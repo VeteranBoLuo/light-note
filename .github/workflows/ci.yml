@@ -20,6 +20,7 @@ jobs:
     timeout-minutes: 15
     env:
       LIGHTNOTE_TEST_MYSQL_SOCKET: /tmp/light-note-ci-mysql/mysql.sock
+      TZ: Asia/Shanghai
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -53,6 +54,13 @@ jobs:
           done
           docker logs light-note-ci-mysql
           exit 1
+      - name: 安装真实图片转换测试运行时
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y imagemagick libheif-plugin-libde265
+          convert -version
+          convert -define heic:primary-image=true -ping 'apps/server/util/imagePreview/fixtures/primary.heic[0]' -format '%w %h %[orientation]' info:
+          convert -define heic:primary-image=true 'apps/server/util/imagePreview/fixtures/primary.heic[0]' -auto-orient -thumbnail '4096x4096>' -profile apps/server/util/imagePreview/sRGB.icc -colorspace sRGB -strip -depth 8 /tmp/light-note-ci-heif.webp
       - name: 笔记持久化、上传并发、排序与运营 SQL
         run: pnpm --filter server test:mysql
       - name: 清理临时数据库
@@ -116,7 +124,7 @@ jobs:
       - name: 安装真实图片转换测试运行时
         run: |
           sudo apt-get update
-          sudo apt-get install -y imagemagick
+          sudo apt-get install -y imagemagick libheif-plugin-libde265
           convert -version
 
       - name: 类型检查

@@ -437,6 +437,7 @@
               :note-type-label="inspectedNoteTypeLabel"
               presentation="sidebar"
               @open="openItem"
+              @read-archive="openBookmarkArchive"
               @analyze="openResourceAi"
               @inbox="(item) => handleItemMenu('addInbox', item)"
               @manage-tags="openSingleTagWorkspace"
@@ -568,12 +569,22 @@
         :note-type-label="inspectedNoteTypeLabel"
         presentation="drawer"
         @open="openInspectedMobileResource"
+        @read-archive="openBookmarkArchive"
         @analyze="openInspectedMobileAi"
         @inbox="(item) => handleItemMenu('addInbox', item)"
         @manage-tags="openSingleTagWorkspace"
         @delete="(item) => handleItemMenu('delete', item)"
       />
     </BDrawer>
+
+    <BookmarkSnapshotModal
+      v-if="archiveBookmarkId"
+      v-model:visible="archiveVisible"
+      :bookmark-id="archiveBookmarkId"
+      :original-url="archiveOriginalUrl"
+      read-only
+      @read="onArchiveRead"
+    />
 
     <ResourceBatchActionBar
       selection-module="search"
@@ -650,7 +661,8 @@
   import { useResourceSelection } from '@/composables/useResourceSelection';
   import { useResourceSelectionStore } from '@/store/resourceSelection';
   import { buildNoteDetailRequestScope } from '@/api/noteDetailPrefetch';
-  import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
+  import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
+  import { captureResourceOpen } from '@/utils/resourceReuseRuntime';
   import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router';
   import { locateSearchResult, navigateToSearchResult } from '@/utils/globalSearchNavigation';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
@@ -737,6 +749,9 @@
   } from '@/components/resourceActions/ResourceOutcomeDrawer.vue';
   import { aiResourceCountBucket, recordAiProductEvent } from '@/api/aiTelemetry';
 
+  const BookmarkSnapshotModal = defineAsyncComponent(
+    () => import('@/components/manage/bookmarkEditMg/BookmarkSnapshotModal.vue'),
+  );
   const SearchResultItem = SearchResultItemComp;
   const route = useRoute();
   const router = useRouter();
@@ -755,6 +770,11 @@
   const isRouteApplying = ref(false);
   const mobileFilterVisible = ref(false);
   const mobileInspectorVisible = ref(false);
+  const archiveVisible = ref(false);
+  const archiveBookmarkId = ref('');
+  const archiveOriginalUrl = ref('');
+  let archiveCapture: ReturnType<typeof captureResourceOpen> | null = null;
+  let archiveOpenGeneration = 0;
   const mobileBatchActionsOpen = ref(false);
   const selectionStore = useResourceSelectionStore();
   const batchMode = computed({
@@ -1238,6 +1258,9 @@
     };
     return [
       openItem,
+      ...(item.type === 'bookmark'
+        ? [{ key: 'readArchive', label: t('resourceCenter.readArchive'), icon: icon.bookmarkManage.snapshot }]
+        : []),
       ...(item.type === 'file'
         ? [{ key: 'locate', label: t('resourceCenter.locateFile'), icon: icon.toolbox.locate }]
         : []),
@@ -1994,6 +2017,29 @@
     void closeMobileInspectorThen(() => openResourceAi(snapshot));
   }
 
+  async function openBookmarkArchive(item: DisplaySearchItem) {
+    if (item.type !== 'bookmark' || !String(item.id || '').trim()) return;
+    const id = String(item.id);
+    const generation = ++archiveOpenGeneration;
+    const url = String(item.url || '');
+    const scope = searchReturnScope.value;
+    const path = route.fullPath;
+    const capture = captureResourceOpen();
+    const open = () => {
+      if (generation !== archiveOpenGeneration || scope !== searchReturnScope.value || path !== route.fullPath) return;
+      archiveBookmarkId.value = id;
+      archiveOriginalUrl.value = url;
+      archiveCapture = capture;
+      archiveVisible.value = true;
+    };
+    if (mobileInspectorVisible.value) await closeMobileInspectorThen(open);
+    else open();
+  }
+
+  function onArchiveRead(id: string) {
+    if (archiveVisible.value && id === archiveBookmarkId.value) archiveCapture?.('bookmark', id);
+  }
+
   function openSingleTagWorkspace(item: DisplaySearchItem) {
     if (!isTaggableResourceType(item.type)) return;
     const selectedItem = { id: String(item.id), type: item.type as TaggableResourceType, title: item.title };
@@ -2016,6 +2062,10 @@
   }
 
   function handleItemMenu(action: string, item: DisplaySearchItem) {
+    if (action === 'readArchive') {
+      void openBookmarkArchive(item);
+      return;
+    }
     if (action === 'joinProject') {
       joinProject([{ type: item.type as any, id: String(item.id), title: item.title }]);
       return;
@@ -2145,6 +2195,11 @@
     // 移动抽屉会用同 URL 的 history state 管理返回栈；可见 URL 变化只同步筛选，显式选择由模块会话维护。
     [() => route.fullPath, searchReturnScope],
     (_value, previous) => {
+      archiveOpenGeneration++;
+      archiveVisible.value = false;
+      archiveBookmarkId.value = '';
+      archiveOriginalUrl.value = '';
+      archiveCapture = null;
       if (route.path !== '/search') return;
       mobileInspectorVisible.value = false;
       applyRouteState();

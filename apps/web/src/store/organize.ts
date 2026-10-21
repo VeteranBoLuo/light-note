@@ -96,7 +96,7 @@ export default defineStore('organize', {
     },
     async loadIssue(
       issueType: OrganizeIssueType,
-      options: { reset?: boolean; keyword?: string; resourceType?: string; kind?: string } = {},
+      options: { reset?: boolean; keyword?: string; resourceType?: string; kind?: string; restoreCount?: number } = {},
     ) {
       const list = this.lists[issueType];
       const reset = options.reset !== false;
@@ -104,31 +104,43 @@ export default defineStore('organize', {
       // 且它的 finally 也无法复位 loadingMore，列表会永久卡在加载态。
       if (!reset && (!list.hasMore || list.loadingMore || list.loading)) return false;
       const generation = ++list.requestGeneration;
+      const restoring = reset && issueType === 'untagged' && options.restoreCount !== undefined;
       if (reset) {
         list.loading = true;
         list.loadingMore = false;
         list.error = false;
+        // A return refresh must not expose pre-edit resources after a failed query.
+        if (restoring) list.items = [];
       } else {
         list.loadingMore = true;
       }
       try {
-        const response = await getOrganizeIssueList(issueType, {
-          cursor: reset ? null : list.cursor,
-          limit: 20,
-          keyword: options.keyword,
-          resourceType: options.resourceType,
-          kind: options.kind,
-        });
-        if (generation !== list.requestGeneration) return false;
-        if (response.status !== 200) {
-          list.retryReset = reset;
-          list.error = true;
-          return false;
-        }
-        const items = Array.isArray(response.data?.items) ? response.data.items : [];
+        let cursor = reset ? null : list.cursor;
+        let hasMore = false;
+        const items: IssueItem[] = [];
+        const seenCursors = new Set<string>();
+        do {
+          if (cursor) seenCursors.add(cursor);
+          const response = await getOrganizeIssueList(issueType, {
+            cursor,
+            limit: 20,
+            keyword: options.keyword,
+            resourceType: options.resourceType,
+            kind: options.kind,
+          });
+          if (this.lists[issueType] !== list || generation !== list.requestGeneration) return false;
+          if (response.status !== 200) throw new Error('Organize list unavailable');
+          const page: IssueItem[] = Array.isArray(response.data?.items) ? response.data.items : [];
+          items.push(...page);
+          cursor = response.data?.nextCursor || null;
+          hasMore = Boolean(response.data?.hasMore);
+          if (restoring && hasMore && (!cursor || seenCursors.has(cursor) || !page.length)) {
+            throw new Error('Organize pagination did not advance');
+          }
+        } while (restoring && hasMore && items.length < (options.restoreCount || 0));
         list.items = reset ? items : [...list.items, ...items];
-        list.cursor = response.data?.nextCursor || null;
-        list.hasMore = Boolean(response.data?.hasMore);
+        list.cursor = cursor;
+        list.hasMore = hasMore;
         list.error = false;
         return true;
       } catch {

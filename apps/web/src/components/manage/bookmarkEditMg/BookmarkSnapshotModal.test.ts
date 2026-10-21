@@ -46,13 +46,23 @@ vi.mock('@/components/base/SvgIcon/src/SvgIcon.vue', () => ({
 const { default: BookmarkSnapshotModal } = await import('./BookmarkSnapshotModal.vue');
 
 let cleanup: (() => void) | undefined;
+const button = (host: HTMLElement, key: string) => {
+  const found = [...host.querySelectorAll('button')].find((b) => b.textContent?.includes(key));
+  expect(found, key).toBeDefined();
+  return found!;
+};
+
 let controls: {
   visible: ReturnType<typeof ref<boolean>>;
   bookmarkId: ReturnType<typeof ref<string>>;
   draftContext: ReturnType<typeof ref<any>>;
 };
 
-function mountModal(bookmarkId = 'bookmark-1', draftContext?: { runId: string; suggestionId: string }) {
+function mountModal(
+  bookmarkId = 'bookmark-1',
+  draftContext?: { runId: string; suggestionId: string },
+  options: { readOnly?: boolean; originalUrl?: string; onRead?: (id: string) => void } = {},
+) {
   const host = document.createElement('div');
   document.body.append(host);
   const app = createApp({
@@ -60,6 +70,7 @@ function mountModal(bookmarkId = 'bookmark-1', draftContext?: { runId: string; s
       controls = { visible: ref(true), bookmarkId: ref(bookmarkId), draftContext: ref(draftContext) };
       return () =>
         h(BookmarkSnapshotModal, {
+          ...options,
           visible: controls.visible.value,
           bookmarkId: controls.bookmarkId.value,
           draftContext: controls.draftContext.value,
@@ -90,6 +101,78 @@ afterEach(() => {
 });
 
 describe('BookmarkSnapshotModal 网页存档生命周期', () => {
+  it('只读入口显示已有正文和摘要，不提供生成或保存操作，并只报告一次成功阅读', async () => {
+    const onRead = vi.fn();
+    requestMocks.apiBasePost.mockResolvedValue({
+      status: 200,
+      data: { content: '已保存正文', summary: '已保存摘要', bookmarkUrl: 'https://example.com/article' },
+    });
+    const host = mountModal('bookmark-1', undefined, { readOnly: true, onRead });
+    await vi.waitFor(() => expect(host.textContent).toContain('已保存正文'));
+    expect(host.textContent).toContain('已保存摘要');
+    expect(host.textContent).not.toContain('bookmarkMg.snapshotArchive');
+    expect(host.textContent).not.toContain('bookmarkMg.aiSummaryGenerate');
+    expect(onRead).toHaveBeenCalledExactlyOnceWith('bookmark-1');
+    button(host, 'bookmarkMg.archiveOpenOriginal').click();
+    expect(openOriginal).toHaveBeenCalledWith('https://example.com/article', { resourceId: 'bookmark-1' });
+    expect(requestMocks.apiBasePost.mock.calls.map(([path]) => path)).toEqual(['/api/bookmark/snapshot']);
+  });
+
+  it('只读入口的空存档保留原网页操作，不自动创建存档或消耗 AI', async () => {
+    requestMocks.apiBasePost.mockResolvedValue({ status: 200, data: null });
+    const onRead = vi.fn();
+    const host = mountModal('bookmark-1', undefined, {
+      readOnly: true,
+      originalUrl: 'https://example.com/empty',
+      onRead,
+    });
+    await vi.waitFor(() => expect(host.textContent).toContain('resourceCenter.archiveEmpty'));
+    expect(host.textContent).not.toContain('bookmarkMg.snapshotEmpty');
+    expect(onRead).not.toHaveBeenCalled();
+    button(host, 'bookmarkMg.archiveOpenOriginal').click();
+    expect(openOriginal).toHaveBeenCalledWith('https://example.com/empty', { resourceId: 'bookmark-1' });
+    expect(requestMocks.apiBasePost).toHaveBeenCalledOnce();
+  });
+
+  it('网址已变化时只读入口不展示旧网址的正文和摘要', async () => {
+    requestMocks.apiBasePost.mockResolvedValue({
+      status: 200,
+      data: {
+        url: 'https://example.com/old',
+        bookmarkUrl: 'https://example.com/new',
+        content: '旧正文',
+        summary: '旧摘要',
+      },
+    });
+    const onRead = vi.fn();
+    const host = mountModal('bookmark-1', undefined, { readOnly: true, onRead });
+    await vi.waitFor(() => expect(host.textContent).toContain('resourceCenter.archiveEmpty'));
+    expect(host.textContent).not.toContain('旧正文');
+    expect(host.textContent).not.toContain('旧摘要');
+    expect(onRead).not.toHaveBeenCalled();
+  });
+
+  it('只读失败可原地重试，关闭前的迟到响应不展示正文或报告阅读', async () => {
+    let resolveRead: (value: unknown) => void = () => {};
+    requestMocks.apiBasePost.mockRejectedValueOnce(new Error('offline')).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveRead = resolve;
+        }),
+    );
+    const onRead = vi.fn();
+    const host = mountModal('bookmark-1', undefined, { readOnly: true, originalUrl: 'https://example.com/a', onRead });
+    await vi.waitFor(() => expect(host.textContent).toContain('bookmarkMg.archiveLoadError'));
+    button(host, 'common.retry').click();
+    await vi.waitFor(() => expect(requestMocks.apiBasePost).toHaveBeenCalledTimes(2));
+    controls.visible.value = false;
+    await nextTick();
+    resolveRead({ status: 200, data: { content: '迟到正文' } });
+    await nextTick();
+    expect(host.textContent).not.toContain('迟到正文');
+    expect(onRead).not.toHaveBeenCalled();
+  });
+
   it('打开缺少存档的弹窗不会自动调用 AI，用户可显式保存网页正文', async () => {
     let snapshotReads = 0;
     requestMocks.apiBasePost.mockImplementation(async (path: string) => {
@@ -301,11 +384,6 @@ describe('BookmarkSnapshotModal 网页存档生命周期', () => {
       ...overrides,
     },
   });
-  const button = (host: HTMLElement, key: string) => {
-    const found = [...host.querySelectorAll('button')].find((b) => b.textContent?.includes(key));
-    expect(found, key).toBeDefined();
-    return found!;
-  };
   const deferred = () => {
     let resolve!: (value: any) => void;
     let reject!: (error: Error) => void;

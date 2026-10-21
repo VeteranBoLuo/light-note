@@ -1,10 +1,16 @@
 <template>
   <ProfileBackgroundSurface class="profile-editor-identity" :background-id="profile.backgroundId">
     <header class="profile-editor-identity__person">
-      <span
+      <component
+        :is="avatarEditable ? BButton : 'span'"
+        v-bind="
+          avatarEditable
+            ? { type: 'text', iconOnly: true, 'aria-label': t('myInfo.chooseAvatar') }
+            : { 'aria-hidden': true }
+        "
         class="profile-editor-identity__avatar"
         :style="{ '--profile-editor-avatar-slot': `${avatarSlot}px` }"
-        aria-hidden="true"
+        @click="avatarEditable && $emit('edit-avatar')"
       >
         <AvatarFramePreview
           v-if="frameId"
@@ -15,7 +21,7 @@
           pause-when-offscreen
         />
         <SvgIcon v-else :src="avatar" :size="avatarSize" :density-aware="false" />
-      </span>
+      </component>
       <div class="profile-editor-identity__copy">
         <strong :title="profile.name">{{ profile.name || t('communityChat.memberFallback') }}</strong>
         <span v-if="profile.communityId" class="profile-editor-identity__id">@{{ profile.communityId }}</span>
@@ -37,6 +43,7 @@
   import { useI18n } from 'vue-i18n';
   import type { CommunityChatAuthorProfile } from '@/api/communityChatApi';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
+  import BButton from '@/components/base/BasicComponents/BButton.vue';
   import AvatarFramePreview from '@/components/growth/AvatarFramePreview.vue';
   import ProfileBackgroundSurface from '@/components/growth/ProfileBackgroundSurface.vue';
   import { avatarFrameStableSlot } from '@/config/avatarFrameArtwork';
@@ -44,7 +51,8 @@
   import icon from '@/config/icon';
   import { useUiDensity } from '@/composables/useUiDensity';
 
-  const props = defineProps<{ profile: CommunityChatAuthorProfile }>();
+  const props = defineProps<{ profile: CommunityChatAuthorProfile; avatarEditable?: boolean }>();
+  defineEmits<{ 'edit-avatar': [] }>();
   const { t } = useI18n();
   const { dimension } = useUiDensity();
   const frameId = computed(() => (frameVariant(props.profile.frameId) ? props.profile.frameId : null));
@@ -73,13 +81,17 @@
     align-items: center;
     padding-block: var(--ui-space-16, 16px);
   }
-  .profile-editor-identity__avatar {
+  .profile-editor-identity__avatar,
+  .profile-editor-identity__avatar.b_btn {
     position: relative;
     width: var(--profile-editor-avatar-slot);
     height: var(--ui-layout-84, 84px);
     flex: 0 0 var(--profile-editor-avatar-slot);
     display: grid;
     place-items: center;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
   }
   .is-decorated .profile-editor-identity__avatar {
     height: var(--profile-editor-avatar-slot);

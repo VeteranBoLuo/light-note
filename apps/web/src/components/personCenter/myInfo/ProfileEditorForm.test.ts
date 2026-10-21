@@ -69,18 +69,22 @@ vi.mock('@/components/growth/AvatarFramePreview.vue', () => ({
   default: { props: ['frameId'], template: '<span :data-frame="frameId" />' },
 }));
 vi.mock('@/components/growth/ProfileAppearanceStudio.vue', () => ({
-  default: { props: ['open'], template: '<div v-if="open" role="dialog" aria-label="个人装扮" />' },
+  default: {
+    props: ['open'],
+    emits: ['avatar-saved'],
+    setup() {
+      return {
+        applyAvatar: () => {
+          user.headPicture = 'new-avatar';
+        },
+      };
+    },
+    template:
+      '<div v-if="open" role="dialog" aria-label="个人装扮"><button @click="applyAvatar(); $emit(\'avatar-saved\')">使用测试头像</button></div>',
+  },
 }));
 vi.mock('@/components/personCenter/myInfo/PassConfigDlg.vue', () => ({
   default: { props: ['visible'], template: '<div v-if="visible" role="dialog" aria-label="密码" />' },
-}));
-vi.mock('@/components/personCenter/myInfo/AvatarPicker.vue', () => ({
-  default: {
-    props: ['open'],
-    emits: ['select', 'update:open'],
-    template:
-      '<div v-if="open" role="dialog" aria-label="头像"><button @click="$emit(\'select\', \'new-avatar\'); $emit(\'update:open\', false)">选择测试头像</button></div>',
-  },
 }));
 
 const { default: ProfileEditorForm } = await import('./ProfileEditorForm.vue');
@@ -197,24 +201,43 @@ describe('profile editor layout and existing flows', () => {
     expect(onClose).toHaveBeenCalledOnce();
   });
 
-  it('头像、装扮和密码入口继续可用，未保存头像离开时仍需确认', async () => {
+  it('头像在装扮内生效，昵称和简介草稿继续保留并在离开时确认', async () => {
     const { host, button, instance, onClose } = mount();
     await flush();
     button('个人装扮').click();
     button('修改密码').click();
-    button('更换头像').click();
+    input(host.querySelector('input')!, '未保存的昵称');
+    input(host.querySelector('textarea')!, '未保存的简介');
     await nextTick();
     expect(host.querySelector('[aria-label="个人装扮"]')).not.toBeNull();
     expect(host.querySelector('[aria-label="密码"]')).not.toBeNull();
-    button('选择测试头像').click();
+    button('使用测试头像').click();
     await nextTick();
     expect(actions.update).not.toHaveBeenCalled();
+    expect(actions.saveCommunity).not.toHaveBeenCalled();
+    expect(host.querySelector<HTMLInputElement>('input')!.value).toBe('未保存的昵称');
+    expect(host.querySelector<HTMLTextAreaElement>('textarea')!.value).toBe('未保存的简介');
+    expect(user.headPicture).toBe('new-avatar');
     instance.requestClose();
     expect(actions.alert).toHaveBeenCalledWith(
       expect.objectContaining({ onOk: expect.any(Function), onCancel: expect.any(Function) }),
     );
     expect(onClose).not.toHaveBeenCalled();
     actions.alert.mock.calls[0][0].onOk();
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+
+  it('仅独立更新头像不会让资料表单出现未保存状态', async () => {
+    const { host, button, instance, onClose } = mount();
+    await flush();
+    host.querySelector<HTMLButtonElement>('[aria-label="选择头像"]')!.click();
+    await nextTick();
+    expect(host.querySelector('[aria-label="个人装扮"]')).not.toBeNull();
+    button('使用测试头像').click();
+    await nextTick();
+    expect(button('保存修改').disabled).toBe(true);
+    instance.requestClose();
+    expect(actions.alert).not.toHaveBeenCalled();
     expect(onClose).toHaveBeenCalledOnce();
   });
 
@@ -244,7 +267,7 @@ describe('profile editor layout and existing flows', () => {
     expect(identity.textContent).not.toContain('传说头像框');
     expect(identity.querySelector('[data-frame]')).toBeNull();
     expect(identity.classList.contains('is-decorated')).toBe(false);
-    expect(button('更换头像').disabled).toBe(false);
+    expect(host.querySelector<HTMLButtonElement>('[aria-label="选择头像"]')!.disabled).toBe(false);
   });
 
   it('社区读取中显示共享加载提示，资料到达后恢复简介输入', async () => {
