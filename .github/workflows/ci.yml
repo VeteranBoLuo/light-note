@@ -58,6 +58,8 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y imagemagick
           convert -version
+          convert -define heic:primary-image=true -ping 'apps/server/util/imagePreview/fixtures/primary.heic[0]' -format '%w %h %[orientation]' info:
+          convert -define heic:primary-image=true 'apps/server/util/imagePreview/fixtures/primary.heic[0]' -auto-orient -thumbnail '4096x4096>' -profile apps/server/util/imagePreview/sRGB.icc -colorspace sRGB -strip -depth 8 /tmp/light-note-ci-heif.webp
       - name: 笔记持久化、上传并发、排序与运营 SQL
         run: pnpm --filter server test:mysql
       - name: 清理临时数据库
