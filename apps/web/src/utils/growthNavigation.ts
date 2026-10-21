@@ -24,6 +24,19 @@ export function resolveGrowthActionRoute(action: string, isMobile: boolean): Rou
   return null;
 }
 
+/** 每周挑战按指标前往对应业务入口；成长中心挑战列表与周报共用。 */
+export function resolveWeeklyChallengeRoute(metric: string, isMobile: boolean): RouteLocationRaw | null {
+  if (metric === 'communityPosts') return '/community/feed';
+  if (metric === 'bookmark' || metric === 'collect') return '/home';
+  if (metric === 'note') return '/noteLibrary';
+  if (metric === 'todo' || metric === 'progress') return { path: '/inbox', query: { tab: 'todo' } };
+  if (metric === 'organize' || metric === 'variety' || metric === 'activeDays') {
+    return resolvePendingResourcesRoute(isMobile);
+  }
+  if (metric === 'checkin') return { path: '/growth', query: { section: 'overview' } };
+  return null;
+}
+
 /** 每日任务“去完成”的统一目的地，供成长中心和各端工作台共同使用。 */
 export function resolveDailyQuestRoute(key: string, isMobile: boolean): RouteLocationRaw | null {
   if (key === 'create' || key === 'daily_note' || key === 'knowledge_action_1' || key === 'knowledge_action_2') {

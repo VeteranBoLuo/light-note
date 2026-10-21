@@ -41,6 +41,7 @@ const ACTION_BY_WEEKLY = Object.freeze({
   note: 'create_note',
   checkin: 'checkin',
   todo: 'open_todos',
+  progress: 'open_todos',
   organize: 'open_inbox',
 });
 

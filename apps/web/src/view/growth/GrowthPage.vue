@@ -10,7 +10,6 @@
         <p class="growth-subtitle">{{ t('growth.pageSubtitle') }}</p>
         <BButton
           class="growth-report-btn"
-          :loading="wrLoading"
           v-click-log="{ module: '成长', operation: '打开成长周报' }"
           @click="openWeeklyReport"
         >
@@ -54,7 +53,6 @@
 
           <BButton
             class="growth-side-report"
-            :loading="wrLoading"
             v-click-log="{ module: '成长', operation: '打开成长周报' }"
             @click="openWeeklyReport"
           >
@@ -400,7 +398,7 @@
       </div>
     </div>
 
-    <WeeklyReportModal v-model:visible="wrVisible" :report="wrData" />
+    <WeeklyReportModal v-model:visible="wrVisible" />
   </div>
 </template>
 
@@ -438,7 +436,6 @@
   import { useGrowth } from '@/composables/useGrowth.ts';
   import { useGrowthClaimFeedback } from '@/composables/useGrowthClaimFeedback';
   import WeeklyReportModal from '@/components/growth/WeeklyReportModal.vue';
-  import growthApi from '@/api/growthApi.ts';
   import { bookmarkStore, useUserStore } from '@/store';
   import { resetMobileScrollElement } from '@/composables/useMobileNavigationState';
   import { useForegroundRefresh } from '@/composables/useForegroundRefresh';
@@ -796,7 +793,7 @@
 
   function handleGrowthAction(action: string) {
     if (action === 'open_weekly_report') {
-      void openWeeklyReport();
+      openWeeklyReport();
       return;
     }
     if (action === 'profile') {
@@ -832,26 +829,10 @@
     }
   }
 
+  // 周报弹框自行加载本周/上周数据，入口只负责打开。
   const wrVisible = ref(false);
-  const wrData = ref<any>(null);
-  const wrLoading = ref(false);
-  async function openWeeklyReport() {
-    if (wrLoading.value) return;
-    wrLoading.value = true;
-    try {
-      const res = await growthApi.getWeeklyReport();
-      if (res?.status === 200) {
-        wrData.value = res.data;
-        wrVisible.value = true;
-      } else {
-        message.error(t('growth.weeklyReportFailed'));
-      }
-    } catch (err) {
-      console.error('获取周报失败:', err);
-      message.error(t('growth.weeklyReportFailed'));
-    } finally {
-      wrLoading.value = false;
-    }
+  function openWeeklyReport() {
+    wrVisible.value = true;
   }
 
   onMounted(() => {
@@ -868,7 +849,7 @@
     () => route.query.report,
     (report) => {
       if (report !== 'weekly') return;
-      void openWeeklyReport();
+      openWeeklyReport();
       const { report: _report, ...query } = route.query;
       void router.replace({ query, hash: route.hash });
     },

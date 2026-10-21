@@ -70,7 +70,7 @@
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon.ts';
   import { bookmarkStore } from '@/store';
-  import { resolvePendingResourcesRoute } from '@/utils/resourceNavigation';
+  import { resolveWeeklyChallengeRoute } from '@/utils/growthNavigation';
   import { useRouter } from 'vue-router';
 
   const { t, te } = useI18n();
@@ -129,16 +129,13 @@
   }
 
   function goToChallenge(challenge: WeeklyChallenge) {
-    if (challenge.metric === 'communityPosts') void router.push('/community/feed');
-    else if (challenge.metric === 'bookmark' || challenge.metric === 'collect') void router.push('/home');
-    else if (challenge.metric === 'note') void router.push('/noteLibrary');
-    else if (challenge.metric === 'todo' || challenge.metric === 'progress')
-      void router.push({ path: '/inbox', query: { tab: 'todo' } });
-    else if (challenge.metric === 'organize' || challenge.metric === 'variety' || challenge.metric === 'activeDays') {
-      void router.push(resolvePendingResourcesRoute(bookmark.isMobile));
-    } else if (challenge.metric === 'checkin') {
+    // 签到在成长中心内切换分区即可，保留当前查询参数。
+    if (challenge.metric === 'checkin') {
       void router.replace({ query: { ...router.currentRoute.value.query, section: 'overview' } });
+      return;
     }
+    const target = resolveWeeklyChallengeRoute(challenge.metric, bookmark.isMobile);
+    if (target) void router.push(target);
   }
 
   async function reload() {

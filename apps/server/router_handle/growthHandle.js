@@ -8,7 +8,7 @@ import {
   RANKS,
   markNoticesRead,
 } from '../util/growth.js';
-import { buildWeeklyReport } from '../util/weeklyReport.js';
+import { WEEKLY_REPORT_PERIODS, buildWeeklyReport } from '../util/weeklyReport.js';
 import { L, resultData } from '../util/common.js';
 import { ensureNotVisitor, ensureUserOrAdminPolicy } from '../util/auth.js';
 import {
@@ -129,11 +129,19 @@ export const doUseProtectCard = async (req, res) => {
   }
 };
 
-// GET /growth/weeklyReport —— 实时生成当前用户本周周报(供前端随时「查看大图」,不发通知)
+// GET /growth/weeklyReport?period=current|last —— 实时生成本周/上周周报(不发通知)
 export const getWeeklyReport = async (req, res) => {
   if (!ensureUserOrAdminPolicy(req, res, ['read'])) return;
+  const period = String(req.query?.period || 'current');
+  if (!WEEKLY_REPORT_PERIODS.includes(period)) {
+    return res.send(resultData(null, 400, L(req, '周报周期无效', 'Invalid report period')));
+  }
   try {
-    const report = await buildWeeklyReport(req.user.id, req.user.role);
+    // 资源标题只给本人；管理员上下文的只读策略不开放笔记、书签列表，这里同样不返回条目。
+    const report = await buildWeeklyReport(req.user.id, req.user.role, {
+      period,
+      includeItems: !req.adminContext,
+    });
     res.send(resultData(report));
   } catch (error) {
     console.error('获取周报失败 code=%s', stableAgentErrorCode(error));

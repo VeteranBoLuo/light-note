@@ -5,6 +5,7 @@ import { notificationSchedulerEnabled } from './notificationSchedulerPolicy.js';
  *
  * 设计:
  * - 不建新表,周报数据存进 notification.meta(JSON),复用通知系统;前端识别 meta.weeklyReport 弹详情。
+ * - 周期是账号时区的自然周,与每周挑战同一周一重置口径:current=本周一至今天,last=上周一至周日。
  * - 只给「上周有成长活动 且 未在设置里关闭周报」的非 root 用户生成,避免给沉默用户刷屏。
  * - 无实质活动(新增/经验/签到全为 0)的用户跳过,不发空周报。
  * - 定时任务异常绝不影响主流程(整体 try/catch 吞错)。
@@ -12,88 +13,120 @@ import { notificationSchedulerEnabled } from './notificationSchedulerPolicy.js';
 import pool from '../db/index.js';
 import { formatDateTime } from './common.js';
 import { getGrowth } from './growth.js';
+import { DEFAULT_GROWTH_PREFERENCES, dayKeyAtOffset, getGrowthCalendarContext } from './growthPreferences.js';
 import { stableAgentErrorCode } from './agent/logSafety.js';
 import crypto from 'crypto';
 
-function startOfLocalDay(value) {
-  const date = new Date(value);
-  date.setHours(0, 0, 0, 0);
-  return date;
+export const WEEKLY_REPORT_PERIODS = Object.freeze(['current', 'last']);
+/** 「本周留下的内容」只回最近若干条；完整数量以分类型计数为准。 */
+export const WEEKLY_REPORT_ITEM_LIMIT = 20;
+
+const DAY_MS = 86_400_000;
+
+function dayKeyToUtcDate(key) {
+  return new Date(Date.UTC(Number(key.slice(0, 4)), Number(key.slice(4, 6)) - 1, Number(key.slice(6, 8))));
 }
 
-function addDays(value, amount) {
-  const date = new Date(value);
-  date.setDate(date.getDate() + amount);
-  return date;
+function addUtcDays(date, amount) {
+  return new Date(date.getTime() + amount * DAY_MS);
 }
 
-function dateKey(value) {
-  return formatDateTime(new Date(value)).slice(0, 10);
+function isoDay(date) {
+  return date.toISOString().slice(0, 10);
 }
 
-/** 计算自然周序号。周一为一周开始，跨年时同时返回 ISO 周所属年份。 */
+function compactDay(date) {
+  return isoDay(date).replaceAll('-', '');
+}
+
+/** 账号时区某日 0 点在服务器本地时间下的写法；业务表 create_time 按服务器本地时间写入。 */
+function serverLocalSql(utcMidnight, shiftMinutes) {
+  const shifted = new Date(utcMidnight.getTime() - Number(shiftMinutes || 0) * 60_000).toISOString();
+  return `${shifted.slice(0, 10)} ${shifted.slice(11, 19)}`;
+}
+
+/** 计算 ISO 周序号（周一为一周开始）；入参取 UTC 日期部分，跨年时同时返回周所属年份。 */
 export function getIsoWeekInfo(value) {
-  const date = startOfLocalDay(value);
-  const utc = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const date = new Date(value);
+  const utc = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
   const weekday = utc.getUTCDay() || 7;
   utc.setUTCDate(utc.getUTCDate() + 4 - weekday);
   const weekYear = utc.getUTCFullYear();
   const yearStart = new Date(Date.UTC(weekYear, 0, 1));
-  const week = Math.ceil(((utc.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
+  const week = Math.ceil(((utc.getTime() - yearStart.getTime()) / DAY_MS + 1) / 7);
   return { week, weekYear };
 }
 
 /**
- * 实时周报包含今天在内的最近 7 个自然日；定时周报通过 endOffsetDays=1 固定为上周一至周日。
- * 使用明确边界而非 NOW()-168h，避免周报一天里不同时刻打开时统计口径漂移。
+ * 账号时区的自然周。进行中的本周只统计到今天，对比上周同一时段；上周统计完整七天，对比再前一周。
+ * 边界换算成服务器本地时间后用于 SQL，避免同一天不同时刻打开时口径漂移。
  */
-export function getWeeklyReportPeriod(now = new Date(), endOffsetDays = 0) {
-  const end = addDays(startOfLocalDay(now), -endOffsetDays);
-  const start = addDays(end, -6);
-  const next = addDays(end, 1);
-  const prevStart = addDays(start, -7);
-  const { week, weekYear } = getIsoWeekInfo(end);
+export function getWeeklyReportPeriod({ now = new Date(), calendar = null, period = 'current' } = {}) {
+  const kind = period === 'last' ? 'last' : 'current';
+  const utcOffsetMinutes = calendar?.utcOffsetMinutes ?? DEFAULT_GROWTH_PREFERENCES.utcOffsetMinutes;
+  const shiftMinutes = Number(calendar?.shiftMinutes || 0);
+  const today = dayKeyToUtcDate(dayKeyAtOffset(now, utcOffsetMinutes));
+  const weekday = today.getUTCDay() || 7;
+  const thisMonday = addUtcDays(today, 1 - weekday);
+  const start = kind === 'current' ? thisMonday : addUtcDays(thisMonday, -7);
+  const elapsedDays = kind === 'current' ? weekday : 7;
+  const next = addUtcDays(start, elapsedDays);
+  const compareStart = addUtcDays(start, -7);
+  const compareNext = addUtcDays(next, -7);
+  const { week, weekYear } = getIsoWeekInfo(start);
   return {
-    start: dateKey(start),
-    end: dateKey(end),
+    kind,
+    start: isoDay(start),
+    end: isoDay(addUtcDays(start, 6)),
+    dataEnd: isoDay(addUtcDays(next, -1)),
+    elapsedDays,
+    inProgress: kind === 'current',
     week,
     weekYear,
-    startSql: formatDateTime(start),
-    nextSql: formatDateTime(next),
-    prevStartSql: formatDateTime(prevStart),
+    compareStart: isoDay(compareStart),
+    compareEnd: isoDay(addUtcDays(compareNext, -1)),
+    today: isoDay(today),
+    shiftMinutes,
+    startKey: compactDay(start),
+    endKey: compactDay(addUtcDays(next, -1)),
+    startSql: serverLocalSql(start, shiftMinutes),
+    nextSql: serverLocalSql(next, shiftMinutes),
+    compareStartSql: serverLocalSql(compareStart, shiftMinutes),
+    compareNextSql: serverLocalSql(compareNext, shiftMinutes),
   };
 }
 
-/** 把数据库稀疏日聚合补成固定 7 天，前端可直接绘制真实趋势。 */
+/** 把数据库稀疏日聚合补成周一至周日；本周尚未到来的日子标记为 future。 */
 export function fillWeeklyReportDays(period, rows = []) {
-  const rowMap = new Map((rows || []).map((row) => [String(row.day), row]));
-  const start = startOfLocalDay(`${period.start}T00:00:00`);
+  const rowMap = new Map((rows || []).map((row) => [String(row.day).replaceAll('-', ''), row]));
+  const start = new Date(`${period.start}T00:00:00Z`);
   return Array.from({ length: 7 }, (_, index) => {
-    const day = dateKey(addDays(start, index));
-    const row = rowMap.get(day) || {};
+    const date = addUtcDays(start, index);
+    const future = index >= Number(period.elapsedDays ?? 7);
+    const row = (!future && rowMap.get(compactDay(date))) || {};
     const bookmarks = Number(row.bookmarks || 0);
     const notes = Number(row.notes || 0);
     const files = Number(row.files || 0);
     const todos = Number(row.todos || 0);
     const organized = Number(row.organized || 0);
-    const exp = Number(row.exp || 0);
-    const checkins = Number(row.checkins || 0);
     return {
-      day,
+      day: isoDay(date),
       bookmarks,
       notes,
       files,
       todos,
       organized,
-      exp,
-      checkins,
+      exp: Number(row.exp || 0),
+      checkins: Number(row.checkins || 0) > 0 ? 1 : 0,
       total: bookmarks + notes + files + todos + organized,
+      future,
     };
   });
 }
 
+/** 活跃天数只计有记录的天，与每周挑战「有效活跃」同口径；签到单独计数。 */
 export function summarizeWeeklyReportDays(days = []) {
-  const total = days.reduce(
+  return days.reduce(
     (sum, day) => ({
       bookmarks: sum.bookmarks + Number(day.bookmarks || 0),
       notes: sum.notes + Number(day.notes || 0),
@@ -102,29 +135,105 @@ export function summarizeWeeklyReportDays(days = []) {
       organized: sum.organized + Number(day.organized || 0),
       exp: sum.exp + Number(day.exp || 0),
       checkinDays: sum.checkinDays + (Number(day.checkins || 0) > 0 ? 1 : 0),
+      activeDays: sum.activeDays + (Number(day.total || 0) > 0 ? 1 : 0),
     }),
-    { bookmarks: 0, notes: 0, files: 0, todos: 0, organized: 0, exp: 0, checkinDays: 0 },
+    { bookmarks: 0, notes: 0, files: 0, todos: 0, organized: 0, exp: 0, checkinDays: 0, activeDays: 0 },
   );
-  const activeDays = days.filter(
-    (day) => Number(day.total || 0) > 0 || Number(day.exp || 0) > 0 || Number(day.checkins || 0) > 0,
-  ).length;
-  const bestDay = days.reduce((best, day) => {
-    if (!best) return day;
-    const score = Number(day.total || 0) * 1000 + Number(day.exp || 0) + Number(day.checkins || 0);
-    const bestScore = Number(best.total || 0) * 1000 + Number(best.exp || 0) + Number(best.checkins || 0);
-    return score >= bestScore ? day : best;
-  }, null);
-  const bestScore = Number(bestDay?.total || 0) + Number(bestDay?.exp || 0) + Number(bestDay?.checkins || 0);
-  return { ...total, activeDays, bestDay: bestScore > 0 ? bestDay : null };
 }
 
-// 汇总单个用户近 7 个自然日的成长数据(供定时任务发通知 + 前端实时「本周周报」预览复用)
+/** 合并三类资源的最近条目；按创建时间倒序，只保留展示需要的低敏字段。 */
+export function mergeWeeklyReportItems(groups, limit = WEEKLY_REPORT_ITEM_LIMIT) {
+  const rows = [];
+  for (const [type, list] of Object.entries(groups || {})) {
+    for (const row of list || []) {
+      const time = new Date(row.createTime).getTime();
+      const day = String(row.reportDay || '');
+      rows.push({
+        type,
+        id: String(row.id),
+        title: String(row.title || '').trim(),
+        day: /^\d{8}$/.test(day) ? `${day.slice(0, 4)}-${day.slice(4, 6)}-${day.slice(6, 8)}` : null,
+        time: Number.isFinite(time) ? time : 0,
+      });
+    }
+  }
+  return rows
+    .sort((left, right) => right.time - left.time)
+    .slice(0, limit)
+    .map(({ time: _time, ...item }) => item);
+}
+
+const SEED_FILTER = {
+  bookmark: `NOT EXISTS (
+          SELECT 1 FROM onboarding_seed_resources osr
+          WHERE osr.user_id = b.user_id AND osr.resource_type = 'bookmark' AND osr.resource_id = b.id
+        )`,
+  note: `NOT EXISTS (
+          SELECT 1 FROM onboarding_seed_resources osr
+          WHERE osr.user_id = n.create_by AND osr.resource_type = 'note' AND osr.resource_id = n.id
+        )`,
+  file: `NOT EXISTS (
+          SELECT 1 FROM onboarding_seed_resources osr
+          WHERE osr.user_id = f.create_by AND osr.resource_type = 'file'
+            AND osr.resource_id = CAST(f.id AS CHAR)
+        )`,
+  organize: `NOT EXISTS (
+          SELECT 1 FROM onboarding_seed_resources osr
+          WHERE osr.user_id = ri.user_id AND osr.resource_type = ri.resource_type
+            AND osr.resource_id = ri.resource_id
+        )`,
+};
+
+async function queryWeeklyReportItems(userId, period) {
+  const bounds = [period.shiftMinutes, userId, period.startSql, period.nextSql, WEEKLY_REPORT_ITEM_LIMIT];
+  // 三张表的文本列排序规则不同，分别取数后在内存合并，避免 UNION 混合排序规则。
+  const [[bookmarks], [notes], [files]] = await Promise.all([
+    pool.query(
+      `SELECT b.id AS id, b.name AS title, b.create_time AS createTime,
+              DATE_FORMAT(DATE_ADD(b.create_time, INTERVAL ? MINUTE), '%Y%m%d') AS reportDay
+         FROM bookmark b
+        WHERE b.user_id = ? AND b.del_flag = 0 AND b.create_time >= ? AND b.create_time < ?
+          AND ${SEED_FILTER.bookmark}
+        ORDER BY b.create_time DESC
+        LIMIT ?`,
+      bounds,
+    ),
+    pool.query(
+      `SELECT n.id AS id, n.title AS title, n.create_time AS createTime,
+              DATE_FORMAT(DATE_ADD(n.create_time, INTERVAL ? MINUTE), '%Y%m%d') AS reportDay
+         FROM note n
+        WHERE n.create_by = ? AND n.del_flag = 0 AND n.create_time >= ? AND n.create_time < ?
+          AND ${SEED_FILTER.note}
+        ORDER BY n.create_time DESC
+        LIMIT ?`,
+      bounds,
+    ),
+    pool.query(
+      `SELECT CAST(f.id AS CHAR) AS id, f.file_name AS title, f.create_time AS createTime,
+              DATE_FORMAT(DATE_ADD(f.create_time, INTERVAL ? MINUTE), '%Y%m%d') AS reportDay
+         FROM files f
+        WHERE f.create_by = ? AND f.del_flag = 0 AND f.create_time >= ? AND f.create_time < ?
+          AND ${SEED_FILTER.file}
+        ORDER BY f.create_time DESC
+        LIMIT ?`,
+      bounds,
+    ),
+  ]);
+  return mergeWeeklyReportItems({ bookmark: bookmarks, note: notes, file: files });
+}
+
+/**
+ * 汇总单个用户一个自然周的成长数据(供定时任务发通知 + 前端实时周报复用)。
+ * includeItems 只用于用户本人实时查看；通知快照与管理员上下文不携带资源标题。
+ */
 export async function buildWeeklyReport(userId, userRole = null, options = {}) {
-  const period = getWeeklyReportPeriod(options.now || new Date(), Number(options.endOffsetDays || 0));
-  const currentBounds = [period.startSql, period.nextSql];
-  const previousEndSql = period.startSql;
+  const now = options.now || new Date();
+  const calendar = options.calendar || (await getGrowthCalendarContext(userId, { now }));
+  const period = getWeeklyReportPeriod({ now, calendar, period: options.period });
+  const shift = period.shiftMinutes;
+  const currentBounds = [shift, userId, period.startSql, period.nextSql];
   const dailySql = `
-    SELECT day,
+    SELECT report_day AS day,
       SUM(bookmarks) AS bookmarks,
       SUM(notes) AS notes,
       SUM(files) AS files,
@@ -133,111 +242,92 @@ export async function buildWeeklyReport(userId, userRole = null, options = {}) {
       SUM(exp) AS exp,
       SUM(checkins) AS checkins
     FROM (
-      SELECT DATE_FORMAT(b.create_time, '%Y-%m-%d') AS day, COUNT(*) AS bookmarks,
+      SELECT DATE_FORMAT(DATE_ADD(b.create_time, INTERVAL ? MINUTE), '%Y%m%d') AS report_day, COUNT(*) AS bookmarks,
         0 AS notes, 0 AS files, 0 AS todos, 0 AS organized, 0 AS exp, 0 AS checkins
       FROM bookmark b
       WHERE b.user_id = ? AND b.del_flag = 0 AND b.create_time >= ? AND b.create_time < ?
-        AND NOT EXISTS (
-          SELECT 1 FROM onboarding_seed_resources osr
-          WHERE osr.user_id = b.user_id AND osr.resource_type = 'bookmark' AND osr.resource_id = b.id
-        )
-      GROUP BY DATE_FORMAT(b.create_time, '%Y-%m-%d')
+        AND ${SEED_FILTER.bookmark}
+      GROUP BY report_day
       UNION ALL
-      SELECT DATE_FORMAT(n.create_time, '%Y-%m-%d') AS day, 0 AS bookmarks,
+      SELECT DATE_FORMAT(DATE_ADD(n.create_time, INTERVAL ? MINUTE), '%Y%m%d') AS report_day, 0 AS bookmarks,
         COUNT(*) AS notes, 0 AS files, 0 AS todos, 0 AS organized, 0 AS exp, 0 AS checkins
       FROM note n
       WHERE n.create_by = ? AND n.del_flag = 0 AND n.create_time >= ? AND n.create_time < ?
-        AND NOT EXISTS (
-          SELECT 1 FROM onboarding_seed_resources osr
-          WHERE osr.user_id = n.create_by AND osr.resource_type = 'note' AND osr.resource_id = n.id
-        )
-      GROUP BY DATE_FORMAT(n.create_time, '%Y-%m-%d')
+        AND ${SEED_FILTER.note}
+      GROUP BY report_day
       UNION ALL
-      SELECT DATE_FORMAT(f.create_time, '%Y-%m-%d') AS day, 0 AS bookmarks,
+      SELECT DATE_FORMAT(DATE_ADD(f.create_time, INTERVAL ? MINUTE), '%Y%m%d') AS report_day, 0 AS bookmarks,
         0 AS notes, COUNT(*) AS files, 0 AS todos, 0 AS organized, 0 AS exp, 0 AS checkins
       FROM files f
       WHERE f.create_by = ? AND f.del_flag = 0 AND f.create_time >= ? AND f.create_time < ?
-        AND NOT EXISTS (
-          SELECT 1 FROM onboarding_seed_resources osr
-          WHERE osr.user_id = f.create_by AND osr.resource_type = 'file'
-            AND osr.resource_id = CAST(f.id AS CHAR)
-        )
-      GROUP BY DATE_FORMAT(f.create_time, '%Y-%m-%d')
+        AND ${SEED_FILTER.file}
+      GROUP BY report_day
       UNION ALL
-      SELECT DATE_FORMAT(td.completed_at, '%Y-%m-%d') AS day, 0 AS bookmarks,
+      SELECT DATE_FORMAT(DATE_ADD(td.completed_at, INTERVAL ? MINUTE), '%Y%m%d') AS report_day, 0 AS bookmarks,
         0 AS notes, 0 AS files, COUNT(*) AS todos, 0 AS organized, 0 AS exp, 0 AS checkins
       FROM todo_items td
       WHERE td.user_id = ? AND td.completed_at >= ? AND td.completed_at < ?
-      GROUP BY DATE_FORMAT(td.completed_at, '%Y-%m-%d')
+      GROUP BY report_day
       UNION ALL
-      SELECT DATE_FORMAT(ri.complete_time, '%Y-%m-%d') AS day, 0 AS bookmarks,
+      SELECT DATE_FORMAT(DATE_ADD(ri.complete_time, INTERVAL ? MINUTE), '%Y%m%d') AS report_day, 0 AS bookmarks,
         0 AS notes, 0 AS files, 0 AS todos, COUNT(*) AS organized, 0 AS exp, 0 AS checkins
       FROM resource_inbox ri
       WHERE ri.user_id = ? AND ri.complete_time >= ? AND ri.complete_time < ?
-        AND NOT EXISTS (
-          SELECT 1 FROM onboarding_seed_resources osr
-          WHERE osr.user_id = ri.user_id AND osr.resource_type = ri.resource_type
-            AND osr.resource_id = ri.resource_id
-        )
-      GROUP BY DATE_FORMAT(ri.complete_time, '%Y-%m-%d')
+        AND ${SEED_FILTER.organize}
+      GROUP BY report_day
       UNION ALL
-      SELECT DATE_FORMAT(ge.create_time, '%Y-%m-%d') AS day, 0 AS bookmarks,
+      SELECT DATE_FORMAT(DATE_ADD(ge.create_time, INTERVAL ? MINUTE), '%Y%m%d') AS report_day, 0 AS bookmarks,
         0 AS notes, 0 AS files, 0 AS todos, 0 AS organized,
-        SUM(CASE WHEN ge.status = 'granted' THEN ge.amount ELSE 0 END) AS exp,
-        MAX(CASE WHEN ge.source = 'checkin' AND ge.status = 'granted' THEN 1 ELSE 0 END) AS checkins
+        SUM(CASE WHEN ge.status = 'granted' THEN ge.amount ELSE 0 END) AS exp, 0 AS checkins
       FROM growth_events ge
       WHERE ge.user_id = ? AND ge.create_time >= ? AND ge.create_time < ?
-      GROUP BY DATE_FORMAT(ge.create_time, '%Y-%m-%d')
+      GROUP BY report_day
+      UNION ALL
+      -- 签到按目标日 day 计（与热力图、连签一致），补签不会落到补签当天。
+      SELECT ge.day AS report_day, 0 AS bookmarks, 0 AS notes, 0 AS files, 0 AS todos, 0 AS organized,
+        0 AS exp, 1 AS checkins
+      FROM growth_events ge
+      WHERE ge.user_id = ? AND ge.source = 'checkin' AND ge.status = 'granted'
+        AND ge.day >= ? AND ge.day <= ?
+      GROUP BY ge.day
     ) weekly_days
-    GROUP BY day
-    ORDER BY day`;
+    GROUP BY report_day
+    ORDER BY report_day`;
+  const previousBounds = [period.compareStartSql, period.compareNextSql];
   const previousSql = `SELECT
       (SELECT COUNT(*) FROM bookmark b
         WHERE b.user_id = ? AND b.del_flag = 0 AND b.create_time >= ? AND b.create_time < ?
-          AND NOT EXISTS (
-            SELECT 1 FROM onboarding_seed_resources osr
-            WHERE osr.user_id = b.user_id AND osr.resource_type = 'bookmark' AND osr.resource_id = b.id
-          )) AS prevBookmarks,
+          AND ${SEED_FILTER.bookmark}) AS prevBookmarks,
       (SELECT COUNT(*) FROM note n
         WHERE n.create_by = ? AND n.del_flag = 0 AND n.create_time >= ? AND n.create_time < ?
-          AND NOT EXISTS (
-            SELECT 1 FROM onboarding_seed_resources osr
-            WHERE osr.user_id = n.create_by AND osr.resource_type = 'note' AND osr.resource_id = n.id
-          )) AS prevNotes,
+          AND ${SEED_FILTER.note}) AS prevNotes,
       (SELECT COUNT(*) FROM files f
         WHERE f.create_by = ? AND f.del_flag = 0 AND f.create_time >= ? AND f.create_time < ?
-          AND NOT EXISTS (
-            SELECT 1 FROM onboarding_seed_resources osr
-            WHERE osr.user_id = f.create_by AND osr.resource_type = 'file'
-              AND osr.resource_id = CAST(f.id AS CHAR)
-          )) AS prevFiles,
+          AND ${SEED_FILTER.file}) AS prevFiles,
       (SELECT COUNT(*) FROM todo_items td
         WHERE td.user_id = ? AND td.completed_at >= ? AND td.completed_at < ?) AS prevTodos,
       (SELECT COUNT(*) FROM resource_inbox ri
         WHERE ri.user_id = ? AND ri.complete_time >= ? AND ri.complete_time < ?
-          AND NOT EXISTS (
-            SELECT 1 FROM onboarding_seed_resources osr
-            WHERE osr.user_id = ri.user_id AND osr.resource_type = ri.resource_type
-              AND osr.resource_id = ri.resource_id
-          )) AS prevOrganized,
+          AND ${SEED_FILTER.organize}) AS prevOrganized,
       (SELECT COALESCE(SUM(amount), 0) FROM growth_events
         WHERE user_id = ? AND status = 'granted' AND create_time >= ? AND create_time < ?) AS prevExp`;
-  const dailyParams = Array.from({ length: 6 }, () => [userId, ...currentBounds]).flat();
-  const previousParams = Array.from({ length: 6 }, () => [userId, period.prevStartSql, previousEndSql]).flat();
-  const [dailyResult, previousResult, g] = await Promise.all([
+  const dailyParams = [
+    ...Array.from({ length: 6 }, () => currentBounds).flat(),
+    userId,
+    period.startKey,
+    period.endKey,
+  ];
+  const previousParams = Array.from({ length: 6 }, () => [userId, ...previousBounds]).flat();
+  const [dailyResult, previousResult, g, items] = await Promise.all([
     pool.query(dailySql, dailyParams),
     pool.query(previousSql, previousParams),
     getGrowth(userId, { userRole }),
+    options.includeItems ? queryWeeklyReportItems(userId, period) : Promise.resolve(null),
   ]);
   const [dailyRows] = dailyResult;
   const [[row]] = previousResult;
   const days = fillWeeklyReportDays(period, dailyRows);
   const summary = summarizeWeeklyReportDays(days);
-  // 兼容早期缺少签到流水的历史账号：用当前连签数兜底(至多 7 天)。
-  let checkinDays = Number(summary.checkinDays || 0);
-  if (checkinDays === 0 && Number(g.streak) > 0) checkinDays = Math.min(Number(g.streak), 7);
-  const total = summary.bookmarks + summary.notes + summary.files + summary.todos + summary.organized;
-  const expStatus = summary.exp > 0 ? 'earned' : total > 0 ? 'no_grant' : 'none';
   return {
     bookmarks: summary.bookmarks,
     notes: summary.notes,
@@ -245,24 +335,24 @@ export async function buildWeeklyReport(userId, userRole = null, options = {}) {
     todos: summary.todos,
     organized: summary.organized,
     exp: summary.exp,
-    checkinDays,
-    activeDays: Math.max(summary.activeDays, checkinDays),
+    checkinDays: summary.checkinDays,
+    activeDays: summary.activeDays,
     days,
-    bestDay: summary.bestDay,
     period: {
+      kind: period.kind,
       start: period.start,
       end: period.end,
+      dataEnd: period.dataEnd,
+      elapsedDays: period.elapsedDays,
+      inProgress: period.inProgress,
       week: period.week,
       weekYear: period.weekYear,
+      compareStart: period.compareStart,
+      compareEnd: period.compareEnd,
     },
-    expStatus,
     level: g.level,
     levelName: g.name,
-    levelProgress: g.progress,
-    expToNext: g.expToNext,
-    isMax: g.isMax,
-    streak: g.streak,
-    generatedAt: dateKey(options.now || new Date()), // 本地时区,避免凌晨 toISOString 取 UTC 差一天
+    generatedAt: period.today,
     prev: {
       bookmarks: Number(row.prevBookmarks || 0),
       notes: Number(row.prevNotes || 0),
@@ -271,6 +361,7 @@ export async function buildWeeklyReport(userId, userRole = null, options = {}) {
       organized: Number(row.prevOrganized || 0),
       exp: Number(row.prevExp || 0),
     },
+    ...(items ? { items } : {}),
   };
 }
 
@@ -309,7 +400,7 @@ export async function generateWeeklyReports() {
         const notificationId = crypto.createHash('md5').update(`weekly:${weekKey}:${userId}`).digest('hex');
         const [[existing]] = await pool.query('SELECT 1 FROM notification WHERE id = ? LIMIT 1', [notificationId]);
         if (existing) continue;
-        const report = await buildWeeklyReport(userId, null, { endOffsetDays: 1 });
+        const report = await buildWeeklyReport(userId, null, { period: 'last' });
         // 无实质活动不发空周报
         if (
           report.bookmarks +
@@ -324,9 +415,9 @@ export async function generateWeeklyReports() {
           continue;
         const isEn = lang === 'en-US';
         const content = isEn
-          ? `This week +${report.exp} EXP · ${report.bookmarks} bookmarks / ${report.notes} notes / ${report.files} files · ${report.todos} todos completed / ${report.organized} items organized · ${report.checkinDays} check-in days`
-          : `本周 +${report.exp} 经验 · 新增书签 ${report.bookmarks} / 笔记 ${report.notes} / 文件 ${report.files} · 完成待办 ${report.todos} / 整理资源 ${report.organized} · 签到 ${report.checkinDays} 天`;
-        const title = isEn ? '📊 Your weekly growth report' : '📊 你的本周成长周报';
+          ? `Last week +${report.exp} EXP · ${report.bookmarks} bookmarks / ${report.notes} notes / ${report.files} files · ${report.todos} todos completed / ${report.organized} items organized · ${report.checkinDays} check-in days`
+          : `上周 +${report.exp} 经验 · 新增书签 ${report.bookmarks} / 笔记 ${report.notes} / 文件 ${report.files} · 完成待办 ${report.todos} / 整理资源 ${report.organized} · 签到 ${report.checkinDays} 天`;
+        const title = isEn ? '📊 Your weekly growth report' : '📊 你的成长周报';
         await createNotification(userId, {
           id: notificationId,
           type: 'system',
