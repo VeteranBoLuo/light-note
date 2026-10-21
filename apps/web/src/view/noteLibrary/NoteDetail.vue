@@ -2097,13 +2097,12 @@
     skipSaveOnLeave = true;
     clearScheduledSave();
     const organizer = resolveUntaggedReturnPath(sourceReturnPath());
+    noteWorkspace.setNavigation({ activePageId: organizer ? null : fallbackId || null, browseParentId: null });
+    await refreshTree();
     if (organizer) {
-      noteWorkspace.setNavigation({ activePageId: null, browseParentId: null });
       await router.replace(organizer);
       return;
     }
-    noteWorkspace.setNavigation({ activePageId: fallbackId || null, browseParentId: null });
-    await refreshTree();
 
     if (fallbackId) {
       try {
