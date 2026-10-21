@@ -24,8 +24,9 @@ export const getGrowthTasks = () => apiBaseGet('/api/growth/tasks');
 // 成长任务达成后手动领取经验
 export const claimGrowthTask = (taskKey: string) => apiBasePost('/api/growth/tasks/claim', { taskKey });
 
-// 实时本周成长周报(前端「查看大图」用)
-export const getWeeklyReport = () => apiBaseGet('/api/growth/weeklyReport');
+// 实时成长周报(本周/上周)；周报弹框自行展示失败与重试，请求层保持静默，避免重复提示。
+export const getWeeklyReport = (period: 'current' | 'last' = 'current') =>
+  apiBaseGet('/api/growth/weeklyReport', { period }, { silent: true });
 
 // 后台成长运营(root):查目标用户成长 + 调整(发经验/设等级/送补签卡)
 export const adminGetUserGrowth = (userId: string) => apiBasePost('/api/growth/admin/userGrowth', { userId });
