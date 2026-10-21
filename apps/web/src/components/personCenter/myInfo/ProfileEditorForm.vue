@@ -1,16 +1,11 @@
 <template>
   <div class="unified-profile-form">
-    <ProfileEditorIdentity :profile="identityProfile">
+    <ProfileEditorIdentity
+      :profile="identityProfile"
+      :avatar-editable="!saving && !isGuest"
+      @edit-avatar="appearanceOpen = true"
+    >
       <template #actions>
-        <BButton
-          type="text"
-          class="profile-appearance-action"
-          :disabled="saving || isGuest"
-          v-click-log="{ module: '我的信息', operation: `选择头像` }"
-          @click="avatarPickerOpen = true"
-          >{{ t('profileAppearance.changeAvatar') }}</BButton
-        >
-        <span class="profile-appearance-divider" aria-hidden="true" />
         <BButton type="text" class="profile-appearance-action" :disabled="saving" @click="appearanceOpen = true"
           ><SvgIcon :src="icon.common.magicWand" size="14" aria-hidden="true" />{{
             t('profileAppearance.title')
@@ -99,13 +94,11 @@
       >
     </component>
   </div>
-  <ProfileAppearanceStudio v-model:open="appearanceOpen" :profile="identityProfile" @navigate="handleFrameNavigation" />
-  <AvatarPicker
-    v-model:open="avatarPickerOpen"
-    :current-src="headPicture"
-    :frame-id="equippedFrameId"
-    :z-index="730"
-    @select="handleAvatarSelected"
+  <ProfileAppearanceStudio
+    v-model:open="appearanceOpen"
+    :profile="identityProfile"
+    @navigate="handleFrameNavigation"
+    @avatar-saved="handleAvatarSaved"
   />
 </template>
 
@@ -132,13 +125,10 @@
   import type { CommunityChatAuthorProfile } from '@/api/communityChatApi';
   import { useMobileLayout } from '@/composables/useMobileLayout';
   import { profileBackground } from '@/config/profileBackgrounds';
-  import AvatarPicker from '@/components/personCenter/myInfo/AvatarPicker.vue';
   import { resolveAccountRoleLabelKey } from '@/config/accountRole';
   import { frameVariant } from '@/config/growthFrames.ts';
   const user = useUserStore();
   const isGuest = computed(() => !user.id || user.role === 'visitor');
-  const headPicture = ref<string>('');
-  const avatarChanged = ref(false);
   const saving = ref(false);
   const emit = defineEmits<{ close: []; saved: []; navigate: [path: string] }>();
   const profile = useCommunityChatProfile();
@@ -153,7 +143,7 @@
   }
   const bioLength = computed(() => Array.from(bio.value).length);
   const accountBaseline = ref('');
-  const accountSignature = () => JSON.stringify([userData.value.alias, userData.value.email || '', headPicture.value]);
+  const accountSignature = () => JSON.stringify([userData.value.alias, userData.value.email || '']);
   const accountDirty = computed(() => accountSignature() !== accountBaseline.value);
   const communityDirty = computed(() =>
     Boolean(profile.ownProfile.value && bio.value !== profile.ownProfile.value.bio),
@@ -191,7 +181,6 @@
   const { t } = useI18n();
   const isMobileLayout = useMobileLayout();
   const appearanceOpen = ref(false);
-  const avatarPickerOpen = ref(false);
   const equippedFrameId = computed(() => {
     const id = growth.value?.equippedFrame;
     return frameVariant(id) ? id : null;
@@ -207,7 +196,7 @@
       userPublicId: preview?.userPublicId,
       communityId: preview?.communityId,
       role: preview?.role || 'member',
-      avatar: headPicture.value,
+      avatar: user.headPicture || '',
       frameId,
       frameRarity:
         shop.value?.frames?.find((item) => item.id === frameId)?.rarity ??
@@ -224,9 +213,9 @@
       hasMoreAchievements: false,
     };
   });
-  function handleAvatarSelected(source: string) {
-    headPicture.value = source;
-    avatarChanged.value = true;
+  function handleAvatarSaved() {
+    void loadGrowthTasks(true);
+    emit('saved');
   }
 
   async function saveUserInfo() {
@@ -246,20 +235,17 @@
     }
     saving.value = true;
     try {
-      const payload: { id: string; alias: string; email: string; headPicture?: string } = {
+      const payload = {
         id: user.id,
-        headPicture: headPicture.value,
         alias: userData.value.alias,
         email: userData.value.email,
       };
-      if (!avatarChanged.value) delete payload.headPicture;
       if (accountDirty.value) {
         const res = await userApi.updateUserInfo(payload);
         if (res.status !== 200) throw new Error('PROFILE_SAVE_FAILED');
         const refreshed = await userApi.getUserInfoById({ id: user.id });
         user.setUserInfo(refreshed.data);
         accountBaseline.value = accountSignature();
-        avatarChanged.value = false;
       }
       if (communityDirty.value && profile.ownProfile.value) {
         const result = await profile.saveOwnProfile({
@@ -318,7 +304,6 @@
   }
 
   const userData = ref({ alias: user.alias, email: user.email });
-  headPicture.value = user.headPicture || '';
   accountBaseline.value = accountSignature();
   void loadGrowth();
   if (user.id && user.role !== 'visitor') void loadCommunity();
@@ -346,12 +331,6 @@
     padding: 0 var(--ui-space-8, 8px);
     gap: var(--ui-space-6, 6px);
     font-size: var(--ui-font-13, 13px);
-  }
-  .profile-appearance-divider {
-    height: var(--ui-layout-14, 14px);
-    /* ui-density-fixed: 操作分隔线保持 1px 细线，不随界面密度变粗。 */
-    width: 1px;
-    background: var(--surface-border-color);
   }
   .profile-public-fields {
     display: grid;

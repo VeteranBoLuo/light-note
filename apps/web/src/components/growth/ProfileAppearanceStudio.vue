@@ -1,14 +1,39 @@
 <template>
+  <!-- ui-density-fixed: 桌面弹框高度上限是视口预算；内部尺寸跟随密度，让紧凑档增加可见选项。 -->
   <BModal
     :visible="open"
     :title="t('profileAppearance.title')"
     width="var(--ui-layout-960, 960px)"
-    height="min(88vh, var(--ui-layout-760, 760px))"
+    height="min(88vh, 760px)"
     modal-class="appearance-studio-modal"
     content-class="appearance-studio-modal__content"
     fullscreen-mobile
+    :close-disabled="busy || avatar.saving.value"
     @close="close"
   >
+    <template #mobileHeader="{ close: closeModal }">
+      <div class="appearance-studio__mobile-header">
+        <BButton
+          type="text"
+          icon-only
+          class="appearance-studio__back"
+          :aria-label="t('common.back')"
+          :disabled="busy || avatar.saving.value"
+          @click="closeModal"
+        >
+          <SvgIcon :src="icon.arrow_left" size="23" aria-hidden="true" />
+        </BButton>
+        <h2>{{ t('profileAppearance.title') }}</h2>
+        <BButton
+          v-if="isTrying"
+          type="text"
+          class="appearance-studio__mobile-revert"
+          :disabled="busy || avatar.saving.value"
+          @click="revertTrial"
+          >{{ t('profileAppearance.revert') }}</BButton
+        >
+      </div>
+    </template>
     <template #title
       ><span class="appearance-studio__title"
         >{{ t('profileAppearance.title')
@@ -36,12 +61,29 @@
 
       <div class="appearance-studio__toolbar">
         <BTabs v-model:active-tab="category" variant="line" :options="categoryOptions" />
-        <BTabs v-model:active-tab="filter" variant="pill" :options="filterOptions" />
+        <BTabs
+          v-if="category !== 'avatar'"
+          v-model:active-tab="filter"
+          class="appearance-studio__filters"
+          variant="pill"
+          :options="filterOptions"
+        />
       </div>
 
       <div ref="listElement" v-auto-scrollbar class="appearance-studio__list">
+        <ProfileAvatarOptions
+          v-if="category === 'avatar'"
+          :selected-id="avatar.selectedId.value"
+          :source-kind="avatar.kind.value"
+          :disabled="busy || avatar.saving.value"
+          :preparing="avatar.preparing.value"
+          :prepare-error="avatar.error.value === 'prepare'"
+          @select="avatar.selectBuiltin"
+          @upload="avatar.upload"
+          @restore="avatar.selectDefault"
+        />
         <BLoading
-          v-if="shopLoading && !shop"
+          v-else-if="shopLoading && !shop"
           class="appearance-studio__state"
           inline
           :loading="true"
@@ -146,7 +188,49 @@
 
     <template #footer>
       <div class="appearance-studio__footer">
-        <div v-if="shop" class="appearance-studio__selection">
+        <template v-if="category === 'avatar'">
+          <div class="appearance-studio__selection">
+            <strong>{{ avatarName }}</strong>
+            <small v-if="avatar.error.value === 'save'" role="alert">{{
+              t('profileAppearance.avatarSaveFailed')
+            }}</small>
+            <small v-else>{{ avatarHint }}</small>
+          </div>
+          <div class="appearance-studio__actions">
+            <span
+              v-if="!avatar.changed.value && !avatar.preparing.value && !avatar.error.value && avatar.canEdit.value"
+              class="appearance-studio__using"
+            >
+              <SvgIcon :src="icon.filterPanel.check" size="15" aria-hidden="true" />{{
+                t('profileAppearance.action.using')
+              }}
+            </span>
+            <BButton
+              v-else
+              class="appearance-studio__primary"
+              type="primary"
+              :loading="avatar.saving.value"
+              :disabled="
+                busy ||
+                avatar.preparing.value ||
+                avatar.error.value === 'prepare' ||
+                Boolean(user.adminContext) ||
+                (!avatar.changed.value && avatar.canEdit.value)
+              "
+              @click="useAvatar"
+              >{{
+                t(
+                  user.adminContext
+                    ? 'profileAppearance.avatarReadOnly'
+                    : avatar.canEdit.value
+                      ? 'myInfo.useAvatar'
+                      : 'myInfo.loginToDecorate',
+                )
+              }}</BButton
+            >
+          </div>
+        </template>
+        <div v-else-if="shop" class="appearance-studio__selection">
           <strong
             >{{ current.name
             }}<span v-if="current.rarity" class="appearance-studio__chip" :class="`is-${current.rarity}`">{{
@@ -156,9 +240,17 @@
               t('profileAppearance.motion')
             }}</span></strong
           >
-          <small>{{ footerHint }}</small>
+          <small>{{
+            isMobileLayout && current.category === 'background' && current.item
+              ? t(
+                  current.item.owned
+                    ? 'profileAppearance.hint.backgroundOwnedShort'
+                    : 'profileAppearance.hint.backgroundRedeemShort',
+                )
+              : footerHint
+          }}</small>
         </div>
-        <div v-if="shop" class="appearance-studio__actions">
+        <div v-if="category !== 'avatar' && shop" class="appearance-studio__actions">
           <span v-if="!shop.isVisitor" class="appearance-studio__balance" :title="t('profileAppearance.balance')"
             ><SvgIcon :src="icon.growth.coin" size="15" aria-hidden="true" />{{ shop.points.toLocaleString() }}</span
           >
@@ -211,11 +303,15 @@
   import ChatUserProfileContent from '@/components/communityChat/ChatUserProfileContent.vue';
   import ProfileBackgroundArt from './ProfileBackgroundArt.vue';
   import AvatarFramePreview from './AvatarFramePreview.vue';
+  import ProfileAvatarOptions from '@/components/personCenter/myInfo/ProfileAvatarOptions.vue';
+  import { useProfileAvatar } from '@/composables/useProfileAvatar';
+  import { BUILTIN_AVATARS } from '@/config/builtinAvatars';
 
-  type Category = 'background' | 'frame';
+  type DecorationCategory = 'background' | 'frame';
+  type Category = 'avatar' | DecorationCategory;
   type Rarity = NonNullable<ShopItem['rarity']>;
   type Option = {
-    category: Category;
+    category: DecorationCategory;
     id: string | null;
     name: string;
     item: ShopItem | null;
@@ -227,12 +323,13 @@
 
   const props = defineProps<{
     open: boolean;
-    /** 资料编辑中的身份信息（含未保存的昵称、头像与简介）；背景与头像框由试穿状态覆盖。 */
+    /** 保留资料表单的昵称、简介草稿；头像、背景与头像框由装扮试穿状态覆盖。 */
     profile: CommunityChatAuthorProfile;
   }>();
   const emit = defineEmits<{
     'update:open': [value: boolean];
     navigate: [destination: 'growth' | 'tasks' | 'achievements'];
+    'avatar-saved': [];
   }>();
 
   const { t, te } = useI18n();
@@ -253,7 +350,25 @@
     claimAchievement,
   } = useGrowth();
 
-  const category = ref<Category>('background');
+  const category = ref<Category>('avatar');
+  const avatar = useProfileAvatar(computed(() => props.open));
+  const selectedAvatar = computed(() => BUILTIN_AVATARS.find((item) => item.id === avatar.selectedId.value));
+  const avatarName = computed(() =>
+    selectedAvatar.value
+      ? t(selectedAvatar.value.nameKey)
+      : t(
+          avatar.kind.value === 'custom'
+            ? 'myInfo.customAvatarSelected'
+            : avatar.kind.value === 'default'
+              ? 'myInfo.defaultAvatar'
+              : 'myInfo.currentAvatar',
+        ),
+  );
+  const avatarHint = computed(() =>
+    selectedAvatar.value
+      ? t(selectedAvatar.value.descriptionKey)
+      : t('profileAppearance.avatarImmediate'),
+  );
   const filter = ref<'all' | 'owned'>('all');
   const trial = reactive<{ background: string | null; frame: string | null }>({ background: null, frame: null });
   const busy = ref(false);
@@ -261,7 +376,7 @@
   let generation = 0;
   onBeforeUnmount(() => generation++);
 
-  const avatarSrc = computed(() => props.profile.avatar || icon.communityChat.defaultAvatar);
+  const avatarSrc = computed(() => avatar.source.value || icon.communityChat.defaultAvatar);
   const equipped = computed(() => {
     const frame = shop.value ? shop.value.equippedFrame : growth.value?.equippedFrame;
     const background = shop.value ? shop.value.equippedBackground : growth.value?.equippedBackground;
@@ -342,12 +457,13 @@
       (category.value === 'background' ? backgroundItems.value : frameItems.value).filter((item) => item.owned).length,
   );
   const categoryOptions = computed(() => [
+    { key: 'avatar', label: t('profileAppearance.avatar') },
+    { key: 'frame', label: t('profileAppearance.frame'), badge: shop.value ? frameItems.value.length : undefined },
     {
       key: 'background',
       label: t('profileAppearance.background'),
       badge: shop.value ? backgroundItems.value.length : undefined,
     },
-    { key: 'frame', label: t('profileAppearance.frame'), badge: shop.value ? frameItems.value.length : undefined },
   ]);
   const filterOptions = computed(() => [
     { key: 'all', label: t('profileAppearance.all') },
@@ -361,10 +477,16 @@
     return frameOptions.value.find((option) => option.id === trial.frame) || noFrameOption.value;
   });
   const isTrying = computed(
-    () => trial.background !== equipped.value.background || trial.frame !== equipped.value.frame,
+    () =>
+      avatar.changed.value ||
+      avatar.preparing.value ||
+      Boolean(avatar.error.value) ||
+      trial.background !== equipped.value.background ||
+      trial.frame !== equipped.value.frame,
   );
   const stageProfile = computed<CommunityChatAuthorProfile>(() => ({
     ...props.profile,
+    avatar: avatarSrc.value,
     backgroundId: trial.background,
     frameId: trial.frame,
     frameRarity:
@@ -533,7 +655,10 @@
   }
 
   function revertTrial() {
-    if (!busy.value) resetTrial();
+    if (!busy.value && !avatar.saving.value) {
+      resetTrial();
+      avatar.reset();
+    }
   }
 
   async function loadCatalog() {
@@ -557,7 +682,7 @@
     (open) => {
       generation++;
       if (!open) return;
-      category.value = 'background';
+      category.value = 'avatar';
       filter.value = 'all';
       busy.value = false;
       resetTrial();
@@ -565,20 +690,34 @@
     },
     { immediate: true },
   );
-  watch(
-    () => user.id,
-    () => {
-      if (props.open) close();
-    },
-  );
+  watch([() => user.id, () => user.role, () => user.adminContext?.subjectUserId], () => {
+    if (props.open) {
+      busy.value = false;
+      close();
+    }
+  });
   watch([category, filter], async () => {
     await nextTick();
     listElement.value?.scrollTo({ top: 0 });
   });
 
   function close() {
+    if (busy.value || avatar.saving.value) return;
     generation++;
+    avatar.reset();
     emit('update:open', false);
+  }
+
+  async function useAvatar() {
+    if (!avatar.canEdit.value) {
+      if (!user.adminContext) bookmark.isShowLogin = true;
+      return;
+    }
+    if (await avatar.save()) {
+      message.success(t('profileAppearance.avatarSaved'));
+      recordOperation({ module: '个人资料', operation: '保存头像' });
+      emit('avatar-saved');
+    }
   }
 
   function goTo(destination: 'growth' | 'tasks' | 'achievements') {
@@ -740,6 +879,29 @@
 </style>
 
 <style scoped lang="less">
+  .appearance-studio__mobile-header {
+    box-sizing: border-box;
+    width: 100%;
+    height: var(--ui-layout-56, 56px);
+    padding-inline: var(--ui-space-8, 8px);
+    display: grid;
+    grid-template-columns: var(--ui-control-44, 44px) minmax(0, 1fr) var(--ui-control-44, 44px);
+    align-items: center;
+  }
+  .appearance-studio__mobile-header h2 {
+    margin: 0;
+    text-align: center;
+    font-size: var(--ui-font-18, 18px);
+  }
+  .appearance-studio__back.b_btn {
+    width: var(--ui-control-44, 44px);
+    height: var(--ui-control-44, 44px);
+    padding: 0;
+  }
+  .appearance-studio__mobile-revert.b_btn {
+    padding: 0;
+    font-size: var(--ui-font-12, 12px);
+  }
   .appearance-studio__title {
     display: inline-flex;
     align-items: center;
@@ -1143,9 +1305,16 @@
     .appearance-studio__stage {
       height: var(--ui-layout-150, 150px);
     }
+    .appearance-studio__stage :deep(.chat-profile-content__rarity) {
+      display: none;
+    }
 
     .appearance-studio__toolbar {
       gap: var(--ui-space-8, 8px);
+      flex-wrap: wrap;
+    }
+    .appearance-studio__filters {
+      width: 100%;
     }
 
     .appearance-studio__list {

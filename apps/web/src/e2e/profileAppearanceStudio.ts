@@ -14,7 +14,7 @@ import Harness from './ProfileAppearanceHarness.vue';
 import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
 
 // 资料编辑与个人装扮的本地验收页：真实组件 + 内存数据，所有请求都在本页应答，不连接后端、不扣真实积分。
-// 参数：state=newbie|visitor|loading|error|maintenance|long|profile-loading|profile-error，appearance=none，identity=official，theme=night，renderProfile=mobile，density，locale=en-US。
+// 参数：state=newbie|visitor|loading|error|maintenance|long|profile-loading|profile-error|avatar-error|avatar-saving，appearance=none，identity=official，theme=night，renderProfile=mobile，density，locale=en-US。
 const params = new URLSearchParams(location.search);
 const state = params.get('state');
 const mobile = params.get('renderProfile') === 'mobile' || innerWidth < 768;
@@ -242,6 +242,9 @@ request.defaults.adapter = async (config) => {
     }
     data = structuredClone(ownProfile);
   } else if (path.endsWith('/api/user/saveUserInfo')) {
+    if ('headPicture' in body && state === 'avatar-error')
+      return { config, status: 200, statusText: 'OK', headers: {}, data: { status: 500, data: null } };
+    if ('headPicture' in body && state === 'avatar-saving') await wait(1500);
     Object.assign(account, body);
     data = {};
   } else if (path.endsWith('/api/user/getUserInfo')) data = structuredClone(account);

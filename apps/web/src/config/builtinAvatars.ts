@@ -1,7 +1,7 @@
-import avatarSpriteUrl from '@/assets/img/light-note-avatar-sprite-v2.webp';
-import avatarVarietySpriteUrl from '@/assets/img/light-note-avatar-sprite-variety-v1.webp';
+import avatarSpriteUrl from '@/assets/img/light-note-avatar-sprite-v3.webp';
+import avatarVarietySpriteUrl from '@/assets/img/light-note-avatar-sprite-variety-v2.webp';
+import avatarRefinedSpriteUrl from '@/assets/img/light-note-avatar-sprite-refined-v1.webp';
 
-const AVATAR_GRID_SIZE = 3;
 const AVATAR_OUTPUT_SIZE = 256;
 const AVATAR_WEBP_QUALITY = 0.82;
 const AVATAR_JPEG_QUALITY = 0.84;
@@ -24,13 +24,20 @@ export type BuiltinAvatarId =
   | 'library-mushroom'
   | 'pixel-owl'
   | 'porcelain-rabbit'
-  | 'sunflower-turntable';
+  | 'sunflower-turntable'
+  | 'silver-fox'
+  | 'ink-cat'
+  | 'white-deer'
+  | 'snow-owl'
+  | 'star-whale'
+  | 'paper-traveler';
 
-type BuiltinAvatarSprite = 'classic' | 'variety';
+type BuiltinAvatarSprite = 'classic' | 'variety' | 'refined';
 
-const AVATAR_SPRITE_URLS: Record<BuiltinAvatarSprite, string> = {
-  classic: avatarSpriteUrl,
-  variety: avatarVarietySpriteUrl,
+const AVATAR_SPRITES: Record<BuiltinAvatarSprite, { url: string; columns: number; rows: number }> = {
+  classic: { url: avatarSpriteUrl, columns: 3, rows: 3 },
+  variety: { url: avatarVarietySpriteUrl, columns: 3, rows: 3 },
+  refined: { url: avatarRefinedSpriteUrl, columns: 3, rows: 2 },
 };
 
 export interface BuiltinAvatar {
@@ -187,16 +194,65 @@ export const BUILTIN_AVATARS: readonly BuiltinAvatar[] = [
     nameKey: 'myInfo.builtinAvatarNames.sunflowerTurntable',
     descriptionKey: 'myInfo.builtinAvatarDescriptions.sunflowerTurntable',
   },
+  {
+    id: 'silver-fox',
+    sprite: 'refined',
+    row: 0,
+    column: 0,
+    nameKey: 'myInfo.builtinAvatarNames.silverFox',
+    descriptionKey: 'myInfo.builtinAvatarDescriptions.silverFox',
+  },
+  {
+    id: 'ink-cat',
+    sprite: 'refined',
+    row: 0,
+    column: 1,
+    nameKey: 'myInfo.builtinAvatarNames.inkCat',
+    descriptionKey: 'myInfo.builtinAvatarDescriptions.inkCat',
+  },
+  {
+    id: 'white-deer',
+    sprite: 'refined',
+    row: 0,
+    column: 2,
+    nameKey: 'myInfo.builtinAvatarNames.whiteDeer',
+    descriptionKey: 'myInfo.builtinAvatarDescriptions.whiteDeer',
+  },
+  {
+    id: 'snow-owl',
+    sprite: 'refined',
+    row: 1,
+    column: 0,
+    nameKey: 'myInfo.builtinAvatarNames.snowOwl',
+    descriptionKey: 'myInfo.builtinAvatarDescriptions.snowOwl',
+  },
+  {
+    id: 'star-whale',
+    sprite: 'refined',
+    row: 1,
+    column: 1,
+    nameKey: 'myInfo.builtinAvatarNames.starWhale',
+    descriptionKey: 'myInfo.builtinAvatarDescriptions.starWhale',
+  },
+  {
+    id: 'paper-traveler',
+    sprite: 'refined',
+    row: 1,
+    column: 2,
+    nameKey: 'myInfo.builtinAvatarNames.paperTraveler',
+    descriptionKey: 'myInfo.builtinAvatarDescriptions.paperTraveler',
+  },
 ] as const;
 
 export const BUILTIN_AVATAR_SPRITE_URL = avatarSpriteUrl;
 
 export function builtinAvatarPreviewStyle(avatar: BuiltinAvatar) {
+  const sprite = AVATAR_SPRITES[avatar.sprite];
   return {
-    backgroundImage: `url("${AVATAR_SPRITE_URLS[avatar.sprite]}")`,
-    backgroundPosition: `${avatar.column * 50}% ${avatar.row * 50}%`,
+    backgroundImage: `url("${sprite.url}")`,
+    backgroundPosition: `${(avatar.column * 100) / (sprite.columns - 1)}% ${(avatar.row * 100) / (sprite.rows - 1)}%`,
     backgroundRepeat: 'no-repeat',
-    backgroundSize: `${AVATAR_GRID_SIZE * 100}% ${AVATAR_GRID_SIZE * 100}%`,
+    backgroundSize: `${sprite.columns * 100}% ${sprite.rows * 100}%`,
   };
 }
 
@@ -222,15 +278,16 @@ function loadSpriteImage(spriteUrl: string): Promise<HTMLImageElement> {
 
 /**
  * 内置头像按系列使用紧凑精灵图交付，用户确认后再裁成独立的 256px Data URL。
- * 这样既避免首屏加载十八张大图，也兼容当前头像接口与聊天室头像接口的数据格式。
+ * 这样既避免首屏逐张加载大图，也兼容当前头像接口与聊天室头像接口的数据格式。
  */
 export async function renderBuiltinAvatar(id: BuiltinAvatarId): Promise<string> {
   const avatar = BUILTIN_AVATARS.find((item) => item.id === id);
   if (!avatar) throw new Error('BUILTIN_AVATAR_NOT_FOUND');
 
-  const image = await loadSpriteImage(AVATAR_SPRITE_URLS[avatar.sprite]);
-  const sourceWidth = image.naturalWidth / AVATAR_GRID_SIZE;
-  const sourceHeight = image.naturalHeight / AVATAR_GRID_SIZE;
+  const sprite = AVATAR_SPRITES[avatar.sprite];
+  const image = await loadSpriteImage(sprite.url);
+  const sourceWidth = image.naturalWidth / sprite.columns;
+  const sourceHeight = image.naturalHeight / sprite.rows;
   if (!sourceWidth || !sourceHeight) throw new Error('BUILTIN_AVATAR_SPRITE_SIZE_INVALID');
 
   const canvas = document.createElement('canvas');
