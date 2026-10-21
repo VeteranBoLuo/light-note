@@ -6,11 +6,11 @@ import { resolveNoteDetailReturnPath } from './noteDetailNavigation';
 const STORAGE_KEY = 'light-note:untagged-note-return:v1';
 const MAX_AGE_MS = 12 * 60 * 60_000;
 const trackingRouters = new WeakSet<Router>();
-let memory: UntaggedNoteReturn | null = null;
+let memory: UntaggedResourceReturn | null = null;
 let sequence = 0;
 
 /** Tab-local navigation metadata; resource contents always come from a fresh query. */
-export interface UntaggedNoteReturn {
+export interface UntaggedResourceReturn {
   id: string;
   scope: string;
   path: string;
@@ -32,7 +32,7 @@ export function resolveUntaggedReturnPath(value: unknown): string {
   return parsed.pathname === '/organize' && parsed.searchParams.get('issue') === 'untagged' ? source : '';
 }
 
-function write(snapshot: UntaggedNoteReturn | null) {
+function write(snapshot: UntaggedResourceReturn | null) {
   memory = snapshot;
   try {
     if (snapshot) sessionStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
@@ -42,7 +42,7 @@ function write(snapshot: UntaggedNoteReturn | null) {
   }
 }
 
-function read(): UntaggedNoteReturn | null {
+function read(): UntaggedResourceReturn | null {
   let snapshot = memory;
   try {
     const raw = sessionStorage.getItem(STORAGE_KEY);
@@ -85,19 +85,22 @@ function read(): UntaggedNoteReturn | null {
   return snapshot;
 }
 
-// Install in both pages so refreshing a note still supports browser/system back.
-export function trackUntaggedNoteReturn(router: Router) {
+// Install at each participating entry so refresh still supports browser/system back.
+export function trackUntaggedResourceReturn(router: Router) {
   if (trackingRouters.has(router)) return;
   trackingRouters.add(router);
   router.afterEach((to, from, failure) => {
     if (failure || to.fullPath === from.fullPath) return;
     const snapshot = read();
     if (!snapshot) return;
-    const isSourceNote = (path: string, source: unknown) =>
-      path.startsWith('/noteLibrary/') && resolveUntaggedReturnPath(source) === snapshot.path;
-    if (to.fullPath === snapshot.path && isSourceNote(from.path, from.query.from)) {
+    const isSourceResource = (route: typeof to) =>
+      resolveUntaggedReturnPath(route.query.from) === snapshot.path &&
+      (route.path.startsWith('/noteLibrary/') ||
+        (route.query.organize === 'untagged' &&
+          (route.path.startsWith('/manage/editBookmark/') || route.path === '/cloudSpace')));
+    if (to.fullPath === snapshot.path && isSourceResource(from)) {
       write({ ...snapshot, returning: true });
-    } else if (isSourceNote(to.path, to.query.from)) {
+    } else if (isSourceResource(to)) {
       write({ ...snapshot, returning: false });
     } else {
       write(null);
@@ -105,12 +108,12 @@ export function trackUntaggedNoteReturn(router: Router) {
   });
 }
 
-export function rememberUntaggedNoteReturn(input: Omit<UntaggedNoteReturn, 'id' | 'createdAt' | 'returning'>) {
+export function rememberUntaggedResourceReturn(input: Omit<UntaggedResourceReturn, 'id' | 'createdAt' | 'returning'>) {
   if (!resolveUntaggedReturnPath(input.path)) return;
   write({ ...input, id: `${Date.now()}-${++sequence}`, createdAt: Date.now(), returning: false });
 }
 
-export function readUntaggedNoteReturn(scope: string, path: string): UntaggedNoteReturn | null {
+export function readUntaggedResourceReturn(scope: string, path: string): UntaggedResourceReturn | null {
   const snapshot = read();
   if (!snapshot) return null;
   if (snapshot.scope !== scope) {
@@ -120,6 +123,6 @@ export function readUntaggedNoteReturn(scope: string, path: string): UntaggedNot
   return snapshot.returning && snapshot.path === path ? snapshot : null;
 }
 
-export function clearUntaggedNoteReturn(snapshot?: UntaggedNoteReturn) {
+export function clearUntaggedResourceReturn(snapshot?: UntaggedResourceReturn) {
   if (!snapshot || read()?.id === snapshot.id) write(null);
 }

@@ -1,3 +1,4 @@
+import { trackUntaggedResourceReturn } from '@/utils/untaggedResourceReturn';
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { onBeforeRouteLeave, useRouter } from 'vue-router';
 import { apiBasePost, apiQueryPost } from '@/http/request';
@@ -34,6 +35,7 @@ export interface BookmarkEditorErrors {
 
 export function useBookmarkEditor() {
   const router = useRouter();
+  trackUntaggedResourceReturn(router);
   const bookmark = bookmarkStore();
   const user = useUserStore();
   const { t } = useI18n();

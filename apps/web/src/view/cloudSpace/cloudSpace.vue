@@ -242,6 +242,7 @@
 </template>
 
 <script lang="ts" setup>
+  import { trackUntaggedResourceReturn, resolveUntaggedReturnPath } from '@/utils/untaggedResourceReturn';
   import icon from '@/config/icon';
   import { useResourceSelection } from '@/composables/useResourceSelection';
   import type { SelectedResource, SelectionOperation } from '@/store/resourceSelection';
@@ -301,6 +302,7 @@
   const user = useUserStore();
   const route = useRoute();
   const router = useRouter();
+  trackUntaggedResourceReturn(router);
   const { isOrganizingFromInbox, completingInbox, completeInboxResource } = useInboxOrganizer();
   const deletedOrganizingFileId = ref('');
   const organizingFileId = computed(() => {
@@ -352,8 +354,10 @@
     const query = { ...route.query };
     delete query.fileId;
     delete query.fileName;
-    delete query.organize;
-    delete query.from;
+    if (!resolveUntaggedReturnPath(route.query.from)) {
+      delete query.organize;
+      delete query.from;
+    }
     void router.replace({ path: '/cloudSpace', query });
   }
 
@@ -514,8 +518,11 @@
   );
 
   useMobileTopBar(['cloudSpace'], {
-    onBack: () => toggleBatchMode(),
-    canGoBack: () => batchMode.value,
+    onBack: () => {
+      if (batchMode.value) toggleBatchMode();
+      else if (resolveUntaggedReturnPath(route.query.from)) router.back();
+    },
+    canGoBack: () => batchMode.value || Boolean(resolveUntaggedReturnPath(route.query.from)),
     onTitleClick: resetCloudSpace,
     searchSourceType: 'file',
     onAuxiliaryAction: () => {
