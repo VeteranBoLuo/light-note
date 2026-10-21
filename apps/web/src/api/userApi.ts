@@ -1,12 +1,12 @@
 import { clearBrowserPush } from '@/composables/useBrowserPush';
-import { apiBaseGet, apiBasePost } from '@/http/request';
+import { apiBaseGet, apiBasePost, type RequestOptions } from '@/http/request';
 
 const userApi = {
   getUserInfoById(data) {
     return apiBaseGet('/api/user/getUserInfo', data);
   },
-  updateUserInfo(user) {
-    return apiBasePost('/api/user/saveUserInfo', user);
+  updateUserInfo(user, options?: RequestOptions) {
+    return apiBasePost('/api/user/saveUserInfo', user, options);
   },
   markFeatureAnnouncementSeen(payload: { announcementId: string; version: string }) {
     return apiBasePost('/api/user/feature-announcements/seen', payload, { silent: true });

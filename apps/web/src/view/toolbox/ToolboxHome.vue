@@ -415,9 +415,10 @@
                         type="text"
                         :class="{ 'is-pinned': isPinned(tool.id) }"
                         :aria-label="t(isPinned(tool.id) ? 'toolbox.home.unpinTool' : 'toolbox.home.pinTool')"
+                        :aria-pressed="isPinned(tool.id)"
                         @click.stop="togglePinnedTool(tool.id)"
                       >
-                        <SvgIcon :src="isPinned(tool.id) ? icon.contextMenu.unpin : icon.contextMenu.pin" size="15" />
+                        <SvgIcon :src="icon.contextMenu.pin" size="15" aria-hidden="true" />
                       </BButton>
                     </BTooltip>
                   </div>
@@ -1591,8 +1592,8 @@
   }
   .toolbox-card__pin-wrap {
     position: absolute;
-    bottom: var(--ui-space-4, 4px);
-    right: var(--ui-space-4, 4px);
+    bottom: var(--ui-space-8, 8px);
+    right: var(--ui-space-8, 8px);
   }
   .toolbox-card__pin.b_btn {
     width: var(--ui-control-32, 32px);
@@ -1602,6 +1603,8 @@
   }
   .toolbox-card__pin.b_btn.is-pinned {
     color: var(--workspace-purple-text);
+    background: var(--chip-pin-bg);
+    border: 1px solid var(--workspace-purple-text);
   }
   .toolbox-catalog__notice {
     display: flex;
@@ -1823,17 +1826,29 @@
       width: var(--ui-control-44, 44px);
       height: var(--ui-control-44, 44px);
     }
-    .toolbox-card__pin-wrap {
-      bottom: 1px;
+    .toolbox-card__pin.b_btn.is-pinned {
+      position: relative;
+      background: transparent;
+      border: 0;
     }
-    .toolbox-card.b_btn {
-      padding-bottom: 0;
+    .toolbox-card__pin.b_btn.is-pinned::before {
+      content: '';
+      position: absolute;
+      inset: var(--ui-space-8, 8px);
+      border: 1px solid var(--workspace-purple-text);
+      border-radius: 6px;
+      background: var(--chip-pin-bg);
+      pointer-events: none;
+    }
+    .toolbox-card__pin-wrap {
+      bottom: var(--ui-space-10, 10px);
+      right: var(--ui-space-10, 10px);
     }
     .toolbox-card :deep(.toolbox-tool-card__billing) {
       display: flex;
       align-items: center;
       min-height: var(--ui-control-44, 44px);
-      padding-right: var(--ui-space-44, 44px);
+      padding-right: calc(var(--ui-control-44, 44px) + var(--ui-space-6, 6px));
     }
     .toolbox-task-meta {
       padding-right: var(--ui-space-32, 32px);

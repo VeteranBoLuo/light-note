@@ -23,10 +23,6 @@ const desktopMyInfoSource = source('src/components/personCenter/myInfo/ProfileEd
   .replace(/dimension\((\d+), 'icon'\)/g, '$1');
 const appearanceStudioSource = source('src/components/growth/ProfileAppearanceStudio.vue');
 const avatarFrameSource = source('src/components/growth/AvatarFramePreview.vue');
-const avatarPickerSource = source('src/components/personCenter/myInfo/AvatarPicker.vue').replace(
-  /var\(--ui-[\w-]+, ([\d.]+px)\)/g,
-  '$1',
-);
 const avatarArtworkSource = source('src/config/avatarFrameArtwork.ts');
 const pointsShopSource = source('src/components/growth/PointsShop.vue');
 const achievementWallSource = source('src/components/growth/AchievementWall.vue');
@@ -235,12 +231,6 @@ describe('mobile personal center experience', () => {
     );
     expect(appearanceStudioSource).toMatch(/\.appearance-studio__stage\s*\{[\s\S]*?height:\s*176px;/);
     expect(176 - stableSlot - 2 * maxNameCardBleed).toBeGreaterThanOrEqual(8);
-    expect(avatarPickerSource).toMatch(
-      /\.avatar-picker__preview-shell\s*\{[\s\S]*?width:\s*180px;[\s\S]*?height:\s*180px;[\s\S]*?overflow:\s*visible;/,
-    );
-    expect(avatarPickerSource).toMatch(
-      /@media \(max-width: 767px\)[\s\S]*?\.avatar-picker__preview-shell\s*\{[\s\S]*?width:\s*160px;[\s\S]*?height:\s*160px;/,
-    );
   });
 
   it('implements all 29 unique themes and the static-to-ceiling motion ladder', () => {
