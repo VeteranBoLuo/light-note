@@ -5642,6 +5642,8 @@ export default {
     },
   },
   resourceCenter: {
+    readArchive: '阅读已存正文',
+    archiveEmpty: '当前书签暂无已保存的正文，你仍可打开原网页。',
     todo: {
       open: '打开待办',
       pending: '未完成',

@@ -5955,6 +5955,8 @@ export default {
     },
   },
   resourceCenter: {
+    readArchive: 'Read saved content',
+    archiveEmpty: 'No saved content is available for this bookmark. You can still open the original page.',
     todo: {
       open: 'Open todo',
       pending: 'Pending',

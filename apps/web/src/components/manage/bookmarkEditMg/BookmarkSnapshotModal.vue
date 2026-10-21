@@ -9,7 +9,10 @@
           })
         }}</span>
         <span v-else class="bsnap-time"></span>
-        <BSpace v-if="!isGuest && !draftContext">
+        <BButton v-if="readOnly && bookmarkUrl" size="small" @click="openOriginal">
+          {{ $t('bookmarkMg.archiveOpenOriginal') }}
+        </BButton>
+        <BSpace v-if="!isGuest && !draftContext && !readOnly">
           <BButton
             v-if="canArchive && !archiveFailed"
             class="bsnap-generate-button"
@@ -64,7 +67,7 @@
         <p v-if="snap.content && snap.archiveTask.status !== 'succeeded'">{{ $t('bookmarkMg.archivePreserved') }}</p>
         <div v-if="archiveFailed" class="bsnap-recovery-actions">
           <BButton
-            v-if="bookmarkUrl"
+            v-if="bookmarkUrl && !readOnly"
             size="small"
             :type="retryRecommended ? undefined : 'primary'"
             @click="openOriginal"
@@ -135,7 +138,7 @@
       </div>
       <div v-else-if="taskActive" class="bsnap-empty">{{ $t('organizeWorkspace.archiveWaitingPreview') }}</div>
       <div v-else-if="!loadError && snap?.archiveTask?.status !== 'failed'" class="bsnap-empty">{{
-        $t('bookmarkMg.snapshotEmpty')
+        $t(readOnly ? 'resourceCenter.archiveEmpty' : 'bookmarkMg.snapshotEmpty')
       }}</div>
     </div>
   </BModal>
@@ -159,14 +162,22 @@
   import { openBookmarkUrl } from '@/utils/openBookmark';
 
   const { t, te } = useI18n();
-  const props = defineProps<{ bookmarkId?: string; draftContext?: { runId: string; suggestionId: string } }>();
+  const props = defineProps<{
+    bookmarkId?: string;
+    draftContext?: { runId: string; suggestionId: string };
+    readOnly?: boolean;
+    originalUrl?: string;
+  }>();
+  const emit = defineEmits<{ read: [bookmarkId: string] }>();
   const visible = defineModel<boolean>('visible');
 
   // 游客(共享 visitor 账号)可查看快照,但「归档 / AI 摘要」是写/消耗操作,对游客隐藏,避免点了被后端拦。
   const user = useUserStore();
   const isGuest = computed(() => !user.id || user.role === 'visitor');
   const isReadonlyAdminContext = computed(() => user.adminContext?.mode === 'readonly');
-  const canArchive = computed(() => !isGuest.value && !isReadonlyAdminContext.value && !props.draftContext);
+  const canArchive = computed(
+    () => !props.readOnly && !isGuest.value && !isReadonlyAdminContext.value && !props.draftContext,
+  );
 
   const snap = ref<any>(null);
   const loading = ref(false);
@@ -180,7 +191,9 @@
   const bookmarkUrl = computed(() =>
     props.draftContext
       ? ''
-      : resolveBookmarkUrlInput(snap.value?.bookmarkUrl || '', { allowTextExtraction: false }).canonicalUrl,
+      : resolveBookmarkUrlInput(snap.value?.bookmarkUrl || (props.readOnly ? props.originalUrl : '') || '', {
+          allowTextExtraction: false,
+        }).canonicalUrl,
   );
   const failureMessage = computed(() => {
     const task = snap.value?.archiveTask;
@@ -195,6 +208,7 @@
   );
   let pollTimer: ReturnType<typeof setTimeout> | undefined;
   let contextVersion = 0;
+  let readReported = false;
   function stopPolling() {
     clearTimeout(pollTimer);
     pollTimer = undefined;
@@ -229,7 +243,19 @@
         : await apiBasePost('/api/bookmark/snapshot', { id: bookmarkId });
       if (current !== loadSequence || bookmarkId !== props.bookmarkId || !visible.value) return null;
       loadError.value = res?.status !== 200;
-      if (res?.status === 200) snap.value = res.data;
+      if (res?.status === 200) {
+        const data = res.data;
+        // The read-only entry must not present an old URL's archive as the current bookmark's body.
+        const currentUrl = data?.bookmarkUrl || props.originalUrl;
+        snap.value =
+          props.readOnly && data?.url && currentUrl && data.url !== currentUrl
+            ? { ...data, content: null, summary: null, update_time: null }
+            : data;
+        if (props.readOnly && snap.value?.content && !readReported) {
+          readReported = true;
+          emit('read', bookmarkId);
+        }
+      }
       if (!loadError.value && taskActive.value)
         pollTimer = setTimeout(() => {
           void loadSnap(true);
@@ -270,7 +296,7 @@
   }
 
   async function generateSummary() {
-    if (!props.bookmarkId || !snap.value?.content || busy.value) return;
+    if (props.readOnly || !props.bookmarkId || !snap.value?.content || busy.value) return;
     const bookmarkId = props.bookmarkId;
     const version = contextVersion;
     summarizing.value = true;
@@ -306,6 +332,8 @@
     [
       () => visible.value,
       () => props.bookmarkId,
+      () => props.readOnly,
+      () => props.originalUrl,
       () => props.draftContext?.runId,
       () => props.draftContext?.suggestionId,
       () => user.id,
@@ -317,6 +345,7 @@
     async ([isVisible, bookmarkId]) => {
       loadSequence += 1;
       contextVersion++;
+      readReported = false;
       stopPolling();
       archiving.value = false;
       summarizing.value = false;
