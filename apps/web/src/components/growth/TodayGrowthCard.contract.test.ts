@@ -7,6 +7,7 @@ const nextActionSource = readFileSync(resolve(process.cwd(), 'src/components/gro
 const growthPageSource = readFileSync(resolve(process.cwd(), 'src/view/growth/GrowthPage.vue'), 'utf8');
 const weeklySource = readFileSync(resolve(process.cwd(), 'src/components/growth/WeeklyChallenge.vue'), 'utf8');
 const tasksSource = readFileSync(resolve(process.cwd(), 'src/components/growth/GrowthTasks.vue'), 'utf8');
+const navigationSource = readFileSync(resolve(process.cwd(), 'src/utils/growthNavigation.ts'), 'utf8');
 const zhLocaleSource = readFileSync(resolve(process.cwd(), 'src/i18n/locales/zh-CN-core.ts'), 'utf8');
 
 describe('成长建议与领取状态视觉契约', () => {
@@ -36,7 +37,9 @@ describe('成长建议与领取状态视觉契约', () => {
   it('成长模块的资源整理入口在移动端明确进入资源中心待整理分区', () => {
     expect(growthPageSource).toContain('resolveGrowthActionRoute(action, bookmark.isMobile)');
     expect(tasksSource).toContain('resolvePendingResourcesRoute(bookmark.isMobile)');
-    expect(weeklySource).toContain('resolvePendingResourcesRoute(bookmark.isMobile)');
+    // 每周挑战与周报共用 growthNavigation 的指标路由，整理类指标在其中进入待整理分区。
+    expect(weeklySource).toContain('resolveWeeklyChallengeRoute(challenge.metric, bookmark.isMobile)');
+    expect(navigationSource).toMatch(/metric === 'organize'[\s\S]*?resolvePendingResourcesRoute\(isMobile\)/);
   });
 
   it('每日经验明确说明上限口径，并区分一次性成长任务奖励', () => {

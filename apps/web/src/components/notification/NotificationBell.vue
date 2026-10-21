@@ -144,7 +144,7 @@
     :actions="notificationActions"
     @action="handleNotificationAction"
   />
-  <WeeklyReportModal v-model:visible="wrVisible" :report="wrData" />
+  <WeeklyReportModal v-model:visible="wrVisible" :snapshot="wrData" initial-period="last" />
 
   <!-- 无跳转链接的通知:点击弹框看完整标题 + 正文(列表里被截两行) -->
   <BModal

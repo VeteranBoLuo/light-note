@@ -1,6 +1,6 @@
 import type { RouteLocationNormalizedLoaded, RouteMeta } from 'vue-router';
 
-const SITE_ORIGIN = 'https://boluo66.top';
+export const SITE_ORIGIN = 'https://boluo66.top';
 
 type SeoRouteMeta = RouteMeta & {
   seoIndexable?: boolean;

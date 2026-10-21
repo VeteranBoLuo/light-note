@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { growthNextActionCommand, resolveDailyQuestRoute, resolveGrowthActionRoute } from './growthNavigation';
+import {
+  growthNextActionCommand,
+  resolveDailyQuestRoute,
+  resolveGrowthActionRoute,
+  resolveWeeklyChallengeRoute,
+} from './growthNavigation';
 
 describe('growthNavigation', () => {
   it.each([false, true])('下一步建议在移动模式 %s 下前往动作对应的业务入口', (mobile) => {
@@ -60,5 +65,14 @@ describe('growthNavigation', () => {
     expect(resolveDailyQuestRoute('daily_organize', true)).toEqual({ path: '/organize', query: { issue: 'pending' } });
     expect(resolveDailyQuestRoute('future_quest', false)).toBeNull();
     expect(resolveDailyQuestRoute('checkin', true)).toBeNull();
+  });
+
+  it('每周挑战按指标前往对应入口，推进事项去待办', () => {
+    expect(resolveWeeklyChallengeRoute('note', false)).toBe('/noteLibrary');
+    expect(resolveWeeklyChallengeRoute('collect', false)).toBe('/home');
+    expect(resolveWeeklyChallengeRoute('progress', true)).toEqual({ path: '/inbox', query: { tab: 'todo' } });
+    expect(resolveWeeklyChallengeRoute('variety', false)).toEqual({ path: '/organize', query: { issue: 'pending' } });
+    expect(resolveWeeklyChallengeRoute('communityPosts', false)).toBe('/community/feed');
+    expect(resolveWeeklyChallengeRoute('unknown', false)).toBeNull();
   });
 });
