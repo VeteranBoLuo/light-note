@@ -1143,7 +1143,7 @@ const parseBookmarksFromHtml = (html = '') => {
 };
 
 function finishBookmarkImport(req, userId, stats) {
-  if (stats.createdBookmarks > 0 || stats.boundRelations > 0) {
+  if (stats.createdBookmarks > 0 || stats.updatedBookmarks > 0 || stats.boundRelations > 0) {
     // 业务事务已提交，索引失效作为旁路执行，避免占用导入事务连接。
     void invalidatePersonalKnowledgeCache(userId);
   }
@@ -1253,6 +1253,7 @@ export const importBookmarksExcel = async (req, res) => {
     stats = await runBookmarkImportTransaction(pool, {
       userId,
       items,
+      overwriteDescriptions: true,
     });
   } catch (error) {
     console.error('[bookmark] Excel 导入失败 code=%s', stableAgentErrorCode(error));

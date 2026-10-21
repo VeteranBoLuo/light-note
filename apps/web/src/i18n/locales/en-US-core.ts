@@ -12058,10 +12058,10 @@ export default {
     exportHTML: 'Export HTML Bookmarks',
     importExcel: 'Import Excel',
     importHTML: 'Import HTML Bookmarks',
-    exportExcelDesc: 'Export an Excel spreadsheet with tags',
-    exportHTMLDesc: 'Export as browser bookmark file',
-    importExcelDesc: 'Import bookmarks and tags from an Excel file',
-    importHTMLDesc: 'Import from browser bookmark file',
+    exportExcelDesc: 'A spreadsheet with names, URLs, descriptions, and tags for backup and bulk editing.',
+    exportHTMLDesc: 'A common browser bookmark format, ready to import into your browser. Tags become folders.',
+    importExcelDesc: 'Import bookmarks and tags from a spreadsheet to add bookmarks or update existing descriptions in bulk.',
+    importHTMLDesc: 'Bring an HTML bookmark file exported by your browser into Light Note. Folders become tags.',
     batchDelete: 'Batch Delete',
     batchSelect: 'Select multiple',
     batchCancel: 'Cancel selection',
@@ -12079,7 +12079,7 @@ export default {
       'Invalid import file. Include Bookmark Name, URL, and Description; the optional Tags column uses | to separate tags.',
     excelImportFailed: 'Failed to import Excel bookmarks. Please try again later.',
     excelImportSummary:
-      'Import complete: {parsed} parsed, {tags} new tags, {bookmarks} new bookmarks, {relations} links created',
+      'Import complete: {parsed} parsed, {tags} new tags, {bookmarks} new bookmarks, {updated} descriptions updated, {relations} links created',
     excelImportInvalidUrls: ', skipped {count} invalid URLs',
     importInProgress: 'Bookmarks are being imported. Please wait.',
     importState: {
@@ -12120,7 +12120,8 @@ export default {
       retryQueued: '{count} items were added back to the completion queue',
       retryFailed: 'Could not retry icon completion. Please try again later.',
     },
-    exportNote: 'If bookmarks are selected, export the selected ones; otherwise, export all bookmarks.',
+    exportNote:
+      'Use HTML to move bookmarks between Light Note and your browser, or Excel to keep descriptions and work in a spreadsheet. HTML omits descriptions. Excel replaces descriptions only for matching URLs with nonempty values; blanks and same-name bookmarks at different URLs keep the original. Existing names stay unchanged. Export uses selected bookmarks, or the current list scope if none are selected.',
     exportEmpty: 'There are no bookmarks to export in the current scope.',
     exportLoadFailed: 'Could not load bookmarks for export. Please try again later.',
     subtitle: 'Browse, search, filter and manage all your bookmarks.',

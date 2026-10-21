@@ -1606,18 +1606,27 @@
         return;
       }
 
-      const { parsedTotal, createdTags, createdBookmarks, boundRelations, skippedInvalidUrls, iconBatch } =
-        res.data || {};
+      const {
+        parsedTotal,
+        createdTags,
+        createdBookmarks,
+        updatedBookmarks,
+        boundRelations,
+        skippedInvalidUrls,
+        iconBatch,
+      } = res.data || {};
       const summary = t('bookmarkMg.excelImportSummary', {
         parsed: parsedTotal || 0,
         tags: createdTags || 0,
         bookmarks: createdBookmarks || 0,
+        updated: updatedBookmarks || 0,
         relations: boundRelations || 0,
       });
-      if (Number(createdBookmarks || 0) > 0 || Number(boundRelations || 0) > 0) {
+      if (Number(createdBookmarks || 0) > 0 || Number(updatedBookmarks || 0) > 0 || Number(boundRelations || 0) > 0) {
+        clearGlobalSearchCache();
         recordOperation({
           module: '书签管理',
-          operation: `导入 Excel 书签完成【解析${parsedTotal || 0}条/新增书签${createdBookmarks || 0}个/新增标签${createdTags || 0}个/关联${boundRelations || 0}条】`,
+          operation: `导入 Excel 书签完成【解析${parsedTotal || 0}条/新增书签${createdBookmarks || 0}个/更新描述${updatedBookmarks || 0}个/新增标签${createdTags || 0}个/关联${boundRelations || 0}条】`,
         });
       }
       importStage.value = 'refreshing';
@@ -1657,6 +1666,7 @@
           parsed: parsedTotal || 0,
           tags: createdTags || 0,
           bookmarks: createdBookmarks || 0,
+          updated: 0,
           relations: boundRelations || 0,
         });
         recordOperation({

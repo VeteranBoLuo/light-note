@@ -22,6 +22,44 @@ await import('../util/common.js');
 const { normalizeBookmarkUrl } = await import('./bookmarkHandle.js');
 const source = readFileSync(new URL('./bookmarkHandle.js', import.meta.url), 'utf8');
 
+describe('书签导入描述协议', () => {
+  it.each(['excel', 'html'])('%s 导入使用服务端模式并返回实际更新数量，纯描述修改也失效缓存', async (format) => {
+    const service = await import('../util/services/bookmarkImportService.js');
+    const knowledge = await import('../util/personalKnowledgeSearch.js');
+    const { promises: fs } = await import('node:fs');
+    const { importBookmarksExcel, importBookmarksHtml } = await import('./bookmarkHandle.js');
+    const updatedBookmarks = format === 'excel' ? 2 : 0;
+    const stats = {
+      parsedTotal: 3, createdBookmarks: 0, updatedBookmarks, createdTags: 0,
+      boundRelations: 0, skippedInvalidUrls: 0, createdBookmarkIds: [], affectedBookmarkIds: [],
+    };
+    const importSpy = vi.spyOn(service, 'runBookmarkImportTransaction').mockResolvedValue(stats);
+    const invalidate = vi.spyOn(knowledge, 'invalidatePersonalKnowledgeCache').mockResolvedValue(undefined);
+    const read = vi.spyOn(fs, 'readFile').mockResolvedValue('<DT><A HREF="https://example.com/">书签</A>');
+    const unlink = vi.spyOn(fs, 'unlink').mockResolvedValue(undefined);
+    try {
+      const res = { send: vi.fn() };
+      const items = [{ name: '书签', url: 'https://example.com/', description: '新描述' }];
+      await (format === 'excel' ? importBookmarksExcel : importBookmarksHtml)({
+        user: { id: 'owner', role: 'user' },
+        body: { items, userId: 'untrusted', overwriteDescriptions: format !== 'excel' },
+        file: { path: '/tmp/bookmark-import-fixture.html' },
+      }, res);
+      const options = importSpy.mock.calls[0][1];
+      expect(options.userId).toBe('owner');
+      expect(options.overwriteDescriptions === true).toBe(format === 'excel');
+      expect(res.send.mock.calls[0][0]).toMatchObject({ status: 200, data: { updatedBookmarks } });
+      if (format === 'excel') expect(invalidate).toHaveBeenCalledWith('owner');
+      else expect(invalidate).not.toHaveBeenCalled();
+    } finally {
+      importSpy.mockRestore();
+      invalidate.mockRestore();
+      read.mockRestore();
+      unlink.mockRestore();
+    }
+  });
+});
+
 describe('normalizeBookmarkUrl', () => {
   it('裸域名补 https://', () => {
     expect(normalizeBookmarkUrl('keep.com')).toBe('https://keep.com');
