@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createApp, h } from 'vue';
 import { createI18n } from 'vue-i18n';
 import ResourceInspectorPanel from './ResourceInspectorPanel.vue';
@@ -25,6 +25,31 @@ function mount(component: any, props: any) {
 }
 const base = { id: 'todo', type: 'todo' as const, title: '任务', description: '' };
 describe('待办查找只读展示', () => {
+  it.each(['bookmark', 'note', 'file', 'todo'] as const)('存档阅读仅对书签提供，不替换 %s 的原打开动作', (type) => {
+    const onOpen = vi.fn();
+    const onReadArchive = vi.fn();
+    const [resource] = mapDisplayItems([{ ...base, type }], '');
+    const host = mount(ResourceInspectorPanel, {
+      resource,
+      iconSrc: icon.bookmarkManage.snapshot,
+      typeLabel: type,
+      preview: '',
+      noteTypeLabel: '',
+      onOpen,
+      onReadArchive,
+    });
+    const buttons = [...host.querySelectorAll('button')];
+    buttons[0].click();
+    expect(onOpen).toHaveBeenCalledExactlyOnceWith(resource);
+    const read = buttons.find((button) => button.textContent?.trim() === '阅读已存正文');
+    if (type === 'bookmark') {
+      expect(read).toBeDefined();
+      read!.click();
+      expect(onReadArchive).toHaveBeenCalledExactlyOnceWith(resource);
+    } else expect(read).toBeUndefined();
+    expect(icon.bookmarkManage.snapshot).toBeTruthy();
+    expect(icon.bookmarkManage.snapshot).not.toBe(icon.nullImg);
+  });
   it.each([
     ['pending', '2020-01-01 10:00:00', '已逾期'],
     ['completed', '2020-01-01 10:00:00', '已完成'],

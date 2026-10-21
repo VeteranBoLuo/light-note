@@ -62,6 +62,10 @@
         <SvgIcon :src="icon.noteTree.openPage" size="17" aria-hidden="true" />
         {{ t(resource.type === 'todo' ? 'resourceCenter.todo.open' : 'resourceCenter.openResource') }}
       </BButton>
+      <BButton v-if="resource.type === 'bookmark'" block size="large" @click="emit('readArchive', resource)">
+        <SvgIcon :src="icon.bookmarkManage.snapshot" size="17" aria-hidden="true" />
+        {{ t('resourceCenter.readArchive') }}
+      </BButton>
       <BButton
         v-if="isTaggableResourceType(resource.type)"
         block
@@ -136,6 +140,7 @@
 
   const emit = defineEmits<{
     open: [resource: DisplaySearchItem];
+    readArchive: [resource: DisplaySearchItem];
     analyze: [resource: DisplaySearchItem];
     inbox: [resource: DisplaySearchItem];
     manageTags: [resource: DisplaySearchItem];
