@@ -53,6 +53,11 @@ jobs:
           done
           docker logs light-note-ci-mysql
           exit 1
+      - name: 安装真实图片转换测试运行时
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y imagemagick
+          convert -version
       - name: 笔记持久化、上传并发、排序与运营 SQL
         run: pnpm --filter server test:mysql
       - name: 清理临时数据库
