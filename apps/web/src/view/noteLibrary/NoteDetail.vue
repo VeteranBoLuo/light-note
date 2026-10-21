@@ -361,6 +361,7 @@
   import { useI18n } from 'vue-i18n';
   import { isNavigationFailure, onBeforeRouteLeave, onBeforeRouteUpdate, useRouter } from 'vue-router';
   import { trackSearchReturnNavigation } from '@/utils/searchReturnNavigation';
+  import { resolveUntaggedReturnPath, trackUntaggedNoteReturn } from '@/utils/untaggedNoteReturn';
   import { cloneDeep } from 'lodash-es';
   import { apiBasePost } from '@/http/request.ts';
   import Catalog from '@/components/noteLibrary/detail/Catalog.vue';
@@ -474,6 +475,7 @@
   });
   const router = useRouter();
   trackSearchReturnNavigation(router);
+  trackUntaggedNoteReturn(router);
   const bookmark = bookmarkStore();
   const { t, locale } = useI18n();
   const user = useUserStore();
@@ -2094,6 +2096,12 @@
     // 删除已在服务端成功完成，离开时不能再把排队中的旧编辑内容写回已删除笔记。
     skipSaveOnLeave = true;
     clearScheduledSave();
+    const organizer = resolveUntaggedReturnPath(sourceReturnPath());
+    if (organizer) {
+      noteWorkspace.setNavigation({ activePageId: null, browseParentId: null });
+      await router.replace(organizer);
+      return;
+    }
     noteWorkspace.setNavigation({ activePageId: fallbackId || null, browseParentId: null });
     await refreshTree();
 

@@ -141,4 +141,121 @@ describe('organize store', () => {
     );
     expect(store.lists.untagged).toMatchObject({ error: false, items: [], hasMore: false });
   });
+
+  it('返回时按原筛选重新读取已加载范围，原子替换已加标签或删除的旧资料', async () => {
+    const store = useOrganizeStore();
+    store.lists.untagged.items = [{ resourceType: 'note', resourceId: 'removed' } as any];
+    const later = deferred<any>();
+    mocks.getOrganizeIssueList
+      .mockResolvedValueOnce({
+        status: 200,
+        data: {
+          items: [{ resourceType: 'note', resourceId: 'current-a' }],
+          nextCursor: 'page2',
+          hasMore: true,
+        },
+      })
+      .mockReturnValueOnce(later.promise);
+    const loading = store.loadIssue('untagged', {
+      reset: true,
+      keyword: '项目',
+      resourceType: 'note',
+      restoreCount: 2,
+    });
+    await vi.waitFor(() => expect(mocks.getOrganizeIssueList).toHaveBeenCalledTimes(2));
+    expect(store.lists.untagged).toMatchObject({ items: [], loading: true });
+    later.resolve({
+      status: 200,
+      data: {
+        items: [{ resourceType: 'note', resourceId: 'current-b' }],
+        nextCursor: 'page3',
+        hasMore: true,
+      },
+    });
+    await expect(loading).resolves.toBe(true);
+    expect(store.lists.untagged).toMatchObject({
+      items: [{ resourceId: 'current-a' }, { resourceId: 'current-b' }],
+      cursor: 'page3',
+      hasMore: true,
+      loading: false,
+    });
+    expect(mocks.getOrganizeIssueList.mock.calls.map(([, options]) => options)).toEqual([
+      expect.objectContaining({ cursor: null, keyword: '项目', resourceType: 'note', limit: 20 }),
+      expect.objectContaining({ cursor: 'page2', keyword: '项目', resourceType: 'note', limit: 20 }),
+    ]);
+  });
+
+  it('新列表缩短或清空时停止续页，不重新放回旧资料', async () => {
+    const store = useOrganizeStore();
+    store.lists.untagged.items = [{ resourceType: 'note', resourceId: 'removed' } as any];
+    mocks.getOrganizeIssueList.mockResolvedValueOnce({ status: 200, data: { items: [], hasMore: false } });
+    await expect(store.loadIssue('untagged', { restoreCount: 60 })).resolves.toBe(true);
+    expect(store.lists.untagged).toMatchObject({ items: [], hasMore: false, cursor: null, error: false });
+    expect(mocks.getOrganizeIssueList).toHaveBeenCalledTimes(1);
+  });
+
+  it('恢复后续页失败不展示旧快照，重试从首屏重新读取完整范围', async () => {
+    const store = useOrganizeStore();
+    store.lists.untagged.items = [{ resourceType: 'note', resourceId: 'removed' } as any];
+    mocks.getOrganizeIssueList
+      .mockResolvedValueOnce({
+        status: 200,
+        data: {
+          items: [{ resourceType: 'note', resourceId: 'first' }],
+          nextCursor: 'next',
+          hasMore: true,
+        },
+      })
+      .mockRejectedValueOnce(new Error('offline'));
+    await expect(store.loadIssue('untagged', { restoreCount: 2 })).resolves.toBe(false);
+    expect(store.lists.untagged).toMatchObject({ items: [], error: true, retryReset: true, loading: false });
+    mocks.getOrganizeIssueList.mockResolvedValueOnce({ status: 200, data: { items: [], hasMore: false } });
+    await store.loadIssue('untagged', { restoreCount: 2 });
+    expect(mocks.getOrganizeIssueList).toHaveBeenLastCalledWith('untagged', expect.objectContaining({ cursor: null }));
+  });
+
+  it.each(['filter', 'owner'])('恢复中切换 %s，旧续页不能覆盖当前列表', async (change) => {
+    const store = useOrganizeStore();
+    store.resetForOwner('owner-a');
+    const oldPage = deferred<any>();
+    mocks.getOrganizeIssueList
+      .mockResolvedValueOnce({
+        status: 200,
+        data: {
+          items: [{ resourceType: 'note', resourceId: 'old' }],
+          nextCursor: 'page2',
+          hasMore: true,
+        },
+      })
+      .mockReturnValueOnce(oldPage.promise);
+    const old = store.loadIssue('untagged', { keyword: '旧条件', restoreCount: 2 });
+    await vi.waitFor(() => expect(mocks.getOrganizeIssueList).toHaveBeenCalledTimes(2));
+    mocks.getOrganizeIssueList.mockResolvedValueOnce({
+      status: 200,
+      data: {
+        items: [{ resourceType: 'note', resourceId: 'new' }],
+        hasMore: false,
+      },
+    });
+    if (change === 'owner') store.resetForOwner('owner-b');
+    await store.loadIssue('untagged', { keyword: '新条件' });
+    oldPage.resolve({ status: 200, data: { items: [{ resourceType: 'note', resourceId: 'late' }], hasMore: false } });
+    await expect(old).resolves.toBe(false);
+    expect(store.lists.untagged.items).toEqual([expect.objectContaining({ resourceId: 'new' })]);
+  });
+
+  it('异常游标不前进时停止恢复并可重试，避免无限请求', async () => {
+    const store = useOrganizeStore();
+    mocks.getOrganizeIssueList.mockResolvedValue({
+      status: 200,
+      data: {
+        items: [{ resourceType: 'note', resourceId: 'same' }],
+        nextCursor: 'same-cursor',
+        hasMore: true,
+      },
+    });
+    await expect(store.loadIssue('untagged', { restoreCount: 60 })).resolves.toBe(false);
+    expect(mocks.getOrganizeIssueList).toHaveBeenCalledTimes(2);
+    expect(store.lists.untagged).toMatchObject({ items: [], error: true, loading: false, retryReset: true });
+  });
 });
