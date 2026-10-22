@@ -4130,11 +4130,11 @@ describe('CommunityChatWorkspace', () => {
           isOwn: true,
           messageKind: 'sticker',
           stickerSource: 'official',
-          stickerKey: 'paper-spirit-v1:hello',
+          stickerKey: 'paper-spirit-v2:laughing_tears',
           sticker: {
             source: 'official',
-            key: 'paper-spirit-v1:hello',
-            url: '/community-chat/stickers/paper-spirit-v1/hello.png',
+            key: 'paper-spirit-v2:laughing_tears',
+            url: '/community-chat/stickers/paper-spirit-v2/laughing-tears.png',
           },
         }),
       },
@@ -4153,7 +4153,7 @@ describe('CommunityChatWorkspace', () => {
       )
       ?.click();
     await flushAsync();
-    expect(host.querySelectorAll('.chat-official-sticker-panel__item')).toHaveLength(16);
+    expect(host.querySelectorAll('.chat-official-sticker-panel__item')).toHaveLength(24);
     expect(mocks.getCustomStickers).not.toHaveBeenCalled();
     host.querySelector<HTMLButtonElement>('.chat-official-sticker-panel__item')?.click();
     await flushAsync();
@@ -4163,10 +4163,10 @@ describe('CommunityChatWorkspace', () => {
       content: '',
       messageKind: 'sticker',
       stickerSource: 'official',
-      stickerKey: 'paper-spirit-v1:hello',
+      stickerKey: 'paper-spirit-v2:laughing_tears',
     });
     expect(host.querySelector<HTMLImageElement>('.community-message__sticker.has-image img')?.src).toContain(
-      '/community-chat/stickers/paper-spirit-v1/hello.png',
+      '/community-chat/stickers/paper-spirit-v2/laughing-tears.png',
     );
     expect(host.querySelector('.chat-expression-panel')).toBeNull();
   });

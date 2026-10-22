@@ -296,15 +296,19 @@ describe('communityChatMessageService', () => {
     expect(removed).toMatchObject({ messageKind: 'sticker', sticker: null });
   });
 
-  it('官方纸灵表情由版本化清单还原静态地址，不依赖个人表情记录', () => {
+  it.each([
+    ['paper-spirit-v1:hello', '/community-chat/stickers/paper-spirit-v1/hello.png'],
+    ['paper-spirit-v2:laughing_tears', '/community-chat/stickers/paper-spirit-v2/laughing-tears.png'],
+    ['paper-spirit-v2:received', '/community-chat/stickers/paper-spirit-v2/received.png'],
+  ])('官方纸灵表情 %s 由版本化清单还原静态地址，不依赖个人表情记录', (key, assetPath) => {
     expect(__test__.normalizeStickerSource('official', 'sticker')).toBe('official');
-    expect(__test__.normalizeStickerKey('PAPER-SPIRIT-V1:HELLO', 'sticker', 'official')).toBe('paper-spirit-v1:hello');
+    expect(__test__.normalizeStickerKey(key.toUpperCase(), 'sticker', 'official')).toBe(key);
 
     const message = __test__.toPublicMessage(
       messageRow({
         messageKind: 'sticker',
         stickerSource: 'official',
-        stickerKey: 'paper-spirit-v1:hello',
+        stickerKey: key,
         availableStickerPublicId: null,
         content: '',
       }),
@@ -314,11 +318,11 @@ describe('communityChatMessageService', () => {
     expect(message).toMatchObject({
       messageKind: 'sticker',
       stickerSource: 'official',
-      stickerKey: 'paper-spirit-v1:hello',
+      stickerKey: key,
       sticker: {
         source: 'official',
-        key: 'paper-spirit-v1:hello',
-        url: '/community-chat/stickers/paper-spirit-v1/hello.png',
+        key,
+        url: assetPath,
       },
     });
   });

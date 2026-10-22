@@ -14,7 +14,26 @@ export type CommunityChatOfficialStickerId =
   | "organizing"
   | "complete"
   | "good_night"
-  | "goodbye";
+  | "goodbye"
+  | "laughing_tears"
+  | "eating_watermelon"
+  | "go_on"
+  | "smug"
+  | "meltdown"
+  | "lying_flat"
+  | "confused"
+  | "aggrieved"
+  | "angry"
+  | "refuse"
+  | "snicker"
+  | "speechless"
+  | "slacking"
+  | "buffering"
+  | "leaving"
+  | "sleepy"
+  | "busy"
+  | "please"
+  | "really";
 
 export interface CommunityChatOfficialStickerDefinition {
   readonly id: CommunityChatOfficialStickerId;
@@ -25,8 +44,8 @@ export interface CommunityChatOfficialStickerDefinition {
 export declare const COMMUNITY_CHAT_OFFICIAL_STICKERS: readonly CommunityChatOfficialStickerDefinition[];
 
 export declare const COMMUNITY_CHAT_OFFICIAL_STICKER_PACK: {
-  readonly id: "paper-spirit-v1";
-  readonly version: 1;
+  readonly id: "paper-spirit-v2";
+  readonly version: 2;
   readonly stickers: readonly CommunityChatOfficialStickerDefinition[];
 };
 
