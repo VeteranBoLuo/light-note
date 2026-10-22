@@ -1,5 +1,5 @@
 import pool from '../db/index.js';
-import { grantExp } from './growth.js';
+import { grantExp, lockGrowthAccount } from './growth.js';
 import { GROWTH_TASK_DEFINITIONS } from './growthTaskCatalog.js';
 import { ensureGrowthTaskSchema } from './growthTaskSchema.js';
 
@@ -74,7 +74,7 @@ export async function completeGrowthTask(
 /**
  * 用户主动领取一次性成长任务经验。
  *
- * user_growth_tasks 行锁串行化同一任务的领取；growth_events 唯一键继续作为第二层幂等保护。
+ * 先锁账号再锁任务，与统一领取入口保持同一锁序；growth_events 唯一键继续保护幂等。
  * claimed_at 只在经验账本成功提交后写入，任何一步失败都会整体回滚。
  */
 export async function claimGrowthTask(userId, taskKey, { userRole = null } = {}) {
@@ -87,6 +87,7 @@ export async function claimGrowthTask(userId, taskKey, { userRole = null } = {})
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
+    await lockGrowthAccount(conn, String(userId));
     const [[row]] = await conn.query(
       `SELECT status, claimed_at AS claimedAt
        FROM user_growth_tasks

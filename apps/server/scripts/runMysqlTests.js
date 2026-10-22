@@ -6,6 +6,7 @@ import mysql from 'mysql2/promise';
 
 // These suites create and remove their own random schemas. Never load application .env.
 const suites = {
+  'util/growth.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
   'util/services/bookmarkImportService.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
   'util/weeklyReport.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
   'util/filePreview/heif.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',

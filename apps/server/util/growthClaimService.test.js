@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   getGrowth: vi.fn(),
   getGrowthDashboard: vi.fn(),
   grantExp: vi.fn(),
+  lockGrowthAccount: vi.fn(),
   earnPoints: vi.fn(),
   getAchievementFrameByKey: vi.fn(),
   getGrowthTasks: vi.fn(),
@@ -25,6 +26,7 @@ vi.mock('./growth.js', () => ({
   getGrowth: mocks.getGrowth,
   getGrowthDashboard: mocks.getGrowthDashboard,
   grantExp: mocks.grantExp,
+  lockGrowthAccount: mocks.lockGrowthAccount,
 }));
 vi.mock('./points.js', () => ({
   earnPoints: mocks.earnPoints,
@@ -119,6 +121,10 @@ describe('growthClaimService', () => {
       claimGrowthRewards('user-1', { scopes: ['weekly', 'weekly'] }, { userRole: 'user' }),
     ).resolves.toMatchObject({ ok: true, claimed: 0, receipts: [] });
 
+    expect(mocks.lockGrowthAccount).toHaveBeenCalledWith(conn, 'user-1');
+    expect(mocks.lockGrowthAccount.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.getGrowthCalendarContext.mock.invocationCallOrder[0],
+    );
     expect(mocks.getWeeklyChallenges).toHaveBeenCalled();
     expect(conn.commit).toHaveBeenCalledOnce();
   });

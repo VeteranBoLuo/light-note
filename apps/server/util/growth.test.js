@@ -158,6 +158,8 @@ describe('每日经验上限与一次性奖励隔离', () => {
       rollback: vi.fn(),
       release: vi.fn(),
       query: vi.fn(async (sql) => {
+        if (sql.includes('FROM user_growth_preferences')) return [[]];
+        if (sql.includes('AS serverOffset')) return [[{ serverOffset: 480 }]];
         if (sql.includes('INSERT IGNORE INTO growth_events')) return [{ affectedRows: 1, insertId: 11 }];
         if (sql.includes('INSERT INTO user_growth (user_id) VALUES')) return [{ affectedRows: 0 }];
         if (sql.includes('SELECT exp, level FROM user_growth')) return [[{ exp, level }]];
@@ -183,6 +185,8 @@ describe('每日经验上限与一次性奖励隔离', () => {
     expect(capQuery?.[0]).toContain('source NOT IN (?, ?, ?, ?, ?, ?)');
     expect(capQuery?.[1]).toEqual([
       'user-1',
+      0,
+      expect.stringMatching(/^\d{8}$/),
       'community_task',
       'growth_task',
       'first_own_resource',

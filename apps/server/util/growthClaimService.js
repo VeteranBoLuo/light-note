@@ -1,6 +1,6 @@
 import { taskRewardStates, claimTaskRewards } from './communityFeed/taskRewards.js';
 import pool from '../db/index.js';
-import { getGrowth, getGrowthDashboard, grantExp } from './growth.js';
+import { getGrowth, getGrowthDashboard, grantExp, lockGrowthAccount } from './growth.js';
 import { earnPoints, getAchievementFrameByKey } from './points.js';
 import { getGrowthTasks } from './growthTaskService.js';
 import { getWeeklyChallenges } from './weeklyChallenge.js';
@@ -212,8 +212,7 @@ export async function claimGrowthRewards(userId, input = {}, { userRole = null }
   let growth = null;
   try {
     await conn.beginTransaction();
-    await conn.query('INSERT IGNORE INTO user_growth (user_id) VALUES (?)', [String(userId)]);
-    await conn.query('SELECT user_id FROM user_growth WHERE user_id = ? FOR UPDATE', [String(userId)]);
+    await lockGrowthAccount(conn, String(userId));
 
     const calendar = await getGrowthCalendarContext(userId, { db: conn });
     if (scopes.has('daily')) await resolveDailyEarningPolicyVersion(calendar.dayKey, { db: conn, lock: true });
