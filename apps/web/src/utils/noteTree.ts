@@ -38,11 +38,15 @@ export interface FlatNoteTreeItem extends NoteTreeItem {
 
 /** 父页面的主点击只由显式偏好决定，不再把“正文是否为空”当作导航意图。 */
 export function shouldBrowseNoteChildrenOnOpen(
-  note: { childCount?: unknown } | null | undefined,
+  note: { childCount?: unknown; hasChildren?: unknown } | null | undefined,
   parentOpenMode: 'children' | 'preview' = 'children',
   treeReadEnabled = true,
 ) {
-  return Boolean(treeReadEnabled && parentOpenMode === 'children' && Math.max(0, Number(note?.childCount) || 0) > 0);
+  return Boolean(
+    treeReadEnabled &&
+    parentOpenMode === 'children' &&
+    (note?.hasChildren === true || Math.max(0, Number(note?.childCount) || 0) > 0),
+  );
 }
 
 /**
@@ -76,6 +80,24 @@ export function getNoteParentPathText(note: {
 export function getNoteParentTargetId(note: { parentId?: unknown; path?: Array<{ id?: unknown }> | null }) {
   const pathParentId = Array.isArray(note.path) && note.path.length > 1 ? note.path.at(-2)?.id : null;
   return String(pathParentId || note.parentId || '').trim();
+}
+
+/** Display order of loaded, expanded rows only; selecting a parent never implies its descendants. */
+export function collectVisibleNoteTreeItems(
+  childrenByParent: Record<string, NoteTreeItem[]>,
+  expandedIds: Set<string>,
+  rootKey: string,
+): NoteTreeItem[] {
+  const visible = new Map<string, NoteTreeItem>();
+  const visit = (parentId: string) => {
+    for (const node of childrenByParent[parentId] || []) {
+      if (visible.has(node.id)) continue;
+      visible.set(node.id, node);
+      if (expandedIds.has(node.id)) visit(node.id);
+    }
+  };
+  visit(rootKey);
+  return [...visible.values()];
 }
 
 export function flattenNoteTree(items: NoteTreeItem[] = []): FlatNoteTreeItem[] {

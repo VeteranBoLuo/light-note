@@ -20,6 +20,7 @@
       @select="handleActionMenuSelect"
     >
       <div
+        v-range-select="{ controller: rangeSelection, key: String(node.id), group: 'tree' }"
         class="note-tree-row"
         :class="{
           'is-active': active,
@@ -106,6 +107,7 @@
             :drop-target-active="dropTargetActive"
             :drop-target-position="dropTargetPosition"
             :menu-disabled="menuDisabled"
+            :range-selection="rangeSelection"
             :batch-mode="batchMode"
             :selected-ids="selectedIds"
             :selection-disabled="selectionDisabled"
@@ -132,10 +134,12 @@
 </template>
 
 <script lang="ts" setup>
+  import type { RangeSelectionController } from '@/composables/useRangeSelection';
+  import { vRangeSelect } from '@/directives/rangeSelection';
+  import BCheckbox from '@/components/base/BasicComponents/BCheckbox.vue';
   import { computed } from 'vue';
   import { useI18n } from 'vue-i18n';
   import BActionMenu from '@/components/base/BasicComponents/BActionMenu.vue';
-  import BCheckbox from '@/components/base/BasicComponents/BCheckbox.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
   import type { BActionMenuItem, BActionMenuTrigger } from '@/components/base/BasicComponents/actionMenu';
@@ -163,6 +167,7 @@
       dropTargetActive?: boolean;
       dropTargetPosition?: NoteTreeDropPosition | '';
       menuDisabled?: boolean;
+      rangeSelection?: RangeSelectionController;
       batchMode?: boolean;
       selectedIds?: Set<string>;
       selectionDisabled?: boolean;
@@ -469,7 +474,7 @@
   }
 
   .note-tree-row.is-batch {
-    grid-template-columns: 22px 28px minmax(0, 1fr);
+    grid-template-columns: var(--ui-layout-22, 22px) var(--ui-layout-28, 28px) minmax(0, 1fr);
   }
 
   .note-tree-checkbox {

@@ -295,6 +295,7 @@
             />
 
             <div
+              v-range-selection-scroll="rangeSelection"
               ref="resultScrollRef"
               class="result-scroll-area"
               @touchstart.passive="pullRefresh.onTouchStart"
@@ -338,6 +339,7 @@
                       :menu="menuForSearchItem(item)"
                       @select="handleItemMenu($event, item)"
                       v-for="item in group.items"
+                      v-range-select="{ controller: !allMatchingActive && isTaggableResourceType(item.type) ? rangeSelection : undefined, key: getItemSelectionKey(item), group: group.type }"
                       :key="`${item.type}-${item.id}`"
                       class="resource-result-entry"
                       :data-search-resource-key="getItemSelectionKey(item)"
@@ -587,6 +589,7 @@
     />
 
     <ResourceBatchActionBar
+      :range-selection="rangeSelection"
       selection-module="search"
       :selection-visible-count="selectionSession.visibleSelected.value"
       :open="batchMode"
@@ -611,7 +614,7 @@
             controlled
             :checked="batchSelectAllChecked"
             :indeterminate="batchSelectAllIndeterminate"
-            :disabled="!selectableVisibleItems.length || selectionStore.busy || viewState.loading"
+            :disabled="!selectableVisibleItems.length || selectionStore.busy || viewState.loading || rangeSelection.selecting"
             :aria-label="batchSelectAllLabel"
             @change="handleBatchSelectAllChange"
           />
@@ -656,6 +659,8 @@
 </template>
 
 <script setup lang="ts">
+  import { useRangeSelection } from '@/composables/useRangeSelection';
+  import { vRangeSelect, vRangeSelectionScroll } from '@/directives/rangeSelection';
   import { useProjectResourceAction } from '@/composables/useProjectResourceAction';
   const { canJoinProject, joinProject } = useProjectResourceAction();
   import { useResourceSelection } from '@/composables/useResourceSelection';
@@ -993,6 +998,20 @@
     selectedTypes.value.reduce((sum, type) => sum + Number(summaryTotals.value[type] || 0), 0),
   );
   const allMatchingActive = computed(() => allMatchingSummary.value?.mode === 'allMatching');
+  const rangeSelection = useRangeSelection({
+    active: batchMode,
+    mobile: () => bookmark.isMobile,
+    blocked: () => selectionStore.busy || viewState.loading || allMatchingActive.value || selectionStore.reviewOpen,
+    groups: () =>
+      visibleGroups.value.map((group) => ({
+        id: group.type,
+        keys: group.items
+          .filter((item) => isTaggableResourceType(item.type))
+          .map(getItemSelectionKey),
+      })),
+    scope: () => JSON.stringify([queryState, selectionStore.session]),
+    apply: selectionSession.selectKeys,
+  });
   const selectedCount = computed(() =>
     allMatchingActive.value
       ? Math.max(0, Number(allMatchingSummary.value?.total || 0) - excludedSelectionIds.value.length)

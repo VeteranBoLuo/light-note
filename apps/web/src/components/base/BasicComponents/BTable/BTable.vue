@@ -53,6 +53,7 @@
         <div class="table-row-window" :class="{ 'is-virtual': props.virtual }" :style="virtualWindowStyle">
           <template v-for="entry in renderedRows" :key="entry.item[props.rowKey] ?? entry.index">
             <div
+              v-range-select="{ controller: props.rangeSelection, key: String(entry.item[props.rowKey]) }"
               class="table-row"
               :class="{ 'is-clickable': props.rowClickable }"
               :style="[bodyGridStyle, virtualRowStyle]"
@@ -119,6 +120,8 @@
 </template>
 
 <script lang="ts" setup>
+  import type { RangeSelectionController } from '@/composables/useRangeSelection';
+  import { vRangeSelect } from '@/directives/rangeSelection';
   import { useUiDensity } from '@/composables/useUiDensity';
   import { computed, nextTick, onBeforeUnmount, onMounted, PropType, ref, watch } from 'vue';
   import { Column } from '@/components/base/BasicComponents/BTable/config.ts';
@@ -133,6 +136,7 @@
   type TableSort = { key: string | null; order: SortOrder };
 
   const props = defineProps({
+    rangeSelection: { type: Object as PropType<RangeSelectionController>, default: undefined },
     data: {
       type: Array as PropType<any[]>,
       default: () => [],
@@ -217,7 +221,7 @@
     },
   });
 
-  const emit = defineEmits(['pageChange', 'sizeChange', 'selectionChange', 'rowClick', 'loadMore', 'sortChange']);
+  const emit = defineEmits(['pageChange', 'sizeChange', 'selectionChange', 'rowClick', 'loadMore', 'sortChange', 'rowOrderChange']);
   // 生成网格列宽样式
   const gridStyle = computed(() => {
     const tracks = props.columns.map((col) =>
@@ -278,6 +282,10 @@
     });
     return data;
   });
+
+  watch([sortedData, () => props.rowKey], ([rows]) => {
+    if (props.rangeSelection) emit('rowOrderChange', rows.map((row) => String(row[props.rowKey])));
+  }, { immediate: true, flush: 'sync' });
 
   const tableBodyRef = ref<HTMLElement | null>(null);
   const scrollTop = ref(0);

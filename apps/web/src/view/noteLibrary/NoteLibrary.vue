@@ -100,6 +100,7 @@
       <template #sidebar>
         <aside class="note-sidebar-panel">
           <NoteWorkspaceSidebar
+            :range-selection="rangeSelection"
             v-model:mode="librarySidebarMode"
             :current-parent-id="currentParentId"
             :active-page-id="previewNoteId"
@@ -124,7 +125,7 @@
             :menu-disabled="noteDragging"
             :batch-mode="batchMode"
             :selected-ids="selectedNoteIds"
-            :selection-disabled="selection.busy.value || loading || refreshing"
+            :selection-disabled="selection.busy.value || loading || refreshing || treeSearchLoading"
             @select-note="(node, checked) => selection.toggle(node, checked)"
             @toggle="toggleTreeNode"
             @select="selectDirectory"
@@ -168,8 +169,8 @@
           :child-count="previewChildCount"
           :menu-options="previewMenuOptions"
           :outline-target="previewOutlineTarget"
-          @close="closeDesktopPreview"
-          @open-page="openPreviewBreadcrumbPage"
+          @go-library="selectDirectory(null)"
+          @open-page="openBreadcrumbPage"
           @edit="openDirectoryPage(previewNoteId)"
           @browse-children="selectDirectory(previewNoteId)"
           @breadcrumb-resolved="handlePreviewBreadcrumbResolved"
@@ -208,7 +209,7 @@
                 }"
                 :data-note-drop-parent="item.id"
                 :data-note-drop-title="item.title || $t('note.untitled')"
-                @click="selectDirectory(item.id)"
+                @click="openBreadcrumbPage(item)"
               >
                 {{ item.title || $t('note.untitled') }}
               </BButton>
@@ -287,6 +288,7 @@
         <VueDraggable
           v-else-if="!desktopPreviewOpen && currentViewMode === 'card' && visibleDragNoteList.length"
           v-auto-scrollbar
+          v-range-selection-scroll="rangeSelection"
           :disabled="!canDragNote"
           :sort="false"
           :animation="200"
@@ -307,6 +309,7 @@
         >
           <RightMenu
             v-for="note in visibleDragNoteList"
+            v-range-select="{ controller: rangeSelection, key: String(note.id), group: 'list' }"
             :key="note.id"
             :data-note-sort-id="String(note.id)"
             :data-note-drop-parent="String(note.id)"
@@ -323,6 +326,7 @@
             @select="handleNoteMenuSelect($event, note)"
           >
             <note-card
+              data-range-select="primary"
               :note="note"
               :selected="selection.ids.value.includes(String(note.id))"
               :selection-disabled="selection.busy.value || loading || refreshing"
@@ -363,6 +367,7 @@
           <VueDraggable
             v-else
             v-auto-scrollbar
+            v-range-selection-scroll="rangeSelection"
             :disabled="!canDragNote"
             :sort="false"
             :animation="200"
@@ -381,6 +386,7 @@
           >
             <RightMenu
               v-for="note in visibleDragNoteList"
+            v-range-select="{ controller: rangeSelection, key: String(note.id), group: 'list' }"
               :key="note.id"
               :data-note-sort-id="String(note.id)"
               :data-note-drop-parent="String(note.id)"
@@ -397,6 +403,7 @@
               @select="handleNoteMenuSelect($event, note)"
             >
               <note-list-item
+                data-range-select="primary"
                 :note="note"
                 :selected="selection.ids.value.includes(String(note.id))"
                 :selection-disabled="selection.busy.value || loading || refreshing"
@@ -504,6 +511,7 @@
 
     <NoteAiDialog v-model:visible="noteAiVisible" :notes="noteAiItems" />
     <ResourceBatchActionBar
+      :range-selection="rangeSelection"
       :show-mobile-project="false"
       selection-module="notes"
       :selection-visible-count="selection.visibleSelected.value"
@@ -523,21 +531,38 @@
       @primary="openSelectedOutcomeDrawer"
     >
       <template #leading>
-        <span class="batch-action-select-all" @click.stop>
-          <BCheckbox
-            controlled
-            :checked="allVisibleChecked"
-            :indeterminate="someVisibleChecked"
-            :disabled="!batchSelectionCandidates.length || selection.busy.value || loading || refreshing"
-            :aria-label="$t(allVisibleChecked ? 'note.unselectAllCurrent' : 'note.selectAllCurrent')"
-            @change="setAllVisibleChecked"
-          />
-        </span>
+        <BTooltip
+          v-if="desktopPreviewOpen"
+          class="batch-action-preview-help"
+          role="img"
+          :aria-label="$t('note.batchPreviewSelectionHint')"
+          :title="$t('note.batchPreviewSelectionHint')"
+          always
+        >
+          <SvgIcon :src="icon.ai.materials" size="18" aria-hidden="true" />
+        </BTooltip>
+        <BTooltip
+          v-else
+          :title="$t(allVisibleChecked ? 'note.unselectAllCurrentHint' : 'note.selectAllCurrentHint')"
+          :disabled="bookmark.isMobile"
+          always
+        >
+          <span class="batch-action-select-all" @click.stop>
+            <BCheckbox
+              controlled
+              :checked="allVisibleChecked"
+              :indeterminate="someVisibleChecked"
+              :disabled="!batchSelectionCandidates.length || selection.busy.value || loading || refreshing || rangeSelection.selecting"
+              :aria-label="$t(allVisibleChecked ? 'note.unselectAllCurrent' : 'note.selectAllCurrent')"
+              @change="setAllVisibleChecked"
+            />
+          </span>
+        </BTooltip>
       </template>
       <template #mobile-actions>
         <BButton
           class="batch-action-delete"
-          :disabled="!selectedVisibleCount || selection.busy.value"
+          :disabled="!selectedVisibleCount || selection.busy.value || rangeSelection.selecting"
           @click="batchDeleteNote"
         >
           <SvgIcon :src="icon.noteDetail.delete" size="16" aria-hidden="true" />
@@ -648,6 +673,8 @@
 </template>
 
 <script lang="ts" setup>
+  import { useRangeSelection } from '@/composables/useRangeSelection';
+  import { vRangeSelect, vRangeSelectionScroll } from '@/directives/rangeSelection';
   import BActionMenu from '@/components/base/BasicComponents/BActionMenu.vue';
   import NoteTransferDialog from '@/components/noteLibrary/transfer/NoteTransferDialog.vue';
   import { useProjectResourceAction } from '@/composables/useProjectResourceAction';
@@ -667,7 +694,6 @@
   import icon from '@/config/icon.ts';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import { useRouter } from 'vue-router';
-  import { collectNoteBatchCandidates } from '@/utils/noteBatchSelection';
   import { useNoteLibraryNavigation } from '@/composables/useNoteLibraryNavigation';
   import { useResourceSelection } from '@/composables/useResourceSelection';
   import type { SelectionOperation } from '@/store/resourceSelection';
@@ -691,6 +717,7 @@
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BBatchToggle from '@/components/base/BasicComponents/BBatchToggle.vue';
   import BCheckbox from '@/components/base/BasicComponents/BCheckbox.vue';
+  import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
   import BDropdown from '@/components/base/BasicComponents/BDropdown.vue';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
@@ -698,7 +725,7 @@
   import { OPERATION_LOG_MAP } from '@/config/logMap.ts';
   import ViewModeToggle from '@/components/base/ViewModeToggle.vue';
   import { DEFAULT_NOTE_VIEW_MODE, getNoteParentOpenMode, shouldOpenNoteDirectly } from '@/utils/preferences.ts';
-  import { hasMeaningfulNoteContent, shouldBrowseNoteChildrenOnOpen } from '@/utils/noteTree';
+  import { collectVisibleNoteTreeItems, hasMeaningfulNoteContent, shouldBrowseNoteChildrenOnOpen } from '@/utils/noteTree';
   import type { NoteWorkspaceLayoutState } from '@/utils/noteWorkspaceLayout';
   import { recordOperation } from '@/api/commonApi.ts';
   import {
@@ -823,6 +850,7 @@
     router,
     computed(() => bookmark.isMobile),
   );
+  const desktopPreviewOpen = computed(() => !bookmark.isMobile && Boolean(previewNoteId.value));
   const librarySidebarOverlayOpen = ref(false);
   const libraryWorkspaceMode = ref<NoteWorkspaceLayoutState['mode'] | null>(null);
 
@@ -1008,12 +1036,7 @@
   const attachPagesVisible = ref(false);
   const activeRenameNote = ref<{ id: string; title?: string; revision?: number } | null>(null);
   const renameNoteVisible = ref(false);
-  const batchSelectionCandidates = computed(() => collectNoteBatchCandidates(
-    noteList.value,
-    !bookmark.isMobile && noteTreeReadEnabled.value ? sidebarTreeChildrenByParent.value : {},
-    sidebarTreeExpandedIds.value,
-    NOTE_TREE_ROOT_KEY,
-  ));
+  const batchSelectionCandidates = computed(() => (desktopPreviewOpen.value ? [] : visibleDragNoteList.value));
   const selection = useResourceSelection(
     'notes',
     batchSelectionCandidates,
@@ -1086,7 +1109,6 @@
   let previewPendingLocallyChanged = false;
   let previewSeedScope = '';
   let pendingPreviewPathId = '';
-  const desktopPreviewOpen = computed(() => !bookmark.isMobile && Boolean(previewNoteId.value));
   const previewBreadcrumb = computed(() =>
     previewNoteId.value ? noteWorkspace.breadcrumbByNote[previewNoteId.value] || [] : [],
   );
@@ -1619,18 +1641,14 @@
     setDesktopPreviewPage(normalizedId, source);
   }
 
-  function openPreviewBreadcrumbPage(page: PreviewBreadcrumbTarget) {
+  function openBreadcrumbPage(page: PreviewBreadcrumbTarget) {
     const noteId = String(page?.id || '').trim();
-    if (!desktopPreviewOpen.value || !noteId || noteId === previewNoteId.value) return;
-    const source = findNoteForWarmup(noteId) || page;
-    prefetchNoteDetail(user, noteId);
-    // 面包屑是在当前阅读链路中切换页面，不重新记录列表滚动位置；退出预览后仍回到最初打开处。
-    setDesktopPreviewPage(noteId, source);
-    void recordNoteTreeProductEvent('note_tree_page_opened', {
-      surface: 'desktop',
-      ...noteTreeNodeMetrics(noteId),
-      result: 'success',
-    });
+    if (!noteId || noteId === previewNoteId.value) return;
+    const source = { ...page, ...findNoteForWarmup(noteId), id: noteId };
+    // Ancestors are known parents even when the path has no child count.
+    // The current directory can be empty; retain its real metadata instead of inventing descendants.
+    if (desktopPreviewOpen.value || noteId !== currentParentId.value) source.hasChildren = true;
+    return openLibraryNote(source);
   }
 
   async function openDirectoryPage(noteId: string) {
@@ -1711,7 +1729,7 @@
       return selectDirectory(noteId);
     }
     // 父页面的显式“预览当前页面”偏好优先于“点击笔记直接编辑”，且不再依赖正文是否为空。
-    if (Math.max(0, Number(source.childCount) || 0) > 0 && parentOpenMode === 'preview') {
+    if ((source.hasChildren === true || Math.max(0, Number(source.childCount) || 0) > 0) && parentOpenMode === 'preview') {
       prefetchNoteDetail(user, noteId);
       captureDesktopPreviewScroll();
       setDesktopPreviewPage(noteId, source);
@@ -1740,10 +1758,6 @@
       ...noteTreeNodeMetrics(noteId),
       result: 'success',
     });
-  }
-
-  function closeDesktopPreview() {
-    void closePreview();
   }
 
   watch(noteCacheScope, () => {
@@ -2086,6 +2100,38 @@
   }
   // 手机与桌面共用同一个 noteViewMode 偏好：设置里能配、笔记库顶部也能快切，与 PC 一致
   const currentViewMode = computed(() => user.preferences.noteViewMode || DEFAULT_NOTE_VIEW_MODE);
+  const visibleTreeSelectionItems = computed(() =>
+    librarySidebarMode.value === 'directory' &&
+    !bookmark.isMobile &&
+    noteTreeReadEnabled.value &&
+    !treeSearchLoading.value
+      ? collectVisibleNoteTreeItems(sidebarTreeChildrenByParent.value, sidebarTreeExpandedIds.value, NOTE_TREE_ROOT_KEY)
+      : [],
+  );
+  const rangeSelection = useRangeSelection({
+    active: batchMode,
+    mobile: () => bookmark.isMobile,
+    blocked: () => selection.busy.value || loading.value || refreshing.value || selection.store.reviewOpen,
+    groups: () => [
+      {
+        id: 'list',
+        keys: batchSelectionCandidates.value.map((note) => String(note.id)),
+      },
+      { id: 'tree', keys: visibleTreeSelectionItems.value.map((note) => String(note.id)) },
+    ],
+    scope: () =>
+      JSON.stringify([
+        currentParentId.value,
+        debouncedSearch.value,
+        currentViewMode.value,
+        treeSearchValue.value,
+        librarySidebarMode.value,
+        desktopPreviewOpen.value,
+        selection.store.session,
+      ]),
+    apply: (keys) =>
+      selection.selectKeys(keys, [...visibleTreeSelectionItems.value, ...batchSelectionCandidates.value]),
+  });
   const noteWorkspaceRef = ref<InstanceType<typeof NoteWorkspaceShell> | HTMLElement | null>(null);
 
   function noteWorkspaceElement() {
@@ -2437,6 +2483,7 @@
   }
   const canDragNote = computed(
     () =>
+      !batchMode.value &&
       !bookmark.isMobile &&
       (!noteTreeReadEnabled.value || noteTreeWriteEnabled.value) &&
       !loading.value &&
@@ -2588,11 +2635,7 @@
   onActivated(applyPendingLibraryRootEntryRequest);
 
   async function handleNoteLibraryTitleClick() {
-    if (desktopPreviewOpen.value) {
-      closeDesktopPreview();
-      return;
-    }
-    await resetNoteLibrary();
+    await selectDirectory(null);
   }
 
   onBeforeUnmount(() => {
@@ -3423,6 +3466,9 @@
 </script>
 
 <style lang="less" scoped>
+  .batch-action-preview-help {
+    cursor: help;
+  }
   @import (reference) "@/assets/css/workspace-surfaces.less";
   @media (min-width: 1200px) {
     .note-library-shell {

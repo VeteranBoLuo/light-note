@@ -154,6 +154,7 @@
                 @retry="loadUntagged(true)"
               >
                 <BVirtualList
+                  v-range-selection-scroll="rangeSelection"
                   ref="untaggedVirtualListRef"
                   class="organize-resource-list"
                   :items="untaggedVirtualItems"
@@ -171,6 +172,7 @@
                 >
                   <template #default="{ item }">
                     <article
+                      v-range-select="{ controller: rangeSelection, key: untaggedKey(item) }"
                       class="organize-resource-row"
                       :data-untagged-resource-key="untaggedKey(item)"
                       :class="{
@@ -185,6 +187,7 @@
                     >
                       <BCheckbox
                         v-if="untaggedBatchMode"
+                        controlled
                         :model-value="selectedUntaggedKeys.includes(untaggedKey(item))"
                         :aria-label="t('organize.selectResource', { title: item.title || t('inbox.untitled') })"
                         @update:model-value="toggleUntagged(item, $event)"
@@ -554,6 +557,7 @@
     </BModal>
 
     <ResourceBatchActionBar
+      :range-selection="rangeSelection"
       :open="activeView === 'untagged' && untaggedBatchMode"
       :mobile="bookmark.isMobile"
       :summary="t('organize.selectedCount', { count: selectedUntaggedItems.length })"
@@ -572,6 +576,7 @@
       <template #leading>
         <BCheckbox
           controlled
+          :disabled="rangeSelection.selecting || rangeSelectionBlocked"
           :checked="allVisibleUntaggedSelected"
           :indeterminate="someVisibleUntaggedSelected"
           :aria-label="t('organize.untagged.selectAllVisible')"
@@ -617,6 +622,8 @@
 </template>
 
 <script setup lang="ts">
+  import { useRangeSelection } from '@/composables/useRangeSelection';
+  import { vRangeSelect, vRangeSelectionScroll } from '@/directives/rangeSelection';
   import { buildNoteDetailRequestScope } from '@/api/noteDetailPrefetch';
   import ResourceBatchTagsDrawer from '@/components/resourceActions/ResourceBatchTagsDrawer.vue';
   import type { BatchSelection } from '@/api/search';
@@ -735,6 +742,19 @@
   const untaggedVirtualItems = computed(() =>
     untaggedItems.value.map((item) => ({ ...item, virtualKey: untaggedKey(item) })),
   );
+  const rangeSelectionBlocked = computed(
+    () => untaggedList.value.loading || ignoringUntagged.value || restoringUntagged.value,
+  );
+  const rangeSelection = useRangeSelection({
+    active: () => activeView.value === 'untagged' && untaggedBatchMode.value,
+    mobile: () => bookmark.isMobile,
+    blocked: rangeSelectionBlocked,
+    groups: () => [{ id: 'default', keys: untaggedItems.value.map(untaggedKey) }],
+    scope: () => JSON.stringify([activeView.value, appliedUntaggedFilters.value, user.id]),
+    apply: (keys) => {
+      selectedUntaggedKeys.value = [...new Set([...selectedUntaggedKeys.value, ...keys])];
+    },
+  });
   const duplicateGroups = computed(() => duplicateList.value.items as DuplicateBookmarkGroup[]);
   const healthItems = computed(() => healthList.value.items as BookmarkHealthItem[]);
   const healthScan = computed(() => healthSummary.value?.scan || null);

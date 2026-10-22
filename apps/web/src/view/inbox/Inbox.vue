@@ -21,6 +21,7 @@
       :keyword="inbox.keyword"
       input-id="mobile-inbox-page-input"
       show-menu
+      :selection-disabled="resourceRangeSelection.selecting || hasPendingOperation"
       :selection-mode="resourceSelectionMode"
       :selected-count="selectedItems.length"
       :allow-batch="inbox.items.length > 0"
@@ -327,6 +328,7 @@
           :has-subitems="todo.items.some((item) => item.checklist?.length > 0)"
         />
         <ResourceBatchActionBar
+          :range-selection="todoRangeSelection"
           :open="isTodoFocused && todoView === 'list' && todoSelectionMode"
           :mobile="bookmark.isMobile"
           :summary="todoBatchSummary"
@@ -348,9 +350,10 @@
         >
           <template #leading>
             <BCheckbox
+              controlled
               :checked="allTodoItemsSelected"
               :indeterminate="someTodoItemsSelected"
-              :disabled="!todo.items.length || todoBatchMutating"
+              :disabled="!todo.items.length || todoBatchMutating || todoRangeSelection.selecting"
               :aria-label="
                 t(allTodoItemsSelected ? 'inbox.todoBatchUnselectAll' : 'inbox.selectAll', {
                   count: todo.items.length,
@@ -426,7 +429,10 @@
           "
           class="inbox-batch"
         >
+          <RangeSelectionHint :controller="resourceRangeSelection" />
           <BCheckbox
+            controlled
+            :disabled="resourceRangeSelection.selecting || hasPendingOperation"
             :model-value="allItemsSelected"
             :indeterminate="someItemsSelected"
             @update:model-value="toggleSelectAll"
@@ -435,10 +441,12 @@
           </BCheckbox>
           <div class="inbox-batch__actions">
             <span>{{ t('inbox.selectedCount', { count: selectedItems.length }) }}</span>
+            <RangeSelectionToggle v-if="bookmark.isMobile" :controller="resourceRangeSelection" />
+            <span v-if="resourceRangeSelection.hintKey" role="status" aria-live="polite">{{ t(resourceRangeSelection.hintKey) }}</span>
             <BButton
               size="small"
               type="primary"
-              :disabled="!selectedItems.length || hasPendingOperation"
+              :disabled="!selectedItems.length || hasPendingOperation || resourceRangeSelection.selecting"
               :loading="batchCompleting"
               @click="completeSelected"
             >
@@ -447,7 +455,7 @@
             <BButton
               size="small"
               type="danger"
-              :disabled="!selectedItems.length || hasPendingOperation"
+              :disabled="!selectedItems.length || hasPendingOperation || resourceRangeSelection.selecting"
               :loading="batchDeleting"
               @click="confirmDelete(selectedItems, true)"
             >
@@ -538,7 +546,7 @@
                 @delete="confirmDeleteTodo"
                 @range-change="ensureCalendarRange"
               />
-              <div v-else-if="isTodoFocused" class="todo-group-list">
+              <div v-else-if="isTodoFocused" v-range-selection-scroll="todoRangeSelection" class="todo-group-list">
                 <small v-if="hasTodoSeries" class="todo-count-hint">{{ t('todoWorkspace.instanceCountHint') }}</small>
                 <section v-for="group in todoGroupLists" :key="group.key" class="todo-group">
                   <header
@@ -608,6 +616,8 @@
                         </div>
                         <TodoSeriesGroup
                           v-else-if="node.kind === 'series'"
+                          :range-selection="todoRangeSelection"
+                          :range-group="group.key"
                           :series-id="node.seriesId"
                           :representative="node.representative"
                           :items="[node.representative]"
@@ -639,6 +649,8 @@
                         <TodoItem
                           workspace
                           v-else
+                          :range-selection="todoRangeSelection"
+                          :range-group="group.key"
                           :item="node.item"
                           :selectable="todoSelectionMode"
                           :selected="selectedTodoIds.includes(node.item.id)"
@@ -692,6 +704,7 @@
                 <template v-for="action in actionItems" :key="action.key">
                   <div
                     v-if="action.actionType === 'resource'"
+                    v-range-select="{ controller: resourceRangeSelection, key: inbox.resourceKey(action.item) }"
                     class="resource-inbox-entry"
                     :class="{
                       'is-inspected':
@@ -980,6 +993,10 @@
 </template>
 
 <script setup lang="ts">
+  import { useRangeSelection } from '@/composables/useRangeSelection';
+  import { vRangeSelect, vRangeSelectionScroll } from '@/directives/rangeSelection';
+  import RangeSelectionToggle from '@/components/resourceActions/RangeSelectionToggle.vue';
+  import RangeSelectionHint from '@/components/resourceActions/RangeSelectionHint.vue';
   import {
     canEnsureTodoCalendarRange,
     todoCalendarOwnerKey,
@@ -1509,6 +1526,27 @@
     if (isMobileResourceInbox.value) return inbox.loadFailed;
     return inbox.filterType === 'todo' ? todo.loadFailed : inbox.loadFailed;
   });
+  const todoRangeSelection = useRangeSelection({
+    active: () => isTodoFocused.value && todoView.value === 'list' && todoSelectionMode.value,
+    mobile: () => bookmark.isMobile,
+    blocked: () =>
+      hasPendingOperation.value ||
+      todoBatchMutating.value ||
+      pageLoading.value ||
+      todo.refreshing ||
+      seriesDrawerOpen.value,
+    groups: () =>
+      todoGroupLists.value
+        .filter((group) => !collapsedGroups.value[group.key])
+        .map((group) => ({
+          id: group.key,
+          keys: group.nodes.map((node) => (node.kind === 'series' ? node.representative.id : node.item.id)),
+        })),
+    scope: () => JSON.stringify([todo.groupQuery, todo.status, todoView.value, todo.ownerId]),
+    apply: (keys) => {
+      for (const key of keys) toggleTodoSelected(key, true);
+    },
+  });
   const pullRefresh = useAndroidPullRefresh({
     // 批量选择模式下顶部是操作条,下拉手势与勾选滑动容易互相误触,直接停用。
     enabled: computed(() => !todoSelectionMode.value && !resourceSelectionMode.value),
@@ -1633,6 +1671,24 @@
     }));
     // 资源中心的“全部”只展示资源；待办拥有独立的列表 / 议程 / 日历 / 四象限工作区。
     return resources;
+  });
+
+  const resourceRangeSelection = useRangeSelection({
+    active: () => inbox.filterType !== 'todo' && (!usesExplicitResourceSelection.value || resourceSelectionMode.value),
+    mobile: () => bookmark.isMobile,
+    blocked: () => hasPendingOperation.value || pageLoading.value,
+    groups: () => [
+      {
+        id: 'default',
+        keys: actionItems.value.flatMap((action) =>
+          action.actionType === 'resource' ? [inbox.resourceKey(action.item)] : [],
+        ),
+      },
+    ],
+    scope: () => JSON.stringify([inbox.filterType, router.currentRoute.value.fullPath]),
+    apply: (keys) => {
+      inbox.selectedKeys = [...new Set([...inbox.selectedKeys, ...keys])];
+    },
   });
 
   watch(
@@ -3246,6 +3302,7 @@
     background: var(--todo-accent-color);
   }
   .inbox-batch {
+    position: relative;
     display: flex;
     justify-content: space-between;
     align-items: center;

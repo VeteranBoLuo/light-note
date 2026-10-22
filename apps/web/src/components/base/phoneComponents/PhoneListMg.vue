@@ -25,7 +25,7 @@
           <SvgIcon color="var(--desc-color)" :src="icon.navigation.search" size="16" />
         </template>
       </BInput>
-      <div class="list-body">
+      <div v-range-selection-scroll="rangeSelection" class="list-body">
         <div
           v-if="loading"
           class="phone-list-skeleton"
@@ -55,8 +55,10 @@
         <MobileListSurface v-else-if="dataList.length">
           <MobileListRow
             v-for="item in dataList"
+            v-range-select="{ controller: rangeSelection, key: String(item.id || item.name) }"
             :key="item.id || item.name"
             interactive
+            range-selectable
             :complex="Boolean(item.hasSnapshot || item.hasSummary)"
             :selected="selectedKeys.includes(String(item.id || item.name))"
             class="list-item"
@@ -91,6 +93,8 @@
 </template>
 
 <script lang="ts" setup>
+  import type { RangeSelectionController } from '@/composables/useRangeSelection';
+  import { vRangeSelect, vRangeSelectionScroll } from '@/directives/rangeSelection';
   import { computed, ref, watch, type PropType } from 'vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import MobileListRow from '@/components/mobile/MobileListRow.vue';
@@ -103,6 +107,7 @@
   import { backRouterPage } from '@/utils/common';
 
   const props = defineProps({
+    rangeSelection: { type: Object as PropType<RangeSelectionController>, default: undefined },
     title: {
       type: String,
       default: '',

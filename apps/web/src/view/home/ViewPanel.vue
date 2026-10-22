@@ -2,6 +2,7 @@
   <div class="view-panel" id="view-panel" :data-mobile-resource-scroll="bookmark.isMobile ? null : ''">
     <TagInfo />
     <CardPanel
+      :range-selection="rangeSelection"
       :batch-mode="batchMode"
       :selected-ids="selectedIds"
       @load-more="emit('load-more')"
@@ -11,12 +12,14 @@
 </template>
 
 <script lang="ts" setup>
+  import type { RangeSelectionController } from '@/composables/useRangeSelection';
   import TagInfo from '@/components/home/TagInfo.vue';
   import CardPanel from '@/components/home/CardPanel.vue';
   import { bookmarkStore } from '@/store';
 
   const bookmark = bookmarkStore();
   defineProps<{
+    rangeSelection?: RangeSelectionController;
     batchMode?: boolean;
     selectedIds?: string[];
   }>();

@@ -1,6 +1,8 @@
 <template>
   <section class="todo-series-group" :class="{ 'is-selecting': selectable, 'is-workspace': workspace }">
     <TodoItem
+      :range-selection="rangeSelection"
+      :range-group="rangeGroup"
       :workspace="workspace"
       @organize="emit('organize', representative)"
       :item="representative"
@@ -94,6 +96,7 @@
 </template>
 
 <script setup lang="ts">
+  import type { RangeSelectionController } from '@/composables/useRangeSelection';
   import { computed, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import type { TodoChecklistItem, TodoItem as TodoItemType, TodoPriority, TodoSeriesAction } from '@/api/todoApi';
@@ -106,6 +109,8 @@
 
   const props = withDefaults(
     defineProps<{
+      rangeSelection?: RangeSelectionController;
+      rangeGroup?: string;
       workspace?: boolean;
       instanceCount?: number;
       overdueCount?: number;

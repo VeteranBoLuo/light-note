@@ -16,13 +16,6 @@ describe('笔记库桌面预览退出', () => {
     expect(source).toMatch(/function handlePreviewUnavailable[\s\S]*closePreview\(true\)/u);
   });
 
-  it('预览态点击笔记库只退出预览，普通态仍执行原有重置', () => {
-    expect(source).toContain('@title-click="handleNoteLibraryTitleClick"');
-    expect(source).toMatch(
-      /async function handleNoteLibraryTitleClick\(\)[\s\S]*if \(desktopPreviewOpen\.value\)[\s\S]*closeDesktopPreview\(\);[\s\S]*return;[\s\S]*await resetNoteLibrary\(\);/,
-    );
-  });
-
   it('进入预览前记录列表滚动位置，退出后在原视图恢复', () => {
     expect(source).toMatch(/function openLibraryNote[\s\S]*captureDesktopPreviewScroll\(\);/);
     expect(source).toContain("querySelector<HTMLElement>('.note-main-panel [data-mobile-resource-scroll]')");
@@ -31,13 +24,6 @@ describe('笔记库桌面预览退出', () => {
     expect(source).toContain('snapshot.viewMode !== currentViewMode.value');
     expect(source).toContain('element.scrollTop = snapshot.top');
     expect(source).toContain('element.scrollLeft = snapshot.left');
-  });
-
-  it('沿父级面包屑切换预览不会覆盖最初的列表滚动快照', () => {
-    const openBreadcrumbFunction = source.match(/function openPreviewBreadcrumbPage[\s\S]*?\n  }/)?.[0] || '';
-    expect(openBreadcrumbFunction).toContain('setDesktopPreviewPage(noteId, source)');
-    expect(openBreadcrumbFunction).not.toContain('captureDesktopPreviewScroll');
-    expect(openBreadcrumbFunction).not.toContain('closeDesktopPreview');
   });
 
   it('顶部笔记入口在路由成功落到根页时清除 keepAlive 内的预览和筛选现场', () => {

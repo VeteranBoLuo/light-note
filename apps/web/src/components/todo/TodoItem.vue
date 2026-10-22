@@ -10,6 +10,7 @@
     @delete="emit('delete')"
   >
     <article
+      v-range-select="{ controller: rangeSelection, key: item.id, group: rangeGroup }"
       class="todo-item"
       @click="selectable && openPreviewFromCard($event)"
       :class="{
@@ -34,6 +35,7 @@
           />
           <BCheckbox
             v-else
+            controlled
             class="todo-item__select"
             :model-value="selected"
             :disabled="writeDisabled"
@@ -307,6 +309,8 @@
 </template>
 
 <script setup lang="ts">
+  import type { RangeSelectionController } from '@/composables/useRangeSelection';
+  import { vRangeSelect } from '@/directives/rangeSelection';
   import TodoSubitems from './TodoSubitems.vue';
   import TodoPriorityMenu from './TodoPriorityMenu.vue';
   import ResourceTagChip from '@/components/tag/ResourceTagChip.vue';
@@ -342,6 +346,8 @@
   import icon from '@/config/icon';
 
   const props = defineProps<{
+    rangeSelection?: RangeSelectionController;
+    rangeGroup?: string;
     item: TodoItem;
     workspace?: boolean;
     seriesDetail?: boolean;
