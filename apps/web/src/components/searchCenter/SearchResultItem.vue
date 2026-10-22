@@ -15,7 +15,7 @@
       <div v-if="selectable" class="row-checkbox-wrap">
         <BCheckbox :checked="selected" @click.stop @change="emit('toggle-select')" />
       </div>
-      <BButton class="result-row" @click="handlePrimaryClick">
+      <BButton data-range-select="primary" class="result-row" @click="handlePrimaryClick">
         <span class="type-pill" :class="`type-pill--${item.type}`">{{ typeLabel }}</span>
         <span class="row-title">
           <template v-for="(segment, index) in titleSegments" :key="`lt-${index}`">
@@ -47,6 +47,7 @@
       />
 
       <BButton
+        data-range-select="primary"
         class="result-click-area"
         :class="{ 'result-click-area--selectable': selectable }"
         @click="handlePrimaryClick"

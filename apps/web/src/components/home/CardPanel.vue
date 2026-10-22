@@ -1,5 +1,5 @@
 <template>
-  <div class="card-panel-wrap" :data-mobile-resource-scroll="bookmark.isMobile ? '' : null">
+  <div v-range-selection-scroll="rangeSelection" class="card-panel-wrap" :data-mobile-resource-scroll="bookmark.isMobile ? '' : null">
     <div v-if="bookmark.bookmarkLoading || (!hasLoaded && !getBookList.length)" class="card-panel skeleton-panel">
       <div v-for="n in skeletonCount" :key="n" class="card-skeleton">
         <div class="skeleton-title">
@@ -37,7 +37,7 @@
       v-else
       :animation="200"
       :disabled="
-        bookmark.isMobile ||
+        batchMode || bookmark.isMobile ||
         bookmark.type !== 'all' ||
         bookmark.bookmarkLoading ||
         bookmark.bookmarkLoadingMore ||
@@ -55,6 +55,7 @@
     >
       <div
         v-for="item in getBookList"
+        v-range-select="{ controller: rangeSelection, key: String(item.id) }"
         :key="item.id"
         :data-bookmark-id="item.id"
         class="bookmark-card-wrap"
@@ -65,6 +66,7 @@
       >
         <BCheckbox
           v-if="batchMode"
+          controlled
           class="bookmark-card-checkbox"
           :checked="selectedIds.includes(String(item.id))"
           :aria-label="item.name"
@@ -75,6 +77,7 @@
         </RightMenu>
         <TagCard
           v-else
+          data-range-select="primary"
           :cardInfo="item"
           selection-mode
           :selected="selectedIds.includes(String(item.id))"
@@ -96,6 +99,8 @@
 </template>
 
 <script lang="ts" setup>
+  import type { RangeSelectionController } from '@/composables/useRangeSelection';
+  import { vRangeSelect, vRangeSelectionScroll } from '@/directives/rangeSelection';
   import { useProjectResourceAction } from '@/composables/useProjectResourceAction';
   const { canJoinProject, joinProject } = useProjectResourceAction();
   import { VueDraggable } from 'vue-draggable-plus';
@@ -126,6 +131,7 @@
   const { addResourcesToInbox, removeResourcesFromInbox } = useInboxEnqueue();
   withDefaults(
     defineProps<{
+      rangeSelection?: RangeSelectionController;
       batchMode?: boolean;
       selectedIds?: string[];
     }>(),

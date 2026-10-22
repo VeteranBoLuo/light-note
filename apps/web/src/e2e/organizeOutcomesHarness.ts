@@ -26,6 +26,7 @@ for (const [key, value] of Object.entries(densityCssVariables(density)))
 document.documentElement.classList.toggle('light-note-mobile-rendering', params.has('renderProfile'));
 for (const el of [document.documentElement, document.body, document.getElementById('app')!]) {
   el.style.height = '100%';
+  el.style.width = '100%';
   el.style.margin = '0';
 }
 const check = (id: string, status: string, kind: WorkspaceSuggestion['kind'] = 'tags'): WorkspaceSuggestion => ({

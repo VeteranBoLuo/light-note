@@ -1,5 +1,6 @@
 <template>
   <section
+    v-range-selection-scroll="resourceType === 'tag' ? iconRangeSelection : suggestionRangeSelection"
     ref="scrollRoot"
     @scroll.passive="updatePinnedGroup"
     class="organize-suggestion-workspace"
@@ -249,7 +250,8 @@
               >
             </div>
             <div v-if="group.key === 'priority' && batch.selecting.value" class="resource-batch-toolbar">
-              <div class="batch-selection-info">
+              <RangeSelectionHint :controller="suggestionRangeSelection" />
+              <div v-if="!bookmark.isMobile" class="batch-selection-info">
                 <BCheckbox
                   controlled
                   :model-value="
@@ -258,7 +260,7 @@
                   :indeterminate="
                     batch.selectedCount.value > 0 && batch.selectedCount.value < batch.applicable.value.length
                   "
-                  :disabled="batch.busy.value"
+                  :disabled="batch.busy.value || suggestionRangeSelection.selecting"
                   @update:model-value="batch.selectAll"
                   >{{ t('organizeWorkspace.batch.all') }}</BCheckbox
                 >
@@ -266,13 +268,14 @@
               </div>
               <div class="batch-selection-actions">
                 <BButton
+                  v-if="!bookmark.isMobile"
                   type="primary"
                   :loading="batch.busy.value"
-                  :disabled="!batch.selectedCount.value || loading"
+                  :disabled="!batch.selectedCount.value || loading || suggestionRangeSelection.selecting"
                   @click="batch.apply"
                   >{{ t('organizeWorkspace.batch.apply', { count: batch.selectedCount.value }) }}</BButton
                 >
-                <BButton :disabled="batch.busy.value" @click="batch.reset">{{ t('common.cancel') }}</BButton>
+                <BButton :disabled="batch.busy.value" @click="batch.reset">{{ t(bookmark.isMobile ? 'common.exitBatch' : 'common.cancel') }}</BButton>
                 <span v-if="batch.busy.value" role="status">{{
                   t('organizeWorkspace.batch.progress', { done: batch.progress.value, total: batch.total.value })
                 }}</span>
@@ -295,6 +298,7 @@
               }}</p>
               <BCard
                 v-for="item in filteredGroupItems(group)"
+                v-range-select="{ controller: resourceType === 'tag' ? iconRangeSelection : suggestionRangeSelection, key: item.id, group: group.key }"
                 :key="item.id"
                 as="article"
                 padding="0"
@@ -493,6 +497,30 @@
       </div>
     </section>
     <ResourceBatchActionBar
+      :range-selection="suggestionRangeSelection"
+      :open="bookmark.isMobile && resourceType !== 'tag' && batch.selecting.value"
+      mobile
+      :above-navigation="false"
+      :summary="t('organize.selectedCount', { count: batch.selectedCount.value })"
+      :clear-label="t('common.cancel')"
+      :primary-label="t('organizeWorkspace.batch.apply', { count: batch.selectedCount.value })"
+      :more-label="t('common.more')"
+      :primary-icon="icon.organize.check"
+      :show-clear="false"
+      :show-more="false"
+      :primary-disabled="!batch.selectedCount.value || loading"
+      :primary-loading="batch.busy.value"
+      @primary="batch.apply"
+    >
+      <template #leading>
+        <BCheckbox controlled :checked="batch.selectedCount.value > 0 && batch.selectedCount.value === batch.applicable.value.length"
+          :indeterminate="batch.selectedCount.value > 0 && batch.selectedCount.value < batch.applicable.value.length"
+          :disabled="suggestionRangeSelection.selecting || !suggestionRangeSelection.available"
+          :aria-label="t('organizeWorkspace.batch.all')" @change="batch.selectAll" />
+      </template>
+    </ResourceBatchActionBar>
+    <ResourceBatchActionBar
+      :range-selection="iconRangeSelection"
       :open="resourceType === 'tag' && iconReview.selecting.value"
       :mobile="bookmark.isMobile"
       :above-navigation="false"
@@ -518,7 +546,7 @@
           :indeterminate="
             iconReview.selectedCount.value > 0 && iconReview.selectedCount.value < iconReview.applicable.value.length
           "
-          :disabled="iconReview.batchBusy.value || loading || !iconReview.applicable.value.length"
+          :disabled="iconReview.batchBusy.value || loading || !iconReview.applicable.value.length || iconRangeSelection.selecting"
           :aria-label="t('organizeIcons.selectAvailable')"
           @update:model-value="iconReview.selectAll"
         />
@@ -570,6 +598,8 @@
   </section>
 </template>
 <script setup lang="ts">
+  import { useRangeSelection } from '@/composables/useRangeSelection';
+  import { vRangeSelect, vRangeSelectionScroll } from '@/directives/rangeSelection';
   import { useUiDensity } from '@/composables/useUiDensity';
   const { dimension } = useUiDensity();
   import OrganizeRunProgress from './OrganizeRunProgress.vue';
@@ -579,6 +609,7 @@
   const acquireQuotaVisible = ref(false);
   import OrganizeTagIconSuggestion from './OrganizeTagIconSuggestion.vue';
   import ResourceBatchActionBar from '@/components/resourceActions/ResourceBatchActionBar.vue';
+  import RangeSelectionHint from '@/components/resourceActions/RangeSelectionHint.vue';
   import useBookmarkStore from '@/store/bookmark';
   import { useOrganizeIconReview } from '@/composables/useOrganizeIconReview';
   import { supportsOrganizeCheck } from '@lightnote/shared/organize-capabilities';
@@ -1551,6 +1582,55 @@
   const writing = computed(
     () => pendingActions.value.size > 0 || batch.busy.value || iconReview.busy.size > 0 || iconReview.batchBusy.value,
   );
+  function visibleRangeGroups(eligible: Set<string>, icons: boolean) {
+    return resultGroups.value
+      .filter((group) => openGroups.value.has(group.key))
+      .map((group) => ({
+        id: group.key,
+        keys: filteredGroupItems(group)
+          .filter((item) =>
+            item.suggestions.some(
+              (suggestion) =>
+                (icons ? suggestion.kind === 'tag_icon' : suggestion.kind !== 'tag_icon') && eligible.has(suggestion.id),
+            ),
+          )
+          .map((item) => item.id),
+      }));
+  }
+  const rangeScope = () =>
+    JSON.stringify([
+      run.value?.id,
+      resourceType.value,
+      kind.value,
+      reviewFilter.value,
+      buildNoteDetailRequestScope(user),
+    ]);
+  const iconRangeSelection = useRangeSelection({
+    active: iconReview.selecting,
+    mobile: () => bookmark.isMobile,
+    blocked: () => loading.value || readingView.value || switching.value || writing.value,
+    groups: () => visibleRangeGroups(new Set(iconReview.applicable.value.map((suggestion) => suggestion.id)), true),
+    scope: rangeScope,
+    apply: (keys) => {
+      const selectedItems = new Set(keys),
+        eligible = new Set(iconReview.applicable.value.map((suggestion) => suggestion.id));
+      for (const item of items.value)
+        if (selectedItems.has(item.id))
+          for (const suggestion of item.suggestions)
+            if (eligible.has(suggestion.id)) iconReview.selected.add(suggestion.id);
+    },
+  });
+  const suggestionRangeSelection = useRangeSelection({
+    active: batch.selecting,
+    mobile: () => bookmark.isMobile,
+    blocked: () => loading.value || readingView.value || switching.value || writing.value || batchPreparing.value,
+    groups: () => visibleRangeGroups(new Set(batch.applicable.value.map((suggestion) => suggestion.id)), false),
+    scope: rangeScope,
+    apply: (keys) => {
+      const selectedItems = new Set(keys);
+      for (const item of items.value) if (selectedItems.has(item.id)) selectResource(item, true);
+    },
+  });
   let refreshAfterWrite = false;
   function suggestionBusy(key: string, busy: boolean) {
     if (busy) pendingActions.value.add(key);
@@ -2140,6 +2220,7 @@
     border-color: var(--ow-purple);
   }
   .resource-batch-toolbar {
+    position: relative;
     display: flex;
     align-items: center;
     justify-content: space-between;

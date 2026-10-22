@@ -1,6 +1,6 @@
 <template>
   <div v-if="interactive" class="mobile-list-row__item-shell" role="listitem" @click="emit('click')">
-    <BButton class="mobile-list-row" :class="rowClasses" :aria-current="selected ? 'true' : undefined">
+    <BButton :data-range-select="rangeSelectable ? 'primary' : undefined" class="mobile-list-row" :class="rowClasses" :aria-current="selected ? 'true' : undefined">
       <span v-if="$slots.leading" class="mobile-list-row__leading"><slot name="leading" /></span>
       <span v-if="$slots.default" class="mobile-list-row__body"><slot /></span>
       <span v-else class="mobile-list-row__body">
@@ -35,6 +35,7 @@
 
   const props = withDefaults(
     defineProps<{
+      rangeSelectable?: boolean;
       interactive?: boolean;
       selected?: boolean;
       complex?: boolean;

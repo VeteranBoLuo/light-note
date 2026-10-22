@@ -117,9 +117,23 @@ export function useResourceSelection(
     if (active.value && !loading.value) store.refreshItems(value);
   });
   function toggle(item: any, checked?: boolean) {
-    if (!active.value || store.busy || loading.value) return;
+    if (!active.value || store.busy || loading.value) return false;
     const resource = selectionResource(item, type || item.type);
-    notifyLimit(store.setVisible([resource], checked ?? !store.keys.has(resourceSelectionKey(resource))));
+    const ok = store.setVisible([resource], checked ?? !store.keys.has(resourceSelectionKey(resource)));
+    notifyLimit(ok);
+    return ok;
+  }
+  function selectKeys(keys: readonly string[], availableItems?: readonly any[]) {
+    if (!active.value || store.busy || loading.value) return false;
+    // A second rendered surface may supply its range without expanding the toolbar's select-all scope.
+    const resources = availableItems
+      ? availableItems.map((item) => selectionResource(item, type || item.type))
+      : candidates.value;
+    const available = new Map(resources.map((item) => [type ? item.id : resourceSelectionKey(item), item]));
+    if (keys.some((key) => !available.has(key))) return false;
+    const ok = store.setVisible(keys.map((key) => available.get(key)!), true);
+    notifyLimit(ok);
+    return ok;
   }
   function selectVisible(checked: boolean) {
     if (active.value && !loading.value) notifyLimit(store.setVisible(candidates.value, checked));
@@ -275,6 +289,7 @@ export function useResourceSelection(
     candidates,
     operation: () => operation,
     toggle,
+    selectKeys,
     selectVisible,
     clear,
     prepare,

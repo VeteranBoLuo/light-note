@@ -6,6 +6,7 @@ import { createApp, defineComponent, h, reactive, ref, nextTick, type App } from
 import { useResourceSelection, useResourceSelectionRuntime } from './useResourceSelection';
 import { useResourceSelectionStore } from '@/store/resourceSelection';
 import BTable from '@/components/base/BasicComponents/BTable/BTable.vue';
+import { MAX_EXPLICIT_RESOURCE_SELECTION } from '@lightnote/shared/resource-selection';
 
 const mocks = vi.hoisted(() => ({ user: null as any, preview: vi.fn(), info: vi.fn() }));
 vi.mock('@/store', () => ({ useUserStore: () => mocks.user }));
@@ -91,6 +92,78 @@ async function harness() {
   await nextTick();
   return { wrapper, router, visible, loading, selection, store: useResourceSelectionStore(pinia) };
 }
+
+describe('显式范围写回', () => {
+  it('写入给定范围并保留其他选择，重复写入不产生重复项', async () => {
+    const x = await harness();
+    x.selection.toggle(item('outside'));
+    x.visible.value = ['a', 'b', 'c', 'd', 'e', 'f'].map(item);
+    expect(x.selection.selectKeys(['b', 'c', 'd', 'e'])).toBe(true);
+    expect(x.selection.ids.value).toEqual(['outside', 'b', 'c', 'd', 'e']);
+    expect(x.selection.selectKeys(['b', 'c', 'd', 'e'])).toBe(true);
+    expect(x.selection.ids.value).toHaveLength(5);
+    x.selection.toggle(item('c'), false);
+    expect(x.selection.ids.value).toEqual(['outside', 'b', 'd', 'e']);
+  });
+
+  it('树范围独立提供候选，支持列表外勾选但不扩大列表全选及取消范围', async () => {
+    const x = await harness();
+    const tree = [item('tree-parent'), item('tree-child')];
+    expect(x.selection.selectKeys(['tree-parent'], tree)).toBe(true);
+    expect(x.selection.visibleSelected.value).toBe(0);
+    expect(x.selection.allVisible.value).toBe(false);
+    x.selection.selectVisible(true);
+    expect(x.selection.ids.value).toEqual(['tree-parent', 'a', 'b']);
+    x.selection.selectVisible(false);
+    expect(x.selection.ids.value).toEqual(['tree-parent']);
+    expect(x.selection.selectKeys(['tree-child', 'missing'], tree)).toBe(false);
+    expect(x.selection.ids.value).toEqual(['tree-parent']);
+    x.loading.value = true;
+    expect(x.selection.selectKeys(['tree-child'], tree)).toBe(false);
+    x.loading.value = false;
+    const op = x.store.beginOperation()!;
+    expect(x.selection.selectKeys(['tree-child'], tree)).toBe(false);
+    x.store.finish(op);
+    expect(x.selection.selectKeys(['tree-child'], tree)).toBe(true);
+    expect(x.selection.ids.value).toEqual(['tree-parent', 'tree-child']);
+  });
+
+  it('追加分页保留完整范围，同一端点只选一项；ID 统一为字符串', async () => {
+    const x = await harness();
+    x.visible.value = [{ ...item('first'), id: 1 } as any, item('middle')];
+    x.visible.value.push(item('last'));
+    expect(x.selection.selectKeys(['1', 'middle', 'last'])).toBe(true);
+    expect(x.selection.ids.value).toEqual(['1', 'middle', 'last']);
+    x.selection.clear();
+    expect(x.selection.selectKeys(['middle'])).toBe(true);
+    expect(x.selection.ids.value).toEqual(['middle']);
+  });
+
+  it('范围含不可用项、加载中、操作锁和已结束的会话均不能改选', async () => {
+    const x = await harness();
+    x.selection.toggle(item('a'));
+    expect(x.selection.selectKeys(['missing', 'b'])).toBe(false);
+    x.loading.value = true;
+    expect(x.selection.selectKeys(['a', 'b'])).toBe(false);
+    x.loading.value = false;
+    const op = x.store.beginOperation()!;
+    expect(x.selection.selectKeys(['a', 'b'])).toBe(false);
+    expect(x.selection.ids.value).toEqual(['a']);
+    x.store.finish(op);
+    x.selection.mode.value = false;
+    expect(x.selection.selectKeys(['a', 'b'])).toBe(false);
+    expect(x.selection.ids.value).toEqual([]);
+  });
+
+  it('超过选择上限时整次拒绝，不截断区间或丢弃原选择', async () => {
+    const x = await harness();
+    x.selection.toggle(item('outside'));
+    x.visible.value = Array.from({ length: MAX_EXPLICIT_RESOURCE_SELECTION }, (_, i) => item(String(i)));
+    expect(x.selection.selectKeys(x.visible.value.map((item) => String(item.id)))).toBe(false);
+    expect(x.selection.ids.value).toEqual(['outside']);
+    expect(mocks.info).toHaveBeenCalledTimes(1);
+  });
+});
 
 describe('跨目录选择：组件、路由、请求闭环', () => {
   it('目录快捷操作的显式范围不依赖后台列表是否加载，且不替换原选择', async () => {

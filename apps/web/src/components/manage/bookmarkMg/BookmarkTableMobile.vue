@@ -1,5 +1,6 @@
 <template>
   <PhoneListMg
+    :range-selection="rangeSelection"
     class="bookmark-mobile-list"
     :class="{ 'bookmark-mobile-list--batch': batchMode }"
     :loading="initialLoading"
@@ -46,6 +47,7 @@
     </template>
   </PhoneListMg>
   <ResourceBatchActionBar
+    :range-selection="rangeSelection"
     :show-mobile-project="false"
     selection-module="bookmarks"
     :selection-visible-count="selection.visibleSelected.value"
@@ -67,7 +69,7 @@
         controlled
         :checked="allBookmarksSelected"
         :indeterminate="someBookmarksSelected"
-        :disabled="!selection.candidates.value.length || selection.busy.value"
+        :disabled="!selection.candidates.value.length || selection.busy.value || rangeSelection.selecting"
         :aria-label="$t(allBookmarksSelected ? 'bookmarkMg.batchDeselectAll' : 'bookmarkMg.batchSelectAll')"
         @change="toggleSelectAll"
       />
@@ -75,7 +77,7 @@
     <template #mobile-actions>
       <BButton
         class="batch-action-delete"
-        :disabled="!selectedIds.length || selection.busy.value"
+        :disabled="!selectedIds.length || selection.busy.value || rangeSelection.selecting"
         @click="handleBatchDelete"
       >
         <SvgIcon :src="icon.table_delete" size="16" aria-hidden="true" />
@@ -114,6 +116,7 @@
 </template>
 
 <script lang="ts" setup>
+  import { useRangeSelection } from '@/composables/useRangeSelection';
   import { useProjectResourceAction } from '@/composables/useProjectResourceAction';
   const { canJoinProject, joinProject } = useProjectResourceAction();
   import { useResourceSelection } from '@/composables/useResourceSelection';
@@ -171,6 +174,19 @@
   const selection = useResourceSelection('bookmarks', selectionVisible, 'bookmark', loading);
   const selectedIds = selection.ids;
   const mutating = ref(false);
+  const rangeSelection = useRangeSelection({
+    active: batchMode,
+    mobile: true,
+    blocked: () => loading.value || selection.busy.value || mutating.value || selection.store.reviewOpen,
+    groups: () => [
+      {
+        id: 'default',
+        keys: selectionVisible.value.map((item) => String(item.id)),
+      },
+    ],
+    scope: () => selection.store.session,
+    apply: selection.selectKeys,
+  });
   const pageActionsOpen = ref(false);
   const mobilePageActionsOpen = ref(false);
   const mobileBatchActionsOpen = ref(false);

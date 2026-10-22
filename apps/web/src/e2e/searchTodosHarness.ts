@@ -11,6 +11,11 @@ import '@/assets/css/index.less';
 
 // 仅使用虚构内容和内存适配器，所有 API 请求均在此截获。
 const params = new URLSearchParams(location.search);
+for (const element of [document.documentElement, document.body, document.getElementById('app')!]) {
+  element.style.height = '100%'; element.style.margin = '0';
+}
+document.body.style.display = 'block';
+document.getElementById('app')!.style.width = '100%';
 const pinia = createPinia();
 setActivePinia(pinia);
 const user = useUserStore(pinia);

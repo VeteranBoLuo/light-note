@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   canMoveNoteSubtreeToDepth,
   collectNoteDescendantIds,
+  collectVisibleNoteTreeItems,
   flattenNoteTree,
   getNoteParentPathText,
   getNoteParentTargetId,
@@ -45,6 +46,30 @@ const tree = [
 ];
 
 describe('noteTree 前端纯函数', () => {
+  it('树连选只按已加载的展开行排列，不混入折叠分支或旧缓存，并防止循环', () => {
+    const parent = tree[0],
+      child = parent.children[0],
+      grandchild = child.children[0];
+    const loaded = {
+      top: [parent],
+      [parent.id]: [child],
+      [child.id]: [grandchild],
+      stale: [{ ...parent, id: 'old' }],
+    };
+    expect(collectVisibleNoteTreeItems(loaded, new Set(), 'top').map((item) => item.id)).toEqual(['root']);
+    expect(collectVisibleNoteTreeItems(loaded, new Set(['root']), 'top').map((item) => item.id)).toEqual([
+      'root',
+      'child',
+    ]);
+    expect(
+      collectVisibleNoteTreeItems(
+        { ...loaded, grandchild: [parent] },
+        new Set(['root', 'child', 'grandchild']),
+        'top',
+      ).map((item) => item.id),
+    ).toEqual(['root', 'child', 'grandchild']);
+  });
+
   it('按展示顺序展平并保留层级', () => {
     expect(flattenNoteTree(tree).map(({ id, depth }) => ({ id, depth }))).toEqual([
       { id: 'root', depth: 1 },
@@ -97,6 +122,10 @@ describe('noteTree 前端纯函数', () => {
     expect(shouldBrowseNoteChildrenOnOpen({ childCount: 2 }, 'preview')).toBe(false);
     expect(shouldBrowseNoteChildrenOnOpen({ childCount: 0 }, 'children')).toBe(false);
     expect(shouldBrowseNoteChildrenOnOpen({ childCount: 2 }, 'children', false)).toBe(false);
+    expect(shouldBrowseNoteChildrenOnOpen({ hasChildren: true }, 'children')).toBe(true);
+    expect(shouldBrowseNoteChildrenOnOpen({ hasChildren: true, childCount: 0 }, 'children')).toBe(true);
+    expect(shouldBrowseNoteChildrenOnOpen({ hasChildren: true }, 'preview')).toBe(false);
+    expect(shouldBrowseNoteChildrenOnOpen({ hasChildren: true }, 'children', false)).toBe(false);
   });
 
   it('从完整详情中识别空手绘、空富文本和真实可视内容', () => {

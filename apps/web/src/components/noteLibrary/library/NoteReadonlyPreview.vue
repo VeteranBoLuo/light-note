@@ -3,7 +3,7 @@
     <header class="note-readonly-preview__header">
       <div class="note-readonly-preview__heading">
         <nav class="note-readonly-preview__breadcrumb" :aria-label="t('note.currentDirectory')">
-          <BButton size="small" class="note-readonly-preview__crumb" @click="emit('close')">
+          <BButton size="small" class="note-readonly-preview__crumb" @click="emit('goLibrary')">
             {{ t('note.knowledgeRoot') }}
           </BButton>
           <template v-for="item in parentBreadcrumb" :key="item.id">
@@ -240,7 +240,7 @@
   );
   const emit = defineEmits<{
     selectNote: [checked: boolean];
-    close: [];
+    goLibrary: [];
     openPage: [page: PreviewBreadcrumbItem];
     edit: [];
     browseChildren: [];
