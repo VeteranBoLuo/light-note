@@ -2,6 +2,7 @@ import { onBeforeUnmount, onMounted, watch, type Ref } from 'vue';
 import { apiBasePost } from '@/http/request';
 import { hasAndroidBridge } from '@/utils/androidBridge';
 import { createNativeNotificationSync, nativeNotificationMessage } from '@/utils/nativeNotificationSync';
+import { createNativePushBindingStore } from '@/utils/nativePushBindingStore';
 import { useNotification } from './useNotification';
 import {
   updateNativeNotificationStatus,
@@ -13,31 +14,45 @@ export function useNativeNotificationSync(owner: Ref<string | null>, open: () =>
   const { refreshUnread } = useNotification();
   const sync = createNativeNotificationSync({
     bridge: nativeNotificationMessage,
+    bindingStore: createNativePushBindingStore({
+      getItem: (key) => localStorage.getItem(key),
+      setItem: (key, value) => localStorage.setItem(key, value),
+      removeItem: (key) => localStorage.removeItem(key),
+    }),
     fetch: async (input) => {
       const response = await apiBasePost('/api/notification/native/sync', input);
       if (response?.status !== 200 || !response.data) throw new Error('NATIVE_NOTIFICATION_SYNC_UNAVAILABLE');
       return response.data;
     },
     remote: {
-      bind: async (deviceToken) => {
+      bind: async (deviceToken, previousBinding) => {
         const response = await apiBasePost(
           '/api/notification/huawei/subscribe',
-          { deviceToken },
+          { deviceToken, ...(previousBinding ? { previousBinding } : {}) },
           { silent: true, timeout: 5000 },
-        );
-        if (response?.status !== 200 || !response.data)
-          throw Object.assign(new Error('HUAWEI_PUSH_UNAVAILABLE'), { invalidToken: response?.status === 410 });
+        ).catch((error) => {
+          throw connectionError(error);
+        });
+        if (response?.status !== 200 || !response.data) throw connectionError(response);
         return response.data;
       },
       activate: async (binding) => {
         const response = await apiBasePost('/api/notification/huawei/activate', binding, {
           silent: true,
           timeout: 5000,
+        }).catch((error) => {
+          throw connectionError(error);
         });
-        if (response?.status !== 200) throw new Error('HUAWEI_PUSH_BINDING_EXPIRED');
+        if (response?.status !== 200) throw connectionError(response);
       },
       unbind: async (binding) => {
-        await apiBasePost('/api/notification/huawei/unsubscribe', binding, { silent: true, timeout: 5000 });
+        const response = await apiBasePost('/api/notification/huawei/unsubscribe', binding, {
+          silent: true,
+          timeout: 5000,
+        }).catch((error) => {
+          throw connectionError(error);
+        });
+        if (response?.status !== 200) throw connectionError(response);
       },
     },
     open,
@@ -110,5 +125,20 @@ export function useNativeNotificationSync(owner: Ref<string | null>, open: () =>
     window.removeEventListener('light-note:native-notification-retry', resume);
     window.removeEventListener('light-note:native-notification-resume', resume);
     sync.pause();
+  });
+}
+
+function connectionError(response: { status?: number; msg?: string } | null | undefined) {
+  return Object.assign(new Error('HUAWEI_PUSH_UNAVAILABLE'), {
+    connectionState:
+      response?.msg === 'HUAWEI_PUSH_DEVICE_LIMIT'
+        ? 'deviceLimit'
+        : response?.msg === 'HUAWEI_PUSH_DISABLED'
+          ? 'serviceDisabled'
+          : [401, 403].includes(response?.status || 0)
+            ? 'accountRequired'
+            : undefined,
+    invalidToken: response?.status === 410 || response?.msg === 'HUAWEI_PUSH_TOKEN_INVALID',
+    staleBinding: ['HUAWEI_PUSH_BINDING_EXPIRED', 'HUAWEI_PUSH_BINDING_INVALID'].includes(response?.msg || ''),
   });
 }

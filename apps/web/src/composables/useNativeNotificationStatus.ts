@@ -1,7 +1,7 @@
 import { readonly, shallowRef } from 'vue';
 import type { NativeNotificationDeviceState, NativeNotificationState } from '@/utils/nativeNotificationSync';
 
-// Presentation only. Tokens and binding credentials stay inside the synchronization runtime.
+// Presentation only. Provider tokens and binding receipts are never exposed here.
 const connection = shallowRef<{ state: NativeNotificationState; owner: string }>({ state: 'idle', owner: '' });
 const online = shallowRef(true);
 const device = shallowRef<NativeNotificationDeviceState & { owner: string }>({

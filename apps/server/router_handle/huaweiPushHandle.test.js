@@ -38,7 +38,7 @@ it('binds and mutates only the authenticated owner', async () => {
   await subscribe(req(), response);
   await activate(req(), response);
   await unsubscribe(req(), response);
-  expect(bindHuaweiSubscription).toHaveBeenCalledWith('alice', token);
+  expect(bindHuaweiSubscription).toHaveBeenCalledWith('alice', token, null);
   expect(activatePushSubscription).toHaveBeenCalledWith('alice', 'd', 'g');
   expect(unbindPushSubscription).toHaveBeenCalledWith('alice', 'd', 'g');
 });
@@ -56,5 +56,23 @@ it('reports invalid tokens without disclosing provider or token content', async 
   bindHuaweiSubscription.mockRejectedValue(Object.assign(new Error(token), { code: 'PUSH_SUBSCRIPTION_INVALID' }));
   const response = res();
   await subscribe(req(), response);
-  expect(response.send).toHaveBeenCalledWith({ data: null, status: 410, msg: 'HUAWEI_PUSH_BIND_FAILED' });
+  expect(response.send).toHaveBeenCalledWith({ data: null, status: 410, msg: 'HUAWEI_PUSH_TOKEN_INVALID' });
+});
+it.each([
+  ['PUSH_DEVICE_LIMIT', 409, 'HUAWEI_PUSH_DEVICE_LIMIT'],
+  ['PUSH_BINDING_EXPIRED', 409, 'HUAWEI_PUSH_BINDING_EXPIRED'],
+  ['INVALID_PUSH_BINDING', 400, 'HUAWEI_PUSH_BINDING_INVALID'],
+  ['PUSH_ACCOUNT_UNAVAILABLE', 403, 'HUAWEI_PUSH_ACCOUNT_REQUIRED'],
+  ['UNKNOWN_DATABASE_FAILURE', 500, 'HUAWEI_PUSH_BIND_FAILED'],
+])('reports %s with a stable, non-sensitive result', async (code, status, msg) => {
+  bindHuaweiSubscription.mockRejectedValue(Object.assign(new Error(token), { code }));
+  const response = res();
+  await subscribe(req(), response);
+  expect(response.send).toHaveBeenCalledWith({ data: null, status, msg });
+});
+it('passes the replacement receipt while keeping the authenticated account authoritative', async () => {
+  const request = req();
+  request.body.previousBinding = { id: 'old', generation: 'g', userId: 'bob' };
+  await subscribe(request, res());
+  expect(bindHuaweiSubscription).toHaveBeenCalledWith('alice', token, request.body.previousBinding);
 });

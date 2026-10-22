@@ -69,6 +69,84 @@ describe.skipIf(!socketPath)('native notification real SQL', () => {
     await connection.query('INSERT INTO notification SET ?,browser_push_created_at=NOW(6)', [row]);
     return row.id;
   }
+  it('replaces a rotated Huawei token at the device limit and cancels only the replaced generation', async () => {
+    await db.query("INSERT INTO user (id) VALUES ('alice')");
+    const old = await bindHuaweiSubscription('alice', 'a'.repeat(100), null, db);
+    await activatePushSubscription('alice', old.id, old.generation, db);
+    for (let i = 1; i < 20; i++) {
+      const device = await bindHuaweiSubscription('alice', `device_${i}_` + 'x'.repeat(64), null, db);
+      await activatePushSubscription('alice', device.id, device.generation, db);
+    }
+    await db.query(
+      'INSERT INTO browser_push_jobs (notification_id,subscription_id,generation,expires_at) VALUES (?,?,?,DATE_ADD(NOW(),INTERVAL 1 DAY))',
+      [randomUUID(), old.id, old.generation],
+    );
+    await expect(bindHuaweiSubscription('alice', 'b'.repeat(100), null, db)).rejects.toMatchObject({
+      code: 'PUSH_DEVICE_LIMIT',
+    });
+    const replacement = await bindHuaweiSubscription('alice', 'b'.repeat(100), old, db);
+    expect(await activatePushSubscription('alice', replacement.id, replacement.generation, db)).toBe(true);
+    const [[count]] = await db.query('SELECT COUNT(*) AS total FROM browser_push_subscriptions WHERE active IN(1,2)');
+    expect(Number(count.total)).toBe(20);
+    const [[previous]] = await db.query('SELECT active FROM browser_push_subscriptions WHERE id=?', [old.id]);
+    expect(previous.active).toBe(0);
+    const [[job]] = await db.query('SELECT status FROM browser_push_jobs WHERE subscription_id=?', [old.id]);
+    expect(job.status).toBe('cancelled');
+    // A lost successful response is safe to replay using the previously persisted receipt.
+    expect(await bindHuaweiSubscription('alice', 'b'.repeat(100), old, db)).toEqual(replacement);
+  });
+  it('rolls back old-token retirement when the replacement cannot be stored', async () => {
+    await db.query("INSERT INTO user (id) VALUES ('alice')");
+    const old = await bindHuaweiSubscription('alice', 'a'.repeat(100), null, db);
+    await activatePushSubscription('alice', old.id, old.generation, db);
+    const failing = {
+      getConnection: async () => {
+        const c = await db.getConnection();
+        return {
+          beginTransaction: () => c.beginTransaction(),
+          commit: () => c.commit(),
+          rollback: () => c.rollback(),
+          release: () => c.release(),
+          query: (sql, params) => {
+            if (sql.startsWith('INSERT INTO browser_push_subscriptions')) throw new Error('simulated write failure');
+            return c.query(sql, params);
+          },
+        };
+      },
+    };
+    await expect(bindHuaweiSubscription('alice', 'b'.repeat(100), old, failing)).rejects.toThrow(
+      'simulated write failure',
+    );
+    const [[stored]] = await db.query('SELECT active FROM browser_push_subscriptions WHERE id=?', [old.id]);
+    expect(stored.active).toBe(1);
+  });
+  it('rejects another account or a stale generation as replacement authority', async () => {
+    await db.query("INSERT INTO user (id) VALUES ('alice'),('bob')");
+    const old = await bindHuaweiSubscription('alice', 'a'.repeat(100), null, db);
+    await activatePushSubscription('alice', old.id, old.generation, db);
+    for (const [owner, receipt] of [
+      ['bob', old],
+      ['alice', { ...old, generation: randomUUID() }],
+    ]) {
+      await expect(bindHuaweiSubscription(owner, 'b'.repeat(100), receipt, db)).rejects.toMatchObject({
+        code: 'PUSH_BINDING_EXPIRED',
+      });
+    }
+    const [[stored]] = await db.query('SELECT active FROM browser_push_subscriptions WHERE id=?', [old.id]);
+    expect(stored.active).toBe(1);
+  });
+  it('keeps one active binding when a token refresh is submitted concurrently', async () => {
+    await db.query("INSERT INTO user (id) VALUES ('alice')");
+    const old = await bindHuaweiSubscription('alice', 'a'.repeat(100), null, db);
+    await activatePushSubscription('alice', old.id, old.generation, db);
+    const bindings = await Promise.all([
+      bindHuaweiSubscription('alice', 'b'.repeat(100), old, db),
+      bindHuaweiSubscription('alice', 'b'.repeat(100), old, db),
+    ]);
+    expect(bindings[0].id).toBe(bindings[1].id);
+    const [[count]] = await db.query('SELECT COUNT(*) AS total FROM browser_push_subscriptions WHERE active IN(1,2)');
+    expect(Number(count.total)).toBe(1);
+  });
   it('reuses the actual queue with activation, WORK source checks, lease and account-generation invalidation', async () => {
     const env = {
       LIGHTNOTE_RUNTIME_ENV: 'production',
@@ -82,10 +160,10 @@ describe.skipIf(!socketPath)('native notification real SQL', () => {
     await db.query("INSERT INTO todo_items (id,user_id) VALUES ('t','alice')");
     await db.query("INSERT INTO todo_reminder_jobs VALUES ('j','t','alice','in_app','sent')");
     const token = 'a'.repeat(100);
-    const binding = await bindHuaweiSubscription('alice', token, db);
+    const binding = await bindHuaweiSubscription('alice', token, null, db);
     expect(await activatePushSubscription('bob', binding.id, binding.generation, db)).toBe(false);
     expect(await activatePushSubscription('alice', binding.id, binding.generation, db)).toBe(true);
-    expect(await bindHuaweiSubscription('alice', token, db)).toEqual(binding);
+    expect(await bindHuaweiSubscription('alice', token, null, db)).toEqual(binding);
     const n = await add({
       type: 'todo_reminder',
       source_type: 'todo_reminder_job',
@@ -105,7 +183,7 @@ describe.skipIf(!socketPath)('native notification real SQL', () => {
     expect(await processNextPush({ db, env, send })).toBeNull();
     await add({ type: 'todo_reminder', source_type: 'todo_reminder_job', source_id: 'j', browser_push_pending: 1 });
     await expandPushOutbox(db, env);
-    const switched = await bindHuaweiSubscription('bob', token, db);
+    const switched = await bindHuaweiSubscription('bob', token, null, db);
     expect(switched.generation).not.toBe(binding.generation);
     await unbindPushSubscription('alice', binding.id, binding.generation, db);
     expect(await activatePushSubscription('bob', switched.id, switched.generation, db)).toBe(true);
@@ -153,11 +231,7 @@ describe.skipIf(!socketPath)('native notification real SQL', () => {
   });
   it('checks current community result visibility before sending rather than trusting the queued notification', async () => {
     const schemaSpy = vi.spyOn(feedSchema, 'communityFeedSchemaReady').mockResolvedValue(true);
-    const tables = [
-      'community_posts',
-      'community_comments',
-      'community_moderation_actions',
-    ];
+    const tables = ['community_posts', 'community_comments', 'community_moderation_actions'];
     try {
       await db.query(
         'CREATE TABLE community_posts(id int, public_id varchar(64),author_id char(36),status varchar(32),pending_revision_id int)',
@@ -168,7 +242,7 @@ describe.skipIf(!socketPath)('native notification real SQL', () => {
       await db.query('CREATE TABLE community_moderation_actions(public_id varchar(64),subject_id char(36))');
       await db.query("INSERT INTO user(id) VALUES('alice')");
       await db.query("INSERT INTO community_moderation_actions VALUES('result-1','alice')");
-      const binding = await bindHuaweiSubscription('alice', 'b'.repeat(100), db);
+      const binding = await bindHuaweiSubscription('alice', 'b'.repeat(100), null, db);
       await activatePushSubscription('alice', binding.id, binding.generation, db);
       const env = {
         LIGHTNOTE_RUNTIME_ENV: 'production',
@@ -214,13 +288,23 @@ describe.skipIf(!socketPath)('native notification real SQL', () => {
     const { since } = await readNativeNotifications(db, 'alice');
     const ownTodoId = randomUUID();
     const otherTodoId = randomUUID();
-    await db.query('INSERT INTO todo_items (id,user_id,title,description) VALUES (?,?,?,?),(?,?,?,?)',
-      [ownTodoId, 'alice', '整理资料', '检查本周资料\n并发送总结', otherTodoId, 'bob', '他人的待办', '私密说明']);
+    await db.query('INSERT INTO todo_items (id,user_id,title,description) VALUES (?,?,?,?),(?,?,?,?)', [
+      ownTodoId,
+      'alice',
+      '整理资料',
+      '检查本周资料\n并发送总结',
+      otherTodoId,
+      'bob',
+      '他人的待办',
+      '私密说明',
+    ]);
     const own = await add({ type: 'todo_reminder', meta: JSON.stringify({ todoId: ownTodoId }) });
     const other = await add({ type: 'todo_reminder', meta: JSON.stringify({ todoId: otherTodoId }) });
     const page = await readNativeNotifications(db, 'alice', { since });
     expect(page.items.find((row) => row.id === own)).toMatchObject({
-      todo: true, title: '待办：整理资料', body: '检查本周资料 并发送总结',
+      todo: true,
+      title: '待办：整理资料',
+      body: '检查本周资料 并发送总结',
     });
     expect(page.items.find((row) => row.id === other)).toEqual(expect.objectContaining({ id: other }));
     expect(page.items.find((row) => row.id === other)).not.toHaveProperty('body');

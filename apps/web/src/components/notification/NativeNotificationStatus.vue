@@ -2,7 +2,7 @@
   <section
     v-if="visible"
     class="native-notification-status"
-    :class="{ 'is-connected': state === 'connected' }"
+    :class="{ 'is-connected': state === 'connected', 'is-error': specificFailure }"
     :aria-label="t('nativePush.title')"
   >
     <div class="native-notification-status__copy" role="status" aria-live="polite">
@@ -27,7 +27,9 @@
       }}</p>
     </div>
     <BButton
-      v-if="['retrying', 'unavailable'].includes(state) || (state === 'disabled' && !settingsAvailable)"
+      v-if="
+        specificFailure || ['retrying', 'unavailable'].includes(state) || (state === 'disabled' && !settingsAvailable)
+      "
       size="small"
       @click="retryNativeNotifications"
     >
@@ -84,6 +86,9 @@
         ? 'nativePush.settingsPermissionOn'
         : `nativePush.settings${state.value === 'connected' ? 'Connected' : 'Disabled'}`
       : `nativePush.description.${state.value}`,
+  );
+  const specificFailure = computed(() =>
+    ['deviceLimit', 'accountRequired', 'serviceDisabled', 'storageUnavailable'].includes(state.value),
   );
   const openingSettings = ref(false);
   const settingsError = ref(false);
@@ -166,5 +171,11 @@
   }
   .is-connected strong {
     color: var(--success-color);
+  }
+  .is-error {
+    border-color: var(--danger-color);
+  }
+  .is-error strong {
+    color: var(--danger-color);
   }
 </style>

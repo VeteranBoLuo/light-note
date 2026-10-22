@@ -266,12 +266,15 @@ it.each([{ active: 3 }, { active: 0, invalid: 1 }])(
       commit: vi.fn(),
       rollback: vi.fn(),
       release: vi.fn(),
-      query: vi.fn().mockResolvedValueOnce([[{ id: 's1', ...previous }]]),
+      query: vi
+        .fn()
+        .mockResolvedValueOnce([[{ id: 'u1' }]])
+        .mockResolvedValueOnce([[{ id: 's1', ...previous }]]),
     };
     await expect(
       bindPushSubscription('u1', subscription, 'zh-CN', { getConnection: async () => conn }),
     ).rejects.toMatchObject({ code: 'PUSH_SUBSCRIPTION_INVALID' });
-    expect(conn.query).toHaveBeenCalledOnce();
+    expect(conn.query).toHaveBeenCalledTimes(2);
     expect(conn.commit).not.toHaveBeenCalled();
     expect(conn.rollback).toHaveBeenCalledOnce();
   },

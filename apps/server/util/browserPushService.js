@@ -27,14 +27,28 @@ export async function bindPushSubscription(userId, raw, locale, db = pool) {
   return bindSubscription(userId, validatePushSubscription(raw), locale, db);
 }
 
-export async function bindHuaweiSubscription(userId, token, db = pool) {
-  return bindSubscription(userId, huaweiSubscription(token), 'zh-CN', db);
+export async function bindHuaweiSubscription(userId, token, previousBinding = null, db = pool) {
+  if (
+    previousBinding !== null &&
+    (!previousBinding ||
+      typeof previousBinding !== 'object' ||
+      Array.isArray(previousBinding) ||
+      typeof previousBinding.id !== 'string' ||
+      typeof previousBinding.generation !== 'string' ||
+      !/^[a-f\d-]{36}$/i.test(previousBinding.id || '') ||
+      !/^[a-f\d-]{36}$/i.test(previousBinding.generation || ''))
+  )
+    throw Object.assign(new Error('INVALID_PUSH_BINDING'), { code: 'INVALID_PUSH_BINDING' });
+  return bindSubscription(userId, huaweiSubscription(token), 'zh-CN', db, previousBinding);
 }
 
-async function bindSubscription(userId, subscription, locale, db) {
+async function bindSubscription(userId, subscription, locale, db, previousBinding = null) {
   const conn = await db.getConnection();
   try {
     await conn.beginTransaction();
+    // Serialize device limits and replacements for an account before locking its endpoints.
+    const [[owner]] = await conn.query('SELECT id FROM user WHERE id = ? AND del_flag = 0 FOR UPDATE', [userId]);
+    if (!owner) throw Object.assign(new Error('PUSH_ACCOUNT_UNAVAILABLE'), { code: 'PUSH_ACCOUNT_UNAVAILABLE' });
     const hash = endpointHash(subscription.endpoint);
     const [existing] = await conn.query(
       `SELECT s.*, EXISTS(SELECT 1 FROM browser_push_jobs j WHERE j.subscription_id = s.id AND j.status = 'invalid') AS invalid FROM browser_push_subscriptions s WHERE endpoint_hash = ? FOR UPDATE`,
@@ -44,6 +58,22 @@ async function bindSubscription(userId, subscription, locale, db) {
     // Provider-invalid endpoints must never be reactivated, even by an older client.
     if (Number(previous?.active) === 3 || Number(previous?.invalid) === 1)
       throw Object.assign(new Error('PUSH_SUBSCRIPTION_INVALID'), { code: 'PUSH_SUBSCRIPTION_INVALID' });
+    if (previousBinding && !(previous?.id === previousBinding.id && previous.user_id === userId)) {
+      const [[replaced]] = await conn.query(
+        `SELECT id FROM browser_push_subscriptions
+         WHERE id = ? AND user_id = ? AND generation = ? AND endpoint LIKE 'huawei:%' FOR UPDATE`,
+        [previousBinding.id, userId, previousBinding.generation],
+      );
+      if (!replaced) throw Object.assign(new Error('PUSH_BINDING_EXPIRED'), { code: 'PUSH_BINDING_EXPIRED' });
+      await conn.query(
+        'UPDATE browser_push_subscriptions SET active = IF(active = 3, 3, 0) WHERE id = ? AND user_id = ? AND generation = ?',
+        [previousBinding.id, userId, previousBinding.generation],
+      );
+      await conn.query(
+        "UPDATE browser_push_jobs SET status = 'cancelled' WHERE subscription_id = ? AND generation = ? AND status IN ('pending', 'sending')",
+        [previousBinding.id, previousBinding.generation],
+      );
+    }
     if (
       Number(previous?.active) === 1 &&
       previous.user_id === userId &&
@@ -54,14 +84,12 @@ async function bindSubscription(userId, subscription, locale, db) {
       await conn.commit();
       return { id: previous.id, generation: previous.generation, userId };
     }
-    const [[owner]] = await conn.query('SELECT id FROM user WHERE id = ? AND del_flag = 0 FOR UPDATE', [userId]);
-    if (!owner) throw new Error('PUSH_ACCOUNT_UNAVAILABLE');
     const [[count]] = await conn.query(
       'SELECT COUNT(*) AS total FROM browser_push_subscriptions WHERE user_id = ? AND active IN (1, 2)',
       [userId],
     );
     if (Number(count.total) >= 20 && (previous?.user_id !== userId || ![1, 2].includes(Number(previous?.active))))
-      throw new Error('PUSH_DEVICE_LIMIT');
+      throw Object.assign(new Error('PUSH_DEVICE_LIMIT'), { code: 'PUSH_DEVICE_LIMIT' });
     let id = previous?.id || randomUUID();
     const generation = randomUUID();
     await conn.query(

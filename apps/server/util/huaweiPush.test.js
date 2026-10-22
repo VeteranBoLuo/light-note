@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 vi.mock('../db/index.js', () => ({ default: { query: vi.fn() } }));
 import { huaweiNotificationPresentation, huaweiPushEnabled, huaweiSubscription } from './huaweiPushPolicy.js';
 import { createHuaweiTransport } from './huaweiPushTransport.js';
-import { processNextPush } from './browserPushService.js';
+import { processNextPush, bindHuaweiSubscription } from './browserPushService.js';
 const env = {
   LIGHTNOTE_RUNTIME_ENV: 'production',
   HUAWEI_PUSH_ENABLED: 'true',
@@ -14,6 +14,15 @@ const env = {
 };
 const token = 'a'.repeat(100);
 const response = (body) => ({ ok: true, json: async () => body });
+it.each([
+  [],
+  'receipt',
+  { id: ['a'.repeat(36)], generation: 'b'.repeat(36) },
+  { id: 'a'.repeat(36), generation: ['b'.repeat(36)] },
+  { id: 'invalid', generation: 'b'.repeat(36) },
+])('rejects malformed replacement receipts before touching the database: %j', async (receipt) => {
+  await expect(bindHuaweiSubscription('alice', token, receipt)).rejects.toMatchObject({ code: 'INVALID_PUSH_BINDING' });
+});
 describe('Huawei transport', () => {
   it('is disabled outside production or with incomplete configuration', () => {
     expect(huaweiPushEnabled(env)).toBe(true);

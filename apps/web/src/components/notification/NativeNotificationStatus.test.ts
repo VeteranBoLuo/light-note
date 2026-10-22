@@ -36,6 +36,22 @@ function mount() {
   app.use(createI18n({ legacy: false, locale: 'zh-CN', messages: { 'zh-CN': zh } }));
   app.mount(host);
 }
+it.each([
+  ['deviceLimit', '通知设备数量已满', '清理不再使用的设备'],
+  ['accountRequired', '请重新确认登录', '重新登录后再检查'],
+  ['serviceDisabled', '后台通知服务未开启', '联系管理员检查服务配置'],
+  ['storageUnavailable', '通知连接信息无法保存', '检查存储空间后重试'],
+] as const)('explains %s while keeping system permission independent', (state, title, description) => {
+  updateNativeNotificationStatus(state, 'alice');
+  updateNativeNotificationDevice({ systemEnabled: true, settingsAvailable: true }, 'alice');
+  mount();
+  expect(host.textContent).toContain(title);
+  expect(host.textContent).toContain(description);
+  expect(host.textContent).not.toContain('正在重新连接');
+  expect(host.querySelector('[role="switch"]')?.getAttribute('aria-checked')).toBe('true');
+  expect(host.querySelector('section')?.classList.contains('is-error')).toBe(true);
+  expect(host.textContent).toContain('重新检查');
+});
 it('shows confirmed status, offline state and local notification preference independently', async () => {
   mount();
   expect(host.textContent).toContain('通知已连接');

@@ -163,7 +163,7 @@ describe.skipIf(!socketPath)('root chat subscription real SQL', () => {
     expect(ordinary.total).toBe(2);
   });
   it('cancels unsent alerts permanently while retaining inbox history and keeping new messages off', async () => {
-    const binding = await bindHuaweiSubscription('root', 'a'.repeat(100), db);
+    const binding = await bindHuaweiSubscription('root', 'a'.repeat(100), null, db);
     await activatePushSubscription('root', binding.id, binding.generation, db);
     await deliver(await message());
     await expandPushOutbox(db, env);
@@ -256,7 +256,7 @@ describe.skipIf(!socketPath)('root chat subscription real SQL', () => {
     }
   });
   it('uses SUBSCRIPTION and current content through the actual worker, and observes master switches', async () => {
-    const binding = await bindHuaweiSubscription('root', 'b'.repeat(100), db);
+    const binding = await bindHuaweiSubscription('root', 'b'.repeat(100), null, db);
     await activatePushSubscription('root', binding.id, binding.generation, db);
     await deliver(await message({ kind: 'poll', content: '要参加吗？' }));
     await expandPushOutbox(db, env);

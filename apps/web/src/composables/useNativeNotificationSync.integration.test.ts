@@ -19,6 +19,8 @@ let host: HTMLElement;
 const owner = ref<string | null>('alice');
 async function flush() {
   for (let i = 0; i < 20; i++) await Promise.resolve();
+  // Drain jsdom's storage-event tasks without advancing the notification polling interval.
+  await vi.advanceTimersByTimeAsync(0);
 }
 function mount() {
   app = createApp({
@@ -32,6 +34,7 @@ function mount() {
 beforeEach(() => {
   vi.useFakeTimers();
   vi.clearAllMocks();
+  localStorage.clear();
   Object.defineProperty(navigator, 'onLine', { configurable: true, value: true });
   Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' });
   window.LightNoteAndroid = { postMessage: vi.fn() };
@@ -55,6 +58,23 @@ afterEach(() => {
   vi.useRealTimers();
 });
 describe('foreground notification connection scheduling', () => {
+  it.each([
+    [409, 'HUAWEI_PUSH_DEVICE_LIMIT', 'deviceLimit'],
+    [503, 'HUAWEI_PUSH_DISABLED', 'serviceDisabled'],
+    [403, 'HUAWEI_PUSH_ACCOUNT_REQUIRED', 'accountRequired'],
+    [500, 'HUAWEI_PUSH_BIND_FAILED', 'retrying'],
+  ])('maps API %s/%s to an accurate connection state', async (status, msg, expected) => {
+    mocks.api.mockResolvedValue({ status, msg });
+    mount();
+    await flush();
+    expect(nativeNotificationStatus.value.state).toBe(expected);
+  });
+  it('reports HTTP authentication failures separately from a connection retry', async () => {
+    mocks.api.mockRejectedValue({ status: 401 });
+    mount();
+    await flush();
+    expect(nativeNotificationStatus.value.state).toBe('accountRequired');
+  });
   it('picks up a delayed token within a second without accelerating notification API polling', async () => {
     mocks.bridge.mockResolvedValue({ ok: true, enabled: true, huaweiToken: '' });
     mount();
@@ -110,7 +130,12 @@ describe('foreground notification connection scheduling', () => {
     owner.value = '';
     await flush();
     expect(nativeNotificationStatus.value).toEqual({ owner: '', state: 'idle' });
-    expect(nativeNotificationDevice.value).toEqual({ owner: '', systemEnabled: null, settingsAvailable: false, pushSupport: 'unknown' });
+    expect(nativeNotificationDevice.value).toEqual({
+      owner: '',
+      systemEnabled: null,
+      settingsAvailable: false,
+      pushSupport: 'unknown',
+    });
     const count = mocks.api.mock.calls.length;
     await vi.advanceTimersByTimeAsync(65000);
     expect(mocks.api).toHaveBeenCalledTimes(count);
@@ -125,7 +150,12 @@ describe('foreground notification connection scheduling', () => {
     });
     mount();
     await flush();
-    expect(nativeNotificationDevice.value).toEqual({ owner: 'alice', systemEnabled: true, settingsAvailable: true, pushSupport: 'unknown' });
+    expect(nativeNotificationDevice.value).toEqual({
+      owner: 'alice',
+      systemEnabled: true,
+      settingsAvailable: true,
+      pushSupport: 'unknown',
+    });
     Object.defineProperty(navigator, 'onLine', { configurable: true, value: false });
     mocks.bridge.mockResolvedValue({ ok: true, enabled: false, systemEnabled: false, settingsAvailable: true });
     const count = mocks.api.mock.calls.length;
