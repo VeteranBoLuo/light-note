@@ -90,6 +90,7 @@
     min-height: var(--ui-layout-300, 300px);
     box-sizing: border-box;
     display: grid;
+    grid-template-columns: minmax(0, 1fr);
     grid-template-rows: minmax(0, 1fr) auto;
     overflow: hidden;
     border: 0;
@@ -99,6 +100,7 @@
   }
 
   .chat-expression-panel__body {
+    min-width: 0;
     min-height: 0;
     overflow: hidden;
   }
@@ -150,5 +152,15 @@
   html.light-note-mobile-rendering .chat-expression-panel__tab.b_btn.is-active {
     border-width: 1px;
     border-style: solid;
+  }
+
+  html.light-note-mobile-rendering .chat-expression-panel__tabs {
+    gap: var(--ui-space-2, 2px);
+    padding-inline: var(--ui-space-4, 4px);
+  }
+
+  html.light-note-mobile-rendering .chat-expression-panel__tab.b_btn {
+    gap: var(--ui-space-4, 4px);
+    padding-inline: var(--ui-space-4, 4px);
   }
 </style>

@@ -1,6 +1,9 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { COMMUNITY_CHAT_OFFICIAL_STICKERS } from '@lightnote/shared/community-chat-stickers';
+import {
+  COMMUNITY_CHAT_OFFICIAL_STICKERS,
+  resolveCommunityChatOfficialSticker,
+} from '@lightnote/shared/community-chat-stickers';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createApp, nextTick } from 'vue';
 import { createI18n } from 'vue-i18n';
@@ -14,6 +17,7 @@ let cleanup: (() => void) | undefined;
 afterEach(() => {
   cleanup?.();
   cleanup = undefined;
+  vi.useRealTimers();
 });
 
 function mountPanel(onSelect = vi.fn()) {
@@ -45,9 +49,12 @@ describe('ChatOfficialStickerPanel', () => {
 
     expect(COMMUNITY_CHAT_OFFICIAL_STICKERS).toHaveLength(24);
     for (const sticker of COMMUNITY_CHAT_OFFICIAL_STICKERS) {
-      expect(sticker.key).toBe(`paper-spirit-v2:${sticker.id}`);
+      expect(sticker.key).toBe(`paper-spirit-v3:${sticker.id}`);
       expect(sticker.key.length).toBeLessThanOrEqual(80);
-      expect(sticker.assetPath).toBe(`/community-chat/stickers/paper-spirit-v2/${sticker.id.replaceAll('_', '-')}.png`);
+      expect(sticker.assetPath).toBe(`/community-chat/stickers/paper-spirit-v3/${sticker.id.replaceAll('_', '-')}.png`);
+      expect(resolveCommunityChatOfficialSticker(`paper-spirit-v2:${sticker.id}`)?.assetPath).toBe(
+        `/community-chat/stickers/paper-spirit-v2/${sticker.id.replaceAll('_', '-')}.png`,
+      );
       expect(keys.has(sticker.key)).toBe(false);
       expect(paths.has(sticker.assetPath)).toBe(false);
       keys.add(sticker.key);
@@ -84,5 +91,21 @@ describe('ChatOfficialStickerPanel', () => {
     expect(expressionPanelSource).toContain("emit('selectOfficialSticker', $event)");
     expect(expressionPanelSource).toContain('icon.coBuild.official');
     expect(expressionPanelSource).not.toContain('<svg');
+  });
+
+  it('无字贴图仍提供名称提示，选择后收起提示', async () => {
+    vi.useFakeTimers();
+    const { host, onSelect } = mountPanel();
+    const choice = host.querySelector<HTMLElement>('.chat-official-sticker-panel__choice');
+    choice?.dispatchEvent(new MouseEvent('mouseenter'));
+    await vi.advanceTimersByTimeAsync(250);
+    await nextTick();
+    const tooltip = document.body.querySelector<HTMLElement>('.b-tooltip-popup');
+    expect(tooltip?.textContent).toBe(zhCN.communityChat.sticker.officialItems.laughing_tears);
+    expect(tooltip?.style.display).not.toBe('none');
+    choice?.querySelector('button')?.click();
+    await nextTick();
+    expect(onSelect).toHaveBeenCalledWith('paper-spirit-v3:laughing_tears');
+    expect(tooltip?.style.display).toBe('none');
   });
 });

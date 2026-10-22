@@ -2582,8 +2582,8 @@ describe('CommunityChatWorkspace', () => {
     await flushAsync();
 
     const sticker = host.querySelector<HTMLImageElement>('.community-message__sticker.has-image img');
-    expect(sticker?.getAttribute('width')).toBe('176');
-    expect(sticker?.getAttribute('height')).toBe('176');
+    expect(sticker?.getAttribute('width')).toBe('128');
+    expect(sticker?.getAttribute('height')).toBe('128');
     expect(workspaceSource).toMatch(/\.community-message__sticker\.has-image\s*\{[\s\S]*?aspect-ratio:\s*1\s*\/\s*1;/u);
     expect(messageList.scrollTop).toBe(600);
 
@@ -4130,11 +4130,11 @@ describe('CommunityChatWorkspace', () => {
           isOwn: true,
           messageKind: 'sticker',
           stickerSource: 'official',
-          stickerKey: 'paper-spirit-v2:laughing_tears',
+          stickerKey: 'paper-spirit-v3:laughing_tears',
           sticker: {
             source: 'official',
-            key: 'paper-spirit-v2:laughing_tears',
-            url: '/community-chat/stickers/paper-spirit-v2/laughing-tears.png',
+            key: 'paper-spirit-v3:laughing_tears',
+            url: '/community-chat/stickers/paper-spirit-v3/laughing-tears.png',
           },
         }),
       },
@@ -4163,10 +4163,10 @@ describe('CommunityChatWorkspace', () => {
       content: '',
       messageKind: 'sticker',
       stickerSource: 'official',
-      stickerKey: 'paper-spirit-v2:laughing_tears',
+      stickerKey: 'paper-spirit-v3:laughing_tears',
     });
     expect(host.querySelector<HTMLImageElement>('.community-message__sticker.has-image img')?.src).toContain(
-      '/community-chat/stickers/paper-spirit-v2/laughing-tears.png',
+      '/community-chat/stickers/paper-spirit-v3/laughing-tears.png',
     );
     expect(host.querySelector('.chat-expression-panel')).toBeNull();
   });

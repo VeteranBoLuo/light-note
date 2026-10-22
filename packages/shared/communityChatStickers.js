@@ -1,4 +1,4 @@
-const PAPER_SPIRIT_PACK_ID = "paper-spirit-v2";
+const PAPER_SPIRIT_PACK_ID = "paper-spirit-v3";
 
 const paperSpiritSticker = (packId, id) =>
   Object.freeze({
@@ -29,43 +29,54 @@ const legacyPaperSpiritStickers = Object.freeze(
   ].map((id) => paperSpiritSticker("paper-spirit-v1", id)),
 );
 
+// The captioned v2 and caption-free v3 share the same expression vocabulary.
+const paperSpiritEmotionIds = Object.freeze([
+  "laughing_tears",
+  "eating_watermelon",
+  "go_on",
+  "smug",
+  "meltdown",
+  "lying_flat",
+  "confused",
+  "aggrieved",
+  "angry",
+  "refuse",
+  "received",
+  "hug",
+  "snicker",
+  "speechless",
+  "slacking",
+  "buffering",
+  "leaving",
+  "sleepy",
+  "busy",
+  "thanks",
+  "approve",
+  "please",
+  "good_night",
+  "really",
+]);
+
 export const COMMUNITY_CHAT_OFFICIAL_STICKERS = Object.freeze(
-  [
-    "laughing_tears",
-    "eating_watermelon",
-    "go_on",
-    "smug",
-    "meltdown",
-    "lying_flat",
-    "confused",
-    "aggrieved",
-    "angry",
-    "refuse",
-    "received",
-    "hug",
-    "snicker",
-    "speechless",
-    "slacking",
-    "buffering",
-    "leaving",
-    "sleepy",
-    "busy",
-    "thanks",
-    "approve",
-    "please",
-    "good_night",
-    "really",
-  ].map((id) => paperSpiritSticker(PAPER_SPIRIT_PACK_ID, id)),
+  paperSpiritEmotionIds.map((id) =>
+    paperSpiritSticker(PAPER_SPIRIT_PACK_ID, id),
+  ),
 );
 
 export const COMMUNITY_CHAT_OFFICIAL_STICKER_PACK = Object.freeze({
   id: PAPER_SPIRIT_PACK_ID,
-  version: 2,
+  version: 3,
   stickers: COMMUNITY_CHAT_OFFICIAL_STICKERS,
 });
 
 const officialStickerByKey = new Map(
-  [...legacyPaperSpiritStickers, ...COMMUNITY_CHAT_OFFICIAL_STICKERS].map((sticker) => [sticker.key, sticker]),
+  [
+    ...legacyPaperSpiritStickers,
+    ...paperSpiritEmotionIds.map((id) =>
+      paperSpiritSticker("paper-spirit-v2", id),
+    ),
+    ...COMMUNITY_CHAT_OFFICIAL_STICKERS,
+  ].map((sticker) => [sticker.key, sticker]),
 );
 
 export function resolveCommunityChatOfficialSticker(value) {

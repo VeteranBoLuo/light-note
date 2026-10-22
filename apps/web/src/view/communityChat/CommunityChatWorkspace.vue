@@ -308,8 +308,8 @@
                             v-if="chatMessage.sticker?.url"
                             :src="chatMessage.sticker.url"
                             :alt="t('communityChat.sticker.messageAlt', { name: authorName(chatMessage) })"
-                            width="176"
-                            height="176"
+                            width="128"
+                            height="128"
                             loading="lazy"
                             decoding="async"
                             @load="handleStickerImageSettled"
@@ -431,8 +431,8 @@
                           v-if="chatMessage.sticker?.url"
                           :src="chatMessage.sticker.url"
                           :alt="t('communityChat.sticker.messageAlt', { name: authorName(chatMessage) })"
-                          width="176"
-                          height="176"
+                          width="128"
+                          height="128"
                           loading="lazy"
                           decoding="async"
                           @load="handleStickerImageSettled"
@@ -5932,7 +5932,7 @@
   }
 
   .community-message__sticker {
-    width: min(var(--ui-layout-176, 176px), 48vw);
+    width: min(var(--ui-layout-128, 128px), 48vw);
     min-height: var(--ui-layout-72, 72px);
     padding: var(--ui-space-6, 6px);
     box-sizing: border-box;
@@ -6541,12 +6541,14 @@
     }
 
     .community-message__sticker {
-      width: min(148px, 46vw);
+      /* ui-density-fixed: 移动端贴图使用固定标准尺寸，不跟随桌面密度。 */
+      width: min(112px, 46vw);
       min-height: 64px;
     }
 
     .community-message__sticker img {
-      max-height: 148px;
+      /* ui-density-fixed: 与移动端贴图宽度保持一致。 */
+      max-height: 112px;
     }
 
     .community-message__actions {
