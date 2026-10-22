@@ -25,6 +25,13 @@ export const isHuaweiSubscriptionRequest = (context) =>
   String(context.method).toUpperCase() === 'POST' &&
   /^(?:\/api)?\/notification\/huawei\/subscribe\/?$/.test(String(context.path || context.url || ''));
 
+export function approvedHuaweiCategory(category, env = process.env) {
+  const approved = String(env.HUAWEI_PUSH_APPROVED_CATEGORIES || '')
+    .split(',')
+    .map((x) => x.trim());
+  return ['WORK', 'SUBSCRIPTION'].includes(category) && approved.includes(category) ? category : 'MARKETING';
+}
+
 // Only explicitly approved service categories are sent as such. Other messages use Huawei's
 // normal classification rather than borrowing the WORK entitlement.
 export function huaweiNotificationPresentation(n, env = process.env, verifiedTodo = null, verifiedChat = null) {
@@ -60,12 +67,14 @@ export function huaweiNotificationPresentation(n, env = process.env, verifiedTod
     ({ title, body } = todoPushPresentation(verifiedTodo));
   } else if (n?.type === 'community_chat' && verifiedChat) {
     ({ title, body } = verifiedChat);
+    // The approved social-subscription category requires subscription wording in
+    // the visible notification, including when a verified sender preview is used.
+    title = `订阅：${title}`;
   }
-  const approved = new Set(
-    String(env.HUAWEI_PUSH_APPROVED_CATEGORIES || '')
-      .split(',')
-      .map((x) => x.trim()),
-  );
-  return { title, body, ...(detailedTodo || verifiedChat ? { visibility: 'SECRET' } : {}),
-    ...(category && approved.has(category) ? { category } : {}) };
+  return {
+    title,
+    body,
+    ...(detailedTodo || verifiedChat ? { visibility: 'SECRET' } : {}),
+    category: approvedHuaweiCategory(category, env),
+  };
 }

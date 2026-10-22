@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 import mysql from 'mysql2/promise';
 import { COMMUNITY_CHAT_TABLE_SQL } from '../communityChatSchema.js';
 import { browserPushTableSql } from '../browserPushSchema.js';
+import { ensureHuaweiPushDeliverySchema } from '../huaweiPushDeliverySchema.js';
 import {
   deliverCommunityChatMessageNotifications,
   getCommunityChatNotificationSettings,
@@ -84,6 +85,7 @@ describe.skipIf(!socketPath)('root chat subscription real SQL', () => {
     );
     for (const sql of COMMUNITY_CHAT_TABLE_SQL) await db.query(sql);
     for (const sql of browserPushTableSql) await db.query(sql);
+    await ensureHuaweiPushDeliverySchema(db);
     await db.query(`CREATE TABLE notification (id char(36) PRIMARY KEY, user_id varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci,
       type varchar(32), title varchar(255), content text, link varchar(255), meta json, source_type varchar(40), source_id varchar(64),
       is_read tinyint DEFAULT 0, read_time datetime, del_flag tinyint DEFAULT 0, recalled tinyint DEFAULT 0,
@@ -264,7 +266,7 @@ describe.skipIf(!socketPath)('root chat subscription real SQL', () => {
     expect((await processNextPush({ db, env, send })).status).toBe('accepted');
     expect(send.mock.calls[0][1].huawei).toMatchObject({
       category: 'SUBSCRIPTION',
-      title: '发送者发来新消息',
+      title: '订阅：发送者发来新消息',
       body: '[投票] 要参加吗？',
       visibility: 'SECRET',
     });

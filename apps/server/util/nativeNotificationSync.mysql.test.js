@@ -3,6 +3,7 @@ import mysql from 'mysql2/promise';
 import { COMMUNITY_CHAT_TABLE_SQL } from './communityChatSchema.js';
 import * as feedSchema from './communityFeed/schema.js';
 import { browserPushTableSql } from './browserPushSchema.js';
+import { ensureHuaweiPushDeliverySchema } from './huaweiPushDeliverySchema.js';
 import {
   bindHuaweiSubscription,
   activatePushSubscription,
@@ -33,6 +34,7 @@ describe.skipIf(!socketPath)('native notification real SQL', () => {
     db = mysql.createPool({ socketPath, user: 'root', database: schema });
     for (const sql of COMMUNITY_CHAT_TABLE_SQL) await db.query(sql);
     for (const sql of browserPushTableSql) await db.query(sql);
+    await ensureHuaweiPushDeliverySchema(db);
     await db.query(
       "CREATE TABLE user (id char(36) PRIMARY KEY, del_flag tinyint DEFAULT 0, role varchar(20) DEFAULT 'user', preferences json)",
     );
@@ -155,6 +157,7 @@ describe.skipIf(!socketPath)('native notification real SQL', () => {
       HUAWEI_PUSH_PROJECT_ID: '2',
       HUAWEI_PUSH_APP_SECRET: 'test',
       HUAWEI_PUSH_ORIGIN: 'https://test.invalid',
+      HUAWEI_PUSH_APPROVED_CATEGORIES: 'WORK',
     };
     await db.query("INSERT INTO user (id) VALUES ('alice'), ('bob')");
     await db.query("INSERT INTO todo_items (id,user_id) VALUES ('t','alice')");
@@ -174,12 +177,22 @@ describe.skipIf(!socketPath)('native notification real SQL', () => {
     expect(await expandPushOutbox(db, env)).toBe(2);
     const [[count]] = await db.query('SELECT COUNT(*) AS total FROM browser_push_jobs');
     expect(count.total).toBe(2);
-    const send = vi.fn();
+    const send = vi.fn(async (_subscription, payload) => {
+      const attemptId = payload.huawei.biTag.slice(3);
+      const [[attempt]] = await db.query('SELECT send_status,provider_request_id FROM huawei_push_delivery_attempts WHERE id=?', [attemptId]);
+      expect(attempt).toMatchObject({ send_status: 'sending', provider_request_id: null });
+      return { requestId: 'provider-' + payload.notificationId };
+    });
     expect((await processNextPush({ db, env, send })).status).toBe('accepted');
     expect(send).toHaveBeenCalledOnce();
     expect(send.mock.calls[0][1].notificationId).toBe(n);
     expect((await processNextPush({ db, env, send })).status).toBe('accepted');
-    expect(send.mock.calls[1][1].huawei.category).toBeUndefined();
+    expect(send.mock.calls[1][1].huawei.category).toBe('MARKETING');
+    const [attempts] = await db.query('SELECT category,send_status,provider_request_id,delivered_at FROM huawei_push_delivery_attempts ORDER BY job_id');
+    expect(attempts).toEqual([
+      { category: 'WORK', send_status: 'accepted', provider_request_id: 'provider-' + n, delivered_at: null },
+      { category: 'MARKETING', send_status: 'accepted', provider_request_id: 'provider-' + send.mock.calls[1][1].notificationId, delivered_at: null },
+    ]);
     expect(await processNextPush({ db, env, send })).toBeNull();
     await add({ type: 'todo_reminder', source_type: 'todo_reminder_job', source_id: 'j', browser_push_pending: 1 });
     await expandPushOutbox(db, env);

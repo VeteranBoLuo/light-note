@@ -1,4 +1,4 @@
-import { huaweiPushEnabled, HUAWEI_ENDPOINT } from './huaweiPushPolicy.js';
+import { approvedHuaweiCategory, huaweiPushEnabled, HUAWEI_ENDPOINT } from './huaweiPushPolicy.js';
 
 const fail = (code, statusCode = 503) => Object.assign(new Error(code), { code, statusCode });
 export function createHuaweiTransport(fetcher = globalThis.fetch) {
@@ -65,7 +65,11 @@ export function createHuaweiTransport(fetcher = globalThis.fetch) {
             body: payload.huawei?.body || '你有一条新通知，点击打开通知中心查看。',
           },
           android: {
-            ...(payload.huawei?.category ? { category: payload.huawei.category } : {}),
+            category: approvedHuaweiCategory(payload.huawei?.category, env),
+            ...(payload.huawei?.biTag ? { bi_tag: payload.huawei.biTag } : {}),
+            ...(env.HUAWEI_PUSH_RECEIPTS_ENABLED === 'true' && env.HUAWEI_PUSH_RECEIPT_ID
+              ? { receipt_id: env.HUAWEI_PUSH_RECEIPT_ID }
+              : {}),
             // Personal todo details should not wait in the provider queue after an account change.
             ttl: `${Math.max(1, Math.min(payload.huawei?.visibility === 'SECRET' ? 60 : 300, Math.floor(ttl)))}s`,
             notification: {
@@ -77,13 +81,18 @@ export function createHuaweiTransport(fetcher = globalThis.fetch) {
         },
       }),
     });
-    if (String(result.code) === '80000000') return;
+    const requestId =
+      typeof result.requestId === 'string' && /^[A-Za-z0-9_-]{1,128}$/.test(result.requestId) ? result.requestId : null;
+    if (String(result.code) === '80000000') return { requestId };
     if (['80200001', '80200003'].includes(String(result.code))) {
       cached = null;
-      throw fail('HUAWEI_AUTH_EXPIRED', 503);
+      throw Object.assign(fail('HUAWEI_AUTH_EXPIRED', 503), { providerRequestId: requestId });
     }
-    if (['80300007', '80100000'].includes(String(result.code))) throw fail('HUAWEI_TOKEN_INVALID', 410);
-    throw fail('HUAWEI_SEND_REJECTED', /^(801|803)/.test(String(result.code)) ? 400 : 503);
+    if (['80300007', '80100000'].includes(String(result.code)))
+      throw Object.assign(fail('HUAWEI_TOKEN_INVALID', 410), { providerRequestId: requestId });
+    throw Object.assign(fail('HUAWEI_SEND_REJECTED', /^(801|803)/.test(String(result.code)) ? 400 : 503), {
+      providerRequestId: requestId,
+    });
   };
 }
 export const deliverHuaweiPush = createHuaweiTransport();

@@ -74,6 +74,9 @@ ssh -i "$KEY" "$HOST" "cd '$REMOTE' && '$REMOTE_NODE' scripts/ensureTodoWorkspac
 echo "🗂  幂等初始化异步任务复核归档 Schema…"
 ssh -i "$KEY" "$HOST" "cd '$REMOTE' && '$REMOTE_NODE' scripts/ensureAdminAsyncJobArchiveSchema.js"
 
+echo "📨  幂等初始化华为发送记录与送达回执 Schema…"
+ssh -i "$KEY" "$HOST" "cd '$REMOTE' && '$REMOTE_NODE' scripts/ensureHuaweiPushDeliverySchema.js"
+
 echo "🔎  执行只读 Schema 发布门禁…"
 ssh -i "$KEY" "$HOST" "cd '$REMOTE' && '$REMOTE_NODE' scripts/checkSchemaAssertions.js"
 
