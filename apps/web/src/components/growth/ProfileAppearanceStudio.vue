@@ -325,11 +325,13 @@
     open: boolean;
     /** 保留资料表单的昵称、简介草稿；头像、背景与头像框由装扮试穿状态覆盖。 */
     profile: CommunityChatAuthorProfile;
+    initialTab?: Category;
   }>();
   const emit = defineEmits<{
     'update:open': [value: boolean];
     navigate: [destination: 'growth' | 'tasks' | 'achievements'];
     'avatar-saved': [];
+    saved: [];
   }>();
 
   const { t, te } = useI18n();
@@ -682,7 +684,7 @@
     (open) => {
       generation++;
       if (!open) return;
-      category.value = 'avatar';
+      category.value = props.initialTab || 'avatar';
       filter.value = 'all';
       busy.value = false;
       resetTrial();
@@ -717,6 +719,7 @@
       message.success(t('profileAppearance.avatarSaved'));
       recordOperation({ module: '个人资料', operation: '保存头像' });
       emit('avatar-saved');
+      emit('saved');
     }
   }
 
@@ -760,6 +763,7 @@
         message.error(t('growth.operationFailed'));
         return;
       }
+      emit('saved');
       message.success(applySuccessText(option));
       recordOperation({
         module: '个人资料',
@@ -817,8 +821,10 @@
           }
           const ok = await apply(option);
           if (!isCurrent()) return;
-          if (ok) message.success(t('profileAppearance.redeemed', { name: option.name }));
-          else message.warning(t('profileAppearance.useFailedAfterGain', { name: option.name }));
+          if (ok) {
+            emit('saved');
+            message.success(t('profileAppearance.redeemed', { name: option.name }));
+          } else message.warning(t('profileAppearance.useFailedAfterGain', { name: option.name }));
           recordOperation({
             module: '个人资料',
             operation: `兑换头像框「${option.name}」（-${quote.expectedCost} 积分）${ok ? '并佩戴' : '，自动佩戴失败'}`,
@@ -840,8 +846,10 @@
       }
       const ok = await apply(option);
       if (!isCurrent()) return;
-      if (ok) message.success(t('profileAppearance.claimed', { name: option.name }));
-      else message.warning(t('profileAppearance.useFailedAfterGain', { name: option.name }));
+      if (ok) {
+        emit('saved');
+        message.success(t('profileAppearance.claimed', { name: option.name }));
+      } else message.warning(t('profileAppearance.useFailedAfterGain', { name: option.name }));
       recordOperation({ module: '个人资料', operation: `领取成就头像框「${option.name}」${ok ? '并佩戴' : ''}` });
     });
   }
