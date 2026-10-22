@@ -295,7 +295,6 @@ describe('编辑器 V2 交互回归', () => {
   it('划词菜单避开顶部工具栏，AI 选段操作在文字尾部挂载临时等待标记', () => {
     expect(editorSource).toContain('adjustContextToolbarAwayFromMainToolbar');
     expect(editorSource).toContain("editor.on('contexttoolbar-show', handleContextToolbarShow)");
-    expect(editorSource).toContain('editorViewportTop + selectionRect.bottom');
     expect(editorSource).toContain("addEventListener('scroll', scheduleContextToolbarAdjustment");
     expect(editorSource).toContain("'data-mce-bogus': 'all'");
     expect(editorSource).toContain('ln-ai-selection-pending__spinner');

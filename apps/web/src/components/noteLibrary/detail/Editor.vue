@@ -820,6 +820,7 @@
     type ReferencedFilePreviewInfo,
   } from '@/utils/noteResourceNavigation';
   import { resolveResourceRoute } from '@/utils/resourceNavigation';
+  import { useUiDensity } from '@/composables/useUiDensity';
   import { resolveAiSourceNavigation, type AiSource, type AiSourceTarget } from '@/utils/aiSourceNavigation';
   import {
     analyzeNoteFormatConversion,
@@ -4652,6 +4653,7 @@
     triggerUndoSwitch: () => undoSwitch(),
   });
 
+  const { dimension: contextToolbarDimension } = useUiDensity();
   const editorInit = computed(() => ({
     inline: true,
     menubar: false,
@@ -4676,7 +4678,7 @@
     // 格式化能力不受影响:移动端仍有底部主工具栏 #editor-toolbar。
     quickbars_selection_toolbar: usesNativeTextSelectionMenu.value
       ? false
-      : 'aiEdit | myHeadingMenu | bold italic forecolor backcolor | removeformat | quicklink',
+      : 'aiEdit | myHeadingMenu | bold italic | forecolor backcolor | removeformat quicklink',
     quickbars_insert_toolbar: false,
     // 普通图片快捷条在 setup 中按节点类型自行注册，避免 quickbars 把图文组合里的图片
     // 也识别成普通图片，再和图文组合设置条叠出第二层菜单。
@@ -4713,11 +4715,20 @@
       let contextToolbarAdjustFrame: number | null = null;
       let contextToolbarAdjustTimer: number | null = null;
       let contextToolbarScrollContainer: HTMLElement | null = null;
+      let contextToolbarObserver: MutationObserver | null = null;
 
       const clearContextToolbarAdjustments = () => {
         document.querySelectorAll<HTMLElement>('.tox-pop[data-ln-context-toolbar-original-top]').forEach((popup) => {
-          popup.style.top = popup.dataset.lnContextToolbarOriginalTop || '';
-          delete popup.dataset.lnContextToolbarOriginalTop;
+          for (const property of ['top', 'bottom', 'maxHeight'] as const) {
+            const suffix = property[0].toUpperCase() + property.slice(1);
+            const originalKey = `lnContextToolbarOriginal${suffix}`;
+            const adjustedKey = `lnContextToolbarAdjusted${suffix}`;
+            if (popup.dataset[originalKey] !== undefined && popup.style[property] === popup.dataset[adjustedKey]) {
+              popup.style[property] = popup.dataset[originalKey] || '';
+            }
+            delete popup.dataset[originalKey];
+            delete popup.dataset[adjustedKey];
+          }
         });
       };
       const adjustContextToolbarAwayFromMainToolbar = () => {
@@ -4731,56 +4742,59 @@
         const toolbarRect = toolbar.getBoundingClientRect();
         const iframe = editor.iframeElement as HTMLIFrameElement | null;
         const iframeRect = iframe?.getBoundingClientRect();
-        // TinyMCE 的正文选区位于 iframe 的视口坐标系，Quickbars 浮层位于外层页面。
-        // 所有命中判断和选区位置都换算到外层视口，避免浮层只避开工具栏却盖住第一行正文。
         const bodyRect = iframeRect || body.getBoundingClientRect();
-        const editorViewportTop = iframeRect?.top || 0;
-        // 选区几何在 WebKit/TinyMCE 的 inline 模式下偶尔返回 0×0；至少预留一行正文高度，
-        // 避免解决了“遮工具栏”后又把第一行选中文字盖住。
-        let selectionBottom = toolbarRect.bottom + 28;
-        try {
-          const range = editor.selection?.getRng?.() as Range | undefined;
-          const rects = range ? Array.from(range.getClientRects()) : [];
-          const selectionRect = rects.at(-1) || range?.getBoundingClientRect?.();
-          if (selectionRect && selectionRect.bottom > 0 && (selectionRect.width > 0 || selectionRect.height > 0)) {
-            selectionBottom = editorViewportTop + selectionRect.bottom;
-          } else {
-            const selectionNode = (editor.selection?.getStart?.() ||
-              editor.selection?.getNode?.()) as HTMLElement | null;
-            const nodeRect = selectionNode?.getBoundingClientRect?.();
-            if (selectionNode && selectionNode !== body && body.contains(selectionNode) && nodeRect?.bottom) {
-              selectionBottom = editorViewportTop + nodeRect.bottom;
-            }
-          }
-        } catch {
-          // 选区在毁掉过程中可能已离开 DOM，此时只按主工具栏底部避让。
-        }
         document.querySelectorAll<HTMLElement>('.tox-pop').forEach((popup) => {
           const isImageToolbar = Boolean(popup.querySelector('[data-mce-name="lnimagepreview"]'));
           popup.classList.toggle('ln-image-context-toolbar', isImageToolbar);
-          if (isImageToolbar) {
-            // 内置 SVG 只有固定尺寸；补上原始画布，才能与自定义图标一起随界面密度缩放。
+          const isTextToolbar = Boolean(popup.querySelector('[data-mce-name="aiedit"]'));
+          popup.classList.toggle('ln-text-context-toolbar', isTextToolbar);
+          const constrainToEditor = isImageToolbar || isTextToolbar;
+          if (constrainToEditor) {
+            // 内置图标和箭头只有固定尺寸；补齐各自画布后才能随密度缩放。
             popup.querySelectorAll<SVGSVGElement>('.tox-tbtn svg:not([viewBox])').forEach((svg) => {
               const width = Number(svg.getAttribute('width'));
               const height = Number(svg.getAttribute('height'));
               if (width > 0 && height > 0) svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
             });
           }
+          const gap = contextToolbarDimension(6);
+          const scrollRect = contextToolbarScrollContainer?.getBoundingClientRect();
+          const safeTop = Math.max(toolbarRect.bottom, scrollRect?.top ?? toolbarRect.bottom) + gap;
+          const safeBottom = Math.min(document.documentElement.clientHeight, scrollRect?.bottom ?? Infinity) - gap;
+          // 大图和长选区离屏时可能把 max-height 压成 0，先恢复正文可用高度再测量。
+          if (constrainToEditor && safeBottom > safeTop) {
+            popup.dataset.lnContextToolbarOriginalTop = popup.style.top;
+            popup.dataset.lnContextToolbarOriginalMaxHeight = popup.style.maxHeight;
+            popup.style.maxHeight = `${Math.floor(safeBottom - safeTop)}px`;
+            popup.dataset.lnContextToolbarAdjustedMaxHeight = popup.style.maxHeight;
+          }
           const rect = popup.getBoundingClientRect();
           if (!rect.width || !rect.height || rect.right < bodyRect.left || rect.left > bodyRect.right) return;
-          if (rect.top >= toolbarRect.bottom + 6) return;
+          // 图片与文字浮条共用正文边界，正常范围内仍沿用原位置。
+          const overlapsToolbar = rect.bottom > toolbarRect.top && rect.top < toolbarRect.bottom &&
+            rect.right > toolbarRect.left && rect.left < toolbarRect.right;
+          if (!constrainToEditor && !overlapsToolbar) return;
           const currentTop = Number.parseFloat(popup.style.top);
-          if (!Number.isFinite(currentTop)) return;
-          const viewportBottom = document.documentElement.clientHeight;
-          const desiredTop = Math.min(
-            Math.max(toolbarRect.bottom + 6, selectionBottom + 8),
-            Math.max(toolbarRect.bottom + 6, viewportBottom - rect.height - 8),
-          );
+          const currentBottom = Number.parseFloat(popup.style.bottom);
+          if (!Number.isFinite(currentTop) && !Number.isFinite(currentBottom)) return;
+          const desiredTop = constrainToEditor
+            ? Math.max(safeTop, Math.min(rect.top, safeBottom - rect.height))
+            : safeTop;
           const delta = desiredTop - rect.top;
-          if (delta <= 0) return;
+          if (Math.abs(delta) < 0.5) return;
           popup.dataset.lnContextToolbarOriginalTop = popup.style.top;
-          popup.style.top = `${Math.round(currentTop + delta)}px`;
+          // TinyMCE 向上展开时使用 bottom 定位，不能只处理 top。
+          if (Number.isFinite(currentTop)) {
+            popup.style.top = `${Math.round(currentTop + delta)}px`;
+            popup.dataset.lnContextToolbarAdjustedTop = popup.style.top;
+          } else {
+            popup.dataset.lnContextToolbarOriginalBottom = popup.style.bottom;
+            popup.style.bottom = `${Math.round(currentBottom - delta)}px`;
+            popup.dataset.lnContextToolbarAdjustedBottom = popup.style.bottom;
+          }
         });
+        // 丢弃本轮自己产生的样式记录，避免避让逻辑反复触发观察器。
+        contextToolbarObserver?.takeRecords();
       };
       const scheduleContextToolbarAdjustment = () => {
         if (contextToolbarAdjustFrame !== null) window.cancelAnimationFrame(contextToolbarAdjustFrame);
@@ -5207,6 +5221,31 @@
         contextToolbarScrollContainer?.addEventListener('scroll', scheduleContextToolbarAdjustment, {
           passive: true,
         });
+        // Quickbars 会在快捷键、布局测量和动画结束后再次定位，不能只依赖固定延时。
+        contextToolbarObserver = new MutationObserver((records) => {
+          document.querySelectorAll('.tox-tinymce-aux').forEach((sink) => {
+            contextToolbarObserver?.observe(sink, { childList: true, subtree: true, attributes: true, attributeFilter: ['style', 'class'] });
+          });
+          const changed = records.some((record) =>
+            record.target instanceof Element && (
+              record.target.matches('.tox-pop') ||
+              (record.type === 'childList' && Array.from(record.addedNodes).some((node) =>
+                node instanceof Element && (node.matches('.tox-pop,.tox-tinymce-aux') || Boolean(node.querySelector('.tox-pop'))),
+              ))
+            ),
+          );
+          if (!changed || contextToolbarAdjustFrame !== null) return;
+          contextToolbarAdjustFrame = window.requestAnimationFrame(adjustContextToolbarAwayFromMainToolbar);
+        });
+        contextToolbarObserver.observe(document.body, { childList: true });
+        document.querySelectorAll('.tox-tinymce-aux').forEach((sink) => {
+          contextToolbarObserver?.observe(sink, {
+            childList: true,
+            subtree: true,
+            attributes: true,
+            attributeFilter: ['style', 'class'],
+          });
+        });
         // searchreplace 插件会注册自己的 Meta+F。若只在 keydown 里 preventDefault，
         // 同一个编辑器事件上的 TinyMCE shortcut 监听仍会继续执行，原生浮层就会藏在
         // 自研查找栏后面，按 Esc 后才暴露出来。初始化完成后明确替换为唯一入口。
@@ -5232,6 +5271,8 @@
         editor.shortcuts.remove('Meta+Alt+R');
       });
       editor.on('remove', () => {
+        contextToolbarObserver?.disconnect();
+        contextToolbarObserver = null;
         if (contextToolbarAdjustFrame !== null) window.cancelAnimationFrame(contextToolbarAdjustFrame);
         contextToolbarAdjustFrame = null;
         if (contextToolbarAdjustTimer !== null) window.clearTimeout(contextToolbarAdjustTimer);

@@ -106,8 +106,9 @@ html[data-density='comfortable'] .tox {
   }
 }
 
-// 普通图片浮条按操作分组紧凑排布；通过按钮身份标记浮条，避免影响文字、表格工具条。
-html .tox .ln-image-context-toolbar {
+// 图片与文字浮条共用紧凑分组和分隔线；通过按钮身份标记，避免影响表格工具条。
+html .tox .ln-image-context-toolbar,
+html .tox .ln-text-context-toolbar {
   // 浮条会避让主工具栏，移位后不再保留可能指错位置、遮断边框的三角箭头。
   &::before,
   &::after {
@@ -161,5 +162,32 @@ html.light-note-mobile-rendering .tox .ln-image-context-toolbar {
     flex-basis: var(--mobile-touch-size, 44px);
     /* ui-density-fixed: 移动端图片操作保持共享触控尺寸，不随桌面密度缩放。 */
     height: var(--mobile-touch-size, 44px);
+  }
+}
+
+// 文字菜单复用浮条分组样式，文字下拉按内容宽度排列。
+html .tox .ln-text-context-toolbar {
+  .tox-split-button__chevron {
+    flex-basis: var(--ui-layout-16, 16px);
+    width: var(--ui-layout-16, 16px);
+    padding: 0;
+  }
+  .tox-tbtn--select {
+    flex-basis: auto;
+    width: max-content;
+    min-width: 0;
+    padding-inline: var(--ui-space-8, 8px);
+  }
+  // 箭头原始画布为 10×10，不能套用主图标的 24×24 尺寸。
+  .tox-tbtn__select-chevron svg,
+  .tox-split-button__chevron svg {
+    flex: none;
+    width: var(--ui-layout-10, 10px);
+    height: var(--ui-layout-10, 10px);
+  }
+  .tox-tbtn__select-label {
+    width: auto;
+    flex-shrink: 0;
+    margin-inline-end: var(--ui-space-4, 4px);
   }
 }
