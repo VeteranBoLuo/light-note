@@ -3,6 +3,7 @@ import { publicFormsRouter } from './router/collectionForms.js';
 import { startCommunityFeedScheduler } from './util/communityFeed/scheduler.js';
 import { ensureBookmarkArchiveSchema } from './util/bookmarkArchiveJobs.js';
 import express from 'express';
+import huaweiPushReceiptRouter from './router/huaweiPushReceipt.js';
 import bodyParser from 'body-parser';
 import { logFunction } from './util/log.js';
 import { baseRouter } from './util/common.js';
@@ -74,6 +75,9 @@ console.log('Loaded env from: 【.env】');
 const app = express();
 app.set('trust proxy', 1);
 app.use(requestTraceMiddleware);
+// Provider callbacks authenticate with their own signed header before parsing.
+// Keep raw device tokens out of account authentication, API logs and attack reports.
+app.use('/api/notification/huawei/receipt', huaweiPushReceiptRouter);
 // 在 Body 解析、鉴权和安全正则之前提供高上限的匿名来源保护，先挡住明显资源耗尽流量。
 app.use(earlyAnonymousRateLimiter);
 app.use('/public/forms', publicFormsRouter);

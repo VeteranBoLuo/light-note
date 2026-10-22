@@ -10,6 +10,8 @@ import {
   isHuaweiEndpoint,
 } from './huaweiPushPolicy.js';
 import { deliverHuaweiPush } from './huaweiPushTransport.js';
+import { beginHuaweiPushAttempt, finishHuaweiPushAttempt } from './huaweiPushDelivery.js';
+import { huaweiAttemptTag } from './huaweiPushReceiptPolicy.js';
 import { browserPushQuietUntil } from './browserPushQuietHours.js';
 import { browserNotificationPresentation } from '@lightnote/shared/notification-presentation';
 import { randomUUID } from 'node:crypto';
@@ -219,6 +221,7 @@ export async function processNextPush({ db = pool, send = sendWebPush, env = pro
   if (!job) return null;
   let status = 'cancelled',
     code = null;
+  let huaweiAttempt = null, providerRequestId = null;
   try {
     let [[subscription]] = await db.query(
       `SELECT s.* FROM browser_push_subscriptions s
@@ -310,10 +313,18 @@ export async function processNextPush({ db = pool, send = sendWebPush, env = pro
         [job.id, lease],
       );
       if (!owned) return { status: 'cancelled', delaySeconds: Number(job.delay_seconds || 0) };
-      await send(
+      const presentation = huawei ? huaweiNotificationPresentation(notification, env, verifiedTodo, verifiedChat) : null;
+      if (huawei) {
+        // Save the correlation before sending: an early receipt can arrive while
+        // the provider's HTTP response is still in flight.
+        await beginHuaweiPushAttempt(db, lease, job, subscription, presentation.category, notification.type);
+        huaweiAttempt = lease;
+        presentation.biTag = huaweiAttemptTag(lease);
+      }
+      const result = await send(
         { endpoint: subscription.endpoint, keys: { p256dh: subscription.p256dh, auth: subscription.auth } },
         {
-          ...(huawei ? { huawei: huaweiNotificationPresentation(notification, env, verifiedTodo, verifiedChat) } : {}),
+          ...(huawei ? { huawei: presentation } : {}),
           version: 1,
           notificationId: notification.id,
           subscriptionId: subscription.id,
@@ -325,9 +336,11 @@ export async function processNextPush({ db = pool, send = sendWebPush, env = pro
         Math.min(86400, job.ttl),
         env,
       );
+      providerRequestId = result?.requestId || null;
       status = 'accepted';
     }
   } catch (error) {
+    providerRequestId = error?.providerRequestId || null;
     const httpCode = Number(error?.statusCode || 0);
     status = error?.code === 'PUSH_EXPIRED' ? 'expired' : pushFailure(httpCode, job.attempts);
     code = /^HUAWEI_[A-Z_]+$/.test(error?.code || '')
@@ -340,6 +353,13 @@ export async function processNextPush({ db = pool, send = sendWebPush, env = pro
         job.subscription_id,
         job.generation,
       ]);
+  }
+  if (huaweiAttempt) {
+    try { await finishHuaweiPushAttempt(db, huaweiAttempt, status, code, providerRequestId); }
+    catch {
+      // Metadata failure after provider acceptance must not trigger another send.
+      console.error('[huawei-push] code=HUAWEI_ATTEMPT_RESULT_STORE_FAILED');
+    }
   }
   await db.query(
     `UPDATE browser_push_jobs SET status = ?, last_code = ?, lease_until = NULL,

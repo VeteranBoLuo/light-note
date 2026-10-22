@@ -18,6 +18,7 @@ const suites = {
   'util/services/visitorExampleScheduleService.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
   'util/services/rootChatSubscription.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
   'util/nativeNotificationSync.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
+  'util/huaweiPushDelivery.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
   'util/communityChatPushPresentation.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
   'util/services/organizeWorkerDiagnostics.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
   'util/services/organizeSuggestionRead.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',

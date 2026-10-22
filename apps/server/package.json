@@ -38,6 +38,8 @@
     "worker:browser-push": "node browserPushWorker.js",
     "worker:browser-push:dev": "node --watch --watch-preserve-output browserPushWorker.js",
     "check:browser-push": "node scripts/checkBrowserPushRuntime.js",
+    "migrate:huawei-push-delivery": "node scripts/ensureHuaweiPushDeliverySchema.js",
+    "inspect:huawei-push-delivery": "node scripts/inspectHuaweiPushDelivery.js",
     "worker:note-imports": "node noteImportWorker.js",
     "worker:note-imports:dev": "node --watch --watch-preserve-output noteImportWorker.js",
     "check:note-imports": "node scripts/checkNoteImportRuntime.js",

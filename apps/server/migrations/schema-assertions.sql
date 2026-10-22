@@ -3650,6 +3650,66 @@ SELECT 'browser_push_missing_index' AS check_name, CONCAT(e.tn, '.', e.idx) AS d
 ) e LEFT JOIN information_schema.STATISTICS s ON s.TABLE_SCHEMA = DATABASE() AND s.TABLE_NAME = e.tn AND s.INDEX_NAME = e.idx
 WHERE s.INDEX_NAME IS NULL;
 
+-- Huawei delivery evidence contract (begin).
+SELECT 'huawei_delivery_table' AS check_name, e.tn AS detail FROM (
+ SELECT 'huawei_push_delivery_attempts' tn UNION ALL SELECT 'huawei_push_delivery_receipts'
+) e LEFT JOIN information_schema.TABLES t ON t.TABLE_SCHEMA=DATABASE() AND t.TABLE_NAME=e.tn
+WHERE t.TABLE_NAME IS NULL OR t.ENGINE<>'InnoDB' OR t.TABLE_COLLATION<>'utf8mb4_general_ci';
+SELECT 'huawei_delivery_column' AS check_name, CONCAT(e.tn,'.',e.cn) AS detail FROM (
+ SELECT 'huawei_push_delivery_attempts' tn, 'id' cn, 'char' dt, 36 size, 'NO' nullable
+ UNION ALL SELECT 'huawei_push_delivery_attempts' tn, 'job_id' cn, 'bigint' dt, NULL size, 'NO' nullable
+ UNION ALL SELECT 'huawei_push_delivery_attempts' tn, 'subscription_id' cn, 'char' dt, 36 size, 'NO' nullable
+ UNION ALL SELECT 'huawei_push_delivery_attempts' tn, 'generation' cn, 'char' dt, 36 size, 'NO' nullable
+ UNION ALL SELECT 'huawei_push_delivery_attempts' tn, 'endpoint_hash' cn, 'char' dt, 64 size, 'NO' nullable
+ UNION ALL SELECT 'huawei_push_delivery_attempts' tn, 'notification_type' cn, 'varchar' dt, 32 size, 'NO' nullable
+ UNION ALL SELECT 'huawei_push_delivery_attempts' tn, 'category' cn, 'varchar' dt, 32 size, 'NO' nullable
+ UNION ALL SELECT 'huawei_push_delivery_attempts' tn, 'provider_request_id' cn, 'varchar' dt, 128 size, 'YES' nullable
+ UNION ALL SELECT 'huawei_push_delivery_attempts' tn, 'send_status' cn, 'varchar' dt, 16 size, 'NO' nullable
+ UNION ALL SELECT 'huawei_push_delivery_attempts' tn, 'send_code' cn, 'varchar' dt, 64 size, 'YES' nullable
+ UNION ALL SELECT 'huawei_push_delivery_attempts' tn, 'created_at' cn, 'datetime' dt, 6 size, 'NO' nullable
+ UNION ALL SELECT 'huawei_push_delivery_attempts' tn, 'accepted_at' cn, 'datetime' dt, 6 size, 'YES' nullable
+ UNION ALL SELECT 'huawei_push_delivery_attempts' tn, 'receipt_result' cn, 'int' dt, NULL size, 'YES' nullable
+ UNION ALL SELECT 'huawei_push_delivery_attempts' tn, 'receipt_sub_status' cn, 'int' dt, NULL size, 'YES' nullable
+ UNION ALL SELECT 'huawei_push_delivery_attempts' tn, 'receipt_at' cn, 'datetime' dt, 6 size, 'YES' nullable
+ UNION ALL SELECT 'huawei_push_delivery_attempts' tn, 'delivered_at' cn, 'datetime' dt, 6 size, 'YES' nullable
+ UNION ALL SELECT 'huawei_push_delivery_receipts' tn, 'id' cn, 'char' dt, 64 size, 'NO' nullable
+ UNION ALL SELECT 'huawei_push_delivery_receipts' tn, 'attempt_id' cn, 'char' dt, 36 size, 'NO' nullable
+ UNION ALL SELECT 'huawei_push_delivery_receipts' tn, 'provider_request_id' cn, 'varchar' dt, 128 size, 'NO' nullable
+ UNION ALL SELECT 'huawei_push_delivery_receipts' tn, 'result' cn, 'int' dt, NULL size, 'NO' nullable
+ UNION ALL SELECT 'huawei_push_delivery_receipts' tn, 'sub_status' cn, 'int' dt, NULL size, 'YES' nullable
+ UNION ALL SELECT 'huawei_push_delivery_receipts' tn, 'provider_timestamp' cn, 'bigint' dt, NULL size, 'NO' nullable
+ UNION ALL SELECT 'huawei_push_delivery_receipts' tn, 'received_at' cn, 'datetime' dt, 6 size, 'NO' nullable
+) e LEFT JOIN information_schema.COLUMNS c ON c.TABLE_SCHEMA=DATABASE() AND c.TABLE_NAME=e.tn AND c.COLUMN_NAME=e.cn
+WHERE c.COLUMN_NAME IS NULL OR c.DATA_TYPE<>e.dt OR c.IS_NULLABLE<>e.nullable
+ OR (e.dt IN ('char','varchar') AND c.CHARACTER_MAXIMUM_LENGTH<>e.size)
+ OR (e.dt='datetime' AND c.DATETIME_PRECISION<>e.size)
+ OR (e.dt='bigint' AND LOCATE('unsigned',c.COLUMN_TYPE)=0)
+ OR (e.cn='send_status' AND COALESCE(c.COLUMN_DEFAULT,'')<>'sending');
+SELECT 'huawei_delivery_index' AS check_name, CONCAT(e.tn,'.',e.ix) AS detail FROM (
+ SELECT 'huawei_push_delivery_attempts' tn, 'PRIMARY' ix, 'id' cols, 0 non_unique
+ UNION ALL SELECT 'huawei_push_delivery_attempts','idx_huawei_attempt_job','job_id',1
+ UNION ALL SELECT 'huawei_push_delivery_attempts','idx_huawei_attempt_subscription','subscription_id,created_at',1
+ UNION ALL SELECT 'huawei_push_delivery_attempts','idx_huawei_attempt_created','created_at',1
+ UNION ALL SELECT 'huawei_push_delivery_receipts','PRIMARY','id',0
+ UNION ALL SELECT 'huawei_push_delivery_receipts','idx_huawei_receipt_attempt','attempt_id,provider_timestamp',1
+) e LEFT JOIN (
+ SELECT TABLE_NAME,INDEX_NAME,NON_UNIQUE,GROUP_CONCAT(COLUMN_NAME ORDER BY SEQ_IN_INDEX) cols,
+ SUM(SUB_PART IS NOT NULL) prefixes FROM information_schema.STATISTICS
+ WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME IN ('huawei_push_delivery_attempts','huawei_push_delivery_receipts')
+ GROUP BY TABLE_NAME,INDEX_NAME,NON_UNIQUE
+) s ON s.TABLE_NAME=e.tn AND s.INDEX_NAME=e.ix
+WHERE s.INDEX_NAME IS NULL OR s.cols<>e.cols OR s.NON_UNIQUE<>e.non_unique OR s.prefixes<>0;
+SELECT 'huawei_delivery_cascade' AS check_name, CONCAT(e.tn,'.',e.fk) AS detail FROM (
+ SELECT 'huawei_push_delivery_attempts' tn,'fk_huawei_attempt_job' fk,'job_id' col,'browser_push_jobs' ref_table
+ UNION ALL SELECT 'huawei_push_delivery_receipts','fk_huawei_receipt_attempt','attempt_id','huawei_push_delivery_attempts'
+) e LEFT JOIN information_schema.REFERENTIAL_CONSTRAINTS r
+ ON r.CONSTRAINT_SCHEMA=DATABASE() AND r.TABLE_NAME=e.tn AND r.CONSTRAINT_NAME=e.fk
+LEFT JOIN information_schema.KEY_COLUMN_USAGE k
+ ON k.CONSTRAINT_SCHEMA=DATABASE() AND k.TABLE_NAME=e.tn AND k.CONSTRAINT_NAME=e.fk AND k.ORDINAL_POSITION=1
+WHERE r.CONSTRAINT_NAME IS NULL OR r.DELETE_RULE<>'CASCADE' OR k.COLUMN_NAME<>e.col
+ OR k.REFERENCED_TABLE_SCHEMA<>DATABASE() OR k.REFERENCED_TABLE_NAME<>e.ref_table OR k.REFERENCED_COLUMN_NAME<>'id';
+-- Huawei delivery evidence contract (end).
+
 -- Unified image lifecycle contract
 SELECT 'image_lifecycle_missing_table' AS check_name, required.t AS detail FROM (SELECT 'image_assets' t UNION ALL SELECT 'image_asset_refs') required LEFT JOIN information_schema.TABLES actual ON actual.TABLE_SCHEMA=DATABASE() AND actual.TABLE_NAME=required.t WHERE actual.TABLE_NAME IS NULL;
 SELECT 'image_preview_missing_revision' AS check_name, 'file_preview_artifacts.source_revision' AS detail FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='file_preview_artifacts' AND COLUMN_NAME='source_revision');

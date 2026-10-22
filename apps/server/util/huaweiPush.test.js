@@ -77,6 +77,24 @@ describe('Huawei transport', () => {
       createHuaweiTransport(fetcher)(huaweiSubscription(token), { notificationId: 'n' }, 300, env),
     ).rejects.toMatchObject({ statusCode });
   });
+  it('correlates an actual provider request with the configured receipt and captures its acceptance ID', async () => {
+    const fetcher = vi.fn().mockResolvedValueOnce(response({access_token:'test-access',expires_in:3600}))
+      .mockResolvedValue(response({code:'80000000',requestId:'provider-123'}));
+    const result = await createHuaweiTransport(fetcher)(huaweiSubscription(token),{
+      notificationId:'n',huawei:{biTag:'ln:attempt',category:'SUBSCRIPTION'}
+    },300,{...env,HUAWEI_PUSH_RECEIPTS_ENABLED:'true',HUAWEI_PUSH_RECEIPT_ID:'receipt-1'});
+    expect(result).toEqual({requestId:'provider-123'});
+    expect(JSON.parse(fetcher.mock.calls[1][1].body).message.android).toMatchObject({
+      bi_tag:'ln:attempt',receipt_id:'receipt-1',category:'MARKETING'
+    });
+  });
+  it('captures a rejected request ID while withholding untrusted provider text', async () => {
+    const fetcher = vi.fn().mockResolvedValueOnce(response({access_token:'test-access',expires_in:3600}))
+      .mockResolvedValue(response({code:'80300002',requestId:'provider-123',msg:token}));
+    const error = await createHuaweiTransport(fetcher)(huaweiSubscription(token),{},300,env).catch(error=>error);
+    expect(error).toMatchObject({code:'HUAWEI_SEND_REJECTED',providerRequestId:'provider-123'});
+    expect(String(error)).not.toContain(token);
+  });
 });
 function workerDb(notification, source = true) {
   return {
@@ -96,6 +114,28 @@ function workerDb(notification, source = true) {
   };
 }
 describe('Huawei business routing', () => {
+  it('stores correlation before sending and never retries accepted delivery because metadata storage failed', async () => {
+    const db = workerDb({id:'n',type:'system'});
+    const query = db.query.getMockImplementation();
+    db.query.mockImplementation(async (sql,params)=>{
+      if (sql.startsWith('UPDATE huawei_push_delivery_attempts')) throw new Error('fixture metadata failure');
+      return query(sql,params);
+    });
+    const log = vi.spyOn(console,'error').mockImplementation(()=>{});
+    const send = vi.fn(async (_subscription,payload)=>{
+      const insert = db.query.mock.calls.find(([sql])=>sql.startsWith('INSERT INTO huawei_push_delivery_attempts'));
+      expect(insert).toBeDefined();
+      expect(payload.huawei.biTag).toBe('ln:'+insert[1][0]);
+      return {requestId:'provider-123'};
+    });
+    try {
+      expect((await processNextPush({db,env,send})).status).toBe('accepted');
+      expect(send).toHaveBeenCalledOnce();
+      const update = db.query.mock.calls.find(([sql])=>sql.startsWith('UPDATE huawei_push_delivery_attempts'));
+      expect(update[1]).toEqual(['accepted',null,'provider-123','accepted',expect.any(String)]);
+      expect(db.query.mock.lastCall[1][0]).toBe('accepted');
+    } finally { log.mockRestore(); }
+  });
   it.each([
     { type: 'system' },
     { type: 'todo_reminder' },
@@ -103,7 +143,7 @@ describe('Huawei business routing', () => {
   ])('routes other notification types without claiming WORK %j', async (notification) => {
     const send = vi.fn();
     expect((await processNextPush({ db: workerDb(notification), env, send })).status).toBe('accepted');
-    expect(send.mock.calls[0][1].huawei.category).toBeUndefined();
+    expect(send.mock.calls[0][1].huawei.category).toBe('MARKETING');
   });
   it('requires an existing active todo reminder source', async () => {
     const n = { id: 'n', type: 'todo_reminder', source_type: 'todo_reminder_job', source_id: 'j' };
@@ -120,7 +160,7 @@ describe('Huawei business routing', () => {
     const db = workerDb(n);
     expect((await processNextPush({ db, env, send })).status).toBe('accepted');
     expect(send.mock.calls[0][1].huawei).toMatchObject({ title: '待办：旧待办', body: '旧说明', visibility: 'SECRET' });
-    expect(send.mock.calls[0][1].huawei.category).toBeUndefined();
+    expect(send.mock.calls[0][1].huawei.category).toBe('MARKETING');
     expect(db.query.mock.calls.some(([sql, params]) => sql.includes('FROM todo_items') && params[1] === 'u')).toBe(true);
   });
 });
@@ -130,8 +170,8 @@ it('uses approved category only, preserving privacy and a fixed destination for 
   expect(huaweiNotificationPresentation(
     { type: 'todo_reminder', source_type: 'todo_reminder_job', source_id: 'j' },
     { ...env, HUAWEI_PUSH_APPROVED_CATEGORIES: '' },
-  ).category).toBeUndefined();
-  expect(huaweiNotificationPresentation(n, env).category).toBeUndefined();
+  ).category).toBe('MARKETING');
+  expect(huaweiNotificationPresentation(n, env).category).toBe('MARKETING');
   expect(
     huaweiNotificationPresentation(n, { ...env, HUAWEI_PUSH_APPROVED_CATEGORIES: 'WORK,SUBSCRIPTION' }).category,
   ).toBe('SUBSCRIPTION');
@@ -141,11 +181,11 @@ it('uses approved category only, preserving privacy and a fixed destination for 
       { ...env, HUAWEI_PUSH_APPROVED_CATEGORIES: 'SUBSCRIPTION' },
     ).category,
   ).toBe('SUBSCRIPTION');
-  expect(huaweiNotificationPresentation({ type: 'system' }, env).category).toBeUndefined();
+  expect(huaweiNotificationPresentation({ type: 'system' }, env).category).toBe('MARKETING');
   expect(JSON.stringify(huaweiNotificationPresentation(n, env))).not.toContain('private message');
   expect(huaweiNotificationPresentation(n, env, null, {
     title: '小明回复了你', body: '消息摘要', visibility: 'SECRET',
-  })).toMatchObject({ title: '小明回复了你', body: '消息摘要', visibility: 'SECRET' });
+  })).toMatchObject({ title: '订阅：小明回复了你', body: '消息摘要', visibility: 'SECRET' });
   const todo = huaweiNotificationPresentation(
     { type: 'todo_reminder', source_type: 'todo_reminder_job', source_id: 'j' },
     env,
@@ -168,7 +208,7 @@ it('does not label generic messages as WORK in the actual provider request', asy
     env,
   );
   const message = JSON.parse(fetcher.mock.calls[1][1].body).message;
-  expect(message.android.category).toBeUndefined();
+  expect(message.android.category).toBe('MARKETING');
   expect(message.notification.title).toBe('轻笺通知');
 });
 

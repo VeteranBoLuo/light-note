@@ -107,7 +107,15 @@ pnpm --filter server check:schema
 
 浏览器推送需先经授权应用 `apps/server/migrations/20260908_browser_push.sql`，再运行 `pnpm --filter server check:browser-push` 验证 Schema 与 VAPID 配置。API 与 `browserPushWorker.js` 使用同一持久 VAPID 密钥和站点 Origin；默认服务开关关闭，启动本地预览及部署脚本均纳入该 Worker。密钥不由部署过程临时生成，服务开关关闭不影响站内通知。推送凭据不进入日志，测试应区分厂商受理、设备展示及点击定位，不能用模拟推送替代真实网络与设备验收。
 
-华为 App 通知推送复用同一 Worker 与订阅/任务表，无新增 Schema；启用前给 API 和 Worker 配置 `HUAWEI_PUSH_*`，应用密钥仅保存在服务端，`HUAWEI_PUSH_APPROVED_CATEGORIES` 只能填写控制台实际获批的类型，未获批消息使用智能分类并受频控；运行 `check:browser-push` 检查共同运行条件。仅发布服务端不会开启手机接收，须配套显式华为 APK 与 Web；实际待办来源、前后台、点击、退出/换号及失效恢复须真机验收。关闭华为开关保留站内及前台同步；队列只由生产环境消费，不能启动本地 Worker 验证线上发送。正式候选包必须使用正式包名的 AGC Android 应用和正式签名，逐项核对 SDK 披露、隐私版本与 APK 实际权限；详见 [Android 推送说明](../apps/android/README.md#华为通知正式候选包)。
+华为 App 通知推送复用同一 Worker 与订阅/任务表；启用前给 API 和 Worker 配置 `HUAWEI_PUSH_*`，应用密钥仅保存在服务端，`HUAWEI_PUSH_APPROVED_CATEGORIES` 只能填写控制台实际获批的类型，未获批消息显式归入 MARKETING 并受频控；运行 `check:browser-push` 检查共同运行条件。仅发布服务端不会开启手机接收，须配套显式华为 APK 与 Web；实际待办来源、前后台、点击、退出/换号及失效恢复须真机验收。关闭华为开关保留站内及前台同步；队列只由生产环境消费，不能启动本地 Worker 验证线上发送。正式候选包必须使用正式包名的 AGC Android 应用和正式签名，逐项核对 SDK 披露、隐私版本与 APK 实际权限；详见 [Android 推送说明](../apps/android/README.md#华为通知正式候选包)。
+
+### 华为送达回执
+
+发布含回执的后端前，执行 `pnpm --filter server migrate:huawei-push-delivery` 幂等安装 `20261022_huawei_push_delivery.sql` 的两张诊断表，再运行 `check:schema` 与 `check:browser-push`。部署脚本在 Schema 门禁前执行同一入口；应用和 Worker 启动不执行 DDL。只新增结构，不重发或回填历史消息，旧任务保留期与账号注销通过外键级联清理诊断记录。回滚代码可保留新表。
+
+在正式 Android 应用的 AGC 推送配置中选择应用回执，配置 HTTPS 地址 `/api/notification/huawei/receipt`，优先 V2。将同一回调用户名与新版本 Base64 密钥仅配置到 API、Worker 的服务端环境：`HUAWEI_PUSH_RECEIPTS_ENABLED=true`、`HUAWEI_PUSH_RECEIPT_USERNAME`、`HUAWEI_PUSH_RECEIPT_SECRET`；`HUAWEI_PUSH_PACKAGE_NAME` 与 APK 包名一致。需要指定某个配置时设置 `HUAWEI_PUSH_RECEIPT_ID`，否则使用 AGC 默认应用回执。不要混用 HarmonyOS 原生应用或联调包，也不要把回执版本与发送 API 版本混淆。
+
+先验证无签名请求被拒绝，再使用控制台「测试回执」确认验签和 HTTPS 连通；固定测试样本不计入设备送达。真实通知通过正常队列携带 attempt 标记，使用 `pnpm --filter server inspect:huawei-push-delivery` 查看最近 24 小时的分类、受理和送达结果，可加 `--notification-id=通知ID` 缩小范围。结果 0 才是设备送达，6 表示通知权限问题，256 表示资讯营销限制；无回执只表示尚无设备证据，不能判成送达或 Token 失效。普通系统消息归为 MARKETING；卓易通不支持其后台转发，真实待办 WORK 和获批订阅互动 SUBSCRIPTION 须分别真机确认。关闭回执开关只停止接收回执，推送与站内通知继续按原通道运行。
 
 FCM 备用出口使用 `scripts/browser-push-relay/worker.mjs`，以独立托管实例配置主、备用地址与各自的服务端凭据（`BROWSER_PUSH_RELAYS`）。实例需设置 `RELAY_TOKEN`，关闭请求正文与凭据日志；示例 `wrangler.jsonc` 只提供部署结构，不含线上地址或密钥。每条出口上线前分别验证生产服务器到实际中转域名、中转到厂商以及真实设备展示；官网可访问或模拟测试不算出口验收。未配置中转保持直连，停用中转清空该配置即可；不得为验证而重开本地队列消费者。
 

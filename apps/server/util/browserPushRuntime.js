@@ -2,11 +2,15 @@ import { huaweiPushEnabled } from './huaweiPushPolicy.js';
 import webpush from 'web-push';
 import { browserPushRelays } from './browserPushTransport.js';
 import { browserPushEnabled } from './browserPushPolicy.js';
+import { huaweiReceiptConfig } from './huaweiPushReceiptPolicy.js';
 export async function assertBrowserPushRuntime(db, env = process.env) {
   await db.query('SELECT browser_push_pending, browser_push_created_at FROM notification LIMIT 0');
   await db.query('SELECT id, generation, enabled_at FROM browser_push_subscriptions LIMIT 0');
   await db.query('SELECT id, generation, lease_token, lease_until, expires_at FROM browser_push_jobs LIMIT 0');
   if (env.HUAWEI_PUSH_ENABLED === 'true') {
+    await db.query('SELECT id, job_id, provider_request_id, category, send_status, receipt_result, delivered_at FROM huawei_push_delivery_attempts LIMIT 0');
+    await db.query('SELECT id, attempt_id, result, sub_status, provider_timestamp FROM huawei_push_delivery_receipts LIMIT 0');
+    huaweiReceiptConfig(env);
     if (
       !huaweiPushEnabled(env) ||
       new URL(env.HUAWEI_PUSH_ORIGIN).origin !== env.HUAWEI_PUSH_ORIGIN ||
