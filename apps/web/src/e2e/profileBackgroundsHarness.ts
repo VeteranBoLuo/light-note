@@ -97,6 +97,7 @@ request.defaults.adapter = async (config) => {
   else if (path.endsWith('/profiles/profile-qa'))
     data = {
       name: '山间拾光',
+      userPublicId: 'profile-qa',
       isOwn: true,
       backgroundShopEnabled: true,
       role: 'member',
@@ -106,7 +107,7 @@ request.defaults.adapter = async (config) => {
       levelName: '探花',
       title: null,
       communityId: 'ln_DEMO01',
-      backgroundId: `background_${params.get('art') || (params.get('theme') === 'night' ? 'stars' : 'mountains')}`,
+      backgroundId: fixture.equippedBackground,
       bio: '记录生活的细碎光芒，让每一个灵感都有安放之处。',
       communityTenureLabel: '加入轻笺约 1 年',
       achievements: [{ key: 'bookmark_10', group: 'create' }],

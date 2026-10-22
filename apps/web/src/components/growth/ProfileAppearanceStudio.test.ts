@@ -1,4 +1,4 @@
-import { createApp, nextTick, reactive, ref } from 'vue';
+import { createApp, h, nextTick, reactive, ref } from 'vue';
 import { createI18n } from 'vue-i18n';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import zhCN from '@/i18n/locales/zh-CN';
@@ -61,9 +61,10 @@ const flush = async () => {
   await nextTick();
   await new Promise((resolve) => setTimeout(resolve, 0));
 };
-function mount() {
+function mount(initialTab?: 'avatar' | 'frame' | 'background') {
   const props = reactive({
     open: true,
+    initialTab,
     profile: {
       name: '昵称草稿',
       avatar: user.headPicture,
@@ -77,9 +78,12 @@ function mount() {
     },
   });
   const onSaved = vi.fn();
+  const onAppearanceSaved = vi.fn();
   const host = document.createElement('div');
   document.body.append(host);
-  const app = createApp(Studio as any, { ...props, 'onAvatar-saved': onSaved });
+  const app = createApp({
+    render: () => h(Studio as any, { ...props, 'onAvatar-saved': onSaved, onSaved: onAppearanceSaved }),
+  });
   app.use(createI18n({ legacy: false, locale: 'zh-CN', messages: { 'zh-CN': zhCN } }));
   app.directive('auto-scrollbar', {});
   app.mount(host);
@@ -95,7 +99,7 @@ function mount() {
     button.click();
     await flush();
   };
-  return { host, click, onSaved };
+  return { host, click, onSaved, onAppearanceSaved, props };
 }
 beforeEach(() => {
   vi.clearAllMocks();
@@ -124,7 +128,7 @@ afterEach(() => {
 
 describe('unified profile appearance studio', () => {
   it('previews an avatar without writing and applies only the current avatar after confirmation', async () => {
-    const { host, click, onSaved } = mount();
+    const { host, click, onSaved, onAppearanceSaved } = mount();
     await flush();
     expect(host.querySelector('.profile-avatar-options')).not.toBeNull();
     expect(host.querySelector('.appearance-studio__filters')).toBeNull();
@@ -134,6 +138,7 @@ describe('unified profile appearance studio', () => {
     await click('使用此头像');
     expect(actions.update).toHaveBeenCalledWith({ id: 'studio-user', headPicture: 'new-fox-avatar' }, { silent: true });
     expect(onSaved).toHaveBeenCalledOnce();
+    expect(onAppearanceSaved).toHaveBeenCalledOnce();
     expect(host.querySelector('.appearance-studio__using')?.textContent).toContain('正在使用');
   });
   it('retains avatar trial across tabs and reverts all unused trial selections', async () => {
@@ -156,5 +161,50 @@ describe('unified profile appearance studio', () => {
     await click('使用此头像');
     expect(user.headPicture).toBe('new-fox-avatar');
     expect(host.querySelector('.profile-avatar-options')).not.toBeNull();
+  });
+  it('opens the requested background tab on every visit and resets the filter', async () => {
+    const { host, click, props } = mount('background');
+    await flush();
+    expect(host.querySelector('.appearance-studio__backgrounds')).not.toBeNull();
+    expect(host.querySelector('[role="tab"][aria-selected="true"]')?.textContent).toContain('背景');
+    await click('已拥有1');
+    await click('头像');
+    props.open = false;
+    await flush();
+    props.open = true;
+    await flush();
+    expect(host.querySelector('.appearance-studio__backgrounds')).not.toBeNull();
+    expect(host.querySelector('.appearance-studio__filters [aria-selected="true"]')?.textContent).toContain('全部');
+  });
+  it.each([true, false])('notifies the owner only after applying a background succeeds (ok=%s)', async (ok) => {
+    actions.equip.mockResolvedValueOnce({ status: 200, data: { ok } });
+    const { host, click, onAppearanceSaved } = mount('background');
+    await flush();
+    host.querySelector<HTMLButtonElement>('.appearance-tile--background')!.click();
+    await flush();
+    expect(actions.equip).not.toHaveBeenCalled();
+    expect(onAppearanceSaved).not.toHaveBeenCalled();
+    await click('恢复默认');
+    expect(actions.equip).toHaveBeenCalledWith(null);
+    expect(onAppearanceSaved).toHaveBeenCalledTimes(ok ? 1 : 0);
+  });
+  it('ignores a background save response after the studio closes', async () => {
+    let finish!: (value: unknown) => void;
+    actions.equip.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const { host, click, props, onAppearanceSaved } = mount('background');
+    await flush();
+    host.querySelector<HTMLButtonElement>('.appearance-tile--background')!.click();
+    await flush();
+    await click('恢复默认');
+    props.open = false;
+    await flush();
+    finish({ status: 200, data: { ok: true } });
+    await flush();
+    expect(onAppearanceSaved).not.toHaveBeenCalled();
   });
 });

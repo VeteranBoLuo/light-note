@@ -406,12 +406,19 @@
                       <BButton
                         v-if="profile.isOwn && !preview && (profile.backgroundShopEnabled || profile.backgroundId)"
                         type="text"
-                        @click="go('/growth?section=rewards&reward=shop&focus=background')"
-                        >{{ t('profileBackgrounds.change') }}</BButton
+                        class="profile-summary-action"
+                        @click="appearanceOpen = true"
+                        ><SvgIcon :src="icon.toolbox.image" size="15" aria-hidden="true" />
+                        <span>{{ t('profileBackgrounds.change') }}</span></BButton
                       >
-                      <BButton type="text" v-if="profile.isOwn && !preview" @click="accountEditorOpen = true">{{
-                        t('community.feed.editProfile')
-                      }}</BButton>
+                      <BButton
+                        v-if="profile.isOwn && !preview"
+                        type="text"
+                        class="profile-summary-action"
+                        @click="accountEditorOpen = true"
+                        ><SvgIcon :src="icon.communityChat.profileEdit" size="15" aria-hidden="true" />
+                        <span>{{ t('community.feed.editProfile') }}</span></BButton
+                      >
                       <div class="feed-actions profile-relationship-actions" v-if="authenticated && !profile.isOwn"
                         ><BButton
                           type="primary"
@@ -515,6 +522,14 @@
         @saved="load"
       />
       <MyInfo v-model:visible="accountEditorOpen" />
+      <ProfileAppearanceStudio
+        v-if="appearanceOpen && displayProfile && profile?.isOwn && !preview"
+        v-model:open="appearanceOpen"
+        :profile="displayProfile"
+        initial-tab="background"
+        @saved="refreshPublicProfile"
+        @navigate="(destination) => go(destination === 'growth' ? '/growth' : '/growth?section=' + destination)"
+      />
       <BModal
         v-if="profileEditSection"
         :visible="true"
@@ -630,6 +645,7 @@
   import icon from '@/config/icon';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import MyInfo from '@/components/personCenter/myInfo/MyInfo.vue';
+  import ProfileAppearanceStudio from '@/components/growth/ProfileAppearanceStudio.vue';
   import CommunityProfileEditor from '@/components/community/CommunityProfileEditor.vue';
   import Alert from '@/components/base/BasicComponents/BModal/Alert';
   import CommunityPostResources from '@/components/community/CommunityPostResources.vue';
@@ -1167,6 +1183,7 @@
     }
   }
   const accountEditorOpen = ref(false);
+  const appearanceOpen = ref(false);
   const profileEditSection = ref<'achievements' | 'posts' | null>(null);
   const profileEditor = ref<InstanceType<typeof CommunityProfileEditor>>();
   function closeProfileEditor() {
@@ -1185,16 +1202,18 @@
       },
     });
   }
+  let profileRefreshRequest = 0;
   async function refreshPublicProfile() {
     const current = generation,
+      request = ++profileRefreshRequest,
       id = profile.value?.userPublicId;
     profileEditSection.value = null;
     if (!id) return;
     try {
       const updated = await feedGet('profiles/' + id);
-      if (current === generation) profile.value = updated;
+      if (current === generation && request === profileRefreshRequest) profile.value = updated;
     } catch {
-      error.value = true;
+      if (current === generation && request === profileRefreshRequest) error.value = true;
     }
   }
   const liking = ref(new Set<string>()),
@@ -1268,6 +1287,7 @@
       posts.value = [];
       managed.value = [];
       profile.value = null;
+      appearanceOpen.value = false;
       profileEditSection.value = null;
       loadedTopic.value = null;
       topicRows.value = [];
@@ -1906,6 +1926,7 @@
   }
   .public-profile-card :deep(.chat-profile-content__hero) {
     display: flex;
+    flex-wrap: wrap;
     align-items: flex-start;
     justify-content: space-between;
     gap: var(--ui-space-24, 24px);
@@ -1914,12 +1935,12 @@
   .public-profile-card :deep(.chat-profile-content__hero.is-decorated) {
     padding: var(--ui-space-24, 24px);
   }
-  .public-profile-card :deep(.is-decorated .profile-summary-actions .text_btn) {
-    background: var(--card-background);
-    color: var(--primary-color);
+  .public-profile-card :deep(.is-decorated .profile-summary-action) {
+    color: var(--text-color);
+    text-shadow: 0 1px 4px var(--card-background);
   }
   .public-profile-card :deep(.chat-profile-content__identity) {
-    flex: 1;
+    flex: 1 1 var(--ui-layout-320, 320px);
     align-items: flex-start;
     background: transparent;
     border: 0;
@@ -1943,9 +1964,17 @@
   }
   .profile-summary-actions {
     display: flex;
-    flex-direction: column;
-    align-items: flex-end;
-    gap: var(--ui-space-16, 16px);
+    flex: 0 1 auto;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: var(--ui-space-4, 4px) var(--ui-space-16, 16px);
+    margin-left: auto;
+    max-width: 100%;
+  }
+  .profile-summary-action.b_btn {
+    gap: var(--ui-space-6, 6px);
+    font-size: var(--ui-font-13, 13px);
   }
   .profile-relationship-actions {
     margin: 0;
@@ -1970,10 +1999,6 @@
     }
     .profile-summary-actions {
       width: 100%;
-      flex-direction: row-reverse;
-      flex-wrap: wrap;
-      justify-content: space-between;
-      align-items: center;
     }
   }
   .profile-statistics {
