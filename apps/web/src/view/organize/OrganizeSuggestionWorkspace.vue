@@ -110,20 +110,29 @@
         <p v-if="run.skipped" class="workspace-background">{{
           t('organizeLifecycle.skippedCount', { count: run.skipped })
         }}</p>
-        <p v-if="run.status === 'paused'" class="workspace-background">{{
-          t(
-            run.runVersion === 3
-              ? run.inFlight
-                ? 'organizeProgress.pausing'
-                : `organizeProgress.pauseReasons.${run.pauseReason || 'user'}`
-              : run.inFlight
-                ? 'organizeLifecycle.pausing'
-                : `organizeLifecycle.reasons.${run.pauseReason || 'user'}`,
-          )
-        }}</p>
-        <BButton v-if="run.status === 'paused' && run.pauseReason === 'quota'" @click="acquireQuotaVisible = true">{{
-          t('entitlementJourney.acquire')
-        }}</BButton>
+        <div v-if="run.status === 'paused'" class="workspace-run-notice">
+          <div class="workspace-run-notice-copy" role="status">
+            <SvgIcon class="workspace-run-notice-icon" :src="icon.message.info" size="16" aria-hidden="true" />
+            <div>
+              <p>{{
+                t(
+                  `${run.runVersion === 3 ? 'organizeProgress.pauseReasons' : 'organizeLifecycle.reasons'}.${run.pauseReason || 'user'}`,
+                )
+              }}</p>
+              <p v-if="run.inFlight" class="workspace-run-notice-hint">{{
+                t(run.runVersion === 3 ? 'organizeProgress.pausing' : 'organizeLifecycle.pausing')
+              }}</p>
+              <p v-if="run.pauseReason === 'quota' && run.canResume" class="workspace-run-notice-hint">{{
+                t('organizeProgress.quotaResumeHint', {
+                  action: t(run.runVersion === 3 ? 'organizeProgress.resumeAi' : 'organizeLifecycle.resume'),
+                })
+              }}</p>
+            </div>
+          </div>
+          <BButton v-if="run.pauseReason === 'quota'" @click="acquireQuotaVisible = true">{{
+            t('entitlementJourney.acquire')
+          }}</BButton>
+        </div>
         <EntitlementAcquireModal
           v-if="acquireQuotaVisible"
           v-model:visible="acquireQuotaVisible"
@@ -2016,6 +2025,42 @@
     font-size: var(--ui-font-12, 12px);
     color: var(--ow-muted);
   }
+  .workspace-run-notice {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: var(--ui-space-12, 12px) var(--ui-space-18, 18px);
+    padding: var(--ui-space-12, 12px) var(--ui-space-18, 18px);
+    border-top: 1px solid var(--workspace-divider);
+  }
+  .workspace-run-notice-copy {
+    display: flex;
+    align-items: flex-start;
+    flex: 1;
+    min-width: 0;
+    gap: var(--ui-space-8, 8px);
+  }
+  .workspace-run-notice-icon {
+    flex-shrink: 0;
+    margin-top: var(--ui-space-2, 2px);
+    color: var(--ow-amber);
+  }
+  .workspace-run-notice-copy p {
+    color: var(--workspace-text);
+    font-size: var(--ui-font-13, 13px);
+    line-height: 1.6;
+    overflow-wrap: anywhere;
+  }
+  .workspace-run-notice-copy .workspace-run-notice-hint {
+    margin-top: var(--ui-space-4, 4px);
+    color: var(--workspace-muted);
+    font-size: var(--ui-font-12, 12px);
+  }
+  .workspace-run-notice > .b_btn {
+    flex-shrink: 0;
+    margin-inline-start: auto;
+  }
   .workspace-filters {
     display: flex;
     align-items: center;
@@ -2501,6 +2546,12 @@
     }
     .workspace-run-header .workspace-tools {
       margin-left: auto;
+    }
+    .workspace-run-notice {
+      padding: var(--ui-space-12, 12px);
+    }
+    .workspace-run-notice-copy {
+      flex-basis: 100%;
     }
     .workspace-filters {
       flex-wrap: wrap;

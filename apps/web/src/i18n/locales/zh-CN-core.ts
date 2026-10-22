@@ -376,10 +376,11 @@ export default {
     inspectionEnded: '本轮检查已结束',
     inspectionDone: '全部对象已检查',
     resumeAi: '继续 AI',
+    quotaResumeHint: '补充额度或每日额度恢复后，点击“{action}”处理剩余项目。',
     pausing: 'AI 已暂停领取新项目，正在分析的项目会继续完成。',
     pauseReasons: {
       user: 'AI 已暂停，可随时继续；不影响资源检查和直接处理。',
-      quota: 'AI 额度不足，分析已暂停；直接处理继续，已有结果保留。',
+      quota: 'AI 额度不足，AI 分析已暂停；资源检查和直接处理不受影响，已有结果保留。',
       unavailable: 'AI 服务暂不可用；直接处理继续，已有结果保留。',
       restricted: 'AI 权限暂不可用；直接处理继续，已有结果保留。',
     },

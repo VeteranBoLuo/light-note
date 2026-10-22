@@ -26,6 +26,7 @@ for (const [key, value] of Object.entries(densityCssVariables(density)))
 document.documentElement.classList.toggle('light-note-mobile-rendering', params.has('renderProfile'));
 for (const el of [document.documentElement, document.body, document.getElementById('app')!]) {
   el.style.height = '100%';
+  el.style.width = '100%';
   el.style.margin = '0';
 }
 const check = (id: string, status: string, kind: WorkspaceSuggestion['kind'] = 'tags'): WorkspaceSuggestion => ({
@@ -97,9 +98,13 @@ if (params.has('volume')) {
 }
 const run: SuggestionRun = {
   id: 'outcomes-fixture',
-  status: params.has('volume') ? 'completed' : 'running',
+  status: params.has('pause') ? 'paused' : params.has('volume') ? 'completed' : 'running',
   runVersion: 3,
   rulePhase: 'completed',
+  pauseReason: params.get('pause') || undefined,
+  canResume: params.has('pause'),
+  canEnd: params.has('pause') || !params.has('volume'),
+  inFlight: params.has('inFlight') ? 1 : 0,
   options: { resourceTypes: ['note'], checks: ['tags', 'title', 'empty', 'duplicate'], scope: 'all', items: [] },
   summary: {
     total: items.length,
@@ -160,8 +165,10 @@ function snapshot(reviewState = '') {
     groupTotals,
     overview: {
       inspection: { total: items.length, checked: items.length, skipped: 1, settled: true },
-      direct: lane,
-      ai: { ...lane, total: 0, waiting: 0 },
+      direct: params.has('directDone') ? { ...lane, completed: 1, waiting: 0 } : lane,
+      ai: params.has('pause')
+        ? { ...lane, running: run.inFlight || 0, total: 2, queued: 2 - (run.inFlight || 0), waiting: 0 }
+        : { ...lane, total: 0, waiting: 0 },
       review,
     },
     items: visible,

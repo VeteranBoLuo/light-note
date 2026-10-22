@@ -387,10 +387,11 @@ export default {
     inspectionEnded: 'Checks ended',
     inspectionDone: 'All objects checked',
     resumeAi: 'Resume AI',
+    quotaResumeHint: 'After adding quota or your daily quota resets, select “{action}” to process the remaining items.',
     pausing: 'No new AI work will start. In-flight analysis will finish.',
     pauseReasons: {
       user: 'AI is paused. Checks and direct processing can continue.',
-      quota: 'AI quota is insufficient. Direct processing continues and results are retained.',
+      quota: 'AI analysis is paused due to insufficient quota. Resource checks and direct processing are unaffected; existing results are retained.',
       unavailable: 'AI is unavailable. Direct processing continues and results are retained.',
       restricted: 'AI access is restricted. Direct processing continues and results are retained.',
     },
