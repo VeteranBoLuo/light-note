@@ -9,26 +9,32 @@
     </header>
 
     <div class="chat-official-sticker-panel__grid">
-      <BButton
+      <BTooltip
         v-for="sticker in stickers"
         :key="sticker.key"
-        class="chat-official-sticker-panel__item"
-        :aria-label="
-          t('communityChat.sticker.sendOfficial', {
-            name: t(`communityChat.sticker.officialItems.${sticker.id}`),
-          })
-        "
-        @click="emit('select', sticker.key)"
+        class="chat-official-sticker-panel__choice"
+        :title="t(`communityChat.sticker.officialItems.${sticker.id}`)"
+        :delay="250"
       >
-        <img
-          :src="sticker.assetPath"
-          :alt="t(`communityChat.sticker.officialItems.${sticker.id}`)"
-          width="96"
-          height="96"
-          loading="lazy"
-          decoding="async"
-        />
-      </BButton>
+        <BButton
+          class="chat-official-sticker-panel__item"
+          :aria-label="
+            t('communityChat.sticker.sendOfficial', {
+              name: t(`communityChat.sticker.officialItems.${sticker.id}`),
+            })
+          "
+          @click="emit('select', sticker.key)"
+        >
+          <img
+            :src="sticker.assetPath"
+            :alt="t(`communityChat.sticker.officialItems.${sticker.id}`)"
+            width="96"
+            height="96"
+            loading="lazy"
+            decoding="async"
+          />
+        </BButton>
+      </BTooltip>
     </div>
 
     <p>{{ t('communityChat.sticker.officialHint') }}</p>
@@ -39,6 +45,7 @@
   import { COMMUNITY_CHAT_OFFICIAL_STICKERS } from '@lightnote/shared/community-chat-stickers';
   import { useI18n } from 'vue-i18n';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
 
   const emit = defineEmits<{ select: [key: string] }>();
   const { t } = useI18n();
@@ -102,6 +109,10 @@
     gap: var(--ui-space-6, 6px);
     overflow-y: auto;
     overscroll-behavior: contain;
+  }
+
+  .chat-official-sticker-panel__choice {
+    min-width: 0;
   }
 
   .chat-official-sticker-panel__item.b_btn {
