@@ -101,6 +101,22 @@ afterEach(() => {
 });
 
 describe('BookmarkSnapshotModal 网页存档生命周期', () => {
+  it.each(['succeeded', 'retry_wait', 'failed'])(
+    '%s 显示对应状态，不向用户展示后台尝试次数',
+    async (status) => {
+      requestMocks.apiBasePost.mockResolvedValue({
+        status: 200,
+        data: { archiveTask: { status, attempts: 3 } },
+      });
+      const host = mountModal();
+      await vi.waitFor(() => expect(host.querySelector('[role="status"]')).not.toBeNull());
+      const statusElement = host.querySelector('[role="status"]')!;
+      expect(statusElement.querySelector('strong')?.textContent).toBe(`bookmarkMg.archiveState_${status}`);
+      expect(statusElement.textContent).not.toContain('bookmarkMg.archiveAttempts');
+      expect(statusElement.textContent).not.toContain('bookmarkMg.archiveFailedAttempts');
+    },
+  );
+
   it('只读入口显示已有正文和摘要，不提供生成或保存操作，并只报告一次成功阅读', async () => {
     const onRead = vi.fn();
     requestMocks.apiBasePost.mockResolvedValue({

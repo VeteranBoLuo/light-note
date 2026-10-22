@@ -70,7 +70,7 @@
         v-if="isTaggableResourceType(resource.type)"
         block
         size="large"
-        type="function"
+        class="resource-inspector-action--ai"
         @click="emit('analyze', resource)"
       >
         <SvgIcon :src="icon.ai.organize" size="17" aria-hidden="true" />
@@ -330,10 +330,11 @@
     font-size: var(--ui-font-13, 13px);
   }
 
+  .resource-inspector-action--ai,
   .resource-inspector-action--inbox,
   .resource-inspector-action--tags {
     border-color: color-mix(in srgb, var(--primary-color) 28%, var(--surface-border-color));
-    color: var(--primary-color);
+    color: var(--workspace-purple-text);
     background: color-mix(in srgb, var(--primary-color) 8%, var(--card-background));
   }
 
