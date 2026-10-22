@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createApp, nextTick } from 'vue';
 import { createI18n } from 'vue-i18n';
 import zhCN from '@/i18n/locales/zh-CN';
+import enUS from '@/i18n/locales/en-US';
 import expressionPanelSource from './ChatExpressionPanel.vue?raw';
 import ChatOfficialStickerPanel from './ChatOfficialStickerPanel.vue';
 
@@ -37,20 +38,22 @@ function mountPanel(onSelect = vi.fn()) {
 }
 
 describe('ChatOfficialStickerPanel', () => {
-  it('纸灵首发包的键、地址和透明 PNG 资产一一对应', () => {
+  it('纸灵情绪包的键、地址和透明 PNG 资产一一对应', () => {
     const publicRoot = join(process.cwd(), 'public');
     const keys = new Set<string>();
     const paths = new Set<string>();
 
-    expect(COMMUNITY_CHAT_OFFICIAL_STICKERS).toHaveLength(16);
+    expect(COMMUNITY_CHAT_OFFICIAL_STICKERS).toHaveLength(24);
     for (const sticker of COMMUNITY_CHAT_OFFICIAL_STICKERS) {
-      expect(sticker.key).toBe(`paper-spirit-v1:${sticker.id}`);
+      expect(sticker.key).toBe(`paper-spirit-v2:${sticker.id}`);
       expect(sticker.key.length).toBeLessThanOrEqual(80);
-      expect(sticker.assetPath).toBe(`/community-chat/stickers/paper-spirit-v1/${sticker.id.replaceAll('_', '-')}.png`);
+      expect(sticker.assetPath).toBe(`/community-chat/stickers/paper-spirit-v2/${sticker.id.replaceAll('_', '-')}.png`);
       expect(keys.has(sticker.key)).toBe(false);
       expect(paths.has(sticker.assetPath)).toBe(false);
       keys.add(sticker.key);
       paths.add(sticker.assetPath);
+      expect(zhCN.communityChat.sticker.officialItems[sticker.id]).toBeTruthy();
+      expect(enUS.communityChat.sticker.officialItems[sticker.id]).toBeTruthy();
 
       const data = readFileSync(join(publicRoot, sticker.assetPath.replace(/^\//, '')));
       expect(data.subarray(1, 4).toString()).toBe('PNG');
@@ -65,12 +68,15 @@ describe('ChatOfficialStickerPanel', () => {
     const buttons = host.querySelectorAll<HTMLButtonElement>('.chat-official-sticker-panel__item');
     const images = host.querySelectorAll<HTMLImageElement>('.chat-official-sticker-panel__item img');
 
-    expect(buttons).toHaveLength(16);
-    expect(images).toHaveLength(16);
-    expect(images[0].getAttribute('src')).toBe(COMMUNITY_CHAT_OFFICIAL_STICKERS[0].assetPath);
-    buttons[0].click();
-    await nextTick();
-    expect(onSelect).toHaveBeenCalledWith(COMMUNITY_CHAT_OFFICIAL_STICKERS[0].key);
+    expect(buttons).toHaveLength(24);
+    expect(images).toHaveLength(24);
+    for (const [index, sticker] of COMMUNITY_CHAT_OFFICIAL_STICKERS.entries()) {
+      expect(images[index].getAttribute('src')).toBe(sticker.assetPath);
+      expect(images[index].getAttribute('alt')).toBe(zhCN.communityChat.sticker.officialItems[sticker.id]);
+      buttons[index].click();
+      await nextTick();
+      expect(onSelect).toHaveBeenNthCalledWith(index + 1, sticker.key);
+    }
   });
 
   it('统一表情面板以已核验的图标路径提供纸灵标签', () => {
