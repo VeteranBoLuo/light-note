@@ -103,6 +103,17 @@ describe('Huawei public authenticated receipt route', () => {
     expect((await post(probe)).status).toBe(200);
     expect(recordHuaweiReceipts).toHaveBeenCalledWith({ fixture: true }, []);
   });
+  it('acknowledges the provider V1 appid setup format without recording a delivery', async () => {
+    const probe = {
+      statuses: [
+        { appid: 'fixture-app', token, biTag: 'provider_fixed_test', requestId: 'req-v1', status: 0, timestamp: now },
+      ],
+    };
+    const response = await post(probe);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ code: '0', message: 'success' });
+    expect(recordHuaweiReceipts).toHaveBeenCalledWith({ fixture: true }, []);
+  });
   it('reserves a nonce before storage completes and canonicalizes header whitespace', async () => {
     let release;
     const entered = new Promise((resolve) => {

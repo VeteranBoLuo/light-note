@@ -101,6 +101,19 @@ describe('Huawei V1/V2 delivery evidence', () => {
     ])
       expect(parseHuaweiReceipts({ statuses: [row] }, env)).toEqual([]);
   });
+  it('accepts V1 appid receipts while keeping setup probes and other apps out of delivery evidence', () => {
+    const receipt = v1({ clientId: undefined, appid: '123' });
+    expect(parseHuaweiReceipts({ statuses: [receipt] }, env)).toEqual(
+      parseHuaweiReceipts({ statuses: [v2()] }, env),
+    );
+    expect(
+      parseHuaweiReceipts({ statuses: [{ ...receipt, appid: 'fixture-app', biTag: 'provider_fixed_test' }] }, env),
+    ).toEqual([]);
+    expect(parseHuaweiReceipts({ statuses: [{ ...receipt, appid: 'other-app' }] }, env)).toEqual([]);
+    expect(
+      parseHuaweiReceipts({ statuses: [receipt] }, { ...env, HUAWEI_PUSH_APP_ID: undefined }),
+    ).toEqual([]);
+  });
   it.each([
     null,
     [],
@@ -115,6 +128,9 @@ describe('Huawei V1/V2 delivery evidence', () => {
     { statuses: [v1({ token: '' })] },
     { statuses: [v1({ subStatus: '6' })] },
     { statuses: [v1({ clientId: undefined })] },
+    { statuses: [v1({ clientId: undefined, appid: '' })] },
+    { statuses: [v1({ clientId: undefined, appid: 123 })] },
+    { statuses: [v1({ clientId: undefined, appid: 'x'.repeat(129) })] },
     { statuses: [v2({ appPackageName: [] })] },
     { statuses: [v1(), v1({ requestId: [] })] },
   ])('rejects malformed batches atomically (%#)', (body) => {

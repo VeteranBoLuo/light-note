@@ -88,8 +88,12 @@ export function parseHuaweiReceipts(body, env = process.env) {
         if (!object(row.deliveryStatus)) throw error('HUAWEI_RECEIPT_PAYLOAD_INVALID');
         ({ result, timestamp } = row.deliveryStatus);
       } else {
-        if (!bounded(row.clientId, 128) && !bounded(row.projectid, 128)) throw error('HUAWEI_RECEIPT_PAYLOAD_INVALID');
-        applicationMatches = row.clientId === env.HUAWEI_PUSH_APP_ID || row.projectid === env.HUAWEI_PUSH_PROJECT_ID;
+        const appIds = [row.appid, row.clientId];
+        if (!appIds.some((id) => bounded(id, 128)) && !bounded(row.projectid, 128))
+          throw error('HUAWEI_RECEIPT_PAYLOAD_INVALID');
+        applicationMatches =
+          appIds.some((id) => bounded(id, 128) && id === env.HUAWEI_PUSH_APP_ID) ||
+          (bounded(row.projectid, 128) && row.projectid === env.HUAWEI_PUSH_PROJECT_ID);
         result = row.status;
         timestamp = row.timestamp;
         if (row.subStatus !== undefined) subStatus = row.subStatus;
