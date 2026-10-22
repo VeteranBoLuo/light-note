@@ -10,6 +10,8 @@ import request from '@/http/request';
 import '@/assets/css/index.less';
 
 const params = new URLSearchParams(location.search);
+const textSelection = params.has('textSelection');
+const largeImage = params.has('largeImage');
 const theme = params.get('theme') === 'night' ? 'night' : 'day';
 const locale = params.get('locale') === 'en-US' ? 'en-US' : 'zh-CN';
 await setLocale(locale);
@@ -41,23 +43,40 @@ const app = createApp({
     syncViewport();
     window.addEventListener('resize', syncViewport);
     applyUiDensity(params.get('density'), !store.isDesktop);
-    const src = '/brand-scenes/autumn-vista.webp';
+    const src = largeImage
+      ? 'data:image/svg+xml,' +
+        encodeURIComponent(
+          '<svg xmlns="http://www.w3.org/2000/svg" width="800" height="1600"><rect width="800" height="1600" fill="#dce8fa"/><text x="40" y="80" font-size="32" fill="#344767">Large image fixture</text></svg>',
+        )
+      : '/brand-scenes/autumn-vista.webp';
     const content = ref(
-      `<h2>图片与文字</h2><p>图片之前的内容</p><p><img src="${src}" alt="窗边阅读" title="阅读角落" width="320"></p><p>图片之后的内容</p>`,
+      textSelection
+        ? '<h2>选区菜单验收</h2>' +
+            Array.from(
+              { length: 45 },
+              (_, index) => `<p>第 ${index + 1} 行：全选和滚动后，菜单保持在正文可视区域内。</p>`,
+            ).join('')
+        : `<h2>图片与文字</h2><p>图片之前的内容</p><p><img src="${src}" alt="窗边阅读" title="阅读角落" width="${largeImage ? 1200 : 320}"></p><p>图片之后的内容</p>`,
     );
     return () =>
-      h('main', { style: 'height:100vh;max-width:100%;overflow:hidden' }, [
-        h(Editor, {
-          content: content.value,
-          'onUpdate:content': (value: string) => {
-            content.value = value;
-          },
-          readonly: params.has('readonly'),
-          imageUploadMode: 'base64',
-          context: 'template',
-          type: 'html',
-        }),
-      ]);
+      h(
+        'main',
+        {
+          style: `height:100vh;max-width:100%;overflow:hidden;${textSelection || largeImage ? 'display:flex;flex-direction:column;padding:120px 80px 24px;box-sizing:border-box' : ''}`,
+        },
+        [
+          h(Editor, {
+            content: content.value,
+            'onUpdate:content': (value: string) => {
+              content.value = value;
+            },
+            readonly: params.has('readonly'),
+            imageUploadMode: 'base64',
+            context: 'template',
+            type: 'html',
+          }),
+        ],
+      );
   },
 });
 app.use(pinia);

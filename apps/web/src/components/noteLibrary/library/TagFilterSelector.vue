@@ -27,20 +27,31 @@
     </BButton>
     <BDrawer
       :open="filterVisible"
-      :title="t('note.tagDirectory')"
+      :title="t('note.filterTitle')"
       placement="bottom"
       height="min(72dvh, 620px)"
       body-padding="0"
       @close="filterVisible = false"
     >
-      <div class="filter-container filter-container--mobile" role="listbox" :aria-label="t('note.tagDirectory')">
+      <template #header-actions>
+        <BButton
+          v-if="pendingOnly || tag !== undefined"
+          class="clear-action clear-action--mobile"
+          @click.stop="clearFilters"
+          >{{ t('note.filterClear') }}</BButton
+        >
+      </template>
+      <div class="filter-container filter-container--mobile" role="group" :aria-label="t('note.tagDirectory')">
         <div class="fixed-section">
-          <PendingFilterSection :model-value="pendingOnly" @update:model-value="setPendingOnly">
-            <template #actions>
-              <BButton class="clear-action" @click.stop="clearFilters">{{ $t('note.clearFilter') }}</BButton>
-            </template>
-          </PendingFilterSection>
-          <span class="filter-section-heading">{{ t('note.tagsTab') }}</span>
+          <div class="pending-row">
+            <span>{{ t('inbox.pendingFilter') }}</span>
+            <BSwitch
+              :checked="pendingOnly"
+              controlled
+              :aria-label="t('inbox.pendingFilter')"
+              @change="setPendingOnly"
+            />
+          </div>
 
           <div class="filter-header">
             <BInput
@@ -49,13 +60,15 @@
               :placeholder="$t('note.searchTag')"
               v-model:value="keyword"
               allow-clear
-            />
+            >
+              <template #prefix><SvgIcon :src="icon.navigation.search" :size="16" aria-hidden="true" /></template>
+            </BInput>
           </div>
 
           <BButton
+            v-if="!keyword.trim()"
             class="filter-item"
-            role="option"
-            :aria-selected="tag === undefined"
+            :aria-pressed="tag === undefined"
             :class="{ 'is-selected': tag === undefined }"
             @click.stop="viewNote('all')"
           >
@@ -63,31 +76,34 @@
             <SvgIcon v-if="tag === undefined" class="check-mark" :src="icon.filterPanel.check" size="16" />
           </BButton>
           <BButton
+            v-if="!keyword.trim()"
             class="filter-item"
-            role="option"
-            :aria-selected="tag === 'null'"
+            :aria-pressed="tag === 'null'"
             :class="{ 'is-selected': tag === 'null' }"
             @click.stop="viewNote('null')"
           >
             <span>{{ t('note.noTagNote') }}</span>
             <SvgIcon v-if="tag === 'null'" class="check-mark" :src="icon.filterPanel.check" size="16" />
           </BButton>
-          <div class="divider"></div>
+          <div v-if="!keyword.trim()" class="divider"></div>
         </div>
 
         <div class="scrollable-section">
-          <div v-if="filteredTags.length === 0" class="filter-empty">{{ $t('note.noTag') }}</div>
+          <div v-if="filteredTags.length === 0" class="filter-empty" role="status">
+            <SvgIcon :src="icon.navigation.search" :size="28" aria-hidden="true" />
+            <span>{{ t(keyword.trim() ? 'note.noMatchingTag' : 'note.noTag') }}</span>
+            <small v-if="keyword.trim()">{{ t('note.tryTagKeyword') }}</small>
+          </div>
           <BButton
             :title="item.name"
             v-for="item in filteredTags"
             :key="item.id"
             class="filter-item"
-            role="option"
-            :aria-selected="tag === item.id"
+            :aria-pressed="tag === item.id"
             :class="{ 'is-selected': tag === item.id }"
             @click.stop="viewNote(item.id)"
           >
-            <span class="text-hidden"> # {{ item.name }} </span>
+            <span class="tag-prefix" aria-hidden="true">#</span><span class="text-hidden">{{ item.name }}</span>
             <SvgIcon v-if="tag === item.id" class="check-mark" :src="icon.filterPanel.check" size="16" />
           </BButton>
         </div>
@@ -125,14 +141,24 @@
       />
     </BButton>
     <template #content>
-      <div class="filter-container" role="listbox" :aria-label="t('note.tagDirectory')">
+      <div class="filter-container" role="group" :aria-label="t('note.tagDirectory')">
         <div class="fixed-section">
-          <PendingFilterSection :model-value="pendingOnly" @update:model-value="setPendingOnly">
-            <template #actions>
-              <BButton class="clear-action" @click.stop="clearFilters">{{ $t('note.clearFilter') }}</BButton>
-            </template>
-          </PendingFilterSection>
-          <span class="filter-section-heading">{{ t('note.tagsTab') }}</span>
+          <div class="filter-title-row">
+            <strong class="filter-title">{{ t('note.filterTitle') }}</strong>
+            <BButton v-if="pendingOnly || tag !== undefined" class="clear-action" @click.stop="clearFilters">{{
+              t('note.filterClear')
+            }}</BButton>
+          </div>
+          <div class="pending-row">
+            <span>{{ t('inbox.pendingFilter') }}</span>
+            <BSwitch
+              :checked="pendingOnly"
+              controlled
+              :aria-label="t('inbox.pendingFilter')"
+              @change="setPendingOnly"
+            />
+          </div>
+
           <div class="filter-header">
             <BInput
               class="tag-filter-input"
@@ -140,13 +166,15 @@
               :placeholder="$t('note.searchTag')"
               v-model:value="keyword"
               allow-clear
-            />
+            >
+              <template #prefix><SvgIcon :src="icon.navigation.search" :size="16" aria-hidden="true" /></template>
+            </BInput>
           </div>
 
           <BButton
+            v-if="!keyword.trim()"
             class="filter-item"
-            role="option"
-            :aria-selected="tag === undefined"
+            :aria-pressed="tag === undefined"
             :class="{ 'is-selected': tag === undefined }"
             @click.stop="viewNote('all')"
           >
@@ -154,31 +182,34 @@
             <SvgIcon v-if="tag === undefined" class="check-mark" :src="icon.filterPanel.check" size="16" />
           </BButton>
           <BButton
+            v-if="!keyword.trim()"
             class="filter-item"
-            role="option"
-            :aria-selected="tag === 'null'"
+            :aria-pressed="tag === 'null'"
             :class="{ 'is-selected': tag === 'null' }"
             @click.stop="viewNote('null')"
           >
             <span>{{ t('note.noTagNote') }}</span>
             <SvgIcon v-if="tag === 'null'" class="check-mark" :src="icon.filterPanel.check" size="16" />
           </BButton>
-          <div class="divider"></div>
+          <div v-if="!keyword.trim()" class="divider"></div>
         </div>
 
         <div class="scrollable-section">
-          <div v-if="filteredTags.length === 0" class="filter-empty">{{ $t('note.noTag') }}</div>
+          <div v-if="filteredTags.length === 0" class="filter-empty" role="status">
+            <SvgIcon :src="icon.navigation.search" :size="28" aria-hidden="true" />
+            <span>{{ t(keyword.trim() ? 'note.noMatchingTag' : 'note.noTag') }}</span>
+            <small v-if="keyword.trim()">{{ t('note.tryTagKeyword') }}</small>
+          </div>
           <BButton
             v-for="item in filteredTags"
             :key="item.id"
             :title="item.name"
             class="filter-item"
-            role="option"
-            :aria-selected="tag === item.id"
+            :aria-pressed="tag === item.id"
             :class="{ 'is-selected': tag === item.id }"
             @click.stop="viewNote(item.id)"
           >
-            <span class="text-hidden"> # {{ item.name }} </span>
+            <span class="tag-prefix" aria-hidden="true">#</span><span class="text-hidden">{{ item.name }}</span>
             <SvgIcon v-if="tag === item.id" class="check-mark" :src="icon.filterPanel.check" size="16" />
           </BButton>
         </div>
@@ -188,7 +219,7 @@
 </template>
 
 <script lang="ts" setup>
-  import PendingFilterSection from '@/components/inbox/PendingFilterSection.vue';
+  import BSwitch from '@/components/base/BasicComponents/BSwitch.vue';
   import { useI18n } from 'vue-i18n';
   const { t } = useI18n();
   import icon from '@/config/icon.ts';
@@ -199,7 +230,7 @@
   import BPopover from '@/components/base/BasicComponents/BPopover.vue';
   import { computed, ref } from 'vue';
   import { OPERATION_LOG_MAP } from '@/config/logMap.ts';
-  import router from '@/router';
+  import { useRouter } from 'vue-router';
   import { bookmarkStore } from '@/store';
   import { closeCurrentMobileOverlayThen } from '@/utils/mobileOverlayHistory';
 
@@ -215,6 +246,7 @@
   );
   const emit = defineEmits<{ select: [key: 'all' | 'null' | string] }>();
 
+  const router = useRouter();
   const filterVisible = ref(false);
   const keyword = ref('');
   const bookmark = bookmarkStore();
@@ -287,17 +319,11 @@
       }, navigate);
       return;
     }
-    filterVisible.value = false;
     void navigate();
   }
 </script>
 
 <style lang="less" scoped>
-  .filter-section-heading {
-    padding: var(--ui-space-8, 8px) var(--ui-space-8, 8px) 0;
-    color: var(--desc-color);
-    font-size: var(--ui-font-12, 12px);
-  }
   .noteType-select.b_btn {
     height: var(--ui-control-36, 36px);
     padding: 0 var(--ui-space-11, 11px);
@@ -359,12 +385,12 @@
   }
   .filter-container {
     /* 背景/圆角/阴影由 BPopover 面板统一提供,这里只管尺寸与布局,避免双重卡片 */
-    width: var(--ui-layout-248, 248px);
+    width: var(--ui-layout-280, 280px);
     /* ui-density-fixed: 24px reserves the fixed viewport safety gap, independent of panel density. */
     max-height: min(var(--ui-layout-440, 440px), calc(100vh - 24px));
     /* ui-density-fixed: Keep the same viewport safety gap for the dynamic viewport override. */
     max-height: min(var(--ui-layout-440, 440px), calc(100dvh - 24px));
-    padding: var(--ui-space-5, 5px);
+    padding: var(--ui-space-12, 12px);
     display: flex;
     flex-direction: column;
     gap: 0;
@@ -372,14 +398,15 @@
   }
   .filter-container--mobile {
     width: 100%;
-    max-height: calc(min(72dvh, 620px) - 57px);
-    padding: 10px 16px max(18px, env(safe-area-inset-bottom));
+    height: 100%;
+    max-height: 100%;
+    padding: var(--ui-space-8, 8px) var(--ui-space-16, 16px) max(var(--ui-space-16, 16px), env(safe-area-inset-bottom));
   }
   .fixed-section {
     flex-shrink: 0;
     display: flex;
     flex-direction: column;
-    gap: var(--ui-space-5, 5px);
+    gap: 0;
   }
   .scrollable-section {
     margin-top: var(--ui-space-5, 5px);
@@ -387,7 +414,7 @@
     overflow-y: auto;
     display: flex;
     flex-direction: column;
-    gap: var(--ui-space-5, 5px);
+    gap: 0;
     min-height: 0; /* Allow flex item to shrink below content size */
   }
   .divider {
@@ -412,20 +439,10 @@
     color: var(--workspace-note-text);
     white-space: nowrap;
   }
-  .filter-toggle {
-    min-height: var(--ui-control-28, 28px);
-    padding: 0 var(--ui-space-10, 10px);
-    display: flex;
-    align-items: center;
-    gap: var(--ui-space-8, 8px);
-    color: var(--desc-color);
-    font-size: var(--ui-font-12, 12px);
-    cursor: pointer;
-    user-select: none;
-  }
+
   .filter-item {
     text-align: left;
-    color: var(--desc-color);
+    color: var(--text-color);
     justify-content: flex-start;
     gap: var(--ui-space-8, 8px);
     padding: 0 var(--ui-space-11, 11px);
@@ -433,7 +450,7 @@
     border: 1px solid transparent !important;
     border-radius: 8px;
     width: 100%;
-    height: var(--ui-control-30, 30px);
+    height: var(--ui-control-36, 36px);
     flex-shrink: 0;
     display: flex;
     align-items: center;
@@ -446,15 +463,61 @@
     }
   }
   .filter-item.is-selected {
-    border-color: var(--workspace-note-text) !important;
     background: var(--workspace-note-selected) !important;
     color: var(--workspace-note-text);
-    font-weight: 600;
+    font-weight: 500;
   }
   .filter-empty {
-    padding: var(--ui-space-8, 8px) var(--ui-space-12, 12px);
+    padding: var(--ui-space-24, 24px) var(--ui-space-12, 12px);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--ui-space-12, 12px);
+    color: var(--text-color);
+    text-align: center;
+    font-size: var(--ui-font-14, 14px);
+    small {
+      color: var(--desc-color);
+      font-size: var(--ui-font-12, 12px);
+    }
+    > :first-child {
+      color: var(--desc-color);
+    }
+  }
+  .filter-title-row,
+  .pending-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--ui-space-12, 12px);
+    min-height: var(--ui-control-36, 36px);
+  }
+  .filter-title {
+    font-size: var(--ui-font-14, 14px);
+    font-weight: 600;
+  }
+  .pending-row {
+    padding-block: var(--ui-space-8, 8px);
+    margin-bottom: var(--ui-space-8, 8px);
+    border-bottom: 1px solid var(--surface-divider-color);
+    font-size: var(--ui-font-14, 14px);
+  }
+  .pending-row :deep(.b-switch) {
+    --primary-color: var(--workspace-note-text);
+  }
+  .tag-prefix {
     color: var(--desc-color);
-    font-size: var(--ui-font-12, 12px);
+  }
+  .filter-header {
+    margin-bottom: var(--ui-space-8, 8px);
+    color: var(--desc-color);
+  }
+  .filter-item:focus-visible {
+    outline: 2px solid var(--workspace-note-text);
+    outline-offset: -2px;
+  }
+  .scrollable-section {
+    overscroll-behavior: contain;
   }
   .check-mark {
     margin-left: auto;
@@ -462,28 +525,34 @@
     flex: 0 0 auto;
   }
 
+  .clear-action--mobile {
+    /* ui-density-fixed: Mobile header actions retain a 44px touch target. */
+    min-height: var(--mobile-touch-size, 44px);
+  }
   .filter-container--mobile {
-    .filter-header {
-      padding: 2px 0 8px;
-    }
-
-    .clear-action {
-      height: var(--mobile-touch-size, 44px);
+    .pending-row :deep(.b-switch) {
+      /* ui-density-fixed: Mobile touch targets remain 44px across desktop density settings. */
       min-height: var(--mobile-touch-size, 44px);
+    }
+    .filter-header {
+      padding: var(--ui-space-2, 2px) 0 var(--ui-space-8, 8px);
     }
 
     .tag-filter-input :deep(.b-input) {
+      /* ui-density-fixed: Mobile touch targets remain 44px across desktop density settings. */
       min-height: var(--mobile-touch-size, 44px);
     }
 
     .filter-item {
-      min-height: 52px;
-      height: 52px;
-      font-size: 14px;
+      /* ui-density-fixed: Mobile touch targets remain 44px across desktop density settings. */
+      min-height: var(--mobile-touch-size, 44px);
+      /* ui-density-fixed: Mobile touch targets remain 44px across desktop density settings. */
+      height: var(--mobile-touch-size, 44px);
+      font-size: var(--ui-font-14, 14px);
     }
 
     .scrollable-section {
-      gap: 2px;
+      gap: var(--ui-space-2, 2px);
     }
   }
 </style>
