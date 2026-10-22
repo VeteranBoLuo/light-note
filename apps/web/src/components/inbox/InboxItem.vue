@@ -12,7 +12,11 @@
       :class="[
         'inbox-item',
         `inbox-item--${item.resourceType}`,
-        { 'inbox-item--selection': selectionMode, 'inbox-item--selected': selected },
+        {
+          'inbox-item--selectable': selectable,
+          'inbox-item--selection': selectionMode,
+          'inbox-item--selected': selected,
+        },
       ]"
     >
       <BCheckbox
@@ -22,7 +26,6 @@
         :aria-label="item.title || t('inbox.untitled')"
         @update:model-value="emit('select', $event)"
       />
-      <span v-else class="inbox-item__select-placeholder" aria-hidden="true"></span>
       <div
         :data-range-select="selectionMode ? 'primary' : undefined"
         class="inbox-item__body"
@@ -35,13 +38,20 @@
         @keydown.enter.prevent="handleBodyClick"
         @keydown.space.prevent="handleBodyClick"
       >
-        <div class="inbox-item__meta">
-          <span class="inbox-item__type">{{ t(`inbox.${item.resourceType}`) }}</span>
-          <span>{{ formatTime(item.collectedAt) }}</span>
+        <span class="inbox-item__icon" aria-hidden="true">
+          <SvgIcon :src="icon.resource[item.resourceType]" size="18" />
+        </span>
+        <div class="inbox-item__content">
+          <div class="inbox-item__heading">
+            <h3 :title="item.title">{{ item.title || t('inbox.untitled') }}</h3>
+            <BChip class="inbox-item__type" :tone="item.resourceType">{{ t(`inbox.${item.resourceType}`) }}</BChip>
+          </div>
+          <p v-if="plainSummary">{{ plainSummary }}</p>
+          <span v-if="item.resourceType === 'bookmark'" class="inbox-item__detail">{{ item.detail }}</span>
+          <time v-if="item.collectedAt" class="inbox-item__time" :datetime="item.collectedAt">
+            {{ formatTime(item.collectedAt) }}
+          </time>
         </div>
-        <h3 :title="item.title">{{ item.title || t('inbox.untitled') }}</h3>
-        <p v-if="plainSummary">{{ plainSummary }}</p>
-        <span v-if="item.resourceType === 'bookmark'" class="inbox-item__detail">{{ item.detail }}</span>
       </div>
       <div v-if="!selectionMode" class="inbox-item__actions inbox-item__actions--mobile" @click.stop>
         <BButton
@@ -68,6 +78,7 @@
   import { useI18n } from 'vue-i18n';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BCheckbox from '@/components/base/BasicComponents/BCheckbox.vue';
+  import BChip from '@/components/base/BasicComponents/BChip.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import MobilePageActionsDrawer, { type MobilePageActionItem } from '@/components/mobile/MobilePageActionsDrawer.vue';
   import MobileSwipeActions, { type MobileSwipeActionItem } from '@/components/mobile/MobileSwipeActions.vue';
@@ -170,53 +181,57 @@
 </script>
 
 <style scoped lang="less">
+  @import (reference) '@/assets/css/workspace-surfaces.less';
+
   .inbox-item {
-    --type-color: #615ced;
+    .workspace-content-surface();
+    --type-color: var(--workspace-purple-text);
     position: relative;
     overflow: hidden;
     display: grid;
-    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr);
     align-items: center;
-    gap: var(--ui-space-14, 14px);
-    padding: var(--ui-space-16, 16px);
-    border: 1px solid color-mix(in srgb, var(--card-border-color) 82%, transparent);
-    border-radius: 16px;
-    background: linear-gradient(
-      108deg,
-      color-mix(in srgb, var(--type-color) 8%, var(--background-color)) 0%,
-      var(--background-color) 26%,
-      color-mix(in srgb, var(--type-color) 2%, var(--background-color)) 100%
-    );
+    gap: var(--ui-space-8, 8px);
+    padding: var(--ui-space-10, 10px) var(--ui-space-12, 12px);
+    border: 1px solid var(--workspace-border);
+    border-radius: 10px;
     transition:
-      box-shadow 0.2s,
-      transform 0.2s,
+      background-color 0.2s,
       border-color 0.2s;
     min-width: 0;
   }
-  .inbox-item::before {
-    position: absolute;
-    top: 12px;
-    bottom: 12px;
-    left: 0;
-    width: 3px;
-    border-radius: 0 4px 4px 0;
-    content: '';
-    background: linear-gradient(to bottom, transparent, var(--type-color) 20%, var(--type-color) 80%, transparent);
-  }
-  .inbox-item:hover {
-    border-color: color-mix(in srgb, var(--type-color) 26%, var(--card-border-color));
-    box-shadow: 0 10px 28px rgba(28, 33, 66, 0.09);
-    transform: translateY(-1px);
+  .inbox-item--selectable {
+    grid-template-columns: auto minmax(0, 1fr);
   }
   .inbox-item--note {
-    --type-color: #2ecc71;
+    --type-color: var(--workspace-note-text);
   }
   .inbox-item--file {
-    --type-color: #f39c12;
+    --type-color: var(--workspace-file-text);
   }
   .inbox-item__body {
+    display: grid;
+    grid-template-columns: var(--ui-layout-38, 38px) minmax(0, 1fr);
+    align-items: center;
+    gap: var(--ui-space-12, 12px);
     min-width: 0;
     cursor: pointer;
+  }
+
+  .inbox-item__icon {
+    display: grid;
+    place-items: center;
+    width: var(--ui-layout-38, 38px);
+    height: var(--ui-layout-38, 38px);
+    border-radius: 11px;
+    color: var(--type-color);
+    background: var(--workspace-canvas);
+  }
+
+  .inbox-item__content {
+    display: grid;
+    gap: var(--ui-space-2, 2px);
+    min-width: 0;
   }
 
   .inbox-item__body:focus-visible {
@@ -229,26 +244,24 @@
     cursor: default;
   }
 
-  .inbox-item__select-placeholder {
-    width: var(--ui-layout-18, 18px);
-    height: var(--ui-layout-18, 18px);
-    flex: 0 0 var(--ui-layout-18, 18px);
-  }
-  .inbox-item__meta {
+  .inbox-item__heading {
     display: flex;
     gap: var(--ui-space-8, 8px);
     align-items: center;
-    color: var(--desc-color);
-    font-size: var(--ui-font-12, 12px);
+    min-width: 0;
   }
-  .inbox-item__type {
-    color: var(--type-color);
-    font-weight: 600;
+  .inbox-item .inbox-item__type {
+    --b-chip-fg: var(--type-color);
+    --b-chip-bg: var(--workspace-canvas);
+    --b-chip-border: var(--workspace-border);
+    font-weight: 500;
   }
   h3 {
-    margin: var(--ui-space-6, 6px) 0 var(--ui-space-4, 4px);
+    min-width: 0;
+    margin: 0;
     color: var(--text-color);
-    font-size: var(--ui-font-16, 16px);
+    font-size: var(--ui-font-15, 15px);
+    line-height: 1.4;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -257,20 +270,24 @@
     margin: 0;
     color: var(--desc-color);
     font-size: var(--ui-font-13, 13px);
-    line-height: 1.6;
+    line-height: 1.5;
     display: -webkit-box;
-    -webkit-line-clamp: 2;
+    -webkit-line-clamp: 1;
     -webkit-box-orient: vertical;
     overflow: hidden;
   }
   .inbox-item__detail {
     display: block;
-    margin-top: var(--ui-space-5, 5px);
     color: var(--desc-color);
     font-size: var(--ui-font-12, 12px);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+  .inbox-item__time {
+    color: var(--desc-color);
+    font-size: var(--ui-font-11, 11px);
+    line-height: 1.5;
   }
   .inbox-item__actions {
     display: flex;
@@ -285,22 +302,30 @@
   .inbox-item.inbox-item--selected {
     border-color: var(--primary-color);
   }
+  @media (hover: hover) and (pointer: fine) {
+    .inbox-item:hover {
+      background: var(--surface-card-hover-bg);
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .inbox-item {
+      transition: none;
+    }
+  }
   @media (max-width: 767px) {
     .inbox-item {
-      grid-template-columns: auto minmax(0, 1fr);
       align-items: start;
-      padding: var(--ui-space-13, 13px);
     }
     .inbox-item__actions--mobile {
       position: absolute;
-      top: 8px;
-      right: 8px;
+      top: 0;
+      right: 0;
       display: block;
     }
     .inbox-item__more {
-      width: var(--ui-layout-36, 36px);
-      min-width: var(--ui-layout-36, 36px);
-      height: var(--ui-layout-36, 36px);
+      width: var(--ui-control-44, 44px);
+      min-width: var(--ui-control-44, 44px);
+      height: var(--ui-control-44, 44px);
       padding: 0;
       border-radius: 10px;
       color: var(--desc-color);
@@ -311,6 +336,9 @@
     }
     .inbox-item--selection .inbox-item__body {
       padding-right: 0;
+    }
+    p {
+      -webkit-line-clamp: 2;
     }
   }
 </style>

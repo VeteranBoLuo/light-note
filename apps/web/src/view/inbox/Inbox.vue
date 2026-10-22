@@ -2945,15 +2945,18 @@
   }
   .inbox-page--embedded > .inbox-workspace-body > .inbox-workspace-main > .inbox-content {
     overflow: hidden;
-    border: 1px solid var(--surface-border-color);
-    border-radius: 16px;
-    background: var(--card-background);
+    border: 0;
+    border-radius: 0;
+  }
+  .inbox-page--embedded:not(.inbox-page--todo-focused) .inbox-list {
+    gap: var(--ui-space-8, 8px);
+    padding: 0 0 var(--ui-space-12, 12px);
   }
   .inbox-page--embedded .inbox-toolbar__right--resources {
     width: auto;
     min-width: min(100%, var(--ui-layout-480, 480px));
     flex: 0 1 var(--ui-layout-520, 520px);
-    grid-template-columns: minmax(var(--ui-layout-140, 140px), 1fr) var(--ui-layout-118, 118px) auto auto;
+    grid-template-columns: minmax(0, 1fr) var(--ui-layout-118, 118px) auto auto;
   }
   .inbox-page--embedded .inbox-toolbar__right--resources :deep(.b-input),
   .inbox-page--embedded .inbox-toolbar__right--resources :deep(.select-trigger),
@@ -3390,7 +3393,7 @@
   }
   .resource-inbox-entry {
     min-width: 0;
-    border-radius: 16px;
+    border-radius: 10px;
     outline: none;
   }
   .resource-inbox-entry.is-inspected :deep(.inbox-item),
@@ -3541,12 +3544,8 @@
   .resource-inbox-inspector__meta {
     flex: 0 0 auto;
     display: grid;
-    gap: var(--ui-space-10, 10px);
+    gap: var(--ui-space-8, 8px);
     margin: var(--ui-space-4, 4px) 0 0;
-    padding: var(--ui-space-12, 12px);
-    border: 1px solid var(--surface-border-color);
-    border-radius: 12px;
-    background: var(--workspace-panel-bg-color, var(--background-color));
   }
 
   .resource-inbox-inspector__meta > div {
@@ -3899,7 +3898,7 @@
       width: 100%;
       min-width: 0;
       flex: 0 0 auto;
-      grid-template-columns: minmax(0, 1fr) var(--ui-layout-112, 112px);
+      grid-template-columns: minmax(0, 1fr) auto;
     }
 
     .inbox-page--embedded .inbox-resource-capture {
