@@ -57,11 +57,6 @@
         role="status"
       >
         <strong>{{ $t(`bookmarkMg.archiveState_${snap.archiveTask.status}`) }}</strong>
-        <span v-if="snap.archiveTask.attempts">{{
-          $t(archiveFailed ? 'bookmarkMg.archiveFailedAttempts' : 'bookmarkMg.archiveAttempts', {
-            count: snap.archiveTask.attempts,
-          })
-        }}</span>
         <p v-if="failureMessage">{{ failureMessage }}</p>
         <p v-if="archiveFailed && bookmarkUrl">{{ $t('bookmarkMg.archiveBookmarkSafe') }}</p>
         <p v-if="snap.content && snap.archiveTask.status !== 'succeeded'">{{ $t('bookmarkMg.archivePreserved') }}</p>
