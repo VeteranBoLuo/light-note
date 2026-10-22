@@ -9,10 +9,11 @@ const connection = {
 };
 const pool = { getConnection: vi.fn(() => connection) };
 const grantExp = vi.fn();
+const lockGrowthAccount = vi.fn();
 const ensureGrowthTaskSchema = vi.fn();
 
 vi.mock('../db/index.js', () => ({ default: pool }));
-vi.mock('./growth.js', () => ({ grantExp }));
+vi.mock('./growth.js', () => ({ grantExp, lockGrowthAccount }));
 vi.mock('./growthTaskSchema.js', () => ({ ensureGrowthTaskSchema }));
 
 const { claimGrowthTask, completeGrowthTask } = await import('./growthTaskCompletion.js');
@@ -140,6 +141,8 @@ describe('growthTaskCompletion', () => {
       'user-1',
       'profile_avatar',
     ]);
+    expect(lockGrowthAccount).toHaveBeenCalledWith(connection, 'user-1');
+    expect(lockGrowthAccount.mock.invocationCallOrder[0]).toBeLessThan(connection.query.mock.invocationCallOrder[0]);
     expect(grantExp).toHaveBeenCalledWith(
       'user-1',
       'growth_task',

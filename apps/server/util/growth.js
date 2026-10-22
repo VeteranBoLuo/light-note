@@ -223,8 +223,18 @@ async function writeLevelUpNotification(conn, userId, level, { source = null } =
   }
 }
 
+// 写事务在任何普通读取、资源占位或任务行锁之前取得账号锁，避免 RR 旧快照与反向锁序。
+// upsert 直接取得排他锁，也能安全处理新账号，不能换成 INSERT IGNORE 后再升级共享锁。
+export async function lockGrowthAccount(conn, userId) {
+  await conn.query(
+    `INSERT INTO user_growth (user_id) VALUES (?)
+     ON DUPLICATE KEY UPDATE user_id = VALUES(user_id)`,
+    [userId],
+  );
+}
+
 /**
- * EXP 统一发放入口(幂等 + 日硬顶 + root 跳过)。
+ * EXP 统一发放入口(幂等 + 日硬顶)。所有登录角色共用真实经验。
  * @param {string} userId
  * @param {string} source checkin/bookmark/note/file/...
  * @param {{refId?:string, day?:string, amount:number, meta?:object, userRole?:string}} opts
@@ -241,7 +251,11 @@ export async function grantExp(userId, source, opts = {}, conn = null) {
   try {
     if (ownConn) await c.beginTransaction();
 
-    // 1. 幂等占位:先插 amount=0 抢唯一键;冲突(affectedRows=0)=已发过 → 不重复计
+    // 1. 先锁账号，再处理事件。外部事务也须在普通读取前取此锁，或使用 READ COMMITTED。
+    await lockGrowthAccount(c, userId);
+    const [[gRow]] = await c.query('SELECT exp, level FROM user_growth WHERE user_id = ? FOR UPDATE', [userId]);
+
+    // 2. 幂等占位:插 amount=0 抢唯一键;冲突(affectedRows=0)=已发过 → 不重复计
     // 用 INSERT IGNORE 而非 ON DUPLICATE KEY UPDATE id=id:后者在"匹配未改变"时 affectedRows 仍为 1,
     // 无法据此判重(实测踩坑);IGNORE 对唯一冲突可靠返回 affectedRows=0。
     const [ins] = await c.query(
@@ -255,19 +269,12 @@ export async function grantExp(userId, source, opts = {}, conn = null) {
     }
     const eventId = ins.insertId;
 
-    // 2. 锁定用户成长行，串行化同一用户的并发发放，防止多请求同时穿透 200 日硬顶。
-    // ON DUPLICATE KEY UPDATE 直接取排他锁；不用 INSERT IGNORE 的共享锁再升级，避免并发锁升级死锁。
-    await c.query(
-      `INSERT INTO user_growth (user_id) VALUES (?)
-       ON DUPLICATE KEY UPDATE user_id = VALUES(user_id)`,
-      [userId],
-    );
-    const [[gRow]] = await c.query('SELECT exp, level FROM user_growth WHERE user_id = ? FOR UPDATE', [userId]);
-
     // 3. 日 EXP 硬顶:只统计受限的日常/创造来源，一次性奖励始终单独计算。
     // daily_quest 不豁免，与签到、新增内容、批量导入共用 200/日额度。
     const capExempt = isDailyExpCapExemptSource(source);
-    const used = capExempt ? 0 : await getDailyLimitedExpTotal(c, userId, calendar);
+    // 未传日历的导入等入口也必须使用账号自然日，不能退回服务器日期形成第二套额度。
+    const capCalendar = capExempt ? null : calendar || (await getGrowthCalendarContext(userId, { db: c }));
+    const used = capExempt ? 0 : await getDailyLimitedExpTotal(c, userId, capCalendar);
     const grantAmount = capExempt ? amount : Math.max(0, Math.min(amount, DAILY_EXP_CAP - used));
     if (grantAmount > 0) {
       await c.query('UPDATE growth_events SET amount = ? WHERE id = ?', [grantAmount, eventId]);
@@ -365,31 +372,46 @@ export function hashRef(str) {
 export async function awardCreate(userId, kind, refId, { userRole = null } = {}) {
   if (isVisitorGrowthActor(userId, userRole)) return { granted: 0, skipped: true };
   if (!refId) return { granted: 0, skipped: 'no-ref' };
+  if (!Object.hasOwn(CREATE_TIERS, kind)) return { granted: 0, skipped: 'unknown_kind' };
   // 功能发现任务只记录一次业务事实，经验仍由用户主动领取。
-  if (kind === 'note' || kind === 'bookmark' || kind === 'file') {
-    try {
-      const { completeGrowthTask } = await import('./growthTaskCompletion.js');
-      const taskKey = kind === 'note' ? 'first_note' : kind === 'bookmark' ? 'first_bookmark' : 'first_file';
-      await completeGrowthTask(userId, taskKey, { userRole });
-    } catch (error) {
-      console.warn('[growth] 首次成长任务状态同步失败 code=%s', stableAgentErrorCode(error));
-    }
+  try {
+    const { completeGrowthTask } = await import('./growthTaskCompletion.js');
+    const taskKey = kind === 'note' ? 'first_note' : kind === 'bookmark' ? 'first_bookmark' : 'first_file';
+    await completeGrowthTask(userId, taskKey, { userRole });
+  } catch (error) {
+    console.warn('[growth] 首次成长任务状态同步失败 code=%s', stableAgentErrorCode(error));
   }
-  const calendar = await getGrowthCalendarContext(userId);
-  // 当日第 N 条衰减
-  const [[row]] = await pool.query(
-    `SELECT COUNT(*) AS c FROM growth_events
-      WHERE user_id=? AND source=? AND status='granted'
-        AND DATE_FORMAT(DATE_ADD(create_time, INTERVAL ? MINUTE), '%Y%m%d') = ?`,
-    [userId, kind, calendar.shiftMinutes, calendar.dayKey],
-  );
-  const nth = Number(row?.c || 0) + 1;
-  const grant = await grantExp(userId, kind, {
-    refId: String(refId),
-    amount: createAmount(kind, nth),
-    userRole,
-    calendar,
-  });
+  const conn = await pool.getConnection();
+  let grant;
+  try {
+    await conn.beginTransaction();
+    await lockGrowthAccount(conn, userId);
+    // 首次普通读取在账号锁之后建立快照；统计与发奖共用事务，跨进程批量创建也逐条衰减。
+    const calendar = await getGrowthCalendarContext(userId, { db: conn });
+    const [[row]] = await conn.query(
+      `SELECT COUNT(*) AS c FROM growth_events
+       WHERE user_id=? AND source=? AND status='granted'
+         AND DATE_FORMAT(DATE_ADD(create_time, INTERVAL ? MINUTE), '%Y%m%d') = ?`,
+      [userId, kind, calendar.shiftMinutes, calendar.dayKey],
+    );
+    const nth = Number(row?.c || 0) + 1;
+    grant = await grantExp(
+      userId,
+      kind,
+      { refId: String(refId), amount: createAmount(kind, nth), userRole, calendar },
+      conn,
+    );
+    await conn.commit();
+  } catch (error) {
+    try {
+      await conn.rollback();
+    } catch {
+      // 保留原始错误，账本与余额必须一起回滚。
+    }
+    throw error;
+  } finally {
+    conn.release();
+  }
   try {
     const { persistAchievementMetricFromDatabase } = await import('./growthAchievementState.js');
     const metric = kind === 'note' ? 'noteCount' : kind === 'bookmark' ? 'bookmarkCount' : 'fileCount';
@@ -1482,6 +1504,7 @@ export async function checkin(userId, { userRole = null, calendar = null } = {})
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
+    await lockGrowthAccount(conn, userId);
     const accountCalendar = calendar || (await getGrowthCalendarContext(userId, { db: conn }));
     const today = accountCalendar.dayKey;
     const earningPolicyVersion = await resolveDailyEarningPolicyVersion(today, { db: conn, lock: true });
@@ -1493,11 +1516,7 @@ export async function checkin(userId, { userRole = null, calendar = null } = {})
       'SELECT exp, level, streak, last_checkin_date FROM user_growth WHERE user_id = ? FOR UPDATE',
       [userId],
     );
-    let g = rows[0];
-    if (!g) {
-      await conn.query('INSERT INTO user_growth (user_id) VALUES (?)', [userId]);
-      g = { exp: 0, level: 1, streak: 0, last_checkin_date: null };
-    }
+    const g = rows[0];
     if (g.last_checkin_date === today) {
       const growth = await getGrowth(userId, { userRole, db: conn, calendar: accountCalendar });
       await conn.commit();
@@ -1587,16 +1606,18 @@ export async function checkin(userId, { userRole = null, calendar = null } = {})
 // 使用补签卡:可补今天之前的补签窗口内任一漏签，补签到记录和连签，不发经验/积分/里程碑奖励。
 export async function useProtectCard(userId, { userRole = null, date = null, calendar = null } = {}) {
   if (isVisitorGrowthActor(userId, userRole)) return { ok: false, reason: 'visitor' };
+  // 日历只作为输入在事务外读取，非法日期无需加锁，也不会提前建立奖励事务的 RR 快照。
+  const accountCalendar = calendar || (await getGrowthCalendarContext(userId));
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
-    const accountCalendar = calendar || (await getGrowthCalendarContext(userId, { db: conn }));
     // 未传日期时兼容旧客户端，默认仍尝试补昨天；新版前端会明确传入用户选择的日期。
     const makeupDate = date || accountCalendar.makeupDays[0];
     if (!dateFromDayKey(makeupDate) || !accountCalendar.makeupDays.includes(makeupDate)) {
       await conn.rollback();
       return { ok: false, reason: 'outside_window' };
     }
+    await lockGrowthAccount(conn, userId);
     const [rows] = await conn.query(
       'SELECT streak, last_checkin_date, streak_protect_cards FROM user_growth WHERE user_id = ? FOR UPDATE',
       [userId],
