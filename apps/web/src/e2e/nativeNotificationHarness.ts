@@ -50,6 +50,10 @@ const states: NativeNotificationState[] = [
   'disabled',
   'retrying',
   'unavailable',
+  'deviceLimit',
+  'accountRequired',
+  'serviceDisabled',
+  'storageUnavailable',
 ];
 const state = params.get('state') as NativeNotificationState;
 updateNativeNotificationStatus(states.includes(state) ? state : 'connected', 'fixture-user');
@@ -60,7 +64,12 @@ updateNativeNotificationDevice(
     : {
         systemEnabled: params.has('systemOn') || state !== 'disabled',
         settingsAvailable: true,
-        pushSupport: params.get('support') === 'unsupported' ? 'unsupported' : params.get('support') === 'unknown' ? 'unknown' : 'supported',
+        pushSupport:
+          params.get('support') === 'unsupported'
+            ? 'unsupported'
+            : params.get('support') === 'unknown'
+              ? 'unknown'
+              : 'supported',
       },
   'fixture-user',
 );

@@ -25,15 +25,18 @@ export async function subscribe(req, res) {
   if (!uid) return;
   if (!huaweiPushEnabled()) return res.send(resultData(null, 503, 'HUAWEI_PUSH_DISABLED'));
   try {
-    res.send(resultData(await bindHuaweiSubscription(uid, req.body?.deviceToken)));
+    res.send(resultData(await bindHuaweiSubscription(uid, req.body?.deviceToken, req.body?.previousBinding ?? null)));
   } catch (error) {
-    res.send(
-      resultData(
-        null,
-        error?.code === 'PUSH_SUBSCRIPTION_INVALID' ? 410 : error?.code === 'INVALID_HUAWEI_TOKEN' ? 400 : 409,
-        'HUAWEI_PUSH_BIND_FAILED',
-      ),
-    );
+    const failures = {
+      PUSH_DEVICE_LIMIT: [409, 'HUAWEI_PUSH_DEVICE_LIMIT'],
+      PUSH_BINDING_EXPIRED: [409, 'HUAWEI_PUSH_BINDING_EXPIRED'],
+      PUSH_ACCOUNT_UNAVAILABLE: [403, 'HUAWEI_PUSH_ACCOUNT_REQUIRED'],
+      INVALID_PUSH_BINDING: [400, 'HUAWEI_PUSH_BINDING_INVALID'],
+      INVALID_HUAWEI_TOKEN: [400, 'HUAWEI_PUSH_TOKEN_INVALID'],
+      PUSH_SUBSCRIPTION_INVALID: [410, 'HUAWEI_PUSH_TOKEN_INVALID'],
+    };
+    const [status, code] = failures[error?.code] || [500, 'HUAWEI_PUSH_BIND_FAILED'];
+    res.send(resultData(null, status, code));
   }
 }
 export async function activate(req, res) {

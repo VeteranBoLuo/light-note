@@ -43,6 +43,10 @@ export default {
       retrying: 'Reconnecting notifications',
       unavailable: 'Background notifications not connected',
       offline: 'Waiting for a connection',
+      deviceLimit: 'Notification device limit reached',
+      accountRequired: 'Sign in again to connect',
+      serviceDisabled: 'Background notification service is off',
+      storageUnavailable: 'Unable to save notification connection',
     },
     description: {
       idle: 'Sign in and allow notifications to connect automatically.',
@@ -51,10 +55,14 @@ export default {
       connected:
         'This account is connected to background notifications, including after dismissing the app. Display follows your phone settings.',
       disabled: 'Allow Light Note notifications in your phone settings. Connection resumes when you return to the app.',
-      retrying: 'Connection is not confirmed yet. We retry automatically while the app is open; you can keep using it.',
+      retrying: 'The notification connection request failed. We retry while the app is open. Background notifications are unavailable; in-app notifications remain available.',
       unavailable:
         'Background notification support is not confirmed on this device. We keep checking while the app is open. In-app notifications remain available.',
       offline: 'Connection will be checked and restored when you are back online. No need to sign in again.',
+      deviceLimit: 'This account has reached its notification device limit. Ask an administrator to remove unused devices, then select Check again. In-app notifications remain available.',
+      accountRequired: 'The current sign-in cannot connect notifications. Sign in again and check the connection. Existing in-app notifications remain available.',
+      serviceDisabled: 'App background notifications are not enabled on the server. Ask an administrator to check the service settings. In-app notifications remain available.',
+      storageUnavailable: 'The app cannot save this device’s notification connection. Check available storage and try again. In-app notifications remain available.',
     },
   },
 
