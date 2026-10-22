@@ -333,6 +333,7 @@
             >
               <template #default="{ item: bookmarkItem }">
                 <BCard
+                  v-range-select="{ controller: rangeSelection, key: String(bookmarkItem.id) }"
                   :key="bookmarkItem.id"
                   as="article"
                   variant="card"
@@ -367,6 +368,7 @@
                         <div class="bookmark-name">{{ bookmarkItem.name }}</div>
                         <div class="bookmark-url" :title="bookmarkItem.url">
                           <a
+                            data-range-select
                             :href="withProtocol(bookmarkItem.url)"
                             target="_blank"
                             rel="noopener noreferrer"
@@ -435,6 +437,8 @@
 
             <!-- 表格视图 -->
             <BTable
+              :range-selection="rangeSelection"
+              @row-order-change="tableRangeKeys = $event"
               v-else-if="viewMode === 'table' && filteredBookmarks.length"
               :data="filteredBookmarks"
               virtual
@@ -577,6 +581,7 @@
       <BookmarkSnapshotModal v-model:visible="snapVisible" :bookmark-id="snapBookmarkId" />
       <BookmarkAiDialog v-model:visible="bookmarkAiVisible" :bookmarks="bookmarkAiItems" />
       <ResourceBatchActionBar
+        :range-selection="rangeSelection"
         selection-module="bookmarks"
         :selection-visible-count="selection.visibleSelected.value"
         :open="selectionMode && (!embedded || managementMode)"
@@ -631,6 +636,8 @@
 </template>
 
 <script lang="ts" setup>
+  import { useRangeSelection } from '@/composables/useRangeSelection';
+  import { vRangeSelect } from '@/directives/rangeSelection';
   import { useResourceSelection } from '@/composables/useResourceSelection';
   import { bookmarkStore, useUserStore } from '@/store';
   import { computed, defineAsyncComponent, ref, onMounted, onUnmounted, watch } from 'vue';
@@ -1108,6 +1115,20 @@
     },
     { immediate: true, flush: 'sync' },
   );
+  const tableRangeKeys = ref<string[]>([]);
+  const rangeSelection = useRangeSelection({
+    active: selection.mode,
+    mobile: false,
+    blocked: () => loading.value || selection.busy.value || selection.store.reviewOpen,
+    groups: () => [
+      {
+        id: 'default',
+        keys: viewMode.value === 'table' ? tableRangeKeys.value : filteredBookmarks.value.map((item) => String(item.id)),
+      },
+    ],
+    scope: () => JSON.stringify([route.fullPath, viewMode.value, selection.store.session]),
+    apply: selection.selectKeys,
+  });
   const selectableBookmarkIds = computed(() =>
     filteredBookmarks.value.map((item) => String(item.id || '')).filter((id) => Boolean(id)),
   );

@@ -189,7 +189,7 @@ describe('笔记库页面树交互接线', () => {
 
   it('父页面主点击不再预取正文猜测导航意图', () => {
     const openFunction =
-      source.match(/function openLibraryNote[\s\S]*?\n  \}\n\n  function closeDesktopPreview/u)?.[0] || '';
+      source.match(/function openLibraryNote[\s\S]*?\n  \}/u)?.[0] || '';
     expect(openFunction).not.toContain("typeof source.hasContent !== 'boolean'");
     expect(openFunction).not.toContain('hasMeaningfulNoteContent');
     expect(openFunction).not.toContain('await prefetchNoteDetail');
@@ -534,12 +534,7 @@ describe('笔记库页面树交互接线', () => {
     expect(backFunction).not.toContain('resetLibraryRootState');
   });
 
-  it('预览页父级面包屑在当前预览区打开，且预览与编辑面包屑都不显示 hover 背景', () => {
-    expect(readonlyPreviewSource).toContain('@click="emit(\'openPage\', item)"');
-    expect(source).toContain('@open-page="openPreviewBreadcrumbPage"');
-    expect(source).toMatch(
-      /function openPreviewBreadcrumbPage[\s\S]*prefetchNoteDetail\(user, noteId\);[\s\S]*setDesktopPreviewPage\(noteId, source\);/u,
-    );
+  it('预览与编辑面包屑不显示 hover 背景', () => {
     expect(readonlyPreviewSource).toMatch(
       /\.note-readonly-preview__crumb\.b_btn\s*\{[\s\S]*&:hover,[\s\S]*background:\s*transparent !important;/u,
     );

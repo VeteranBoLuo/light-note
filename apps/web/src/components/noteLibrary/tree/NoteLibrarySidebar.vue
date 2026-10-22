@@ -62,6 +62,7 @@
           :drop-target-active="dropTargetActive"
           :drop-target-position="dropTargetPosition"
           :menu-disabled="menuDisabled"
+          :range-selection="rangeSelection"
           :batch-mode="batchMode"
           :selected-ids="selectedIds"
           :selection-disabled="selectionDisabled"
@@ -95,6 +96,7 @@
 </template>
 
 <script lang="ts" setup>
+  import type { RangeSelectionController } from '@/composables/useRangeSelection';
   import { computed, nextTick, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
@@ -132,6 +134,7 @@
       dropTargetActive?: boolean;
       dropTargetPosition?: NoteTreeDropPosition | '';
       menuDisabled?: boolean;
+      rangeSelection?: RangeSelectionController;
       batchMode?: boolean;
       selectedIds?: Set<string>;
       selectionDisabled?: boolean;

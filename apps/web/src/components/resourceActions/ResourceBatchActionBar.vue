@@ -3,11 +3,12 @@
     <!-- 移动端与复选框、列表留白同帧退出，避免工具栏离场期间底层布局先恢复。 -->
     <Transition name="resource-batch-action-bar" :css="!mobile">
       <MobileStickyActionBar
+        ref="mobileBarRef"
         v-if="open && mobile"
         class="resource-batch-action-bar--mobile"
         :class="{
           'has-selection-session': !!selectionModule,
-          'has-project-action': (showMobileProject && canAddProject) || !!$slots['mobile-actions'],
+          'has-project-action': (showMobileProject && canAddProject) || !!$slots['mobile-actions'] || !!rangeSelection,
         }"
         :above-navigation="aboveNavigation"
         :aria-busy="selectionStore?.busy || undefined"
@@ -19,24 +20,40 @@
           <BButton
             v-if="selectionModule"
             class="resource-batch-action-bar__copy resource-batch-action-bar__review"
+            :disabled="rangeSelection?.selecting"
             @click="selectionStore.reviewOpen = true"
           >
             <strong>{{ summary }}</strong>
-            <small v-if="selectionScopeDetail" role="status">{{ selectionScopeDetail }}</small>
+            <small
+              v-if="selectionScopeDetail"
+              :class="{
+                'is-selection-hint':
+                  !!rangeSelection?.selecting || (selectionHint && selectionScopeDetail === selectionHint),
+              }"
+              role="status"
+              aria-live="polite"
+              >{{ selectionScopeDetail }}</small
+            >
           </BButton>
           <div v-else class="resource-batch-action-bar__copy" role="status" aria-live="polite">
             <strong>{{ summary }}</strong>
-            <small v-if="detail">{{ detail }}</small>
+            <small v-if="rangeHint || detail" :class="{ 'is-selection-hint': !!rangeHint }">{{
+              rangeHint || detail
+            }}</small>
           </div>
         </div>
-        <BButton v-if="showMobileProject && canAddProject" :disabled="!!selectionStore?.busy" @click="addToProject">{{
-          translate('toolbox.project.join')
-        }}</BButton>
+        <BButton
+          v-if="showMobileProject && canAddProject"
+          :disabled="!!selectionStore?.busy || rangeSelection?.selecting"
+          @click="addToProject"
+          >{{ translate('toolbox.project.join') }}</BButton
+        >
+        <RangeSelectionToggle v-if="rangeSelection" :controller="rangeSelection" />
         <slot name="mobile-actions" />
         <BButton
           v-if="showMore"
           class="resource-batch-action-bar__mobile-more"
-          :disabled="!!selectionStore?.busy"
+          :disabled="moreDisabled || !!selectionStore?.busy || rangeSelection?.selecting"
           @click="emit('more')"
         >
           <SvgIcon :src="icon.common.more" size="17" aria-hidden="true" />
@@ -51,7 +68,7 @@
             <BButton
               class="resource-batch-action-bar__primary"
               type="primary"
-              :disabled="primaryDisabled || !!selectionStore?.busy"
+              :disabled="primaryDisabled || !!selectionStore?.busy || rangeSelection?.selecting"
               :loading="primaryLoading"
               @click="emit('primary')"
             >
@@ -69,6 +86,7 @@
         :aria-label="ariaLabel"
         :aria-busy="selectionStore?.busy || undefined"
       >
+        <RangeSelectionHint v-if="rangeSelection" :controller="rangeSelection" />
         <div class="resource-batch-action-bar__selection">
           <span class="resource-batch-action-bar__leading" :aria-hidden="$slots.leading ? undefined : 'true'">
             <slot name="leading">
@@ -81,7 +99,7 @@
             @click="selectionStore.reviewOpen = true"
           >
             <strong>{{ summary }}</strong>
-            <small v-if="selectionScopeDetail" role="status">{{ selectionScopeDetail }}</small>
+            <small v-if="selectionScopeDetail" role="status" aria-live="polite">{{ selectionScopeDetail }}</small>
           </BButton>
           <div v-else class="resource-batch-action-bar__copy" role="status" aria-live="polite">
             <strong>{{ summary }}</strong>
@@ -100,7 +118,10 @@
           v-if="showClear"
           class="resource-batch-action-bar__clear"
           :disabled="!!selectionStore?.busy"
-          @click="emit('clear')"
+          @click="
+            rangeSelection?.reset();
+            emit('clear');
+          "
         >
           {{ clearLabel }}
         </BButton>
@@ -125,7 +146,7 @@
 
 <script setup lang="ts">
   import { useProjectResourceAction } from '@/composables/useProjectResourceAction';
-  import { computed } from 'vue';
+  import { computed, onBeforeUnmount, ref, watch, type ComponentPublicInstance } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useResourceSelectionStore, type SelectionModule } from '@/store/resourceSelection';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
@@ -133,6 +154,9 @@
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import MobileStickyActionBar from '@/components/mobile/MobileStickyActionBar.vue';
   import icon from '@/config/icon';
+  import RangeSelectionToggle from './RangeSelectionToggle.vue';
+  import RangeSelectionHint from './RangeSelectionHint.vue';
+  import type { RangeSelectionController } from '@/composables/useRangeSelection';
 
   const props = withDefaults(
     defineProps<{
@@ -142,10 +166,13 @@
       mobile?: boolean;
       summary: string;
       detail?: string;
+      selectionHint?: string;
+      rangeSelection?: RangeSelectionController;
       ariaLabel?: string;
       clearLabel: string;
       primaryLabel: string;
       moreLabel: string;
+      moreDisabled?: boolean;
       showClear?: boolean;
       showMore?: boolean;
       showPrimary?: boolean;
@@ -161,9 +188,11 @@
       mobile: false,
       selectionVisibleCount: 0,
       detail: '',
+      selectionHint: '',
       ariaLabel: '',
       showClear: true,
       showMore: true,
+      moreDisabled: false,
       showPrimary: true,
       showMobilePrimary: true,
       showMobileProject: true,
@@ -176,15 +205,42 @@
   );
 
   const selectionStore = props.selectionModule ? useResourceSelectionStore() : null;
-  const translate = props.selectionModule ? useI18n().t : () => '';
+  const translate = useI18n().t;
+  const rangeHint = computed(() => (props.rangeSelection?.hintKey ? translate(props.rangeSelection.hintKey) : ''));
   // busy 也包含已打开的移动/标签操作层，只锁选择，不改变底栏尺寸或启动无关主动作的加载态。
   const selectionScopeDetail = computed(() =>
     selectionStore?.pendingReconcile
       ? translate('resourceSelection.pending')
       : selectionStore?.query
         ? translate('resourceSelection.allMatching')
-        : '',
+        : props.selectionHint || rangeHint.value,
   );
+  const mobileBarRef = ref<ComponentPublicInstance | null>(null);
+  let barObserver: ResizeObserver | undefined;
+  const measureBar = () => {
+    const element = mobileBarRef.value?.$el;
+    props.rangeSelection?.setInset(
+      element instanceof HTMLElement ? window.innerHeight - element.getBoundingClientRect().top : 0,
+    );
+  };
+  watch(
+    () => [props.open, props.mobile, props.rangeSelection, props.aboveNavigation, mobileBarRef.value],
+    () => {
+      barObserver?.disconnect();
+      measureBar();
+      const element = mobileBarRef.value?.$el;
+      if (props.rangeSelection && element instanceof HTMLElement && typeof ResizeObserver !== 'undefined') {
+        barObserver = new ResizeObserver(measureBar);
+        barObserver.observe(element);
+      }
+    },
+    { flush: 'post' },
+  );
+  window.addEventListener('resize', measureBar);
+  onBeforeUnmount(() => {
+    barObserver?.disconnect();
+    window.removeEventListener('resize', measureBar);
+  });
 
   const { canJoinProject, joinProject } = useProjectResourceAction();
   const canAddProject = computed(
@@ -385,6 +441,12 @@
     display: block;
     white-space: normal;
     font-size: var(--ui-font-10, 10px);
+  }
+
+  .resource-batch-action-bar--mobile .resource-batch-action-bar__copy small.is-selection-hint {
+    display: block;
+    white-space: normal;
+    font-size: var(--ui-font-12, 12px);
   }
 
   .resource-batch-action-bar--mobile :deep(.b-tooltip-wrap) {

@@ -3,6 +3,7 @@ import { createI18n } from 'vue-i18n';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import zhCN from '@/i18n/locales/zh-CN';
 import icon from '@/config/icon';
+import { useRangeSelection } from '@/composables/useRangeSelection';
 
 vi.mock('@/composables/useNoteTree', () => ({ NOTE_TREE_ROOT_KEY: '__light_note_root__' }));
 
@@ -136,6 +137,74 @@ describe('NoteTreeRow 显式页面操作', () => {
     batch.value = false;
     await nextTick();
     expect(boxes()).toHaveLength(0);
+  });
+
+  it('树内 Shift 连选按可见行顺序加入选择，标题点击仍只预览', async () => {
+    const host = document.createElement('div');
+    document.body.append(host);
+    const selectedIds = ref(new Set(['outside']));
+    const node = (id: string, childCount = 0) => ({
+      id,
+      parentId: null,
+      title: id,
+      childCount,
+      hasChildren: childCount > 0,
+      isTop: false,
+      sort: 0,
+    });
+    const parent = node('parent', 1),
+      child = node('child'),
+      sibling = node('sibling');
+    const apply = vi.fn((keys: string[]) => {
+      selectedIds.value = new Set([...selectedIds.value, ...keys]);
+    });
+    const open = vi.fn();
+    const app = createApp({
+      setup() {
+        const rangeSelection = useRangeSelection({
+          active: true,
+          mobile: false,
+          groups: [{ id: 'tree', keys: ['parent', 'child', 'sibling'] }],
+          apply,
+        });
+        return () =>
+          h(
+            'div',
+            [parent, sibling].map((item) =>
+              h(NoteTreeRow, {
+                node: item,
+                depth: 0,
+                childrenByParent: { parent: [child] },
+                expandedIds: new Set(['parent']),
+                loadingKeys: new Set<string>(),
+                batchMode: true,
+                selectedIds: selectedIds.value,
+                rangeSelection,
+                onSelectNote: (node, checked) => {
+                  const next = new Set(selectedIds.value);
+                  if (checked) next.add(node.id);
+                  else next.delete(node.id);
+                  selectedIds.value = next;
+                },
+                onOpen: open,
+              }),
+            ),
+          );
+      },
+    });
+    app.use(createI18n({ legacy: false, locale: 'zh-CN', messages: { 'zh-CN': zhCN } }));
+    app.mount(host);
+    cleanup = () => app.unmount();
+    const boxes = host.querySelectorAll<HTMLElement>('[role=checkbox]');
+    boxes[1].click();
+    boxes[2].dispatchEvent(new MouseEvent('click', { shiftKey: true, bubbles: true, cancelable: true }));
+    await nextTick();
+    expect(apply).toHaveBeenCalledExactlyOnceWith(['child', 'sibling']);
+    expect([...selectedIds.value]).toEqual(['outside', 'child', 'sibling']);
+    expect(boxes[0].getAttribute('aria-checked')).toBe('false');
+    host.querySelector('.note-tree-title')!.dispatchEvent(new MouseEvent('click', { shiftKey: true, bubbles: true }));
+    expect(open).toHaveBeenCalledWith('parent');
+    expect(apply).toHaveBeenCalledTimes(1);
   });
 
   it('预览其他笔记时隐藏旧浏览目录边框，关闭预览后恢复', async () => {

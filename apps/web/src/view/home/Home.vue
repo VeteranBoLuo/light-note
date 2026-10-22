@@ -87,6 +87,7 @@
         <BookmarkDirectoryPanel v-if="!bookmark.isMobile" />
         <main class="bookmark-main-panel">
           <ViewPanel
+            :range-selection="rangeSelection"
             :batch-mode="batchMode"
             :selected-ids="selectedIds"
             @load-more="loadMoreBookmarks"
@@ -97,6 +98,7 @@
     </ResourcePageShell>
 
     <ResourceBatchActionBar
+      :range-selection="rangeSelection"
       :show-mobile-project="false"
       :open="batchMode && !desktopManagementMode"
       :mobile="bookmark.isMobile"
@@ -116,11 +118,11 @@
           controlled
           :checked="selection.allVisible.value"
           :indeterminate="selection.someVisible.value"
-          :disabled="selection.busy.value || bookmark.bookmarkLoading"
+          :disabled="selection.busy.value || bookmark.bookmarkLoading || rangeSelection.selecting"
           @change="selection.selectVisible"
       /></template>
       <template #mobile-actions>
-        <BButton class="batch-action-delete" :disabled="selection.busy.value || !selectedIds.length" @click="handleBatchDelete">
+        <BButton class="batch-action-delete" :disabled="selection.busy.value || !selectedIds.length || rangeSelection.selecting" @click="handleBatchDelete">
           <SvgIcon :src="icon.table_delete" size="16" aria-hidden="true" />
           {{ $t('common.delete') }}
         </BButton>
@@ -163,6 +165,7 @@
 </template>
 
 <script lang="ts" setup>
+  import { useRangeSelection } from '@/composables/useRangeSelection';
   import FilterPanel from '@/view/home/FilterPanel.vue';
   import BookmarkDirectoryPanel from '@/components/home/BookmarkDirectoryPanel.vue';
   import ViewPanel from '@/view/home/ViewPanel.vue';
@@ -217,6 +220,19 @@
   );
   const batchMode = selection.mode;
   const selectedIds = selection.ids;
+  const rangeSelection = useRangeSelection({
+    active: batchMode,
+    mobile: () => bookmark.isMobile,
+    blocked: () => selection.busy.value || bookmark.bookmarkLoading || selection.store.reviewOpen,
+    groups: () => [
+      {
+        id: 'default',
+        keys: bookmark.bookmarkList.map((item) => String(item.id)),
+      },
+    ],
+    scope: () => JSON.stringify([route.fullPath, bookmark.type, bookmark.tagData?.id, selection.store.session]),
+    apply: selection.selectKeys,
+  });
   const mobileBatchActionsOpen = ref(false);
   const mobileBatchActions = computed<MobilePageActionItem[]>(() => [
     {

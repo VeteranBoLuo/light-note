@@ -22,7 +22,7 @@ const tags = [
   { id: 'tag1', name: '工作' },
   { id: 'tag2', name: '学习' },
 ];
-const items = Array.from({ length: 8 }, (_, i) => ({
+const items = Array.from({ length: params.has('noteNavigation') ? 26 : 8 }, (_, i) => ({
   id: String(i + 1),
   name: `设计资料 ${i + 1}`,
   title: `设计资料 ${i + 1}`,
@@ -35,6 +35,18 @@ const items = Array.from({ length: 8 }, (_, i) => ({
   tagList: [],
   updateTime: '2026-09-07 12:00:00',
 }));
+// Two directory scopes plus a nested child exercise selection boundaries on the real note page.
+if (params.has('noteScope')) {
+  const parents = [null, null, '1', '1', '2', '2', '3', null];
+  if (params.has('noteNavigation')) parents[25] = '3';
+  items.forEach((item, index) => Object.assign(item, { parentId: parents[index] || null }));
+}
+if (params.has('noteNavigation')) {
+  items.forEach(item => Object.assign(item, {
+    childCount: items.filter((child: any) => child.parentId === item.id).length,
+    hasChildren: items.some((child: any) => child.parentId === item.id),
+  }));
+}
 request.defaults.adapter = async (config) => {
   const url = String(config.url);
   const body = typeof config.data === 'string' ? JSON.parse(config.data) : config.data || {};
@@ -62,9 +74,13 @@ request.defaults.adapter = async (config) => {
             },
     };
   } else if (url.endsWith('/archive')) data = { ok: true, status: 'pending' };
-  else if (url.endsWith('/getBookmarkList') || url.endsWith('/queryNoteList'))
-    data = { items: params.has('tree') && url.endsWith('/queryNoteList') ? items.slice(0, 3) : items, total: items.length, page: 1, hasMore: false };
-  else if (url.endsWith('/getNoteTreeFeatures'))
+  else if (url.endsWith('/getBookmarkList') || url.endsWith('/queryNoteList')) {
+    const scopeItems = params.has('noteScope') && url.endsWith('/queryNoteList')
+      ? items.filter((item: any) => (!body.parentId || item.parentId === body.parentId) &&
+          (!body.keyword || item.title.includes(body.keyword)))
+      : params.has('tree') && url.endsWith('/queryNoteList') ? items.slice(0, 3) : items;
+    data = { items: scopeItems, total: scopeItems.length, page: 1, hasMore: false };
+  } else if (url.endsWith('/getNoteTreeFeatures'))
     data = {
       features: {
         noteTreeRead: params.has('tree'),
@@ -76,19 +92,31 @@ request.defaults.adapter = async (config) => {
     data = {
       parentId: body.parentId || null,
       maxDepth: 8,
-      items: body.parentId
-        ? []
-        : items.map((item) => ({
-            ...item,
-            parentId: null,
-            hasChildren: false,
-            childCount: 0,
-            isTop: false,
-            sort: Number(item.id),
-          })),
+      items: (params.has('noteScope')
+        ? items.filter((item: any) => item.parentId === (body.parentId || null))
+        : body.parentId ? [] : items).map((item: any) => ({
+          ...item,
+          parentId: item.parentId || null,
+          hasChildren: params.has('noteScope') && items.some((child: any) => child.parentId === item.id),
+          childCount: params.has('noteScope') ? items.filter((child: any) => child.parentId === item.id).length : 0,
+          isTop: false,
+          sort: Number(item.id),
+        })),
     };
   else if (url.endsWith('/getNoteDetail')) data = items.find((item) => item.id === body.id);
-  else if (url.endsWith('/queryNoteBreadcrumb')) data = { items: items.filter((item) => item.id === body.id) };
+  else if (url.endsWith('/queryNoteBreadcrumb')) {
+    if (params.has('noteScope')) {
+      const path: Array<{ id: string; title: string }> = [];
+      const visited = new Set<string>();
+      let current: any = items.find(item => item.id === (body.noteId || body.id));
+      while (current && !visited.has(current.id)) {
+        visited.add(current.id);
+        path.unshift({ id: current.id, title: current.title });
+        current = items.find(item => item.id === current.parentId);
+      }
+      data = { items: path };
+    } else data = { items: items.filter((item) => item.id === (body.noteId || body.id)) };
+  }
   else if (url.endsWith('/batchSelectionPreview'))
     data = {
       resolvedItems: body.selection.items.map((item: any) => ({ ...item, title: `设计资料 ${item.id}` })),
@@ -127,6 +155,7 @@ const { default: Home } = await import('@/view/home/Home.vue');
 const { default: Notes } = await import('@/view/noteLibrary/NoteLibrary.vue');
 const { default: Center } = await import('@/view/organize/OrganizeCenter.vue');
 const { default: CloudActions } = await import('@/components/cloudSpace/MobileCloudSpaceActionsDrawer.vue');
+const { default: BookmarkManage } = await import('@/view/manage/BookmarkMg.vue');
 const { default: Layout } = await import('@/view/index.vue');
 const router = createRouter({
   history: createMemoryHistory(),
@@ -136,7 +165,9 @@ const router = createRouter({
       component: Layout,
       children: [
         { path: 'home', name: 'home', component: Home },
+        { path: 'manage/bookmarkMg', name: 'bookmarkManage', component: BookmarkManage },
         { path: 'noteLibrary', name: 'noteLibrary', component: Notes },
+        { path: 'note/:id', alias: '/noteLibrary/:id', name: 'noteDetail', component: { render: () => null } },
         { path: 'organize', name: 'organizeCenter', component: Center },
         {
           path: 'cloud-menu',
@@ -167,6 +198,11 @@ if (params.has('tree')) {
   const { default: moduleRouter } = await import('@/router');
   moduleRouter.push = router.push.bind(router);
   moduleRouter.replace = router.replace.bind(router);
+  if (params.has('noteNavigation')) {
+    moduleRouter.go = router.go.bind(router);
+    moduleRouter.back = router.back.bind(router);
+    moduleRouter.forward = router.forward.bind(router);
+  }
   watch(
     router.currentRoute,
     (route) => {
@@ -183,6 +219,11 @@ bookmark.tagList = [];
 const user = useUserStore();
 user.id = 'fixture-user';
 user.role = 'user';
+if (params.has('noteNavigation')) {
+  user.preferences.noteParentOpenMode = params.get('parentMode') === 'preview' ? 'preview' : 'children';
+  user.preferences.noteDirectEdit = params.has('directEdit');
+  user.preferences.noteViewMode = params.get('view') === 'list' ? 'list' : 'card';
+}
 user.preferences.theme = params.get('theme') === 'night' ? 'night' : 'day';
 document.documentElement.dataset.theme = user.currentTheme;
 document.documentElement.classList.toggle('light-note-mobile-rendering', params.get('renderProfile') === 'mobile');
@@ -190,7 +231,9 @@ for (const el of [document.documentElement, document.body, document.getElementBy
   el.style.height = '100%';
   el.style.margin = '0';
 }
-await router.push(params.get('module') === 'cloud' ? '/cloud-menu' : type === 'note' ? '/noteLibrary' : '/home');
+document.body.style.display = 'block';
+document.getElementById('app')!.style.width = '100%';
+await router.push(params.get('module') === 'bookmark-mobile' ? '/manage/bookmarkMg' : params.get('module') === 'cloud' ? '/cloud-menu' : type === 'note' ? '/noteLibrary' : '/home');
 const app = createApp({
   setup() {
     useResourceSelectionRuntime();
@@ -206,6 +249,6 @@ const app = createApp({
 app
   .use(pinia)
   .use(router)
-  .use(createI18n({ legacy: false, locale: 'zh-CN', messages: { 'zh-CN': zh, 'en-US': en } }));
+  .use(createI18n({ legacy: false, locale: params.get('lang') === 'en' ? 'en-US' : 'zh-CN', messages: { 'zh-CN': zh, 'en-US': en } }));
 globalDirect(app);
 app.mount('#app');

@@ -7,6 +7,7 @@
     @touchmove="pullRefresh.onTouchMove"
     @touchend.passive="pullRefresh.onTouchEnd"
     @touchcancel.passive="pullRefresh.onTouchCancel"
+    @keydown.esc="cancelRangeOnEscape"
   >
     <CloudVirtualGrid
       v-if="viewMode === 'card' && (cloud.loading || cloud.fileList.length)"
@@ -19,6 +20,7 @@
     >
       <template #default="{ item }">
         <BActionMenu
+          v-range-select="{ controller: rangeSelection, key: String(item.id) }"
           :ref="(menu) => setFileContextMenu(item.id, menu)"
           :items="desktopFileActions(item)"
           :triggers="['contextmenu']"
@@ -33,22 +35,30 @@
             'file-card--draggable': canDragFile(item),
             'file-card--batch': batchMode,
             'file-card--selected': batchMode && selectedRows.includes(String(item.id)),
+            'file-card--range-anchor': isRangeAnchor(item),
           }"
           :draggable="canDragFile(item)"
           @click="
             closeFileContext(item);
-            onCardClick(item);
+            onCardClick(item, $event);
           "
           @dragstart="onFileDragStart($event, item)"
           @dragend="onFileDragEnd"
         >
           <div class="file-card-cover">
-            <span v-if="batchMode" class="card-checkbox" @click.stop>
+            <span
+              v-if="batchMode"
+              class="card-checkbox"
+              :title="!bookmark.isMobile ? $t('resourceSelection.range.shiftHint') : undefined"
+              @click.stop="selectFile(item, $event)"
+              @keydown.enter.stop.prevent="selectFile(item, $event)"
+              @keydown.space.stop.prevent="selectFile(item, $event)"
+            >
               <BCheckbox
                 controlled
                 :checked="selectedRows.includes(String(item.id))"
                 :disabled="selection.busy.value || cloud.loading"
-                @update:checked="(val: boolean) => toggleRow(item.id, val)"
+                :aria-label="item.fileName"
               />
             </span>
             <!-- HEIC 候选由大图入口生成兼容副本，不直接回退加载浏览器原件。 -->
@@ -154,6 +164,9 @@
               }}</span>
               <PinBadge v-if="item.isTop" />
               <InboxPendingBadge v-if="item.isPending" />
+              <span v-if="isRangeAnchor(item)" class="file-range-start">{{
+                $t('resourceSelection.range.startMark')
+              }}</span>
               <span class="file-card-size">{{ formatFileSize(item.fileSize) }}</span>
             </div>
             <CloudFileCardIdentity
@@ -269,6 +282,7 @@
     >
       <template #default="{ item }">
         <BActionMenu
+          v-range-select="{ controller: rangeSelection, key: String(item.id) }"
           :ref="(menu) => setFileContextMenu(item.id, menu)"
           :items="desktopFileActions(item)"
           :triggers="['contextmenu']"
@@ -281,35 +295,50 @@
             'field-item-draggable': canDragFile(item),
             'field-item--batch': batchMode,
             'field-item--selected': batchMode && selectedRows.includes(String(item.id)),
+            'field-item--range-anchor': isRangeAnchor(item),
           }"
           :draggable="canDragFile(item)"
           @click="
             closeFileContext(item);
-            onListRowClick(item);
+            onListRowClick(item, $event);
           "
           @dragstart="onFileDragStart($event, item)"
           @dragend="onFileDragEnd"
           :key="item.id"
         >
           <div class="flex-align-center" :style="{ position: 'relative', width: fieldNameWidth }">
-            <span v-if="batchMode" class="row-checkbox" @click.stop>
+            <span
+              v-if="batchMode"
+              class="row-checkbox"
+              :title="!bookmark.isMobile ? $t('resourceSelection.range.shiftHint') : undefined"
+              @click.stop="selectFile(item, $event)"
+              @keydown.enter.stop.prevent="selectFile(item, $event)"
+              @keydown.space.stop.prevent="selectFile(item, $event)"
+            >
               <BCheckbox
                 controlled
                 :checked="selectedRows.includes(String(item.id))"
                 :disabled="selection.busy.value || cloud.loading"
-                @update:checked="(val: boolean) => toggleRow(item.id, val)"
+                :aria-label="item.fileName"
               />
             </span>
-            <div v-if="!item.isRename" class="file-label flex-align-center" @click.stop="onFileLabelClick(item)">
+            <div
+              v-if="!item.isRename"
+              class="file-label flex-align-center"
+              @click.stop="onFileLabelClick(item, $event)"
+            >
               <svg-icon
                 :src="icon.cloudSpace.fileIcon[getFileCategory(item)]"
                 size="20"
                 style="min-width: var(--ui-layout-20, 20px)"
               />
               <span class="file-name text-hidden">{{ item.fileName }}</span>
-              <span v-if="item.isTop || item.isPending" class="file-status-badges">
+              <span v-if="item.isTop || item.isPending || isRangeAnchor(item)" class="file-status-badges">
                 <PinBadge v-if="item.isTop" />
                 <InboxPendingBadge v-if="item.isPending" />
+                <span v-if="isRangeAnchor(item)" class="file-range-start">{{
+                  $t('resourceSelection.range.startMark')
+                }}</span>
               </span>
             </div>
             <b-input
@@ -421,12 +450,13 @@
               <div v-else class="file-tags-list">
                 <ResourceTagChip
                   v-for="tag in item.tags"
+                  :data-range-select="batchMode ? '' : undefined"
                   :key="tag.id"
                   :tag="tag"
                   size="medium"
                   interactive
                   max-width="var(--ui-layout-90, 90px)"
-                  @click.stop="onFileTagClick(item, tag.id)"
+                  @click.stop="onFileTagClick(item, tag.id, $event)"
                   v-click-log="{ module: '云空间', operation: `点击文件关联标签【${tag.name}】` }"
                 />
               </div>
@@ -636,6 +666,7 @@
       :open="batchMode"
       :mobile="bookmark.isMobile"
       :summary="batchActionSummary"
+      :range-selection="rangeSelection"
       :aria-label="$t('resourceOutcome.batch.ariaLabel')"
       :clear-label="$t('resourceOutcome.batch.clear')"
       :show-clear="false"
@@ -653,7 +684,7 @@
           <BCheckbox
             controlled
             :indeterminate="indeterminate"
-            :disabled="selection.busy.value || cloud.loading"
+            :disabled="selection.busy.value || cloud.loading || rangeSelection.selecting"
             :checked="selectAll"
             :aria-label="$t(selectAll ? 'resourceOutcome.batch.unselectAll' : 'resourceOutcome.batch.selectAll')"
             @change="(checked: boolean) => onToggleSelectAll({ target: { checked } })"
@@ -663,7 +694,7 @@
       <template #mobile-actions>
         <BButton
           class="batch-action-delete"
-          :disabled="!hasSelection || selection.busy.value"
+          :disabled="!hasSelection || selection.busy.value || rangeSelection.selecting"
           @click="handleBatchDelete"
         >
           <SvgIcon :src="icon.table_delete" size="16" aria-hidden="true" />
@@ -798,6 +829,8 @@
   </div>
 </template>
 <script setup lang="ts">
+  import { useRangeSelection } from '@/composables/useRangeSelection';
+  import { vRangeSelect } from '@/directives/rangeSelection';
   import { closeCurrentMobileOverlayThen } from '@/utils/mobileOverlayHistory';
   import ManagedImagePreview from '@/components/imagePreview/ManagedImagePreview.vue';
   import { readFileShareToken, copyFileShareUrl, buildFileShareUrl } from '@/utils/fileShareLinks';
@@ -1113,6 +1146,34 @@
   const hasSelection = computed(() => selectedRows.value.length > 0);
   const batchDownloadLoading = ref(false);
   const indeterminate = selection.someVisible;
+  const rangeSelection = useRangeSelection({
+    active: batchMode,
+    mobile: () => bookmark.isMobile,
+    blocked: () => cloud.loading || selection.busy.value || selection.store.reviewOpen,
+    groups: () => [{ id: 'default', keys: cloud.fileList.map((file) => String(file.id)) }],
+    scope: () =>
+      JSON.stringify([
+        cloud.folder?.id,
+        cloud.searchFileName,
+        cloud.typeCheckValue,
+        cloud.pendingOnly,
+        cloud.fileSort.field,
+        cloud.fileSort.order,
+        selection.store.session,
+        viewMode.value,
+      ]),
+    apply: selection.selectKeys,
+  });
+  const resetFileRange = rangeSelection.reset;
+  function isRangeAnchor(file: { id: string | number }) {
+    return rangeSelection.isAnchor(String(file.id));
+  }
+  function cancelRangeOnEscape(event: KeyboardEvent) {
+    if (!rangeSelection.selecting) return;
+    event.preventDefault();
+    event.stopPropagation();
+    rangeSelection.reset();
+  }
   const mobileBatchActionsOpen = ref(false);
   const outcomeDrawerOpen = ref(false);
   const outcomeResources = ref<ResourceOutcomeResource[]>([]);
@@ -1220,12 +1281,16 @@
   });
   let suppressCardClickUntil = 0;
 
-  const onToggleSelectAll = (e: any) => selection.selectVisible(e.target.checked);
-  const toggleRow = (id: string | number, checked: boolean) => {
-    const file = cloud.fileList.find((item) => String(item.id) === String(id));
-    if (file) selection.toggle(file, checked);
+  const onToggleSelectAll = (e: any) => {
+    resetFileRange();
+    selection.selectVisible(e.target.checked);
   };
+  function selectFile(file: any, _event?: MouseEvent | KeyboardEvent) {
+    if (!batchMode.value || cloud.loading || selection.busy.value) return;
+    selection.toggle(file);
+  }
   function clearSelectedFiles() {
+    resetFileRange();
     selection.clear();
   }
 
@@ -1302,18 +1367,18 @@
     emit('previewFile', item);
   }
 
-  const onCardClick = (item: any) => {
+  const onCardClick = (item: any, event?: MouseEvent) => {
     if (Date.now() < suppressCardClickUntil) return;
     if (batchMode.value) {
-      selection.toggle(item);
+      selectFile(item, event);
     } else {
       emit('previewFile', item);
     }
   };
 
-  const onListRowClick = (item: any) => {
+  const onListRowClick = (item: any, event?: MouseEvent) => {
     if (batchMode.value) {
-      selection.toggle(item);
+      selectFile(item, event);
       return;
     }
     if (!bookmark.isMobile) return;
@@ -1321,18 +1386,18 @@
     emit('previewFile', item);
   };
 
-  const onFileLabelClick = (item: any) => {
+  const onFileLabelClick = (item: any, event?: MouseEvent) => {
     if (batchMode.value) {
-      selection.toggle(item);
+      selectFile(item, event);
       return;
     }
     recordOperation({ module: '云空间', operation: `预览文件【${item.fileName}】` });
     emit('previewFile', item);
   };
 
-  const onFileTagClick = (item: any, tagId: string) => {
+  const onFileTagClick = (item: any, tagId: string, event?: MouseEvent) => {
     if (batchMode.value) {
-      selection.toggle(item);
+      selectFile(item, event);
       return;
     }
     goToTagDetail(tagId);
@@ -1541,7 +1606,7 @@
   watch(
     () => props.clearKey,
     () => {
-      selection.clear();
+      clearSelectedFiles();
     },
   );
 
@@ -2345,6 +2410,25 @@
 </script>
 
 <style scoped lang="less">
+  .field-item--batch {
+    cursor: pointer;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  .file-card.file-card--range-anchor,
+  .field-item.field-item--range-anchor {
+    outline: 2px solid var(--workspace-purple-text);
+    outline-offset: -2px;
+  }
+  .file-range-start {
+    flex-shrink: 0;
+    padding: 0 var(--ui-space-4, 4px);
+    border: 1px solid var(--workspace-purple-text);
+    border-radius: 4px;
+    color: var(--workspace-purple-text);
+    font-size: var(--ui-font-11, 11px);
+    line-height: 1.5;
+  }
   .file-more-button.b_btn {
     padding: 0;
     width: var(--ui-layout-28, 28px);
@@ -2782,6 +2866,12 @@
     }
   }
   @media (max-width: 767px) {
+    .field-list {
+      // 为两行批量栏、连选提示和底部安全区保留滚动空间。
+      --cloud-batch-bottom-space: calc(
+        var(--ui-space-180, 180px) + var(--ui-space-40, 40px) + env(safe-area-inset-bottom, 0px)
+      );
+    }
     .batch-download-choice__options {
       grid-template-columns: 1fr;
     }
@@ -2848,8 +2938,8 @@
 
   .field-list--batch-mode .file-container,
   .field-list--batch-mode .file-card-grid {
-    padding-bottom: var(--ui-space-112, 112px);
-    scroll-padding-bottom: var(--ui-space-112, 112px);
+    padding-bottom: var(--cloud-batch-bottom-space, var(--ui-space-112, 112px));
+    scroll-padding-bottom: var(--cloud-batch-bottom-space, var(--ui-space-112, 112px));
   }
 
   .file-card {
@@ -3250,12 +3340,6 @@
     }
     .file-card-grid {
       padding: var(--ui-space-10, 10px);
-    }
-
-    .field-list--batch-mode .file-container,
-    .field-list--batch-mode .file-card-grid {
-      padding-bottom: var(--ui-space-164, 164px);
-      scroll-padding-bottom: var(--ui-space-164, 164px);
     }
 
     .file-card {

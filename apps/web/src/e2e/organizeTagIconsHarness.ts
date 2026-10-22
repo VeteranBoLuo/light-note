@@ -4,7 +4,7 @@ import { createRouter, createMemoryHistory } from 'vue-router';
 import { createI18n } from 'vue-i18n';
 import Workspace from '@/view/organize/OrganizeSuggestionWorkspace.vue';
 import request from '@/http/request';
-import { bookmarkStore } from '@/store';
+import { bookmarkStore, useUserStore } from '@/store';
 import globalDirect from '@/config/globalDirect';
 import icon from '@/config/icon';
 import zh from '@/i18n/locales/zh-CN';
@@ -296,7 +296,8 @@ request.defaults.adapter = async (config) => {
   const url = String(config.url);
   const body = typeof config.data === 'string' ? JSON.parse(config.data) : config.data;
   let data: unknown = [];
-  if (url.endsWith('/runs')) {
+  if (url.endsWith('/workspace')) data = params.has('empty') ? null : run;
+  else if (url.endsWith('/runs')) {
     if (params.has('loadDelay')) await new Promise((resolve) => setTimeout(resolve, 300));
     const { overview, progress, review, counts, items: _items, ...brief } = run;
     data = params.has('empty') ? [] : [brief];
@@ -346,6 +347,7 @@ request.defaults.adapter = async (config) => {
 const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/', component: Workspace }] });
 const app = createApp({
   setup() {
+    const user = useUserStore(); user.id = 'organize-range-fixture'; user.role = 'user';
     const store = bookmarkStore();
     const sync = () => {
       store.screenWidth = innerWidth;

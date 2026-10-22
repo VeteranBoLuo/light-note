@@ -24,6 +24,7 @@
       />
       <span v-else class="inbox-item__select-placeholder" aria-hidden="true"></span>
       <div
+        :data-range-select="selectionMode ? 'primary' : undefined"
         class="inbox-item__body"
         role="button"
         :tabindex="disabled ? -1 : 0"
