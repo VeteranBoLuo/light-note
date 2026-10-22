@@ -4,62 +4,54 @@
       <span class="app-offline-banner__dot" aria-hidden="true"></span>
       {{ t('http.offline') }}
     </div>
-    <a-config-provider
-      :theme="{
-        token: {
-          colorPrimary: '#4e4b46',
-        },
-      }"
+    <div
+      v-if="applicationAuthGateVisible"
+      class="app-loading"
+      :role="applicationAuthStatus === 'error' ? 'alert' : undefined"
+      :aria-live="applicationAuthStatus === 'error' ? 'assertive' : undefined"
     >
-      <div
-        v-if="applicationAuthGateVisible"
-        class="app-loading"
-        :role="applicationAuthStatus === 'error' ? 'alert' : undefined"
-        :aria-live="applicationAuthStatus === 'error' ? 'assertive' : undefined"
-      >
-        <div v-if="applicationAuthStatus === 'error'" class="loading-container">
-          <div class="loading-text">
-            <h2>{{ t('app.authRestoreFailed') }}</h2>
-            <p>{{ t('app.authRestoreFailedHint') }}</p>
-            <BButton type="primary" class="auth-startup-retry" @click="retryApplicationAuth">
-              {{ t('common.retry') }}
-            </BButton>
-          </div>
+      <div v-if="applicationAuthStatus === 'error'" class="loading-container">
+        <div class="loading-text">
+          <h2>{{ t('app.authRestoreFailed') }}</h2>
+          <p>{{ t('app.authRestoreFailedHint') }}</p>
+          <BButton type="primary" class="auth-startup-retry" @click="retryApplicationAuth">
+            {{ t('common.retry') }}
+          </BButton>
         </div>
       </div>
-      <template v-else>
-        <div class="app-workspace" :class="{ 'has-mobile-preview': mobilePreviewActive }">
-          <AdminContextBanner v-if="mobilePreviewActive" mobile />
-          <div class="app-workspace__content">
-            <MobileAppShell
-              :enabled="mobileShellEnabled"
-              :show-top-bar="mobileTopBarActive"
-              :show-top-switcher="mobileTopSwitcherActive"
-              :show-bottom-nav="mobileBottomNavActive"
-            >
-              <router-view />
-            </MobileAppShell>
-          </div>
+    </div>
+    <template v-else>
+      <div class="app-workspace" :class="{ 'has-mobile-preview': mobilePreviewActive }">
+        <AdminContextBanner v-if="mobilePreviewActive" mobile />
+        <div class="app-workspace__content">
+          <MobileAppShell
+            :enabled="mobileShellEnabled"
+            :show-top-bar="mobileTopBarActive"
+            :show-top-switcher="mobileTopSwitcherActive"
+            :show-bottom-nav="mobileBottomNavActive"
+          >
+            <router-view />
+          </MobileAppShell>
         </div>
-        <Login v-if="bookmark.isShowLogin && !publicStandaloneRoute" />
-        <BViewer v-if="bookmark.viewerKey && !publicStandaloneRoute" />
-        <GuestNudge v-if="nudgeVisible && !publicStandaloneRoute" />
-        <AndroidDownloadProgress v-if="isAndroidApp && !publicStandaloneRoute" />
-        <DisplayScaleSuggestion v-if="!publicStandaloneRoute" />
-        <ResourceBatchTagsHost v-if="!publicStandaloneRoute" />
-        <EntitlementReturnHost v-if="!publicStandaloneRoute" />
-        <ResourceProjectHost v-if="!publicStandaloneRoute" />
-        <SaveAsNoteHost v-if="!publicStandaloneRoute" />
-        <ResourceSelectionDrawer v-if="!publicStandaloneRoute" />
-        <AdminContextBanner v-if="user.adminContext && !publicStandaloneRoute && !mobilePreviewActive" />
-        <QuickCaptureModal
-          v-if="inbox.quickCaptureVisible && !publicStandaloneRoute"
-          v-model:visible="inbox.quickCaptureVisible"
-          @captured="inbox.notifyCaptured()"
-        />
-        <PwaInstallGuideModal v-if="!isAndroidApp && pwaGuideVisible && !publicStandaloneRoute" />
-      </template>
-    </a-config-provider>
+      </div>
+      <Login v-if="bookmark.isShowLogin && !publicStandaloneRoute" />
+      <BViewer v-if="bookmark.viewerKey && !publicStandaloneRoute" />
+      <GuestNudge v-if="nudgeVisible && !publicStandaloneRoute" />
+      <AndroidDownloadProgress v-if="isAndroidApp && !publicStandaloneRoute" />
+      <DisplayScaleSuggestion v-if="!publicStandaloneRoute" />
+      <ResourceBatchTagsHost v-if="!publicStandaloneRoute" />
+      <EntitlementReturnHost v-if="!publicStandaloneRoute" />
+      <ResourceProjectHost v-if="!publicStandaloneRoute" />
+      <SaveAsNoteHost v-if="!publicStandaloneRoute" />
+      <ResourceSelectionDrawer v-if="!publicStandaloneRoute" />
+      <AdminContextBanner v-if="user.adminContext && !publicStandaloneRoute && !mobilePreviewActive" />
+      <QuickCaptureModal
+        v-if="inbox.quickCaptureVisible && !publicStandaloneRoute"
+        v-model:visible="inbox.quickCaptureVisible"
+        @captured="inbox.notifyCaptured()"
+      />
+      <PwaInstallGuideModal v-if="!isAndroidApp && pwaGuideVisible && !publicStandaloneRoute" />
+    </template>
   </div>
 </template>
 <script setup lang="ts">

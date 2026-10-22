@@ -3,7 +3,6 @@ import { createApp } from 'vue';
 import App from '@/App.vue';
 import router, { getPendingNavigationTarget, reloadOnceTo } from '@/router';
 import '@/assets/css/index.less';
-import { Icon } from '@iconify/vue';
 import globalDirect from '@/config/globalDirect';
 import { createPinia } from 'pinia';
 import i18n, { prepareInitialLocale } from '@/i18n';
@@ -34,7 +33,6 @@ const pinia = createPinia();
 app.use(pinia);
 app.use(router);
 app.use(i18n);
-app.component('Icon', Icon);
 app.config.globalProperties.$t = i18n.global.t;
 globalDirect(app);
 // 必须在 mount 前监听 beforeinstallprompt，否则浏览器可能在应用组件挂载前触发事件而丢失安装入口。

@@ -144,7 +144,7 @@
     :actions="notificationActions"
     @action="handleNotificationAction"
   />
-  <WeeklyReportModal v-model:visible="wrVisible" :snapshot="wrData" initial-period="last" />
+  <WeeklyReportModal v-if="wrData" v-model:visible="wrVisible" :snapshot="wrData" initial-period="last" />
 
   <!-- 无跳转链接的通知:点击弹框看完整标题 + 正文(列表里被截两行) -->
   <BModal
@@ -166,7 +166,7 @@
 <script setup lang="ts">
   import BrowserPushPrompt from './BrowserPushPrompt.vue';
   import NativeNotificationStatus from './NativeNotificationStatus.vue';
-  import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
+  import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
   import { notificationPresentation } from '@lightnote/shared/notification-presentation';
   import { useI18n } from 'vue-i18n';
   import { useRouter } from 'vue-router';
@@ -174,7 +174,7 @@
   import BPopover from '@/components/base/BasicComponents/BPopover.vue';
   import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
   import { useNotification, type NotificationItem } from '@/composables/useNotification.ts';
-  import WeeklyReportModal from '@/components/growth/WeeklyReportModal.vue';
+  import AsyncFeatureLoadingOverlay from '@/components/base/AsyncFeatureLoadingOverlay.vue';
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
@@ -188,6 +188,12 @@
   import NotificationCenterPanel from '@/components/notification/NotificationCenterPanel.vue';
   import MobilePageActionsDrawer, { type MobilePageActionItem } from '@/components/mobile/MobilePageActionsDrawer.vue';
   import { useMobileLayout } from '@/composables/useMobileLayout';
+
+  const WeeklyReportModal = defineAsyncComponent({
+    loader: () => import('@/components/growth/WeeklyReportModal.vue'),
+    loadingComponent: AsyncFeatureLoadingOverlay,
+    delay: 120,
+  });
 
   const props = withDefaults(defineProps<{ page?: boolean }>(), { page: false });
 

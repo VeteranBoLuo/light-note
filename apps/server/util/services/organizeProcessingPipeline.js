@@ -115,6 +115,7 @@ export const manualSuggestionSql = () =>
   `s.status IN ('insufficient','no_suggestion') AND s.kind IN ('tags','title','description','tag_icon')`;
 export async function readOrganizeOutcomes(c, run, itemOutcomes, jobs) {
   const v3 = Number(run.run_version) === 3;
+  // 按任务与条目复用已有联合索引，并复核账号，避免逐项扫描全部历史任务。
   const [rows] = await c.query(
     `SELECT i.id,i.resource_type,i.rule_status,i.ai_status,
     GROUP_CONCAT(DISTINCT s.kind) check_kinds,
@@ -133,8 +134,8 @@ export async function readOrganizeOutcomes(c, run, itemOutcomes, jobs) {
     MAX(s.status='expired') expired,
     MAX((${manualSuggestionSql()}) OR (s.status='info' AND COALESCE(JSON_UNQUOTE(JSON_EXTRACT(s.payload_json,'$.action')),'') NOT IN ('trash','duplicate_bookmarks'))) manual,
     MAX(s.status IN ('applied','ignored','closed')) reviewed,
-    ${v3 ? `EXISTS(SELECT 1 FROM organize_processing_jobs j WHERE j.item_id=i.id AND j.status IN (${open}))` : '0'} work_open,
-    ${v3 ? "EXISTS(SELECT 1 FROM organize_processing_jobs j WHERE j.item_id=i.id AND j.status IN ('failed','conflict','partial','cancelled'))" : '0'} work_failed
+    ${v3 ? `EXISTS(SELECT 1 FROM organize_processing_jobs j WHERE j.run_id=i.run_id AND j.item_id=i.id AND j.user_id=i.user_id AND j.status IN (${open}))` : '0'} work_open,
+    ${v3 ? "EXISTS(SELECT 1 FROM organize_processing_jobs j WHERE j.run_id=i.run_id AND j.item_id=i.id AND j.user_id=i.user_id AND j.status IN ('failed','conflict','partial','cancelled'))" : '0'} work_failed
     FROM organize_suggestion_items i LEFT JOIN organize_suggestions s ON s.item_id=i.id AND s.user_id=i.user_id
     WHERE i.run_id=? AND i.user_id=? GROUP BY i.id,i.rule_status,i.ai_status,i.resource_type,i.resource_id,i.user_id`,
     [run.id, run.user_id],

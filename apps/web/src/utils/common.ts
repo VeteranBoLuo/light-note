@@ -4,7 +4,7 @@ import { Ref } from 'vue';
 import { PWA_LAUNCH_QUERY_KEY, PWA_LAUNCH_QUERY_VALUE, PWA_RUNTIME_SESSION_KEY } from '@/config/appEntryBootstrap.ts';
 import { renderNoteMathHtml, serializeNoteMath } from '@/utils/noteMath';
 import { configureNoteMarkdownRenderer } from '@/utils/markdownRenderer.ts';
-import { makeNotePreviewCheckboxesReadonly } from '@/utils/noteHtmlToMarkdown.ts';
+import { makeNotePreviewCheckboxesReadonly } from '@/utils/notePreviewCheckboxes.ts';
 
 export const copyTextToClipboard = function (text) {
   // 检查浏览器是否支持Clipboard API

@@ -201,6 +201,84 @@ describe.skipIf(!socket)('整理结果分组读取 · 隔离 MySQL', () => {
     expect(result.kind).toBe('');
     expect(Object.values(result.pages).flatMap((page) => page.items)).toHaveLength(9);
   });
+  it('大量历史任务下按当前任务和账号判定条目状态，并复用已有联合索引', async () => {
+    const statuses = [
+      'queued',
+      'waiting',
+      'running',
+      'failed',
+      'conflict',
+      'partial',
+      'cancelled',
+      'completed',
+      'skipped',
+    ];
+    const jobs = statuses.map((status, n) => [
+      `scope-job-${n}`,
+      'run',
+      id(n),
+      'owner',
+      `scope-work-${n}`,
+      'analysis',
+      'ai',
+      status,
+    ]);
+    // 同一条目 ID 出现在其他任务或异常归属记录中，也不能改变当前账号的状态。
+    jobs.push(
+      ['scope-other-run', 'other-run', id(9), 'owner', 'scope-work', 'analysis', 'ai', 'running'],
+      ['scope-other-owner', 'run', id(10), 'other-owner', 'scope-work', 'analysis', 'ai', 'failed'],
+      ...Array.from({ length: 12_000 }, (_, n) => [
+        `scope-history-${n}`,
+        'history-run',
+        `history-item-${n}`,
+        'other-owner',
+        `history-work-${n}`,
+        'analysis',
+        'ai',
+        n % 2 ? 'completed' : 'queued',
+      ]),
+    );
+    try {
+      await db.query(
+        'INSERT INTO organize_processing_jobs(id,run_id,item_id,user_id,work_key,kind,lane,status) VALUES ?',
+        [jobs],
+      );
+      const result = await getSuggestionRun(reader, {
+        userId: 'owner',
+        id: 'run',
+        resourceType: 'bookmark',
+        groups: ['unfinished', 'clear'],
+      });
+      expect(result.groupTotals).toEqual({ clear: 236, manual: 6, unfinished: 10, reviewed: 8 });
+      expect(result.pages.unfinished.items.map((item) => item.id)).toEqual([
+        ...Array.from({ length: 7 }, (_, n) => id(n)),
+        '0249',
+        '0250',
+        '0251',
+      ]);
+      expect(result.pages.clear.items.map((item) => item.id)).toEqual(
+        expect.arrayContaining(['0007', '0008', '0009', '0010']),
+      );
+      const outcomeQuery = queryLog.find((sql) => sql.startsWith('SELECT i.id,i.resource_type'));
+      expect(outcomeQuery).toBeDefined();
+      const [plan] = await db.query(`EXPLAIN ${outcomeQuery}`, ['run', 'owner']);
+      const jobReads = plan.filter((step) => step.table === 'j');
+      const [indexes] = await db.query('SHOW INDEX FROM organize_processing_jobs');
+      const scopedIndexes = new Set(
+        indexes
+          .filter((index) => index.Seq_in_index === 1 && index.Column_name === 'run_id')
+          .map((index) => index.Key_name),
+      );
+      expect(jobReads).toHaveLength(2);
+      for (const step of jobReads) {
+        expect(scopedIndexes.has(step.key)).toBe(true);
+        expect(step.type).not.toBe('ALL');
+        expect(Number(step.rows)).toBeLessThan(100);
+      }
+    } finally {
+      await db.query("DELETE FROM organize_processing_jobs WHERE id LIKE 'scope-%'");
+    }
+  });
   it('跨页分组按对象计数，批量读取同时遵守类型与检查筛选', async () => {
     await db.query("UPDATE organize_suggestions SET status='pending' WHERE item_id<'0065'");
     try {
