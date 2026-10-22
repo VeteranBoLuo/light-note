@@ -5,7 +5,7 @@ import { createHmac, randomUUID } from 'node:crypto';
 vi.mock('../db/index.js', () => ({ default: {} }));
 vi.mock('../util/huaweiPushDelivery.js', () => ({ recordHuaweiReceipts: vi.fn() }));
 import { recordHuaweiReceipts } from '../util/huaweiPushDelivery.js';
-import { createHuaweiPushReceiptRouter } from './huaweiPushReceipt.js';
+import { createHuaweiPushReceiptRouter, HUAWEI_PUSH_RECEIPT_PATH } from './huaweiPushReceipt.js';
 
 const now = Date.parse('2026-10-22T03:00:00Z');
 const key = Buffer.alloc(32, 5);
@@ -42,11 +42,14 @@ let server, url;
 beforeAll(async () => {
   const app = express();
   app.use(
-    '/api/notification/huawei/receipt',
+    HUAWEI_PUSH_RECEIPT_PATH,
     createHuaweiPushReceiptRouter({ db: { fixture: true }, env, now: () => now }),
   );
   app.use((req, res) => res.status(401).json({ code: 'ACCOUNT_AUTH_REQUIRED' }));
-  server = createServer(app);
+  const proxy = express();
+  // Exercise the public URL through the same /api stripping used by Vite/Nginx.
+  proxy.use('/api', app);
+  server = createServer(proxy);
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   url = `http://127.0.0.1:${server.address().port}/api/notification/huawei/receipt`;
 });

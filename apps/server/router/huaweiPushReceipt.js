@@ -4,6 +4,9 @@ import pool from '../db/index.js';
 import { parseHuaweiReceipts, verifyHuaweiReceiptHeader } from '../util/huaweiPushReceiptPolicy.js';
 import { recordHuaweiReceipts } from '../util/huaweiPushDelivery.js';
 
+// The public /api prefix is stripped by the Web proxy before Express receives it.
+export const HUAWEI_PUSH_RECEIPT_PATH = '/notification/huawei/receipt';
+
 export function createHuaweiPushReceiptRouter({ db = pool, env = process.env, now = () => Date.now() } = {}) {
   const router = express.Router();
   const nonces = new Map();
