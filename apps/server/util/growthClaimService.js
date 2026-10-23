@@ -9,6 +9,7 @@ import {
   dailyClaimRef,
   earningWritesEnabled,
   POINTS_EARNING_POLICY_VERSION,
+  POINTS_EARNING_C8_POLICY_VERSION,
   resolveDailyQuestStages,
   weeklyClaimRef,
 } from './pointsEarningPolicy.js';
@@ -215,7 +216,8 @@ export async function claimGrowthRewards(userId, input = {}, { userRole = null }
     await lockGrowthAccount(conn, String(userId));
 
     const calendar = await getGrowthCalendarContext(userId, { db: conn });
-    if (scopes.has('daily')) await resolveDailyEarningPolicyVersion(calendar.dayKey, { db: conn, lock: true });
+    if (scopes.has('daily') || scopes.has('achievements'))
+      await resolveDailyEarningPolicyVersion(calendar.dayKey, { db: conn, lock: true });
     if (scopes.has('weekly')) await resolveWeeklyEarningPolicyVersion(calendar.weekKey, { db: conn, lock: true });
     const [dashboard, weekly, tasks] = await Promise.all([
       getGrowthDashboard(userId, { userRole, db: conn, calendar }),
@@ -309,6 +311,10 @@ export async function claimGrowthRewards(userId, input = {}, { userRole = null }
         const frameId = achievement.rewardSnapshot?.frameId || prospectiveFrame?.id || null;
         const snapshotPolicyVersion =
           achievement.rewardSnapshot?.policyVersion || achievement.policyVersion || POINTS_EARNING_POLICY_VERSION;
+        if (snapshotPolicyVersion === POINTS_EARNING_C8_POLICY_VERSION && !earningWritesEnabled(snapshotPolicyVersion)) {
+          await conn.rollback();
+          return { ok: false, reason: 'earning_paused', receipts: [], ...emptySummary(), growth: null };
+        }
         await conn.query(
           `INSERT INTO user_achievements
              (user_id, achievement_key, unlocked_at, reward_points_snapshot, reward_frame_id_snapshot, policy_version)

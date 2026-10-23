@@ -23,8 +23,8 @@ function safeVersion(value, fallback) {
 
 function hasConfiguredBoundary(type, runtime) {
   return type === 'day'
-    ? Boolean(runtime.c6EffectiveDay || runtime.effectiveDay)
-    : Boolean(runtime.c7EffectiveWeek || runtime.effectiveWeek);
+    ? Boolean(runtime.c8EffectiveDay || runtime.c6EffectiveDay || runtime.effectiveDay)
+    : Boolean(runtime.c8EffectiveWeek || runtime.c7EffectiveWeek || runtime.effectiveWeek);
 }
 
 /**

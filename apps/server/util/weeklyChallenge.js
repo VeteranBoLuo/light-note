@@ -4,10 +4,10 @@ import { earnPoints } from './points.js';
 import { getMeaningfulActivityFacts } from './meaningfulActivity.js';
 import {
   POINTS_EARNING_POLICY_VERSION,
-  POINTS_EARNING_C7_POLICY_VERSION,
   earningWritesEnabled,
   resolveWeeklyChallenges,
   usesC5EarningRules,
+  usesCommunityWeeklyChallenges,
   weeklyClaimRef,
   weeklyClaimRefCandidates,
 } from './pointsEarningPolicy.js';
@@ -70,7 +70,7 @@ export async function weekProgress(userId, db = pool, { calendar = null, weekKey
     activeDays: facts.activeDays,
     variety: facts.variety,
     communityPosts:
-      version === POINTS_EARNING_C7_POLICY_VERSION
+      usesCommunityWeeklyChallenges(version)
         ? await communityWeekPosts(userId, { db, calendar: effectiveCalendar, weekKey: week })
         : 0,
   };

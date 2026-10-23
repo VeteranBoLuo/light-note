@@ -12,7 +12,7 @@ import {
   RANDOM_POINTS_REASONS,
   STABLE_POINTS_REASONS,
 } from './pointsEarningPolicy.js';
-import { resolveDailyEarningPolicyVersion } from './pointsEarningPolicyState.js';
+import { resolveDailyEarningPolicyVersion, resolveWeeklyEarningPolicyVersion } from './pointsEarningPolicyState.js';
 
 const SOURCE_LABELS = Object.freeze({
   checkin: 'checkin',
@@ -80,10 +80,11 @@ export async function getUserPointsSummary(userId, { db = pool, userRole = null 
     return { enabled: getPointsEarningRuntime().pointsCenterEnabled, visitor: true };
   }
   const calendar = await getGrowthCalendarContext(userId, { db });
-  const [growth, preferences, policyVersion] = await Promise.all([
+  const [growth, preferences, policyVersion, weeklyVersion] = await Promise.all([
     getGrowth(userId, { userRole, db, calendar }),
     getGrowthPreferences(userId, { db }),
     resolveDailyEarningPolicyVersion(calendar.dayKey, { db }),
+    resolveWeeklyEarningPolicyVersion(calendar.weekKey, { db }),
   ]);
   const stableList = [...STABLE_POINTS_REASONS];
   const oneTimeList = [...ONE_TIME_POINTS_REASONS];
@@ -211,7 +212,7 @@ export async function getUserPointsSummary(userId, { db = pool, userRole = null 
       effect: item.effect || null,
       rarity: item.rarity || null,
     })),
-    earningRules: getEarningPolicySnapshot(policyVersion),
+    earningRules: getEarningPolicySnapshot(policyVersion, { weeklyVersion }),
   };
 }
 

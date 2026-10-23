@@ -70,7 +70,10 @@
           >
           <div
             ><dt>{{ t('growth.pointsCenterRuleDaily') }}</dt
-            ><dd>{{ dailyRule }}</dd></div
+            ><dd>
+              <span v-for="rule in dailyRules" :key="rule" class="rule-stage">{{ rule }}</span>
+              <template v-if="!dailyRules.length">—</template>
+            </dd></div
           >
           <div
             ><dt>{{ t('growth.pointsCenterRuleWeekly') }}</dt
@@ -121,8 +124,10 @@
     const rule = summary.value?.earningRules?.checkin;
     return rule ? `${rule.base}–${rule.maximum}` : '—';
   });
-  const dailyRule = computed(
-    () => (summary.value?.earningRules?.daily || []).map((item: any) => item.points).join(' + ') || '—',
+  const dailyRules = computed(() =>
+    (summary.value?.earningRules?.daily || []).map((item: any) =>
+      t('growth.pointsCenterRuleStage', { n: item.required, p: formatNumber(item.points) }),
+    ),
   );
   const weeklyRule = computed(() =>
     summary.value?.earningRules?.weekly
@@ -301,6 +306,9 @@
   .rules dd {
     margin: var(--ui-space-4, 4px) 0 0;
     font-size: var(--ui-font-15, 15px);
+  }
+  .rule-stage {
+    display: block;
   }
   @media (max-width: 767px) {
     .totals {

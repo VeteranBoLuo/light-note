@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   getConnection: vi.fn(),
@@ -37,6 +37,9 @@ vi.mock('./weeklyChallenge.js', () => ({ getWeeklyChallenges: mocks.getWeeklyCha
 vi.mock('./growthPreferences.js', () => ({ getGrowthCalendarContext: mocks.getGrowthCalendarContext }));
 
 import { claimGrowthRewards, getGrowthClaimableSnapshot } from './growthClaimService.js';
+import { POINTS_EARNING_C8_POLICY_VERSION, resolveDailyQuestStages } from './pointsEarningPolicy.js';
+
+afterEach(() => vi.unstubAllEnvs());
 
 const calendar = {
   dayKey: '20260812',
@@ -88,6 +91,63 @@ beforeEach(() => {
 });
 
 describe('growthClaimService', () => {
+  it('C8 单项和一键领取共用阶段与旧成就快照，未来成就使用减半奖励', async () => {
+    vi.stubEnv('POINTS_EARNING_C5_ENABLED', 'true');
+    vi.stubEnv('POINTS_EARNING_C8_ENABLED', 'true');
+    const conn = connection();
+    mocks.getConnection.mockResolvedValueOnce(conn);
+    mocks.getGrowthDashboard.mockResolvedValueOnce(
+      dashboard({
+        questBonus: {
+          policyVersion: POINTS_EARNING_C8_POLICY_VERSION,
+          stages: resolveDailyQuestStages(POINTS_EARNING_C8_POLICY_VERSION).map((stage) => ({
+            ...stage,
+            claimable: true,
+          })),
+        },
+        achievements: [
+          {
+            key: 'bookmark_500',
+            unlocked: true,
+            reward: 200,
+            policyVersion: POINTS_EARNING_C8_POLICY_VERSION,
+            rewardSnapshot: { points: 400, frameId: 'frame_bookmark_archive', policyVersion: 'points-earning-c6' },
+          },
+          { key: 'file_500', unlocked: true, reward: 250, policyVersion: POINTS_EARNING_C8_POLICY_VERSION },
+        ],
+      }),
+    );
+    vi.stubEnv('POINTS_EARNING_C6_ENABLED', 'false');
+    const result = await claimGrowthRewards('user-1', { scopes: ['daily', 'achievements'] }, { userRole: 'user' });
+    expect(result).toMatchObject({ ok: true, points: 665, claimed: 4, frames: ['frame_bookmark_archive'] });
+    expect(mocks.earnPoints.mock.calls.map(([, points]) => points)).toEqual([5, 10, 400, 250]);
+    expect(mocks.earnPoints.mock.calls[2][5]).toMatchObject({ policyVersion: 'points-earning-c6' });
+    expect(mocks.earnPoints.mock.calls[3][5]).toMatchObject({ policyVersion: POINTS_EARNING_C8_POLICY_VERSION });
+    expect(mocks.grantExp.mock.calls.map(([, , options]) => options.amount)).toEqual([5, 10]);
+    expect(conn.commit).toHaveBeenCalledOnce();
+  });
+
+  it('C8 暂停时单独领取新成就也失败关闭，不绕过日常奖励写闸', async () => {
+    vi.stubEnv('POINTS_EARNING_C5_ENABLED', 'true');
+    vi.stubEnv('POINTS_EARNING_C8_ENABLED', 'false');
+    const conn = connection();
+    mocks.getConnection.mockResolvedValueOnce(conn);
+    mocks.getGrowthDashboard.mockResolvedValueOnce(
+      dashboard({
+        achievements: [
+          { key: 'file_500', unlocked: true, reward: 250, policyVersion: POINTS_EARNING_C8_POLICY_VERSION },
+        ],
+      }),
+    );
+    expect(await claimGrowthRewards('user-1', { scopes: ['achievements'] })).toMatchObject({
+      ok: false,
+      reason: 'earning_paused',
+    });
+    expect(mocks.earnPoints).not.toHaveBeenCalled();
+    expect(conn.rollback).toHaveBeenCalledOnce();
+    expect(conn.commit).not.toHaveBeenCalled();
+  });
+
   it('所有路线完成并领取后保留周报与任务入口，不让建议消失', async () => {
     mocks.getGrowthDashboard.mockResolvedValueOnce(dashboard({ quests: [{ key: 'daily_note', done: true }] }));
     mocks.getGrowthTasks.mockResolvedValueOnce(

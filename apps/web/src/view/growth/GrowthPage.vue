@@ -323,7 +323,7 @@
                   <div class="growth-task-summary__points">
                     <strong>{{ t('growth.taskPointsSummary') }}</strong>
                     <span>{{ t('growth.taskDailyPoints') }}</span>
-                    <span>{{ t('growth.taskWeeklyPoints') }}</span>
+                    <span v-if="weekly">{{ t('growth.taskWeeklyPoints', { n: weekly.totalPoints }) }}</span>
                   </div>
                 </aside>
               </div>

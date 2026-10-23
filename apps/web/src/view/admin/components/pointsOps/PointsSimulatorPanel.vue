@@ -17,7 +17,7 @@
     </div>
     <div class="points-simulator__actions">
       <BButton type="primary" :loading="loading" @click="simulate">运行模拟</BButton>
-      <BButton :disabled="loading" @click="reset">恢复 C5 默认值</BButton>
+      <BButton :disabled="loading" @click="reset">恢复默认值</BButton>
       <BButton :disabled="!result || loading" @click="exportResult('json')">导出 JSON</BButton>
       <BButton :disabled="!result || loading" @click="exportResult('csv')">导出 CSV</BButton>
     </div>
@@ -73,23 +73,23 @@
     | 'consumptionRatio'
     | 'activeUsers';
   const defaults: Record<FormKey, string> = {
-    checkinDaily: '20',
-    dailyQuestDaily: '40',
-    weeklyChallenges: '250',
-    freeDrawExpected: '15',
-    achievementPool: '8080',
-    milestonePool: '2950',
-    activeRatio: '0.35',
-    consumptionRatio: '0.65',
-    activeUsers: '1000',
+    checkinDaily: '',
+    dailyQuestDaily: '',
+    weeklyChallenges: '',
+    freeDrawExpected: '',
+    achievementPool: '',
+    milestonePool: '',
+    activeRatio: '',
+    consumptionRatio: '',
+    activeUsers: '',
   };
   const form = reactive<Record<FormKey, string>>({ ...defaults });
   const loading = ref(false);
   const result = ref<any>(null);
   const fields: Array<{ key: FormKey; label: string; hint: string; placeholder?: string; type?: string }> = [
-    { key: 'checkinDaily', label: '签到日均', hint: '默认按连续签到最高 20 估算' },
-    { key: 'dailyQuestDaily', label: '每日任务总额', hint: 'C5 默认 15 + 25' },
-    { key: 'weeklyChallenges', label: '每周挑战总额', hint: 'C5 默认 250' },
+    { key: 'checkinDaily', label: '签到日均', hint: '默认按策略目录中的连续签到最高值估算' },
+    { key: 'dailyQuestDaily', label: '每日任务总额', hint: '默认使用模拟版本的阶段奖励合计' },
+    { key: 'weeklyChallenges', label: '每周挑战总额', hint: '默认使用模拟版本的每周奖励合计' },
     { key: 'freeDrawExpected', label: '单次免费惊喜期望', hint: '仅模拟随机回流' },
     { key: 'achievementPool', label: '成就一次性池', hint: '单用户可获得总量假设' },
     { key: 'milestonePool', label: '里程碑一次性池', hint: '单用户可获得总量假设' },
@@ -131,10 +131,18 @@
   async function simulate() {
     loading.value = true;
     try {
-      const payload = Object.fromEntries(Object.entries(form).map(([key, value]) => [key, Number(value)]));
+      const payload = Object.fromEntries(
+        Object.entries(form)
+          .filter(([, value]) => value !== '')
+          .map(([key, value]) => [key, Number(value)]),
+      );
       const response = await growthApi.adminPointsSimulator(payload);
-      if (response.status === 200) result.value = response.data;
-      else message.error(response.msg || '策略模拟失败');
+      if (response.status === 200) {
+        result.value = response.data;
+        for (const key of Object.keys(defaults) as FormKey[]) {
+          if (form[key] === '' && response.data?.input?.[key] != null) form[key] = String(response.data.input[key]);
+        }
+      } else message.error(response.msg || '策略模拟失败');
     } finally {
       loading.value = false;
     }
@@ -147,7 +155,7 @@
     const url = URL.createObjectURL(new Blob([content], { type }));
     const anchor = document.createElement('a');
     anchor.href = url;
-    anchor.download = `points-c5-simulation-${new Date().toISOString().slice(0, 10)}.${suffix}`;
+    anchor.download = `${result.value?.policyVersion || 'points'}-simulation-${new Date().toISOString().slice(0, 10)}.${suffix}`;
     anchor.click();
     URL.revokeObjectURL(url);
   }

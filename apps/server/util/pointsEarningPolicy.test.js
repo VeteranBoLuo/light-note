@@ -2,8 +2,12 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   POINTS_EARNING_C7_POLICY_VERSION,
   POINTS_EARNING_C6_POLICY_VERSION,
+  POINTS_EARNING_C8_POLICY_VERSION,
+  POINTS_EARNING_C8_SNAPSHOT_MARKER,
+  POINTS_EARNING_C5_MIGRATION_MARKERS,
   POINTS_EARNING_POLICY_VERSION,
   applyAchievementEarningPolicy,
+  achievementPolicyVersionForRuntime,
   assertPointsEarningActivationReady,
   checkinPointsForStreak,
   dailyClaimRef,
@@ -14,10 +18,99 @@ import {
   getPointsEarningRuntime,
   resolveDailyQuestStages,
   resolveWeeklyChallenges,
+  weeklyClaimRef,
+  usesC6DailyQuestCatalog,
 } from './pointsEarningPolicy.js';
 import { resolvePointsEarningPeriodVersion } from './pointsEarningPolicyState.js';
 
 describe('pointsEarningPolicy', () => {
+  const c8Runtime = () =>
+    getPointsEarningRuntime({
+      POINTS_EARNING_C5_ENABLED: 'true',
+      POINTS_EARNING_C5_EFFECTIVE_DAY: '20260818',
+      POINTS_EARNING_C5_EFFECTIVE_WEEK: '202634',
+      POINTS_EARNING_C6_EFFECTIVE_DAY: '20260820',
+      POINTS_EARNING_C7_EFFECTIVE_WEEK: '202639',
+      POINTS_EARNING_C8_ENABLED: 'true',
+      POINTS_EARNING_C8_EFFECTIVE_DAY: '20261026',
+      POINTS_EARNING_C8_EFFECTIVE_WEEK: '202644',
+    });
+
+  it('C8 每日积分与经验一致，六项周任务共 120，稳定周上限 365', () => {
+    const snapshot = getEarningPolicySnapshot(POINTS_EARNING_C8_POLICY_VERSION);
+    expect(snapshot.daily.map(({ exp, points }) => [exp, points])).toEqual([
+      [5, 5],
+      [10, 10],
+    ]);
+    expect(snapshot.weekly.map(({ reward }) => reward)).toEqual([20, 25, 25, 20, 20, 10]);
+    expect(snapshot.stableWeekMaximum).toBe(365);
+    expect(checkinPointsForStreak(6, POINTS_EARNING_C8_POLICY_VERSION)).toBe(20);
+    expect(usesC6DailyQuestCatalog(POINTS_EARNING_C8_POLICY_VERSION)).toBe(true);
+    expect(dailyClaimRef('20261026', 3, POINTS_EARNING_C8_POLICY_VERSION)).toBe('daily:c8:20261026:3');
+    expect(weeklyClaimRef('202644', 'wk_note', POINTS_EARNING_C8_POLICY_VERSION)).toBe('week:c8:202644:wk_note');
+    expect(getEarningPolicySnapshot(POINTS_EARNING_C6_POLICY_VERSION).stableWeekMaximum).toBe(670);
+    expect(getEarningPolicySnapshot(POINTS_EARNING_C7_POLICY_VERSION).stableWeekMaximum).toBe(690);
+  });
+
+  it('C8 只减半成就积分，资格不变，跨日周切换按各自锁定版本展示', () => {
+    expect(
+      applyAchievementEarningPolicy(
+        { key: 'bookmark_500', reward: 400, minLevel: 8 },
+        POINTS_EARNING_C8_POLICY_VERSION,
+      ),
+    ).toEqual({ key: 'bookmark_500', reward: 200, minLevel: 8 });
+    expect(
+      applyAchievementEarningPolicy({ key: 'streak_365', reward: 800 }, POINTS_EARNING_C8_POLICY_VERSION).reward,
+    ).toBe(250);
+    expect(
+      getEarningPolicySnapshot(POINTS_EARNING_C8_POLICY_VERSION, {
+        weeklyVersion: POINTS_EARNING_C7_POLICY_VERSION,
+      }).stableWeekMaximum,
+    ).toBe(515);
+  });
+
+  it('C8 暂停不回退，既有日周策略锁优先，避免同周期双领', async () => {
+    const runtime = c8Runtime();
+    expect(achievementPolicyVersionForRuntime(POINTS_EARNING_C6_POLICY_VERSION, runtime)).toBe(
+      POINTS_EARNING_C8_POLICY_VERSION,
+    );
+    expect(achievementPolicyVersionForRuntime(POINTS_EARNING_C6_POLICY_VERSION, { ...runtime, c8Enabled: false })).toBe(
+      POINTS_EARNING_C8_POLICY_VERSION,
+    );
+    expect(earningPolicyVersionForDay('20261025', runtime)).toBe(POINTS_EARNING_C6_POLICY_VERSION);
+    expect(earningPolicyVersionForDay('20261026', runtime)).toBe(POINTS_EARNING_C8_POLICY_VERSION);
+    expect(earningPolicyVersionForWeek('202643', runtime)).toBe(POINTS_EARNING_C7_POLICY_VERSION);
+    const paused = { ...runtime, c8Enabled: false };
+    expect(earningPolicyVersionForDay('20261026', paused)).toBe(POINTS_EARNING_C8_POLICY_VERSION);
+    expect(earningPolicyVersionForWeek('202644', paused)).toBe(POINTS_EARNING_C8_POLICY_VERSION);
+    expect(earningWritesEnabled(POINTS_EARNING_C8_POLICY_VERSION, runtime)).toBe(true);
+    expect(earningWritesEnabled(POINTS_EARNING_C8_POLICY_VERSION, paused)).toBe(false);
+    for (const [type, key, version] of [
+      ['day', '20261026', POINTS_EARNING_C6_POLICY_VERSION],
+      ['week', '202644', POINTS_EARNING_C7_POLICY_VERSION],
+    ]) {
+      const db = { query: vi.fn().mockResolvedValue([[{ policyVersion: version }]]) };
+      expect(await resolvePointsEarningPeriodVersion(type, key, { db, lock: true, runtime })).toBe(version);
+      expect(db.query).toHaveBeenCalledTimes(1);
+    }
+  });
+
+  it('C8 必须有完整新日周边界和旧成就快照准备标记', async () => {
+    const runtime = c8Runtime();
+    await expect(
+      assertPointsEarningActivationReady({ db: { query: vi.fn() }, runtime: { ...runtime, c8EffectiveWeek: null } }),
+    ).rejects.toMatchObject({ code: 'POINTS_EARNING_C8_BOUNDARY_REQUIRED' });
+    const baseMarkers = POINTS_EARNING_C5_MIGRATION_MARKERS.map((migrationKey) => ({ migrationKey }));
+    const db = { query: vi.fn().mockResolvedValueOnce([baseMarkers]).mockResolvedValueOnce([[]]) };
+    await expect(assertPointsEarningActivationReady({ db, runtime })).rejects.toMatchObject({
+      code: 'POINTS_EARNING_C8_SNAPSHOT_REQUIRED',
+    });
+    db.query
+      .mockResolvedValueOnce([baseMarkers])
+      .mockResolvedValueOnce([[{ migration_key: POINTS_EARNING_C8_SNAPSHOT_MARKER }]]);
+    await expect(assertPointsEarningActivationReady({ db, runtime })).resolves.toBe(true);
+  });
+
   it('固定 C5 版本与完整数值快照', () => {
     expect(POINTS_EARNING_POLICY_VERSION).toBe('points-earning-c5');
     expect(Array.from({ length: 10 }, (_, index) => checkinPointsForStreak(index + 1))).toEqual([
@@ -111,7 +204,7 @@ describe('pointsEarningPolicy', () => {
     ).rejects.toMatchObject({ code: 'POINTS_CAMPAIGN_LIMITS_REQUIRED' });
   });
 
-  it('成就覆盖总量为 7850 且连签合计 820', () => {
+  it('C5 连签成就覆盖合计 820，历史目录保持原奖励', () => {
     const legacy = [
       ['streak_1', 10],
       ['streak_7', 50],
@@ -122,7 +215,6 @@ describe('pointsEarningPolicy', () => {
     const values = legacy.map(([key, reward]) => applyAchievementEarningPolicy({ key, reward }).reward);
     expect(values).toEqual([10, 30, 80, 200, 500]);
     expect(values.reduce((sum, reward) => sum + reward, 0)).toBe(820);
-    expect(8310 - (1280 - 820)).toBe(7850);
   });
 
   it('严格按全局日/周边界选择策略，非法开关失败关闭', () => {
@@ -224,16 +316,27 @@ describe('pointsEarningPolicy', () => {
     );
   });
   it('adds posting only in the new weekly version and never rolls back on pause', async () => {
-    const runtime = getPointsEarningRuntime({POINTS_EARNING_C5_ENABLED:'true',POINTS_EARNING_C5_EFFECTIVE_DAY:'20260901',POINTS_EARNING_C5_EFFECTIVE_WEEK:'202636',POINTS_EARNING_C7_EFFECTIVE_WEEK:'202639',POINTS_EARNING_C7_ENABLED:'true'});
-    expect(earningPolicyVersionForWeek('202638',runtime)).toBe(POINTS_EARNING_POLICY_VERSION);
-    expect(earningPolicyVersionForWeek('202639',runtime)).toBe(POINTS_EARNING_C7_POLICY_VERSION);
-    expect(resolveWeeklyChallenges(POINTS_EARNING_POLICY_VERSION).some(x=>x.key==='wk_community')).toBe(false);
-    expect(resolveWeeklyChallenges(POINTS_EARNING_C7_POLICY_VERSION).find(x=>x.key==='wk_community')).toMatchObject({target:1,reward:20});
+    const runtime = getPointsEarningRuntime({
+      POINTS_EARNING_C5_ENABLED: 'true',
+      POINTS_EARNING_C5_EFFECTIVE_DAY: '20260901',
+      POINTS_EARNING_C5_EFFECTIVE_WEEK: '202636',
+      POINTS_EARNING_C7_EFFECTIVE_WEEK: '202639',
+      POINTS_EARNING_C7_ENABLED: 'true',
+    });
+    expect(earningPolicyVersionForWeek('202638', runtime)).toBe(POINTS_EARNING_POLICY_VERSION);
+    expect(earningPolicyVersionForWeek('202639', runtime)).toBe(POINTS_EARNING_C7_POLICY_VERSION);
+    expect(resolveWeeklyChallenges(POINTS_EARNING_POLICY_VERSION).some((x) => x.key === 'wk_community')).toBe(false);
+    expect(
+      resolveWeeklyChallenges(POINTS_EARNING_C7_POLICY_VERSION).find((x) => x.key === 'wk_community'),
+    ).toMatchObject({ target: 1, reward: 20 });
     expect(getEarningPolicySnapshot(POINTS_EARNING_C7_POLICY_VERSION).stableWeekMaximum).toBe(690);
-    expect(earningPolicyVersionForWeek('202639',{...runtime,c7Enabled:false})).toBe(POINTS_EARNING_C7_POLICY_VERSION);
-    expect(earningWritesEnabled(POINTS_EARNING_C7_POLICY_VERSION,{...runtime,c7Enabled:false})).toBe(false);
-    const db = {query:vi.fn().mockResolvedValue([[{policyVersion:POINTS_EARNING_POLICY_VERSION}]])};
-    expect(await resolvePointsEarningPeriodVersion('week','202639',{db,runtime})).toBe(POINTS_EARNING_POLICY_VERSION);
+    expect(earningPolicyVersionForWeek('202639', { ...runtime, c7Enabled: false })).toBe(
+      POINTS_EARNING_C7_POLICY_VERSION,
+    );
+    expect(earningWritesEnabled(POINTS_EARNING_C7_POLICY_VERSION, { ...runtime, c7Enabled: false })).toBe(false);
+    const db = { query: vi.fn().mockResolvedValue([[{ policyVersion: POINTS_EARNING_POLICY_VERSION }]]) };
+    expect(await resolvePointsEarningPeriodVersion('week', '202639', { db, runtime })).toBe(
+      POINTS_EARNING_POLICY_VERSION,
+    );
   });
-
 });
