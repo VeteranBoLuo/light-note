@@ -22,8 +22,9 @@ import { finishAdminAction } from './adminActionExecution.js';
 import { dayKeyAtOffset, getGrowthCalendarContext } from './growthPreferences.js';
 import {
   POINTS_EARNING_POLICY_VERSION,
-  POINTS_EARNING_C6_POLICY_VERSION,
+  POINTS_EARNING_C8_POLICY_VERSION,
   applyAchievementEarningPolicy,
+  achievementPolicyVersionForRuntime,
   checkinPointsForStreak,
   dailyClaimRef,
   dailyClaimRefCandidates,
@@ -32,6 +33,8 @@ import {
   LEGACY_POINTS_EARNING_POLICY_VERSION,
   resolveDailyQuestStages,
   MAKEUP_CARD_SUPPLY_POLICY,
+  usesC5EarningRules,
+  usesC6DailyQuestCatalog,
 } from './pointsEarningPolicy.js';
 import { resolveDailyEarningPolicyVersion } from './pointsEarningPolicyState.js';
 import { C6_DAILY_QUEST_KINDS, selectLegacyDailyQuestKey } from './dailyQuestPolicy.js';
@@ -88,8 +91,8 @@ export const DAILY_QUEST_STAGES = resolveDailyQuestStages();
 export const STREAK_MILESTONES = [
   { days: 7, points: 50, cards: 1 },
   { days: 30, points: 300, storageMb: 512, cards: 1 },
-  { days: 100, points: 600, storageMb: 1024 },
-  { days: 365, points: 2000, storageMb: 2048 },
+  { days: 100, points: 600, storageMb: 1024, cards: 1 },
+  { days: 365, points: 2000, storageMb: 2048, cards: 1 },
 ];
 
 const CHECKIN_BASE = 5; // 每日签到基础 +5
@@ -615,17 +618,18 @@ export async function getDailyQuestState(
     (isGuest
       ? earningPolicyVersionForDay(effectiveDayKey)
       : await resolveDailyEarningPolicyVersion(effectiveDayKey, { db }));
-  if ([POINTS_EARNING_POLICY_VERSION, POINTS_EARNING_C6_POLICY_VERSION].includes(earningPolicyVersion)) {
+  if (usesC5EarningRules(earningPolicyVersion)) {
+    const usesSpecificTasks = usesC6DailyQuestCatalog(earningPolicyVersion);
     const facts = isGuest
       ? { total: 0, byType: {}, activeDays: 0, variety: 0, events: [] }
       : await getMeaningfulActivityFacts(userId, {
           db,
           calendar,
           dayKey: effectiveDayKey,
-          ...(earningPolicyVersion === POINTS_EARNING_C6_POLICY_VERSION ? { activityKinds: C6_DAILY_QUEST_KINDS } : {}),
+          ...(usesSpecificTasks ? { activityKinds: C6_DAILY_QUEST_KINDS } : {}),
         });
     const quests =
-      earningPolicyVersion === POINTS_EARNING_C6_POLICY_VERSION
+      usesSpecificTasks
         ? c6DailyQuestsFromFacts({
             userId,
             dayKey: effectiveDayKey,
@@ -1007,9 +1011,10 @@ export async function getGrowthDashboard(userId, { userRole = null, db = pool, c
   const isGuest = isVisitorGrowthActor(userId, userRole);
   const accountCalendar = calendar || (!isGuest ? await getGrowthCalendarContext(userId, { db }) : null);
   const effectiveDayKey = accountCalendar?.dayKey || dayKey();
-  const achievementPolicyVersion = isGuest
+  const dayPolicyVersion = isGuest
     ? earningPolicyVersionForDay(effectiveDayKey)
     : await resolveDailyEarningPolicyVersion(effectiveDayKey, { db });
+  const achievementPolicyVersion = achievementPolicyVersionForRuntime(dayPolicyVersion);
   const achievementCatalog = resolveAchievements(achievementPolicyVersion);
   const growth = await getGrowth(userId, { userRole, db, calendar: accountCalendar });
 
@@ -1218,6 +1223,14 @@ export async function getGrowthDashboard(userId, { userRole = null, db = pool, c
     const everUnlocked = Boolean(state?.unlockedAt);
     const requirementsMet = meetsAchievementRequirement(a, metrics);
     const unlocked = everUnlocked || requirementsMet;
+    // 展示和领取都以已承诺的快照为准；旧行缺少快照时按其原策略恢复奖励。
+    const rewardPolicyVersion = state
+      ? state.policyVersion || LEGACY_POINTS_EARNING_POLICY_VERSION
+      : achievementPolicyVersion;
+    const previousReward = state
+      ? applyAchievementEarningPolicy(LEGACY_ACHIEVEMENTS.find((item) => item.key === a.key), rewardPolicyVersion).reward
+      : null;
+    const reward = Number(state?.rewardPointsSnapshot ?? previousReward ?? a.reward);
     return {
       key: a.key,
       group: a.group,
@@ -1228,16 +1241,16 @@ export async function getGrowthDashboard(userId, { userRole = null, db = pool, c
       currentActiveDays: activeDays,
       currentLevel,
       unlocked,
-      reward: a.reward, // 解锁后可领的积分
-      policyVersion: state?.policyVersion || achievementPolicyVersion,
+      reward,
+      policyVersion: rewardPolicyVersion,
       rewardSnapshot: state
         ? {
-            points: Number(state.rewardPointsSnapshot ?? a.reward),
+            points: reward,
             frameId: state.rewardFrameIdSnapshot || rewardFrame?.id || null,
-            policyVersion: state.policyVersion || achievementPolicyVersion,
+            policyVersion: rewardPolicyVersion,
           }
         : null,
-      frameId: rewardFrame?.id || null, // 可选头像框奖励；领取时与积分在同一事务发放
+      frameId: state?.rewardFrameIdSnapshot || rewardFrame?.id || null, // 可选头像框奖励；领取时与积分在同一事务发放
       claimed, // 是否已领取奖励
       claimable: unlocked && !claimed, // 可领取(已解锁且未领)
       unlockedAt: state?.unlockedAt || null,
@@ -1257,7 +1270,7 @@ export async function getGrowthDashboard(userId, { userRole = null, db = pool, c
     isGuest,
     db,
     calendar: accountCalendar,
-    policyVersion: achievementPolicyVersion,
+    policyVersion: dayPolicyVersion,
   });
   const effectiveDailyStages = resolveDailyQuestStages(dailyPolicyVersion);
   let legacyClaimed = false;
@@ -1395,11 +1408,15 @@ export async function claimAchievement(userId, key, { userRole = null, dashboard
   const dash = dashboard || (await getGrowthDashboard(userId, { userRole }));
   const a = dash.achievements.find((x) => x.key === key);
   if (!a || !a.unlocked) return { ok: false, reason: 'locked', msg: '成就尚未解锁' };
+  const rewardPoints = Number(a.rewardSnapshot?.points ?? a.reward ?? ach.reward);
+  const policyVersion = a.rewardSnapshot?.policyVersion || a.policyVersion;
+  if (policyVersion === POINTS_EARNING_C8_POLICY_VERSION && !earningWritesEnabled(policyVersion))
+    return { ok: false, reason: 'earning_paused' };
   const rewardFrame = getAchievementFrameByKey(key);
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
-    const got = await earnPoints(userId, ach.reward, 'achievement', key, conn);
+    const got = await earnPoints(userId, rewardPoints, 'achievement', key, conn, { policyVersion });
     if (!got) {
       await conn.rollback();
       return { ok: false, reason: 'claimed', msg: '该成就奖励已领取' };
@@ -1424,7 +1441,7 @@ export async function claimAchievement(userId, key, { userRole = null, dashboard
   return {
     ok: true,
     key,
-    reward: ach.reward,
+    reward: rewardPoints,
     frameId: rewardFrame?.id || null,
     growth: await getGrowth(userId, { userRole }),
   };

@@ -41,9 +41,10 @@ import {
   grantExp,
   getGrowth,
   getDailyQuestState,
+  checkin,
   generateGrowthNudges,
 } from './growth.js';
-import { POINTS_EARNING_C6_POLICY_VERSION } from './pointsEarningPolicy.js';
+import { POINTS_EARNING_C6_POLICY_VERSION, POINTS_EARNING_C8_POLICY_VERSION } from './pointsEarningPolicy.js';
 
 function accountCalendar(dayKey, makeupDays = []) {
   return {
@@ -94,10 +95,12 @@ describe('growth 段位表', () => {
     }
   });
 
-  it('补签卡只在 7/30 天连签里程碑供给且单次各 1 张', () => {
+  it('7/30/100/365 天连签里程碑各赠 1 张补签卡', () => {
     expect(STREAK_MILESTONES.filter((milestone) => milestone.cards).map(({ days, cards }) => [days, cards])).toEqual([
       [7, 1],
       [30, 1],
+      [100, 1],
+      [365, 1],
     ]);
   });
 });
@@ -148,6 +151,131 @@ describe('C6 每日任务状态', () => {
     expect(new Set(state.quests.map((quest) => quest.key)).size).toBe(3);
     expect(state.quests.some((quest) => quest.key.startsWith('knowledge_action_'))).toBe(false);
   });
+
+  it('C8 奖励升级不改变同账号同日的 C6 随机任务组合', async () => {
+    const options = { db: { query: vi.fn().mockResolvedValue([[]]) }, calendar: accountCalendar('20261026') };
+    const previous = await getDailyQuestState(
+      'user-1',
+      { checkedInToday: true },
+      { ...options, policyVersion: POINTS_EARNING_C6_POLICY_VERSION },
+    );
+    const next = await getDailyQuestState(
+      'user-1',
+      { checkedInToday: true },
+      { ...options, policyVersion: POINTS_EARNING_C8_POLICY_VERSION },
+    );
+    expect(next.quests).toEqual(previous.quests);
+    expect(next.policyVersion).toBe(POINTS_EARNING_C8_POLICY_VERSION);
+  });
+});
+
+describe('C8 成就展示与旧承诺', () => {
+  it.each(['points-earning-c5', 'points-earning-c8'])('兼容日任务入口对 %s 仍遵守发放暂停', async (version) => {
+    vi.stubEnv('POINTS_EARNING_C5_EFFECTIVE_DAY', '20260818');
+    vi.stubEnv('POINTS_EARNING_C5_ENABLED', 'false');
+    vi.stubEnv('POINTS_EARNING_C8_ENABLED', 'false');
+    pool.query.mockImplementation(async (sql) => {
+      if (sql.includes('points_earning_period_policy')) return [[{ policyVersion: version }]];
+      if (sql.includes('SELECT exp, streak, last_checkin_date')) return [[{ exp: 0, streak: 0, points: 0 }]];
+      if (sql.includes('SUM(amount)')) return [[{ used: 0 }]];
+      return [[]];
+    });
+    expect(
+      await claimDailyQuestBonus('user-1', { userRole: 'user', calendar: accountCalendar('20261026') }),
+    ).toMatchObject({ ok: false, reason: 'earning_paused' });
+  });
+
+  it('已解锁快照和缺快照的旧策略金额优先，未解锁才按新奖励展示，GET 保持只读', async () => {
+    vi.stubEnv('COMMUNITY_FEED_ENABLED', 'false');
+    vi.stubEnv('POINTS_EARNING_C8_EFFECTIVE_DAY', '20261026');
+    let dayVersion = POINTS_EARNING_C8_POLICY_VERSION;
+    const db = {
+      query: vi.fn(async (sql) => {
+        if (sql.includes('points_earning_period_policy')) return [[{ policyVersion: dayVersion }]];
+        if (sql.includes('SELECT exp, streak, last_checkin_date')) return [[{ exp: 50000, streak: 0, points: 0 }]];
+        if (sql.includes('AS bookmarkCount')) return [[{}]];
+        if (sql.includes('SUM(amount)')) return [[{ used: 0, s: 0 }]];
+        if (sql.includes('FROM user_achievements'))
+          return [
+            [
+              {
+                achievementKey: 'bookmark_500',
+                unlockedAt: '2026-10-01',
+                rewardPointsSnapshot: 400,
+                policyVersion: 'points-earning-c6',
+              },
+              {
+                achievementKey: 'note_500',
+                unlockedAt: '2026-10-01',
+                rewardPointsSnapshot: null,
+                policyVersion: 'points-earning-c6',
+              },
+            ],
+          ];
+        return [[]];
+      }),
+    };
+    const result = await getGrowthDashboard('user-1', { userRole: 'user', db, calendar: accountCalendar('20261026') });
+    expect(result.achievements.find((item) => item.key === 'bookmark_500')).toMatchObject({
+      unlocked: true,
+      reward: 400,
+      rewardSnapshot: { points: 400, policyVersion: 'points-earning-c6' },
+    });
+    expect(result.achievements.find((item) => item.key === 'note_500')).toMatchObject({ unlocked: true, reward: 600 });
+    expect(result.achievements.find((item) => item.key === 'file_500')).toMatchObject({ unlocked: false, reward: 250 });
+    expect(result.questBonus.stages.map(({ points }) => points)).toEqual([5, 10]);
+    vi.stubEnv('POINTS_EARNING_C8_EFFECTIVE_WEEK', '202644');
+    dayVersion = POINTS_EARNING_C6_POLICY_VERSION;
+    const beforeDay = await getGrowthDashboard('user-1', {
+      userRole: 'user',
+      db,
+      calendar: accountCalendar('20261025'),
+    });
+    expect(beforeDay.achievementPolicyVersion).toBe(POINTS_EARNING_C8_POLICY_VERSION);
+    expect(beforeDay.achievements.find((item) => item.key === 'file_500')?.reward).toBe(250);
+    expect(beforeDay.questBonus.stages.map(({ points }) => points)).toEqual([15, 25]);
+    expect(db.query.mock.calls.every(([sql]) => sql.trimStart().startsWith('SELECT'))).toBe(true);
+  });
+});
+
+describe('长连签里程碑补签卡发放', () => {
+  it.each([100, 365].flatMap((days) => [true, false].map((firstHit) => ({ days, firstHit }))))(
+    '$days 天里程碑首次命中=$firstHit，补签卡与里程碑收据共用事务',
+    async ({ days, firstHit }) => {
+      vi.clearAllMocks();
+      const row = { exp: 0, level: 1, streak: days - 1, last_checkin_date: '20261025', points: 0 };
+      const conn = {
+        beginTransaction: vi.fn(),
+        commit: vi.fn(),
+        rollback: vi.fn(),
+        release: vi.fn(),
+        query: vi.fn(async (sql) => {
+          if (sql.includes('SELECT exp')) return [[row]];
+          if (sql.includes('AS serverOffset')) return [[{ serverOffset: 480 }]];
+          if (sql.includes('SUM(amount)')) return [[{ used: 0 }]];
+          if (sql.includes('COUNT(DISTINCT day)')) return [[{ total: days }]];
+          if (sql.startsWith('SELECT')) return [[]];
+          return [{ affectedRows: 1, insertId: 1 }];
+        }),
+      };
+      pool.getConnection.mockResolvedValue(conn);
+      earnPoints.mockImplementation(async (_user, _amount, reason) =>
+        reason === 'streak_milestone' ? firstHit : true,
+      );
+      const result = await checkin('user-1', { userRole: 'user', calendar: accountCalendar('20261026') });
+      expect(result.ok).toBe(true);
+      if (firstHit) {
+        expect(grantItem).toHaveBeenCalledExactlyOnceWith(conn, 'user-1', 'makeup_card', 1);
+        expect(result.milestone).toMatchObject({ days, cards: 1 });
+      } else {
+        expect(grantItem).not.toHaveBeenCalled();
+        expect(result.milestone).toBeNull();
+      }
+      expect(conn.commit).toHaveBeenCalledOnce();
+      expect(conn.rollback).not.toHaveBeenCalled();
+      earnPoints.mockReset();
+    },
+  );
 });
 
 describe('每日经验上限与一次性奖励隔离', () => {
@@ -392,7 +520,7 @@ describe('成就头像框领取', () => {
       dashboard: { achievements: [{ key: 'streak_1', unlocked: true }] },
     });
 
-    expect(earnPoints).toHaveBeenCalledWith('user-1', 10, 'achievement', 'streak_1', connection);
+    expect(earnPoints).toHaveBeenCalledWith('user-1', 10, 'achievement', 'streak_1', connection, { policyVersion: undefined });
     expect(connection.query).toHaveBeenCalledWith(
       'INSERT IGNORE INTO user_cosmetics (user_id, cosmetic_id) VALUES (?, ?)',
       ['user-1', 'frame_first_light'],

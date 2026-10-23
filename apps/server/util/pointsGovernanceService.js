@@ -2,12 +2,13 @@ import pool from '../db/index.js';
 import { INTERNAL_ROLES } from './internalRoles.js';
 import { enrichPointsLogRow, getActiveShopItems } from './points.js';
 import { getEconomyRuntime } from './pointsEconomyCatalog.js';
+import { resolveAchievements, STREAK_MILESTONES } from './growth.js';
 import {
   C5_EARNING_RULE_POLICY_VERSIONS,
   getEarningPolicySnapshot,
   ONE_TIME_POINTS_REASONS,
   OPERATIONS_POINTS_REASONS,
-  POINTS_EARNING_POLICY_VERSION,
+  POINTS_EARNING_C8_POLICY_VERSION,
   RANDOM_POINTS_REASONS,
   STABLE_POINTS_REASONS,
 } from './pointsEarningPolicy.js';
@@ -752,7 +753,7 @@ function boundedRatio(value, fallback) {
 
 /** 纯函数模拟器：只读代码目录，不读取或修改生产策略。 */
 export function simulatePointsPolicy(input = {}) {
-  const defaults = getEarningPolicySnapshot();
+  const defaults = getEarningPolicySnapshot(POINTS_EARNING_C8_POLICY_VERSION);
   const checkinDaily = boundedInteger(input.checkinDaily, defaults.checkin.maximum, { max: 200 });
   const dailyQuestDaily = boundedInteger(
     input.dailyQuestDaily,
@@ -770,8 +771,16 @@ export function simulatePointsPolicy(input = {}) {
     throw new PointsGovernanceError('INVALID_SIMULATOR_INPUT', '免费次数档位无效');
   }
   const draws = freeDrawsByTier.map((value) => boundedInteger(value, 0, { max: 20 }));
-  const achievementPool = boundedInteger(input.achievementPool, 8080, { max: 100_000 });
-  const milestonePool = boundedInteger(input.milestonePool, 2950, { max: 100_000 });
+  const achievementPool = boundedInteger(
+    input.achievementPool,
+    resolveAchievements(POINTS_EARNING_C8_POLICY_VERSION).reduce((sum, item) => sum + item.reward, 0),
+    { max: 100_000 },
+  );
+  const milestonePool = boundedInteger(
+    input.milestonePool,
+    STREAK_MILESTONES.reduce((sum, item) => sum + item.points, 0),
+    { max: 100_000 },
+  );
   const activeRatio = boundedRatio(input.activeRatio, 0.35);
   const consumptionRatio = boundedRatio(input.consumptionRatio, 0.65);
   const activeUsers = boundedInteger(input.activeUsers, 1000, { max: 100_000_000 });
@@ -796,7 +805,7 @@ export function simulatePointsPolicy(input = {}) {
   return {
     readOnly: true,
     economyVersion: getEconomyRuntime().economyVersion,
-    policyVersion: POINTS_EARNING_POLICY_VERSION,
+    policyVersion: POINTS_EARNING_C8_POLICY_VERSION,
     input: {
       checkinDaily,
       dailyQuestDaily,

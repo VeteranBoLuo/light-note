@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../db/index.js', () => ({ default: { query: vi.fn() } }));
 vi.mock('./growth.js', () => ({
@@ -23,6 +23,21 @@ import { persistAchievementUnlocksForMetrics } from './growthAchievementState.js
 
 describe('growthAchievementState', () => {
   beforeEach(() => vi.clearAllMocks());
+  afterEach(() => vi.unstubAllEnvs());
+
+  it('日任务尚未切换前，C8 配置已使新成就固化为新目录版本', async () => {
+    vi.stubEnv('POINTS_EARNING_C8_EFFECTIVE_DAY', '20261026');
+    vi.stubEnv('POINTS_EARNING_C8_EFFECTIVE_WEEK', '202644');
+    const db = { query: vi.fn().mockResolvedValue([{ affectedRows: 1 }]) };
+    await persistAchievementUnlocksForMetrics('user-1', { completedTodoCount: 20, level: 2 }, { db });
+    expect(db.query).toHaveBeenCalledWith(expect.stringContaining('INSERT IGNORE INTO user_achievements'), [
+      'user-1',
+      'todo_20',
+      20,
+      null,
+      'points-earning-c8',
+    ]);
+  });
 
   it('达标时只追加永久解锁状态，不覆盖既有领取时间', async () => {
     const db = { query: vi.fn().mockResolvedValue([{ affectedRows: 1 }]) };

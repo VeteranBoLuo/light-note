@@ -4,11 +4,14 @@ import { getMeaningfulActiveDays } from './meaningfulActivity.js';
 import { getGrowthCalendarContext } from './growthPreferences.js';
 import { resolveDailyEarningPolicyVersion } from './pointsEarningPolicyState.js';
 import { getAchievementFrameByKey } from './points.js';
+import { achievementPolicyVersionForRuntime } from './pointsEarningPolicy.js';
 
 export async function persistAchievementUnlocksForMetrics(userId, metrics, { db = pool, currentLevel = null } = {}) {
   if (!userId || userId === 'visitor') return [];
   const calendar = await getGrowthCalendarContext(userId, { db });
-  const policyVersion = await resolveDailyEarningPolicyVersion(calendar.dayKey, { db, lock: true });
+  const policyVersion = achievementPolicyVersionForRuntime(
+    await resolveDailyEarningPolicyVersion(calendar.dayKey, { db, lock: true }),
+  );
   const achievements = resolveAchievements(policyVersion);
   let level = Number(currentLevel ?? metrics?.level ?? 0);
   if (!level) {

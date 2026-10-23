@@ -81,11 +81,22 @@
               <div class="aw-mini-progress">
                 <div class="aw-mini-bar"><div class="aw-mini-fill" :style="{ width: prog(a) + '%' }"></div></div>
                 <span class="aw-mini-num">{{ Math.min(a.cur, a.target) }}/{{ a.target }}</span>
-                <span v-if="a.minLevel" class="aw-mini-level">Lv.{{ a.currentLevel || 0 }}/{{ a.minLevel }}</span>
               </div>
-              <span v-if="a.reward" class="aw-reward-hint">
-                {{ t('growth.achRewardLabel') }} <SvgIcon :src="icon.growth.coin" size="10" /> {{ a.reward }}
-              </span>
+              <div v-if="a.minLevel || a.reward" class="aw-mini-meta">
+                <span
+                  v-if="a.minLevel"
+                  class="aw-mini-level"
+                  :class="{ 'aw-mini-level--met': (a.currentLevel || 0) >= a.minLevel }"
+                  :title="t('growth.achLevelRequirement', { level: a.minLevel, current: a.currentLevel || 0 })"
+                  :aria-label="t('growth.achLevelRequirement', { level: a.minLevel, current: a.currentLevel || 0 })"
+                >
+                  Lv.{{ a.minLevel }}
+                  <SvgIcon v-if="(a.currentLevel || 0) >= a.minLevel" :src="icon.filterPanel.check" size="10" />
+                </span>
+                <span v-if="a.reward" class="aw-reward-hint">
+                  {{ t('growth.achRewardLabel') }} <SvgIcon :src="icon.growth.coin" size="10" /> {{ a.reward }}
+                </span>
+              </div>
             </div>
           </div>
         </div>
@@ -346,6 +357,9 @@
   }
   .aw-filters {
     align-self: flex-start;
+    min-width: 0;
+    max-width: 100%;
+    overflow-x: auto;
   }
   .aw-group {
     display: flex;
@@ -543,16 +557,15 @@
     display: inline-flex;
     align-items: center;
     gap: var(--ui-space-2, 2px);
-    font-size: var(--ui-font-9_5, 9.5px);
-    color: #d97706;
+    margin-left: auto;
+    font-size: var(--ui-font-11, 11px);
+    color: var(--warning-color);
     font-weight: 600;
     white-space: nowrap;
   }
   .aw-mini {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--ui-space-9, 9px);
+    display: grid;
+    gap: var(--ui-space-8, 8px);
     width: 100%;
   }
   .aw-mini-progress {
@@ -560,7 +573,7 @@
     display: flex;
     align-items: center;
     gap: var(--ui-space-7, 7px);
-    flex: 1 1 auto;
+    width: 100%;
   }
   .aw-mini-bar {
     min-width: var(--ui-layout-42, 42px);
@@ -582,16 +595,31 @@
     color: var(--desc-color);
     font-variant-numeric: tabular-nums;
   }
+  .aw-mini-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--ui-space-6, 6px) var(--ui-space-10, 10px);
+    min-width: 0;
+  }
   .aw-mini-level {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--ui-space-3, 3px);
     flex: 0 0 auto;
     padding: var(--ui-space-1, 1px) var(--ui-space-5, 5px);
-    border: 1px solid color-mix(in srgb, var(--primary-color) 38%, transparent);
+    border: 1px solid var(--card-border-color);
     border-radius: 999px;
-    color: var(--primary-color);
-    font-size: var(--ui-font-9, 9px);
+    color: var(--desc-color);
+    font-size: var(--ui-font-11, 11px);
     font-weight: 700;
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
+  }
+  .aw-mini-level--met {
+    color: var(--success-color);
+    border-color: var(--chip-success-border);
+    background: var(--chip-success-bg);
   }
 
   @media (max-width: 767px) {
@@ -634,7 +662,6 @@
     }
 
     .aw-mini {
-      flex-direction: column;
       gap: 4px;
     }
 

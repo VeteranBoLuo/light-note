@@ -105,6 +105,31 @@ async function mount(
 }
 
 describe('新手任务展示与创建入口', () => {
+  it('全部领取后只显示一处完成提示，已完成路线可以展开和收起', async () => {
+    const data = tasksData(Object.fromEntries(keys.map((key) => [key, { completed: true, claimed: true }])));
+    Object.assign(data, { completedCount: 6, claimedCount: 6, remainingCount: 0 });
+    const view = await mount(data, { compact: false });
+    expect(view.host.querySelector('.growth-tasks__remaining')).toBeNull();
+    expect(view.host.querySelectorAll('.growth-tasks__empty-message')).toHaveLength(1);
+    const toggle = view.host.querySelector<HTMLButtonElement>('.growth-tasks__completed-toggle')!;
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    toggle.click();
+    await nextTick();
+    expect(view.titles()).toEqual(keys);
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    toggle.click();
+    await nextTick();
+    expect(view.titles()).toEqual([]);
+  });
+
+  it('全部达成但还有奖励待领取时保留任务和领取入口', async () => {
+    const data = tasksData(Object.fromEntries(keys.map((key) => [key, { completed: true, claimable: true }])));
+    Object.assign(data, { completedCount: 6, claimableCount: 6, remainingCount: 0 });
+    const view = await mount(data, { compact: false, maxVisible: 6 });
+    expect(view.host.querySelector('.growth-tasks__empty')).toBeNull();
+    expect(view.host.querySelectorAll('.growth-task__claim')).toHaveLength(data.tasks.length);
+  });
+
   it('首页从完整任务中优先展示首次收藏和笔记，输入数据不被排序修改', async () => {
     const data = tasksData();
     const view = await mount(data);

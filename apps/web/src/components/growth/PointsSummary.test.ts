@@ -53,6 +53,35 @@ describe('积分收支摘要', () => {
     expect(host.querySelector('.source-groups')).toBeNull();
     expect(get).toHaveBeenCalledTimes(1);
   });
+  it.each([
+    { name: 'C8', daily: [5, 10], weekly: 120 },
+    { name: '日周过渡周期', daily: [5, 10], weekly: 270 },
+    { name: '旧周期', daily: [15, 25], weekly: 270 },
+  ])('$name 的积分说明按接口当期奖励与门槛展示', async ({ daily, weekly }) => {
+    get.mockResolvedValue({
+      status: 200,
+      data: {
+        ...data,
+        earningRules: {
+          checkin: { base: 15, maximum: 20 },
+          daily: daily.map((points, index) => ({ required: index + 2, points })),
+          weekly: [{ reward: weekly - 10 }, { reward: 10 }],
+        },
+      },
+    });
+    await mount();
+    click('积分规则');
+    await flush();
+    const rules = [...host.querySelectorAll('.rules > div')];
+    expect(rules[0].textContent).toContain('15–20');
+    expect(rules[1].querySelector('dt')?.textContent).toBe('每日任务（分阶段领取）');
+    expect([...rules[1].querySelectorAll('.rule-stage')].map((row) => row.textContent)).toEqual([
+      `完成 2 项：+${daily[0]} 积分`,
+      `完成 3 项：+${daily[1]} 积分`,
+    ]);
+    expect(rules[2].querySelector('dd')?.textContent).toBe(String(weekly));
+    expect(get).toHaveBeenCalledTimes(1);
+  });
   it('加载失败不会伪装成零余额，重试恢复摘要', async () => {
     get.mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce({ status: 200, data });
     await mount();

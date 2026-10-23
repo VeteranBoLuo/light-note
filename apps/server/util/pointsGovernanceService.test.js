@@ -63,16 +63,17 @@ describe('C5 积分治理时间窗与只读模拟器', () => {
     ]);
   });
 
-  it('默认 C5 稳定周产出保持 670，模拟器不接收数据库也没有写入入口', () => {
+  it('默认模拟 C8 周上限 365，成就池从奖励目录读取，不接收数据库和写入入口', () => {
     const result = simulatePointsPolicy();
     expect(result).toMatchObject({
       readOnly: true,
-      stableWeek: 670,
-      input: { milestonePool: 2950, achievementPool: 8080 },
-      firstYearOneTime: 3_860_500,
+      policyVersion: 'points-earning-c8',
+      stableWeek: 365,
+      input: { milestonePool: 2950, achievementPool: 4140 },
+      firstYearOneTime: 2_481_500,
       disclaimer: 'simulation_only_no_production_write',
     });
-    expect(result.tiers.map((row) => row.expectedWeek)).toEqual([670, 775, 880, 985]);
+    expect(result.tiers.map((row) => row.expectedWeek)).toEqual([365, 470, 575, 680]);
     expect(result.goalCycles.length).toBeGreaterThan(0);
   });
 

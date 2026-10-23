@@ -20,7 +20,6 @@
         </div>
       </div>
 
-      <div class="ps-earn"><SvgIcon :src="icon.message.info" size="15" /> {{ t('growth.shopEarnHint') }}</div>
       <div class="ps-store-bridge">
         <span class="ps-store-bridge__icon" aria-hidden="true"><SvgIcon :src="icon.support.store" size="19" /></span>
         <div>
@@ -639,17 +638,6 @@
     color: var(--desc-color);
     font-size: var(--ui-font-11, 11px);
     line-height: 1.45;
-  }
-  .ps-earn {
-    display: flex;
-    align-items: center;
-    gap: var(--ui-space-6, 6px);
-    font-size: var(--ui-font-12, 12px);
-    color: var(--desc-color);
-    padding: var(--ui-space-8, 8px) var(--ui-space-12, 12px);
-    border-radius: 10px;
-    background: color-mix(in srgb, var(--primary-color) 5%, var(--background-color));
-    border: 1px dashed color-mix(in srgb, var(--primary-color) 30%, transparent);
   }
   .ps-visitor {
     font-size: var(--ui-font-12_5, 12.5px);

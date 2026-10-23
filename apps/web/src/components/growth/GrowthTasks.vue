@@ -11,7 +11,7 @@
     <div class="growth-tasks__bar" aria-hidden="true">
       <span :style="{ width: `${progress}%` }"></span>
     </div>
-    <p class="growth-tasks__remaining">
+    <p v-if="visibleTasks.length" class="growth-tasks__remaining">
       {{ remainingLabel }}
     </p>
 
@@ -61,9 +61,21 @@
     </div>
 
     <div v-else class="growth-tasks__empty">
-      <span>{{ t('growth.tasksAllDone') }}</span>
-      <BButton v-if="completedTasks.length" size="small" @click="completedExpanded = !completedExpanded">
-        {{ completedExpanded ? t('growth.tasksCollapseCompleted') : t('growth.tasksShowCompleted', { n: completedTasks.length }) }}
+      <SvgIcon class="growth-tasks__empty-icon" :src="icon.message.success" size="22" />
+      <span class="growth-tasks__empty-message" role="status">{{ t('growth.tasksAllDone') }}</span>
+      <BButton
+        v-if="completedTasks.length"
+        class="growth-tasks__completed-toggle"
+        size="small"
+        type="text"
+        :aria-expanded="completedExpanded"
+        @click="completedExpanded = !completedExpanded"
+      >
+        {{
+          completedExpanded
+            ? t('growth.tasksCollapseCompleted')
+            : t('growth.tasksShowCompleted', { n: completedTasks.length })
+        }}
       </BButton>
     </div>
 
@@ -120,9 +132,13 @@
   const completedExpanded = ref(false);
 
   const allTasks = computed<GrowthTask[]>(() => props.data?.allTasks || props.data?.tasks || []);
-  const completedTasks = computed<GrowthTask[]>(() => props.data?.completedTasks || allTasks.value.filter((task) => task.claimed));
+  const completedTasks = computed<GrowthTask[]>(
+    () => props.data?.completedTasks || allTasks.value.filter((task) => task.claimed),
+  );
   const pendingTasks = computed<GrowthTask[]>(() => allTasks.value.filter((task) => !task.completed));
-  const activeTasks = computed<GrowthTask[]>(() => (props.data?.tasks || allTasks.value).filter((task) => !task.claimed));
+  const activeTasks = computed<GrowthTask[]>(() =>
+    (props.data?.tasks || allTasks.value).filter((task) => !task.claimed),
+  );
   const visibleTasks = computed(() => {
     const firstResourceKeys = ['first_bookmark', 'first_note', 'first_file'];
     const firstResourceTasks = firstResourceKeys.map((key) => allTasks.value.find((task) => task.taskKey === key));
@@ -146,8 +162,8 @@
   const totalCount = computed(() => Number(props.data?.totalCount || 0));
   const completedCount = computed(() => Number(props.data?.completedCount || 0));
   const remainingCount = computed(() => Number(props.data?.remainingCount ?? pendingTasks.value.length));
-  const claimableCount = computed(
-    () => Number(props.data?.claimableCount ?? allTasks.value.filter((task) => task.claimable).length),
+  const claimableCount = computed(() =>
+    Number(props.data?.claimableCount ?? allTasks.value.filter((task) => task.claimable).length),
   );
   const progress = computed(() => (totalCount.value ? Math.round((completedCount.value / totalCount.value) * 100) : 0));
   const progressLabel = computed(() => ({ completed: completedCount.value, total: totalCount.value }));
@@ -395,12 +411,32 @@
   }
 
   .growth-tasks__empty {
-    padding: var(--ui-space-13, 13px);
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--ui-space-8, 8px) var(--ui-space-12, 12px);
+    padding: var(--ui-space-16, 16px);
+    border: 1px solid var(--card-border-color);
     border-radius: 10px;
-    background: color-mix(in srgb, var(--primary-color) 7%, var(--workbench-subcard-bg));
-    color: var(--desc-color);
+    background: var(--workbench-subcard-bg);
+    color: var(--text-color);
     font-size: var(--ui-font-13, 13px);
-    text-align: center;
+    line-height: 1.6;
+  }
+
+  .growth-tasks__empty-icon {
+    flex: 0 0 auto;
+    color: var(--success-color);
+  }
+
+  .growth-tasks__empty-message {
+    flex: 1 1 var(--ui-layout-180, 180px);
+    min-width: 0;
+  }
+
+  .growth-tasks__completed-toggle {
+    flex: 0 0 auto;
+    margin-left: auto;
   }
 
   .growth-tasks__action {
