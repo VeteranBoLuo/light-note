@@ -10,6 +10,7 @@ export const notificationMessages: Record<
     collectionSubmissionContent: string;
   }
 >;
+export function formatWeeklyReportExperience(value: number): string;
 export function notificationPresentation(
   item: { type?: string; title?: string; content?: string | null; meta?: any },
   locale?: string,

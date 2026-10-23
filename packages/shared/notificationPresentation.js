@@ -71,6 +71,11 @@ export const notificationMessages = {
     },
   },
 };
+export function formatWeeklyReportExperience(value) {
+  const exp = Number.isFinite(value) ? value : 0;
+  return exp >= 0 ? `+${exp}` : String(exp);
+}
+
 export function notificationPresentation(item, locale = "zh-CN") {
   const messages =
     notificationMessages[locale] || notificationMessages["zh-CN"];
@@ -84,6 +89,10 @@ export function notificationPresentation(item, locale = "zh-CN") {
   }
   let title = item.title || "轻笺";
   let content = String(item.content || "");
+  if (meta?.weeklyReport && typeof meta.weeklyReport === "object") {
+    // 历史通知正文已固化；只修正经验前的双重符号，保留原始统计与文案。
+    content = content.replace(/\+(-\d+(?:\.\d+)?)(?=\s*(?:经验|EXP))/g, "$1");
+  }
   if (
     item.type === "collection_form_submission" &&
     typeof meta?.formTitle === "string"

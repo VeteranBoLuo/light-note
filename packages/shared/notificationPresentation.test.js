@@ -2,8 +2,36 @@ import { describe, expect, it } from "vitest";
 import {
   notificationPresentation,
   browserNotificationPresentation,
+  formatWeeklyReportExperience,
 } from "./notificationPresentation.js";
 describe("shared notification presentation", () => {
+  it.each([
+    [10, "+10"],
+    [0, "+0"],
+    [-9283, "-9283"],
+  ])("formats weekly experience %s with one sign", (value, expected) => {
+    expect(formatWeeklyReportExperience(value)).toBe(expected);
+  });
+  it.each([
+    "本周 +-9283 经验 · 签到 1 天",
+    "Last week +-9283 EXP · 1 check-in days",
+  ])("fixes double signs in historical weekly notifications: %s", (content) => {
+    const item = {
+      type: "system",
+      content,
+      meta: JSON.stringify({ weeklyReport: { exp: -9283 } }),
+    };
+    expect(notificationPresentation(item).content).toBe(
+      content.replace("+-9283", "-9283"),
+    );
+    expect(browserNotificationPresentation(item).body).toBe(
+      content.replace("+-9283", "-9283"),
+    );
+    expect(notificationPresentation({ ...item, meta: null }).content).toBe(
+      content,
+    );
+  });
+
   it("localizes new submission notices without exposing answer content", () => {
     const formTitle = "活动反馈 $& {title}";
     const item = {

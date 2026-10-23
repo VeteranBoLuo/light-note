@@ -9290,7 +9290,7 @@ export default {
     wrTitleKicker: 'Title of the week',
     wrStatRecords: 'Records',
     wrStatActiveDays: 'Active days',
-    wrStatExp: 'EXP gained',
+    wrStatExp: 'EXP change',
     wrDailyRecords: 'Daily records',
     wrCheckedIn: 'Checked in',
     wrToday: 'Today',

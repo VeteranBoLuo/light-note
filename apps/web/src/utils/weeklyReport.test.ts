@@ -95,6 +95,12 @@ describe('weekly report normalization', () => {
   it('returns null for missing payloads', () => {
     expect(normalizeWeeklyReport(null)).toBeNull();
   });
+
+  it('preserves negative experience adjustments in current reports and historical snapshots', () => {
+    expect(normalizeWeeklyReport({ ...currentWeek, exp: -9283 })?.exp).toBe(-9283);
+    expect(normalizeWeeklyReport({ exp: -9283 })?.blank).toBe(false);
+    expect(normalizeWeeklyReport({ exp: Number.NaN })?.exp).toBe(0);
+  });
 });
 
 describe('weekly report titles and theme', () => {

@@ -263,6 +263,67 @@ describe.skipIf(!socketPath)('成长周报真实 MySQL / HTTP 联调', () => {
     const meta = typeof row.meta === 'string' ? JSON.parse(row.meta) : row.meta;
     expect(meta.weeklyReport).not.toHaveProperty('items');
   });
+  it('root 与普通账号均按周报开关发放，默认开启且同周不重复发放', async () => {
+    const { generateWeeklyReports, getWeeklyReportPeriod } = await import('./weeklyReport.js');
+    const { getGrowthCalendarContext } = await import('./growthPreferences.js');
+    const fixtures = ['root', 'user'].flatMap((role) =>
+      [true, false, null].map((enabled) => ({
+        id: `weekly-push-${role}-${enabled ?? 'default'}`,
+        role,
+        preferences: enabled === null ? null : JSON.stringify({ weeklyReport: enabled }),
+        receives: enabled !== false,
+        exp: role === 'root' ? -1 : 15,
+      })),
+    );
+    for (const fixture of fixtures) {
+      await state.db.query('INSERT INTO user (id,role,preferences) VALUES (?,?,?)', [
+        fixture.id,
+        fixture.role,
+        fixture.preferences,
+      ]);
+      const period = getWeeklyReportPeriod({
+        calendar: await getGrowthCalendarContext(fixture.id),
+        period: 'last',
+      });
+      // 本周事件确保进入候选查询，上周事件提供非空周报数据，避免依赖测试执行的星期。
+      await state.db.query(
+        `INSERT INTO growth_events (user_id,source,ref_id,amount,create_time)
+         VALUES (?,'activity_note','current',0,NOW()),(?,'note','last',?,?)`,
+        [fixture.id, fixture.id, fixture.exp, `${period.end} 12:00:00`],
+      );
+      if (fixture.role === 'root') {
+        // 一条记录与 -1 经验相加为零，但这仍是一份有活动的周报。
+        await state.db.query('INSERT INTO note (id,title,create_by,create_time) VALUES (?,?,?,?)', [
+          fixture.id,
+          '周报经验调整验收',
+          fixture.id,
+          `${period.end} 12:00:00`,
+        ]);
+      }
+    }
+    vi.stubEnv('LIGHTNOTE_RUNTIME_ENV', 'production');
+    try {
+      for (let run = 0; run < 2; run++) {
+        await generateWeeklyReports();
+        for (const fixture of fixtures) {
+          const [notifications] = await state.db.query('SELECT type,content,meta FROM notification WHERE user_id=?', [
+            fixture.id,
+          ]);
+          expect(notifications, `${fixture.id}, run ${run}`).toHaveLength(fixture.receives ? 1 : 0);
+          if (fixture.receives) {
+            expect(notifications[0].type).toBe('system');
+            expect(notifications[0].content).toContain(`${fixture.exp >= 0 ? '+' : ''}${fixture.exp} 经验`);
+            const meta =
+              typeof notifications[0].meta === 'string' ? JSON.parse(notifications[0].meta) : notifications[0].meta;
+            expect(meta.weeklyReport).toMatchObject({ exp: fixture.exp, period: { kind: 'last' } });
+            expect(meta.weeklyReport).not.toHaveProperty('items');
+          }
+        }
+      }
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
   it('挑战领奖写入真实积分账本，重复领取不重复增加余额', async () => {
     const weekly = await request('/api/growth/weekly');
     expect(weekly.status).toBe(200);

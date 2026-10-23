@@ -187,7 +187,7 @@ export function normalizeWeeklyReport(raw: WeeklyReportData | null | undefined):
   const checkinDays = sourceDays
     ? days.filter((day) => day.checkedIn).length
     : Math.min(7, safeNumber(raw.checkinDays));
-  const exp = Math.max(0, safeNumber(raw.exp));
+  const exp = safeNumber(raw.exp);
   const weekInfo = start ? isoWeekOf(start) : null;
   return {
     kind,

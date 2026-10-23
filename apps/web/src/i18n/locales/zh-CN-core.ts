@@ -8859,7 +8859,7 @@ export default {
     wrTitleKicker: '本期称号',
     wrStatRecords: '记录数',
     wrStatActiveDays: '活跃天数',
-    wrStatExp: '获得经验',
+    wrStatExp: '经验变化',
     wrDailyRecords: '每日记录',
     wrCheckedIn: '当天已签到',
     wrToday: '今天',

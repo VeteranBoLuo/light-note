@@ -52,7 +52,7 @@
         >
       </div>
       <div class="wr-p-stat">
-        <b>+{{ report.exp }}</b>
+        <b>{{ formatWeeklyReportExperience(report.exp) }}</b>
         <span><SvgIcon :density-aware="false" :src="icon.growth.level" size="13" />{{ t('growth.wrStatExp') }}</span>
       </div>
     </section>
@@ -103,6 +103,7 @@
 </template>
 
 <script setup lang="ts">
+  import { formatWeeklyReportExperience } from '@lightnote/shared/notification-presentation';
   import { computed, ref } from 'vue';
   import { useI18n } from 'vue-i18n';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';

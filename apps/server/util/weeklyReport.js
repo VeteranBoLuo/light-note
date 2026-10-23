@@ -1,12 +1,13 @@
 import { createNotification } from './notification.js';
 import { notificationSchedulerEnabled } from './notificationSchedulerPolicy.js';
+import { formatWeeklyReportExperience } from '@lightnote/shared/notification-presentation';
 /**
  * 成长周报(每周一生成上周报告,推送一条「系统」分类通知,meta 带完整数据供前端点击看大图)。
  *
  * 设计:
  * - 不建新表,周报数据存进 notification.meta(JSON),复用通知系统;前端识别 meta.weeklyReport 弹详情。
  * - 周期是账号时区的自然周,与每周挑战同一周一重置口径:current=本周一至今天,last=上周一至周日。
- * - 只给「上周有成长活动 且 未在设置里关闭周报」的非 root 用户生成,避免给沉默用户刷屏。
+ * - 只给「上周有成长活动 且 未在设置里关闭周报」的用户生成,所有角色遵循同一开关。
  * - 无实质活动(新增/经验/签到全为 0)的用户跳过,不发空周报。
  * - 定时任务异常绝不影响主流程(整体 try/catch 吞错)。
  */
@@ -375,7 +376,7 @@ export async function generateWeeklyReports() {
     monday.setHours(0, 0, 0, 0);
     monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
     const weekKey = formatDateTime(monday).slice(0, 10);
-    // 上周有成长活动、非 root、未在设置里关闭周报(preferences.weeklyReport !== false)的用户
+    // 上周有成长活动、未在设置里关闭周报(preferences.weeklyReport !== false)的用户
     const [users] = await pool.query(
       `SELECT activity.user_id,
               COALESCE(JSON_UNQUOTE(JSON_EXTRACT(u.preferences, '$.lang')), 'zh-CN') AS lang
@@ -387,8 +388,7 @@ export async function generateWeeklyReports() {
          SELECT user_id FROM resource_inbox WHERE complete_time >= DATE_SUB(NOW(), INTERVAL 7 DAY)
        ) activity
        JOIN \`user\` u ON u.id = activity.user_id
-       WHERE 1 = 1
-         AND u.role != 'root' AND u.del_flag = 0
+       WHERE u.del_flag = 0
          AND COALESCE(JSON_UNQUOTE(JSON_EXTRACT(u.preferences, '$.weeklyReport')), 'true') != 'false'
        GROUP BY activity.user_id, lang`,
     );
@@ -403,20 +403,22 @@ export async function generateWeeklyReports() {
         const report = await buildWeeklyReport(userId, null, { period: 'last' });
         // 无实质活动不发空周报
         if (
-          report.bookmarks +
-            report.notes +
-            report.files +
-            report.todos +
-            report.organized +
-            report.exp +
-            report.checkinDays ===
-          0
+          [
+            report.bookmarks,
+            report.notes,
+            report.files,
+            report.todos,
+            report.organized,
+            report.exp,
+            report.checkinDays,
+          ].every((value) => value === 0)
         )
           continue;
         const isEn = lang === 'en-US';
+        const exp = formatWeeklyReportExperience(report.exp);
         const content = isEn
-          ? `Last week +${report.exp} EXP · ${report.bookmarks} bookmarks / ${report.notes} notes / ${report.files} files · ${report.todos} todos completed / ${report.organized} items organized · ${report.checkinDays} check-in days`
-          : `上周 +${report.exp} 经验 · 新增书签 ${report.bookmarks} / 笔记 ${report.notes} / 文件 ${report.files} · 完成待办 ${report.todos} / 整理资源 ${report.organized} · 签到 ${report.checkinDays} 天`;
+          ? `Last week ${exp} EXP · ${report.bookmarks} bookmarks / ${report.notes} notes / ${report.files} files · ${report.todos} todos completed / ${report.organized} items organized · ${report.checkinDays} check-in days`
+          : `上周 ${exp} 经验 · 新增书签 ${report.bookmarks} / 笔记 ${report.notes} / 文件 ${report.files} · 完成待办 ${report.todos} / 整理资源 ${report.organized} · 签到 ${report.checkinDays} 天`;
         const title = isEn ? '📊 Your weekly growth report' : '📊 你的成长周报';
         await createNotification(userId, {
           id: notificationId,
