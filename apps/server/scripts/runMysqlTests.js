@@ -13,8 +13,6 @@ const suites = {
   'util/services/lotteryHistoryService.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
   'util/services/inventoryAcquisitionService.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
   'util/pointsEarningC8Preparation.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
-  'util/services/dailyBriefTodoFacts.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
-  'util/services/dailyBriefWorkshop.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
   'util/services/bookmarkImportService.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
   'util/publicResources/publicResources.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
   'util/weeklyReport.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',

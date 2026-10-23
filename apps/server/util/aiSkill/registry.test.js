@@ -56,7 +56,7 @@ describe('AI Skill registry contract', () => {
     expect(listAiSkills()).toEqual(
       ALL_EXPECTED_SKILLS.map(([id, domain, effect]) => ({
         id,
-        version: id === 'routine.daily_brief' ? 2 : 1,
+        version: 1,
         domain,
         effect,
       })),
@@ -64,7 +64,7 @@ describe('AI Skill registry contract', () => {
     expect(listAiSkills({ includeInternal: false })).toEqual(
       EXPECTED_SKILLS.map(([id, domain, effect]) => ({
         id,
-        version: id === 'routine.daily_brief' ? 2 : 1,
+        version: 1,
         domain,
         effect,
       })),
@@ -72,10 +72,10 @@ describe('AI Skill registry contract', () => {
   });
 
   it.each(ALL_EXPECTED_SKILLS)('%s 的定义遵守统一能力、安全和上下文契约', (id, domain, effect) => {
-    const definition = resolveAiSkill(id, id === 'routine.daily_brief' ? 2 : 1);
+    const definition = resolveAiSkill(id, 1);
     const policy = definition.contextPolicy;
 
-    expect(definition).toMatchObject({ id, version: id === 'routine.daily_brief' ? 2 : 1, domain, effect });
+    expect(definition).toMatchObject({ id, version: 1, domain, effect });
     expect(Object.isFrozen(definition)).toBe(true);
     expect(definition.allowedRoles).toEqual(expect.arrayContaining(AI_SKILL_AUTHENTICATED_ROLES));
     expect(definition.allowedRoles.every((role) => ALLOWED_ROLES.has(role))).toBe(true);

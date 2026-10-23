@@ -1,4 +1,3 @@
-import { ADVICE_FACT_ID, ADVICE_CONTEXT_FACT_IDS, adviceContext, resolveAdvice } from './dailyBriefAdvice.js';
 import { randomUUID } from 'node:crypto';
 import { Temporal } from '@js-temporal/polyfill';
 import pool from '../../db/index.js';
@@ -7,27 +6,29 @@ import { executeAiSkill } from '../aiSkill/runtime.js';
 import { withActiveUserAiDispatch } from '../aiOutboundDispatchGuard.js';
 import { isDailyBriefFeatureEnabled } from '../dailyBriefFeature.js';
 import { normalizeTodoLocale } from '../todoDateFormat.js';
-import { compileDailyBriefFacts, selectDailyBriefFacts } from './dailyBriefFacts.js';
-import {
-  needsAdviceResultRecovery,
-  briefFreshness,
-  briefSnapshot,
-  DAILY_BRIEF_REFRESH_POLICY,
-} from './dailyBriefFreshness.js';
+import { compileDailyBriefFacts, DAILY_BRIEF_FACT_DEFINITIONS } from './dailyBriefFacts.js';
+import { briefFreshness, briefSnapshot } from './dailyBriefFreshness.js';
 
 const DEFAULT_TIMEZONE = 'Asia/Shanghai';
 const LEASE_SECONDS = 180;
 const DAILY_BRIEF_VERSION = 2;
 const DAILY_BRIEF_TEMPLATE_TOKEN = /\{\{([a-z_]+)\.(count|sample)\}\}/gu;
+const FACT_DEFINITIONS = DAILY_BRIEF_FACT_DEFINITIONS;
 
 const SECTION_TITLES = Object.freeze({
   'zh-CN': Object.freeze({
     today_actions: '今日行动',
+    new_content: '近期新增',
     organize: '待整理',
+    recommendation: '一句建议',
+    daily_recommendation: '今日建议',
   }),
   'en-US': Object.freeze({
     today_actions: "Today's Actions",
+    new_content: 'Recent additions',
     organize: 'To Organize',
+    recommendation: 'Suggestion',
+    daily_recommendation: 'Daily suggestion',
   }),
 });
 
@@ -145,276 +146,105 @@ export async function updateDailyBriefPreference(database = pool, userId, enable
 }
 
 const compileFacts = compileDailyBriefFacts;
-const BRIEF_RESOURCE_NAMES = {
-  bookmark: ['书签', 'bookmarks'],
-  note: ['笔记', 'notes'],
-  file: ['文件', 'files'],
-  tag: ['标签', 'tags'],
-};
-const BRIEF_SUGGESTION_NAMES = {
-  title: ['标题', 'titles'],
-  description: ['描述', 'descriptions'],
-  tags: ['标签', 'tags'],
-  archive: ['网页存档', 'webpage archives'],
-  duplicate: ['重复资料', 'duplicates'],
-  empty: ['空内容', 'empty content'],
-  tag_merge: ['标签合并', 'tag merging'],
-  tag_icon: ['标签图标', 'tag icons'],
-};
-function briefTitle(value) {
-  const title = String(value || '')
-    .replace(/\s+/gu, ' ')
-    .trim();
-  return title.length > 48 ? `${title.slice(0, 47)}…` : title;
-}
-function reviewContext(fact, english) {
-  const join = (values, names) =>
-    new Intl.ListFormat(english ? 'en-US' : 'zh-CN').format(
-      [...new Set(values || [])]
-        .filter((value) => Object.hasOwn(names, value))
-        .map((value) => names[value][english ? 1 : 0]),
-    );
-  const types = join(fact.resourceTypes, BRIEF_RESOURCE_NAMES);
-  const kinds = join(fact.kinds, BRIEF_SUGGESTION_NAMES);
-  if (!types && !kinds) return '';
-  return english
-    ? ` ${[types && `Covering ${types}`, kinds && `suggestions include ${kinds}`].filter(Boolean).join('; ')}.`
-    : `${types ? `涉及${types}` : ''}${types && kinds ? '，' : ''}${kinds ? `包括${kinds}建议` : ''}。`;
-}
-
-function pendingResourceContext(facts, english) {
-  const examples = (facts.find((fact) => fact.id === 'organize_pending')?.resources || [])
-    .slice(0, 2)
-    .filter((resource) => resource.title && Object.hasOwn(BRIEF_RESOURCE_NAMES, resource.type))
-    .map((resource) =>
-      english
-        ? `“${briefTitle(resource.title)}”`
-        : `${BRIEF_RESOURCE_NAMES[resource.type][0]}《${briefTitle(resource.title)}》`,
-    );
-  if (!examples.length) return '';
-  return english
-    ? ` Recently collected: ${new Intl.ListFormat('en-US').format(examples)}.`
-    : `最近收集的有${examples.join('、')}。`;
-}
-
-function todoBriefText(entry, factId, calendar) {
-  const english = calendar.locale === 'en-US';
-  const raw = String(entry.at || '').replace('T', ' ');
-  const date = raw.slice(5, 10);
-  const time = raw.slice(11, 16);
-  const today = raw.slice(0, 10) === calendar.date;
-  const at = today && time ? (english ? `today at ${time}` : `今天 ${time}`) : raw.slice(5, 16);
-  const title = english ? `“${entry.title}”` : `「${entry.title}」`;
-  if (entry.reason === 'plan')
-    return factId === 'todo_overdue'
-      ? english
-        ? `${title} was planned${date ? ` for ${date}` : ' earlier'} and is still pending.`
-        : `此前安排的${title}仍待完成${date ? `（计划日期 ${date}）` : ''}。`
-      : english
-        ? `${title} is on today's plan and is still pending.`
-        : `今天安排了${title}，这项待办目前还未完成。`;
-  if (entry.reason === 'due')
-    return factId === 'todo_overdue'
-      ? english
-        ? `${title} is overdue${at ? ` (due ${at})` : ''} and is still incomplete.`
-        : `${title}已超过截止时间${at ? `（${at}）` : ''}，目前仍未完成。`
-      : english
-        ? `${title} is due${at ? ` ${at}` : ' today'} and is still pending.`
-        : `${title}需要在${at ? `${at} 前` : '今天内'}完成，目前仍待处理。`;
-  if (entry.reason === 'start')
-    return english
-      ? `${title} is scheduled to start${at ? ` ${at}` : ' today'} and is still pending.`
-      : `${title}安排在${at ? `${at} ` : '今天'}开始，目前仍待处理。`;
-  return english
-    ? `Today's reminder is for ${title}${at ? `, ${at}` : ''}. The task is still pending.`
-    : `今天留意一下${title}：${time ? `已设置 ${time} 提醒，` : ''}目前仍待完成。`;
-}
-
-function buildBrief(calendar, facts, narrative = null) {
-  const english = calendar.locale === 'en-US';
-  const eligible = selectDailyBriefFacts(facts);
-  const todos = eligible.filter((fact) => fact.id.startsWith('todo_'));
-  const todoInsights = todos
-    .flatMap((fact) =>
-      (fact.entries || []).map((entry) => {
-        return {
-          id: `todo_${entry.id}`,
-          factIds: [fact.id],
-          text: todoBriefText(entry, fact.id, calendar),
-          sources: [{ type: 'todo', id: entry.id, title: entry.title }],
-        };
-      }),
-    )
-    .slice(0, 1);
-  const insights = [];
-  const attention = eligible.find((fact) => fact.id === 'workshop_attention');
-  if (attention)
-    insights.push({
-      id: attention.id,
-      factIds: [attention.id],
-      text: attention.samples[0],
-      sources: attention.sources,
-    });
-  insights.push(...todoInsights);
-  const due = eligible.find((fact) => fact.id === 'workshop_due');
-  const project = due || eligible.find((fact) => fact.id === 'workshop_next_step');
-  if (project)
-    insights.push({ id: project.id, factIds: [project.id], text: project.samples[0], sources: project.sources });
-  const result = eligible.find((fact) => fact.id === 'workshop_result');
-  if (result) {
-    const summary = narrative?.insights?.find((item) => item.factIds.length === 1 && item.factIds[0] === result.id);
-    insights.push({
-      id: 'workshop_result',
-      factIds: [result.id],
-      text: summary
-        ? narrative.narrativeHydrated
-          ? summary.text
-          : renderNarrativeTemplate(summary.text, new Map([[result.id, result]]))
-        : result.samples[0],
-      sources: result.sources,
-      ...(result.sources?.[0]?.title
-        ? {
-            context: english
-              ? `“${briefTitle(result.sources[0].title)}” is ready and has not been saved.`
-              : `《${briefTitle(result.sources[0].title)}》已生成，尚未保存。`,
-          }
-        : {}),
-    });
+function buildBrief(calendar, facts, narrative) {
+  const byId = new Map(facts.map((fact) => [fact.id, fact]));
+  const items = (...ids) => ids.map((id) => byId.get(id));
+  const titles = SECTION_TITLES[calendar.locale] || SECTION_TITLES['zh-CN'];
+  const selected = [...(Array.isArray(narrative.insights) ? narrative.insights : [])];
+  const due = byId.get('workshop_due');
+  if (due?.count > 0 && due.urgency === 'today' && !selected.some((item) => item.factIds.includes('workshop_due'))) {
+    selected.unshift({ factIds: ['workshop_due'], text: '{{workshop_due.sample}}' });
   }
-  const review = eligible.find((fact) => fact.id === 'organize_ai_pending');
-  const resources = ['organize_pending', 'organize_untagged']
-    .map((id) => eligible.find((fact) => fact.id === id))
-    .filter(Boolean);
-  const organizeTexts = [];
-  if (review)
-    organizeTexts.push(
-      (english
-        ? `${review.count} organizing suggestions are ready for review.`
-        : `有 ${review.count} 条 AI 整理建议待审核。`) + reviewContext(review, english),
-    );
-  if (resources.length)
-    organizeTexts.push(
-      // 这两个集合可能重叠；分别说明数量，不相加为“待处理总量”。
-      `${resources
-        .map((fact) =>
-          fact.id === 'organize_pending'
-            ? english
-              ? `${fact.count} resources await organizing`
-              : `${fact.count} 项资料待整理`
-            : english
-              ? `${fact.count} resources have no tags`
-              : `${fact.count} 项资源尚无标签`,
-        )
-        .join(english ? '; ' : '；')}${english ? '.' : '。'}${pendingResourceContext(resources, english)}`,
-    );
-  if (organizeTexts.length)
-    insights.push({
-      id: 'organize_summary',
-      factIds: [...(review ? [review.id] : []), ...resources.map((fact) => fact.id)],
-      text: organizeTexts.join(' '),
+  selected.sort((a, b) => Number(b.factIds.includes('workshop_due')) - Number(a.factIds.includes('workshop_due')));
+  let workshopCount = 0;
+  const insights = selected
+    .filter((item) => !item.factIds.some((id) => id.startsWith('workshop_')) || ++workshopCount <= 2)
+    .slice(0, 5)
+    .map((insight, index) => {
+      const factIds = [...insight.factIds];
+      const text = renderNarrativeTemplate(insight.text, byId);
+      const connection = factIds.includes('resource_connection') ? byId.get('resource_connection') : null;
+      return Object.freeze({
+        id: `insight_${index + 1}`,
+        text,
+        factIds: Object.freeze(factIds),
+        ...(factIds.some((id) => id.startsWith('workshop_'))
+          ? {
+              sources: [
+                ...new Map(
+                  factIds.flatMap((id) => byId.get(id)?.sources || []).map((s) => [`${s.type}:${s.id}`, s]),
+                ).values(),
+              ],
+            }
+          : {}),
+        ...(connection?.count
+          ? {
+              sources: [
+                ...connection.sources,
+                ...factIds.filter((id) => id.startsWith('workshop_')).flatMap((id) => byId.get(id)?.sources || []),
+              ],
+              tagName: connection.tagName,
+              tagRoute: connection.route,
+            }
+          : {}),
+      });
     });
-  const activityNames = {
-    bookmark_created_today: ['条书签', 'bookmark', 'bookmarks'],
-    note_created_today: ['篇笔记', 'note', 'notes'],
-    file_created_today: ['个文件', 'file', 'files'],
-  };
-  const activity = facts.filter((fact) => Object.hasOwn(activityNames, fact.id) && fact.count > 0);
-  const activityMeasured = Object.keys(activityNames).every((id) =>
-    facts.some((fact) => fact.id === id && Number.isFinite(fact.count) && fact.count >= 0),
-  );
-  const activityHeadline = activity.length
-    ? (english ? 'Added today: ' : '今天新增 ') +
-      new Intl.ListFormat(english ? 'en-US' : 'zh-CN').format(
-        activity.map((fact) => `${fact.count} ${activityNames[fact.id][english ? (fact.count === 1 ? 1 : 2) : 0]}`),
-      )
-    : activityMeasured
-      ? english
-        ? insights.length
-          ? 'No resources added today.'
-          : 'No resources added today, and nothing needs special attention.'
-        : insights.length
-          ? '今天暂无新增资源'
-          : '今天暂无新增资源，也没有需要特别关注的事项。'
-      : insights.length
-        ? ''
-        : english
-          ? 'Nothing needs special attention today.'
-          : '今天暂无需特别关注的事项';
-  // 与正文共用已核实的整理事实；顶部只说明仍有事项，不重复数量。
-  const organizingHeadline = resources.length
-    ? english
-      ? 'Resources still await organizing'
-      : '仍有资料待整理'
-    : review
-      ? english
-        ? 'Organizing suggestions await review'
-        : '仍有整理建议待审核'
-      : '';
-  const headline = organizingHeadline
-    ? activityHeadline
-      ? `${activityHeadline.replace(/[.。]$/, '')}${english ? '; ' : '，'}${english ? organizingHeadline.charAt(0).toLowerCase() + organizingHeadline.slice(1) : organizingHeadline}`
-      : organizingHeadline
-    : activityHeadline;
-  const advice = adviceContext(facts, calendar.locale);
-  const recommendation =
-    narrative?.adviceKey === advice.key
-      ? resolveAdvice(
-          narrative.adviceProposal,
-          advice.evidence,
-          insights.map((item) => item.text),
-        )
-      : null;
-  return {
+  const headline = renderNarrativeTemplate(narrative.headline, byId);
+  const recommendation = renderNarrativeTemplate(narrative.recommendation, byId);
+  return Object.freeze({
     version: DAILY_BRIEF_VERSION,
     date: calendar.date,
-    generatedBy: narrative ? 'ai' : 'facts',
+    generatedBy: 'ai',
     narrativeHydrated: true,
     headline,
-    // 失败、单次待办、项目、成果、整理各最多一项，不靠截断遗漏后面的类别。
-    insights,
-    recommendation: recommendation
-      ? english
-        ? `From the excerpt in “${recommendation.source.title}”: “${recommendation.quote}”. ${recommendation.action}`
-        : `《${recommendation.source.title}》的片段提到「${recommendation.quote}」。${recommendation.action}`
-      : '',
-    adviceStatus: !advice.evidence.length
-      ? 'no_evidence'
-      : narrative?.adviceKey === advice.key
-        ? recommendation
-          ? 'ready'
-          : 'no_value'
-        : 'not_evaluated',
-    ...(facts.find((fact) => fact.id === ADVICE_FACT_ID)?.coverage
-      ? { adviceCoverage: facts.find((fact) => fact.id === ADVICE_FACT_ID).coverage }
-      : {}),
-    ...(narrative?.adviceKey === advice.key && advice.key
-      ? { adviceKey: advice.key, adviceProposal: recommendation ? narrative.adviceProposal : null }
-      : {}),
-    ...(recommendation
-      ? {
-          recommendationKind: 'ai',
-          recommendationFactIds: [ADVICE_FACT_ID, ...ADVICE_CONTEXT_FACT_IDS],
-          recommendationSources: [recommendation.source],
-        }
-      : {}),
-    sections: [
-      { id: 'today_actions', title: SECTION_TITLES[calendar.locale]?.today_actions || '今日行动', items: todos },
-      ...(activity.length || activityMeasured
-        ? [
-            {
-              id: 'new_content',
-              title: english ? 'Added today' : '今日新增',
-              items: activity.length ? activity : facts.filter((fact) => Object.hasOwn(activityNames, fact.id)),
-            },
-          ]
-        : []),
-      {
+    insights: Object.freeze(insights),
+    recommendation,
+    sections: Object.freeze([
+      Object.freeze({
+        id: 'today_actions',
+        title: titles.today_actions,
+        items: Object.freeze(
+          items(
+            'todo_overdue',
+            'todo_due_today',
+            ...facts.filter((fact) => ['workshop_due', 'workshop_next_step'].includes(fact.id)).map((fact) => fact.id),
+          ),
+        ),
+      }),
+      Object.freeze({
+        id: 'new_content',
+        title: titles.new_content,
+        items: Object.freeze(
+          items(
+            'bookmark_created_yesterday',
+            ...facts.filter((fact) => fact.id === 'workshop_result').map((fact) => fact.id),
+            'note_created_yesterday',
+            'file_created_yesterday',
+            'bookmark_created_today',
+            'note_created_today',
+            'file_created_today',
+          ),
+        ),
+      }),
+      Object.freeze({
         id: 'organize',
-        title: SECTION_TITLES[calendar.locale]?.organize || '待整理',
-        items: [...(review ? [review] : []), ...resources],
-      },
-    ],
-  };
+        title: titles.organize,
+        items: Object.freeze(items('organize_untagged', 'organize_ai_pending')),
+      }),
+      Object.freeze({
+        id: 'recommendation',
+        title: titles.recommendation,
+        items: Object.freeze([
+          Object.freeze({
+            id: 'daily_recommendation',
+            label: titles.daily_recommendation,
+            text: recommendation,
+            factIds: Object.freeze([...new Set(insights.flatMap((insight) => insight.factIds))]),
+          }),
+        ]),
+      }),
+    ]),
+  });
 }
 
 function rowStatus({ featureEnabled, preference, calendar, row }) {
@@ -527,13 +357,9 @@ async function generateDailyBriefForActiveUser(
       timezone: calendar.timezone,
     };
   }
-  const currentSnapshot = briefSnapshot(facts, calendar, now.toISOString());
-  const id = randomUUID();
-  const leaseToken = randomUUID();
-  const previousAttempt = parseJson(existing?.factsJson, {});
-  const advice = adviceContext(facts, calendar.locale);
   let previousBrief = parseJson(existing?.briefJson);
-  if (!previousBrief && (advice.key || facts.some((fact) => fact.id === 'workshop_result' && fact.count > 0))) {
+  if (!previousBrief) {
+    // 跨天仍识别长期不变的整理积压；只取最近一次已交付快照，不把昨日正文当今日结果。
     const [previousRows] = await database.query(
       `SELECT brief_json AS briefJson FROM workbench_daily_briefs
         WHERE user_id = ? AND brief_date < ? AND brief_json IS NOT NULL
@@ -542,60 +368,18 @@ async function generateDailyBriefForActiveUser(
     );
     previousBrief = parseJson(previousRows[0]?.briefJson);
   }
-  const cachedResult =
-    currentSnapshot.factRevisions.workshop_result &&
-    currentSnapshot.factRevisions.workshop_result === previousBrief?.snapshot?.factRevisions?.workshop_result
-      ? previousBrief?.insights?.find((item) => item.id === 'workshop_result')
-      : null;
-  const cachedAdvice = Boolean(advice.key && previousBrief?.adviceKey === advice.key);
-  const cachedNarrative =
-    cachedResult || cachedAdvice
-      ? {
-          insights: cachedResult ? [cachedResult] : [],
-          narrativeHydrated: true,
-          ...(cachedAdvice ? { adviceKey: advice.key, adviceProposal: previousBrief.adviceProposal } : {}),
-        }
-      : null;
-  const interval =
-    refresh || needsAdviceResultRecovery(previousBrief)
-      ? DAILY_BRIEF_REFRESH_POLICY.manualIntervalMs
-      : DAILY_BRIEF_REFRESH_POLICY.normalIntervalMs;
-  const lastAttempt = Math.max(
-    Date.parse(previousAttempt.attemptedAt || '') || 0,
-    Date.parse(previousBrief?.adviceAttemptedAt || '') || 0,
+  const currentSnapshot = briefSnapshot(facts, calendar, now.toISOString());
+  const unchangedFactIds = Object.keys(currentSnapshot.factRevisions).filter(
+    (id) => currentSnapshot.factRevisions[id] === previousBrief?.snapshot?.factRevisions?.[id],
   );
-  const previousAdviceFailed = previousBrief?.adviceStatus === 'failed';
-  // 旧失败也保留，直到本次材料变化或用户明确重试；正文变化不代表重试授权。
-  const sameFailedAdvice =
-    previousAdviceFailed &&
-    Boolean(advice.key) &&
-    (previousBrief.adviceAttemptKey === advice.key || !previousBrief.adviceAttemptKey);
-  const quotaBlocked = /^AI_QUOTA_(EXCEEDED|INSUFFICIENT_FOR_REQUEST)$/.test(
-    previousBrief?.adviceFailureCode || existing?.lastErrorCode || '',
-  );
-  const modelAllowed =
-    (!lastAttempt || now.getTime() - lastAttempt >= interval) &&
-    (refresh ||
-      (Number(previousAttempt.automaticAttempts || 0) < DAILY_BRIEF_REFRESH_POLICY.maxAutomaticAttempts &&
-        !quotaBlocked)) &&
-    (refresh || !sameFailedAdvice);
-  const modelFacts =
-    modelAllowed && !cachedResult ? selectDailyBriefFacts(facts).filter((fact) => fact.id === 'workshop_result') : [];
-  const modelEvidence = modelAllowed && !cachedAdvice ? advice.evidence : [];
-  const needsModel = Boolean(modelFacts.length || modelEvidence.length);
-  const adviceDeferred = Boolean(
-    advice.evidence.length &&
-    !cachedAdvice &&
-    !modelAllowed &&
-    !sameFailedAdvice &&
-    Number(previousAttempt.automaticAttempts || 0) < DAILY_BRIEF_REFRESH_POLICY.maxAutomaticAttempts &&
-    !quotaBlocked,
-  );
+  const id = randomUUID();
+  const leaseToken = randomUUID();
+  const previousAttempt = parseJson(existing?.factsJson, {});
   const serializedFacts = JSON.stringify({
     version: 1,
     facts,
-    attemptedAt: needsModel ? now.toISOString() : lastAttempt ? new Date(lastAttempt).toISOString() : null,
-    automaticAttempts: Number(previousAttempt?.automaticAttempts || 0) + (refresh || !needsModel ? 0 : 1),
+    attemptedAt: now.toISOString(),
+    automaticAttempts: Number(previousAttempt?.automaticAttempts || 0) + (refresh ? 0 : 1),
   });
   let ownsLease = false;
 
@@ -630,141 +414,47 @@ async function generateDailyBriefForActiveUser(
 
   const runSkill = dependencies.executeAiSkill || executeAiSkill;
   let committedBrief = null;
-  let deliveryAttempted = false;
-  let adviceFailed = !needsModel && (sameFailedAdvice || (quotaBlocked && advice.evidence.length));
-  let adviceFailureReason = adviceFailed ? previousBrief?.adviceFailureReason || 'GENERATION_UNAVAILABLE' : null;
-  let adviceFailureCode = adviceFailed ? previousBrief?.adviceFailureCode || existing?.lastErrorCode : null;
-  const commitBrief = async (narrative = cachedNarrative) => {
-    const brief = {
-      ...buildBrief(calendar, facts, narrative),
-      snapshot: currentSnapshot,
-      ...(advice.evidence.length && !cachedAdvice && !needsModel && !adviceFailed
-        ? { adviceStatus: adviceDeferred ? 'deferred' : 'paused' }
-        : {}),
-      ...(adviceDeferred ? { adviceDeferred: true } : {}),
-      ...(modelEvidence.length || adviceFailed
-        ? {
-            adviceAttemptKey:
-              adviceFailed && !modelEvidence.length ? previousBrief?.adviceAttemptKey || advice.key : advice.key,
-            adviceAttemptedAt: modelEvidence.length
-              ? now.toISOString()
-              : previousBrief?.adviceAttemptedAt || (lastAttempt ? new Date(lastAttempt).toISOString() : null),
-          }
-        : {}),
-      ...(adviceFailed ? { adviceStatus: 'failed', adviceFailureReason, adviceFailureCode } : {}),
-    };
-    // 保留最近一次完成的分析结果，与本轮调度/失败状态分开，刷新或重进页面不会丢失。
-    const completed = ['ready', 'no_value', 'no_evidence'];
-    const lastResult = completed.includes(brief.adviceStatus)
-      ? brief
-      : completed.includes(previousBrief?.adviceStatus)
-        ? previousBrief
-        : previousBrief?.lastAdviceResult;
-    if (lastResult) {
-      brief.lastAdviceResult = {
-        adviceStatus: lastResult.adviceStatus,
-        recommendation: lastResult.recommendation || '',
-        ...(lastResult.recommendationKind ? { recommendationKind: lastResult.recommendationKind } : {}),
-        ...(lastResult.recommendationFactIds ? { recommendationFactIds: lastResult.recommendationFactIds } : {}),
-        ...(lastResult.recommendationSources ? { recommendationSources: lastResult.recommendationSources } : {}),
-      };
-    }
-    // 有实际判断或明确阻塞后才完成兼容；冷却中的旧记录仍由自动检查接续。
-    if (!needsAdviceResultRecovery(previousBrief) || !needsAdviceResultRecovery(brief) || modelEvidence.length)
-      brief.adviceResultVersion = 1;
-    deliveryAttempted = true;
-    const [updateResult] = await database.query(
-      `UPDATE workbench_daily_briefs
-          SET status = 'ready', brief_json = ?, generated_at = NOW(),
-              lease_token = NULL, lease_expires_at = NULL, last_error_code = NULL
-        WHERE user_id = ? AND brief_date = ? AND status = 'generating' AND lease_token = ?`,
-      [JSON.stringify(brief), userId, calendar.date, leaseToken],
-    );
-    if (Number(updateResult?.affectedRows || 0) !== 1)
-      throw serviceError('DAILY_BRIEF_LEASE_LOST', '每日简报生成租约已失效', 409);
-    committedBrief = brief;
-  };
   try {
-    if (!needsModel) await commitBrief();
-    else {
-      try {
-        await runSkill(
-          {
-            protocolVersion: 1,
-            requestId: randomUUID(),
-            skillId: 'routine.daily_brief',
-            skillVersion: 2,
-            threadId: null,
-            input: {
-              date: calendar.date,
-              timezone: calendar.timezone,
-              locale: calendar.locale,
-              facts: modelFacts.map(({ id, label, route, count, samples }) => ({ id, label, route, count, samples })),
-              ...(modelEvidence.length
-                ? {
-                    evidence: modelEvidence.map(({ key, title, excerpt }) => ({ key, title, excerpt })),
-                    body: buildBrief(calendar, facts, cachedNarrative).insights.map((item) => item.text),
-                  }
-                : {}),
-            },
-            scope: { resourceRefs: [] },
-            client: { locale: calendar.locale, timezone: calendar.timezone, surface: 'desktop_workbench' },
-          },
-          req,
-          {
-            database,
-            internalCaller: 'daily_brief_service',
-            commitValidatedResult: async ({ response }) => {
-              if (
-                modelEvidence.length &&
-                (!Object.hasOwn(response.result, 'recommendation') || response.result.recommendation === undefined)
-              ) {
-                throw Object.assign(new Error('Missing advice decision'), {
-                  code: 'AI_SKILL_DAILY_BRIEF_OUTPUT_INVALID',
-                  details: { reason: 'ADVICE_DECISION_MISSING' },
-                });
-              }
-              return commitBrief({
-                ...cachedNarrative,
-                insights: response.result.insights?.length
-                  ? response.result.insights.map((item) => ({
-                      ...item,
-                      text: renderNarrativeTemplate(item.text, new Map(facts.map((fact) => [fact.id, fact]))),
-                    }))
-                  : cachedNarrative?.insights || [],
-                narrativeHydrated: true,
-                ...(modelEvidence.length
-                  ? { adviceKey: advice.key, adviceProposal: response.result.recommendation }
-                  : {}),
-              });
-            },
-          },
-        );
-      } catch (error) {
-        // 模型失败不挡住行动事实；持久化/租约失败仍必须作为失败返回，不能覆盖迟到产物。
-        if (deliveryAttempted || String(error?.code || '').startsWith('DAILY_BRIEF_')) throw error;
-        adviceFailed = Boolean(modelEvidence.length);
-        adviceFailureCode = /^AI_QUOTA_(EXCEEDED|INSUFFICIENT_FOR_REQUEST)$/.test(error?.code || '')
-          ? error.code
-          : 'AI_ADVICE_GENERATION_FAILED';
-        const reason = error?.details?.reason;
-        adviceFailureReason = [
-          'ADVICE_SHAPE',
-          'ADVICE_DECISION_MISSING',
-          'ADVICE_SOURCE_UNKNOWN',
-          'ADVICE_QUOTE_NOT_FOUND',
-          'ADVICE_QUOTE_LENGTH',
-          'ADVICE_ACTION_LENGTH',
-          'ADVICE_EVIDENCE_INVALID',
-          'ADVICE_NUMBER_UNSUPPORTED',
-          'INSIGHTS_SHAPE',
-          'FACT_IDS_INVALID',
-        ].includes(reason)
-          ? reason
-          : 'GENERATION_UNAVAILABLE';
-        await commitBrief();
-      }
-    }
+    await runSkill(
+      {
+        protocolVersion: 1,
+        requestId: randomUUID(),
+        skillId: 'routine.daily_brief',
+        skillVersion: 1,
+        threadId: null,
+        input: {
+          date: calendar.date,
+          timezone: calendar.timezone,
+          locale: calendar.locale,
+          facts: facts.map(({ id, label, route, count, samples }) => ({ id, label, route, count, samples })),
+          unchangedFactIds,
+        },
+        scope: { resourceRefs: [] },
+        client: { locale: calendar.locale, timezone: calendar.timezone, surface: 'desktop_workbench' },
+      },
+      req,
+      {
+        database,
+        internalCaller: 'daily_brief_service',
+        commitValidatedResult: async ({ response }) => {
+          const brief = {
+            ...buildBrief(calendar, facts, response.result),
+            snapshot: currentSnapshot,
+          };
+          const [updateResult] = await database.query(
+            `UPDATE workbench_daily_briefs
+                SET status = 'ready', brief_json = ?, generated_at = NOW(),
+                    lease_token = NULL, lease_expires_at = NULL, last_error_code = NULL
+              WHERE user_id = ? AND brief_date = ? AND status = 'generating' AND lease_token = ?`,
+            [JSON.stringify(brief), userId, calendar.date, leaseToken],
+          );
+          if (Number(updateResult?.affectedRows || 0) !== 1) {
+            throw serviceError('DAILY_BRIEF_LEASE_LOST', '每日简报生成租约已失效', 409);
+          }
+          committedBrief = brief;
+        },
+      },
+    );
     if (!committedBrief) {
       throw serviceError('DAILY_BRIEF_DELIVERY_NOT_COMMITTED', '每日简报未完成持久化交付', 503);
     }
@@ -787,8 +477,6 @@ async function generateDailyBriefForActiveUser(
         preference,
         now,
       }),
-      // 交付后复核失败表示新鲜度未知，不能让手动更新宣称已核实当前资料。
-      ...(!latestFacts ? { stale: true, staleFactIds: Object.keys(currentSnapshot.factRevisions) } : {}),
     };
   } catch (error) {
     const errorCode = String(error?.code || 'DAILY_BRIEF_GENERATION_FAILED').slice(0, 64);
@@ -865,6 +553,7 @@ export async function refreshDailyBrief(
 }
 
 export const dailyBriefServiceInternals = Object.freeze({
+  FACT_DEFINITIONS,
   DAILY_BRIEF_VERSION,
   SECTION_TITLES,
   LEASE_SECONDS,

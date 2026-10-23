@@ -1,10 +1,11 @@
 import { createHash } from 'node:crypto';
-import { ADVICE_POLICY_VERSION } from './dailyBriefAdvice.js';
 
 // 检查不计费；这些间隔只约束真正的模型生成。持久化在原有 facts_json 内，跨进程共享。
 export const DAILY_BRIEF_REFRESH_POLICY = Object.freeze({
   normalIntervalMs: 10 * 60_000,
+  urgentIntervalMs: 60_000,
   manualIntervalMs: 30_000,
+  retryIntervalMs: 15 * 60_000,
   maxAutomaticAttempts: 24,
 });
 
@@ -27,13 +28,8 @@ export function briefSnapshot(facts, calendar, capturedAt) {
   return {
     capturedAt,
     factRevisions,
-    fingerprint: digest([13, ADVICE_POLICY_VERSION, calendar.date, calendar.timezone, calendar.locale, factRevisions]),
+    fingerprint: digest([2, calendar.date, calendar.timezone, calendar.locale, factRevisions]),
   };
-}
-
-// 旧版等待记录可能已覆盖最后一次结果。只恢复未执行的判断，失败不能自动重放。
-export function needsAdviceResultRecovery(brief) {
-  return brief?.adviceStatus === 'deferred' && !brief.lastAdviceResult && !brief.adviceResultVersion;
 }
 
 export function briefFreshness({ row, facts, calendar, preference, now, automatic = true }) {
@@ -43,32 +39,39 @@ export function briefFreshness({ row, facts, calendar, preference, now, automati
   const snapshot = facts || pendingFacts ? briefSnapshot(facts || pendingFacts, calendar, now.toISOString()) : null;
   const previous = brief?.snapshot;
   const staleFactIds = snapshot
-    ? [...new Set([...Object.keys(snapshot.factRevisions), ...Object.keys(previous?.factRevisions || {})])].filter(
-        (id) => snapshot.factRevisions[id] !== previous?.factRevisions?.[id],
-      )
+    ? Object.keys(snapshot.factRevisions).filter((id) => snapshot.factRevisions[id] !== previous?.factRevisions?.[id])
     : [];
   const stale = Boolean(brief && snapshot && snapshot.fingerprint !== previous?.fingerprint);
   const generating = row?.status === 'generating' && !Number(row.leaseExpired ?? row.lease_expired ?? 0);
   const failed = row?.status === 'failed' || (row?.status === 'generating' && !generating);
-  // 事实刷新不等待模型冷却或额度；是否调用模型另在生成入口按原尝试预算判断。
-  const pauseReason = automatic && preference.autoUpdate === false ? 'manual' : null;
-  const interval = automatic
-    ? DAILY_BRIEF_REFRESH_POLICY.normalIntervalMs
-    : DAILY_BRIEF_REFRESH_POLICY.manualIntervalMs;
-  const lastAttempt = Math.max(
-    Date.parse(attempt.attemptedAt || '') || 0,
-    Date.parse(brief?.adviceAttemptedAt || '') || 0,
+  const lastAttempt = Date.parse(attempt?.attemptedAt || '') || 0;
+  const oldFacts = Array.isArray(attempt) ? attempt : attempt?.facts || [];
+  const quotaBlocked = /^AI_QUOTA_(EXCEEDED|INSUFFICIENT_FOR_REQUEST)$/.test(
+    row?.lastErrorCode ?? row?.last_error_code ?? '',
   );
-  const recovery = needsAdviceResultRecovery(brief);
-  const deferredAt =
-    recovery || brief?.adviceDeferred
-      ? lastAttempt + (recovery ? DAILY_BRIEF_REFRESH_POLICY.manualIntervalMs : interval)
-      : null;
-  const retryAdvice =
-    !automatic &&
-    brief?.adviceStatus === 'failed' &&
-    now.getTime() - (Date.parse(attempt.attemptedAt || '') || 0) >= interval;
-  const needsUpdate = !brief || stale || failed || retryAdvice || (deferredAt !== null && now.getTime() >= deferredAt);
+  // 待办变化与治理队列减少会直接让旧行动建议失效，优先更新；仍合并短时间内的连续操作。
+  const urgent = staleFactIds.some(
+    (id) =>
+      id.startsWith('todo_') ||
+      id === 'workshop_due' ||
+      (id.startsWith('organize_') &&
+        Number(facts?.find((fact) => fact.id === id)?.count) < Number(oldFacts.find((fact) => fact.id === id)?.count)),
+  );
+  const interval = !automatic
+    ? DAILY_BRIEF_REFRESH_POLICY.manualIntervalMs
+    : failed
+      ? DAILY_BRIEF_REFRESH_POLICY.retryIntervalMs
+      : urgent
+        ? DAILY_BRIEF_REFRESH_POLICY.urgentIntervalMs
+        : DAILY_BRIEF_REFRESH_POLICY.normalIntervalMs;
+  let pauseReason = null;
+  if (automatic && preference.autoUpdate === false) pauseReason = 'manual';
+  else if (automatic && quotaBlocked) pauseReason = 'quota';
+  else if (automatic && Number(attempt?.automaticAttempts || 0) >= DAILY_BRIEF_REFRESH_POLICY.maxAutomaticAttempts)
+    pauseReason = 'budget';
+  const needsUpdate = !brief || stale || failed;
+  const nextRefreshAt =
+    lastAttempt && now.getTime() < lastAttempt + interval ? new Date(lastAttempt + interval).toISOString() : null;
   return {
     autoUpdate: preference.autoUpdate !== false,
     checkedAt: facts ? now.toISOString() : null,
@@ -76,7 +79,7 @@ export function briefFreshness({ row, facts, calendar, preference, now, automati
     stale,
     staleFactIds,
     pauseReason,
-    nextRefreshAt: deferredAt !== null ? new Date(deferredAt).toISOString() : null,
-    shouldGenerate: Boolean(snapshot && needsUpdate && !generating && !pauseReason),
+    nextRefreshAt,
+    shouldGenerate: Boolean(snapshot && needsUpdate && !generating && !pauseReason && !nextRefreshAt),
   };
 }
