@@ -1618,6 +1618,7 @@
     white-space: normal;
     text-align: left;
     transition:
+      background-color 0.18s ease,
       border-color 0.18s ease,
       transform 0.18s ease,
       box-shadow 0.18s ease;
@@ -1887,6 +1888,7 @@
     }
 
     .help-topic-card.b_btn:hover {
+      background: var(--surface-card-hover-bg);
       transform: translateY(-1px);
       border-color: var(--help-topic-color) !important;
       box-shadow: var(--surface-hover-shadow);
