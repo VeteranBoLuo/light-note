@@ -4,6 +4,7 @@ import mysql from 'mysql2/promise';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('../../db/index.js', () => ({ default: {} }));
 import { getSuggestionRun, getSuggestionWorkspace } from './organizeSuggestionService.js';
+import { summarizePendingOrganizeReview } from './organizeReviewSummary.js';
 
 const socket = process.env.LIGHTNOTE_TEST_MYSQL_SOCKET;
 const schema = `organize_read_${randomUUID().replaceAll('-', '')}`;
@@ -95,6 +96,29 @@ describe.skipIf(!socket)('整理结果分组读取 · 隔离 MySQL', () => {
     await db?.end();
     if (created) await admin.query(`DROP DATABASE ${schema}`);
     await admin?.end();
+  });
+  it('简报背景只聚合当前有效建议；同对象多建议仍按条数计，删除资料不进入背景', async () => {
+    try {
+      await db.query("UPDATE organize_suggestions SET status='pending',kind='title' WHERE item_id='0001'");
+      await db.query("UPDATE organize_suggestions SET status='pending' WHERE item_id='0002'");
+      await db.query("UPDATE organize_suggestions SET status='pending',kind='description' WHERE item_id='0003'");
+      await db.query("UPDATE bookmark SET del_flag=1 WHERE id='0003'");
+      await db.query(
+        "INSERT INTO organize_suggestions(id,item_id,run_id,user_id,kind,status,payload_json) VALUES ('brief-extra','0001','run','owner','tags','pending','{}')",
+      );
+      const summary = await summarizePendingOrganizeReview(reader, 'owner');
+      expect(summary).toMatchObject({ total: 3, resourceTypes: ['bookmark'], kinds: ['tags', 'title'] });
+      expect(summary.route).toContain('runId=run&resourceType=bookmark');
+      expect(await summarizePendingOrganizeReview(reader, 'other-owner')).toMatchObject({ total: 0 });
+      await db.query("UPDATE organize_suggestions SET kind='description' WHERE id='s0001'");
+      const changed = await summarizePendingOrganizeReview(reader, 'owner');
+      expect(changed.total).toBe(summary.total);
+      expect(changed.revision).not.toBe(summary.revision);
+      expect(changed.kinds).toEqual(['description', 'tags']);
+    } finally {
+      await db.query("DELETE FROM organize_suggestions WHERE id='brief-extra'");
+      await db.query("UPDATE organize_suggestions SET kind='tags' WHERE item_id IN ('0001','0003')");
+    }
   });
   it('260 项首屏只读取 9 项需处理对象，摘要与旧接口一致，安静分组只带计数', async () => {
     const previous = [];

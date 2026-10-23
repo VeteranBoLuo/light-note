@@ -61,6 +61,12 @@ pnpm preview
 
 ## Schema 与 Worker 门禁
 
+邮箱健康检查启用前显式运行 `pnpm --filter server migrate:account-email-health`，安装 `20261023_account_email_health.sql` 的月度续跑与独立通知去重表，并补齐邮件收件地址查询索引，再通过 `check:schema`。迁移不扫描或修改历史账号，不回填邮箱验证状态。调度随 API 启动，仅生产运行环境消费；结构缺失时跳过新调度，不影响注册登录。API 与前端需同步保留专用更换邮箱协议；回滚保留去重事实，不能恢复个人资料直接修改邮箱。验证码与近期 GitHub 身份证明仅存短时 Redis，不能记录到日志或跨用途复用。
+
+站内公开资源启用前显式运行 `pnpm --filter server migrate:public-resources-schema`，安装加法迁移 `20261021_public_resources.sql`（包括副本来源表），通过 `check:schema` 与 MySQL 5.7 事务门禁，再部署同版本 API 和前端。帮助内容通过独立 `20261021_public_resources_help.sql` 幂等更新。`PUBLIC_RESOURCES_ENABLED`、`PUBLIC_RESOURCES_SUBMISSIONS_ENABLED`、`PUBLIC_RESOURCES_AI_ENABLED` 均默认关闭；首期即使开放资源与投稿，也保持 AI 预审关闭，用户显示“提交审核”，Root 终审、通知及失效任务收尾继续运行。AI 预算由 `PUBLIC_RESOURCES_AI_DAILY_BUDGET_TOKENS` 控制，关闭 Kernel 同时降级入口文案。新表缺失仅关闭新域，不能影响个人搜索和原资源删除。
+
+本域审核与站内通知消费者随 API 启动，沿用 production-only 策略，与旧广场开关独立。回退优先关闭入口、投稿与 AI，保留新增表、撤回／治理、原稿删除同步及队列降级能力；不能只回滚 UI 后继续暴露公开内容。观察待审及过期任务、预审失败原因、人工处理记录、预算账本、API 搜索耗时和撤回后的拒绝读取；只记录数量、耗时与稳定错误码，不记录关键词、完整网址、正文或模型原文。发布前完成 PC／移动、主题、中英文、三档桌面密度和共享移动渲染验收；真实 Provider 质量验收遵守下文授权边界。
+
 资料转表格的结构检查只影响该工具，不作为共享 API 与文档 Worker 的启动前置条件。未安装或列不完整时，工坊首页和其他文档任务仍可使用；提取接口返回 `EXTRACTION_SCHEMA_NOT_READY`，提取领取与临时材料清理跳过，显式安装后最多 30 秒重新检查。本地完整试用同样需要在本地数据库应用迁移并开启功能，但不依赖线上部署；不得为了本地预览自动迁移共享或生产数据库。 Vite 开发模式在目录保留“资料转表格”的本地查看入口，生产构建仍由功能开关控制入口；查看入口不开放执行权限，工作台在初始化或开关未就绪时保留草稿并禁用新提取和上传。
 
 资料转表格启用前显式应用 `apps/server/migrations/20261012_extraction_workbench.sql`，通过 `check:schema` 后部署同版本 API 与文档 Worker，再启用默认关闭的 `TOOLBOX_EXTRACTION_ENABLED`。结构仅加法安装，启动不自动迁移；帮助内容通过独立的 `20261012_extraction_help.sql` 幂等维护。回滚先关闭新建和新执行，等待在途调用保存或转为明确待重试状态、暂停未完成任务，再停止新消费者；保留新增表、执行账本和已交付结果。验证覆盖 MySQL 5.7 并发核对、租约围栏、暂停恢复、账号导出与注销，超页导出及共享移动渲染；本地 Provider mock 不替代真实模型质量验收。
@@ -68,6 +74,8 @@ pnpm preview
 社区纯文本自动审核开放前，显式运行社区 Schema 迁移入口安装 `20261008_community_ai_review.sql`，再通过 `check:schema`。`COMMUNITY_AI_REVIEW_ENABLED` 默认关闭，平台日预算由 `COMMUNITY_AI_REVIEW_DAILY_BUDGET_TOKENS` 控制。独立审核调度随 API 启动，沿用 production-only 策略；关闭 AI 审核后保持新版本调度运行，将已排队或过期任务交人工。回滚旧版本前先关闭开关并确认无 pending/processing 审核任务，保留新增表及账本，避免无消费者任务滞留。
 
 普通/托管上传的对象发布与回收保护、历史文件两阶段改名启用前，显式应用 `apps/server/migrations/20260925_cloud_file_rename_staging.sql` 与 `apps/server/migrations/20260925_cloud_legacy_object_lifecycle.sql` 并通过 `check:schema`，再部署 API 与文档 Worker。迁移只新增生命周期与暂存清理账本，不回填文件、不在请求或启动路径建表；回滚 API 时保留表与能够消费剩余暂存记录的清理 Worker。普通名称上传不得重新允许路径式文件名，否则随机副本清理的独占命名空间前提不成立。 所有 API 实例切换到随机上传地址后才能启用旧对象清理 Worker；回滚须保留随机地址签发与确认兼容层，不能恢复向已退休的名称地址签发上传链接。生命周期表中的退休标记与旧客户端名称映射不得作为临时日志清空，随账号注销清理。
+
+上传冻结发布复用上述生命周期表，API 与文档 Worker 必须保留 `published/` 副本、冻结标记及原上传键的幂等映射。上线前验证同一签名重复 PUT 只改变暂存对象、容量按正式副本核算、旧客户端确认与回滚后清理；存量已入库对象不在启动时改写。回滚不能恢复将客户端可写对象直接入库的确认实现，也不能清空冻结标记后重新复制覆盖已发布对象。
 
 搜索时间续页索引通过加法迁移 `apps/server/migrations/20260925_search_seek_indexes.sql` 显式安装，并通过 `check:schema` 核验完整列顺序及非前缀索引。迁移保留既有报表、置顶索引，不回填业务数据；应用不在启动时执行 DDL，回滚 API 可以保留新索引。线上执行仍需迁移授权，建索引的磁盘、写入负载和短暂元数据锁须纳入发布窗口。
 

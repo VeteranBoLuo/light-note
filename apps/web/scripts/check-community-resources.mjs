@@ -16,12 +16,20 @@ async function page(account, extra = '', width = 1440) {
   await p.waitForFunction(() => Boolean(window.communityFixture?.router));
   return p;
 }
-const close = (p) => p.getByRole('dialog').last().getByRole('button', { name: '关闭', exact: true }).click();
+const close = async (p) => {
+  const closingEditor = (await p.getByRole('dialog').last().locator('.community-writing').count()) > 0;
+  await p.getByRole('dialog').last().getByRole('button', { name: '关闭', exact: true }).click();
+  if (closingEditor) {
+    await p.locator('.bAlert').getByRole('button', { name: '退出发布', exact: true }).click();
+    await p.locator('.community-writing').waitFor({ state: 'hidden' });
+  }
+};
 try {
   const root = await page('root');
   await root.getByRole('button', { name: '发布内容', exact: true }).click();
   const title = '固定资源版本验收 ' + Date.now();
   await root.locator('#feed-title').fill(title);
+  await root.getByRole('tab', { name: 'Markdown', exact: true }).click();
   await root.locator('.writing-body .cm-content').fill('分享文字笔记与书签，后续编辑原资源不会同步。');
   await root.getByRole('button', { name: '分享我的资源', exact: true }).click();
   await root.getByRole('button', { name: /我的知识整理方法/ }).waitFor();
@@ -39,13 +47,13 @@ try {
   await root.getByRole('button', { name: '发布内容', exact: true }).click();
   assert.equal(await root.locator('.community-writing .resource-card').count(), 2);
   await root.getByRole('button', { name: '发布', exact: true }).click();
-  await root.getByRole('button', { name: '提交审核', exact: true }).click();
+  await root.getByRole('button', { name: '确认发布', exact: true }).click();
   await root.locator('.community-writing').waitFor({ state: 'hidden' });
-  await root.waitForFunction(() => window.communityFixture.router.currentRoute.value.path === '/community/manage');
+  await root.evaluate(() => window.communityFixture.router.push('/community/manage'));
   await root
     .locator('.feed-post')
     .filter({ hasText: title })
-    .getByRole('button', { name: '查看帖子', exact: true })
+    .getByRole('link', { name: title, exact: true })
     .click();
   const article = root.locator('article[data-post-id]').filter({ hasText: title }).first();
   await article.waitFor();
@@ -70,10 +78,11 @@ try {
     await p.screenshot({ animations: 'disabled', path: `${output}/reader-${width}-${theme}.png` });
     await close(p);
     await card.locator('.resource-card').nth(1).click();
-    assert.equal(await p.locator('.resource-url').getAttribute('href'), 'https://developer.mozilla.org/zh-CN/');
+    assert.equal(await p.getByRole('link', { name: '访问网站', exact: true }).getAttribute('href'), 'https://developer.mozilla.org/zh-CN/');
     await close(p);
     if (width === 390) {
       await p.getByRole('button', { name: '发布内容', exact: true }).click();
+      await p.locator('.writing-mobile-dock').getByRole('button', { name: /^资源 / }).click();
       await p.getByRole('button', { name: '分享我的资源', exact: true }).click();
       await p.getByRole('button', { name: /我的知识整理方法/ }).click();
       await p.locator('.snapshot-preview').waitFor();

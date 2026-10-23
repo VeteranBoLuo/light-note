@@ -66,14 +66,18 @@ export async function ensureCommunityFeedSchema(db = pool) {
 export async function communityFeedSchemaReady(db = pool, contract = COMMUNITY_FEED_SCHEMA) {
   const names = Object.keys(contract),
     marks = names.map(() => '?').join(',');
-  const [columns] = await db.query(
-    `SELECT table_name AS tableName,column_name AS columnName FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name IN (${marks})`,
-    names,
-  );
-  const [indexes] = await db.query(
-    `SELECT table_name AS tableName,index_name AS indexName,GROUP_CONCAT(column_name ORDER BY seq_in_index) AS fields,MAX(non_unique) AS nonUnique FROM information_schema.statistics WHERE table_schema=DATABASE() AND table_name IN (${marks}) GROUP BY table_name,index_name`,
-    names,
-  );
+  // Independent metadata reads share one round trip window on pooled readers.
+  // Transaction connections still serialize their queries as usual.
+  const [[columns], [indexes]] = await Promise.all([
+    db.query(
+      `SELECT table_name AS tableName,column_name AS columnName FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name IN (${marks})`,
+      names,
+    ),
+    db.query(
+      `SELECT table_name AS tableName,index_name AS indexName,GROUP_CONCAT(column_name ORDER BY seq_in_index) AS fields,MAX(non_unique) AS nonUnique FROM information_schema.statistics WHERE table_schema=DATABASE() AND table_name IN (${marks}) GROUP BY table_name,index_name`,
+      names,
+    ),
+  ]);
   return Object.entries(contract).every(
     ([table, spec]) =>
       spec.columns.every((col) => columns.some((c) => c.tableName === table && c.columnName === col)) &&

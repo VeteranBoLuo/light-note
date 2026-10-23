@@ -67,6 +67,28 @@ test("拒绝无效进程组，spawn 失败无 PID 时无需发信号", async () 
   await stopManagedChild({ pid: undefined });
 });
 
+test("强杀后零信号探测短暂返回 EPERM 时继续等待实际退出", async (t) => {
+  const calls = [];
+  let probes = 0;
+  t.mock.method(process, "kill", (target, value) => {
+    assert.equal(target, -999999);
+    calls.push(value);
+    if (value !== 0) return true;
+    probes++;
+    if (probes === 1) return true;
+    throw Object.assign(new Error("probe"), { code: probes === 2 ? "EPERM" : "ESRCH" });
+  });
+  await stopProcessGroup(999999, { graceMs: 0, killMs: 1_000 });
+  assert.deepEqual(calls, ["SIGTERM", 0, "SIGKILL", 0, 0]);
+});
+
+test("发送真实终止信号的 EPERM 仍报告失败", async (t) => {
+  t.mock.method(process, "kill", () => {
+    throw Object.assign(new Error("denied"), { code: "EPERM" });
+  });
+  await assert.rejects(stopProcessGroup(999999), { code: "EPERM" });
+});
+
 test("真实 pnpm watch 传递归属标记，领头进程丢失后可识别并回收", { skip: process.platform === "win32", timeout: 15_000 }, async (t) => {
   const root = realpathSync(mkdtempSync(path.join(os.tmpdir(), "lightnote-process-test-")));
   const server = path.join(root, "apps/server");

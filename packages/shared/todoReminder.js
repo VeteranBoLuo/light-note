@@ -1,3 +1,11 @@
+// 同一条待办的提醒投递上限，渠道分别计数。
+export const TODO_SINGLE_TASK_MAX_REMINDER_JOBS = 500;
+
+/** 固定提醒列表；保留空草稿行，由服务端校验完整性。兼容旧单时间配置。 */
+export function getTodoFixedReminderTimes(once) {
+  return Array.isArray(once?.fixedAts) ? once.fixedAts : [once?.fixedAt || ""];
+}
+
 function parseWallClockDate(value) {
   if (value instanceof Date) return new Date(value);
   return new Date(typeof value === "string" ? value.replace(" ", "T") : value);
@@ -52,7 +60,7 @@ export function resolveTodoConfiguredReminderAt(item = {}) {
 
   if (reminder.version != null && reminder.mode === "once" && reminder.once) {
     const once = reminder.once;
-    if (once.type === "fixed_at") return once.fixedAt || "";
+    if (once.type === "fixed_at") return getTodoFixedReminderTimes(once)[0] || "";
     if (once.type === "at_start") return item.startAt || "";
     if (once.type === "at_due") return item.dueAt || "";
     if (once.type === "before_due")

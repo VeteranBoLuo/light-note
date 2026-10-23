@@ -635,7 +635,7 @@
     quietPolicy?: string;
     schedule?: {
       mode?: string;
-      once?: { type?: string; fixedAt?: string; offsetMinutes?: number };
+      once?: { type?: string; fixedAt?: string; fixedAts?: string[]; offsetMinutes?: number };
       repeat?: {
         kind?: string;
         intervalMinutes?: number;

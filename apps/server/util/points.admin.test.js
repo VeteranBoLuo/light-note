@@ -137,6 +137,29 @@ describe('积分运营选人与资产事务', () => {
     expect(first).toMatchObject({ ok: true, cards: 13 });
     expect(replay).toMatchObject({ ok: true, cards: 13, idempotent: true });
     expect(connection.query.mock.calls.filter(([sql]) => String(sql).includes('UPDATE user_growth'))).toHaveLength(1);
+    const acquisitions = connection.query.mock.calls.filter(([sql]) => String(sql).includes("'asset_grant'"));
+    expect(acquisitions).toHaveLength(1);
+    expect(JSON.parse(acquisitions[0][1][2])).toMatchObject({
+      assetType: 'makeup_card',
+      assetAmount: 10,
+      sourceType: 'admin',
+    });
+  });
+
+  it('管理员扩容按实际增量记账，补签卡记账失败时回滚整个调整', async () => {
+    const connection = connectionWith();
+    await adminGrantPoints('user-1', { storageMb: 64, ...auditedReason });
+    const storage = connection.query.mock.calls.find(([sql]) => String(sql).includes("'storage:admin'"));
+    expect(JSON.parse(storage[1][3])).toMatchObject({ assetType: 'storage_mb', assetAmount: 64, sourceType: 'admin' });
+    const failed = connectionWith();
+    const query = failed.query.getMockImplementation();
+    failed.query.mockImplementation((sql, params) => {
+      if (String(sql).includes("'asset_grant'")) throw Error('journal unavailable');
+      return query(sql, params);
+    });
+    await expect(adminGrantPoints('user-1', { cards: 2, ...auditedReason })).rejects.toThrow('journal unavailable');
+    expect(failed.rollback).toHaveBeenCalledOnce();
+    expect(failed.commit).not.toHaveBeenCalled();
   });
 
   it('补签卡扣减超过库存时回滚', async () => {

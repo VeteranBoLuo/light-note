@@ -19,11 +19,15 @@ export const notificationMessages = {
     },
     levelUpTitle: "升级到 Lv.{level} · {name}",
     opinionReplyTitle: "你的反馈收到新回复",
+    emailHealthTitle: "请检查账号邮箱",
+    emailHealthContent: "账号邮箱 {email} 可能无法接收邮件。请前往账号与安全核对或更换，以便忘记密码时找回账号。正常登录和使用不受影响。",
     collectionRewardTitle: "「{title}」奖励已到账",
     collectionRewardContent:
       "你提交的「{title}」已获得 {points} 积分，奖励已到账。",
     collectionSubmissionTitle: "「{title}」收到新提交",
     collectionSubmissionContent: "你的表单收到一份新回答，点击查看提交记录。",
+    publicResourceReviewTitle: "有公开资源待审核",
+    publicResourceResultTitle: "公开资源审核结果",
     communityReplyTitle: "社区有新的回复或提及",
     communityResultTitle: "社区处理结果",
     communityTitles: {
@@ -54,12 +58,16 @@ export const notificationMessages = {
     },
     levelUpTitle: "Leveled up to Lv.{level} · {name}",
     opinionReplyTitle: "Your feedback got a reply",
+    emailHealthTitle: "Check your account email",
+    emailHealthContent: "Your account email {email} may not receive mail. Check or change it in Account & security so you can recover your account if you forget your password. Sign-in and normal use are unaffected.",
     collectionRewardTitle: "Reward credited for “{title}”",
     collectionRewardContent:
       "You earned {points} points for submitting “{title}”. The reward is now in your account.",
     collectionSubmissionTitle: "New response to “{title}”",
     collectionSubmissionContent:
       "Your form received a new response. Open it to view submissions.",
+    publicResourceReviewTitle: "Public resource awaiting review",
+    publicResourceResultTitle: "Public resource review result",
     communityReplyTitle: "New community reply or mention",
     communityResultTitle: "Community review result",
     communityTitles: {
@@ -123,6 +131,11 @@ export function notificationPresentation(item, locale = "zh-CN") {
       .replace("{level}", String(meta.level || ""))
       .replace("{name}", messages.ranks[meta.level] || meta.name || "");
   if (item.type === "opinion_reply") title = messages.opinionReplyTitle;
+  if (item.type === "email_health") {
+    title = messages.emailHealthTitle;
+    content = messages.emailHealthContent.replace("{email}", () => String(meta.maskedEmail || ""));
+  }
+  if (item.type === "public_resource") title = meta.kind === "review" ? messages.publicResourceReviewTitle : messages.publicResourceResultTitle;
   if (item.type === "community_feed")
     title =
       meta.kind === "result"

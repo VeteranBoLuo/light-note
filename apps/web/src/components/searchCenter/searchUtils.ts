@@ -129,7 +129,7 @@ export function rankByRelevance(items: SearchResultItem[], keyword: string): Sea
 
 export function mapDisplayItems(items: SearchResultItem[], keyword: string): DisplaySearchItem[] {
   return items.map((item, index) => {
-    const rawTime = getRawTime(item.raw);
+    const rawTime = item.origin === 'public' ? item.publicResource?.publishedAt || '' : getRawTime(item.raw);
     const updatedAtMs = normalizeTimeValue(rawTime || (item.type === 'todo' ? '' : item.extra));
     const baseTags = [...extractTagNames(item.raw), ...(item.tags || []).map((tag) => tag.name)]
       .map(normalizeTagName)

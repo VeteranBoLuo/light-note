@@ -297,6 +297,12 @@ describe.skipIf(!socketPath)('native notification real SQL', () => {
     expect(page.items.map((x) => x.id)).toEqual([own]);
     expect(page.owner).toBe('alice');
   });
+  it('邮箱检查提醒只留在站内，不进入原生前台通知同步', async () => {
+    const { since } = await readNativeNotifications(db, 'alice');
+    await add({ type: 'email_health' });
+    const regular = await add({ type: 'system' });
+    expect((await readNativeNotifications(db, 'alice', { since })).items.map((item) => item.id)).toEqual([regular]);
+  });
   it('shows current todo details only when the reminder still belongs to the account and is pending', async () => {
     const { since } = await readNativeNotifications(db, 'alice');
     const ownTodoId = randomUUID();

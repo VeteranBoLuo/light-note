@@ -185,7 +185,7 @@ function placeholders(ids) {
   return ids.map(() => '?').join(',');
 }
 
-async function loadRowsByType({ database, userId, refs }) {
+async function loadRowsByType({ database, userId, refs, preparedOnly = false }) {
   const idsByType = new Map();
   for (const ref of refs) {
     const ids = idsByType.get(ref.type) || [];
@@ -197,12 +197,12 @@ async function loadRowsByType({ database, userId, refs }) {
     [...idsByType.entries()].map(async ([type, ids]) => {
       let sql;
       if (type === 'note') {
-        sql = `SELECT id, title, content, type, create_time, update_time
+        sql = `SELECT id, title, ${preparedOnly ? 'LEFT(content, 65536)' : 'content'} AS content, type, create_time, update_time
                  FROM note
                 WHERE create_by = ? AND del_flag = 0 AND id IN (${placeholders(ids)})`;
       } else if (type === 'bookmark') {
         sql = `SELECT b.id, b.name, b.url, b.description, b.create_time,
-                      s.title AS snapshot_title, s.content AS snapshot_content,
+                      s.title AS snapshot_title, ${preparedOnly ? 'LEFT(s.content, 65536)' : 's.content'} AS snapshot_content,
                       s.summary AS snapshot_summary, s.char_count, s.update_time AS snapshot_update_time
                  FROM bookmark b
                  LEFT JOIN bookmark_snapshot s ON s.bookmark_id = b.id AND s.user_id = b.user_id
@@ -213,6 +213,7 @@ async function loadRowsByType({ database, userId, refs }) {
                       ds.extracted_chars, ds.chunk_count, ds.coverage_metadata, ds.expires_at
                  FROM files f
                  LEFT JOIN ai_document_sources ds ON ds.user_id = f.create_by AND ds.file_id = f.id
+                   ${preparedOnly ? "AND ds.source_type = 'cloud' AND ds.object_key = f.obs_key AND ds.file_size = f.file_size AND ds.status = 'ready' AND (ds.expires_at IS NULL OR ds.expires_at > NOW())" : ''}
                 WHERE f.create_by = ? AND f.del_flag = 0 AND f.id IN (${placeholders(ids)})`;
       } else if (type === 'todo') {
         sql = `SELECT id, title, description, checklist, priority, status, due_at, completed_at,
@@ -229,7 +230,7 @@ async function loadRowsByType({ database, userId, refs }) {
   return result;
 }
 
-async function loadFileChunks({ database, rows }) {
+async function loadFileChunks({ database, rows, excerptsOnly = false }) {
   const sourceIds = [
     ...new Set(
       [...rows.values()]
@@ -240,9 +241,9 @@ async function loadFileChunks({ database, rows }) {
   ];
   if (!sourceIds.length) return new Map();
   const [chunks] = await database.query(
-    `SELECT source_id, chunk_index, content, locator_type, locator_value
+    `SELECT source_id, chunk_index, ${excerptsOnly ? 'LEFT(content, 4000)' : 'content'} AS content, locator_type, locator_value
        FROM ai_document_chunks
-      WHERE source_id IN (${placeholders(sourceIds)})
+      WHERE source_id IN (${placeholders(sourceIds)})${excerptsOnly ? ' AND chunk_index < 3' : ''}
       ORDER BY source_id ASC, chunk_index ASC`,
     sourceIds,
   );
@@ -254,6 +255,34 @@ async function loadFileChunks({ database, rows }) {
     bySource.set(key, values);
   }
   return bySource;
+}
+
+/** 有界读取已保存的正文；不创建解析任务、不抓取 URL、不调用模型。 */
+export async function loadPreparedResourceExcerpts({ database = pool, userId, refs }) {
+  if (!Array.isArray(refs) || refs.length > 20 || refs.some((ref) => !['note', 'bookmark', 'file'].includes(ref.type)))
+    throw aiSkillError('AI_SKILL_RESOURCE_LIMIT', '简报候选资料范围无效');
+  if (!refs.length) return [];
+  const rows = await loadRowsByType({ database, userId, refs, preparedOnly: true });
+  const chunks = await loadFileChunks({ database, rows, excerptsOnly: true });
+  return refs.flatMap((ref) => {
+    const row = rows.get(`${ref.type}:${ref.id}`);
+    if (!row) return [];
+    // 网址、文件名及解析状态不能充当正文证据。
+    const content =
+      ref.type === 'note'
+        ? noteText(row)
+        : ref.type === 'bookmark'
+          ? plainText([row.description, row.snapshot_summary, row.snapshot_content].filter(Boolean).join('\n\n'))
+          : (chunks.get(String(row.source_id || '')) || []).map((chunk) => plainText(chunk.content)).join('\n');
+    return [
+      {
+        resourceType: ref.type,
+        resourceId: ref.id,
+        title: row.title || row.name || row.file_name || '',
+        preparedText: content.replace(/\s+/gu, ' ').trim().slice(0, 600),
+      },
+    ];
+  });
 }
 
 function rawResource(ref, row, fileChunks) {

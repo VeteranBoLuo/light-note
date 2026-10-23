@@ -84,10 +84,42 @@ function c4Request(options) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.poolQuery.mockResolvedValue([[]]);
   requestSequence = 0;
   process.env.POINTS_ECONOMY_C4_ENABLED = 'true';
   process.env.POINTS_ECONOMY_REQUIRE_WRITE_VERSION = 'false';
   mocks.grantItem.mockResolvedValue({ ok: true, qty: 1, overflowQty: 0 });
+});
+
+describe('免费次数逐日防重', () => {
+  it('切到另一天再返回也不能重领，并且状态与写入口使用相同流水', async () => {
+    const growth = { points: 0, exp: 1000, lottery_count: 0, lottery_free_day: null, lottery_free_used: 0 };
+    const days = [];
+    const query = vi.fn(async (sql, params = []) => {
+      const text = String(sql);
+      if (text.includes('FROM points_economy_operations')) return [[]];
+      if (text.includes('INSERT IGNORE INTO points_economy_operations')) return [{ affectedRows: 1, insertId: 1 }];
+      if (text.includes('FROM points_log')) return [days.filter((day) => day === params[1]).map((_, id) => ({ id }))];
+      if (text.includes('FROM user_growth')) return [[{ ...growth }]];
+      if (text.includes('SET lottery_free_day')) [growth.lottery_free_day, growth.lottery_free_used] = params;
+      if (text.includes("'lottery_free', ?")) days.push(params[1]);
+      if (text.includes('SET points = points +')) growth.points += params[0];
+      return [{ affectedRows: 1 }];
+    });
+    const conn = { query, beginTransaction: vi.fn(), commit: vi.fn(), rollback: vi.fn(), release: vi.fn() };
+    mocks.getConnection.mockResolvedValue(conn);
+    mocks.poolQuery.mockImplementation(query);
+    mocks.levelForExp.mockReturnValue(3);
+    const draw = (dayKey) => drawLottery('u1', c4Request({ mode: 'free', calendar: { dayKey }, randomIntFn: () => 0 }));
+    expect(await draw('20261023')).toMatchObject({ ok: true });
+    expect(await draw('20261022')).toMatchObject({ ok: true });
+    for (const day of ['20261023', '20261022', '20261023']) {
+      expect(await draw(day)).toMatchObject({ ok: false, reason: 'no_free' });
+      expect(await getLotteryStatus('u1', { calendar: { dayKey: day } })).toMatchObject({ free: { daily: 1, remaining: 0 } });
+    }
+    expect(days).toEqual(['20261023', '20261022']);
+    expect(growth.points).toBe(20);
+  });
 });
 
 describe('C4 加权随机边界', () => {
@@ -192,7 +224,9 @@ describe('C4 免费与付费奖池隔离', () => {
     const result = await drawLottery('u1', c4Request({ mode: 'paid', times: 1, randomIntFn: () => 0 }));
     expect(result.results[0]).toMatchObject({ kind: 'card', amount: 1 });
     expect(result.results[0].compensated).not.toBe(true);
-    expect(mocks.grantItem).toHaveBeenCalledWith(conn, 'u1', 'makeup_card', 1);
+    expect(mocks.grantItem).toHaveBeenCalledWith(conn, 'u1', 'makeup_card', 1, {
+      sourceType: 'lottery_paid', sourceRef: '41:1',
+    });
     expect(conn.query.mock.calls.some(([, params]) => params?.includes('lottery_paid_compensation'))).toBe(false);
   });
 

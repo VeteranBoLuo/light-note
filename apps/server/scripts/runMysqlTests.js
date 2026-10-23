@@ -6,11 +6,20 @@ import mysql from 'mysql2/promise';
 
 // These suites create and remove their own random schemas. Never load application .env.
 const suites = {
-  'util/pointsEarningC8Preparation.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
+  'util/sessionStore.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
+  'util/services/accountEmail.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
+  'util/securityRegressions.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
   'util/growth.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
+  'util/services/lotteryHistoryService.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
+  'util/services/inventoryAcquisitionService.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
+  'util/pointsEarningC8Preparation.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
+  'util/services/dailyBriefTodoFacts.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
+  'util/services/dailyBriefWorkshop.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
   'util/services/bookmarkImportService.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
+  'util/publicResources/publicResources.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
   'util/weeklyReport.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
   'util/filePreview/heif.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
+  'util/imagePreview/lifecycle.test.js': 'IMAGE_PREVIEW_TEST_SOCKET',
   'util/bookmarkArchiveStatus.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
   'util/security/services/autoResponse.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
   'util/adminAsyncJobHealth.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
@@ -51,6 +60,7 @@ const suites = {
   'util/services/cloudFolderTreeService.sort.mysql.test.js': 'API_SORT_MYSQL_SOCKET',
   'util/services/growthMeasurement.mysql.test.js': 'M01_TEST_MYSQL_SOCKET',
   'util/services/coreUsageReport.mysql.test.js': 'M02_TEST_MYSQL_SOCKET',
+  'util/toolbox/itemDetails.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
   'util/fileCategory.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
   'util/services/organizeTagMerge.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
 };

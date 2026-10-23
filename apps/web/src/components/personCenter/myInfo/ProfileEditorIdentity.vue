@@ -1,5 +1,9 @@
 <template>
-  <ProfileBackgroundSurface class="profile-editor-identity" :background-id="profile.backgroundId">
+  <ProfileBackgroundSurface
+    class="profile-editor-identity"
+    :class="{ 'has-extended-meta': profile.title || profile.role !== 'member' }"
+    :background-id="profile.backgroundId"
+  >
     <header class="profile-editor-identity__person">
       <component
         :is="avatarEditable ? BButton : 'span'"
@@ -20,7 +24,13 @@
           layout-mode="slot"
           pause-when-offscreen
         />
-        <SvgIcon v-else :src="avatar" :size="avatarSize" :density-aware="false" />
+        <SvgIcon
+          v-else
+          class="profile-editor-identity__avatar-image"
+          :src="avatar"
+          :size="avatarSize"
+          :density-aware="false"
+        />
       </component>
       <div class="profile-editor-identity__copy">
         <strong :title="profile.name">{{ profile.name || t('communityChat.memberFallback') }}</strong>
@@ -57,7 +67,7 @@
   const { dimension } = useUiDensity();
   const frameId = computed(() => (frameVariant(props.profile.frameId) ? props.profile.frameId : null));
   const avatar = computed(() => props.profile.avatar || icon.communityChat.defaultAvatar);
-  const avatarSize = computed(() => dimension(58, 'layout'));
+  const avatarSize = computed(() => dimension(54, 'layout'));
   // 始终给最大头像框留槽位，装扮切换时不挤动昵称；框体仍由共享组件独立分层渲染。
   const avatarSlot = computed(() => avatarFrameStableSlot(avatarSize.value));
 </script>
@@ -77,9 +87,12 @@
   }
   .is-decorated .profile-editor-identity__person {
     box-sizing: border-box;
-    min-height: var(--ui-layout-180, 180px);
+    min-height: var(--ui-layout-160, 160px);
     align-items: center;
     padding-block: var(--ui-space-16, 16px);
+  }
+  .has-extended-meta .profile-editor-identity__person {
+    padding-top: var(--ui-space-44, 44px);
   }
   .profile-editor-identity__avatar,
   .profile-editor-identity__avatar.b_btn {
@@ -96,7 +109,7 @@
   .is-decorated .profile-editor-identity__avatar {
     height: var(--profile-editor-avatar-slot);
   }
-  .profile-editor-identity__avatar > :deep(img) {
+  .profile-editor-identity__avatar-image :deep(img) {
     border-radius: 50%;
     object-fit: cover;
   }
@@ -150,30 +163,19 @@
   .profile-editor-identity__title {
     overflow-wrap: anywhere;
   }
-  .profile-editor-identity__actions {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: var(--ui-space-22, 22px);
-    padding: var(--ui-space-8, 8px) var(--ui-space-12, 12px);
-    border-top: 1px solid var(--surface-border-color);
-  }
-  .is-decorated .profile-editor-identity__actions {
-    isolation: isolate;
-    border-radius: 0 0 15px 15px;
-  }
-  .is-decorated .profile-editor-identity__actions::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    z-index: 0;
-    border-radius: inherit;
-    background: var(--card-background);
-    opacity: 0.86;
-    pointer-events: none;
-  }
-  .is-decorated .profile-editor-identity__actions > :slotted(*) {
+  .profile-editor-identity {
     position: relative;
-    z-index: 1;
+  }
+  .profile-editor-identity .profile-editor-identity__actions {
+    position: absolute;
+    top: var(--ui-space-12, 12px);
+    right: var(--ui-space-12, 12px);
+    display: flex;
+    border: 0;
+    padding: 0;
+  }
+  .profile-editor-identity__id,
+  .profile-editor-identity__meta {
+    color: var(--text-color);
   }
 </style>

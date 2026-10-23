@@ -38,6 +38,7 @@ export interface TodoSingleTaskReminderSchedule {
     type: 'at_due' | 'at_start' | 'before_due' | 'fixed_at';
     offsetMinutes?: number;
     fixedAt?: string;
+    fixedAts?: string[];
   };
   repeat?: {
     kind: TodoSingleRepeatKind;

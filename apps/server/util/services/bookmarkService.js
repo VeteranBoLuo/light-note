@@ -132,7 +132,11 @@ export async function createBookmark({
   suppressUserRewards = false,
   idempotencyKey = null,
   suffixDuplicateName = false,
+  transactionConnection = null,
+  afterCommit = null,
+  beforeCreate = null,
 } = {}) {
+  if (transactionConnection && typeof afterCommit !== 'function') throw new Error('AFTER_COMMIT_REQUIRED');
   if (!userId) throw new Error('USER_REQUIRED: 缺少用户');
   const url = requireBookmarkUrl(bookmark.url).canonicalUrl;
   if (url.length > 255) throw new Error('URL_TOO_LONG: 网址不能超过 255 个字符');
@@ -153,7 +157,7 @@ export async function createBookmark({
 
   const idempotentBookmarkId = actionIdempotencyUuid(idempotencyKey, 'bookmark');
   if (idempotentBookmarkId) {
-    const existing = await findOwnedBookmarkById(pool, { userId, bookmarkId: idempotentBookmarkId });
+    const existing = await findOwnedBookmarkById(transactionConnection || pool, { userId, bookmarkId: idempotentBookmarkId });
     if (existing) return formatIdempotentReplay(existing, { addToInbox });
   }
 
@@ -176,15 +180,16 @@ export async function createBookmark({
   name = (name || (captureMetadata ? new URL(url).hostname.replace(/^www\./, '') : url)).slice(0, 255);
   description = description.slice(0, 255);
 
-  const connection = await pool.getConnection();
+  const connection = transactionConnection || await pool.getConnection();
   let data;
   let attachedTagNames = [];
   let transactionError = null;
   try {
-    await connection.beginTransaction();
+    if (!transactionConnection) await connection.beginTransaction();
+    if (beforeCreate) await beforeCreate(connection);
     const [urlDuplicates] = await connection.query(
-      'SELECT id, name FROM bookmark WHERE user_id = ? AND url = ? AND del_flag = 0 LIMIT 1',
-      [userId, url],
+      'SELECT id, name FROM bookmark WHERE user_id = ? AND url = ? AND BINARY url = BINARY ? AND del_flag = 0 LIMIT 1',
+      [userId, url, url],
     );
     if (urlDuplicates.length) {
       if (idempotentBookmarkId && String(urlDuplicates[0].id) === String(idempotentBookmarkId)) {
@@ -196,7 +201,7 @@ export async function createBookmark({
             source: inboxSource,
           });
         }
-        await connection.commit();
+        if (!transactionConnection) await connection.commit();
         return formatIdempotentReplay(
           { ...urlDuplicates[0], url },
           { addToInbox, inbox },
@@ -208,7 +213,7 @@ export async function createBookmark({
           items: [{ resourceType: 'bookmark', resourceId: String(urlDuplicates[0].id) }],
           source: 'duplicate_requeue',
         });
-        await connection.commit();
+        if (!transactionConnection) await connection.commit();
         return {
           id: urlDuplicates[0].id,
           name: urlDuplicates[0].name,
@@ -275,14 +280,15 @@ export async function createBookmark({
         source: inboxSource,
       });
     }
-    await connection.commit();
+    if (!transactionConnection) await connection.commit();
   } catch (error) {
-    await connection.rollback();
+    if (!transactionConnection) await connection.rollback();
     transactionError = error;
   } finally {
-    connection.release();
+    if (!transactionConnection) connection.release();
   }
 
+  if (transactionError && transactionConnection) throw transactionError;
   if (transactionError && idempotentBookmarkId) {
     try {
       const existing = await findOwnedBookmarkById(pool, { userId, bookmarkId: idempotentBookmarkId });
@@ -293,30 +299,35 @@ export async function createBookmark({
   }
   if (transactionError) throw transactionError;
 
-  if (!data.icon_url) {
-    try {
-      await createIconBatch(userId, [{ id: data.id, url }]);
-    } catch (error) {
-      // 书签主事务已经提交。图标补全属于可恢复的后台任务，入队失败不能让前端误判收藏失败。
-      console.error('[bookmark-icon] 新书签补全任务创建失败 code=%s', stableAgentErrorCode(error));
+  let snapshotScheduled = false;
+  const runAfterCommit = async () => {
+    if (!data.icon_url) {
+      try {
+        await createIconBatch(userId, [{ id: data.id, url }]);
+      } catch (error) {
+        // 书签主事务已经提交。图标补全属于可恢复的后台任务，入队失败不能让前端误判收藏失败。
+        console.error('[bookmark-icon] 新书签补全任务创建失败 code=%s', stableAgentErrorCode(error));
+      }
     }
-  }
 
-  try {
-    await triggerResourceCreateEffects({
-      request,
-      userId,
-      userRole,
-      resourceType: 'bookmark',
-      resourceId: data.id,
-      url,
-      suppressUserRewards,
-    });
-  } catch {
-    // 书签已经提交；成长、转化与知识缓存失效都属于旁路副作用，
-    // 任何同步异常都不能把一次成功收藏伪装成 500，诱导用户重试并撞上重复书签。
-  }
-  const snapshotScheduled = saveSnapshot ? await archiveBookmarkBackground(userId, data.id) : false;
+    try {
+      await triggerResourceCreateEffects({
+        request,
+        userId,
+        userRole,
+        resourceType: 'bookmark',
+        resourceId: data.id,
+        url,
+        suppressUserRewards,
+      });
+    } catch {
+      // 书签已经提交；成长、转化与知识缓存失效都属于旁路副作用，
+      // 任何同步异常都不能把一次成功收藏伪装成 500，诱导用户重试并撞上重复书签。
+    }
+    snapshotScheduled = saveSnapshot ? await archiveBookmarkBackground(userId, data.id) : false;
+  };
+  if (transactionConnection) afterCommit(runAfterCommit);
+  else await runAfterCommit();
   return {
     id: data.id,
     name,

@@ -110,3 +110,19 @@ it.each([
     app.unmount();
   }
 });
+
+it('多个固定时间显示下一次提醒、完整次数和多时间摘要', () => {
+  const host = document.createElement('div');
+  const app = createApp({ render: () => h(Preview, { preview: {
+    displaySummary: { title: '指定日期提醒', range: '无日期', timing: '', reminder: '在 2 个指定时间提醒' },
+    occurrenceCount: 1, reminderMomentCount: 2, reminderJobCount: 4, nextReminderAt: '2026-10-23 09:17:00',
+    normalizedPlan: { plan: { type: 'once' }, reminder: { version: 1, mode: 'once', channels: ['in_app', 'email'], once: { type: 'fixed_at', fixedAt: '2026-10-23 09:17:00', fixedAts: ['2026-10-23 09:17:00', '2026-10-24 09:17:00'] } } },
+  } as any }) });
+  app.use(createI18n({ legacy: false, locale: 'zh-CN', messages: { 'zh-CN': zhCN } }));
+  app.mount(host);
+  try {
+    expect(host.textContent).toContain('下一次提醒');
+    expect(host.textContent).toContain('共 2 次');
+    expect(host.textContent).toContain('在 2 个指定时间提醒');
+  } finally { app.unmount(); }
+});

@@ -14,6 +14,36 @@ export const ADMIN_POLICIES = Object.freeze({
 
 const routePolicies = new Map();
 
+// V1 public-resource reads and writes always use the real signed-in identity.
+declare(ADMIN_POLICIES.ACCOUNT_WRITE, 'public_resource', [
+  ['GET', '/public-resources/capabilities'],
+  ['GET', '/public-resources/workspace'],
+  ['GET', '/public-resources/saved-source'],
+  ['GET', '/public-resources/candidates'],
+  ['POST', '/public-resources/preview'],
+  ['POST', '/public-resources/batch/preview'],
+  ['POST', '/public-resources/batch'],
+  ['POST', '/public-resources/moderation/batch'],
+  ['POST', '/public-resources/submit'],
+  ['GET', '/public-resources/own'],
+  ['GET', '/public-resources/own/:id'],
+  ['POST', '/public-resources/own/resolve'],
+  ['POST', '/public-resources/own/:id/withdraw'],
+  ['GET', '/public-resources/operations/:id'],
+  ['GET', '/public-resources/search'],
+  ['GET', '/public-resources/suggest'],
+  ['POST', '/public-resources/search/combined'],
+  ['GET', '/public-resources/:id'],
+  ['POST', '/public-resources/:id/save'],
+  ['POST', '/public-resources/:id/report'],
+  ['GET', '/public-resources/moderation'],
+  ['GET', '/public-resources/moderation/:id'],
+  ['GET', '/public-resources/moderation/:id/history'],
+  ['GET', '/public-resources/moderation/reports/:id'],
+  ['POST', '/public-resources/moderation/:id/decide'],
+  ['POST', '/public-resources/moderation/reports/:id'],
+]);
+
 // Community social operations never impersonate another account.
 declare(ADMIN_POLICIES.ACCOUNT_WRITE, 'community', [
   ['GET', '/community/posts/:id/saved'],
@@ -495,6 +525,7 @@ declare(ADMIN_POLICIES.ACCOUNT_WRITE, 'user', [
   ['POST', '/user/registerUser'],
   ['POST', '/user/github/authorize'],
   ['POST', '/user/github'],
+  ['POST', '/user/github/bind'],
   ['POST', '/user/extension/authorize'],
   ['POST', '/user/extension/exchange'],
   ['POST', '/user/saveUserInfo'],
@@ -502,6 +533,9 @@ declare(ADMIN_POLICIES.ACCOUNT_WRITE, 'user', [
   ['GET', '/user/deleteUserById'],
   ['POST', '/user/logout'],
   ['POST', '/user/configPassword'],
+  ['GET', '/user/email-change/status'],
+  ['POST', '/user/email-change/request'],
+  ['POST', '/user/email-change/confirm'],
   ['POST', '/user/getMySessions'],
   ['POST', '/user/revokeSession'],
   ['POST', '/user/requestAccountDeletionCode'],
@@ -611,7 +645,9 @@ declare(ADMIN_POLICIES.READ, 'growth', [
   ['GET', '/growth/weeklyReport'],
   ['GET', '/growth/shop'],
   ['GET', '/growth/inventory'],
+  ['GET', '/growth/inventory/acquisitions'],
   ['GET', '/growth/lottery'],
+  ['GET', '/growth/lottery/history'],
   ['GET', '/growth/recap'],
   ['GET', '/growth/claimable'],
   ['GET', '/growth/preferences'],
@@ -822,6 +858,20 @@ const normalizePath = (req) => {
 function resolvePolicy(method, path) {
   const exact = routePolicies.get(`${method} ${path}`);
   if (exact) return exact;
+  for (const [pattern, template] of [
+    [/^\/public-resources\/own\/[^/]+\/withdraw$/, '/public-resources/own/:id/withdraw'],
+    [/^\/public-resources\/own\/[^/]+$/, '/public-resources/own/:id'],
+    [/^\/public-resources\/operations\/[^/]+$/, '/public-resources/operations/:id'],
+    [/^\/public-resources\/moderation\/[^/]+\/history$/, '/public-resources/moderation/:id/history'],
+    [/^\/public-resources\/moderation\/reports\/[^/]+$/, '/public-resources/moderation/reports/:id'],
+    [/^\/public-resources\/moderation\/[^/]+\/decide$/, '/public-resources/moderation/:id/decide'],
+    [/^\/public-resources\/moderation\/[^/]+$/, '/public-resources/moderation/:id'],
+    [/^\/public-resources\/[^/]+\/save$/, '/public-resources/:id/save'],
+    [/^\/public-resources\/[^/]+\/report$/, '/public-resources/:id/report'],
+    [/^\/public-resources\/[^/]+$/, '/public-resources/:id'],
+  ])
+    if (pattern.test(path) && !routePolicies.has(`${method} ${path}`))
+      return routePolicies.get(`${method} ${template}`) || null;
   // Explicit community read routes only; never infer safety from the HTTP verb.
   for (const [pattern, route] of [
     [/^\/community\/topics\/[^/]+$/, '/community/topics/:slug'],

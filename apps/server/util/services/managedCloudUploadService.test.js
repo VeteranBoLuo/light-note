@@ -1,8 +1,15 @@
-vi.mock('./cloudObjectPublication.js', () => ({
+vi.mock('./cloudObjectPublication.js', async (importOriginal) => ({
+  ...await importOriginal(),
   lockCloudObjectForPublication: vi.fn(),
   beginCloudObjectDeletion: vi.fn(async () => ({ hash: 'test', token: 'test' })),
   finishCloudObjectDeletion: vi.fn(),
 }));
+vi.mock('./cloudUploadFinalization.js', async (importOriginal) => {
+  const actual = await importOriginal();
+  return { ...actual, trackCloudUpload: vi.fn(), freezeCloudUpload: vi.fn(async (_db, owner, key) => ({
+    objectKey: actual.publishedUploadKey(owner, key), ...await mocks.getObjectMetadataFromObs(key),
+  })) };
+});
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -36,6 +43,7 @@ const { abortManagedCloudUpload, buildManagedCloudObjectKey, confirmManagedCloud
   await import('./managedCloudUploadService.js');
 
 const objectKey = 'files/user-1/uploads/93c12b32-76ad-4ca0-85f7-20df7736a454.pdf';
+const { publishedUploadKey } = await import('./cloudUploadFinalization.js');
 
 function connectionWith(query) {
   return {
@@ -85,7 +93,7 @@ describe('managedCloudUploadService', () => {
     let nameChecks = 0;
     const connection = connectionWith(async (sql) => {
       const text = String(sql);
-      if (text.includes('obs_key = ?')) return [[]];
+      if (text.includes('obs_key IN (?, ?)')) return [[]];
       if (text.includes('file_name = ?')) {
         nameChecks += 1;
         return nameChecks === 1 ? [[{ id: 8 }]] : [[]];
@@ -106,7 +114,7 @@ describe('managedCloudUploadService', () => {
 
     expect(connection.query).toHaveBeenCalledWith('SELECT id FROM user WHERE id = ? LIMIT 1 FOR UPDATE', ['user-1']);
     expect(connection.query).toHaveBeenCalledWith('INSERT INTO files SET ?', [
-      expect.objectContaining({ file_name: '季度报告 (1).pdf', obs_key: objectKey, file_size: 2048 }),
+      expect.objectContaining({ file_name: '季度报告 (1).pdf', obs_key: publishedUploadKey('user-1', objectKey), file_size: 2048 }),
     ]);
     expect(connection.query.mock.calls.some(([sql]) => String(sql).startsWith('DELETE FROM files'))).toBe(false);
     expect(result).toEqual(expect.objectContaining({ fileId: '19', filename: '季度报告 (1).pdf' }));
@@ -151,7 +159,7 @@ describe('managedCloudUploadService', () => {
   it('浏览器插件确认文件时在文件事务内同步加入待整理', async () => {
     const connection = connectionWith(async (sql) => {
       const text = String(sql);
-      if (text.includes('obs_key = ?')) return [[]];
+      if (text.includes('obs_key IN (?, ?)')) return [[]];
       if (text.includes('file_name = ?')) return [[]];
       if (text === 'INSERT INTO files SET ?') return [{ insertId: 23 }];
       return [[]];
@@ -190,7 +198,7 @@ describe('managedCloudUploadService', () => {
     };
     mocks.pool.query.mockResolvedValueOnce([[existing]]);
     const connection = connectionWith(async (sql) => {
-      if (String(sql).includes('obs_key = ?')) return [[existing]];
+      if (String(sql).includes('obs_key IN (?, ?)')) return [[existing]];
       return [[]];
     });
     mocks.pool.getConnection.mockResolvedValue(connection);
@@ -212,9 +220,21 @@ describe('managedCloudUploadService', () => {
     expect(connection.query.mock.calls.some(([sql]) => sql === 'INSERT INTO files SET ?')).toBe(false);
   });
 
+  it('补入待整理前原文件已删除时拒绝，不能重新保存客户端可覆盖的暂存键', async () => {
+    mocks.pool.query.mockResolvedValueOnce([[{ id: 24, file_name: 'saved.pdf', obs_key: objectKey }]]);
+    const connection = connectionWith(async () => [[]]);
+    mocks.pool.getConnection.mockResolvedValue(connection);
+    await expect(confirmManagedCloudUpload({
+      userId: 'user-1', objectKey, fileName: 'saved.pdf', addToInbox: true,
+    })).rejects.toMatchObject({ code: 'UPLOAD_OBJECT_RETIRED' });
+    expect(connection.query.mock.calls.some(([sql]) => sql === 'INSERT INTO files SET ?')).toBe(false);
+    expect(mocks.getObjectMetadataFromObs).not.toHaveBeenCalled();
+    expect(mocks.enqueueResources).not.toHaveBeenCalled();
+  });
+
   it('拒绝不属于当前账号的文件夹并清理已上传随机对象', async () => {
     const connection = connectionWith(async (sql) => {
-      if (String(sql).includes('obs_key = ?')) return [[]];
+      if (String(sql).includes('obs_key IN (?, ?)')) return [[]];
       if (String(sql).includes('FROM folders')) return [[]];
       return [[]];
     });
@@ -246,7 +266,7 @@ describe('managedCloudUploadService', () => {
     mocks.pool.query.mockResolvedValueOnce([[]]).mockResolvedValueOnce([[committed]]);
     const connection = connectionWith(async (sql) => {
       const text = String(sql);
-      if (text.includes('obs_key = ?')) return [[]];
+      if (text.includes('obs_key IN (?, ?)')) return [[]];
       if (text.includes('file_name = ?')) return [[]];
       if (text === 'INSERT INTO files SET ?') return [{ insertId: 21 }];
       return [[]];
@@ -269,7 +289,7 @@ describe('managedCloudUploadService', () => {
   it('确认失败回滚后，清理前发现另一请求已保存同一对象时不删除', async () => {
     const failed = connectionWith(async () => [[]]);
     const cleanup = connectionWith(async (sql) =>
-      String(sql).includes('obs_key = ?')
+      String(sql).includes('obs_key IN (?, ?)')
         ? [[{ id: 31, file_name: '资料.pdf', file_type: 'application/pdf', file_size: 2048 }]]
         : [[]],
     );
@@ -284,7 +304,7 @@ describe('managedCloudUploadService', () => {
 
   it('中止上传先取得与确认相同的账号锁，已落库对象绝不删除', async () => {
     const connection = connectionWith(async (sql) => {
-      if (String(sql).includes('obs_key = ?')) {
+      if (String(sql).includes('obs_key IN (?, ?)')) {
         return [[{ id: 30, file_name: '资料.pdf', file_type: 'application/pdf', file_size: 2048 }]];
       }
       return [[]];

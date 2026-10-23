@@ -21,7 +21,38 @@ function open(onOk = vi.fn()) {
   });
   return onOk;
 }
-afterEach(() => Alert.destroy());
+afterEach(() => {
+  Alert.destroy();
+  vi.unstubAllGlobals();
+});
+
+describe.each([1440, 390])('确认框内容与操作（视口 %i）', (width) => {
+  it('保留安全富文本并剥离脚本、事件属性与危险链接', () => {
+    vi.stubGlobal('innerWidth', width);
+    Alert.alert({
+      title: '确认操作',
+      content:
+        '<strong>保留的重点</strong><script>alert(1)</script><img src="fixture.png" onerror="alert(1)"><a href="javascript:alert(1)">链接</a>',
+    });
+    const dialog = document.querySelector('.bAlert')!;
+    expect(dialog.querySelector('strong')?.textContent).toBe('保留的重点');
+    expect(dialog.querySelector('script, [onerror], a[href^="javascript:"]')).toBeNull();
+  });
+
+  it('多项操作保留全部按钮与危险操作语义', () => {
+    vi.stubGlobal('innerWidth', width);
+    Alert.alert({
+      title: '处理资料',
+      content: '请选择操作',
+      footer: [{ label: '保留', type: 'primary' }, { label: '删除', type: 'danger' }, { label: '取消' }],
+    });
+    const buttons = [...document.querySelectorAll<HTMLButtonElement>('.bAlert button')];
+    expect(buttons.map((button) => button.textContent?.trim())).toEqual(['保留', '删除', '取消']);
+    expect(buttons[1].classList.contains('danger_btn')).toBe(true);
+    expect(document.querySelector('.bAlert button button')).toBeNull();
+  });
+});
+
 describe('选择范围后统一确认', () => {
   it('默认仅本次，标题作为文本展示，选项不会立即执行删除', async () => {
     const onOk = open();
@@ -59,7 +90,9 @@ describe('选择范围后统一确认', () => {
 });
 
 it('Escape cancels an opted-in confirmation without confirming or reaching background handlers', () => {
-  const onCancel = vi.fn(), onOk = vi.fn(), background = vi.fn();
+  const onCancel = vi.fn(),
+    onOk = vi.fn(),
+    background = vi.fn();
   Alert.alert({ title: '退出发布', content: '保留草稿', keyboard: true, onCancel, onOk });
   document.addEventListener('keydown', background);
   const event = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true });

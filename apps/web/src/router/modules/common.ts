@@ -1,5 +1,6 @@
 import { RouteRecordRaw } from 'vue-router';
 import { ALL_ROLES, RoleEnum } from '@/config/bookmarkCfg.ts';
+import { inventoryPointsRoute } from '@/utils/inventoryNavigation';
 
 const commonRouter: RouteRecordRaw[] = [
   {
@@ -56,7 +57,7 @@ const commonRouter: RouteRecordRaw[] = [
     },
     path: '/points-usage',
     name: 'pointsUsage',
-    component: () => import('@/view/pointsUsage/PointsUsagePage.vue'),
+    redirect: (to) => inventoryPointsRoute(to.query),
   },
   {
     meta: {

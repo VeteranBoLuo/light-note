@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright-core';
+const origin = process.env.LIGHTNOTE_WEB_ORIGIN || 'http://localhost:5173';
 
 const browser = await chromium.launch({ executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', headless: true });
 const snapshot = page => page.locator('.b-virtual-list__item:nth-child(-n+5),.b-virtual-list__placeholder,.b-virtual-list__loading').evaluateAll(els => els.map(el => {
@@ -13,14 +14,14 @@ const firstVisible = page => page.locator('main').evaluate(main => {
 try {
   for (const width of [1440, 1024, 390]) for (const theme of ['day', 'night']) for (const state of ['ready', 'loading', 'placeholder', 'ancestor']) {
     let baseline;
-    for (const port of [5174, 5173]) {
+    {
       const page = await browser.newPage({ viewport: { width, height: 800 } }), errors = [];
       page.on('pageerror', error => errors.push(error.message));
-      await page.goto(`http://localhost:${port}/e2e/virtual-list-density.html?state=${state}&theme=${theme}`);
+      await page.goto(`${origin}/e2e/virtual-list-density.html?state=${state}&theme=${theme}`);
       await page.locator('.b-virtual-list__item').first().waitFor();
       await page.waitForTimeout(120);
-      if (port === 5174) baseline = await snapshot(page);
-      else for (const density of ['medium', 'small', 'large']) {
+      baseline = await snapshot(page);
+      for (const density of ['medium', 'small', 'large']) {
         await page.evaluate(d => window.setDensity(d), density);
         await page.evaluate(() => window.scrollToRow(0));
         await page.waitForTimeout(150);

@@ -8,7 +8,7 @@ export function dedupeSearchItems(items: readonly SearchResultItem[]): SearchRes
   const seen = new Set<string>();
   const result: SearchResultItem[] = [];
   items.forEach((item) => {
-    const key = `${item.type}:${item.id}`;
+    const key = `${item.origin || 'personal'}:${item.type}:${item.id}`;
     if (seen.has(key)) return;
     seen.add(key);
     result.push(item);

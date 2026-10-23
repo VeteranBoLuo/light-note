@@ -35,6 +35,13 @@ vi.mock('./obsClient.js', async (importOriginal) => {
         state.realObjects.add(options.objectKey);
         return actual.createUploadSignedUrl(options);
       },
+      copyObjectInObs: (sourceKey, targetKey) => {
+        if (!state.owner || !targetKey.startsWith(`files/${state.owner}/`)) {
+          throw new Error('OBS_TEST_OWNER_MISMATCH');
+        }
+        state.realObjects.add(targetKey);
+        return actual.copyObjectInObs(sourceKey, targetKey);
+      },
     };
   }
   return {
@@ -53,7 +60,11 @@ vi.mock('./obsClient.js', async (importOriginal) => {
       return { contentLength: object.length, contentType: 'image/png', etag: 'local-image' };
     },
     deleteObjectFromObs: async (key) => state.objects.delete(key),
-    copyObjectInObs: vi.fn(),
+    copyObjectInObs: vi.fn(async (sourceKey, targetKey) => {
+      const object = state.objects.get(sourceKey);
+      if (!object) throw Object.assign(new Error('missing local object'), { obsStatus: 404 });
+      state.objects.set(targetKey, Buffer.from(object));
+    }),
     putObjectToObs: vi.fn(),
   };
 });
@@ -358,21 +369,22 @@ describe.skipIf(!socketPath)('成长周报真实 MySQL / HTTP 联调', () => {
     });
     expect(confirmed.status).toBe(200);
     expect(confirmed.data[0].fileId).toBeTruthy();
-    const [[row]] = await state.db.query('SELECT create_by,folder_id,file_size FROM files WHERE id=?', [
+    const [[row]] = await state.db.query('SELECT create_by,folder_id,file_size,obs_key FROM files WHERE id=?', [
       confirmed.data[0].fileId,
     ]);
     expect(row).toMatchObject({ create_by: actor, folder_id: Number(folder.data.id), file_size: bytes.length });
+    expect(row.obs_key.startsWith(`files/${actor}/published/`)).toBe(true);
     if (realObs) {
       const { createDownloadSignedUrl, getObjectBufferFromObs, getObjectMetadataFromObs } =
         await import('./obsClient.js');
-      expect(await getObjectMetadataFromObs(file.objectKey)).toMatchObject({
+      expect(await getObjectMetadataFromObs(row.obs_key)).toMatchObject({
         contentLength: bytes.length,
         contentType: 'image/png',
       });
-      const stored = await getObjectBufferFromObs(file.objectKey);
+      const stored = await getObjectBufferFromObs(row.obs_key);
       const response = await fetch(
         createDownloadSignedUrl({
-          objectKey: file.objectKey,
+          objectKey: row.obs_key,
           fileName: '周报验收.png',
           responseContentType: 'image/png',
         }).url,
@@ -384,6 +396,8 @@ describe.skipIf(!socketPath)('成长周报真实 MySQL / HTTP 联调', () => {
       console.log(
         `[weekly-report-real-obs] signed PUT / HEAD / signed GET / SDK GET passed; sha256=${createHash('sha256').update(downloaded).digest('hex')}`,
       );
+    } else {
+      expect(state.objects.get(row.obs_key)).toEqual(bytes);
     }
   });
   it('C7 挑战按真实活动事实领奖并刷新领取状态', async () => {

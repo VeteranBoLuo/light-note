@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { chromium } from 'playwright-core';
 
-const origin = process.env.LIGHTNOTE_WEB_ORIGIN || 'http://127.0.0.1:5175';
+const origin = process.env.LIGHTNOTE_WEB_ORIGIN || 'http://localhost:5173';
 assert(['localhost', '127.0.0.1'].includes(new URL(origin).hostname));
 const output = process.env.LIGHTNOTE_VISUAL_OUTPUT || '/tmp/lightnote-share-batch';
 await mkdir(output, { recursive: true });

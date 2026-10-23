@@ -77,8 +77,8 @@ describe('资源中心 2.0 工作区边界', () => {
     expect(source).toContain('class="resource-scope-pane"');
     expect(source).toContain('class="result-panel"');
     expect(source).toContain('class="resource-inspector-pane"');
-    expect(source).toMatch(
-      /@media \(min-width: 768px\)[\s\S]*?\.search-layout\s*\{[\s\S]*?grid-template-columns:\s*clamp\(220px, 14vw, 280px\) minmax\(0, 1fr\) clamp\(350px, 20vw, 410px\)/,
+    expect(source.replace(/var\(--ui-layout-\d+,\s*(\d+px)\)/g, '$1')).toMatch(
+      /@media \(min-width: 768px\)[\s\S]*?\.search-layout\s*\{[\s\S]*?grid-template-columns:\s*clamp\(220px, 14vw, 280px\) minmax\(0, 1fr\) clamp\(\s*350px,\s*20vw,\s*410px\s*\)/,
     );
     expect(source).toMatch(/\.resource-scope-pane\s*\{[\s\S]*?overflow:\s*hidden auto/);
     expect(source).toMatch(/@media \(min-width: 768px\)[\s\S]*?\.search-page\s*\{[\s\S]*?overflow:\s*hidden/);
@@ -117,7 +117,7 @@ describe('资源中心 2.0 工作区边界', () => {
   it('移动操作抽屉的同 URL 历史回退不会误清空批量选择', () => {
     const routeWatch = source.slice(source.indexOf('let isInitialRouteLoad'), source.indexOf('watch(selectedCount'));
     expect(routeWatch).toContain('() => route.fullPath');
-    expect(routeWatch).toContain('applyRouteState()');
+    expect(routeWatch).toContain('applyRouteState(identityChanged)');
     expect(routeWatch).not.toContain('clearBatchSelection()');
     expect(source).not.toMatch(/watch\(\s*\(\) => route\.query,[\s\S]*?clearBatchSelection\(\)/);
   });

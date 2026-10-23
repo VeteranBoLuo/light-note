@@ -1,110 +1,118 @@
+import { compileAdviceEvidence, ADVICE_FACT_ID } from './dailyBriefAdvice.js';
 import { summarizePendingOrganizeReview } from './organizeReviewSummary.js';
 import { compileWorkshopBriefFacts } from './dailyBriefWorkshop.js';
+import { compileBriefTodoFacts } from './dailyBriefTodoFacts.js';
+import { listInboxResources } from '../resourceInbox.js';
 import { summarizeUntaggedResources } from './resourceInventoryService.js';
-import { compileBriefConnection } from './dailyBriefConnections.js';
+import { loadPreparedResourceExcerpts } from '../aiSkill/resourceEvidence.js';
 
-// 同时供事实编译器和 internal-only Skill 校验使用，不在 Prompt 维护另一套 ID。
 export const DAILY_BRIEF_FACT_DEFINITIONS = Object.freeze([
-  ['todo_overdue', '已逾期待办', 'Overdue todos', '/inbox?tab=todo'],
-  ['todo_due_today', '今天待办', "Today's todos", '/inbox?tab=todo'],
-  ['bookmark_created_yesterday', '昨天新增书签', 'Bookmarks added yesterday', '/home'],
-  ['note_created_yesterday', '昨天新增笔记', 'Notes added yesterday', '/noteLibrary'],
-  ['file_created_yesterday', '昨天新增文件', 'Files added yesterday', '/cloudSpace'],
-  ['bookmark_created_today', '今天新增书签', 'Bookmarks added today', '/home'],
-  ['note_created_today', '今天新增笔记', 'Notes added today', '/noteLibrary'],
-  ['file_created_today', '今天新增文件', 'Files added today', '/cloudSpace'],
-  ['organize_untagged', '待整理的无标签内容', 'Untagged content to organize', '/organize?issue=untagged'],
-  [
-    'organize_ai_pending',
-    '当前一轮整理中待审核的建议',
-    'Current run: suggestions to review',
-    '/organize?issue=ai_suggestions',
-  ],
+  ['todo_overdue', '单次待办重点（逾期）', 'One-time task focus (overdue)', '/inbox?tab=todo'],
+  ['todo_due_today', '单次待办重点（今天到期）', 'One-time task focus (due today)', '/inbox?tab=todo'],
+  ['todo_scheduled_today', '单次待办重点（今天安排）', 'One-time task focus (scheduled today)', '/inbox?tab=todo'],
+  ['organize_ai_pending', '待审核的整理建议', 'Organizing suggestions to review', '/organize?issue=ai_suggestions'],
+  ['organize_pending', '待整理资料', 'Pending resources', '/organize?issue=pending'],
+  ['organize_untagged', '无标签资源', 'Untagged resources', '/organize?issue=untagged'],
 ]);
 
-export async function compileDailyBriefFacts(database, userId, calendar) {
-  const definitions = {
-    todo_overdue: {
-      table: 'todo_items',
-      owner: 'user_id',
-      title: 'title',
-      order: 'COALESCE(due_at, occurrence_date) ASC, id ASC',
-      filter:
-        "del_flag = 0 AND status = 'pending' AND ((due_at IS NOT NULL AND due_at < ?) OR (due_at IS NULL AND occurrence_date IS NOT NULL AND occurrence_date < ?))",
-      params: [calendar.now, calendar.date],
-      revision: 'id, title, due_at, occurrence_date',
-    },
-    todo_due_today: {
-      table: 'todo_items',
-      owner: 'user_id',
-      title: 'title',
-      order: 'COALESCE(due_at, occurrence_date) ASC, id ASC',
-      filter:
-        "del_flag = 0 AND status = 'pending' AND ((due_at IS NOT NULL AND due_at >= ? AND due_at < ?) OR (due_at IS NULL AND occurrence_date = ?))",
-      params: [calendar.now, calendar.todayEnd, calendar.date],
-      revision: 'id, title, due_at, occurrence_date',
-    },
-  };
-  for (const [kind, table, owner, title] of [
-    ['bookmark', 'bookmark', 'user_id', 'name'],
-    ['note', 'note', 'create_by', 'title'],
-    ['file', 'files', 'create_by', 'file_name'],
-  ]) {
-    for (const period of ['yesterday', 'today']) {
-      definitions[`${kind}_created_${period}`] = {
-        table,
-        owner,
-        title,
-        order: 'create_time DESC, id ASC',
-        filter: 'del_flag = 0 AND create_time >= ? AND create_time < ?',
-        params:
-          period === 'today'
-            ? [calendar.todayStart, calendar.todayEnd]
-            : [calendar.yesterdayStart, calendar.todayStart],
-        revision: `id, ${title}${kind === 'note' ? ', update_time' : ''}`,
-      };
-    }
-  }
-  const entries = await Promise.all(
-    DAILY_BRIEF_FACT_DEFINITIONS.map(async ([id, zh, en, route]) => {
-      let row;
-      if (id === 'organize_ai_pending') {
-        row = await summarizePendingOrganizeReview(database, userId);
-      } else if (id === 'organize_untagged') {
-        row = await summarizeUntaggedResources(database, { userId });
-      } else {
-        const config = definitions[id];
-        const where = `${config.owner} = ? AND ${config.filter}`;
-        const params = [userId, ...config.params];
-        // 静态白名单 SQL；只聚合元数据，不读取正文。校验和检测同数量下的对象替换/编辑，
-        // 不用于权限或身份裁决，也不依赖会被 group_concat_max_len 截断的资源清单。
-        const [rows] = await database.query(
-          `SELECT COUNT(*) AS total,
-                CONCAT(COALESCE(SUM(CRC32(JSON_ARRAY(${config.revision}))), 0), ':',
-                       BIT_XOR(CRC32(JSON_ARRAY(${config.revision})))) AS revision
-                ${config.title ? `, (SELECT ${config.title} FROM ${config.table} WHERE ${where} ORDER BY ${config.order} LIMIT 1) AS sample` : ''}
-           FROM ${config.table} WHERE ${where}`,
-          config.title ? [...params, ...params] : params,
-        );
-        row = rows[0] || {};
-      }
-      const sample = String(row.sample || '')
-        .replace(/\s+/gu, ' ')
-        .trim()
-        .slice(0, 120);
+// 仅供顶部概览，独立于重点条目的筛选和额度，不把收集数量扩写成洞察。
+export async function compileBriefActivityFacts(database, userId, calendar) {
+  return Promise.all(
+    [
+      ['bookmark', 'bookmark', 'user_id', '今天新增书签', 'Bookmarks added today'],
+      ['note', 'note', 'create_by', '今天新增笔记', 'Notes added today'],
+      ['file', 'files', 'create_by', '今天新增文件', 'Files added today'],
+    ].map(async ([kind, table, owner, zh, en]) => {
+      const [[row]] = await database.query(
+        `SELECT COUNT(*) AS total FROM ${table} WHERE ${owner}=? AND del_flag=0 AND create_time>=? AND create_time<?`,
+        [userId, calendar.todayStart, calendar.todayEnd],
+      );
       return {
-        id,
+        id: `${kind}_created_today`,
         label: calendar.locale === 'en-US' ? en : zh,
-        route: row.route || route,
-        count: Math.max(0, Number(row.total || 0)),
-        samples: sample ? [sample] : [],
-        revision: String(row.revision || ''),
+        count: Number(row.total),
+        samples: [],
       };
     }),
   );
+}
+
+// 同一套资格规则供生成决策与交付使用，模型不能把低价值事实重新写回简报。
+export function selectDailyBriefFacts(facts) {
+  const candidates = facts.filter(
+    (fact) =>
+      Number(fact.count) > 0 &&
+      (['todo_overdue', 'todo_due_today', 'todo_scheduled_today'].includes(fact.id) ||
+        ['organize_ai_pending', 'organize_pending', 'organize_untagged'].includes(fact.id) ||
+        (['workshop_due', 'workshop_next_step', 'workshop_result', 'workshop_attention'].includes(fact.id) &&
+          fact.samples?.length &&
+          fact.sources?.length)),
+  );
+  const project =
+    candidates.find((fact) => fact.id === 'workshop_due') ||
+    candidates.find((fact) => fact.id === 'workshop_next_step');
+  // 项目到期和下一步共用一项；失败与成果独立保留，不能互相遮蔽。
+  return candidates.filter((fact) =>
+    ['workshop_due', 'workshop_next_step'].includes(fact.id) ? fact === project : true,
+  );
+}
+
+export async function compileDailyBriefFacts(database, userId, calendar) {
+  const [todos, review, pending, untagged, workshop, activity] = await Promise.all([
+    compileBriefTodoFacts(database, userId, calendar, DAILY_BRIEF_FACT_DEFINITIONS.slice(0, 3)),
+    summarizePendingOrganizeReview(database, userId),
+    listInboxResources(database, { userId, limit: 20, view: 'summary', includeCounts: false }),
+    summarizeUntaggedResources(database, { userId }),
+    compileWorkshopBriefFacts(database, userId, calendar),
+    compileBriefActivityFacts(database, userId, calendar),
+  ]);
+  const organize = [review, pending, untagged];
+  const candidates = (pending.items || []).filter((item) => ['note', 'bookmark', 'file'].includes(item.resourceType));
+  const materials = await loadPreparedResourceExcerpts({
+    database,
+    userId,
+    refs: candidates.map((item) => ({ type: item.resourceType, id: item.resourceId })),
+  });
+  const evidence = compileAdviceEvidence(materials);
   return [
-    ...entries,
-    await compileBriefConnection(database, userId, calendar),
-    ...(await compileWorkshopBriefFacts(database, userId, calendar)),
+    ...todos,
+    ...DAILY_BRIEF_FACT_DEFINITIONS.slice(3).map(([id, zh, en, route], index) => ({
+      id,
+      label: calendar.locale === 'en-US' ? en : zh,
+      route: organize[index].route || route,
+      count: organize[index].total,
+      samples: [],
+      revision: organize[index].revision || '',
+      ...(id === 'organize_ai_pending'
+        ? { resourceTypes: review.resourceTypes || [], kinds: review.kinds || [] }
+        : id === 'organize_pending'
+          ? {
+              // 正文区仅保留最近两项的标题与类型；有界建议材料单独编译。
+              resources: (pending.items || [])
+                .slice(0, 2)
+                .filter(
+                  (item) =>
+                    ['bookmark', 'note', 'file'].includes(item.resourceType) && item.resourceId && item.title?.trim(),
+                )
+                .map((item) => ({
+                  id: item.resourceId,
+                  type: item.resourceType,
+                  title: item.title.trim().replace(/\s+/gu, ' ').slice(0, 80),
+                })),
+            }
+          : {}),
+    })),
+    ...workshop,
+    ...activity,
+    {
+      id: ADVICE_FACT_ID,
+      evidence,
+      coverage: {
+        candidates: candidates.length,
+        readable: materials.filter((item) => item.preparedText?.length >= 8).length,
+        selected: evidence.length,
+        hasMoreCandidates: Boolean(pending.nextCursor),
+      },
+    },
   ];
 }

@@ -87,7 +87,7 @@ export function effectiveSourceReputation(req, reputation) {
   const authPath = String(req.path || '').replace(/^\/api\//, '/');
   const recovery =
     (req.method === 'POST' &&
-      /^\/user\/(?:login|registerUser|sendEmail|verifyCode|configPassword|github(?:\/authorize)?|logout|extension\/exchange)\/?$/.test(
+      /^\/user\/(?:login|registerUser|sendEmail|verifyCode|configPassword|email-change\/(?:status|request|confirm)|github(?:\/(?:authorize|bind))?|logout|extension\/exchange)\/?$/.test(
         authPath,
       )) ||
     (req.method === 'GET' && /^\/user\/(?:me|getUserInfo)\/?$/.test(authPath));

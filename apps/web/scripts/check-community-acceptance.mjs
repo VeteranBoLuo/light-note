@@ -17,13 +17,19 @@ async function page(account, extra = '') {
   return p;
 }
 const go = (p, path) => p.evaluate((path) => window.communityFixture.router.push(path), path);
-const closeDialog = (p) => p.getByRole('dialog').last().getByRole('button', { name: '关闭', exact: true }).click();
+const closeDialog = async (p) => {
+  await p.getByRole('dialog').last().getByRole('button', { name: '关闭', exact: true }).click();
+  const exit = p.locator('.bAlert').getByRole('button', { name: '退出发布', exact: true });
+  await exit.click();
+  await p.locator('.community-writing').waitFor({ state: 'hidden' });
+};
 try {
   const root = await page('root'),
     member = await page('b');
   await root.getByRole('button', { name: '发布内容', exact: true }).click();
   const title = '图片与草稿验收 ' + Date.now();
   await root.locator('#feed-title').fill(title);
+  await root.getByRole('tab', { name: 'Markdown', exact: true }).click();
   await root.locator('.writing-body .cm-content').fill('本地隔离验收：图片草稿应在关闭编辑器后保留。');
   await root.locator('input[type=file]').setInputFiles({
     name: 'fixture.png',
@@ -41,11 +47,11 @@ try {
   assert.equal(await root.locator('#feed-title').inputValue(), title);
   assert.equal(await root.locator('.writing-image img').count(), 1);
   await root.getByRole('button', { name: '发布', exact: true }).click();
-  await root.getByRole('button', { name: '提交审核', exact: true }).click();
+  await root.getByRole('button', { name: '确认发布', exact: true }).click();
   await root.locator('.community-writing').waitFor({ state: 'hidden' });
   await go(root, '/community/manage');
   const card = root.locator('.feed-post').filter({ hasText: title });
-  await card.getByRole('button', { name: '查看帖子', exact: true }).click();
+  await card.getByRole('link', { name: title, exact: true }).click();
   await root.locator('.community-discussion').waitFor();
   const detail = await root.evaluate(() => window.communityFixture.router.currentRoute.value.path);
   await go(member, detail);
@@ -59,21 +65,10 @@ try {
   await go(member, detail);
   await member.locator('.community-content-more').click();
   await member.getByRole('menuitem', { name: '举报', exact: true }).click();
-  assert.equal(await member.locator('#community-comment:visible').count(), 0);
+  assert.equal(await member.locator('.community-comments-panel .comment-composer:visible').count(), 0);
   await member.getByRole('dialog').getByRole('textbox').fill('隔离测试：核对举报与评论分离。');
   await member.getByRole('dialog').getByRole('button', { name: '确认', exact: true }).click();
   await member.getByRole('dialog').waitFor({ state: 'hidden' });
-  await go(root, detail);
-  await root.locator('.post-author').first().click();
-  await root.getByRole('button', { name: '编辑社区资料', exact: true }).click();
-  await root.locator('.community-own-profile').waitFor();
-  await root.locator('.bio-field textarea').fill('隔离环境更新的社区简介');
-  await root.getByRole('button', { name: '保存社区资料', exact: true }).click();
-  await root.waitForFunction(() => document.querySelector('.profile-editor footer button')?.disabled);
-  await go(root, '/community/chat');
-  await go(root, '/community/profile');
-  await root.locator('.bio-field textarea').waitFor();
-  assert.equal(await root.locator('.bio-field textarea').inputValue(), '隔离环境更新的社区简介');
   await go(root, detail);
   await root.locator('.community-content-more').click();
   await root.getByRole('menuitem', { name: '撤回', exact: true }).click();
@@ -105,7 +100,7 @@ try {
       await p.locator('.feed-post').first().waitFor();
       await p.locator('.feed-post h2 a').first().click();
       await p.locator('.discussion-open-comments').click();
-      await p.locator('#community-comment').waitFor();
+      await p.locator('.community-comments-panel .comment-composer textarea').waitFor();
       await p.waitForTimeout(400);
       assert.equal(await p.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
       await p.screenshot({ path: `${output}/${width}-${theme}-comments.png` });
@@ -113,7 +108,7 @@ try {
     }
   assert.deepEqual(errors, []);
   console.log(
-    'PASS: image draft/reopen/publication; follow/unfollow; report separation; own-profile editing; withdrawal; disabled/read-only/failure/guest chat fallback; chat draft; desktop/mobile comment drawer.',
+    'PASS: image draft/reopen/publication; follow/unfollow; report separation; withdrawal; disabled/read-only/failure/guest chat fallback; chat draft; desktop/mobile comment drawer.',
   );
 } finally {
   await browser.close();

@@ -55,7 +55,7 @@
             · {{ t('todoWorkspace.dueNextDay') }}</strong
           ></p
         >
-        <p v-if="hasReminder && !isOnce">{{
+        <p v-if="hasReminder && !isSingleReminder">{{
           preview.displaySummary.reminderSchedule || preview.displaySummary.reminder
         }}</p>
       </section>
@@ -84,7 +84,9 @@
             <dd>{{ channels.join(locale.startsWith('zh') ? '、' : ', ') }}</dd>
           </div>
           <div v-if="preview.nextReminderAt">
-            <dt>{{ t(isOnce ? 'inbox.todoPlanPreviewReminderTime' : 'inbox.todoPlanPreviewNextReminder') }}</dt>
+            <dt>{{
+              t(isSingleReminder ? 'inbox.todoPlanPreviewReminderTime' : 'inbox.todoPlanPreviewNextReminder')
+            }}</dt>
             <dd>{{ preview.nextReminderAt }}</dd>
           </div>
         </template>
@@ -98,6 +100,7 @@
 </template>
 
 <script setup lang="ts">
+  import { getTodoFixedReminderTimes } from '@lightnote/shared/todo-reminder';
   import { computed } from 'vue';
   import { useI18n } from 'vue-i18n';
   import ResourceTagChip from '@/components/tag/ResourceTagChip.vue';
@@ -127,9 +130,9 @@
   const hasReminder = computed(() =>
     reminder.value ? reminder.value.mode !== 'none' : Boolean(props.preview?.reminderJobCount),
   );
-  const isOnce = computed(
+  const isSingleReminder = computed(
     () =>
-      reminder.value?.mode === 'once' ||
+      (reminder.value?.mode === 'once' && getTodoFixedReminderTimes(reminder.value.once).length <= 1) ||
       (reminder.value?.mode === 'once_per_instance' && props.preview?.normalizedPlan?.plan.type === 'once'),
   );
   const ongoing = computed(

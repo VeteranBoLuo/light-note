@@ -236,6 +236,7 @@
     ...WIDE_NOTIFICATION_GROUPS.ai_routine,
     'community_chat',
     'community_feed',
+    'public_resource',
   ]);
   const useWidePageCategories = computed(() => props.page && bookmark.isDesktop);
 
@@ -248,6 +249,7 @@
           { value: 'ai_routine', label: t('notification.tabAiRoutine') },
           { value: 'community_chat', label: t('notification.tabCommunityChat') },
           { value: 'community_feed', label: t('community.feed.title') },
+          { value: 'public_resource', label: t('publicResources.publicResourceNotices') },
           { value: 'system_group', label: t('notification.tabSystem') },
         ]
       : [
@@ -256,6 +258,7 @@
           { value: 'system', label: t('notification.tabSystem') },
           { value: 'opinion_reply', label: t('notification.tabFeedback') },
           { value: 'community_feed', label: t('community.feed.title') },
+          { value: 'public_resource', label: t('publicResources.publicResourceNotices') },
         ],
   );
   // 各 tab 未读角标:全部=总数,其余=该类型未读数

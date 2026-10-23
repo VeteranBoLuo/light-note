@@ -73,8 +73,8 @@ describe('聊天室通知中心可见性与旧客户端兼容', () => {
       ['ai_routine', 'type IN (?,?)', ['user-1', 'daily_brief', 'ai_routine']],
       [
         'system_group',
-        'type NOT IN (?,?,?,?,?,?,?,?)',
-        ['user-1', 'todo_reminder', 'level_up', 'streak_risk', 'collection_form_reward', 'daily_brief', 'ai_routine', 'community_chat', 'community_feed'],
+        'type NOT IN (?,?,?,?,?,?,?,?,?)',
+        ['user-1', 'todo_reminder', 'level_up', 'streak_risk', 'collection_form_reward', 'daily_brief', 'ai_routine', 'community_chat', 'community_feed', 'public_resource'],
       ],
     ]) {
       query

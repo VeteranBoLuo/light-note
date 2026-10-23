@@ -295,6 +295,10 @@ for (const [route, fields] of [
   ['POST /community/moderation/reports', { reason: 500 }],
   ['POST /community/moderation/comments', { reason: 500 }],
   ['POST /community/moderation/appeals', { reason: 500 }],
+  ['POST /public-resources/:id/report', { reason: 500 }],
+  ['POST /public-resources/moderation/:id/decide', { reason: 500 }],
+  ['POST /public-resources/moderation/reports/:id', { reason: 500 }],
+  ['POST /public-resources/search/combined', { keyword: 200 }],
 ])
   REQUEST_FIELD_POLICIES.set(
     route,
@@ -314,6 +318,12 @@ for (const [route, fields] of [
 for (const [route, maxSize] of [
   ['GET /community/posts', 100],
   ['GET /community/members', 40],
+  ['GET /public-resources/search', 200],
+  ['GET /public-resources/suggest', 200],
+  ['GET /public-resources/candidates', 200],
+  ['GET /public-resources/own', 200],
+  ['GET /public-resources/workspace', 200],
+  ['GET /public-resources/moderation', 200],
 ])
   REQUEST_FIELD_POLICIES.set(
     route,
@@ -332,14 +342,22 @@ for (const [route, maxSize] of [
 
 export const resolveRequestFieldPolicy = (context = {}, field = '') => {
   const method = String(context.method || 'GET').toUpperCase();
-  const normalizedPath = normalizeSecurityRoutePath(context.path);
+  let normalizedPath = normalizeSecurityRoutePath(context.path);
+  const id='[0-9a-f-]{36}';
+  for(const [pattern,replacement] of [[new RegExp('^/public-resources/'+id+'/report$','i'),'/public-resources/:id/report'],[new RegExp('^/public-resources/moderation/'+id+'/decide$','i'),'/public-resources/moderation/:id/decide'],[new RegExp('^/public-resources/moderation/reports/'+id+'$','i'),'/public-resources/moderation/reports/:id']]) if(pattern.test(normalizedPath)) normalizedPath=replacement;
   const policyPath = /^\/daily-review\/items\/[^/]+\/action$/u.test(normalizedPath)
     ? '/daily-review/items/:id/action'
     : normalizedPath;
   const routeKey = `${method} ${policyPath}`;
+  const batchReason = method === 'POST' && policyPath === '/public-resources/moderation/batch' && /^body\.items(?:\.(?:[0-9]|[1-9][0-9])|\[(?:[0-9]|[1-9][0-9])\])\.reason$/u.test(field);
+  const batchItems = method === 'POST' && ['/public-resources/batch/preview', '/public-resources/batch', '/public-resources/moderation/batch'].includes(policyPath) && field === 'body.items';
   const boardTextLimit = field === 'body.command.title' ? 255 : field === 'body.command.content' ? 5000
     : /^body\.command\.details\.evidence\.(?:[0-9]|1[0-9])\.explanation$/u.test(field) ? 1000 : 0;
-  const definition = method === 'POST' && /^\/toolbox\/workspaces\/[^/]+\/board$/u.test(policyPath) && boardTextLimit
+  const definition = batchItems
+    ? policy({ semantic: 'public-resource-batch-items', maxSize: 100, sizeUnit: 'items', measure: (value) => Array.isArray(value) ? value.length : 0, accepts: (value) => Array.isArray(value) && value.every((item) => item && typeof item === 'object' && !Array.isArray(item)) })
+    : batchReason
+    ? policy({ semantic: 'public-resource-review-reason', maxSize: 500, skipSignatureRules: '*' })
+    : method === 'POST' && /^\/toolbox\/workspaces\/[^/]+\/board$/u.test(policyPath) && boardTextLimit
     ? policy({ semantic: 'workspace-card-text', maxSize: boardTextLimit, skipSignatureRules: '*' })
     : method === 'POST' && policyPath === '/toolbox/quotes' && field === 'body.input.text' && context.body?.toolId === 'translation'
     ? policy({ semantic: 'translation-text', maxSize: TOOLBOX_TRANSLATION_MAX_CHARS, skipSignatureRules: '*' })
@@ -348,7 +366,7 @@ export const resolveRequestFieldPolicy = (context = {}, field = '') => {
     ? policy({ semantic: 'ai-document-summary-text', maxSize: AI_DOCUMENT_SUMMARY_MAX_CHARS, skipSignatureRules: '*' })
     : REQUEST_FIELD_POLICIES.get(routeKey)?.get(String(field));
   if (!definition) return null;
-  const value = requestFieldValue(context, field);
+  const value = requestFieldValue(context, batchReason ? String(field).replace(/\[(\d+)\]/gu, '.$1') : field);
   const size = definition.sizeUnit === 'utf8-bytes' ? utf8Length(value) : definition.measure(value);
   const measurable = definition.sizeUnit === 'items' ? Array.isArray(value) : typeof value === 'string';
   const withinBudget = measurable && size <= definition.maxSize;

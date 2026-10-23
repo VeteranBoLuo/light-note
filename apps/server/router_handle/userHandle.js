@@ -94,6 +94,7 @@ import {
 import { preserveCommunityPreference } from '../util/communityPreferences.js';
 import { preserveDailyBriefPreference } from '../util/dailyBriefFeature.js';
 import redisClient from '../util/redisClient.js';
+import { rememberRecentGithubAuthentication } from '../util/services/accountEmailChangeService.js';
 
 const isActiveIpBan = (ipReputation) => {
   const bannedUntil = ipReputation?.banned_until ? new Date(ipReputation.banned_until).getTime() : 0;
@@ -209,7 +210,11 @@ export const login = async (req, res) => {
     const ipReputation = await getIpReputation(getClientIp(req));
     const isIpBanned = isActiveIpBan(ipReputation);
     const [result] = await pool.query('SELECT * FROM user WHERE email = ?', [email]);
-    if (result.length === 0 || hasLoginPassword(result[0]) === false || !(await verifyPassword(password, result[0].password))) {
+    if (
+      result.length === 0 ||
+      hasLoginPassword(result[0]) === false ||
+      !(await verifyPassword(password, result[0].password))
+    ) {
       if (isIpBanned) {
         res.send(resultData(null, 403, 'IP 已处于封禁期，禁止登录'));
         return;
@@ -261,7 +266,10 @@ export const login = async (req, res) => {
     if (result[0].password_method === 'plain' && result[0].password) {
       const upgradedHash = await hashPassword(result[0].password);
       pool
-        .query("UPDATE user SET password = ?, password_method = 'scrypt' WHERE id = ? AND password = ? AND password_method = 'plain'", [upgradedHash, result[0].id, result[0].password])
+        .query(
+          "UPDATE user SET password = ?, password_method = 'scrypt' WHERE id = ? AND password = ? AND password_method = 'plain'",
+          [upgradedHash, result[0].id, result[0].password],
+        )
         .catch((e) => console.warn('[auth] 明文密码透明升级失败 code=%s', stableAgentErrorCode(e))); // 非关键,留痕不阻断
     }
     if (result[0].login_password_set == null) {
@@ -1163,6 +1171,21 @@ export const saveUserInfo = async (req, res) => {
     if (typeof finalBody.email === 'string') {
       finalBody.email = normalizeEmail(finalBody.email);
     }
+    if (finalBody.email !== undefined) {
+      const [[current]] = await pool.query('SELECT email FROM user WHERE id = ? LIMIT 1', [id]);
+      if (!current || finalBody.email !== current.email) {
+        return res.send(
+          resultData(
+            { code: 'EMAIL_CHANGE_REQUIRES_VERIFICATION' },
+            409,
+            L(req, '登录邮箱不能通过个人资料直接修改', 'The sign-in email cannot be changed through profile updates.'),
+          ),
+        );
+      }
+      // 同值回传兼容旧客户端，但不再让通用资料写入修改身份字段。
+      delete finalBody.email;
+      if (!Object.keys(finalBody).length) return res.send(resultData({ affectedRows: 0 }));
+    }
     let result;
     if (finalBody.preferences !== undefined) {
       // 偏好仍是用户表上的统一 JSON；公告已读是其中的单调服务端事实。锁住账号行后再合并，
@@ -1415,8 +1438,7 @@ export const github = async (req, res) => {
         getGitHubUser(tokenData.access_token),
         getGitHubEmail(tokenData.access_token),
       ]);
-      const safeEmail = normalizeEmail(email) || `${baseUser.login}@users.noreply.github.com`;
-      githubUser = { ...baseUser, email: safeEmail, emailMissing: !email };
+      githubUser = { ...baseUser, email, emailMissing: !email };
 
       stage = 'ACCOUNT_BIND';
       user = await handleUserDatabaseOperation(githubUser, req);
@@ -1439,6 +1461,9 @@ export const github = async (req, res) => {
 
     stage = 'SESSION_ISSUE';
     const sid = await issueLoginSession(req, res, user, true);
+    await rememberRecentGithubAuthentication(sid, user).catch(() =>
+      console.warn('[github-oauth] recent authentication proof unavailable'),
+    );
     // 成功后保留短时 nonce Cookie 到原 TTL：若响应正文在途中丢失，浏览器可凭 completed 状态恢复本站会话。
     // 新一轮 OAuth 会覆盖该随机 Cookie，Redis 完成记录则会在 5 分钟后先行失效。
     await recordServerOperation(req, {
@@ -1506,6 +1531,22 @@ export const github = async (req, res) => {
       ),
     );
   }
+};
+
+// Retired anonymous linking endpoint: old pages and tickets cannot attach an identity or issue a session.
+export const bindGithub = async (req, res) => {
+  res.clearCookie(GITHUB_OAUTH_NONCE_COOKIE, githubOAuthCookieOptions(0));
+  return res.send(
+    resultData(
+      { code: 'GITHUB_OAUTH_EMAIL_CONFLICT', retryable: false },
+      409,
+      L(
+        req,
+        '此邮箱已注册过轻笺，请使用邮箱登录或找回密码',
+        'This email is already registered with LightNote. Use email sign-in or reset your password.',
+      ),
+    ),
+  );
 };
 
 export const logout = async (req, res) => {
@@ -1696,13 +1737,15 @@ const getGitHubEmail = async (accessToken) => {
 };
 
 export const handleUserDatabaseOperation = async (githubUser, req, { duplicateRetry = true } = {}) => {
-  const safeEmail = normalizeEmail(githubUser.email) || `${githubUser.login}@users.noreply.github.com`;
   const githubId = String(githubUser.id);
+  const safeEmail =
+    (githubUser.emailMissing ? '' : normalizeEmail(githubUser.email)) || `${githubId}@users.noreply.github.com`;
   const connection = await pool.getConnection();
   let user;
   let createdUserId = '';
   let shouldRetryDuplicate = false;
   try {
+    await connection.query('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ');
     await connection.beginTransaction();
     const [existingByGithub] = await connection.query(`SELECT * FROM user WHERE github_id = ? LIMIT 1 FOR UPDATE`, [
       githubId,
@@ -1729,21 +1772,16 @@ export const handleUserDatabaseOperation = async (githubUser, req, { duplicateRe
         safeEmail,
       ]);
       if (existingByEmail.length > 0) {
-        const existingGithubId = String(existingByEmail[0].github_id || '');
-        if (existingGithubId && existingGithubId !== githubId) {
-          throw new GitHubOAuthError('GITHUB_OAUTH_EMAIL_CONFLICT', '该邮箱已绑定其他 GitHub 账号，请使用邮箱登录', {
-            stage: 'ACCOUNT_BIND',
-            status: 409,
-          });
-        }
-        await connection.query(
-          `UPDATE user SET github_id = ?, login_password_set = ?, login_type = 'github' WHERE id = ? AND (github_id IS NULL OR github_id = ?)`,
-          [githubId, hasLoginPassword(existingByEmail[0]), existingByEmail[0].id, githubId],
+        // 注册不证明邮箱归属；同邮箱冲突不能合并身份或保留未知来源的密码后登录。
+        throw new GitHubOAuthError(
+          'GITHUB_OAUTH_EMAIL_CONFLICT',
+          L(
+            req,
+            '此邮箱已注册过轻笺，请使用邮箱登录或找回密码',
+            'This email is already registered with LightNote. Use email sign-in or reset your password.',
+          ),
+          { stage: 'ACCOUNT_BIND', status: 409 },
         );
-        const [updatedUser] = await connection.query(`SELECT * FROM user WHERE id = ? LIMIT 1`, [
-          existingByEmail[0].id,
-        ]);
-        user = updatedUser[0];
       } else {
         createdUserId = generateUUID();
         // GitHub 账号没有可用于邮箱登录的初始密码，使用不可预测随机值，用户可在登录后主动设置密码。
@@ -1799,7 +1837,7 @@ export const handleUserDatabaseOperation = async (githubUser, req, { duplicateRe
 
   if (!createdUserId) return user;
 
-  // 仅 GitHub 首次建号执行；已有 GitHub 账号登录、按邮箱绑定旧账号都不会重复初始化。
+  // 仅 GitHub 首次建号执行；已有 GitHub 账号登录不会重复初始化。
   await initializeNewUserCommunityIdentity(createdUserId);
   const samplesReady = await initializeNewUserSamples(createdUserId, req);
 

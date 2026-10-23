@@ -1,5 +1,6 @@
 <template>
-  <main ref="surface" v-auto-scrollbar class="community-feed community-surface" @scroll.passive="rememberScroll">
+  <PublicResourceModeration v-if="isPublicModeration" :section-options="managementOptions" @section="changeModerationSection"/>
+  <main v-else ref="surface" v-auto-scrollbar class="community-feed community-surface" @scroll.passive="rememberScroll">
     <CommunityLayout class="feed-container" :class="{ 'is-post-detail': mode === 'detail' }">
       <template #navigation><CommunityNavigation active="feed" /></template>
       <div class="feed-main-column" :class="{ 'is-management': mode === 'manage' }">
@@ -233,7 +234,7 @@
             variant="line"
             v-model:active-tab="managementTab"
             :options="managementOptions"
-            @change="load"
+            @change="managementTab==='publicResources' ? changeModerationSection(managementTab) : load()"
           />
           <p v-if="mode === 'moderation'">{{ t('community.feed.reviewHint') }}</p>
           <BLoading class="feed-loading-region" :loading="loading && !loadingMore" :title="t('community.feed.loading')">
@@ -618,6 +619,7 @@
   </main>
 </template>
 <script setup lang="ts">
+  import PublicResourceModeration from './PublicResourceModeration.vue';
   import { useCommunityPreviewImages } from '@/composables/useCommunityPreviewImages';
   import { useCommunityPreview } from '@/composables/useCommunityPreview';
   const { preview } = useCommunityPreview();
@@ -773,10 +775,10 @@
   const managementOptions = computed(() =>
     (mode.value === 'manage'
       ? ['posts', 'comments', 'results']
-      : ['posts', 'publishedPosts', 'comments', 'reports', 'appeals']
+      : ['posts', 'publishedPosts', 'comments', 'reports', 'appeals', 'publicResources']
     ).map((key) => ({
       key,
-      label: t(
+      label: key==='publicResources' ? t('publicResources.moderation') : t(
         'community.feed.' +
           ({
             posts: mode.value === 'manage' ? 'postsLabel' : 'pendingPosts',
@@ -812,9 +814,11 @@
         const card = Array.from(surface.value.querySelectorAll<HTMLElement>('[data-post-id]')).find(
           (el) => el.getBoundingClientRect().bottom > top,
         );
+        const anchorIndex = posts.value.findIndex((post) => post.publicId === card?.dataset.postId);
         sessionStorage.setItem(
           scrollKey(),
           JSON.stringify({
+            trailingCount: anchorIndex < 0 ? 0 : posts.value.length - anchorIndex,
             anchor: card?.dataset.postId,
             anchorPublishedAt: posts.value.find((post) => post.publicId === card?.dataset.postId)?.publishedAt,
             offset: card ? card.getBoundingClientRect().top - top : 0,
@@ -958,7 +962,11 @@
       latestHeadPublishedAt.value = data.items[0]?.publishedAt || '';
     }
   }
+  const isPublicModeration = computed(()=>mode.value==='moderation'&&managementTab.value==='publicResources');
+  function changeModerationSection(value:string){ void router.replace({path:'/community/moderation',query:{tab:value}}); }
   async function load() {
+    if(isPublicModeration.value){loading.value=false;return;}
+
     if (
       preview.value &&
       (['manage', 'settings', 'moderation'].includes(mode.value) || (mode.value === 'profile' && !route.params.id))
@@ -1023,17 +1031,13 @@
           if (mode.value === 'feed' && surface.value && memory) {
             const index = posts.value.findIndex((post) => post.publicId === memory.anchor);
             if (index >= 0) {
-              feedList.value?.scrollToIndex(index, 'start');
-              await nextTick();
+              // 交给虚拟列表维护行键与行内偏移，后续高度测量也沿用同一个阅读锚点。
+              feedList.value?.restoreScrollAnchor({
+                key: memory.anchor,
+                index,
+                offset: -(Number(memory.offset) || 0),
+              });
             }
-            const card = Array.from(surface.value.querySelectorAll<HTMLElement>('[data-post-id]')).find(
-              (element) => element.dataset.postId === memory.anchor,
-            );
-            if (card)
-              surface.value.scrollTop +=
-                card.getBoundingClientRect().top -
-                surface.value.getBoundingClientRect().top -
-                (Number(memory.offset) || 0);
           }
           restoringScroll = false;
         }
@@ -1301,7 +1305,7 @@
       busy.value = false;
       operation = null;
       operationKey = '';
-      managementTab.value = route.query.tab === 'results' ? 'results' : 'posts';
+      managementTab.value = mode.value==='moderation' && ['posts','publishedPosts','comments','reports','appeals','publicResources'].includes(String(route.query.tab)) ? String(route.query.tab) : route.query.tab === 'results' ? 'results' : 'posts';
       void load();
       timer = setInterval(async () => {
         if (mode.value !== 'feed' || !caps.value.feedEnabled || document.hidden || loading.value) return;

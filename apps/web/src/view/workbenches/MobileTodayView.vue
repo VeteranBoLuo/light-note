@@ -27,6 +27,7 @@
 
     <div class="mobile-today__brief">
       <DailyBriefCard
+        ref="dailyBriefCardRef"
         compact
         :eligible="Boolean(user.id && user.role !== 'visitor')"
         :owner-key="dailyBriefOwnerKey"
@@ -70,7 +71,7 @@
           :loading="initialTodayLoading"
           :show-header="false"
           compact-empty
-          @refresh="loadToday"
+          @refresh="refreshTodayActions"
         />
       </div>
     </section>
@@ -258,6 +259,8 @@
   const showDailyGrowthTasks = computed(() => Boolean(dashboard.value && !dailyGrowthBonus.value.claimed));
   const showGrowthTasks = computed(() => Boolean(growthTasks.value?.tasks.some((task) => !task.claimed)));
 
+  const dailyBriefCardRef = ref<InstanceType<typeof DailyBriefCard> | null>(null);
+  const refreshTodayActions = () => Promise.all([loadToday(), dailyBriefCardRef.value?.refresh()]);
   const loading = ref(false);
   const todaySettled = ref(false);
   const initialTodayLoading = computed(() => loading.value && !todaySettled.value);

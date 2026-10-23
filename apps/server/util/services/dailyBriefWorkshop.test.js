@@ -1,8 +1,14 @@
 import { describe, expect, it, vi } from 'vitest';
 import { compileWorkshopBriefFacts } from './dailyBriefWorkshop.js';
 const calendar = { date: '2026-09-08', yesterdayStart: '2026-09-07 00:00:00', locale: 'zh-CN' };
-function db(results = [], projects = []) {
-  return { query: vi.fn().mockResolvedValueOnce([results]).mockResolvedValueOnce([projects]) };
+function db(results = [], projects = [], attention = []) {
+  return {
+    query: vi
+      .fn()
+      .mockResolvedValueOnce([results])
+      .mockResolvedValueOnce([projects])
+      .mockResolvedValueOnce([attention]),
+  };
 }
 describe('workshop brief facts', () => {
   it('returns empty facts without manufacturing conclusions', async () => {
@@ -48,6 +54,65 @@ describe('workshop brief facts', () => {
     );
     expect(facts[2].sources[0].id).toBe('soon');
     expect(facts[1].sources[0].id).toBe('far');
+  });
+  it('纯编号和空白下一步不占位，有文字的明确行动仍可入选', async () => {
+    const facts = await compileWorkshopBriefFacts(
+      db(
+        [],
+        [
+          { id: 'number', kind: 'research', title: '测试项目', pending: 1, next_step: '2323112113' },
+          { id: 'blank', kind: 'research', title: '空项目', pending: 1, next_step: '  ' },
+          { id: 'action', kind: 'research', title: '研究', pending: 1, next_step: '核对原始来源' },
+        ],
+      ),
+      'owner',
+      calendar,
+    );
+    expect(facts[1]).toMatchObject({ sources: [{ id: 'action' }], samples: ['研究：核对原始来源'] });
+    const quiet = await compileWorkshopBriefFacts(
+      db([], [{ id: 'number', pending: 1, next_step: '2323112113' }]),
+      'owner',
+      calendar,
+    );
+    expect(quiet[1].count).toBe(0);
+  });
+  it('长成果摘录尽量保留完整句子，无法完整截取时明确省略', async () => {
+    const sentence = '这是基于所选资料得出的完整结论，后续应回到原成果核对每一项具体依据。';
+    const artifact = {
+      id: 'a',
+      job_id: 'j',
+      content: `## 结论\n${sentence}${'更多材料内容'.repeat(50)}`,
+      coverage_json: { complete: false },
+    };
+    const facts = await compileWorkshopBriefFacts(db([artifact]), 'owner', calendar);
+    expect(facts[0].samples).toEqual([`资料未完整读取：${sentence}`]);
+    artifact.content = `## 结论\n${'详细结论'.repeat(100)}`;
+    const unbroken = (await compileWorkshopBriefFacts(db([artifact]), 'owner', calendar))[0].samples[0];
+    expect(unbroken.length).toBeLessThanOrEqual(120);
+    expect(unbroken.endsWith('…')).toBe(true);
+  });
+  it.each(['failed', 'save_failed'])('未移除的 %s 任务保留准确状态和原任务入口', async (status) => {
+    const row = {
+      id: 'failed-job',
+      title: '报告',
+      status: status === 'failed' ? 'failed' : 'succeeded',
+      save_status: status === 'save_failed' ? 'save_failed' : 'unsaved',
+      updated_at: '2026-10-10 12:00:00',
+    };
+    const database = db([], [], [row]);
+    const facts = await compileWorkshopBriefFacts(database, 'owner', calendar);
+    expect(facts[3]).toMatchObject({
+      id: 'workshop_attention',
+      count: 1,
+      route: '/toolbox/task/failed-job',
+      sources: [{ type: 'toolbox_task', id: 'failed-job' }],
+      samples: [status === 'failed' ? '工坊任务处理失败：报告' : '工坊成果保存失败：报告'],
+    });
+    expect(database.query.mock.calls[2][1]).toEqual(['owner']);
+    expect(database.query.mock.calls[2][0]).toContain('homeDismissed');
+    const completed = await compileWorkshopBriefFacts(db(), 'owner', calendar);
+    expect(completed[3]).toMatchObject({ count: 0, sources: [], samples: [] });
+    expect(completed[3].revision).not.toBe(facts[3].revision);
   });
 });
 

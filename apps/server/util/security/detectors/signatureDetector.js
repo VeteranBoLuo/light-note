@@ -27,7 +27,7 @@ const ENUM_SORT_VALUES_BY_REQUEST_FIELD = [
   { method: 'POST', pattern: /\/inbox\/list\/?$/i, field: 'body.sort', values: new Set(['newest', 'oldest']) },
   {
     method: 'POST',
-    pattern: /\/search\/global\/?$/i,
+    pattern: /(?:\/search\/global|\/public-resources\/search\/combined)\/?$/i,
     field: 'body.sort',
     values: new Set(['relevance', 'updated', 'name']),
   },

@@ -19,7 +19,7 @@
       </div>
 
       <dl class="checkout-modal__facts">
-        <div v-if="!isCampaign">
+        <div v-if="!isCampaign && regularItem.firstPurchaseScope !== 'none'">
           <dt>{{ t('entitlementStore.confirm.baseArrival') }}</dt>
           <dd>{{ formatBenefit(regularItem.base) }}</dd>
         </div>
@@ -85,6 +85,12 @@
   const notice = computed(() => {
     if (!props.item) return '';
     if ('campaignSkuId' in props.item) return t('entitlementStore.confirm.campaignNotice');
+    if (props.item.firstPurchaseScope === 'none')
+      return t(
+        props.item.category === 'storage'
+          ? 'entitlementStore.confirm.storageNotice'
+          : 'entitlementStore.confirm.aiNotice',
+      );
     if (props.item.firstPurchaseStatus === 'available') return t('entitlementStore.confirm.availableNotice');
     return t('entitlementStore.confirm.usedNotice');
   });

@@ -10,6 +10,7 @@ const sdk = vi.hoisted(() => {
   const getObject = vi.fn();
   const copyObject = vi.fn();
   const putObject = vi.fn();
+  const getObjectMetadata = vi.fn();
   const sign = vi.fn(() => ({ SignedUrl: 'https://obs.test/signed' }));
   class MockObsClient {
     createSignedUrlSync(params) {
@@ -25,8 +26,11 @@ const sdk = vi.hoisted(() => {
     putObject(...args) {
       return putObject(...args);
     }
+    getObjectMetadata(...args) {
+      return getObjectMetadata(...args);
+    }
   }
-  return { getObject, copyObject, putObject, sign, MockObsClient };
+  return { getObject, copyObject, putObject, getObjectMetadata, sign, MockObsClient };
 });
 
 vi.mock('esdk-obs-nodejs', () => ({ default: sdk.MockObsClient }));
@@ -37,7 +41,17 @@ import {
   getObjectBufferFromObs,
   getObjectRangeFromObs,
   putObjectBodyToObs,
+  getObjectMetadataFromObs,
 } from './obsClient.js';
+
+it.each([undefined, '', -1, '12', '0'])('HEAD 元数据缺失不能被默认为空文件：%s', async (contentLength) => {
+  sdk.getObjectMetadata.mockImplementationOnce((_params, callback) => callback(null, {
+    CommonMsg: { Status: 200 }, InterfaceResult: { ContentLength: contentLength },
+  }));
+  const result = await getObjectMetadataFromObs('files/u/uploads/test');
+  if (contentLength == null || contentLength === '') expect(result.contentLength).toBeNaN();
+  else expect(result.contentLength).toBe(Number(contentLength));
+});
 
 it('download signing uses the current display name while preview URLs stay inline', () => {
   createDownloadSignedUrl({ objectKey: 'files/u/uploads/stable.pdf', fileName: '新名字 (1).pdf\r\n' });

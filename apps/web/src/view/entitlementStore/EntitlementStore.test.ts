@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp, nextTick } from 'vue';
 import { createI18n } from 'vue-i18n';
-import { SUPPORT_PACKAGE_CATALOG } from '@lightnote/shared';
+import { SUPPORT_PACKAGE_CATALOG, SUPPORT_PACKAGE_CATALOG_VERSION } from '@lightnote/shared';
 import zhCN from '@/i18n/locales/zh-CN';
 
 const routeState = vi.hoisted(() => ({ query: {} as Record<string, string> }));
@@ -16,7 +16,7 @@ const mocks = vi.hoisted(() => ({
     intentId: '11111111-1111-4111-8111-111111111111',
     status: 'pending',
     amount: 10,
-    benefit: { aiTokens: 720000, storageMb: 128 },
+    benefit: { aiTokens: 720000, storageMb: 256 },
   })),
   openCheckout: vi.fn(() => true),
   recordOperation: vi.fn(() => Promise.resolve()),
@@ -106,8 +106,8 @@ const comboPackage = {
   category: 'combo',
   firstPurchaseScope: 'ai_account',
   amount: 10,
-  base: { aiTokens: 600_000, storageMb: 128 },
-  firstPurchase: { aiTokens: 720_000, storageMb: 128 },
+  base: { aiTokens: 600_000, storageMb: 256 },
+  firstPurchase: { aiTokens: 720_000, storageMb: 256 },
   comboSavings: 2,
   firstPurchaseStatus: 'available',
 };
@@ -157,7 +157,7 @@ describe('独立资源商店', () => {
     routeState.query = { category: 'combo' };
     mocks.getState.mockResolvedValue(state);
     mocks.getCatalog.mockResolvedValue({
-      catalogVersion: 'support-packages-v3',
+      catalogVersion: 'support-packages-v4',
       catalogEnabled: true,
       checkoutEnabled: true,
       grantEnabled: true,
@@ -171,7 +171,7 @@ describe('独立资源商店', () => {
     cleanup = undefined;
   });
 
-  it('常驻套餐核对后创建可查询的原单，活动不再内嵌为第二个商城', async () => {
+  it('旧 v4 目录仍展示原首购快照，核对后创建可查询原单', async () => {
     const host = await mountStore();
     expect(host.textContent).toContain('永久有效');
     expect(host.textContent).not.toContain('周年组合包');
@@ -179,11 +179,11 @@ describe('独立资源商店', () => {
     action?.click();
     await nextTick();
     expect(document.body.textContent).toContain('到账账号菠萝');
-    expect(document.body.textContent).toContain('本次预计到账72万 AI 额度 + 128 MB 云空间');
+    expect(document.body.textContent).toContain('本次预计到账72万 AI 额度 + 256 MB 云空间');
     expect(mocks.createIntent).not.toHaveBeenCalled();
     document.body.querySelector<HTMLButtonElement>('.checkout-modal__confirm')?.click();
     await vi.waitFor(() =>
-      expect(mocks.createIntent).toHaveBeenCalledWith('combo-10', 'support-packages-v3', undefined),
+      expect(mocks.createIntent).toHaveBeenCalledWith('combo-10', 'support-packages-v4', undefined),
     );
     expect(mocks.openCheckout).not.toHaveBeenCalled();
     await vi.waitFor(() => expect(document.body.textContent).toContain('前往爱发电付款'));
@@ -192,7 +192,7 @@ describe('独立资源商店', () => {
   it('本地只读目录完整显示云空间套餐并保持结算关闭', async () => {
     routeState.query = { category: 'storage' };
     mocks.getCatalog.mockResolvedValueOnce({
-      catalogVersion: 'support-packages-v3',
+      catalogVersion: SUPPORT_PACKAGE_CATALOG_VERSION,
       catalogEnabled: true,
       checkoutEnabled: false,
       grantEnabled: false,
@@ -202,7 +202,7 @@ describe('独立资源商店', () => {
         ...item,
         base: { ...item.base },
         firstPurchase: { ...item.firstPurchase },
-        firstPurchaseStatus: 'login_required',
+        firstPurchaseStatus: item.firstPurchaseScope === 'none' ? 'not_applicable' : 'login_required',
       })),
       campaigns: [],
     });
@@ -213,14 +213,93 @@ describe('独立资源商店', () => {
     expect(cards).toHaveLength(4);
     expect(host.querySelector('.package-card__choice')).toBeNull();
     expect([...cards].map((card) => card.textContent)).toEqual([
-      expect.stringContaining('128 MB'),
-      expect.stringContaining('512 MB'),
-      expect.stringContaining('1.5 GB'),
-      expect.stringContaining('3 GB'),
+      expect.stringContaining('256 MB'),
+      expect.stringContaining('768 MB'),
+      expect.stringContaining('2 GB'),
+      expect.stringContaining('4 GB'),
     ]);
+    for (const card of cards) {
+      expect(card.querySelectorAll('.package-card__benefit-row')).toHaveLength(1);
+      expect(card.textContent).toContain('一次购买，永久扩容');
+      expect(card.textContent).not.toContain('首购');
+    }
     expect(
       [...host.querySelectorAll<HTMLButtonElement>('.package-card__action')].every((button) => button.disabled),
     ).toBe(true);
+  });
+
+  it('固定空间只确认一次容量，不提示首购资格，按新版目录创建订单', async () => {
+    routeState.query = { category: 'storage' };
+    const definition = SUPPORT_PACKAGE_CATALOG.find((item) => item.skuId === 'storage-6')!;
+    mocks.getCatalog.mockResolvedValueOnce({
+      catalogVersion: SUPPORT_PACKAGE_CATALOG_VERSION,
+      catalogEnabled: true,
+      checkoutEnabled: true,
+      grantEnabled: true,
+      campaignsEnabled: false,
+      packages: [{ ...definition, firstPurchaseStatus: 'not_applicable' }],
+      campaigns: [],
+    });
+    const host = await mountStore();
+    await vi.waitFor(() => expect(host.textContent).toContain('购买 ¥6'));
+    expect(host.querySelector('.package-card__benefits')?.textContent).toBe('每次购买到账256 MB 云空间');
+    host.querySelector<HTMLButtonElement>('.package-card__action')?.click();
+    await nextTick();
+    const modal = document.body.querySelector('.checkout-modal')!;
+    expect(modal.textContent).toContain('一次购买，永久扩容');
+    expect(modal.textContent).not.toContain('首购');
+    expect(modal.textContent).not.toContain('基础到账');
+    expect(modal.querySelectorAll('.checkout-modal__facts .is-emphasis')).toHaveLength(1);
+    expect(modal.textContent?.match(/256 MB 云空间/g)).toHaveLength(1);
+    modal.querySelector<HTMLButtonElement>('.checkout-modal__confirm')?.click();
+    await vi.waitFor(() =>
+      expect(mocks.createIntent).toHaveBeenCalledWith('storage-6', SUPPORT_PACKAGE_CATALOG_VERSION, undefined),
+    );
+  });
+
+  it.each(['ai', 'combo'])('%s 固定显示四档 AI 额度，取消首购展示并按 v5 目录创建订单', async (category) => {
+    routeState.query = { category };
+    mocks.getCatalog.mockResolvedValueOnce({
+      catalogVersion: SUPPORT_PACKAGE_CATALOG_VERSION,
+      catalogEnabled: true,
+      checkoutEnabled: true,
+      grantEnabled: true,
+      campaignsEnabled: false,
+      packages: SUPPORT_PACKAGE_CATALOG.map((item) => ({ ...item, firstPurchaseStatus: 'not_applicable' })),
+      campaigns: [],
+    });
+    const host = await mountStore();
+    await vi.waitFor(() => expect(host.textContent).toContain(category === 'ai' ? '购买 ¥6' : '购买 ¥10'));
+    const cards = [...host.querySelectorAll<HTMLElement>('.package-card')];
+    expect(cards).toHaveLength(4);
+    const quotaLabels = ['30万', '90万', '250万', '500万'];
+    const prices = category === 'ai' ? [6, 18, 50, 100] : [10, 30, 88, 168];
+    cards.forEach((card, index) => {
+      expect(card.querySelector('.package-card__benefits')?.textContent).toContain(`${quotaLabels[index]} AI 额度`);
+      expect(card.querySelector('.package-card__price')?.textContent).toBe(`¥${prices[index]}`);
+      expect(card.querySelectorAll('.package-card__benefit-row')).toHaveLength(1);
+      expect(card.textContent).toContain('一次购买，永久有效；优先使用每日免费额度');
+      expect(card.textContent).not.toContain('首购');
+    });
+    // 历史已到账订单继续展示原发放事实，不被当前目录额度覆盖。
+    expect(host.textContent).toContain('650万 AI 额度');
+    cards[0]?.querySelector<HTMLButtonElement>('.package-card__action')?.click();
+    await nextTick();
+    const modal = document.body.querySelector('.checkout-modal')!;
+    expect(modal.textContent).toContain('一次购买，永久有效；优先使用每日免费额度');
+    expect(modal.textContent).toContain('本次预计到账30万 AI 额度');
+    expect(modal.textContent).not.toContain('首购');
+    expect(modal.textContent).not.toContain('基础到账');
+    expect(modal.querySelectorAll('.checkout-modal__facts .is-emphasis')).toHaveLength(1);
+    if (category === 'combo') expect(modal.textContent).toContain('256 MB 云空间');
+    modal.querySelector<HTMLButtonElement>('.checkout-modal__confirm')?.click();
+    await vi.waitFor(() =>
+      expect(mocks.createIntent).toHaveBeenCalledWith(
+        category === 'ai' ? 'ai-6' : 'combo-10',
+        SUPPORT_PACKAGE_CATALOG_VERSION,
+        undefined,
+      ),
+    );
   });
 
   it('未登录时仍可浏览目录，但不能创建购买订单', async () => {
@@ -263,7 +342,7 @@ describe('独立资源商店', () => {
       await nextTick();
       expect(document.body.querySelector<HTMLButtonElement>('.checkout-modal__confirm')?.disabled).toBe(false);
       mocks.getCatalog.mockResolvedValueOnce({
-        catalogVersion: 'support-packages-v3',
+        catalogVersion: 'support-packages-v4',
         catalogEnabled: true,
         checkoutEnabled: true,
         grantEnabled: true,
@@ -295,16 +374,16 @@ describe('独立资源商店', () => {
       finishRefresh?.(state);
       await vi.waitFor(() => expect(host.textContent).toContain('购买 ¥10'));
       expect(document.body.querySelector<HTMLButtonElement>('.checkout-modal__confirm')?.disabled).toBe(false);
-      expect(document.body.textContent).toContain('本次预计到账60万 AI 额度 + 128 MB 云空间');
+      expect(document.body.textContent).toContain('本次预计到账60万 AI 额度 + 256 MB 云空间');
       expect(document.body.textContent).toContain('本账号对应的首购加量已使用');
     } finally {
       nowSpy.mockRestore();
     }
   });
 
-  it('首购加量已用时，确认弹窗只按基础权益给出预计到账', async () => {
+  it('旧 v4 首购加量已用时，确认弹窗仍按旧基础权益给出预计到账', async () => {
     mocks.getCatalog.mockResolvedValueOnce({
-      catalogVersion: 'support-packages-v3',
+      catalogVersion: 'support-packages-v4',
       catalogEnabled: true,
       checkoutEnabled: true,
       grantEnabled: true,
@@ -317,12 +396,12 @@ describe('独立资源商店', () => {
     expect(host.querySelector('.package-card__benefit-row--primary')).toBeNull();
     expect(host.querySelectorAll('.package-card__benefit-row')).toHaveLength(1);
     expect(host.querySelector('.package-card__benefit-row--base')?.textContent).toContain(
-      '基础到账60万 AI 额度 + 128 MB 云空间',
+      '基础到账60万 AI 额度 + 256 MB 云空间',
     );
     host.querySelector<HTMLButtonElement>('.package-card__action')?.click();
     await nextTick();
-    expect(document.body.textContent).toContain('本次预计到账60万 AI 额度 + 128 MB 云空间');
+    expect(document.body.textContent).toContain('本次预计到账60万 AI 额度 + 256 MB 云空间');
     expect(document.body.textContent).toContain('本账号对应的首购加量已使用');
-    expect(document.body.textContent).not.toContain('本次预计到账72万 AI 额度 + 128 MB 云空间');
+    expect(document.body.textContent).not.toContain('本次预计到账72万 AI 额度 + 256 MB 云空间');
   });
 });

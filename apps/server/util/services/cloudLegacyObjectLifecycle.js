@@ -4,6 +4,7 @@ import pool from '../../db/index.js';
 import { buildObjectKey, createUploadSignedUrl, deleteObjectFromObs } from '../obsClient.js';
 import { assertCloudFileDisplayName } from './cloudFileNameService.js';
 import { imagePreviewWorkerEnabled } from '../imagePreview/workerPolicy.js';
+import { trackCloudUpload } from './cloudUploadFinalization.js';
 
 const UPLOAD_TTL_SECONDS = 900;
 const GRACE_SECONDS = 86400;
@@ -58,6 +59,7 @@ export async function prepareLegacyCloudUpload({ userId, fileName, fileType, dat
       available_at=IF(state='active',NULL,available_at) WHERE object_hash=?`,
       [objectKey, generation, hash],
     );
+    await trackCloudUpload(connection, userId, objectKey);
     const signed = createUploadSignedUrl({ objectKey, contentType: fileType, expires: UPLOAD_TTL_SECONDS });
     await connection.commit();
     return { ...signed, objectKey, generation };

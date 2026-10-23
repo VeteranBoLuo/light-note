@@ -1,5 +1,8 @@
 import { vi } from 'vitest';
 
+// OBS 的副作用导入也不能把本机 .env 中的开关、策略或凭据带入测试。
+vi.mock('dotenv/config', () => ({}));
+
 // 中和 import 期就会连真实基础设施的模块,保证测试 hermetic、CI 无需 redis / 邮件服务。
 // (db 连接池由各测试文件按需自行 mock,以便断言 query 调用。)
 // OBS SDK 在配置缺失时会在 import 期直接抛错；测试占位值只用于构造本地客户端，不发网络请求。

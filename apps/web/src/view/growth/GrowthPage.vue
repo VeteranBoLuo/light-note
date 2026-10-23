@@ -1,7 +1,36 @@
 <template>
-  <div ref="growthPageRef" class="growth-page" :class="{ 'growth-page--wide': useWideDesktopLayout }">
+  <div
+    ref="growthPageRef"
+    class="growth-page"
+    :class="{
+      'growth-page--wide': useWideDesktopLayout,
+      'growth-page--mobile': bookmark.isMobile,
+      'growth-page--inventory': activeSection === 'rewards' && activeRewardSection === 'inventory',
+    }"
+  >
     <div class="growth-container" :class="{ 'growth-container--wide': useWideDesktopLayout }">
-      <header v-if="!useWideDesktopLayout" class="growth-hero">
+      <header v-if="bookmark.isMobile" class="growth-mobile-header">
+        <BButton
+          type="text"
+          icon-only
+          class="growth-mobile-back"
+          :aria-label="t('common.back')"
+          v-click-log="{ module: '成长', operation: '返回上一页' }"
+          @click="goBack"
+        >
+          <SvgIcon :src="icon.arrow_left" size="18" />
+        </BButton>
+        <h1>{{ t('growth.pageTitle') }}</h1>
+        <BButton
+          type="text"
+          class="growth-mobile-report"
+          v-click-log="{ module: '成长', operation: '打开成长周报' }"
+          @click="openWeeklyReport"
+        >
+          {{ t('growth.weeklyReportEntry') }}
+        </BButton>
+      </header>
+      <header v-else-if="!useWideDesktopLayout" class="growth-hero">
         <BButton class="growth-back" v-click-log="{ module: '成长', operation: '返回上一页' }" @click="goBack">
           <svg-icon :src="icon.arrow_left" size="16" />
           <span>{{ t('common.back') }}</span>
@@ -382,9 +411,20 @@
               v-click-log="{ module: '成长', operation: '切换资产与奖励子页' }"
               @select="handleRewardTabSelect"
             />
-            <section class="growth-panel" :class="{ 'growth-points-panel': activeRewardSection === 'ledger' }">
-              <PointsUsagePage v-if="activeRewardSection === 'ledger'" embedded :show-summary="pointsCenterEnabled" />
-              <MyInventory v-else-if="activeRewardSection === 'inventory'" :read-only="isAdminContext" />
+            <section
+              class="growth-panel"
+              :class="{
+                'growth-inventory-panel': activeRewardSection === 'inventory',
+                'growth-shop-panel': activeRewardSection === 'shop',
+                'growth-reward-workspace': ['lottery', 'inventory'].includes(activeRewardSection),
+              }"
+            >
+              <MyInventory
+                v-if="activeRewardSection === 'inventory'"
+                v-model:active-tab="inventoryTab"
+                :read-only="isAdminContext"
+                :show-points-summary="pointsCenterEnabled"
+              />
               <PointsShop
                 v-else-if="activeRewardSection === 'shop'"
                 :read-only="isAdminContext"
@@ -419,7 +459,6 @@
   import PointsShop from '@/components/growth/PointsShop.vue';
   import LotteryDraw from '@/components/growth/LotteryDraw.vue';
   import MyInventory from '@/components/growth/MyInventory.vue';
-  import PointsUsagePage from '@/view/pointsUsage/PointsUsagePage.vue';
   import WeeklyChallenge from '@/components/growth/WeeklyChallenge.vue';
   import TodayGrowthCard from '@/components/growth/TodayGrowthCard.vue';
   import GrowthPreferencesCard from '@/components/growth/GrowthPreferencesCard.vue';
@@ -442,9 +481,16 @@
   import { resolveDailyQuestClaimFeedback } from '@/utils/dailyQuestClaim';
   import { resolveDailyQuestRoute, resolveGrowthActionRoute } from '@/utils/growthNavigation';
   import { scrollIntoContainer } from '@/utils/scrolling';
+  import {
+    inventoryPointsRoute,
+    inventoryTabFromQuery,
+    isLegacyPointsReward,
+    rewardSectionFromQuery,
+    type InventoryTab,
+    type RewardSection,
+  } from '@/utils/inventoryNavigation';
 
   type GrowthSection = 'overview' | 'tasks' | 'achievements' | 'rewards';
-  type RewardSection = 'shop' | 'lottery' | 'inventory' | 'ledger';
   type TaskView = 'daily' | 'weekly' | 'onboarding';
   type GrowthNavOption<T extends string> = { key: T; label: string; icon: string; badge?: number };
   type DesktopGrowthNavOption = {
@@ -462,15 +508,28 @@
   const user = useUserStore();
   const bookmark = bookmarkStore();
   const routeSection = String(route.query.section || '');
-  const routeRewardSection = String(route.query.reward || '').replace(/^center$/, 'ledger');
-  const validRewardSections: RewardSection[] = ['shop', 'lottery', 'inventory', 'ledger'];
-  const hasRewardDeepLink = validRewardSections.includes(routeRewardSection as RewardSection);
+  const hasRewardDeepLink = ['shop', 'lottery', 'inventory', 'ledger', 'center'].includes(
+    String(route.query.reward || ''),
+  );
   const activeSection = ref<GrowthSection>(
     ['overview', 'tasks', 'achievements', 'rewards'].includes(routeSection)
       ? (routeSection as GrowthSection)
       : 'overview',
   );
-  const activeRewardSection = ref<RewardSection>(hasRewardDeepLink ? (routeRewardSection as RewardSection) : 'ledger');
+  const activeRewardSection = ref<RewardSection>(rewardSectionFromQuery(route.query));
+  const inventoryTab = computed<InventoryTab>({
+    get: () => inventoryTabFromQuery(route.query),
+    set: (tab) => {
+      void router.replace({
+        query: {
+          ...route.query,
+          section: 'rewards',
+          reward: 'inventory',
+          inventoryTab: tab === 'points' ? 'points' : undefined,
+        },
+      });
+    },
+  });
   const taskView = ref<TaskView>(
     route.hash === '#growth-weekly' ? 'weekly' : route.hash === '#growth-tasks' ? 'onboarding' : 'daily',
   );
@@ -498,13 +557,12 @@
   });
   const rewardSectionOptions = computed<GrowthNavOption<RewardSection>[]>(() => {
     const options: GrowthNavOption<RewardSection>[] = [
-      { key: 'ledger', label: t('growth.pointsLogTitle'), icon: icon.noteDetail.history },
-      { key: 'inventory', label: t('growth.rewardTabInventory'), icon: icon.growth.storage },
+      { key: 'inventory', label: t('growth.rewardTabInventory'), icon: icon.growth.backpack },
       { key: 'shop', label: t('growth.rewardTabShop'), icon: icon.growth.coin },
       { key: 'lottery', label: t('growth.rewardTabLottery'), icon: icon.growth.reward },
     ];
     if (growthV2Enabled.value) return options;
-    return [options[2], options[3], options[1], options[0]];
+    return [options[1], options[2], options[0]];
   });
   const desktopNavigationOptions = computed<DesktopGrowthNavOption[]>(() => [
     ...sectionOptions.value
@@ -898,16 +956,13 @@
   );
 
   watch(
-    () => route.query.reward,
-    (reward) => {
-      const requested = String(reward || '').replace(/^center$/, 'ledger');
-      const nextReward = validRewardSections.includes(requested as RewardSection)
-        ? (requested as RewardSection)
-        : growthV2Enabled.value
-          ? 'ledger'
-          : 'shop';
+    () => [route.query.reward, route.query.inventoryTab],
+    () => {
+      const nextReward = rewardSectionFromQuery(route.query, growthV2Enabled.value ? 'inventory' : 'shop');
       if (activeRewardSection.value !== nextReward) activeRewardSection.value = nextReward;
+      if (isLegacyPointsReward(route.query.reward)) void router.replace(inventoryPointsRoute(route.query));
     },
+    { immediate: true },
   );
 
   watch(activeSection, (section) => {
@@ -924,13 +979,20 @@
 
   watch(activeRewardSection, (reward) => {
     if (activeSection.value === 'rewards')
-      void router.replace({ query: { ...route.query, section: 'rewards', reward } });
+      void router.replace({
+        query: {
+          ...route.query,
+          section: 'rewards',
+          reward,
+          inventoryTab: reward === 'inventory' && inventoryTab.value === 'points' ? 'points' : undefined,
+        },
+      });
   });
 
   watch(
     growthV2Enabled,
     (enabled) => {
-      if (!hasRewardDeepLink) activeRewardSection.value = enabled ? 'ledger' : 'shop';
+      if (!hasRewardDeepLink) activeRewardSection.value = enabled ? 'inventory' : 'shop';
     },
     { immediate: true },
   );
@@ -973,13 +1035,42 @@
 </script>
 
 <style scoped lang="less">
-  .growth-panel.growth-points-panel {
-    padding: 0;
-    border: 0;
-    background: transparent;
-    box-shadow: none;
+  .growth-mobile-header {
+    display: grid;
+    grid-template-columns: var(--ui-layout-88, 88px) minmax(0, 1fr) var(--ui-layout-88, 88px);
+    align-items: center;
+    gap: var(--ui-space-4, 4px);
   }
-
+  .growth-mobile-header h1 {
+    margin: 0;
+    font-size: var(--ui-font-18, 18px);
+    font-weight: 600;
+    text-align: center;
+    overflow-wrap: anywhere;
+  }
+  .growth-mobile-header .growth-mobile-back {
+    width: var(--ui-control-44, 44px);
+    height: var(--ui-control-44, 44px);
+    padding: 0;
+    color: var(--text-color);
+  }
+  .growth-mobile-report {
+    justify-self: end;
+    max-width: 100%;
+    font-size: var(--ui-font-12, 12px);
+  }
+  .growth-page.growth-page--mobile {
+    padding-top: var(--ui-space-8, 8px);
+  }
+  .growth-page--mobile .growth-container {
+    gap: var(--ui-space-8, 8px);
+  }
+  .growth-page--mobile .growth-main {
+    gap: var(--ui-space-12, 12px);
+  }
+  .growth-page--mobile .growth-shop-panel {
+    padding: var(--ui-space-12, 12px);
+  }
   /* 与设置页同理:index.vue 子路由根元素被内联 position:fixed + height:calc(100%-60px),
      必须自身 overflow-y:auto 在固定框内滚动,勿用 min-height:100vh(见记忆 subroute-fixed-scroll)。 */
   .growth-page {
@@ -1249,6 +1340,34 @@
     display: flex;
     gap: var(--ui-space-18, 18px);
     align-items: stretch;
+  }
+  .growth-panel.growth-reward-workspace {
+    background: var(--workspace-canvas);
+    border-color: var(--workspace-border);
+    box-shadow: none;
+  }
+  .growth-page--inventory .growth-desktop-sidebar {
+    background: var(--workspace-content);
+  }
+  .growth-page--inventory .growth-hero:not(.growth-hero--sidebar) {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: var(--ui-space-12, 12px);
+    .growth-subtitle {
+      display: none;
+    }
+    .growth-back,
+    .growth-report-btn {
+      margin: 0;
+      align-self: center;
+    }
+  }
+  .growth-panel.growth-inventory-panel {
+    padding: 0;
+    border: none;
+    background: transparent;
+    box-shadow: none;
   }
   .growth-panel--flex {
     flex: 1 1 0;

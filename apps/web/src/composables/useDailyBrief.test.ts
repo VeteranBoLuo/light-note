@@ -89,6 +89,27 @@ describe('今日简报前台调度', () => {
     expect(ensure).not.toHaveBeenCalled();
   });
 
+  it('写后刷新排在旧检查之后，合并同批请求且不保留已完成事项', async () => {
+    let resolve!: (value: any) => void;
+    get.mockResolvedValueOnce(ok(initial())).mockReturnValueOnce(
+      new Promise((done) => {
+        resolve = done;
+      }) as any,
+    );
+    const { model } = mount();
+    await settle();
+    const changed = {
+      ...initial(),
+      brief: { ...initial().brief!, headline: '今天暂无需特别关注的事项', insights: [], recommendation: '' },
+    };
+    get.mockResolvedValue(ok(changed));
+    const pending = [model.refreshAfterChange(), model.refreshAfterChange()];
+    resolve(ok(initial()));
+    await Promise.all(pending);
+    expect(get).toHaveBeenCalledTimes(4);
+    expect(model.state.value?.brief?.insights).toEqual([]);
+  });
+
   it('首次缺失或服务端明确允许更新时才 ensure，完成后停止短轮询', async () => {
     get.mockResolvedValue(ok({ ...initial(), status: 'not_generated', brief: null, shouldGenerate: true }));
     const { model } = mount();

@@ -17,15 +17,21 @@ const clean = (value) =>
   String(value || '')
     .replace(/\s+/gu, ' ')
     .trim();
+function conciseExcerpt(value, limit = 120) {
+  if (value.length <= limit) return value;
+  const prefix = value.slice(0, limit - 1);
+  const end = [...prefix.matchAll(/[。！？]|[.!?](?=\s)/gu)].at(-1)?.index;
+  return end >= 23 ? prefix.slice(0, end + 1) : `${prefix.trimEnd()}…`;
+}
 export async function compileWorkshopBriefFacts(database, userId, calendar, { projectIds = null } = {}) {
   const [results] = await database.query(
     `SELECT a.id, a.job_id, a.title, a.artifact_version, LEFT(a.content, 3000) AS content, a.coverage_json
     FROM toolbox_artifacts a JOIN toolbox_jobs j ON j.id = a.job_id AND j.user_id = a.user_id
     WHERE a.user_id = ? AND a.status = 'ready' AND a.expires_at > NOW() AND j.save_status = 'unsaved'
-      AND j.status IN ('succeeded','partial_succeeded') AND a.create_time >= ?
+      AND j.status IN ('succeeded','partial_succeeded')
       AND a.tool_id IN ('material_to_note','research_brief','source_comparison','study_kit','concept_map')
     ORDER BY a.create_time DESC LIMIT 5`,
-    [userId, calendar.yesterdayStart],
+    [userId],
   );
   const [projects] = await database.query(
     `SELECT w.id,w.kind,w.title,w.next_step,w.board_version,DATE_FORMAT(w.target_date, '%Y-%m-%d') AS target_date,
@@ -42,7 +48,7 @@ export async function compileWorkshopBriefFacts(database, userId, calendar, { pr
     FROM toolbox_workspaces w WHERE w.user_id = ? AND w.status = 'active'
       AND EXISTS (SELECT 1 FROM toolbox_workspace_items p ${boardTodoJoin('p')} WHERE p.workspace_id=w.id AND p.user_id=w.user_id AND ${boardOpenSql('p')})
       ${projectIds ? 'AND w.id IN (?)' : ''}
-      AND (w.updated_at >= ? OR w.target_date < DATE_ADD(?, INTERVAL 8 DAY)
+      AND (TRIM(COALESCE(w.next_step,'')) <> '' OR w.updated_at >= ? OR w.target_date < DATE_ADD(?, INTERVAL 8 DAY)
         OR EXISTS (SELECT 1 FROM toolbox_workspace_items i ${boardTodoJoin('i')} WHERE i.workspace_id=w.id AND i.user_id=w.user_id
           AND i.lane='action' AND ${boardOpenSql('i')} AND ${boardDueSql('i')} < DATE_ADD(?, INTERVAL 8 DAY)))
     ORDER BY ((w.target_date = ? AND EXISTS (SELECT 1 FROM toolbox_workspace_items p ${boardTodoJoin('p')} WHERE p.workspace_id=w.id AND p.user_id=w.user_id AND ${boardOpenSql('p')})) OR EXISTS (SELECT 1 FROM toolbox_workspace_items i ${boardTodoJoin('i')}
@@ -63,6 +69,16 @@ export async function compileWorkshopBriefFacts(database, userId, calendar, { pr
       calendar.date,
     ],
   );
+  const [attention] = await database.query(
+    `SELECT j.id,j.status,j.save_status,j.updated_at,
+      COALESCE(a.title,JSON_UNQUOTE(JSON_EXTRACT(j.options_json,'$.title')),'') AS title
+    FROM toolbox_jobs j LEFT JOIN toolbox_artifacts a ON a.id=j.artifact_id AND a.user_id=j.user_id
+    WHERE j.user_id=? AND j.tool_id<>'translation'
+      AND (j.status='failed' OR j.save_status='save_failed')
+      AND COALESCE(JSON_UNQUOTE(JSON_EXTRACT(j.options_json,'$.homeDismissed')),'false') NOT IN ('true','1')
+    ORDER BY j.updated_at DESC,j.id DESC LIMIT 1`,
+    [userId],
+  );
   const result = results
     .map((row) => {
       let inConclusion = false;
@@ -80,18 +96,18 @@ export async function compileWorkshopBriefFacts(database, userId, calendar, { pr
       const partial = json(row.coverage_json)?.complete !== true;
       return {
         row,
-        sample:
-          `${partial ? (calendar.locale === 'en-US' ? 'Partial sources: ' : '资料未完整读取：') : ''}${conclusion}`.slice(
-            0,
-            120,
-          ),
+        sample: conciseExcerpt(
+          `${partial ? (calendar.locale === 'en-US' ? 'Partial sources: ' : '资料未完整读取：') : ''}${conclusion}`,
+        ),
       };
     })
     .find(Boolean);
   const due = selectWorkshopDue(projects, calendar.date);
-  const next = projects.find((row) => row.id !== due?.id && Number(row.pending) > 0 && clean(row.next_step));
+  const next = projects.find(
+    (row) => row.id !== due?.id && Number(row.pending) > 0 && /\p{L}/u.test(clean(row.next_step)),
+  );
   const candidates = [result, next, due];
-  return WORKSHOP_BRIEF_DEFINITIONS.map(([id, zh, en], index) => {
+  const facts = WORKSHOP_BRIEF_DEFINITIONS.map(([id, zh, en], index) => {
     const candidate = candidates[index];
     const row = index === 0 ? candidate?.row : candidate;
     const source = row
@@ -131,6 +147,31 @@ export async function compileWorkshopBriefFacts(database, userId, calendar, { pr
         : '',
     };
   });
+  const failed = attention[0];
+  const title = clean(failed?.title).slice(0, 80);
+  const reason = failed
+    ? calendar.locale === 'en-US'
+      ? failed.save_status === 'save_failed'
+        ? 'Result could not be saved'
+        : 'Workshop task failed'
+      : failed.save_status === 'save_failed'
+        ? '工坊成果保存失败'
+        : '工坊任务处理失败'
+    : '';
+  facts.push({
+    id: 'workshop_attention',
+    label: calendar.locale === 'en-US' ? 'Workshop task to check' : '需要查看的工坊任务',
+    route: failed ? `/toolbox/task/${encodeURIComponent(failed.id)}` : '/toolbox',
+    count: failed ? 1 : 0,
+    samples: failed ? [`${reason}${title ? `${calendar.locale === 'en-US' ? ': ' : '：'}${title}` : ''}`] : [],
+    sources: failed ? [{ type: 'toolbox_task', id: String(failed.id), title: title || reason }] : [],
+    revision: failed
+      ? createHash('sha256')
+          .update(JSON.stringify([failed.id, failed.status, failed.save_status, failed.updated_at, title]))
+          .digest('hex')
+      : '',
+  });
+  return facts;
 }
 
 /** Prefer today's actionable project, then overdue, then the nearest upcoming date. */

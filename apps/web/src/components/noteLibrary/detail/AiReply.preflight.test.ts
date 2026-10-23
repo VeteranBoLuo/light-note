@@ -26,6 +26,7 @@ afterEach(() => {
   cleanup?.();
   cleanup = undefined;
   vi.clearAllMocks();
+  vi.restoreAllMocks();
 });
 
 function mount(content: string, type = 'html') {
@@ -129,5 +130,25 @@ describe('笔记 AI 空内容前置提示', () => {
     view.host.querySelector<HTMLButtonElement>('.ai-preview-followup button')!.click();
     await vi.waitFor(() => expect(mocks.execute).toHaveBeenCalledTimes(2));
     expect(mocks.execute.mock.calls[1][0].input.text).toContain('已有的 AI 建议');
+  });
+});
+
+describe('笔记 AI 流式失败恢复', () => {
+  it.each(['', '已经收到的部分正文'])('失败时保留已接收正文 %j，不把内部标记当成结果', async (partial) => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    mocks.execute.mockImplementationOnce(async (_request, handlers) => {
+      if (partial) handlers.onDelta(partial);
+      throw new Error('fixture stream failed');
+    });
+    const view = mount('<p>有效正文</p>');
+    view.click();
+    await vi.waitFor(() =>
+      expect(view.host.querySelector('.generation-feedback')?.textContent).toContain('fixture stream failed'),
+    );
+    expect(mocks.execute).toHaveBeenCalledTimes(1);
+    expect(view.host.textContent).not.toMatch(/【标题】|【正文】/);
+    if (partial) expect(view.host.querySelector('.output-body')?.textContent).toContain(partial);
+    else expect(view.host.querySelector('.output-actions')).toBeNull();
+    expect(view.host.querySelector('.generation-status')).toBeNull();
   });
 });

@@ -20,13 +20,13 @@ function literalPosition(column) {
   return `LOCATE(CONVERT(LOWER(?) USING utf8mb4) COLLATE utf8mb4_bin, CONVERT(LOWER(TRIM(COALESCE(${column}, ''))) USING utf8mb4) COLLATE utf8mb4_bin)`;
 }
 
-function relevanceScore(type, definition, keyword, userId, idColumn) {
+export function relevanceScore(type, definition, keyword, userId, idColumn, { includeTags = true } = {}) {
   const params = [keyword, keyword, keyword];
   const title = `CONVERT(LOWER(TRIM(COALESCE(${definition.titleColumn}, ''))) USING utf8mb4) COLLATE utf8mb4_bin`;
   let sql = `CASE WHEN ${title} = CONVERT(LOWER(?) USING utf8mb4) COLLATE utf8mb4_bin THEN 100
     WHEN ${literalPosition(definition.titleColumn)} = 1 THEN 80
     WHEN ${literalPosition(definition.titleColumn)} > 0 THEN 60`;
-  if (type !== 'tag') {
+  if (type !== 'tag' && includeTags) {
     const tags =
       type === 'todo'
         ? `SELECT 1 FROM todo_tag_relations rank_rel INNER JOIN tag rank_tag ON rank_tag.id=rank_rel.tag_id AND rank_tag.user_id=rank_rel.user_id

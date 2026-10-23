@@ -1,5 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { shouldSkipApiLog } from './logPolicy.js';
+import { shouldSkipApiLog, summarizeApiLogPayload } from './logPolicy.js';
+
+it.each(['status', 'request', 'confirm'])('更换邮箱日志不保存密码、邮箱、票据或验证码：%s', (action) => {
+  expect(summarizeApiLogPayload(`/api/user/email-change/${action}`, { email: 'private@example.com', oldPassword: 'secret', challenge: 'secret-ticket', code: '123456' }))
+    .toEqual({ payloadSummary: 'account_email_change_omitted' });
+});
+
+it.each(['/api/user/github', '/api/user/github/bind'])('GitHub 认证日志不保留授权码、票据或账号身份：%s', (path) => {
+  expect(summarizeApiLogPayload(path, { code: 'provider-secret', state: 'browser-secret', userId: 'private-id', confirm: true })).toEqual({
+    payloadSummary: 'github_oauth_omitted', confirmed: true,
+  });
+});
 
 describe('API 日志跳过策略', () => {
   it.each([

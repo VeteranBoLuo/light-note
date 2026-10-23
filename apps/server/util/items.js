@@ -2,6 +2,7 @@ import { MAKEUP_WINDOW_DAYS } from '@lightnote/shared';
 import { randomUUID } from 'node:crypto';
 import pool from '../db/index.js';
 import { creditAiBonusTokens } from './aiBonusWallet.js';
+import { recordAssetAcquisition } from './assetAcquisition.js';
 
 // ============================================================================
 // 物品系统(背包)。统一"消耗品"的发放/持有/使用口径,是「我的成长」长期扩展的地基。
@@ -52,13 +53,40 @@ export function getConsumable(id) {
  * @param userId 目标用户
  * @param itemId 物品 id(见 CONSUMABLES)
  * @param qty 数量(默认 1)
+ * @param source 发奖来源(sourceType/sourceRef)；调用方的业务收据负责重复请求去重。
+ * 新 AI 包直接进入永久钱包，仅旧 user_item 库存保留手动转入兼容。
  */
-export async function grantItem(conn, userId, itemId, qty = 1) {
+export async function grantItem(conn, userId, itemId, qty = 1, source = {}) {
   const def = CONSUMABLES[itemId];
   if (!def) throw new Error(`grantItem: 未知物品 ${itemId}`);
-  const db = conn || pool;
   const n = Math.trunc(Number(qty) || 0);
   if (!Number.isSafeInteger(n) || n <= 0) return { ok: false, reason: 'bad_qty' };
+  if (!conn || conn === pool) {
+    const tx = await pool.getConnection();
+    try {
+      await tx.beginTransaction();
+      const result = await grantItem(tx, userId, itemId, n, source);
+      await tx.commit();
+      return result;
+    } catch (error) {
+      await tx.rollback();
+      throw error;
+    } finally {
+      tx.release();
+    }
+  }
+  const db = conn;
+  if (def.effect === 'ai_tokens') {
+    await creditAiBonusTokens(db, {
+      userId,
+      amountTokens: n * def.tokens,
+      sourceType: source.sourceType || 'item_grant',
+      sourceRef: source.sourceRef || itemId,
+      idempotencyKey: source.idempotencyKey || `item-grant:${randomUUID()}:ai`,
+      policyVersion: 'item-grant-v1',
+    });
+    return { ok: true, itemId, qty: n, backing: 'wallet' };
+  }
   if (def.backing === 'card_column') {
     // 所有来源全量累积；保留行锁和实际到账量，串行化同一事务中的抽奖/兑换。
     const [[row]] = await db.query('SELECT streak_protect_cards AS qty FROM user_growth WHERE user_id = ? FOR UPDATE', [
@@ -69,6 +97,7 @@ export async function grantItem(conn, userId, itemId, qty = 1) {
       n,
       userId,
     ]);
+    await recordAssetAcquisition(db, { ...source, userId, kind: 'card', amount: n });
     return {
       ok: true,
       itemId,

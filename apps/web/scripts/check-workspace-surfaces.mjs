@@ -100,7 +100,11 @@ try {
           await page.screenshot({ path: join(output, `${id}-${theme}.png`) });
           results.push({ id, theme, checks });
         }
-      } catch (error) { failures.push(`${id}: ${error.message}`); console.error(failures.at(-1)); }
+      } catch (error) {
+        await page.screenshot({ path: join(output, `${id}-failure.png`) }).catch(() => {});
+        failures.push(`${id}: ${error.message} (url=${page.url()})`);
+        console.error(failures.at(-1));
+      }
       console.log(id, failures.at(-1)?.startsWith(id + ':') ? 'FAIL' : 'PASS');
     }
     await context.close();

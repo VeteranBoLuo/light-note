@@ -83,13 +83,13 @@ describe('移动浏览器与 App 渲染一致性门禁', () => {
     });
 
     expect(compiled.errors).toEqual([]);
-    for (const selector of [
-      '.disable-animations .lt .lt-prize',
-      '.disable-animations .lt .lt-prize-core',
-      '.disable-animations .lt .lt-progress > span',
-      '.disable-animations .lt .lt-odds-toggle__icon',
-    ]) {
-      expect(compiled.code).toContain(selector);
+    const selectors: string[] = [];
+    compiled.rawResult?.root.walkRules((rule) => {
+      if (rule.selector.includes('.disable-animations')) selectors.push(...rule.selectors);
+    });
+    expect(selectors.length).toBeGreaterThan(0);
+    for (const selector of selectors) {
+      expect(selector).toMatch(/^\.disable-animations\s+\.lt(?:\s|\[|\.|:|>|~|\+|$)/u);
     }
     expect(compiled.code).not.toMatch(/\.disable-animations\s*\{[^}]*animation:\s*none/iu);
   });

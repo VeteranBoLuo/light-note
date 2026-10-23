@@ -1,99 +1,135 @@
 <template>
   <div class="unified-profile-form">
-    <ProfileEditorIdentity
-      :profile="identityProfile"
-      :avatar-editable="!saving && !isGuest"
-      @edit-avatar="appearanceOpen = true"
-    >
-      <template #actions>
-        <BButton type="text" class="profile-appearance-action" :disabled="saving" @click="appearanceOpen = true"
-          ><SvgIcon :src="icon.common.magicWand" size="14" aria-hidden="true" />{{
-            t('profileAppearance.title')
-          }}</BButton
-        >
-      </template>
-    </ProfileEditorIdentity>
-    <section class="profile-public-fields">
-      <label class="user-item">
-        <span>{{ t('myInfo.nickname') }}</span>
-        <BInput
-          height="40px"
-          :disabled="saving || isGuest"
-          v-model:value="userData.alias"
-          :placeholder="t('myInfo.enterNickname')"
-        />
-      </label>
-
-      <section class="community-profile-fields" v-if="user.id && user.role !== 'visitor'">
-        <div v-if="profile.ownLoading.value" class="profile-community-state"
-          ><BLoading inline loading :title="t('common.loading')"
-        /></div>
-        <div v-else-if="profile.ownError.value" class="profile-community-state" role="alert">
-          <span>{{ t('communityChat.profile.ownLoadFailed') }}</span>
-          <BButton type="text" @click="loadCommunity">{{ t('community.feed.retry') }}</BButton>
-        </div>
-        <template v-else-if="profile.ownProfile.value">
-          <label class="user-item"
-            ><span class="profile-field-heading"
-              >{{ t('communityChat.profile.bioLabel') }} <small>{{ bioLength }}/60</small></span
-            >
-            <BInput
-              v-model:value="bio"
-              class="profile-bio-input"
-              type="textarea"
-              :rows="3"
-              @compositionstart="bioComposing = true"
-              @compositionend="finishBioInput"
-              @input="limitBio"
-              :disabled="saving"
-              :placeholder="t('communityChat.profile.bioPlaceholder')"
-            />
-          </label>
+    <div class="profile-form-body">
+      <ProfileEditorIdentity
+        :profile="identityProfile"
+        :avatar-editable="!saving && !isGuest"
+        @edit-avatar="appearanceOpen = true"
+      >
+        <template #actions>
+          <BButton
+            size="small"
+            class="profile-appearance-action"
+            :disabled="saving || isGuest"
+            @click="appearanceOpen = true"
+            ><SvgIcon :src="icon.common.magicWand" size="14" aria-hidden="true" />{{
+              t('profileAppearance.title')
+            }}</BButton
+          >
         </template>
+      </ProfileEditorIdentity>
+      <section class="profile-public-fields">
+        <label class="user-item">
+          <span class="user-item-heading"
+            >{{ t('myInfo.nickname') }}<small>{{ t('accountSettings.communityVisible') }}</small></span
+          >
+          <BInput
+            height="40px"
+            :disabled="saving || isGuest"
+            v-model:value="userData.alias"
+            :placeholder="t('myInfo.enterNickname')"
+          />
+        </label>
+
+        <section class="community-profile-fields" v-if="user.id && user.role !== 'visitor'">
+          <div v-if="profile.ownLoading.value" class="profile-community-state"
+            ><BLoading inline loading :title="t('common.loading')"
+          /></div>
+          <div v-else-if="profile.ownError.value" class="profile-community-state" role="alert">
+            <span>{{ t('communityChat.profile.ownLoadFailed') }}</span>
+            <BButton type="text" @click="loadCommunity">{{ t('community.feed.retry') }}</BButton>
+          </div>
+          <template v-else-if="profile.ownProfile.value">
+            <label class="user-item"
+              ><span class="user-item-heading"
+                >{{ t('communityChat.profile.bioLabel') }} <small>{{ bioLength }}/60</small></span
+              >
+              <BInput
+                v-model:value="bio"
+                class="profile-bio-input"
+                type="textarea"
+                :rows="3"
+                @compositionstart="bioComposing = true"
+                @compositionend="finishBioInput"
+                @input="limitBio"
+                :disabled="saving"
+                :placeholder="t('communityChat.profile.bioPlaceholder')"
+              />
+            </label>
+          </template>
+        </section>
       </section>
-    </section>
-    <section class="profile-account-fields" aria-labelledby="profile-account-heading">
-      <h2 id="profile-account-heading">{{ t('settings.accountSecurityTitle') }}</h2>
-      <label class="user-item">
-        <span>{{ t('myInfo.email') }}</span>
-        <BInput
-          height="40px"
-          :disabled="saving || isGuest"
-          v-model:value="userData.email"
-          :placeholder="t('myInfo.enterEmail')"
-        />
-      </label>
-      <p class="private-info-hint">{{ t('community.feed.privateAccountHint') }}</p>
-      <div class="profile-account-row">
-        <span class="profile-account-role"
-          >{{ t('myInfo.accountRole') }}<strong>{{ getRoleName() }}</strong></span
+      <section class="profile-account-fields" aria-labelledby="profile-account-heading">
+        <header
+          ><h2 id="profile-account-heading">{{ t('settings.accountSecurityTitle') }}</h2
+          ><span>{{ t('accountSettings.privateAccount') }}</span></header
         >
-        <BButton type="text" class="profile-account-row__password" :disabled="saving" @click="handleConfigPassword">
-          {{ user.password ? t('myInfo.changePassword') : t('myInfo.setPassword') }}
-          <SvgIcon :src="icon.arrow_right" size="13" aria-hidden="true" />
-        </BButton>
-      </div>
-      <PassConfigDlg v-model:visible="configPassVisible" />
-    </section>
-    <p v-if="isGuest" class="profile-visitor-hint"
-      >{{ t('myInfo.visitorDescription') }}
-      <BButton @click="bookmark.isShowLogin = true">{{ t('myInfo.loginToEdit') }}</BButton></p
-    >
+        <div class="profile-account-fields-panel">
+          <div class="profile-account-fields-row">
+            <div class="profile-account-fields-copy"
+              ><span>{{ t('accountSettings.loginEmail') }}</span
+              ><strong>{{ user.email || '—' }}</strong></div
+            >
+            <BButton type="text" :disabled="saving || isGuest || !!user.adminContext" @click="emailVisible = true">{{
+              t('accountSettings.changeEmail')
+            }}</BButton>
+          </div>
+          <div class="profile-account-fields-row">
+            <div class="profile-account-fields-copy"
+              ><span>{{ t('accountSettings.loginPassword') }}</span
+              ><strong>{{
+                t(
+                  passwordLoading
+                    ? 'accountSettings.loading'
+                    : passwordState === true
+                      ? 'accountSettings.passwordSet'
+                      : passwordState === false
+                        ? 'accountSettings.passwordNotSet'
+                        : 'accountSettings.passwordUnknown',
+                )
+              }}</strong></div
+            >
+            <BButton
+              type="text"
+              :disabled="saving || isGuest || !!user.adminContext || passwordLoading"
+              @click="handleConfigPassword"
+              >{{
+                t(
+                  passwordState === true
+                    ? 'myInfo.changePassword'
+                    : passwordState === false
+                      ? 'myInfo.setPassword'
+                      : 'accountSettings.configurePassword',
+                )
+              }}</BButton
+            >
+          </div>
+        </div>
+        <PassConfigDlg v-model:visible="configPassVisible" />
+      </section>
+      <p v-if="isGuest" class="profile-visitor-hint"
+        >{{ t('myInfo.visitorDescription') }}
+        <BButton @click="bookmark.isShowLogin = true">{{ t('myInfo.loginToEdit') }}</BButton></p
+      >
+    </div>
     <component
       :is="isMobileLayout ? MobileStickyActionBar : 'footer'"
-      v-else
+      v-if="!isGuest"
       class="profile-save-footer"
       :above-navigation="isMobileLayout ? false : undefined"
     >
+      <span v-if="!isMobileLayout" role="status">{{ dirty ? t('accountSettings.profileUnsaved') : '' }}</span>
+      <BButton :disabled="saving" @click="requestClose()">{{ t('common.cancel') }}</BButton>
       <BButton
         type="primary"
         :loading="saving"
         :disabled="!dirty || !userData.alias?.trim() || profile.ownLoading.value || bioLength > 60"
         @click="saveUserInfo"
-        >{{ t(isMobileLayout ? 'myInfo.saveChanges' : 'myInfo.save') }}</BButton
+        >{{ t('myInfo.saveChanges') }}</BButton
       >
     </component>
   </div>
+  <AccountEmailDialog v-model:visible="emailVisible" />
   <ProfileAppearanceStudio
     v-model:open="appearanceOpen"
     :profile="identityProfile"
@@ -105,7 +141,9 @@
 <script lang="ts" setup>
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import { bookmarkStore, useUserStore } from '@/store';
-  import { computed, ref } from 'vue';
+  import { computed, ref, watch, onBeforeUnmount } from 'vue';
+  import { apiBaseGet } from '@/http/request';
+  import AccountEmailDialog from '@/components/settings/AccountEmailDialog.vue';
   import Alert from '@/components/base/BasicComponents/BModal/Alert';
   import { useCommunityChatProfile } from '@/composables/useCommunityChatProfile';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
@@ -125,11 +163,11 @@
   import type { CommunityChatAuthorProfile } from '@/api/communityChatApi';
   import { useMobileLayout } from '@/composables/useMobileLayout';
   import { profileBackground } from '@/config/profileBackgrounds';
-  import { resolveAccountRoleLabelKey } from '@/config/accountRole';
   import { frameVariant } from '@/config/growthFrames.ts';
   const user = useUserStore();
   const isGuest = computed(() => !user.id || user.role === 'visitor');
   const saving = ref(false);
+  let identityGeneration = 0;
   const emit = defineEmits<{ close: []; saved: []; navigate: [path: string] }>();
   const profile = useCommunityChatProfile();
   const bio = ref('');
@@ -143,16 +181,17 @@
   }
   const bioLength = computed(() => Array.from(bio.value).length);
   const accountBaseline = ref('');
-  const accountSignature = () => JSON.stringify([userData.value.alias, userData.value.email || '']);
+  const accountSignature = () => JSON.stringify([userData.value.alias]);
   const accountDirty = computed(() => accountSignature() !== accountBaseline.value);
   const communityDirty = computed(() =>
     Boolean(profile.ownProfile.value && bio.value !== profile.ownProfile.value.bio),
   );
   const dirty = computed(() => accountDirty.value || communityDirty.value);
   async function loadCommunity() {
+    const generation = identityGeneration;
     try {
       const value = await profile.loadOwnProfile({ force: true });
-      if (value) {
+      if (value && generation === identityGeneration) {
         bio.value = value.bio;
       }
     } catch {
@@ -224,27 +263,27 @@
       message.warn(t('myInfo.pleaseLogin'));
       return;
     }
-    userData.value.email = String(userData.value.email || '').trim();
     if (!userData.value.alias || !userData.value.alias.trim()) {
       message.warning(t('myInfo.enterNickname'));
       return;
     }
-    if (userData.value.email && !validateEmail(userData.value.email)) {
-      message.warning(t('myInfo.invalidEmail'));
-      return;
-    }
     saving.value = true;
+    const generation = identityGeneration;
+    const ownerId = user.id;
     try {
       const payload = {
-        id: user.id,
+        id: ownerId,
         alias: userData.value.alias,
-        email: userData.value.email,
       };
       if (accountDirty.value) {
         const res = await userApi.updateUserInfo(payload);
+        if (generation !== identityGeneration) return;
         if (res.status !== 200) throw new Error('PROFILE_SAVE_FAILED');
-        const refreshed = await userApi.getUserInfoById({ id: user.id });
+        const refreshed = await userApi.getUserInfoById({ id: ownerId });
+        if (generation !== identityGeneration) return;
+        if (refreshed.status !== 200 || refreshed.data?.id !== ownerId) throw new Error('PROFILE_READ_FAILED');
         user.setUserInfo(refreshed.data);
+        if (generation !== identityGeneration) return;
         accountBaseline.value = accountSignature();
       }
       if (communityDirty.value && profile.ownProfile.value) {
@@ -254,6 +293,7 @@
           featuredAchievementKeys: profile.ownProfile.value.featuredAchievementKeys,
           baseRevision: profile.ownProfile.value.revision,
         });
+        if (generation !== identityGeneration) return;
         if (!result) throw new Error('PROFILE_SAVE_FAILED');
       }
       recordOperation({ module: '我的信息', operation: '保存个人信息成功' });
@@ -262,21 +302,47 @@
       emit('saved');
       emit('close');
     } catch {
-      message.warning(t('community.profilePartial'));
+      if (generation === identityGeneration) message.warning(t('community.profilePartial'));
     } finally {
       saving.value = false;
     }
   }
 
-  function validateEmail(email) {
-    const regex = /^[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,6}$/;
-    return regex.test(email);
-  }
-
-  function getRoleName() {
-    return t(resolveAccountRoleLabelKey(user.role, user.id));
-  }
   const configPassVisible = ref(false);
+  const emailVisible = ref(false);
+  const passwordState = ref<boolean | null>(null);
+  const passwordLoading = ref(false);
+  watch(
+    () => [user.id, user.role, user.adminContext],
+    async (current, previous) => {
+      const generation = ++identityGeneration;
+      if (previous) {
+        appearanceOpen.value = false;
+        profile.closeProfile({ reset: true, clearIdentityCache: true });
+        emit('close');
+      }
+      emailVisible.value = false;
+      configPassVisible.value = false;
+      passwordState.value = null;
+      passwordLoading.value = false;
+      if (isGuest.value || user.adminContext) return;
+      passwordLoading.value = true;
+      try {
+        const result = await apiBaseGet('/api/user/me', undefined, { silent: true });
+        if (generation === identityGeneration && result.status === 200 && result.data?.id === user.id)
+          passwordState.value = typeof result.data.hasPassword === 'boolean' ? result.data.hasPassword : null;
+      } catch {
+        /* Unknown state retains the dedicated verification flow. */
+      } finally {
+        if (generation === identityGeneration) passwordLoading.value = false;
+      }
+    },
+    { immediate: true, flush: 'sync' },
+  );
+  onBeforeUnmount(() => {
+    identityGeneration++;
+    profile.closeProfile({ reset: true, clearIdentityCache: true });
+  });
   function handleConfigPassword() {
     if (isGuest.value) {
       bookmark.isShowLogin = true;
@@ -303,123 +369,183 @@
     });
   }
 
-  const userData = ref({ alias: user.alias, email: user.email });
+  const userData = ref({ alias: user.alias });
   accountBaseline.value = accountSignature();
   void loadGrowth();
   if (user.id && user.role !== 'visitor') void loadCommunity();
 </script>
 
 <style lang="less" scoped>
+  .profile-public-fields {
+    display: grid;
+    gap: var(--ui-space-16, 16px);
+    padding-block: var(--ui-space-20, 20px);
+  }
+  .user-item {
+    display: grid;
+    gap: var(--ui-space-8, 8px);
+    min-width: 0;
+    line-height: 1.5;
+  }
+  .user-item-heading {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--ui-space-12, 12px);
+  }
+  .user-item-heading > small {
+    font-weight: 400;
+  }
+  .user-item small,
+  .profile-account-fields header > span,
+  .profile-save-footer > span {
+    font-size: var(--ui-font-12, 12px);
+    color: var(--desc-color);
+  }
+  .profile-bio-input :deep(textarea) {
+    height: var(--ui-layout-80, 80px);
+    min-height: var(--ui-layout-80, 80px);
+    padding-block: var(--ui-space-10, 10px);
+    font-size: var(--ui-font-14, 14px);
+    resize: vertical;
+  }
+  .profile-account-fields {
+    border-top: 1px solid var(--surface-divider-color);
+    padding-top: var(--ui-space-16, 16px);
+  }
+  .profile-account-fields-panel {
+    margin-top: var(--ui-space-12, 12px);
+    padding-inline: var(--ui-space-16, 16px);
+    border: 1px solid var(--surface-border-color);
+    border-radius: 12px;
+    background: var(--surface-panel-bg);
+  }
+  .profile-account-fields header,
+  .profile-account-fields-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--ui-space-12, 12px);
+  }
+  .profile-account-fields h2 {
+    margin: 0;
+    font-size: var(--ui-font-14, 14px);
+    font-weight: 700;
+  }
+  .profile-account-fields-row {
+    min-height: var(--ui-layout-54, 54px);
+    padding-block: var(--ui-space-8, 8px);
+    box-sizing: border-box;
+  }
+  .profile-account-fields-row + .profile-account-fields-row {
+    border-top: 1px solid var(--surface-border-color);
+  }
+  .profile-account-fields-copy {
+    display: flex;
+    align-items: center;
+    flex: 1;
+    gap: var(--ui-space-16, 16px);
+    min-width: 0;
+  }
+  .profile-account-fields-copy > span {
+    flex: 0 0 var(--ui-layout-72, 72px);
+    color: var(--desc-color);
+    font-size: var(--ui-font-13, 13px);
+  }
+  .profile-account-fields-copy > strong {
+    min-width: 0;
+    font-size: var(--ui-font-13, 13px);
+    font-weight: 500;
+    overflow-wrap: anywhere;
+  }
+  .profile-account-fields-row > .b_btn {
+    flex-shrink: 0;
+    padding-inline: var(--ui-space-4, 4px);
+    font-size: var(--ui-font-13, 13px);
+  }
+  .profile-save-footer {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: var(--ui-space-10, 10px);
+    padding: var(--ui-space-16, 16px) var(--ui-space-24, 24px);
+    border-top: 1px solid var(--surface-border-color);
+  }
+  .profile-save-footer > .b_btn {
+    min-width: var(--ui-layout-80, 80px);
+    height: var(--ui-control-36, 36px);
+    line-height: var(--ui-control-36, 36px);
+  }
+  .profile-save-footer > span {
+    flex: 1;
+    min-width: 0;
+    line-height: 1.5;
+  }
+
   .unified-profile-form {
     width: 100%;
+    min-height: 0;
+    display: flex;
+    flex: 1;
+    flex-direction: column;
     color: var(--text-color);
     font-size: var(--ui-font-14, 14px);
   }
-  .profile-bio-input :deep(textarea) {
-    display: block;
-    height: var(--ui-layout-86, 86px);
-    min-height: var(--ui-layout-86, 86px);
-    padding-top: var(--ui-space-10, 10px);
-    padding-bottom: var(--ui-space-10, 10px);
-    font-size: var(--ui-font-14, 14px);
-    line-height: 1.57;
-    overflow-wrap: anywhere;
-    resize: vertical;
+  .profile-form-body {
+    min-height: 0;
+    overflow-y: auto;
+    padding: var(--ui-space-20, 20px) var(--ui-space-24, 24px);
   }
   .profile-appearance-action.b_btn {
     height: var(--ui-control-32, 32px);
-    padding: 0 var(--ui-space-8, 8px);
-    gap: var(--ui-space-6, 6px);
-    font-size: var(--ui-font-13, 13px);
-  }
-  .profile-public-fields {
-    display: grid;
-    gap: var(--ui-space-20, 20px);
-    margin-top: var(--ui-space-20, 20px);
-  }
-  .profile-account-fields {
-    margin-top: var(--ui-space-24, 24px);
-    padding-top: var(--ui-space-20, 20px);
-    border-top: 1px solid var(--surface-divider-color);
-  }
-  .profile-account-fields h2 {
-    margin: 0 0 var(--ui-space-18, 18px);
-    font-size: var(--ui-font-14, 14px);
-    line-height: 1.43;
-    font-weight: 700;
-  }
-  .profile-account-row {
-    margin-top: var(--ui-space-12, 12px);
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: var(--ui-space-8, 8px);
-  }
-  .profile-account-role {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--ui-space-10, 10px);
-    color: var(--desc-color);
-    font-size: var(--ui-font-12, 12px);
-  }
-  .profile-account-row strong {
-    color: var(--text-color);
-    font-weight: 400;
-  }
-  .profile-account-row__password {
-    margin-left: auto;
     gap: var(--ui-space-5, 5px);
+    padding-inline: var(--ui-space-10, 10px);
     font-size: var(--ui-font-13, 13px);
-  }
-  .user-item {
-    display: flex;
-    flex-direction: column;
-    gap: var(--ui-space-9, 9px);
-    width: 100%;
-    line-height: 1.43;
-  }
-  .user-item :deep(input) {
-    font-size: var(--ui-font-15, 15px);
-  }
-  .community-profile-fields {
-    width: 100%;
+    border: 1px solid var(--surface-border-color);
+    background: var(--card-background);
+    border-radius: 8px;
   }
   .profile-community-state {
-    min-height: var(--ui-layout-116, 116px);
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    justify-content: center;
+    min-height: var(--ui-layout-108, 108px);
+    display: grid;
+    align-content: center;
     gap: var(--ui-space-8, 8px);
     color: var(--desc-color);
   }
-  .profile-field-heading {
-    display: flex;
-    justify-content: space-between;
+  .user-item :deep(input) {
+    font-size: var(--ui-font-14, 14px);
   }
-  .profile-field-heading small,
-  .private-info-hint {
-    color: var(--desc-color);
+  .profile-save-footer {
+    flex-shrink: 0;
+  }
+  .profile-save-footer > span {
     font-size: var(--ui-font-12, 12px);
-    font-weight: normal;
+    color: var(--desc-color);
   }
-  .private-info-hint {
-    margin: var(--ui-space-8, 8px) 0 0;
-    line-height: 1.58;
+  html.light-note-mobile-rendering .profile-form-body {
+    padding: var(--ui-space-20, 20px);
+    padding-bottom: calc(var(--ui-space-108, 108px) + env(safe-area-inset-bottom));
   }
-  .profile-visitor-hint {
-    margin: var(--ui-space-20, 20px) 0 0;
-    line-height: 1.6;
-  }
-  .profile-save-footer:not(.mobile-sticky-action-bar) {
-    display: flex;
-    justify-content: flex-end;
-    margin-top: var(--ui-space-20, 20px);
-    padding-top: var(--ui-space-16, 16px);
-    border-top: 1px solid var(--surface-border-color);
+  html.light-note-mobile-rendering .profile-account-fields-copy {
+    display: grid;
+    gap: var(--ui-space-3, 3px);
   }
   .profile-save-footer.mobile-sticky-action-bar {
-    max-width: calc(var(--ui-layout-560, 560px) - 2 * var(--ui-space-14, 14px));
-    margin-inline: auto;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    border-radius: 0;
+    border: 0;
+    border-top: 1px solid var(--surface-border-color);
+    box-shadow: none;
+    padding: var(--ui-space-16, 16px) var(--ui-space-20, 20px);
+    padding-bottom: calc(var(--ui-space-16, 16px) + env(safe-area-inset-bottom));
+  }
+  .profile-save-footer.mobile-sticky-action-bar > .b_btn {
+    height: var(--ui-control-44, 44px);
+    line-height: var(--ui-control-44, 44px);
+    flex: 0 0 auto;
+  }
+  .profile-save-footer.mobile-sticky-action-bar > .b_btn:last-child {
+    flex: 1;
   }
 </style>

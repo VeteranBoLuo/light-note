@@ -1,5 +1,5 @@
 <template>
-  <div ref="shopRoot" class="ps">
+  <div ref="shopRoot" class="ps" :class="{ 'is-mobile': bookmark.isMobile }">
     <BButton v-if="journey && !readOnly" @click="returnToTask">{{ t('entitlementJourney.returnTask') }}</BButton>
     <div v-if="!shop && (shopLoading || !shopError)" class="ps-state"><BLoading inline loading /></div>
     <div v-else-if="shopError && !shop" class="ps-state ps-state--error">
@@ -9,24 +9,27 @@
     <template v-else>
       <div class="ps-head">
         <div class="ps-head-left">
-          <div class="ps-title"><SvgIcon :src="icon.growth.reward" size="18" /> {{ t('growth.shopTitle') }}</div>
+          <h2 class="ps-title"><SvgIcon :src="icon.growth.reward" size="18" /> {{ t('growth.shopTitle') }}</h2>
           <div class="ps-sub">{{ t('growth.shopSubtitle') }}</div>
         </div>
         <div class="ps-balance">
           <span class="ps-balance-label">{{ t('growth.myPoints') }}</span>
           <span class="ps-balance-num"
-            ><SvgIcon :src="icon.growth.coin" size="17" /> {{ (shop?.points || 0).toLocaleString('en-US') }}</span
+            ><SvgIcon :src="icon.growth.coin" size="17" /> {{ formatPoints(shop?.points) }}</span
           >
         </div>
       </div>
 
       <div class="ps-store-bridge">
         <span class="ps-store-bridge__icon" aria-hidden="true"><SvgIcon :src="icon.support.store" size="19" /></span>
-        <div>
+        <div class="ps-store-bridge__copy">
           <strong>{{ t('growth.shopStoreTitle') }}</strong>
           <span>{{ t('growth.shopStoreDescription') }}</span>
         </div>
-        <BButton size="small" @click="goToStore">{{ t('growth.shopStoreAction') }}</BButton>
+        <RouterLink class="ps-store-bridge__action" :to="storeDestination">
+          {{ t('growth.shopStoreAction') }}
+          <SvgIcon :src="icon.arrow_right" size="16" aria-hidden="true" />
+        </RouterLink>
       </div>
       <div v-if="shop?.isVisitor" class="ps-visitor">{{ t('growth.shopVisitorTip') }}</div>
       <div v-else-if="shop && !shop.purchaseEnabled" class="ps-visitor">{{ t('growth.shopMaintenance') }}</div>
@@ -37,12 +40,24 @@
         :read-only="readOnly"
         :refresh-key="goalRefreshKey"
         :catalog="[...(shop?.items || []), ...(shop?.frames || [])]"
+        :balance="shop?.points"
+        :level="shop?.level"
+        :purchase-enabled="shop?.purchaseEnabled"
+        :mobile="bookmark.isMobile"
+        @redeem="focusGoalItem"
       />
 
       <!-- 实用道具 -->
       <div v-if="consumables.length" class="ps-section-title">{{ t('growth.shopSectionConsumable') }}</div>
       <div class="ps-grid">
-        <div v-for="it in consumables" :key="it.id" class="ps-item" :class="{ 'is-focused': isFocused(it) }">
+        <div
+          v-for="it in consumables"
+          :key="it.id"
+          class="ps-item ps-consumable-item"
+          :class="{ 'is-focused': isFocused(it) }"
+          :data-shop-item-id="it.id"
+          tabindex="-1"
+        >
           <div class="ps-item-icon"><SvgIcon :src="itemIcon(it.id)" size="27" /></div>
           <div class="ps-item-body">
             <div class="ps-item-name">{{ itemName(it) }}</div>
@@ -56,11 +71,12 @@
           </div>
           <div class="ps-item-foot">
             <span class="ps-purchase-meta">
-              <span class="ps-item-cost"><SvgIcon :src="icon.growth.coin" size="13" /> {{ it.cost }}</span>
+              <span class="ps-item-cost"
+                ><SvgIcon :src="icon.growth.coin" size="13" /> {{ formatPoints(it.cost) }}</span
+              >
               <small v-if="unavailableLabel(it)" class="ps-item-unavailable">{{ unavailableLabel(it) }}</small>
             </span>
             <BButton
-              size="small"
               type="primary"
               :disabled="readOnly || !canBuyNow(it) || buyingId === it.id"
               :loading="buyingId === it.id"
@@ -91,6 +107,8 @@
           :key="it.id"
           class="ps-item ps-frame-item"
           :class="[`ps-frame-item--${frameVariant(it.id) || 'default'}`, { 'is-equipped': it.equipped }]"
+          :data-shop-item-id="it.id"
+          tabindex="-1"
         >
           <AvatarFramePreview
             class="ps-frame-preview"
@@ -123,7 +141,9 @@
               {{ t('growth.shopOwned') }}
             </span>
             <span v-else class="ps-purchase-meta">
-              <span class="ps-item-cost"><SvgIcon :src="icon.growth.coin" size="13" /> {{ it.cost }}</span>
+              <span class="ps-item-cost"
+                ><SvgIcon :src="icon.growth.coin" size="13" /> {{ formatPoints(it.cost) }}</span
+              >
               <span v-if="it.owned" class="ps-item-owned">{{ t('growth.shopOwned') }}</span>
               <small v-else-if="unavailableLabel(it)" class="ps-item-unavailable">{{ unavailableLabel(it) }}</small>
             </span>
@@ -190,9 +210,9 @@
   import { recordEntitlementEvent } from '@/api/entitlementEvents';
   import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import { useRouter } from 'vue-router';
+  import { RouterLink, useRouter } from 'vue-router';
   import { useGrowth, type ShopItem } from '@/composables/useGrowth.ts';
-  import { useUserStore } from '@/store';
+  import { bookmarkStore, useUserStore } from '@/store';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BChip from '@/components/base/BasicComponents/BChip.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
@@ -207,8 +227,9 @@
   import { recordOperation } from '@/api/commonApi.ts';
   import { useUiDensity } from '@/composables/useUiDensity';
   import { frameVariant, sortFramesByRarity } from '@/config/growthFrames';
+  import { findVerticalScrollContainer, scrollIntoContainer } from '@/utils/scrolling';
 
-  const { t, te } = useI18n();
+  const { t, te, locale } = useI18n();
   const { dimension } = useUiDensity();
   const router = useRouter();
   const props = withDefaults(defineProps<{ readOnly?: boolean; focus?: string; showGoal?: boolean }>(), {
@@ -220,6 +241,7 @@
   const readOnly = computed(() => props.readOnly);
   const { dashboard, shop, shopLoading, shopError, loadShop, buyItem, equipFrame, claimAchievement } = useGrowth();
   const user = useUserStore();
+  const bookmark = bookmarkStore();
   const journey = ref(readEntitlementJourney(user.id));
   function returnToTask() {
     const current = prepareEntitlementReturn(user.id);
@@ -240,9 +262,13 @@
   const avatarSrc = computed(() => user.headPicture || icon.navigation.user);
   const shopRoot = ref<HTMLElement | null>(null);
 
-  function goToStore() {
-    const category = ['ai', 'storage'].includes(props.focus) ? props.focus : 'ai';
-    void router.push({ path: '/store', query: { category } });
+  const storeDestination = computed(() => ({
+    path: '/store',
+    query: { category: ['ai', 'storage'].includes(props.focus) ? props.focus : 'ai' },
+  }));
+
+  function formatPoints(value: number | null | undefined) {
+    return Number(value || 0).toLocaleString(locale.value);
   }
 
   function itemIcon(itemId: string) {
@@ -344,6 +370,24 @@
       : frames.value.filter((it) => it.rarity === activeFrameFilter.value),
   );
 
+  async function focusGoalItem(itemId: string) {
+    if (readOnly.value) return;
+    const item = [...(shop.value?.items || []), ...frames.value].find((candidate) => candidate.id === itemId);
+    if (!item) return;
+    if (frames.value.some((frame) => frame.id === itemId)) activeFrameFilter.value = 'all';
+    await nextTick();
+    const target = Array.from(shopRoot.value?.querySelectorAll<HTMLElement>('[data-shop-item-id]') || []).find(
+      (element) => element.dataset.shopItemId === itemId,
+    );
+    if (!target) return;
+    target.focus({ preventScroll: true });
+    const container = findVerticalScrollContainer(target, document.scrollingElement as HTMLElement | null);
+    if (container) {
+      const behavior = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth';
+      scrollIntoContainer(container, target, dimension(16, 'space'), behavior);
+    }
+  }
+
   function frameRarityName(rarity: NonNullable<ShopItem['rarity']>) {
     return t(`growth.frameRarity.${rarity}`);
   }
@@ -412,7 +456,7 @@
     if (s.isVisitor) return t('growth.shopLoginRequired');
     if (it.minLevel && (s.level || 0) < it.minLevel) return t('growth.shopLevelNeed', { n: it.minLevel });
     const shortfall = Math.max(0, Number(it.cost || 0) - Number(s.points || 0));
-    return shortfall > 0 ? t('growth.shopShortfall', { n: shortfall }) : '';
+    return shortfall > 0 ? t('growth.shopShortfall', { n: formatPoints(shortfall) }) : '';
   }
 
   // 消耗品按钮文案:可买=兑换;否则按原因给出置灰提示
@@ -545,6 +589,10 @@
     outline: 2px solid var(--focus-ring-color, var(--primary-color));
     outline-offset: 2px;
   }
+  .ps :deep([data-shop-item-id]:focus) {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 2px;
+  }
   html.light-note-mobile-rendering .ps-item.is-focused {
     border-color: var(--primary-color);
     outline-color: var(--primary-color);
@@ -569,6 +617,7 @@
     flex-wrap: wrap;
   }
   .ps-title {
+    margin: 0;
     display: flex;
     align-items: center;
     gap: var(--ui-space-6, 6px);
@@ -588,8 +637,8 @@
     gap: var(--ui-space-2, 2px);
     padding: var(--ui-space-8, 8px) var(--ui-space-14, 14px);
     border-radius: 12px;
-    background: color-mix(in srgb, #f59e0b 10%, var(--background-color));
-    border: 1px solid color-mix(in srgb, #f59e0b 30%, transparent);
+    background: var(--chip-pending-bg);
+    border: 1px solid var(--chip-pending-border);
     white-space: nowrap;
   }
   .ps-balance-label {
@@ -602,7 +651,7 @@
     gap: var(--ui-space-4, 4px);
     font-size: var(--ui-font-18, 18px);
     font-weight: 800;
-    color: #d97706;
+    color: var(--warning-color);
     font-variant-numeric: tabular-nums;
   }
   .ps-store-bridge {
@@ -610,45 +659,69 @@
     grid-template-columns: auto minmax(0, 1fr) auto;
     align-items: center;
     gap: var(--ui-space-10, 10px);
-    padding: var(--ui-space-11, 11px) var(--ui-space-12, 12px);
+    padding: var(--ui-space-12, 12px) var(--ui-space-16, 16px);
     border: 1px solid var(--surface-border-color);
     border-radius: 12px;
-    background: var(--workspace-panel-bg-color);
+    background: var(--surface-panel-bg);
   }
   .ps-store-bridge__icon {
     width: var(--ui-layout-36, 36px);
     height: var(--ui-layout-36, 36px);
     display: grid;
     place-items: center;
-    border: 1px solid var(--primary-color);
-    border-radius: 11px;
-    color: var(--primary-color);
-    background: var(--primary-btn-bg-color);
+    color: var(--workspace-purple-text);
   }
-  .ps-store-bridge div {
+  .ps-store-bridge__copy {
     min-width: 0;
     display: flex;
     flex-direction: column;
     gap: var(--ui-space-2, 2px);
   }
-  .ps-store-bridge strong {
+  .ps-store-bridge__copy strong {
     font-size: var(--ui-font-13, 13px);
+    font-weight: 600;
   }
-  .ps-store-bridge span {
+  .ps-store-bridge__copy span {
     color: var(--desc-color);
-    font-size: var(--ui-font-11, 11px);
-    line-height: 1.45;
+    font-size: var(--ui-font-12, 12px);
+    line-height: 1.5;
+  }
+  .ps-store-bridge__action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: var(--ui-space-6, 6px);
+    min-height: var(--ui-control-32, 32px);
+    padding: 0 var(--ui-space-4, 4px);
+    color: var(--workspace-purple-text);
+    font-size: var(--ui-font-13, 13px);
+    font-weight: 500;
+    text-decoration: none;
+    white-space: nowrap;
+    border-radius: 6px;
+    touch-action: manipulation;
+  }
+  .ps-store-bridge__action:focus-visible {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 2px;
+  }
+  .ps-store-bridge__action:active {
+    text-decoration: underline;
+  }
+  @media (hover: hover) and (pointer: fine) {
+    .ps-store-bridge__action:hover {
+      text-decoration: underline;
+    }
   }
   .ps-visitor {
     font-size: var(--ui-font-12_5, 12.5px);
     color: var(--primary-color);
   }
   .ps-section-title {
-    font-size: var(--ui-font-12_5, 12.5px);
-    font-weight: 700;
-    color: var(--desc-color);
-    letter-spacing: 0.03em;
-    margin-top: var(--ui-space-4, 4px);
+    font-size: var(--ui-font-14, 14px);
+    font-weight: 600;
+    color: var(--text-color);
+    margin-top: var(--ui-space-8, 8px);
   }
   .ps-frame-toolbar {
     display: flex;
@@ -666,16 +739,20 @@
   }
   .ps-grid {
     display: grid;
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: var(--ui-space-12, 12px);
   }
-  @media (max-width: 560px) {
+  .ps.is-mobile {
+    gap: var(--ui-space-12, 12px);
+
     .ps-store-bridge {
       grid-template-columns: auto minmax(0, 1fr);
+      gap: var(--ui-space-4, 4px) var(--ui-space-10, 10px);
+      padding: var(--ui-space-10, 10px) var(--ui-space-12, 12px);
     }
-    .ps-store-bridge :deep(.b_btn) {
-      grid-column: 1 / -1;
-      width: 100%;
+    .ps-store-bridge__action {
+      grid-column: 2;
+      justify-self: start;
     }
     .ps-grid {
       grid-template-columns: 1fr;
@@ -694,6 +771,40 @@
       transform 0.15s,
       box-shadow 0.15s;
   }
+  .ps-consumable-item {
+    display: grid;
+    grid-template-areas: 'icon body' 'icon foot';
+    grid-template-columns: auto minmax(0, 1fr);
+    align-content: start;
+    column-gap: var(--ui-space-12, 12px);
+    row-gap: var(--ui-space-8, 8px);
+    border-color: var(--surface-border-color);
+    background: var(--surface-card-bg);
+  }
+  .ps-consumable-item .ps-item-icon {
+    grid-area: icon;
+    display: grid;
+    place-items: center;
+    width: var(--ui-layout-32, 32px);
+    height: var(--ui-layout-32, 32px);
+    border-radius: 8px;
+    color: var(--workspace-purple-text);
+    background: var(--workspace-purple-selected);
+  }
+  .ps-consumable-item .ps-item-body {
+    grid-area: body;
+  }
+  .ps-consumable-item .ps-item-foot {
+    grid-area: foot;
+  }
+  .ps-consumable-item .ps-item-name,
+  .ps-consumable-item .ps-item-desc {
+    overflow-wrap: anywhere;
+  }
+  .ps-consumable-item .ps-item-foot :deep(.b_btn) {
+    flex-shrink: 0;
+    font-size: var(--ui-font-13, 13px);
+  }
   .ps-item:hover {
     border-color: color-mix(in srgb, var(--primary-color) 40%, transparent);
     transform: translateY(-2px);
@@ -708,7 +819,7 @@
     color: var(--primary-color);
   }
   .ps-frame-grid {
-    grid-template-columns: repeat(auto-fit, minmax(var(--ui-layout-300, 300px), 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--ui-layout-300, 300px)), 1fr));
   }
   .ps-frame-item {
     display: grid;
@@ -987,7 +1098,7 @@
     gap: var(--ui-space-3, 3px);
     font-size: var(--ui-font-13, 13px);
     font-weight: 700;
-    color: #d97706;
+    color: var(--warning-color);
     font-variant-numeric: tabular-nums;
   }
   .ps-item-cost--owned {

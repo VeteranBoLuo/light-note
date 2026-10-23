@@ -15,6 +15,8 @@
         :key="item.id"
         class="background-shop__item"
         :class="{ 'is-equipped': item.equipped }"
+        :data-shop-item-id="item.id"
+        tabindex="-1"
       >
         <ProfileBackgroundArt :background-id="item.id" thumbnail />
         <div class="background-shop__copy">

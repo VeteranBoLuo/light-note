@@ -86,11 +86,13 @@ describe('官网与应用入口路由', () => {
     expect(router.getRoutes().find((record) => record.name === 'settings')?.beforeEnter).toBeUndefined();
   });
 
-  it('积分明细使用独立登录页，并与 AI 用量保持同级资产入口', () => {
+  it('积分明细旧路径保留命名入口与认证声明，并重定向到背包', () => {
     const resolved = router.resolve('/points-usage');
     expect(resolved.name).toBe('pointsUsage');
     expect(resolved.meta.requireAuth).toBe(true);
     expect(resolved.meta.roles).not.toContain('visitor');
+    const redirect = router.getRoutes().find((record) => record.name === 'pointsUsage')?.redirect;
+    expect(typeof redirect).toBe('function');
   });
 
   it('标签列表与详情都是私人资源路由', () => {

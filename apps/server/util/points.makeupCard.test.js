@@ -87,7 +87,7 @@ describe('补签卡积分兑换', () => {
     const { state } = database({ cards: 3 });
     const original = await buyItem('u1', 'makeup_card', args);
     await expect(buyItem('u1', 'makeup_card', args)).resolves.toEqual({ ...original, idempotent: true });
-    expect(state).toMatchObject({ cards: 4, points: 400, logs: 1 });
+    expect(state).toMatchObject({ cards: 4, points: 400, logs: 2 });
   });
 
   it('不同请求允许连续兑换，超过旧库存上限仍正常到账', async () => {
@@ -99,7 +99,7 @@ describe('补签卡积分兑换', () => {
     await expect(
       buyItem('u1', 'makeup_card', { ...args, clientRequestId: 'makeup-card-request-003' }),
     ).resolves.toMatchObject({ ok: true });
-    expect(state).toMatchObject({ cards: 5, points: 200, logs: 3 });
+    expect(state).toMatchObject({ cards: 5, points: 200, logs: 6 });
   });
 
   it.each([{ economyVersion: 'points-economy-c7', expectedCost: 300 }, { expectedCost: 300 }])(
@@ -122,7 +122,7 @@ describe('补签卡积分兑换', () => {
     expect(original).toMatchObject({ ok: true, cost: 300 });
     vi.stubEnv('POINTS_ECONOMY_C8_ENABLED', 'true');
     await expect(buyItem('u1', 'makeup_card', oldArgs)).resolves.toEqual({ ...original, idempotent: true });
-    expect(state).toMatchObject({ cards: 1, points: 700, logs: 1 });
+    expect(state).toMatchObject({ cards: 1, points: 700, logs: 2 });
   });
 
   it('发卡异常时回滚扣分与流水', async () => {

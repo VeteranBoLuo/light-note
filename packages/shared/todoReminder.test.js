@@ -39,3 +39,7 @@ describe("共享待办提醒投影", () => {
     ).toBe("");
   });
 });
+
+it('多个固定时间在没有下一次 Job 时仍兼容读取首个配置时间', () => {
+  expect(resolveTodoConfiguredReminderAt({ reminder: { version: 1, mode: 'once', once: { type: 'fixed_at', fixedAts: ['2026-10-23T09:17', '2026-10-24T10:00'] } } })).toBe('2026-10-23T09:17');
+});

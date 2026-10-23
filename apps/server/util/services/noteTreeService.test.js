@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
+vi.mock('../publicResources/lifecycle.js',()=>({withdrawDeletedSources:vi.fn().mockResolvedValue(undefined)}));
 vi.mock('../../db/index.js', () => ({ default: { query: vi.fn() } }));
 
 const {

@@ -6,7 +6,11 @@
       </span>
       <span class="gs-suggestion__main">
         <span class="gs-suggestion__title" v-html="highlightedTitle"></span>
-        <small class="gs-suggestion__meta">{{ metaText }}</small>
+        <small class="gs-suggestion__meta"
+          ><span v-if="item.origin === 'public'" class="gs-suggestion__public"
+            >{{ t('publicResources.public') }} · {{ item.publicResource?.author.name }} · </span
+          >{{ metaText }}</small
+        >
       </span>
     </BButton>
     <BTooltip v-if="item.type === 'file'" :title="t('resourceCenter.locateFile')">
@@ -53,12 +57,16 @@
   // 前端不重复实现一套状态文案。
   const metaText = computed(() => {
     const typeLabel = t(`resourceCenter.types.${props.item.type}`);
+    if (props.item.origin === 'public') return typeLabel;
     const detail = String(props.item.extra || props.item.description || '').trim();
     return detail ? `${typeLabel} · ${detail}` : typeLabel;
   });
 </script>
 
 <style scoped lang="less">
+  .gs-suggestion__public {
+    color: var(--workspace-purple-text);
+  }
   .gs-suggestion-row {
     display: flex;
     align-items: center;

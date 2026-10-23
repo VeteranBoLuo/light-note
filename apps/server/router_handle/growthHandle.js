@@ -30,6 +30,8 @@ import {
   AdminPointsError,
 } from '../util/points.js';
 import { drawLottery, getLotteryStatus, freeDrawsFor } from '../util/lottery.js';
+import { getLotteryHistory } from '../util/services/lotteryHistoryService.js';
+import { getInventoryAcquisitions } from '../util/services/inventoryAcquisitionService.js';
 import { getEconomyRuntime } from '../util/pointsEconomyCatalog.js';
 import { PointsEconomyError } from '../util/pointsEconomyOperations.js';
 import { getInventory, useItem } from '../util/items.js';
@@ -1028,6 +1030,27 @@ export const getLottery = async (req, res) => {
         L(req, '获取抽奖信息失败', 'Failed to load draw details'),
       ),
     );
+  }
+};
+
+export const getInventoryAcquisitionsHandle = async (req, res) => {
+  try {
+    res.send(resultData(await getInventoryAcquisitions(req.user?.id || 'visitor', req.query || {})));
+  } catch (error) {
+    if (error instanceof PointsEconomyError) return res.send(resultData(error.data, error.status, error.message));
+    console.error('获取获得记录失败 code=%s', stableAgentErrorCode(error));
+    res.send(resultData(null, 500, L(req, '获取获得记录失败', 'Failed to load acquisition history')));
+  }
+};
+
+export const getLotteryHistoryHandle = async (req, res) => {
+  try {
+    const data = await getLotteryHistory(req.user?.id || 'visitor', req.query || {});
+    res.send(resultData(data));
+  } catch (error) {
+    if (error instanceof PointsEconomyError) return res.send(resultData(error.data, error.status, error.message));
+    console.error('获取抽奖记录失败 code=%s', stableAgentErrorCode(error));
+    res.send(resultData(null, 500, L(req, '获取抽奖记录失败', 'Failed to load draw history')));
   }
 };
 

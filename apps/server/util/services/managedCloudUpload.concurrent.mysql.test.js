@@ -4,7 +4,7 @@ import mysql from 'mysql2/promise';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Explicit disposable local database only. OBS and post-create effects are controlled substitutes.
-const state = vi.hoisted(() => ({ db: null, head: vi.fn(), remove: vi.fn(), quota: 1 }));
+const state = vi.hoisted(() => ({ db: null, head: vi.fn(), copy: vi.fn(), remove: vi.fn(), quota: 1 }));
 vi.mock('../../db/index.js', () => ({
   default: {
     query: (...args) => state.db.query(...args),
@@ -16,6 +16,7 @@ vi.mock('../obsClient.js', () => ({
   bucketBaseUrl: 'https://example.invalid',
   createUploadSignedUrl: vi.fn(),
   getObjectMetadataFromObs: (...args) => state.head(...args),
+  copyObjectInObs: (...args) => state.copy(...args),
   deleteObjectFromObs: (...args) => state.remove(...args),
 }));
 vi.mock('../imagePreview/references.js', () => ({ syncCloudImageById: async () => {} }));
@@ -23,6 +24,7 @@ vi.mock('../resourceInbox.js', () => ({ enqueueResources: async () => {} }));
 vi.mock('./resourceCreateEffects.js', () => ({ triggerResourceCreateEffects: async () => {} }));
 const { confirmManagedCloudUpload, abortManagedCloudUpload, insertVerifiedCloudFile } =
   await import('./managedCloudUploadService.js');
+const { publishedUploadKey } = await import('./cloudUploadFinalization.js');
 const socketPath = process.env.Q01_TEST_MYSQL_SOCKET;
 const schema = `q01_upload_${randomUUID().replaceAll('-', '')}`;
 let admin;
@@ -68,6 +70,7 @@ describe.skipIf(!socketPath)('托管上传真实 MySQL 并发', () => {
     await state.db.query('DELETE FROM cloud_legacy_object_lifecycle');
     state.quota = 1;
     state.head.mockReset().mockResolvedValue({ contentLength: 700000 });
+    state.copy.mockReset().mockResolvedValue({});
     state.remove.mockReset().mockResolvedValue({});
   });
   afterAll(async () => {
@@ -75,12 +78,12 @@ describe.skipIf(!socketPath)('托管上传真实 MySQL 并发', () => {
     if (created) await admin.query(`DROP DATABASE ${schema}`);
     await admin?.end();
   });
-  it('三个并发确认同一对象只保存一次、只读取一次对象元数据', async () => {
+  it('三个并发确认同一对象只保存一次、只冻结一次正式副本', async () => {
     const item = upload();
     const results = await Promise.all(Array.from({ length: 3 }, () => confirmManagedCloudUpload(item)));
     expect(new Set(results.map((r) => r.fileId)).size).toBe(1);
     expect(results.filter((r) => !r.alreadyConfirmed)).toHaveLength(1);
-    expect(state.head).toHaveBeenCalledTimes(1);
+    expect(state.copy).toHaveBeenCalledTimes(1);
     expect((await state.db.query('SELECT COUNT(*) AS n FROM files'))[0][0].n).toBe(1);
   });
   it('两个文件同时确认时重新计算容量，不会一起突破剩余配额', async () => {
@@ -102,13 +105,13 @@ describe.skipIf(!socketPath)('托管上传真实 MySQL 并发', () => {
     const [rows] = await state.db.query('SELECT file_name FROM files WHERE id = ?', [result.fileId]);
     expect(rows[0].file_name).toBe('resume (2).pdf');
   });
-  it('慢对象读取阻塞同账号确认，但其他账号仍能完成', async () => {
+  it('慢对象读取不占账号锁，同账号及其他账号仍能完成不同上传', async () => {
     state.quota = 10;
     const gate = deferred();
     const entered = deferred();
     const firstItem = upload();
     state.head.mockImplementation(async (key) => {
-      if (key === firstItem.objectKey) {
+      if (key === publishedUploadKey(firstItem.userId, firstItem.objectKey)) {
         entered.resolve();
         await gate.promise;
       }
@@ -125,8 +128,9 @@ describe.skipIf(!socketPath)('托管上传真实 MySQL 并发', () => {
       });
       const other = await confirmManagedCloudUpload(upload('two'));
       expect(other.fileId).toBeTruthy();
-      expect(secondDone).toBe(false);
-      expect(state.head).toHaveBeenCalledTimes(2);
+      await second;
+      expect(secondDone).toBe(true);
+      expect(state.head).toHaveBeenCalledTimes(3);
     } finally {
       gate.resolve();
       await Promise.allSettled([first, second].filter(Boolean));
@@ -170,7 +174,7 @@ describe.skipIf(!socketPath)('托管上传真实 MySQL 并发', () => {
       await entered.promise;
       const other = await confirmManagedCloudUpload(upload());
       expect(other.fileId).toBeTruthy();
-      await expect(confirmManagedCloudUpload(item)).rejects.toMatchObject({ code: 'UPLOAD_BUSY' });
+      await expect(confirmManagedCloudUpload(item)).rejects.toMatchObject({ code: 'UPLOAD_OBJECT_RETIRED' });
       const connection = await state.db.getConnection();
       try {
         await connection.beginTransaction();

@@ -8,6 +8,7 @@ export interface TodoReminderProjectionInput {
     once?: {
       type?: string;
       fixedAt?: string | null;
+      fixedAts?: string[];
       offsetMinutes?: number | null;
     } | null;
     trigger?: {
@@ -31,3 +32,9 @@ export declare function resolveTodoConfiguredReminderAt(
 export declare function resolveTodoReminderAt(
   item?: TodoReminderProjectionInput,
 ): string;
+
+export declare const TODO_SINGLE_TASK_MAX_REMINDER_JOBS = 500;
+export declare function getTodoFixedReminderTimes(once?: {
+  fixedAt?: string | null;
+  fixedAts?: string[];
+} | null): string[];

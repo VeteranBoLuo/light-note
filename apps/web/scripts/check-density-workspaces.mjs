@@ -17,7 +17,7 @@ const cases = [
   ['search', '/search', '.result-panel'],
   ['workbench', '/workbenches', '.workbenches-container, .mobile-today'],
   ['settings', '/settings', '.settings-page'],
-  ['toolbox', '/toolbox?view=catalog', '.toolbox-group-filter'],
+  ['toolbox', '/toolbox?view=catalog', '.toolbox-home'],
 ];
 try {
   for (const width of [1440, 900, 390].filter(

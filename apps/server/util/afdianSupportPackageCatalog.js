@@ -9,7 +9,7 @@ export const SUPPORT_CAMPAIGN_MIN_MARGIN_BPS = 4_000;
 
 const PACKAGE_BY_SKU = new Map(SUPPORT_PACKAGE_CATALOG.map((item) => [item.skuId, item]));
 export const SUPPORT_AI_FIRST_PURCHASE_CLAIM_KEY = 'scope-ai-account-v3';
-// 已经写入 v2 首购账本的 SKU 是永久兼容事实，不能跟随未来目录删改而漂移。
+// 历史首购版本与 SKU 是永久兼容事实，不能跟随当前目录的权益和 scope 漂移。
 const LEGACY_AI_FIRST_PURCHASE_KEYS = Object.freeze([
   'ai-6',
   'ai-18',
@@ -20,14 +20,30 @@ const LEGACY_AI_FIRST_PURCHASE_KEYS = Object.freeze([
   'combo-88',
   'combo-168',
 ]);
+const LEGACY_STORAGE_FIRST_PURCHASE_KEYS = Object.freeze(['storage-6', 'storage-18', 'storage-50', 'storage-100']);
 
-export function supportFirstPurchaseClaimKey(item) {
-  return item?.firstPurchaseScope === 'ai_account' ? SUPPORT_AI_FIRST_PURCHASE_CLAIM_KEY : String(item?.skuId || '');
+export function supportFirstPurchaseClaimKey(item, catalogVersion = SUPPORT_PACKAGE_CATALOG_VERSION) {
+  const skuId = String(item?.skuId || '');
+  if (
+    ['support-packages-v2', 'support-packages-v3', 'support-packages-v4'].includes(String(catalogVersion)) &&
+    LEGACY_AI_FIRST_PURCHASE_KEYS.includes(skuId)
+  ) {
+    return SUPPORT_AI_FIRST_PURCHASE_CLAIM_KEY;
+  }
+  if (
+    ['support-packages-v2', 'support-packages-v3'].includes(String(catalogVersion)) &&
+    LEGACY_STORAGE_FIRST_PURCHASE_KEYS.includes(skuId)
+  ) {
+    return skuId;
+  }
+  if (item?.firstPurchaseScope === 'none') return '';
+  return item?.firstPurchaseScope === 'ai_account' ? SUPPORT_AI_FIRST_PURCHASE_CLAIM_KEY : skuId;
 }
 
-export function supportFirstPurchaseCompatibleClaimKeys(item) {
-  if (item?.firstPurchaseScope !== 'ai_account') return [String(item?.skuId || '')].filter(Boolean);
-  return [SUPPORT_AI_FIRST_PURCHASE_CLAIM_KEY, ...LEGACY_AI_FIRST_PURCHASE_KEYS];
+export function supportFirstPurchaseCompatibleClaimKeys(item, catalogVersion = SUPPORT_PACKAGE_CATALOG_VERSION) {
+  const claimKey = supportFirstPurchaseClaimKey(item, catalogVersion);
+  if (!claimKey) return [];
+  return claimKey === SUPPORT_AI_FIRST_PURCHASE_CLAIM_KEY ? [claimKey, ...LEGACY_AI_FIRST_PURCHASE_KEYS] : [claimKey];
 }
 
 function campaignCatalogVersion(campaignId, version) {
@@ -161,33 +177,6 @@ export function normalizeSupportCampaignSkus(skus, { requireMargin = false } = {
   });
 }
 
-function packageDto(item, usedSkuIds) {
-  const alreadyUsed =
-    usedSkuIds !== null && supportFirstPurchaseCompatibleClaimKeys(item).some((key) => usedSkuIds.has(key));
-  return {
-    ...item,
-    firstPurchaseStatus: usedSkuIds === null ? 'login_required' : alreadyUsed ? 'used' : 'available',
-  };
-}
-
-async function loadUsedSkuIds({ userId, db }) {
-  if (!userId) return null;
-  const [[links], [claims]] = await Promise.all([
-    db.query('SELECT provider_user_id FROM support_account_links WHERE user_id = ? LIMIT 1', [userId]),
-    db.query('SELECT sku_id FROM support_first_purchase_claims WHERE user_id = ?', [userId]),
-  ]);
-  const result = new Set(claims.map((row) => String(row.sku_id)));
-  const identityHash = supportProviderIdentityHash(links[0]?.provider_user_id);
-  if (identityHash) {
-    const [identityClaims] = await db.query(
-      'SELECT sku_id FROM support_first_purchase_claims WHERE provider_identity_hash = ?',
-      [identityHash],
-    );
-    for (const row of identityClaims) result.add(String(row.sku_id));
-  }
-  return result;
-}
-
 async function loadActiveCampaignPackages({ userId, db, now }) {
   const params = [now, now];
   const userJoin = userId
@@ -253,13 +242,12 @@ export async function getSupportCatalog({
   if (!feature.catalogEnabled) {
     return { ...feature, packages: [], campaigns: [] };
   }
-  const [usedSkuIds, campaigns] = await Promise.all([
-    loadUsedSkuIds({ userId: effectiveUserId, db }),
-    feature.campaignsEnabled ? loadActiveCampaignPackages({ userId: effectiveUserId, db, now }) : Promise.resolve([]),
-  ]);
+  const campaigns = feature.campaignsEnabled
+    ? await loadActiveCampaignPackages({ userId: effectiveUserId, db, now })
+    : [];
   return {
     ...feature,
-    packages: SUPPORT_PACKAGE_CATALOG.map((item) => packageDto(item, usedSkuIds)),
+    packages: SUPPORT_PACKAGE_CATALOG.map((item) => ({ ...item, firstPurchaseStatus: 'not_applicable' })),
     campaigns,
   };
 }

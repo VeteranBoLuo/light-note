@@ -182,6 +182,7 @@ globalDirect(app);
 app.mount('#app');
 Object.assign(window, {
   __cloudBatchFixture: {
+    applyUiDensity,
     requests: fixture.requests,
     selection: useResourceSelectionStore(),
     cloud: cloudSpaceStore(),

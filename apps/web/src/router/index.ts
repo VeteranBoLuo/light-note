@@ -14,7 +14,7 @@ import workbenchesRouter from '@/router/modules/workbenches.ts';
 import securityCenterRouter from '@/router/modules/securityCenter.ts';
 import notificationCenterRouter from '@/router/modules/notificationCenter.ts';
 import notificationsRouter from '@/router/modules/notifications.ts';
-import searchRouter from '@/router/modules/search.ts';
+import searchRouter, { publicationRoutes } from '@/router/modules/search.ts';
 import searchBatchRouter from '@/router/modules/searchBatch.ts';
 import tagDetailRouter from '@/router/modules/tagDetail.ts';
 import trashRouter from '@/router/modules/trash.ts';
@@ -81,6 +81,7 @@ export const routes: RouteRecordRaw[] = [
       ...noteLibraryRouter,
       ...cloudSpaceRouter,
       searchRouter,
+      ...publicationRoutes,
       searchBatchRouter,
       tagDetailRouter,
       trashRouter,

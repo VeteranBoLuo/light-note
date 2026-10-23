@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { chromium } from 'playwright-core';
 
-const origin = process.env.CLOUD_BATCH_TEST_ORIGIN || 'http://127.0.0.1:5182';
+const origin = process.env.CLOUD_BATCH_TEST_ORIGIN || process.env.LIGHTNOTE_WEB_ORIGIN || 'http://localhost:5173';
 assert(['localhost', '127.0.0.1'].includes(new URL(origin).hostname), 'Use the local Web dev server');
 const output = process.env.CLOUD_BATCH_TEST_OUTPUT || join(tmpdir(), 'lightnote-cloud-batch');
 await mkdir(output, { recursive: true });

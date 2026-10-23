@@ -187,11 +187,14 @@ async function claimFirstPurchase(connection, order) {
   const identityHash = supportProviderIdentityHash(order.provider_user_id);
   if (!identityHash) return false;
   const definition = getSupportPackage(order.sku_id);
-  // 发放时按当前产品范围重新核验。尚未结算的 v2 意图仍使用其冻结权益快照，
-  // 但 AI/组合套餐统一占用账号级 sentinel，避免与 v3 并发重复加赠。
-  const claimKey = definition ? supportFirstPurchaseClaimKey(definition) : String(order.sku_id || '');
+  // 首购范围由旧订单目录版本决定；实际额度始终取订单快照，不能套用当前套餐。
+  const claimKey = definition
+    ? supportFirstPurchaseClaimKey(definition, order.catalog_version)
+    : String(order.sku_id || '');
   if (!claimKey) return false;
-  const compatibleKeys = definition ? supportFirstPurchaseCompatibleClaimKeys(definition) : [claimKey];
+  const compatibleKeys = definition
+    ? supportFirstPurchaseCompatibleClaimKeys(definition, order.catalog_version)
+    : [claimKey];
   const placeholders = compatibleKeys.map(() => '?').join(', ');
   const [userClaims] = await connection.query(
     `SELECT id

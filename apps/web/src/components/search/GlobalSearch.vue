@@ -51,8 +51,12 @@
                 >
               </BInput>
             </div>
+            <PublicSearchScopeControl class="global-search-scope" />
           </header>
 
+          <p v-if="publicFailed" class="global-search-public-error" role="status">{{
+            t('publicResources.publicFailed')
+          }}</p>
           <div class="global-search-dialog__body" :class="{ 'is-loading': loading }" :aria-busy="loading">
             <BButton v-if="workshopMatch" class="global-search__workshop" @click="openWorkshop">
               <SvgIcon :src="icon.toolbox.home" size="20" /><span
@@ -85,7 +89,7 @@
                 <h3>{{ getGroupLabel(group.type) }}</h3>
                 <div
                   v-for="item in group.items"
-                  :key="`${item.type}-${item.id}`"
+                  :key="`${item.origin || 'personal'}-${item.type}-${item.id}`"
                   class="global-search-result"
                   :class="{ 'is-active': isActiveItem(item) }"
                   @mousemove="activateItem(item)"
@@ -99,7 +103,10 @@
                     <span class="global-search-result__main">
                       <span class="global-search-result__title-row">
                         <span class="global-search-result__title" v-html="highlightText(item.title, keyword)"></span>
-                        <span v-if="item.tags?.length" class="global-search-result__tags">
+                        <span v-if="item.origin === 'public'" class="global-search-public-badge"
+                          >{{ t('publicResources.public') }} · {{ item.publicResource?.author.name }}</span
+                        >
+                        <span v-if="item.origin !== 'public' && item.tags?.length" class="global-search-result__tags">
                           <ResourceTagChip
                             v-for="tag in item.tags"
                             :key="tag.id"
@@ -118,7 +125,7 @@
                   </BButton>
                   <span class="global-search-result__extra">
                     <BTooltip
-                      v-if="item.type === 'bookmark' || item.type === 'file'"
+                      v-if="item.origin !== 'public' && (item.type === 'bookmark' || item.type === 'file')"
                       :title="t(item.type === 'file' ? 'resourceCenter.locateFile' : 'resourceCenter.locate')"
                     >
                       <BButton
@@ -164,6 +171,8 @@
 </template>
 
 <script setup lang="ts">
+  import PublicSearchScopeControl from '@/components/publicResources/PublicSearchScopeControl.vue';
+  import { usePublicResourceScope } from '@/store/publicResourceScope';
   import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useRoute, useRouter } from 'vue-router';
@@ -178,11 +187,12 @@
   import { CLOUD_FILE_CATEGORY_LABEL_KEY, getCloudFileCategory } from '@/constants/cloudFileCategory';
   import { useGlobalSearchSuggestions } from '@/composables/useGlobalSearchSuggestions';
   import { type GlobalSearchType } from '@/utils/globalSearchTypes';
-  import { locateSearchResult, navigateToSearchResult } from '@/utils/globalSearchNavigation';
+  import { locateSearchResult, navigateToSearchResult, searchNavigationKey } from '@/utils/globalSearchNavigation';
   import { GLOBAL_SEARCH_HIDDEN_ROUTE_NAMES } from '@/config/navigation';
   import { getGlobalShortcutKeys, isEditableShortcutTarget, matchesGlobalShortcut } from '@/config/keyboardShortcuts';
   import icon from '@/config/icon';
 
+  const publicScope = usePublicResourceScope();
   const router = useRouter();
   const route = useRoute();
   const { t } = useI18n();
@@ -195,10 +205,15 @@
     items,
     loading,
     failed: searchError,
+    publicFailed,
     schedule,
     run,
     reset,
-  } = useGlobalSearchSuggestions(undefined, undefined, { includeRecent: true, suggestLayout: 'grouped' });
+  } = useGlobalSearchSuggestions(undefined, undefined, {
+    includeRecent: true,
+    suggestLayout: 'grouped',
+    allowPublicScope: true,
+  });
   const suggestGroups = computed(() =>
     (['bookmark', 'note', 'file', 'todo', 'tag'] as const)
       .map((type) => ({
@@ -216,7 +231,9 @@
     route.path.includes('/search') ? t('resourceCenter.continueSearch') : t('resourceCenter.searchPlaceholder'),
   );
   const workshopMatch = computed(() =>
-    /工坊|项目|研究|学习|写作|资料|提取|表格|图片|扫描|workshop|project|research|study|learn|writ|extract|table|pdf|ocr/i.test(keyword.value),
+    /工坊|项目|研究|学习|写作|资料|提取|表格|图片|扫描|workshop|project|research|study|learn|writ|extract|table|pdf|ocr/i.test(
+      keyword.value,
+    ),
   );
   function openWorkshop() {
     close({ restoreFocus: false });
@@ -285,6 +302,7 @@
   async function open() {
     if (visible.value) return;
     visible.value = true;
+    void publicScope.ensure(true);
     activeIndex.value = -1;
     previousBodyOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
@@ -354,13 +372,18 @@
   }
   function goSearch() {
     const query = String(keyword.value || '').trim();
-    recordOperation({ module: '全局搜索', operation: query ? `进入资源中心搜索【${query}】` : '进入资源中心' });
+    recordOperation({ module: '全局搜索', operation: '进入资源中心' });
     close({ restoreFocus: false });
-    void router.push({ path: '/search', query: query ? { q: query } : {} });
+    void router.push({
+      path: '/search',
+      query: { ...(query ? { q: query } : {}), public: publicScope.included ? '1' : '0' },
+    });
   }
   function openItem(item: SearchResultItem) {
+    const from = route.fullPath;
     close({ restoreFocus: false });
-    navigateToSearchResult(router, item);
+    if (item.origin === 'public') navigateToSearchResult(router, item, { publicReturnPath: from });
+    else navigateToSearchResult(router, item);
   }
   function locateItem(item: SearchResultItem) {
     close({ restoreFocus: false });
@@ -371,17 +394,32 @@
     locateSearchResult(router, item);
   }
   function handleShortcut(event: KeyboardEvent) {
-    if (
-      !matchesGlobalShortcut(event, 'globalSearch') ||
-      isEditableShortcutTarget(event.target) ||
-      !isSearchAvailable.value
-    )
-      return;
+    if (!matchesGlobalShortcut(event, 'globalSearch') || !isSearchAvailable.value) return;
+    // Search inputs keep the explicit search command after route autofocus; ordinary typing and editors retain theirs.
+    const inSearchInput =
+      (event.ctrlKey || event.metaKey) &&
+      event.target instanceof Element &&
+      !!event.target.closest('#search-center-input, #global-search-input');
+    if (isEditableShortcutTarget(event.target) && !inSearchInput) return;
     event.preventDefault();
     recordOperation({ module: '全局搜索', operation: '使用快捷键唤起搜索' });
     void open();
   }
 
+  watch(
+    () => publicScope.included,
+    () => {
+      reset();
+      if (visible.value) void run(keyword.value);
+    },
+  );
+  watch(
+    () => publicScope.identity,
+    () => {
+      keyword.value = '';
+      close();
+    },
+  );
   watch(suggestGroups, () => {
     activeIndex.value = -1;
   });
@@ -395,7 +433,7 @@
     { immediate: true },
   );
   watch(
-    () => route.fullPath,
+    () => searchNavigationKey(route),
     () => {
       if (visible.value) close({ restoreFocus: false });
     },
@@ -413,6 +451,20 @@
 </script>
 
 <style scoped lang="less">
+  .global-search-scope {
+    margin-top: var(--ui-space-12, 12px);
+  }
+  .global-search-public-error {
+    margin: 0;
+    padding: var(--ui-space-8, 8px) var(--ui-space-20, 20px);
+    color: var(--warning-color);
+    font-size: var(--ui-font-12, 12px);
+  }
+  .global-search-public-badge {
+    color: var(--workspace-purple-text);
+    font-size: var(--ui-font-11, 11px);
+    white-space: nowrap;
+  }
   .global-search {
     width: var(--ui-layout-38, 38px);
     flex: 0 0 var(--ui-layout-38, 38px);

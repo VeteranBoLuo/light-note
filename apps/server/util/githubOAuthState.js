@@ -203,6 +203,13 @@ export async function createGitHubOAuthChallenge({ consentVersion, flow = 'login
   };
 }
 
+function rejectLegacyEmailBinding(challenge) {
+  if (challenge.binding || ['binding', 'binding_processing'].includes(challenge.status)) {
+    throw githubOAuthError('GITHUB_OAUTH_EMAIL_CONFLICT',
+      '此邮箱已注册过轻笺，请使用邮箱登录或找回密码', 409);
+  }
+}
+
 export async function consumeGitHubOAuthChallenge({ state, nonce, code } = {}) {
   const normalizedState = String(state || '').trim();
   const normalizedNonce = String(nonce || '').trim();
@@ -223,6 +230,7 @@ export async function consumeGitHubOAuthChallenge({ state, nonce, code } = {}) {
 
   const challenge = parseChallenge(raw);
   const consentAt = validateChallenge(challenge, normalizedNonce);
+  rejectLegacyEmailBinding(challenge);
   const codeDigest = sha256(normalizedCode);
   if (challenge.codeDigest && challenge.codeDigest !== codeDigest) {
     throw githubOAuthError('GITHUB_OAUTH_STATE_INVALID', 'GitHub 登录校验失败，请重新发起授权');
@@ -256,6 +264,7 @@ export async function consumeGitHubOAuthChallenge({ state, nonce, code } = {}) {
     throw githubOAuthError('GITHUB_OAUTH_STATE_EXPIRED', 'GitHub 登录请求已过期，请重新发起授权');
   }
   const claimed = parseChallenge(claimedRaw);
+  rejectLegacyEmailBinding(claimed);
   if (claimed.processingId !== processingId) {
     if (claimed.status === 'completed' && claimed.codeDigest === codeDigest && claimed.userId) {
       return { ...challengePublicContext(claimed, consentAt), recovered: true, userId: claimed.userId };

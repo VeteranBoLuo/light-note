@@ -78,7 +78,12 @@ function optionalScalar(value, maxLength = 255) {
  * 又会在自动保存中反复出现；这些路由只记 ID、版本、类型和长度，不复制原文。
  */
 export function summarizeApiLogPayload(originalUrl, payload) {
+  if (['/user/github', '/user/github/bind'].includes(normalizeApiPath(originalUrl)))
+    return { payloadSummary: 'github_oauth_omitted', confirmed: payload?.confirm === true };
   const path = normalizeApiPath(originalUrl);
+  if (path.startsWith('/user/email-change/')) return { payloadSummary: 'account_email_change_omitted' };
+  if (path.startsWith('/public-resources/'))
+    return { payloadSummary: 'public_resource_content_omitted', requestId: optionalScalar(payload?.requestId) };
   if (path.startsWith('/community/'))
     return { payloadSummary: 'community_content_omitted', requestId: optionalScalar(payload?.requestId) };
   if (path.startsWith('/note/imports/'))

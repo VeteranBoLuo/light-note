@@ -9,6 +9,27 @@ import { AI_SKILL_NOTE_TRANSFORM_MAX_TEXT_CHARS } from '../aiSkill/limits.js';
 import { resolveRequestFieldPolicy } from './requestFieldPolicy.js';
 
 describe('请求字段安全策略', () => {
+  it('批量审核只豁免有界原因，数组、归属与超限字段保持校验', () => {
+    const context={method:'POST',path:'/api/public-resources/moderation/batch',body:{items:[{publicId:'id',reason:'SELECT 只是待核实的引用',owner:'forged'}]}};
+    expect(resolveRequestFieldPolicy(context,'body.items')).toMatchObject({maxSize:100,sizeUnit:'items',trustedEnvelope:true,skipSignatureRules:[]});
+    for(const field of ['body.items.0.reason','body.items[0].reason']) expect(resolveRequestFieldPolicy(context,field)).toMatchObject({maxSize:500,trustedEnvelope:true});
+    expect(resolveRequestFieldPolicy(context,'body.items.0.owner')).toBeNull();
+    context.body.items[0].reason='字'.repeat(501); expect(resolveRequestFieldPolicy(context,'body.items[0].reason')).toMatchObject({overBudget:true,trustedEnvelope:false});
+    context.body.items=Array.from({length:101},()=>({publicId:'id',reason:'',owner:''}));
+    expect(resolveRequestFieldPolicy(context,'body.items')).toMatchObject({overBudget:true,trustedEnvelope:false});
+  });
+
+  it('公开资源自由文本仅限有界搜索和举报/处理原因，不豁免归属或正文',()=>{
+    const context={method:'POST',path:'/api/public-resources/10000000-0000-4000-8000-000000000001/report',body:{reason:'SELECT 只是举报引用',owner:'other',body:'private'}};
+    expect(resolveRequestFieldPolicy(context,'body.reason')).toMatchObject({maxSize:500,trustedEnvelope:true});
+    expect(resolveRequestFieldPolicy(context,'body.owner')).toBeNull();expect(resolveRequestFieldPolicy(context,'body.body')).toBeNull();
+    context.body.reason='字'.repeat(501);expect(resolveRequestFieldPolicy(context,'body.reason')).toMatchObject({overBudget:true,trustedEnvelope:false});
+    expect(resolveRequestFieldPolicy({...context,path:'/public-resources/search/combined',body:{keyword:'SELECT 笔记'}},'body.keyword')).toMatchObject({maxSize:200,trustedEnvelope:true});
+    const workspace={method:'GET',path:'/api/public-resources/workspace',query:{q:'SELECT <script> 是笔记标题',sourceId:'private'}};
+    expect(resolveRequestFieldPolicy(workspace,'query.q')).toMatchObject({maxSize:200,trustedEnvelope:true,skipSignatureRules:'*'});
+    expect(resolveRequestFieldPolicy(workspace,'query.sourceId')).toBeNull();
+    workspace.query.q='字'.repeat(201);expect(resolveRequestFieldPolicy(workspace,'query.q')).toMatchObject({overBudget:true,trustedEnvelope:false});
+  });
   it('项目卡片只对有界正文与证据解释放行自由文本，不豁免来源身份或超限内容', () => {
     const context = {method:'POST',path:'/api/toolbox/workspaces/project/board',body:{command:{title:'SELECT 研究问题',content:'<script> 作为研究引用',details:{evidence:[{resourceId:'source',explanation:'SELECT 与脚本只是证据中的文字'}]}}}};
     expect(resolveRequestFieldPolicy(context,'body.command.details.evidence.0.explanation')).toMatchObject({maxSize:1000,trustedEnvelope:true,skipSignatureRules:'*'});

@@ -45,15 +45,15 @@ try {
     const preview = page.locator('.note-readonly-preview');
     const nav = (query) =>
       page.evaluate(
-        async (query) => (await import('/src/router/index.ts')).default.push({ path: '/noteLibrary', query }),
+        async (query) => window.batchEntryFixture.router.push({ path: '/noteLibrary', query }),
         query,
       );
     const waitRoute = (parent, body) =>
       page.waitForFunction(
         async ({ parent, body }) => {
-          const route = (await import('/src/router/index.ts')).default.currentRoute.value;
+          const route = window.batchEntryFixture?.router.currentRoute.value;
           return (
-            route.path === '/noteLibrary' &&
+            route?.path === '/noteLibrary' &&
             (route.query.parent || '') === parent &&
             (route.query.preview || '') === body
           );
@@ -131,9 +131,9 @@ try {
         await parentCrumb('3').click();
         if (profile.parentMode === 'children') await waitList('3', 2);
         else await waitPreview('', '3');
-        await page.evaluate(async () => (await import('/src/router/index.ts')).default.back());
+        await page.evaluate(async () => window.batchEntryFixture.router.back());
         await waitPreview('', '26');
-        await page.evaluate(async () => (await import('/src/router/index.ts')).default.back());
+        await page.evaluate(async () => window.batchEntryFixture.router.back());
         await waitList('', 26);
         await page
           .waitForFunction(
@@ -148,7 +148,7 @@ try {
               .evaluate((element) => ({ top: element.scrollTop, max: element.scrollHeight - element.clientHeight }));
             throw new Error(`${error.message}: expected scroll ${scroll}, actual ${JSON.stringify(actual)}`);
           });
-        await page.evaluate(async () => (await import('/src/router/index.ts')).default.forward());
+        await page.evaluate(async () => window.batchEntryFixture.router.forward());
         await waitPreview('', '26');
         await nav({});
         await waitList('', 26);
@@ -200,7 +200,7 @@ try {
       await page.screenshot({ path: join(output, `${name}-explicit-body.png`) });
       await preview.getByRole('button', { name: profile.english ? 'Edit' : '编辑', exact: true }).click();
       await page.waitForFunction(
-        async () => (await import('/src/router/index.ts')).default.currentRoute.value.path === '/noteLibrary/3',
+        async () => window.batchEntryFixture.router.currentRoute.value.path === '/noteLibrary/3',
       );
       assert.deepEqual(errors, [], name);
       report.push({ name, ok: true });

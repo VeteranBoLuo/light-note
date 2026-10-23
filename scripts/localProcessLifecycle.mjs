@@ -7,6 +7,8 @@ function signal(target, value) {
     return true;
   } catch (error) {
     if (error.code === "ESRCH") return false;
+    // 零信号的 EPERM 仍表示目标存在；退出回收期间继续有界等待。
+    if (value === 0 && error.code === "EPERM") return true;
     throw error;
   }
 }

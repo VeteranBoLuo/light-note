@@ -121,6 +121,10 @@
     "./profile-backgrounds": {
       "types": "./profileBackgrounds.d.ts",
       "default": "./profileBackgrounds.js"
+    },
+    "./public-resources": {
+      "types": "./publicResources.d.ts",
+      "default": "./publicResources.js"
     }
   },
   "devDependencies": {

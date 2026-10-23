@@ -10,7 +10,11 @@ vi.mock('@/utils/openBookmark', () => ({ openBookmarkUrl: vi.fn() }));
 const push = vi.fn();
 const routeResolver = createRouter({
   history: createMemoryHistory(),
-  routes: [{ path: '/noteLibrary/:id', component: { template: '<div />' } }],
+  routes: ['/noteLibrary/:id', '/home', '/search', '/workbenches'].map((path) => ({
+    path,
+    meta: { requireAuth: true },
+    component: { template: '<div />' },
+  })),
 });
 const router = { push, resolve: routeResolver.resolve } as unknown as Router;
 const file: SearchResultItem = {
@@ -24,6 +28,33 @@ const file: SearchResultItem = {
 beforeEach(() => vi.clearAllMocks());
 
 describe('搜索结果打开与定位', () => {
+  it('公开结果忽略个人 route、URL 和定位，只进入登录只读详情并保留搜索范围', () => {
+    const item = {
+      ...file,
+      origin: 'public' as const,
+      type: 'bookmark' as const,
+      url: 'https://private.invalid/',
+      route: '/noteLibrary/private',
+      publicResource: { publicId: 'public-id' },
+    } as SearchResultItem;
+    navigateToSearchResult(router, item, { noteReturnPath: '/search?q=资料&public=1' });
+    expect(push).toHaveBeenCalledExactlyOnceWith({
+      path: '/public-resources/public-id',
+      query: { from: '/search?q=%E8%B5%84%E6%96%99&public=1' },
+    });
+    expect(openBookmarkUrl).not.toHaveBeenCalled();
+    push.mockClear();
+    locateSearchResult(router, item);
+    expect(push).not.toHaveBeenCalled();
+  });
+  it('公开结果保留快捷搜索真实来源，不扩大个人笔记返回地址的允许范围', () => {
+    const item = { ...file, origin: 'public' as const, publicResource: { publicId: 'pub' } } as SearchResultItem;
+    navigateToSearchResult(router, item, { publicReturnPath: '/home?tag=x#cards' });
+    expect(push).toHaveBeenCalledExactlyOnceWith({
+      path: '/public-resources/pub',
+      query: { from: '/home?tag=x#cards' },
+    });
+  });
   it('只有资源中心明确传入来源时才补充笔记返回地址，并保留原路由参数', () => {
     const note = { ...file, type: 'note' as const, route: '/noteLibrary/note-1?mode=preview#section' };
     const source = '/search?q=hello&type=note,file&tags=tag-1&date=30d&sort=name&view=list#results';

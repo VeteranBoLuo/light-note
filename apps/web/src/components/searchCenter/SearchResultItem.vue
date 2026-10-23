@@ -12,7 +12,7 @@
   >
     <!-- 列表视图:横向紧凑行(信息密度高,适合快速检索定位) -->
     <template v-if="view === 'list'">
-      <div v-if="selectable" class="row-checkbox-wrap">
+      <div v-if="canSelect" class="row-checkbox-wrap">
         <BCheckbox :checked="selected" @click.stop @change="emit('toggle-select')" />
       </div>
       <BButton data-range-select="primary" class="result-row" @click="handlePrimaryClick">
@@ -31,7 +31,9 @@
         </span>
         <TodoSearchMeta v-if="item.type === 'todo'" :item="item" />
         <span v-if="matchReasonText" class="match-reason">{{ matchReasonText }}</span>
-        <span class="row-tags" :class="{ 'row-meta--empty': !tagMetaText }">{{ tagMetaText || '—' }}</span>
+        <span class="row-tags" :class="{ 'row-meta--empty': !tagMetaText, 'is-public': item.origin === 'public' }">{{
+          tagMetaText || '—'
+        }}</span>
         <span class="row-time" :class="{ 'row-meta--empty': !updateMetaText }">{{ updateMetaText || '—' }}</span>
       </BButton>
     </template>
@@ -39,7 +41,7 @@
     <!-- 卡片视图:竖排卡片(舒适浏览) -->
     <template v-else>
       <BCheckbox
-        v-if="selectable"
+        v-if="canSelect"
         class="result-checkbox-wrap"
         :checked="selected"
         @click.stop
@@ -49,12 +51,13 @@
       <BButton
         data-range-select="primary"
         class="result-click-area"
-        :class="{ 'result-click-area--selectable': selectable }"
+        :class="{ 'result-click-area--selectable': canSelect }"
         @click="handlePrimaryClick"
       >
         <header class="item-head">
           <span class="type-pill" :class="`type-pill--${item.type}`">{{ typeLabel }}</span>
-          <span class="item-extra">{{ headerExtra }}</span>
+          <BChip v-if="item.origin === 'public'" tone="neutral">{{ t('publicResources.public') }}</BChip
+          ><span v-else class="item-extra">{{ headerExtra }}</span>
         </header>
 
         <h3 class="item-title">
@@ -75,13 +78,15 @@
 
         <div class="item-meta">
           <span class="meta-line">
-            <strong>{{ t('tagManage.relatedTag') }}:</strong>
+            <strong>{{ t(item.origin === 'public' ? 'publicResources.author' : 'tagManage.relatedTag') }}:</strong>
             <span class="meta-line-value" :class="{ 'meta-line-value--empty': !tagMetaText }">{{
               tagMetaText || '-'
             }}</span>
           </span>
           <span class="meta-line">
-            <strong>{{ t('tagGraph.panel.updateTime') }}:</strong>
+            <strong
+              >{{ t(item.origin === 'public' ? 'publicResources.publicTime' : 'tagGraph.panel.updateTime') }}:</strong
+            >
             <span class="meta-line-value" :class="{ 'meta-line-value--empty': !updateMetaText }">
               {{ updateMetaText || '-' }}
             </span>
@@ -104,6 +109,7 @@
 
 <script setup lang="ts">
   import TodoSearchMeta from './TodoSearchMeta.vue';
+  import BChip from '@/components/base/BasicComponents/BChip.vue';
   import { computed } from 'vue';
   import { useI18n } from 'vue-i18n';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
@@ -129,11 +135,12 @@
     (e: 'locate'): void;
   }>();
 
-  const { t } = useI18n();
-  const canLocate = computed(() => props.item.type === 'file' && !props.selectable);
+  const { t, locale } = useI18n();
+  const canSelect = computed(() => props.selectable && props.item.origin !== 'public');
+  const canLocate = computed(() => props.item.origin !== 'public' && props.item.type === 'file' && !canSelect.value);
 
   function handlePrimaryClick() {
-    if (props.selectable) {
+    if (canSelect.value) {
       emit('toggle-select');
       return;
     }
@@ -170,8 +177,22 @@
     const knownReasons = new Set(['title_exact', 'title_prefix', 'title', 'tag', 'url', 'description', 'content']);
     return knownReasons.has(reason) ? t(`resourceCenter.matchReason.${reason}`) : '';
   });
-  const tagMetaText = computed(() => props.item.tagNames.slice(0, 3).join(' / '));
-  const updateMetaText = computed(() => props.item.updatedAtText || '');
+  const tagMetaText = computed(() =>
+    props.item.origin === 'public'
+      ? `${t('publicResources.public')} · ${props.item.publicResource?.author.name || ''}`
+      : props.item.tagNames.slice(0, 3).join(' / '),
+  );
+  const updateMetaText = computed(() =>
+    props.item.origin === 'public' && props.item.updatedAtMs
+      ? new Date(props.item.updatedAtMs).toLocaleString(locale.value, {
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+        })
+      : props.item.updatedAtText || '',
+  );
   const headerExtra = computed(() => {
     if (props.item.type === 'todo') return '';
     if (props.item.type === 'bookmark') return props.item.domain || props.item.extra || '';
@@ -181,6 +202,9 @@
 </script>
 
 <style scoped lang="less">
+  .row-tags.is-public {
+    color: var(--workspace-purple-text);
+  }
   @import (reference) '@/assets/css/workspace-surfaces.less';
   .result-item {
     position: relative;

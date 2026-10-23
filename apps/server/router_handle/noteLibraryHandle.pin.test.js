@@ -920,6 +920,7 @@ describe('页面树写入 handler', () => {
   it('新删除接口按确认数量原子删除整棵子树，并在提交后失效知识缓存', async () => {
     connection.query.mockImplementation(async (sql) => {
       const statement = String(sql);
+      if (statement.includes('information_schema')) return [[]];
       if (statement.includes('SELECT id, parent_id')) {
         return [
           [

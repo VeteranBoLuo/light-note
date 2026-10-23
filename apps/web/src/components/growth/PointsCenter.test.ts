@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -31,7 +32,7 @@ describe('积分目标与治理界面防回归', () => {
 
   it('成长页的积分摘要与兑换目标遵循服务端功能开关', () => {
     expect(growthPage).toContain('features?.pointsCenter');
-    expect(growthPage).toContain(':show-summary="pointsCenterEnabled"');
+    expect(growthPage).toContain(':show-points-summary="pointsCenterEnabled"');
     expect(growthPage).toContain(':show-goal="pointsCenterEnabled"');
   });
 

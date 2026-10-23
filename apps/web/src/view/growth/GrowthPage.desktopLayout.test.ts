@@ -17,12 +17,12 @@ describe('GrowthPage 宽屏桌面导航布局', () => {
   });
 
   it('宽屏把返回、标题和说明纳入同一个固定侧栏，紧凑布局仍显示顶部标题', () => {
-    expect(source).toMatch(/<header v-if="!useWideDesktopLayout" class="growth-hero">/);
+    expect(source).toMatch(/<header v-(?:else-)?if="!useWideDesktopLayout" class="growth-hero">/);
     expect(source).toMatch(
       /<aside v-if="useWideDesktopLayout" class="growth-desktop-sidebar">[\s\S]*?<header class="growth-hero growth-hero--sidebar">[\s\S]*?growth\.pageTitle[\s\S]*?growth\.pageSubtitle/,
     );
     expect(source).toMatch(/\.growth-desktop-sidebar\s*\{[\s\S]*?position:\s*static;[\s\S]*?max-height:\s*100%/);
-    expect(source).toContain(`:class="{ 'growth-page--wide': useWideDesktopLayout }"`);
+    expect(source).toContain("'growth-page--wide': useWideDesktopLayout");
     expect(source).toMatch(/\.growth-page--wide\s*\{[\s\S]*?overflow:\s*hidden;/);
     expect(source).toMatch(
       /\.growth-workspace--wide \.growth-main\s*\{[\s\S]*?height:\s*100%;[\s\S]*?overflow-y:\s*auto;/,
@@ -46,17 +46,12 @@ describe('GrowthPage 宽屏桌面导航布局', () => {
     );
   });
 
-  it('奖励页合并为四个入口并兼容旧深链', () => {
-    expect(source).toContain("const validRewardSections: RewardSection[] = ['shop', 'lottery', 'inventory', 'ledger']");
-    expect(source).toContain('const activeRewardSection = ref<RewardSection>(');
-    expect(source).toContain("hasRewardDeepLink ? (routeRewardSection as RewardSection) : 'ledger'");
-    expect(source).toMatch(
-      /const options:[\s\S]*?key: 'ledger'[\s\S]*?key: 'inventory'[\s\S]*?key: 'shop'[\s\S]*?key: 'lottery'/,
-    );
-    expect(source).toContain("replace(/^center$/, 'ledger')");
-    for (const legacyKey of ['shop', 'lottery', 'inventory', 'ledger']) {
-      expect(source).toContain(`'${legacyKey}'`);
-    }
+  it('奖励页归并为背包、兑换和抽奖，积分旧入口交由导航兼容层处理', () => {
+    expect(source).toContain('rewardSectionFromQuery(route.query)');
+    expect(source).toContain('inventoryPointsRoute(route.query)');
+    expect(source).toMatch(/const options:[\s\S]*?key: 'inventory'[\s\S]*?key: 'shop'[\s\S]*?key: 'lottery'/);
+    expect(source).not.toContain("{ key: 'ledger', label:");
+    expect(source).toContain('v-model:active-tab="inventoryTab"');
   });
 
   it('宽屏和紧凑桌面都使用资产与奖励全称，移动端保留短标签', () => {

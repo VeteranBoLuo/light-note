@@ -32,6 +32,7 @@
 </template>
 
 <script setup lang="ts">
+  import { getTodoFixedReminderTimes } from '@lightnote/shared/todo-reminder';
   import { computed } from 'vue';
   import { useI18n } from 'vue-i18n';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
@@ -51,12 +52,12 @@
 
   function setMode(mode: TodoSingleReminderMode) {
     if (mode === 'none') {
-      model.value = { version: 1, mode, channels: [] };
+      model.value = { ...model.value, mode, channels: [] };
       return;
     }
     if (mode === 'once') {
       model.value = {
-        version: 1,
+        ...model.value,
         mode,
         once: model.value.once || { type: 'at_due' },
         channels: model.value.channels.length ? model.value.channels : ['in_app'],
@@ -65,10 +66,11 @@
       return;
     }
     model.value = {
-      version: 1,
+      ...model.value,
       mode,
       repeat: model.value.repeat || {
         kind: 'interval',
+        ...(model.value.once?.type === 'fixed_at' ? { startAt: getTodoFixedReminderTimes(model.value.once)[0] } : {}),
         intervalMinutes: 1440,
         stop: { type: 'completion_or_due' },
       },

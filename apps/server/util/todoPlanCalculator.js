@@ -1,10 +1,12 @@
 import crypto from 'crypto';
+import { getTodoFixedReminderTimes, TODO_SINGLE_TASK_MAX_REMINDER_JOBS } from '@lightnote/shared/todo-reminder';
 import { Temporal } from '@js-temporal/polyfill';
+
+export { TODO_SINGLE_TASK_MAX_REMINDER_JOBS } from '@lightnote/shared/todo-reminder';
 
 export const TODO_PLAN_MAX_FINITE_OCCURRENCES = 366;
 export const TODO_PLAN_MAX_NUDGES_PER_INSTANCE = 20;
 export const TODO_PLAN_MAX_REMINDER_JOBS = 5_000;
-export const TODO_SINGLE_TASK_MAX_REMINDER_JOBS = 500;
 export const TODO_PLAN_MAX_ROLLING_BATCH = 200;
 export const TODO_PLAN_ROLLING_DAYS = 60;
 export const TODO_PLAN_ROLLING_MIN_OCCURRENCES = 8;
@@ -377,8 +379,19 @@ function normalizeSingleTaskReminder(input, timing, timezone) {
       once.offsetMinutes = offsetMinutes;
     }
     if (type === 'fixed_at') {
-      const fixed = parsePlainDateTime(onceRaw.fixedAt, '固定提醒时间');
-      once.fixedAt = sqlLocal(fixed.toZonedDateTime(timezone, { disambiguation: 'compatible' }));
+      if (onceRaw.fixedAts !== undefined && !Array.isArray(onceRaw.fixedAts)) {
+        throw planError('TODO_REMINDER_FIXED_TIMES_INVALID', '固定提醒时间列表无效');
+      }
+      const values = getTodoFixedReminderTimes(onceRaw);
+      if (!values.length || values.length > TODO_SINGLE_TASK_MAX_REMINDER_JOBS) {
+        throw planError('TODO_REMINDER_FIXED_TIMES_INVALID', `请设置 1 到 ${TODO_SINGLE_TASK_MAX_REMINDER_JOBS} 个固定提醒时间`);
+      }
+      const fixedAts = [...new Set(values.map((value) => {
+        const fixed = parsePlainDateTime(value, '固定提醒时间');
+        return sqlLocal(fixed.toZonedDateTime(timezone, { disambiguation: 'compatible' }));
+      }))].sort();
+      once.fixedAt = fixedAts[0];
+      if (fixedAts.length > 1) once.fixedAts = fixedAts;
     }
     return { version: 1, mode, once, channels, targetEmail, quietPolicy };
   }
@@ -670,8 +683,11 @@ function buildSingleOnceMoments(occurrence, reminder, timezone, warnings, nowIns
       minutes: once.offsetMinutes,
     });
   } else if (once.type === 'fixed_at') {
-    const local = parsePlainDateTime(once.fixedAt, '固定提醒时间');
-    instant = zonedFrom(local.toPlainDate(), local.toPlainTime(), timezone, warnings).toInstant();
+    return getTodoFixedReminderTimes(once).map((value, index) => {
+      const local = parsePlainDateTime(value, '固定提醒时间');
+      const fixedInstant = zonedFrom(local.toPlainDate(), local.toPlainTime(), timezone, warnings).toInstant();
+      return singleMoment(fixedInstant, timezone, nowInstant, index + 1);
+    });
   }
   return instant ? [singleMoment(instant, timezone, nowInstant, 1)] : [];
 }

@@ -20,6 +20,7 @@ const SENSITIVE_PAYLOAD_KEYS = new Set([
   'refreshtoken',
   'code',
   'verifycode',
+  'challenge',
   'secret',
   'apikey',
   'authorization',
@@ -67,9 +68,13 @@ export function sanitizeSensitivePayload(value, depth = 0, seen = new WeakSet())
 export function sanitizeLogUrl(value) {
   const raw = String(value || '').slice(0, MAX_LOG_TEXT_LENGTH);
   if (!raw) return '';
+  if (/^(?:\/api)?\/public-resources(?:\/|[?#]|$)/.test(raw)) return raw.split(/[?#]/, 1)[0];
   try {
     const isAbsolute = /^[a-z][a-z\d+.-]*:\/\//i.test(raw);
     const url = new URL(raw, 'https://log.invalid');
+    if (/^(?:\/api)?\/public-resources(?:\/|$)/.test(url.pathname)) {
+      url.search='';url.hash='';
+    }
     if (url.username || url.password) {
       url.username = '[REDACTED]';
       url.password = '';

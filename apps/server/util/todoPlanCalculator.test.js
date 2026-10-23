@@ -1032,3 +1032,35 @@ it('独立待办截止时刻可空：仅过去的开始时刻要求处理选择�
     expect(future.occurrenceCount).toBe(3);
   }
 });
+
+describe('多个固定日期时间提醒', () => {
+  function fixedPlan(fixedAts, channels = ['in_app']) {
+    return {
+      taskMode: 'single', title: '多次预约提醒',
+      timing: { timezone: 'Asia/Shanghai', anchorDate: null, startTime: null, dueTime: null },
+      plan: { type: 'once' }, reminder: { mode: 'none' },
+      singleTaskReminder: { version: 1, mode: 'once', once: { type: 'fixed_at', fixedAts }, channels, ...(channels.includes('email') ? { targetEmail: 'owner@example.com' } : {}) },
+    };
+  }
+  it('按分钟归一、排序、去重；每个日期生成独立序号，过去时刻跳过且不新增待办', () => {
+    const preview = calculateTodoPlan(fixedPlan(['2026-08-08T14:17', '2026-08-05T09:00', '2026-08-07 09:00:39', '2026-08-07T09:00']), { now: NOW });
+    expect(preview.occurrenceCount).toBe(1);
+    expect(preview.normalizedPlan.reminder.once).toEqual({ type: 'fixed_at', fixedAt: '2026-08-05 09:00:00', fixedAts: ['2026-08-05 09:00:00', '2026-08-07 09:00:00', '2026-08-08 14:17:00'] });
+    expect(preview.reminderMoments[0].moments.map(({ sequenceNo, deliverable }) => ({ sequenceNo, deliverable }))).toEqual([{ sequenceNo: 1, deliverable: false }, { sequenceNo: 2, deliverable: true }, { sequenceNo: 3, deliverable: true }]);
+    expect(preview.nextReminderAt).toBe('2026-08-07 09:00:00');
+    expect(preview.reminderMomentCount).toBe(3);
+    const roundTrip = calculateTodoPlan({ ...fixedPlan([]), singleTaskReminder: preview.normalizedPlan.reminder }, { now: NOW });
+    expect(roundTrip.previewHash).toBe(preview.previewHash);
+  });
+  it.each([[], [''], ['2026-08-07T09:00', ''], ['2026-02-30T09:00'], 'invalid', Array(501).fill('2026-08-07T09:00')])('拒绝空行、非法日期与无效列表 %#', (values) => {
+    expect(() => calculateTodoPlan(fixedPlan(values), { now: NOW })).toThrow();
+  });
+  it('多渠道分别计入投递总量上限，重复日期合并后单个仍兼容旧配置', () => {
+    const preview = calculateTodoPlan(fixedPlan(['2026-08-07T09:00', '2026-08-08T09:00'], ['in_app', 'email']), { now: NOW });
+    expect(preview.reminderJobCount).toBe(4);
+    const single = calculateTodoPlan(fixedPlan(['2026-08-07T09:00', '2026-08-07T09:00']), { now: NOW });
+    expect(single.normalizedPlan.reminder.once).toEqual({ type: 'fixed_at', fixedAt: '2026-08-07 09:00:00' });
+    const many = Array.from({ length: 251 }, (_, index) => `2026-08-07T${String(Math.floor(index / 60)).padStart(2, '0')}:${String(index % 60).padStart(2, '0')}`);
+    expect(() => calculateTodoPlan(fixedPlan(many, ['in_app', 'email']), { now: NOW })).toThrow(/上限/);
+  });
+});

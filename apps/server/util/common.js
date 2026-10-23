@@ -1,3 +1,5 @@
+import { formatDateTime } from './dateTime.js';
+import publicResourcesRouter from '../router/publicResources.js';
 import userRouter from '../router/user.js';
 import appRouter from '../router/app.js';
 import commonRouter from '../router/common.js';
@@ -62,16 +64,7 @@ export function L(req, zh, en) {
   return reqLang(req) === 'en-US' ? en : zh;
 }
 
-export const formatDateTime = function (date) {
-  const pad = (v) => v.toString().padStart(2, '0');
-  const year = date.getFullYear();
-  const month = pad(date.getMonth() + 1);
-  const day = pad(date.getDate());
-  const hours = pad(date.getHours());
-  const minutes = pad(date.getMinutes());
-  const seconds = pad(date.getSeconds());
-  return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
-};
+export { formatDateTime } from './dateTime.js';
 
 // 下划线转驼峰
 const camelCaseKeys = function (input) {
@@ -266,6 +259,7 @@ export const baseRouter = [
     path: '/community',
     router: communityRouter,
   },
+  { path: '/public-resources', router: publicResourcesRouter },
   {
     path: '/search',
     router: searchRouter,

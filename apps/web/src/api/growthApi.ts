@@ -56,6 +56,9 @@ export const buyShopItem = (payload: {
 
 // 背包(历史消耗品持有)+ 资产(积分/永久扩容/永久 AI 加油余额)总览
 export const getInventory = () => apiBaseGet('/api/growth/inventory');
+export const getInventoryAcquisitions = (
+  options: { limit?: number; cursor?: string | null; kind?: 'all' | 'points' | 'ai_pack' | 'card' | 'storage' } = {},
+) => apiBaseGet('/api/growth/inventory/acquisitions', options, { silent: true });
 
 // 使用一件历史背包消耗品(旧 AI 加油包会转入永久余额);补签卡走 useProtectCard
 export const useItemApi = (itemId: string) => apiBasePost('/api/growth/item/use', { itemId });
@@ -72,6 +75,9 @@ export const equipFrame = (frameId: string | null) => apiBasePost('/api/growth/e
 
 // 积分抽奖:状态(余额/成本/保底/奖池概率)+ 抽奖(times=1 单抽 / 10 十连)
 export const getLottery = () => apiBaseGet('/api/growth/lottery');
+export const getLotteryHistory = (
+  options: { limit?: number; cursor?: string | null; mode?: 'all' | 'free' | 'paid' } = {},
+) => apiBaseGet('/api/growth/lottery/history', options, { silent: true });
 export const drawLottery = (payload: {
   mode: 'free' | 'paid';
   times: 1 | 10;
@@ -317,11 +323,13 @@ export default {
   getShop,
   buyShopItem,
   getInventory,
+  getInventoryAcquisitions,
   useItemApi,
   equipTitle,
   equipFrame,
   equipBackground,
   getLottery,
+  getLotteryHistory,
   drawLottery,
   claimAchievement,
   getRecap,
