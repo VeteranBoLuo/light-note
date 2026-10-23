@@ -60,6 +60,7 @@ API 使用 `resultData(data, status, msg)` 信封，snake_case 响应键统一�
 - 管理员上下文使用短时 `X-Admin-Context`，所有路由在 `adminRoutePolicy.js` 显式声明；遗漏失败关闭。
 - `readonly` 只读；`maintain` 只允许可逆内容维护并抑制目标账号成长、转化和权益副作用。
 - Root 高风险操作使用 `ensureRootRole()` 并保留意图与终态审计。
+- 账号 IP 定位只在身份确认后异步补充展示元信息，不参与登录恢复成功与否；外部定位或回写失败保留原资料。代看、游客维护及 Root 指定其他账号的读取不更新目标账号 IP，迟到结果不能覆盖已变更的 IP 或停用、注销后的账号。
 
 ### 安全事件自动处置
 

@@ -13,7 +13,7 @@ import {
   reqLang,
 } from '../util/common.js';
 import { completeGrowthTask } from '../util/growthTaskCompletion.js';
-import request from '../http/request.js';
+import { refreshUserIpLocation } from '../util/services/userIpLocationService.js';
 import { validateQueryParams } from '../util/request.js';
 import { fetchGitHubApiJson, fetchGitHubTokenSafely, GitHubOAuthError } from '../util/githubOAuth.js';
 import { createNotification } from '../util/notification.js';
@@ -521,25 +521,6 @@ export const getUserInfo = async (req, res) => {
       res.send(resultData(null, 401, L(req, '用户不存在,请重新登录！', 'User not found. Please sign in again.')));
       return;
     }
-    // 没有储存ip或者ip地址改变，则更新用户ip相关信息
-    const clientIp = getClientIp(req);
-    // 管理员预览/游客维护时，请求 IP 属于真实管理员，不能覆盖到被预览账号。
-    if (!req.isAdminPreview && clientIp && (userRes[0].ip === null || userRes[0].ip !== clientIp)) {
-      const { data } = await request.get(
-        `https://restapi.amap.com/v3/ip?ip=${clientIp}&key=${process.env.AMAP_API_KEY}`,
-      );
-      const location = {
-        city: data.city ?? '接口错误，获取失败',
-        province: data.province ?? '接口错误，获取失败',
-        rectangle: data.rectangle ?? '接口错误，获取失败',
-      };
-      try {
-        await pool.query('update user set location=? , ip=? where id=?', [JSON.stringify(location), clientIp, id]);
-      } catch (e) {
-        console.error('地理信息配置失败:', e.message);
-        // 不发送响应，继续执行获取用户信息
-      }
-    }
     const result = await queryUserInfoById(id);
     if (!result) {
       res.send(resultData(null, 401, L(req, '用户不存在,请重新登录！', 'User not found. Please sign in again.')));
@@ -559,6 +540,10 @@ export const getUserInfo = async (req, res) => {
       );
       return;
     }
+    // 自己的账号才补充 IP 信息；代看、游客维护及 Root 指定其他账号的读取都不能改写目标账号。
+    if (id === req.user?.id && !req.isAdminPreview && !req.adminContext && !req.isVisitorWorkspace) {
+      void refreshUserIpLocation(result, getClientIp(req));
+    }
     const safeUser = sanitizeUser(result);
     safeUser.adminPreview = Boolean(req.isAdminPreview);
     safeUser.visitorWorkspace = Boolean(req.isVisitorWorkspace);
@@ -571,7 +556,14 @@ export const getUserInfo = async (req, res) => {
       res.send(resultData(safeUser));
     }
   } catch (e) {
-    res.send(resultData(null, 400, L(req, '客户端请求异常', 'Bad request: ') + e)); // 设置状态码为400
+    console.error('[user-info] read failed code=%s', stableAgentErrorCode(e));
+    res.send(
+      resultData(
+        null,
+        500,
+        L(req, '暂时无法读取账号信息，请稍后重试', 'Unable to load account information. Please try again later.'),
+      ),
+    );
   }
 };
 

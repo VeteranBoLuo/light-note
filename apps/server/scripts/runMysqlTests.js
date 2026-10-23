@@ -32,6 +32,7 @@ const suites = {
   'util/searchSeekPagination.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
   'util/searchRelevancePagination.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
   'util/loginPasswordState.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
+  'util/services/userIpLocationService.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
   'util/collectionForms/service.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
   'util/services/cloudFileRestore.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
   'util/dataExport/service.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
