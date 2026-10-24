@@ -4927,6 +4927,57 @@
         editor.nodeChanged?.();
       };
 
+      const exitTrailingRichMediaText = (event: KeyboardEvent) => {
+        if (
+          props.readonly ||
+          event.defaultPrevented ||
+          event.isComposing ||
+          event.shiftKey || event.ctrlKey || event.metaKey || event.altKey ||
+          !['ArrowRight', 'ArrowDown'].includes(event.key)
+        ) return false;
+        const range = editor.selection.getRng() as Range;
+        if (!range.collapsed) return false;
+        const body = editor.getBody() as HTMLElement;
+        const container = range.endContainer;
+        const element = container.nodeType === 1 ? (container as Element) : container.parentElement;
+        const caption = element?.closest('.ln-media-text__content');
+        const block = caption?.closest<HTMLElement>('section.ln-media-text');
+        if (!block || !body.contains(block) || !editor.dom.isEditable(caption)) return false;
+
+        // 仅在图注和整篇正文都已到末尾时接管；空段落也是真实内容，保留原生移动。
+        const isEmptyBoundaryNode = (node: Node) =>
+          node.nodeType === 8 ||
+          (node.nodeType === 3 && !node.textContent?.trim()) ||
+          (node.nodeType === 1 && (node as Element).hasAttribute('data-mce-bogus')) ||
+          (node.nodeName === 'BR' && node.parentNode?.childNodes.length === 1);
+        if (container.nodeType === 3 && range.endOffset < (container.textContent || '').length) return false;
+        if (
+          container.nodeType === 1 &&
+          Array.from(container.childNodes).slice(range.endOffset).some((node) => !isEmptyBoundaryNode(node))
+        ) {
+          return false;
+        }
+        let current: Node | null = container;
+        while (current && current !== body) {
+          for (let next = current.nextSibling; next; next = next.nextSibling) {
+            if (!isEmptyBoundaryNode(next)) return false;
+          }
+          current = current.parentNode;
+        }
+        if (current !== body) return false;
+
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        editor.undoManager.transact(() => {
+          const paragraph = createRichImageCaretParagraph();
+          block.after(paragraph);
+          focusRichImageCaret(paragraph);
+        });
+        closeRichMediaTextToolbar();
+        notifyRichMediaTextMutation(editor);
+        return true;
+      };
+
       const insertParagraphAfterSelectedRichImage = () => {
         const image = resolveSelectedRichImage();
         if (!image || props.readonly) return;
@@ -5390,6 +5441,7 @@
             }
             return;
           }
+          if (!inlineMentionVisible.value && exitTrailingRichMediaText(event)) return;
           if (!inlineMentionVisible.value || event.isComposing) return;
           if (event.key === 'ArrowDown') {
             event.preventDefault();
