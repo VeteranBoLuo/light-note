@@ -119,6 +119,26 @@ function stripTransientAttributes(element: Element) {
   });
 }
 
+/** 兼容旧版列表/格式命令把 section 改为 li、div 等标签后留下的图文块。 */
+export function restoreRichMediaTextBlockTags(root: HTMLElement) {
+  root.querySelectorAll<HTMLElement>('.ln-media-text').forEach((element) => {
+    if (element.tagName === 'SECTION' || !directChildrenByClass(element, 'ln-media-text__item').length) return;
+    const block = element.ownerDocument.createElement('section');
+    for (const attribute of Array.from(element.attributes)) {
+      if (attribute.name !== 'value') block.setAttribute(attribute.name, attribute.value);
+    }
+    block.append(...Array.from(element.childNodes));
+    if (element.tagName === 'LI') {
+      // 暂留原 li，让列表拆分按原 start/reversed/value 计算后续编号。
+      element.classList.remove('ln-media-text');
+      element.removeAttribute('id');
+      element.append(block);
+    } else {
+      element.replaceWith(block);
+    }
+  });
+}
+
 /** 拆开图文外层的列表，移动原节点以保留图注、链接和媒体；图注内部的列表不受影响。 */
 export function liftRichMediaTextOutOfLists(block: HTMLElement, boundary?: HTMLElement) {
   if (boundary && !boundary.contains(block)) return false;
@@ -187,6 +207,7 @@ export function liftRichMediaTextOutOfLists(block: HTMLElement, boundary?: HTMLE
 export function normalizeRichMediaTextHtml(html: string) {
   if (!html || typeof DOMParser === 'undefined') return html || '';
   const doc = new DOMParser().parseFromString(`<body>${html}</body>`, 'text/html');
+  restoreRichMediaTextBlockTags(doc.body);
   const blocks = Array.from(doc.body.querySelectorAll<HTMLElement>('section.ln-media-text'));
   if (!blocks.length) return html;
 

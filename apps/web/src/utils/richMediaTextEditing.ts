@@ -1,5 +1,5 @@
 import type { Editor } from 'tinymce';
-import { liftRichMediaTextOutOfLists } from './richMediaText';
+import { liftRichMediaTextOutOfLists, restoreRichMediaTextBlockTags } from './richMediaText';
 
 /** 编辑器内的结构约束和块后光标。临时落点只使用 DOM 选区和可清理属性，不进入正文。 */
 export function bindRichMediaTextEditing(
@@ -145,6 +145,7 @@ export function bindRichMediaTextEditing(
   const normalizeLists = () => {
     const body = editor.getBody();
     if (!body || options.isReadonly()) return;
+    restoreRichMediaTextBlockTags(body);
     const blocks = body.querySelectorAll<HTMLElement>('li section.ln-media-text');
     if (!blocks.length) return;
     const range = editor.selection.getRng();
