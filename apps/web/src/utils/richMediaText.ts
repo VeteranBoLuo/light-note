@@ -105,6 +105,18 @@ function directChildrenByClass(parent: Element, className: string) {
   );
 }
 
+/** 原生删除图片时可能连空 media 容器一起清理；只补回图片位，不触碰图注。 */
+export function ensureRichMediaTextMedia(item: HTMLElement) {
+  const existing = directChildrenByClass(item, 'ln-media-text__media')[0];
+  if (existing) return existing;
+  const caption = directChildrenByClass(item, 'ln-media-text__content')[0];
+  if (!caption) return null;
+  const media = item.ownerDocument.createElement('div');
+  media.className = 'ln-media-text__media';
+  item.insertBefore(media, caption);
+  return media;
+}
+
 function stripTransientAttributes(element: Element) {
   Array.from(element.attributes).forEach((attribute) => {
     if (
@@ -207,6 +219,7 @@ export function liftRichMediaTextOutOfLists(block: HTMLElement, boundary?: HTMLE
 export function normalizeRichMediaTextHtml(html: string) {
   if (!html || typeof DOMParser === 'undefined') return html || '';
   const doc = new DOMParser().parseFromString(`<body>${html}</body>`, 'text/html');
+  doc.body.querySelectorAll('.ln-media-text__media [data-ln-media-image-placeholder]').forEach((node) => node.remove());
   restoreRichMediaTextBlockTags(doc.body);
   const blocks = Array.from(doc.body.querySelectorAll<HTMLElement>('section.ln-media-text'));
   if (!blocks.length) return html;
@@ -225,7 +238,7 @@ export function normalizeRichMediaTextHtml(html: string) {
 
     directChildrenByClass(block, 'ln-media-text__item').forEach((item) => {
       stripTransientAttributes(item);
-      const media = directChildrenByClass(item, 'ln-media-text__media')[0];
+      const media = ensureRichMediaTextMedia(item);
       const caption = directChildrenByClass(item, 'ln-media-text__content')[0];
       if (media) stripTransientAttributes(media);
       if (caption) stripTransientAttributes(caption);

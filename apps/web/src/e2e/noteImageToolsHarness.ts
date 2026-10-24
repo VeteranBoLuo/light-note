@@ -18,13 +18,20 @@ await setLocale(locale);
 document.documentElement.dataset.theme = theme;
 document.documentElement.lang = locale;
 document.documentElement.classList.toggle('light-note-mobile-rendering', params.get('renderProfile') === 'mobile');
-request.defaults.adapter = async (config) => ({
-  data: { status: 200, data: {}, msg: '' },
-  status: 200,
-  statusText: 'OK',
-  headers: {},
-  config,
-});
+let imageUploadAttempts = 0;
+request.defaults.adapter = async (config) => {
+  let data: Record<string, unknown> = {};
+  if (params.has('serverImages') && config.url?.endsWith('/api/note/uploadImage')) {
+    imageUploadAttempts++;
+    config.onUploadProgress?.({ loaded: 1, total: 2, bytes: 1, lengthComputable: true, upload: true, progress: 0.5 });
+    const delay = Math.min(2000, Math.max(0, Number(params.get('imageUploadDelay')) || 0));
+    if (delay) await new Promise((resolve) => setTimeout(resolve, delay));
+    if (params.get('imageUploadFailure') === 'once' && imageUploadAttempts === 1)
+      throw new Error('Fixture image upload failure');
+    data = { url: '/brand-scenes/autumn-vista.webp' };
+  }
+  return { data: { status: 200, data, msg: '' }, status: 200, statusText: 'OK', headers: {}, config };
+};
 
 const router = createRouter({
   history: createMemoryHistory(),
@@ -71,7 +78,7 @@ const app = createApp({
               content.value = value;
             },
             readonly: params.has('readonly'),
-            imageUploadMode: 'base64',
+            imageUploadMode: params.has('serverImages') ? 'api' : 'base64',
             context: 'template',
             type: 'html',
           }),

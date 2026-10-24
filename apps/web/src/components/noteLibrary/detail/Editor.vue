@@ -171,6 +171,19 @@
         </div>
       </div>
     </template>
+    <RichMediaTextImagePlaceholders
+      v-if="currentType === 'html'"
+      :editor="editorRef"
+      :readonly="readonly"
+      :busy="richMediaTextUploading"
+      :busy-item="
+        richMediaTextUploading && richMediaTextUploadIntent?.kind === 'fill' ? richMediaTextUploadIntent.item : null
+      "
+      :failed-item="richMediaTextImageFailedItem"
+      :progress="richMediaTextUploadProgress"
+      @pick="openEmptyRichMediaTextImage"
+      @paste="pasteEmptyRichMediaTextImage"
+    />
     <BUpload
       v-if="currentType === 'html'"
       ref="richImageInputRef"
@@ -247,6 +260,10 @@
             <BButton size="small" :disabled="richMediaTextUploading" @click="addRichMediaTextItem">
               <SvgIcon :src="icon.noteDetail.toolbar.insert" size="15" aria-hidden="true" />
               {{ t('noteDetail.editor.mediaTextAddGroup') }}
+            </BButton>
+            <BButton size="small" :disabled="richMediaTextUploading" @click="deleteRichMediaTextImage">
+              <SvgIcon :src="icon.noteDetail.imageToolbar.delete" size="15" aria-hidden="true" />
+              {{ t('noteDetail.editor.imageDelete') }}
             </BButton>
             <BButton size="small" type="danger" @click="deleteRichMediaTextItem">
               <SvgIcon :src="icon.noteDetail.imageToolbar.delete" size="15" aria-hidden="true" />
@@ -749,6 +766,7 @@
   import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
   import BUpload from '@/components/base/BasicComponents/BUpload.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
+  import RichMediaTextImagePlaceholders from './RichMediaTextImagePlaceholders.vue';
   import EditorFindBar, { type EditorFindBarExpose } from './EditorFindBar.vue';
   import EditorToolbarV2, { type EditorToolbarAction } from './EditorToolbarV2.vue';
   import NoteDetailLoadingState from './NoteDetailLoadingState.vue';
@@ -1181,9 +1199,12 @@
   type RichMediaTextUploadIntent =
     | ({ kind: 'insert' } & RichMediaTextUploadContext)
     | ({ kind: 'add'; block: HTMLElement; item: HTMLElement } & RichMediaTextUploadContext)
+    | ({ kind: 'fill'; block: HTMLElement; item: HTMLElement } & RichMediaTextUploadContext)
     | ({ kind: 'replace'; block: HTMLElement; item: HTMLElement } & RichMediaTextUploadContext);
   const richMediaTextImageInputRef = ref<{ open: () => void } | null>(null);
   const richMediaTextUploading = ref(false);
+  const richMediaTextUploadProgress = ref<number | null>(null);
+  const richMediaTextImageFailedItem = shallowRef<HTMLElement | null>(null);
   const richMediaTextUploadIntent = shallowRef<RichMediaTextUploadIntent | null>(null);
   const richMediaTextToolbarVisible = ref(false);
   const richMediaTextAnchorStyle = ref<Record<string, string>>({});
@@ -2800,7 +2821,12 @@
     return noteId || '';
   }
 
-  async function uploadNoteImageFile(file: Blob, fileName: string, preparedNoteId?: string) {
+  async function uploadNoteImageFile(
+    file: Blob,
+    fileName: string,
+    preparedNoteId?: string,
+    onProgress?: (percent: number) => void,
+  ) {
     let noteId = preparedNoteId ?? props.noteId;
     if (preparedNoteId === undefined && !noteId && typeof props.ensureNoteId === 'function') {
       noteId = await (props.ensureNoteId as () => Promise<string>)();
@@ -2809,6 +2835,9 @@
     formData.append('file', file, fileName);
     formData.append('noteId', noteId || '');
     const res = await apiBasePost('/api/note/uploadImage', formData, {
+      onUploadProgress: (event) => {
+        if (event.total) onProgress?.(Math.min(99, Math.round((event.loaded / event.total) * 100)));
+      },
       headers: {
         'Content-Type': 'multipart/form-data',
       },
@@ -2826,7 +2855,7 @@
       .trim();
   }
 
-  function getPastedMarkdownImage(event: ClipboardEvent): File | null {
+  function getPastedImageFile(event: ClipboardEvent): File | null {
     const files = Array.from(event.clipboardData?.files || []);
     const directImage = files.find((file) => file.type.startsWith('image/'));
     if (directImage) return directImage;
@@ -2835,7 +2864,7 @@
     return imageItem?.getAsFile() || null;
   }
 
-  function readImageAsDataUrl(file: File): Promise<string> {
+  function readImageAsDataUrl(file: File, onProgress?: (percent: number) => void): Promise<string> {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = () => {
@@ -2844,6 +2873,10 @@
         else reject(new Error('INVALID_IMAGE_DATA_URL'));
       };
       reader.onerror = () => reject(reader.error || new Error('IMAGE_READ_FAILED'));
+      reader.onprogress = (event) => {
+        if (event.lengthComputable && event.total)
+          onProgress?.(Math.min(99, Math.round((event.loaded / event.total) * 100)));
+      };
       reader.readAsDataURL(file);
     });
   }
@@ -2856,7 +2889,7 @@
 
   function onMarkdownPaste(event: ClipboardEvent) {
     if (props.readonly) return;
-    const file = getPastedMarkdownImage(event);
+    const file = getPastedImageFile(event);
     if (!file) return;
     // 只拦截图片粘贴；文本与普通 Markdown 内容仍走浏览器默认行为。
     event.preventDefault();
@@ -3211,6 +3244,39 @@
     richMediaTextImageInputRef.value?.open();
   }
 
+  function openEmptyRichMediaTextImage(block: HTMLElement, item: HTMLElement) {
+    const target = getLiveRichMediaTextTarget(block, item);
+    if (props.readonly || !target || richMediaTextUploading.value) return;
+    richMediaTextUploadIntent.value = { kind: 'fill', ...target, editor: editorRef.value, noteId: props.noteId || '' };
+    richMediaTextImageFailedItem.value = null;
+    richMediaTextImageInputRef.value?.open();
+  }
+
+  function pasteEmptyRichMediaTextImage(event: ClipboardEvent, block: HTMLElement, item: HTMLElement) {
+    const target = getLiveRichMediaTextTarget(block, item);
+    if (props.readonly || !target || richMediaTextUploading.value) return;
+    const file = getPastedImageFile(event);
+    if (!file) return;
+    richMediaTextUploadIntent.value = { kind: 'fill', ...target, editor: editorRef.value, noteId: props.noteId || '' };
+    void onRichMediaTextImagePicked([file]);
+  }
+
+  function deleteRichMediaTextImage() {
+    const editor = editorRef.value;
+    const target = getLiveRichMediaTextTarget(richMediaTextBlock.value, richMediaTextItem.value);
+    if (!editor || props.readonly || !target || richMediaTextUploading.value) return;
+    const image = target.item.querySelector<HTMLImageElement>('.ln-media-text__media img');
+    if (!image) return;
+    closeRichMediaTextToolbar();
+    editor.undoManager.transact(() => {
+      const link = image.closest('a');
+      if (link && !link.textContent?.trim() && link.querySelectorAll('img').length === 1) link.remove();
+      else image.remove();
+      focusRichMediaTextCaption(editor, target.item);
+    });
+    notifyRichMediaTextMutation(editor);
+  }
+
   function previewSelectedRichMediaTextImage() {
     const target = getLiveRichMediaTextTarget(richMediaTextBlock.value, richMediaTextItem.value);
     const image = target?.item.querySelector<HTMLImageElement>('.ln-media-text__media img');
@@ -3274,18 +3340,30 @@
     const intent = richMediaTextUploadIntent.value;
     if (!file || !intent || richMediaTextUploading.value) return;
     richMediaTextUploading.value = true;
+    richMediaTextUploadProgress.value = 0;
+    richMediaTextImageFailedItem.value = null;
     try {
+      const reportProgress = (percent: number) => {
+        richMediaTextUploadProgress.value = percent;
+      };
       const imageUrl =
         props.imageUploadMode === 'base64'
-          ? await readImageAsDataUrl(file)
-          : await uploadNoteImageFile(file, file.name || 'note-image.png');
+          ? await readImageAsDataUrl(file, reportProgress)
+          : await uploadNoteImageFile(file, file.name || 'note-image.png', undefined, reportProgress);
       const editor = editorRef.value;
       const body = editor?.getBody?.() as HTMLElement | null;
-      if (!editor || !body || editor !== intent.editor || (intent.noteId && intent.noteId !== props.noteId)) {
+      if (
+        props.readonly || !editor || !body || editor !== intent.editor ||
+        (intent.noteId && intent.noteId !== props.noteId)
+      ) {
         message.warning(t('noteDetail.editor.mediaTextTargetChanged'));
         return;
       }
       const imageAlt = richMediaTextImageAlt(file.name);
+      const active = editor.getDoc().activeElement as Element | null;
+      const focusFilledSlot = Boolean(
+        active?.closest('[data-ln-media-image-placeholder]') || active === editor.getDoc().body,
+      );
       let targetBlock: HTMLElement | null = null;
       let targetItem: HTMLElement | null = null;
 
@@ -3310,17 +3388,28 @@
           return;
         }
         targetBlock = liveTarget.block;
-        if (intent.kind === 'replace') {
+        if (intent.kind === 'replace' || intent.kind === 'fill') {
           targetItem = liveTarget.item;
-          const image = targetItem.querySelector<HTMLImageElement>('.ln-media-text__media img');
-          if (!image) throw new Error('RICH_MEDIA_TEXT_IMAGE_MISSING');
+          const media = targetItem.querySelector<HTMLElement>('.ln-media-text__media');
+          if (!media) throw new Error('RICH_MEDIA_TEXT_IMAGE_MISSING');
+          let image = media.querySelector<HTMLImageElement>('img');
+          if (
+            intent.kind === 'fill' &&
+            Array.from(media.querySelectorAll('img')).some((candidate) => candidate.getAttribute('src')?.trim())
+          ) {
+            message.warning(t('noteDetail.editor.mediaTextTargetChanged'));
+            return;
+          }
+          image ||= editor.getDoc().createElement('img') as HTMLImageElement;
           editor.undoManager?.transact(() => {
-            image.setAttribute('src', imageUrl);
-            image.setAttribute('alt', imageAlt);
-            image.removeAttribute('style');
-            image.removeAttribute('width');
-            image.removeAttribute('height');
-            image.removeAttribute('data-ln-size');
+            media.removeAttribute('data-mce-bogus');
+            if (!image!.parentElement) media.appendChild(image!);
+            image!.setAttribute('src', imageUrl);
+            image!.setAttribute('alt', imageAlt);
+            image!.removeAttribute('style');
+            image!.removeAttribute('width');
+            image!.removeAttribute('height');
+            image!.removeAttribute('data-ln-size');
           });
         } else {
           const holder = editor.getDoc().createElement('div');
@@ -3334,12 +3423,23 @@
       if (!targetBlock || !targetItem) throw new Error('RICH_MEDIA_TEXT_INSERT_FAILED');
       decorateRichMediaTextCaptions(editor);
       notifyRichMediaTextMutation(editor);
-      focusRichMediaTextCaption(editor, targetItem);
-      void nextTick().then(() => openRichMediaTextToolbar(targetBlock as HTMLElement, targetItem as HTMLElement));
+      if (intent.kind !== 'fill') {
+        focusRichMediaTextCaption(editor, targetItem);
+        void nextTick().then(() => openRichMediaTextToolbar(targetBlock as HTMLElement, targetItem as HTMLElement));
+      } else if (focusFilledSlot) {
+        focusRichMediaTextCaption(editor, targetItem);
+      }
     } catch {
+      if (
+        intent.kind === 'fill' && editorRef.value === intent.editor &&
+        getLiveRichMediaTextTarget(intent.block, intent.item)
+      ) {
+        richMediaTextImageFailedItem.value = intent.item;
+      }
       message.warning(t('note.uploadFailed'));
     } finally {
       richMediaTextUploading.value = false;
+      richMediaTextUploadProgress.value = null;
       richMediaTextUploadIntent.value = null;
     }
   }
@@ -5386,6 +5486,7 @@
         }
         setSelectedMermaidFigure(null);
         closeRichMediaTextToolbar();
+        richMediaTextImageFailedItem.value = null;
         unbindMermaidEditRequest();
         unbindRichImageNativeMenuGuard();
       });

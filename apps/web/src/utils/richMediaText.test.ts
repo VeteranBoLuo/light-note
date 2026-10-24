@@ -160,6 +160,31 @@ describe('richMediaText', () => {
     expect(holder.querySelector('[data-ln-media-after-caret]')).toBeNull();
   });
 
+  it('restores an absent image container without changing caption formatting or lists', () => {
+    const source =
+      '<section class="ln-media-text"><figure class="ln-media-text__item"><figcaption class="ln-media-text__content"><p>原文<strong>加粗</strong><a href="/link">链接</a></p><ul><li>列表</li></ul></figcaption></figure></section>';
+    const normalized = normalizeRichMediaTextHtml(source);
+    const holder = parse(normalized);
+    expect(holder.querySelector('.ln-media-text__media')?.innerHTML).toBe('');
+    expect(holder.querySelector('figcaption')?.innerHTML).toBe(parse(source).querySelector('figcaption')?.innerHTML);
+    expect(normalizeRichMediaTextHtml(normalized)).toBe(normalized);
+  });
+
+  it('never serializes the temporary empty-image button or upload progress into content', () => {
+    const source = mediaBlock.replace(
+      '<a href="/original"><img src="/a.png" alt="原图"></a>',
+      '<div data-ln-media-image-placeholder="true" data-mce-bogus="all" contenteditable="false"><button>点击添加图片</button><div role="progressbar">50%</div></div>',
+    );
+    const normalized = normalizeRichMediaTextHtml(source);
+    expect(normalized).not.toContain('点击添加图片');
+    expect(normalized).not.toContain('progressbar');
+    expect(normalized).not.toContain('data-ln-media-image-placeholder');
+    expect(parse(normalized).querySelector('figcaption')?.innerHTML).toBe(
+      parse(mediaBlock).querySelector('figcaption')?.innerHTML,
+    );
+    expect(parse(normalized).querySelector('.ln-media-text__media')?.innerHTML).toBe('');
+  });
+
   it('creates one image paired with one editable caption', () => {
     const html = createRichMediaTextBlockHtml('https://example.com/a.png?x=1&y=2', '窗户 "主卧"');
 
