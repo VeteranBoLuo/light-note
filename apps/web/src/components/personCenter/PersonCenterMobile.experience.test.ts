@@ -58,11 +58,11 @@ describe('mobile personal center experience', () => {
     expect(personCenterSource).toContain('class="profile-card__edit" @click="goToProfileModule(\'/myInfo\')"');
   });
 
-  it('shows only the account email in the profile summary and keeps role labels inside profile editing', () => {
+  it('shows the account email in the profile summary without a separate account role row in editing', () => {
     expect(personCenterSource).toContain('<span v-if="user.email">{{ user.email }}</span>');
     expect(personCenterSource).not.toContain('{{ roleName }}');
     expect(myInfoSource).toContain('<ProfileEditorForm');
-    expect(desktopMyInfoSource).toContain('resolveAccountRoleLabelKey(user.role, user.id)');
+    expect(desktopMyInfoSource).not.toContain('resolveAccountRoleLabelKey(user.role, user.id)');
   });
 
   it('keeps co-build visible in both desktop and mobile personal centers for visitors', () => {
@@ -805,8 +805,7 @@ describe('mobile personal center experience', () => {
     expect(desktopMyInfoSource).toContain("'/growth?section=' + destination");
   });
 
-  it('keeps paid-frame prices visible after ownership and uses a wider desktop achievement layout', () => {
-    expect(pointsShopSource).toMatch(/v-else class="ps-purchase-meta"[\s\S]*?\{\{ it\.cost \}\}/);
+  it('shows achievement-frame requirements and uses a wider desktop achievement layout', () => {
     expect(pointsShopSource).toContain("t('growth.frameAchievementConditionWithLevel'");
     expect(pointsShopSource).toContain("t('growth.frameAchievementLevelProgress'");
     expect(achievementWallSource).toContain('grid-template-columns: repeat(auto-fill, minmax(220px, 1fr))');

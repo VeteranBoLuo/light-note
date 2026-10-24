@@ -265,7 +265,9 @@ describe('长连签里程碑补签卡发放', () => {
       const result = await checkin('user-1', { userRole: 'user', calendar: accountCalendar('20261026') });
       expect(result.ok).toBe(true);
       if (firstHit) {
-        expect(grantItem).toHaveBeenCalledExactlyOnceWith(conn, 'user-1', 'makeup_card', 1);
+        expect(grantItem).toHaveBeenCalledExactlyOnceWith(conn, 'user-1', 'makeup_card', 1, {
+          sourceType: 'streak_milestone', sourceRef: String(days),
+        });
         expect(result.milestone).toMatchObject({ days, cards: 1 });
       } else {
         expect(grantItem).not.toHaveBeenCalled();
@@ -875,6 +877,8 @@ describe('后台成长调整的升级通知', () => {
       'UPDATE user_growth SET exp = ?, level = ?, streak_protect_cards = ? WHERE user_id = ?',
       [490, 1, 99, 'user-3'],
     );
+    const acquisition = connection.query.mock.calls.find(([sql]) => String(sql).includes("'asset_grant'"));
+    expect(JSON.parse(acquisition[1][2])).toMatchObject({ assetType:'makeup_card',assetAmount:99,sourceType:'admin' });
   });
 });
 

@@ -77,6 +77,12 @@ ssh -i "$KEY" "$HOST" "cd '$REMOTE' && '$REMOTE_NODE' scripts/ensureAdminAsyncJo
 echo "📨  幂等初始化华为发送记录与送达回执 Schema…"
 ssh -i "$KEY" "$HOST" "cd '$REMOTE' && '$REMOTE_NODE' scripts/ensureHuaweiPushDeliverySchema.js"
 
+echo "🔎  显式核验并安装公开资源加法结构…"
+ssh -i "$KEY" "$HOST" "cd '$REMOTE' && '$REMOTE_NODE' scripts/ensurePublicResourcesSchema.js"
+
+echo "🔎  显式安装邮箱健康加法结构与邮件查询索引…"
+ssh -i "$KEY" "$HOST" "cd '$REMOTE' && '$REMOTE_NODE' scripts/ensureAccountEmailHealthSchema.js"
+
 echo "🔎  执行只读 Schema 发布门禁…"
 ssh -i "$KEY" "$HOST" "cd '$REMOTE' && '$REMOTE_NODE' scripts/checkSchemaAssertions.js"
 

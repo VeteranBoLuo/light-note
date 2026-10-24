@@ -113,7 +113,8 @@ export function useDailyBrief(options: {
       }
       if (sequence !== generation) return;
       apply(next);
-      confirmedCurrent.value = manual && next.status === 'ready' && next.stale === false;
+      confirmedCurrent.value =
+        manual && next.status === 'ready' && next.stale === false && next.brief?.adviceStatus !== 'failed';
     } catch (error: any) {
       if (sequence !== generation) return;
       errorCode.value = error?.response?.data?.data?.code || error?.code || 'DAILY_BRIEF_UNAVAILABLE';
@@ -140,6 +141,11 @@ export function useDailyBrief(options: {
     if (inFlight) return inFlight;
     inFlight = execute(manual, generation);
     return inFlight;
+  }
+  function refreshAfterChange(): Promise<void> {
+    const sequence = generation;
+    // 完成/延期等写后刷新不能被已在途的旧事实检查吞掉；同一批写后请求仍合并。
+    return inFlight ? inFlight.then(() => (sequence === generation ? refresh() : undefined)) : refresh();
   }
   function handleVisibility() {
     if (!visible()) clearTimer();
@@ -186,6 +192,7 @@ export function useDailyBrief(options: {
     errorCode,
     confirmedCurrent,
     refresh,
+    refreshAfterChange,
     update: () => (passive() ? Promise.resolve() : refresh(true)),
   };
 }

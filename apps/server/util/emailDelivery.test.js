@@ -92,4 +92,9 @@ describe('sendTrackedEmail', () => {
     expect(db.query.mock.calls[0][1][1]).toBe(500);
     expect(result).toEqual({ deleted: 500, backlogPossible: true, retentionDays: 180 });
   });
+  it('仅将收件人阶段的明确不存在退信保存为可供月检使用的证据', async () => {
+    transport.sendMail.mockRejectedValue(Object.assign(new Error('550 5.1.1 No such user'), { code: 'EENVELOPE', command: 'RCPT TO', responseCode: 550, response: '550 5.1.1 No such user' }));
+    await expect(sendTrackedEmail({ emailType: 'verification', recipient: 'person@example.com', subject: 'test' }, { db, transport })).rejects.toThrow();
+    expect(db.query.mock.calls[1][1][0]).toBe('EMAIL_MAILBOX_NOT_FOUND');
+  });
 });

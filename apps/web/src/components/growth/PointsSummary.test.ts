@@ -2,6 +2,8 @@ import { createApp, nextTick } from 'vue';
 import { createI18n } from 'vue-i18n';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import zh from '@/i18n/locales/zh-CN';
+vi.mock('@/components/base/SvgIcon/src/SvgIcon.vue', () => ({ default: { render: () => null } }));
+
 const get = vi.hoisted(() => vi.fn());
 vi.mock('@/api/growthApi', () => ({ default: { getPointsSummary: get } }));
 import PointsSummary from './PointsSummary.vue';
@@ -21,10 +23,10 @@ async function flush() {
   await Promise.resolve();
   await nextTick();
 }
-async function mount() {
+async function mount(compact = false) {
   host = document.createElement('div');
   document.body.append(host);
-  app = createApp(PointsSummary);
+  app = createApp(PointsSummary, { compact });
   app.use(createI18n({ legacy: false, locale: 'zh-CN', messages: { 'zh-CN': zh } }));
   app.mount(host);
   await flush();
@@ -38,6 +40,22 @@ afterEach(() => {
   host?.remove();
 });
 describe('积分收支摘要', () => {
+  it('背包紧凑摘要保留收支、规则与分析，不重复余额和兑换入口', async () => {
+    get.mockResolvedValue({ status: 200, data });
+    await mount(true);
+    expect(host.querySelector('.balance')).toBeNull();
+    expect(host.querySelector('.summary-period')?.textContent).toBe('近 28 天');
+    expect(host.querySelector('.totals .income')?.textContent).toBe('+900');
+    expect(host.querySelector('.totals .expense')?.textContent).toBe('-140');
+    click('收支分析');
+    await flush();
+    expect(host.querySelector('.source-groups')).not.toBeNull();
+    click('积分规则');
+    await flush();
+    expect(host.querySelector('.source-groups')).toBeNull();
+    expect(host.querySelector('.rules')).not.toBeNull();
+    expect(get).toHaveBeenCalledTimes(1);
+  });
   it('优先显示完整收入，同一来源的收入和支出可分别查看，展开不重复查询', async () => {
     get.mockResolvedValue({ status: 200, data });
     await mount();
@@ -51,6 +69,41 @@ describe('积分收支摘要', () => {
     click('积分规则');
     await flush();
     expect(host.querySelector('.source-groups')).toBeNull();
+    expect([...host.querySelectorAll('.rules dd')].map((row) => row.textContent?.trim())).toEqual([
+      '—',
+      '—',
+      '—',
+      zh.growth.pointsCenterRuleUncertain,
+    ]);
+    expect(get).toHaveBeenCalledTimes(1);
+  });
+  it.each([
+    { name: 'C8', daily: [5, 10], weekly: 120 },
+    { name: '日周过渡周期', daily: [5, 10], weekly: 270 },
+    { name: '旧周期', daily: [15, 25], weekly: 270 },
+  ])('$name 的积分说明按接口当期奖励与门槛展示', async ({ daily, weekly }) => {
+    get.mockResolvedValue({
+      status: 200,
+      data: {
+        ...data,
+        earningRules: {
+          checkin: { base: 15, maximum: 20 },
+          daily: daily.map((points, index) => ({ required: index + 2, points })),
+          weekly: [{ reward: weekly - 10 }, { reward: 10 }],
+        },
+      },
+    });
+    await mount();
+    click('积分规则');
+    await flush();
+    const rules = [...host.querySelectorAll('.rules > div')];
+    expect(rules[0].textContent).toContain('15–20');
+    expect(rules[1].querySelector('dt')?.textContent).toBe('每日任务（分阶段领取）');
+    expect([...rules[1].querySelectorAll('.rule-stage')].map((row) => row.textContent)).toEqual([
+      `完成 2 项：+${daily[0]} 积分`,
+      `完成 3 项：+${daily[1]} 积分`,
+    ]);
+    expect(rules[2].querySelector('dd')?.textContent).toBe(String(weekly));
     expect(get).toHaveBeenCalledTimes(1);
   });
   it.each([

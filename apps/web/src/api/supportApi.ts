@@ -44,8 +44,8 @@ export interface AfdianSupportOrder {
 }
 
 export type SupportPackageCategory = 'ai' | 'storage' | 'combo';
-export type FirstPurchaseStatus = 'available' | 'used' | 'login_required';
-export type SupportFirstPurchaseScope = 'ai_account' | 'sku';
+export type FirstPurchaseStatus = 'available' | 'used' | 'login_required' | 'not_applicable';
+export type SupportFirstPurchaseScope = 'ai_account' | 'sku' | 'none';
 
 export interface SupportBenefit {
   aiTokens: number;
@@ -172,7 +172,7 @@ export function createLocalSupportCatalogPreview(): SupportCatalog {
       base: { ...item.base },
       firstPurchase: { ...item.firstPurchase },
       comboSavings: item.comboSavings,
-      firstPurchaseStatus: 'login_required',
+      firstPurchaseStatus: item.firstPurchaseScope === 'none' ? 'not_applicable' : 'login_required',
     })),
     campaigns: [],
   };
@@ -185,7 +185,8 @@ export async function getSupportCatalog({
     const response = await apiBaseGet('/api/support/catalog', undefined, { silent: true });
     if (response.status === 200 && response.data) {
       const catalog = response.data as SupportCatalog;
-      if (!allowLocalPreview || catalog.catalogEnabled) return catalog;
+      if (!allowLocalPreview || (catalog.catalogEnabled && catalog.catalogVersion === SUPPORT_PACKAGE_CATALOG_VERSION))
+        return catalog;
     } else if (!allowLocalPreview) {
       throw new Error('SUPPORT_CATALOG_UNAVAILABLE');
     }

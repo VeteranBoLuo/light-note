@@ -4,6 +4,7 @@ import { resolveResourceRoute } from './resourceNavigation';
 
 const organizeActions = [
   { id: 'organize_ai_pending', label: 'reviewAiSuggestions', route: '/organize?issue=ai_suggestions' },
+  { id: 'organize_pending', label: 'organizePending', route: '/organize?issue=pending' },
   { id: 'organize_untagged', label: 'organizeUntagged', route: '/organize?issue=untagged' },
 ] as const;
 
@@ -52,8 +53,10 @@ export function resolveBriefSourceTarget(source: NonNullable<DailyBriefInsight['
     return { external: null, route: { path: `/toolbox/task/${encodeURIComponent(source.id)}` } };
   if (['research_workspace', 'learning_workspace', 'writing_workspace'].includes(source.type))
     return { external: null, route: { path: `/toolbox/${source.type}`, query: { workspace: source.id } } };
-  if (!['bookmark', 'note', 'file'].includes(source.type)) return null;
+  if (!['bookmark', 'note', 'file', 'todo'].includes(source.type)) return null;
   if (source.type === 'bookmark') {
+    // 内容建议引用的是已保存描述，未提供外链时回到资料本身核对。
+    if (!source.url) return { external: null, route: resolveResourceRoute(source) };
     const resolved = resolveBookmarkUrlInput(source.url, { allowTextExtraction: false });
     return resolved.state === BOOKMARK_URL_STATE.VALID || resolved.state === BOOKMARK_URL_STATE.NORMALIZED
       ? { external: resolved.canonicalUrl, route: null }

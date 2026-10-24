@@ -7,7 +7,7 @@ function compactNumber(value: number) {
   return Number.isInteger(value) ? String(value) : value.toFixed(1).replace(/\.0$/, '');
 }
 
-function formatAiTokens(amount: number, locale: string) {
+export function formatAiTokens(amount: number, locale: string) {
   if (locale.toLowerCase().startsWith('zh')) {
     return amount >= 10_000 ? `${compactNumber(amount / 10_000)} 万` : amount.toLocaleString('zh-CN');
   }

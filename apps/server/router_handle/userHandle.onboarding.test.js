@@ -4,7 +4,7 @@ const query = vi.fn();
 const getConnection = vi.fn();
 const connection = {
   beginTransaction: vi.fn(),
-  query: vi.fn((...args) => query(...args)),
+  query: vi.fn((sql, ...args) => sql.startsWith('SET TRANSACTION') ? Promise.resolve([[]]) : query(sql, ...args)),
   commit: vi.fn(),
   rollback: vi.fn(),
   release: vi.fn(),
@@ -306,7 +306,7 @@ describe('新用户示例数据接入注册流程', () => {
   });
 
   it('保存真实头像会先同步成长任务达成状态，再返回成功', async () => {
-    query.mockResolvedValueOnce([{ affectedRows: 1 }]);
+    query.mockResolvedValueOnce([[{ email: 'new@example.com' }]]).mockResolvedValueOnce([{ affectedRows: 1 }]);
     const res = mockRes();
 
     await saveUserInfo(
@@ -327,7 +327,7 @@ describe('新用户示例数据接入注册流程', () => {
   });
 
   it('root 保存头像也同步任务事实，由成长服务自动收口且不发奖励', async () => {
-    query.mockResolvedValueOnce([{ affectedRows: 1 }]);
+    query.mockResolvedValueOnce([[{ email: 'root@example.com' }]]).mockResolvedValueOnce([{ affectedRows: 1 }]);
     const res = mockRes();
 
     await saveUserInfo(
@@ -443,6 +443,20 @@ describe('新用户示例数据接入注册流程', () => {
     expect(seedNewUserCloudFile).not.toHaveBeenCalled();
   });
 
+  it('GitHub 未提供已验证邮箱时使用稳定 ID，不按可改名的用户名合并账号', async () => {
+    let createdUserId;
+    query.mockImplementation(async (sql, params) => {
+      const text = compactSql(sql);
+      if (text.startsWith('SELECT * FROM user WHERE github_id') || text.startsWith('SELECT * FROM user WHERE email')) return [[]];
+      if (text.startsWith('INSERT INTO user')) { createdUserId = params[0]; return [{ affectedRows: 1 }]; }
+      if (text.startsWith('SELECT * FROM user WHERE id')) return [[{ id: createdUserId, role: 'user' }]];
+      return [[]];
+    });
+    await handleUserDatabaseOperation({ id: 123, login: 'renamed-user', email: 'unverified@example.com', emailMissing: true }, { headers: {}, body: {} });
+    expect(query).toHaveBeenCalledWith('SELECT * FROM user WHERE email = ? LIMIT 1 FOR UPDATE', ['123@users.noreply.github.com']);
+    expect(query).toHaveBeenCalledWith(expect.stringContaining('INSERT INTO user'), expect.arrayContaining(['123@users.noreply.github.com']));
+  });
+
   it('历史 GitHub 固定初始密码在再次完成 GitHub 认证后自动轮换', async () => {
     verifyPassword.mockResolvedValue(true);
     query
@@ -464,25 +478,31 @@ describe('新用户示例数据接入注册流程', () => {
     expect(user.password).toBe('hashed-password');
   });
 
-  it('GitHub 按邮箱绑定已有账号时不把它误判成新用户', async () => {
+  it.each([
+    { login_type: 'email', login_password_set: 1, password: 'attacker-password-hash' },
+    { login_type: 'github', github_id: '999', login_password_set: 0 },
+  ])('读取 GitHub 资料时不自动关联同邮箱账号：%j', async (account) => {
     query
       .mockResolvedValueOnce([[]])
-      .mockResolvedValueOnce([[{ id: 'email-user', email: 'octo@example.com', role: 'user' }]])
-      .mockResolvedValueOnce([{ affectedRows: 1 }])
-      .mockResolvedValueOnce([[{ id: 'email-user', alias: 'octo', role: 'user', login_type: 'github' }]]);
+      .mockResolvedValueOnce([[{ id: 'email-user', email: 'octo@example.com', role: 'user', ...account }]]);
 
-    const user = await handleUserDatabaseOperation(
+    await expect(handleUserDatabaseOperation(
       { id: 123, login: 'octo', email: 'octo@example.com', avatar_url: '' },
-      { headers: { 'x-lang': 'zh-CN' }, body: {} },
-    );
+      { headers: { 'x-lang': 'zh-CN' }, user: { id: 'email-user', role: 'user' }, body: {} },
+    )).rejects.toMatchObject({ code: 'GITHUB_OAUTH_EMAIL_CONFLICT', status: 409 });
 
-    expect(user.id).toBe('email-user');
+    expect(connection.rollback).toHaveBeenCalledOnce();
     expect(seedNewUserWorkspaceData).not.toHaveBeenCalled();
     expect(seedNewUserCloudFile).not.toHaveBeenCalled();
-    expect(query).toHaveBeenCalledWith(
-      "UPDATE user SET github_id = ?, login_password_set = ?, login_type = 'github' WHERE id = ? AND (github_id IS NULL OR github_id = ?)",
-      ['123', false, 'email-user', '123'],
-    );
+    expect(query.mock.calls.every(([sql]) => compactSql(sql).startsWith('SELECT '))).toBe(true);
+  });
+
+  it('普通资料保存不能更改登录邮箱或连带更新其他字段', async () => {
+    query.mockResolvedValueOnce([[{ email: 'owner@example.com' }]]);
+    const res = mockRes();
+    await saveUserInfo({ user: { id: 'user-1', role: 'user' }, body: { email: 'victim@example.com', alias: 'changed' } }, res);
+    expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ status: 409, data: { code: 'EMAIL_CHANGE_REQUIRES_VERIFICATION' } }));
+    expect(query.mock.calls.every(([sql]) => compactSql(sql).startsWith('SELECT '))).toBe(true);
   });
 
   it('同一邮箱已绑定其他 GitHub 账号时拒绝静默覆盖', async () => {

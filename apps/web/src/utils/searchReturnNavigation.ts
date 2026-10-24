@@ -85,7 +85,8 @@ export function trackSearchReturnNavigation(router: Router) {
     const snapshot = read();
     if (!snapshot) return;
     const isSourceNote = (path: string, source: unknown) =>
-      path.startsWith('/noteLibrary/') && resolveSearchReturnPath(source) === snapshot.path;
+      (path.startsWith('/noteLibrary/') || path.startsWith('/public-resources/')) &&
+      resolveSearchReturnPath(source) === snapshot.path;
     if (to.fullPath === snapshot.path && isSourceNote(from.path, from.query.from)) {
       write({ ...snapshot, returning: true });
     } else if (isSourceNote(to.path, to.query.from)) {

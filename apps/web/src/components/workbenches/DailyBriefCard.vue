@@ -3,11 +3,16 @@
     v-if="compact && showCard"
     v-bind="$attrs"
     class="daily-brief-card daily-brief-card--summary"
+    :class="{ 'daily-brief-card--stacked': stackedLayout }"
     :aria-busy="busy || visitorLoading || undefined"
   >
     <header class="daily-brief-card__header">
       <span class="daily-brief-card__ai-mark" aria-hidden="true">{{
-        guestSample ? t('workbench.dailyBrief.exampleMark') : 'AI'
+        guestSample
+          ? t('workbench.dailyBrief.exampleMark')
+          : displayBrief?.generatedBy === 'facts'
+            ? t('workbench.dailyBrief.todayMark')
+            : 'AI'
       }}</span>
       <div class="daily-brief-card__heading">
         <div class="daily-brief-card__title-row"
@@ -36,7 +41,7 @@
     </header>
     <div class="daily-brief-card__summary-copy">
       <p class="daily-brief-card__headline">{{
-        displayBrief?.headline ||
+        (displayBrief ? (!guestSample && briefInsights.length ? briefInsights[0].text : displayBrief.headline) : '') ||
         t(
           guestSample
             ? visitorLoading
@@ -49,24 +54,52 @@
               : 'workbench.dailyBrief.subtitle',
         )
       }}</p>
+      <p v-if="hasActivitySummary && briefInsights.length" class="daily-brief-card__activity">{{
+        displayBrief?.headline
+      }}</p>
       <p v-if="guestSample && visitorState" class="daily-brief-card__sample-status"
         >{{ t('workbench.dailyBrief.sampleMeta', { date: visitorState.dataDate || '—' })
         }}<span v-if="visitorState.stale"> · {{ t('workbench.dailyBrief.sampleStale') }}</span></p
       >
+
+      <p v-if="displayBrief?.adviceStatus === 'failed'" class="daily-brief-card__refresh-error" role="status">{{
+        t(
+          previousAdvice
+            ? 'workbench.dailyBrief.adviceUpdateFailed'
+            : readOnly
+              ? 'workbench.dailyBrief.adviceFailedReadOnly'
+              : 'workbench.dailyBrief.adviceFailed',
+        )
+      }}</p>
+      <aside
+        v-if="adviceStatusText"
+        class="daily-brief-card__preview-recommendation daily-brief-card__advice-status"
+        role="status"
+      >
+        <strong>{{ t('workbench.dailyBrief.aiRecommendation') }}</strong>
+        <p>{{ adviceStatusText }}</p>
+      </aside>
       <aside v-if="briefRecommendation" class="daily-brief-card__preview-recommendation">
         <strong>{{
           t(
             guestSample
               ? 'workbench.dailyBrief.sampleSuggestion'
-              : state?.stale
+              : recommendationStale
                 ? 'workbench.dailyBrief.previousRecommendation'
-                : 'workbench.dailyBrief.aiRecommendation',
+                : displayedAdvice?.recommendationKind === 'action'
+                  ? 'workbench.dailyBrief.actionRecommendation'
+                  : 'workbench.dailyBrief.aiRecommendation',
           )
         }}</strong>
         <p>{{ briefRecommendation }}</p>
       </aside>
       <p v-if="displayBrief && errorMessage" class="daily-brief-card__refresh-error" role="alert">{{ errorMessage }}</p>
-      <BButton size="small" class="daily-brief-card__view-brief" @click="detailsVisible = true">
+      <BButton
+        v-if="!displayBrief || briefInsights.length || briefRecommendation"
+        size="small"
+        class="daily-brief-card__view-brief"
+        @click="detailsVisible = true"
+      >
         {{ t('workbench.dailyBrief.viewBrief') }}
         <SvgIcon :src="icon.ai.sourceArrow" size="13" aria-hidden="true" />
       </BButton>
@@ -84,17 +117,23 @@
       v-if="showCard"
       v-bind="compact ? {} : $attrs"
       class="daily-brief-card"
-      :class="{ 'daily-brief-card--detail': compact }"
+      :class="{ 'daily-brief-card--detail': compact, 'daily-brief-card--stacked': stackedLayout }"
       :aria-busy="busy || visitorLoading || undefined"
     >
       <header class="daily-brief-card__header">
         <span class="daily-brief-card__ai-mark" aria-hidden="true">{{
-          guestSample ? t('workbench.dailyBrief.exampleMark') : 'AI'
+          guestSample
+            ? t('workbench.dailyBrief.exampleMark')
+            : displayBrief?.generatedBy === 'facts'
+              ? t('workbench.dailyBrief.todayMark')
+              : 'AI'
         }}</span>
         <div class="daily-brief-card__heading">
           <div class="daily-brief-card__title-row">
             <h2>{{ t('workbench.dailyBrief.title') }}</h2>
-            <BChip v-if="briefInsights.length" tone="neutral">{{ briefInsights.length }}</BChip>
+            <BChip v-if="briefInsights.length" tone="neutral">{{
+              t('workbench.dailyBrief.focusCount', { count: briefInsights.length })
+            }}</BChip>
             <BChip v-if="readOnly" tone="neutral">{{ t('workbench.dailyBrief.previewMode') }}</BChip>
           </div>
           <p v-if="guestSample">{{ t('workbench.dailyBrief.guestSubtitle') }}</p>
@@ -198,70 +237,120 @@
             <BButton size="small" @click="refreshVisitor">{{ t('common.retry') }}</BButton></span
           ></p
         >
-        <p class="daily-brief-card__headline">{{ displayBrief.headline }}</p>
+        <p
+          v-if="displayBrief.headline && (guestSample || !briefInsights.length || hasActivitySummary)"
+          class="daily-brief-card__headline"
+          >{{ displayBrief.headline }}</p
+        >
 
-        <div class="daily-brief-card__insights">
+        <div class="daily-brief-card__insights" :class="{ 'has-lead': hasLeadInsight }">
           <article
             v-for="insight in briefInsights"
             :key="insight.id"
             class="daily-brief-insight"
-            :class="`is-${insightTone(insight)}`"
+            :class="[`is-${insightTone(insight)}`, { 'is-lead': hasLeadInsight && insight === briefInsights[0] }]"
           >
-            <span class="daily-brief-insight__marker" aria-hidden="true">{{ insightMarker(insight) }}</span>
+            <BChip class="daily-brief-insight__marker" :tone="insightChipTone(insight)">{{
+              insightMarker(insight)
+            }}</BChip>
             <div class="daily-brief-insight__copy">
+              <p v-if="insight.context" class="daily-brief-insight__context">{{ insight.context }}</p>
               <p>
                 {{ insight.text }}
                 <small v-if="insightChanged(insight)" class="daily-brief-insight__changed">{{
                   t('workbench.dailyBrief.changed')
                 }}</small>
               </p>
-              <div v-if="organizeActions(insight).length" class="daily-brief-insight__organize-actions">
-                <BButton
-                  v-for="action in organizeActions(insight)"
-                  :key="action.id"
-                  size="small"
-                  @click="router.push(action.route)"
-                >
-                  {{ t(`workbench.dailyBrief.${action.label}`) }}
-                  <SvgIcon :src="icon.ai.sourceArrow" size="13" />
-                </BButton>
-              </div>
-              <div v-if="insight.sources?.length" class="daily-brief-insight__sources">
-                <span v-if="insight.tagName">{{ t('workbench.dailyBrief.sharedTag', { tag: insight.tagName }) }}</span>
-                <BButton
-                  v-for="(source, index) in insight.sources"
-                  :key="`${source.type}:${source.id}`"
-                  size="small"
-                  :title="source.title"
-                  :disabled="insightChanged(insight)"
-                  @click="openSource(source)"
-                >
-                  <template v-if="insight.tagName"
-                    >{{ t(index === 0 ? 'workbench.dailyBrief.recentSource' : 'workbench.dailyBrief.olderSource') }} ·
-                  </template>
-                  {{
-                    ['research_workspace', 'learning_workspace', 'writing_workspace'].includes(source.type)
-                      ? t('toolbox.project.continueProjectLink', { title: source.title })
-                      : source.title
-                  }}
-                  <SvgIcon :src="icon.ai.sourceArrow" size="13" aria-hidden="true" />
-                </BButton>
+              <div
+                v-if="organizeActions(insight).length || insight.sources?.length"
+                class="daily-brief-insight__actions"
+              >
+                <div v-if="organizeActions(insight).length" class="daily-brief-insight__organize-actions">
+                  <BButton
+                    v-for="action in organizeActions(insight)"
+                    :key="action.id"
+                    size="small"
+                    @click="router.push(action.route)"
+                  >
+                    {{ t(`workbench.dailyBrief.${action.label}`) }}
+                    <SvgIcon :src="icon.ai.sourceArrow" size="13" />
+                  </BButton>
+                </div>
+                <div v-if="insight.sources?.length" class="daily-brief-insight__sources">
+                  <span v-if="insight.tagName">{{
+                    t('workbench.dailyBrief.sharedTag', { tag: insight.tagName })
+                  }}</span>
+                  <BButton
+                    v-for="(source, index) in insight.sources"
+                    :key="`${source.type}:${source.id}`"
+                    size="small"
+                    :title="source.title"
+                    :disabled="insightChanged(insight)"
+                    @click="openSource(source)"
+                  >
+                    <template v-if="insight.tagName"
+                      >{{ t(index === 0 ? 'workbench.dailyBrief.recentSource' : 'workbench.dailyBrief.olderSource') }} ·
+                    </template>
+                    {{
+                      source.type === 'todo'
+                        ? t('workbench.dailyBrief.viewTodos')
+                        : ['research_workspace', 'learning_workspace', 'writing_workspace'].includes(source.type)
+                          ? t('toolbox.project.continueProjectLink', { title: source.title })
+                          : source.title
+                    }}
+                    <SvgIcon :src="icon.ai.sourceArrow" size="13" aria-hidden="true" />
+                  </BButton>
+                </div>
               </div>
             </div>
           </article>
         </div>
 
-        <aside class="daily-brief-card__recommendation">
+        <p v-if="displayBrief?.adviceStatus === 'failed'" class="daily-brief-card__refresh-error" role="status">{{
+          t(
+            previousAdvice
+              ? 'workbench.dailyBrief.adviceUpdateFailed'
+              : readOnly
+                ? 'workbench.dailyBrief.adviceFailedReadOnly'
+                : 'workbench.dailyBrief.adviceFailed',
+          )
+        }}</p>
+        <aside
+          v-if="adviceStatusText"
+          class="daily-brief-card__recommendation daily-brief-card__advice-status"
+          role="status"
+        >
+          <strong>{{ t('workbench.dailyBrief.aiRecommendation') }}</strong>
+          <p>{{ adviceStatusText }}</p>
+        </aside>
+        <aside v-if="briefRecommendation" class="daily-brief-card__recommendation">
           <strong>{{
             t(
               guestSample
                 ? 'workbench.dailyBrief.sampleSuggestion'
-                : state?.stale
+                : recommendationStale
                   ? 'workbench.dailyBrief.previousRecommendation'
-                  : 'workbench.dailyBrief.aiRecommendation',
+                  : displayedAdvice?.recommendationKind === 'action'
+                    ? 'workbench.dailyBrief.actionRecommendation'
+                    : 'workbench.dailyBrief.aiRecommendation',
             )
           }}</strong>
-          <p>{{ briefRecommendation || t('workbench.dailyBrief.noRecommendation') }}</p>
+          <div>
+            <p>{{ briefRecommendation }}</p>
+            <div v-if="displayedAdvice?.recommendationSources?.length" class="daily-brief-insight__sources">
+              <BButton
+                v-for="source in displayedAdvice?.recommendationSources"
+                :key="`${source.type}:${source.id}`"
+                size="small"
+                :disabled="recommendationStale"
+                :title="source.title"
+                @click="openSource(source)"
+              >
+                {{ source.title }}
+                <SvgIcon :src="icon.ai.sourceArrow" size="13" />
+              </BButton>
+            </div>
+          </div>
         </aside>
       </div>
       <div v-else class="daily-brief-card__state">
@@ -283,6 +372,7 @@
 
 <script setup lang="ts">
   import { computed, defineComponent, ref, watch } from 'vue';
+  import { useMobileLayout } from '@/composables/useMobileLayout';
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
   import { useI18n } from 'vue-i18n';
   import { useRouter } from 'vue-router';
@@ -313,6 +403,8 @@
         slots.default?.(),
   });
   const detailsVisible = ref(false);
+  const mobileLayout = useMobileLayout();
+  const stackedLayout = computed(() => props.compact || mobileLayout.value);
   watch(
     () => props.ownerKey,
     () => {
@@ -329,7 +421,7 @@
     refresh: refreshVisitor,
   } = useVisitorBrief({ enabled: () => guestSample.value, owner: () => props.ownerKey, locale: () => locale.value });
   const readOnly = computed(() => props.readOnly);
-  const { state, loading, updating, errorCode, confirmedCurrent, refresh, update } = useDailyBrief({
+  const { state, loading, updating, errorCode, confirmedCurrent, refreshAfterChange, update } = useDailyBrief({
     eligible: () => props.eligible && !guestSample.value,
     ownerKey: () => props.ownerKey,
     passive: () => readOnly.value,
@@ -347,8 +439,76 @@
           Boolean(errorCode.value) ||
           Boolean(state.value?.featureEnabled && state.value?.enabled))),
   );
-  const briefInsights = computed<DailyBriefInsight[]>(() => displayBrief.value?.insights || []);
-  const briefRecommendation = computed(() => displayBrief.value?.recommendation || '');
+  const briefInsights = computed<DailyBriefInsight[]>(() => {
+    const insights = displayBrief.value?.insights || [];
+    if (guestSample.value) return insights;
+    // 旧产物更新前也遵守展示上限；真正的任务筛选和排序仍由服务端完成。
+    let hasTodo = false;
+    let organize: DailyBriefInsight | undefined;
+    const organizeTexts = new Set<string>();
+    const result: DailyBriefInsight[] = [];
+    for (const insight of insights) {
+      if (insight.factIds.some((id) => id.startsWith('todo_'))) {
+        if (hasTodo) continue;
+        hasTodo = true;
+      }
+      if (insight.factIds.length && insight.factIds.every((id) => id.startsWith('organize_'))) {
+        if (!organize) {
+          organize = { ...insight, id: 'organize_summary', text: '', factIds: [] };
+          result.push(organize);
+        }
+        organizeTexts.add(insight.text.trim());
+        organize.text = [...organizeTexts].filter(Boolean).join(' ');
+        organize.factIds = [...new Set([...organize.factIds, ...insight.factIds])];
+        if (insight.sources?.length)
+          organize.sources = [
+            ...new Map(
+              [...(organize.sources || []), ...insight.sources].map((source) => [
+                `${source.type}:${source.id}`,
+                source,
+              ]),
+            ).values(),
+          ];
+      } else result.push(insight);
+    }
+    return result;
+  });
+  const previousAdvice = computed(() =>
+    ['deferred', 'paused', 'not_evaluated', 'failed'].includes(displayBrief.value?.adviceStatus || '')
+      ? displayBrief.value?.lastAdviceResult
+      : undefined,
+  );
+  const displayedAdvice = computed(() => previousAdvice.value || displayBrief.value);
+  const briefRecommendation = computed(() => displayedAdvice.value?.recommendation || '');
+  const recommendationStale = computed(
+    () =>
+      !!previousAdvice.value ||
+      (state.value?.stale &&
+        (!displayBrief.value?.recommendationFactIds?.length ||
+          displayBrief.value.recommendationFactIds.some((id) => state.value?.staleFactIds?.includes(id)))),
+  );
+  const hasActivitySummary = computed(
+    () =>
+      !guestSample.value &&
+      displayBrief.value?.sections?.some(
+        (section) =>
+          section.id === 'new_content' &&
+          section.items.some(
+            (item) =>
+              ['bookmark_created_today', 'note_created_today', 'file_created_today'].includes(item.id) &&
+              typeof item.count === 'number' &&
+              Number.isFinite(item.count) &&
+              item.count >= 0,
+          ),
+      ),
+  );
+  // 奇数条时让短待办领起一行，其余内容成对阅读；只有一条时自然占满。
+  const hasLeadInsight = computed(
+    () =>
+      !guestSample.value &&
+      briefInsights.value.length % 2 === 1 &&
+      briefInsights.value[0]?.factIds.some((id) => id.startsWith('todo_')),
+  );
   const errorMessage = computed(() => {
     if (state.value?.pauseReason === 'quota') return t('workbench.dailyBrief.quotaPaused');
     if (errorCode.value || state.value?.status === 'failed')
@@ -371,10 +531,27 @@
     }).format(date);
   });
   const statusText = computed(() => {
-    if (briefUpdating.value) return t('workbench.dailyBrief.updatingHint');
+    if (briefUpdating.value)
+      return t(readyBrief.value ? 'workbench.dailyBrief.updatingHint' : 'workbench.dailyBrief.generating');
     if (state.value?.pauseReason === 'budget') return t('workbench.dailyBrief.budgetPaused');
     if (state.value?.stale) return t('workbench.dailyBrief.staleHint');
     if (confirmedCurrent.value) return t('workbench.dailyBrief.currentHint');
+    return '';
+  });
+  const adviceStatusText = computed(() => {
+    if (guestSample.value || !displayBrief.value) return '';
+
+    if (!guestSample.value) {
+      const adviceHints: Partial<Record<NonNullable<DailyBrief['adviceStatus']>, string>> = {
+        no_value: 'adviceNoValue',
+        no_evidence: 'adviceNoEvidence',
+        deferred: 'adviceDeferred',
+        paused: 'advicePaused',
+        not_evaluated: 'adviceNotEvaluated',
+      };
+      const hint = adviceHints[displayedAdvice.value?.adviceStatus!];
+      if (hint) return t(`workbench.dailyBrief.${hint}`);
+    }
     return '';
   });
   function insightChanged(insight: DailyBriefInsight) {
@@ -406,7 +583,11 @@
   function insightTone(insight: DailyBriefInsight) {
     const ids = insight.factIds || [];
     if (ids.includes('resource_connection')) return 'connection';
-    if (ids.some((id) => id.startsWith('todo_') || ['workshop_due', 'workshop_next_step'].includes(id)))
+    if (
+      ids.some(
+        (id) => id.startsWith('todo_') || ['workshop_due', 'workshop_next_step', 'workshop_attention'].includes(id),
+      )
+    )
       return 'action';
     if (ids.includes('workshop_result') || ids.includes('visitor_content')) return 'new';
     if (ids.some((id) => id.includes('_created_'))) return 'new';
@@ -414,12 +595,31 @@
     return 'insight';
   }
   function insightMarker(insight: DailyBriefInsight) {
-    return t(`workbench.dailyBrief.markers.${insightTone(insight)}`);
+    const ids = insight.factIds;
+    const label = ids.includes('workshop_result')
+      ? 'result'
+      : ids.includes('workshop_attention')
+        ? 'attention'
+        : ids.some((id) => ['workshop_due', 'workshop_next_step'].includes(id)) &&
+            !ids.some((id) => id.startsWith('todo_'))
+          ? 'project'
+          : insightTone(insight);
+    return t(`workbench.dailyBrief.markers.${label}`);
   }
-  defineExpose({ refresh: () => (guestSample.value ? refreshVisitor() : refresh()) });
+  function insightChipTone(insight: DailyBriefInsight) {
+    const tone = insightTone(insight);
+    return tone === 'action' ? 'todo' : tone === 'new' ? 'success' : tone === 'organize' ? 'pending' : 'neutral';
+  }
+  defineExpose({ refresh: () => (guestSample.value ? refreshVisitor() : refreshAfterChange()) });
 </script>
 
 <style scoped lang="less">
+  .daily-brief-card__activity {
+    margin: var(--ui-space-6, 6px) 0 0;
+    color: var(--text-secondary);
+    font-size: var(--ui-font-12, 12px);
+    line-height: 1.6;
+  }
   .daily-brief-card__sample-status {
     margin: 0 0 var(--ui-space-12, 12px);
     font-size: var(--ui-font-12, 12px);
@@ -700,7 +900,6 @@
   .daily-brief-card__insights {
     min-height: 0;
     overflow: visible;
-    flex: 1 1 auto;
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     column-gap: var(--ui-space-24, 24px);
@@ -710,13 +909,19 @@
   .daily-brief-insight__copy {
     min-width: 0;
     overflow-wrap: anywhere;
+    padding-top: var(--ui-space-2, 2px);
+  }
+  .daily-brief-insight__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--ui-space-8, 8px);
+    margin-top: var(--ui-space-8, 8px);
   }
   .daily-brief-insight__sources {
     display: flex;
     flex-wrap: wrap;
     gap: var(--ui-space-5, 5px);
-    margin-top: var(--ui-space-7, 7px);
-    padding-bottom: var(--ui-space-3, 3px);
+    justify-content: flex-start;
     > span {
       width: 100%;
       color: var(--desc-color);
@@ -745,8 +950,7 @@
     display: flex;
     flex-wrap: wrap;
     gap: var(--ui-space-4, 4px) var(--ui-space-12, 12px);
-    margin-top: var(--ui-space-5, 5px);
-    padding: var(--ui-space-2, 2px);
+    justify-content: flex-start;
 
     :deep(.b_btn) {
       height: auto;
@@ -768,42 +972,45 @@
 
   .daily-brief-insight {
     min-width: 0;
-    padding: var(--ui-space-6, 6px) 0;
+    padding: var(--ui-space-12, 12px) 0;
     display: grid;
-    grid-template-columns: var(--ui-layout-22, 22px) minmax(0, 1fr);
+    grid-template-columns: auto minmax(0, 1fr);
     align-items: start;
-    gap: var(--ui-space-7, 7px);
-    border-bottom: 1px solid var(--surface-divider-color, var(--card-border-color));
+    gap: var(--ui-space-12, 12px);
+    border-top: 1px solid var(--surface-divider-color, var(--card-border-color));
   }
 
-  .daily-brief-insight:last-child {
-    border-bottom: 0;
+  .daily-brief-insight:first-child {
+    border-top: 0;
   }
-
-  .daily-brief-insight:only-child {
+  .daily-brief-card:not(.daily-brief-card--stacked)
+    .daily-brief-card__insights:not(.has-lead)
+    .daily-brief-insight:nth-child(2) {
+    border-top: 0;
+  }
+  .daily-brief-insight:only-child,
+  .daily-brief-insight.is-lead,
+  .daily-brief-card__insights:not(.has-lead) .daily-brief-insight:last-child:nth-child(odd) {
     grid-column: 1 / -1;
+  }
+  .daily-brief-insight.is-lead .daily-brief-insight__copy {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--ui-space-4, 4px) var(--ui-space-16, 16px);
+    .daily-brief-insight__actions {
+      margin-top: 0;
+    }
+  }
+  .daily-brief-insight p.daily-brief-insight__context {
+    margin-bottom: var(--ui-space-4, 4px);
+    font-weight: 600;
   }
 
   .daily-brief-insight__marker {
-    width: var(--ui-layout-21, 21px);
-    height: var(--ui-layout-21, 21px);
-    display: inline-grid;
-    place-items: center;
-    border-radius: 7px;
-    color: var(--primary-color);
-    background: color-mix(in srgb, var(--primary-color) 10%, var(--card-background));
-    font-size: var(--ui-font-10, 10px);
-    font-weight: 700;
-  }
-
-  .daily-brief-insight.is-new .daily-brief-insight__marker {
-    color: var(--success-color, #07865c);
-    background: color-mix(in srgb, var(--success-color, #07865c) 10%, var(--card-background));
-  }
-
-  .daily-brief-insight.is-organize .daily-brief-insight__marker {
-    color: var(--warning-color, #ad6800);
-    background: color-mix(in srgb, var(--warning-color, #ad6800) 10%, var(--card-background));
+    justify-self: start;
+    max-width: 100%;
+    margin-top: var(--ui-space-2, 2px);
   }
 
   .daily-brief-insight p {
@@ -842,21 +1049,19 @@
     color: var(--text-color);
   }
 
-  @media (max-width: 760px) {
-    .daily-brief-insight {
-      display: block;
-    }
-    .daily-brief-insight__marker {
-      float: left;
-      margin: var(--ui-space-1, 1px) var(--ui-space-7, 7px) 0 0;
-    }
-    .daily-brief-insight__sources,
-    .daily-brief-insight__organize-actions {
-      clear: both;
-      margin-top: var(--ui-space-4, 4px);
-    }
+  .daily-brief-card--stacked {
     .daily-brief-card__insights {
       grid-template-columns: minmax(0, 1fr);
+    }
+    .daily-brief-insight {
+      grid-column: auto;
+      gap: var(--ui-space-10, 10px);
+    }
+    .daily-brief-insight.is-lead .daily-brief-insight__copy {
+      display: block;
+    }
+    .daily-brief-insight .daily-brief-insight__actions {
+      margin-top: var(--ui-space-6, 6px);
     }
     .daily-brief-card__header {
       grid-template-columns: var(--ui-layout-34, 34px) minmax(0, 1fr) auto;

@@ -39,6 +39,18 @@ afterEach(() => {
   vi.unstubAllEnvs();
 });
 
+describe('旧同邮箱绑定票据拒绝恢复', () => {
+  it.each(['binding', 'binding_processing', 'completed'])('拒绝 %s 票据，不将旧确认变成已登录账号', async (status) => {
+    const auth = await createGitHubOAuthChallenge({ consentVersion: GITHUB_OAUTH_CONSENT_VERSION });
+    const state = new URL(auth.authorizationUrl).searchParams.get('state');
+    const request = { state, code: 'legacy-binding-code', nonce: auth.nonce };
+    await consumeGitHubOAuthChallenge(request);
+    const [key, raw] = [...redisValues.entries()][0];
+    redisValues.set(key, JSON.stringify({ ...JSON.parse(raw), status, userId: 'owner', binding: { userId: 'owner' } }));
+    await expect(consumeGitHubOAuthChallenge(request)).rejects.toMatchObject({ code: 'GITHUB_OAUTH_EMAIL_CONFLICT', status: 409 });
+  });
+});
+
 describe('GitHub OAuth 单独同意与 state 校验', () => {
   it('只返回授权地址和浏览器 nonce，Redis 保存摘要及同意证据', async () => {
     const result = await createGitHubOAuthChallenge({

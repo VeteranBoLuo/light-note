@@ -22,16 +22,17 @@ try {
       const url = `${origin}/e2e/image-previews.html?video=true&theme=${theme}${width < 768 ? '&renderProfile=mobile' : ''}`;
       await page.goto(url);
       const cards = page.locator('.file-card-video-preview');
+      const retryCard = page.locator('[data-cloud-file-id="cloud-4"] .file-card-video-preview');
       await cards.first().scrollIntoViewIfNeeded();
       await page.waitForFunction(() => document.querySelector('.file-card-video-preview img')?.complete);
       assert.equal(await cards.count(), 6);
       assert.equal(await cards.locator('video').count(), 0);
       assert.equal(await cards.first().locator('.file-card-video-duration').textContent(), '0:13');
-      await cards.nth(4).scrollIntoViewIfNeeded();
-      await cards.nth(4).getByRole('button', { name: '查看原因' }).click();
+      await retryCard.scrollIntoViewIfNeeded();
+      await retryCard.getByRole('button', { name: '原因说明' }).click();
       await page.getByRole('button', { name: '重试预览', exact: true }).click();
       await page.waitForFunction(
-        () => document.querySelectorAll('.file-card-video-preview')[4].querySelector('img')?.complete,
+        () => document.querySelector('[data-cloud-file-id="cloud-4"] .file-card-video-preview img')?.complete,
       );
       assert.equal(originalRequests, 0);
       await page.evaluate(() => window.__toggleVideoDirectory());

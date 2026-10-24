@@ -19,6 +19,27 @@ describe('community feed reading restoration', () => {
     expect(result?.nextCursor).toBe('page3');
     expect(fetch.mock.calls).toEqual([[], ['page2']]);
   });
+  it('restores the loaded tail after a near-page-end anchor so the viewport has room below it', async () => {
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce({ items: [post('new', 22), post('old', 18)], nextCursor: 'page2' })
+      .mockResolvedValueOnce({ items: [post('tail1', 17), post('tail2', 16)], nextCursor: 'page3' });
+    const result = await restoreCommunityFeed(fetch, { ...memory, trailingCount: 3 }, () => true);
+    expect(result?.items.map((item) => item.publicId)).toEqual(['new', 'old', 'tail1', 'tail2']);
+    expect(result?.nextCursor).toBe('page3');
+    expect(fetch.mock.calls).toEqual([[], ['page2']]);
+  });
+  it('keeps the same tail when newly published posts move the anchor to a later page', async () => {
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce({ items: [post('new1', 23), post('new2', 22)], nextCursor: 'page2' })
+      .mockResolvedValueOnce({ items: [post('middle', 21), post('old', 18)], nextCursor: 'page3' })
+      .mockResolvedValueOnce({ items: [post('tail1', 17), post('tail2', 16)], nextCursor: 'page4' });
+    const result = await restoreCommunityFeed(fetch, { ...memory, trailingCount: 3 }, () => true);
+    expect(result?.items.map((item) => item.publicId)).toEqual(['new1', 'new2', 'middle', 'old', 'tail1', 'tail2']);
+    expect(result?.nextCursor).toBe('page4');
+    expect(fetch.mock.calls).toEqual([[], ['page2'], ['page3']]);
+  });
   it('stops after passing a removed anchor and falls back to the latest page for legacy memory', async () => {
     const fetch = vi.fn().mockResolvedValue({ items: [post('earlier', 17)], nextCursor: 'next' });
     await restoreCommunityFeed(fetch, memory, () => true);

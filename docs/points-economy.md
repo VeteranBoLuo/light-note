@@ -75,6 +75,8 @@ AI 入门包 `ai_pack_starter` 与空间复用 `points_shop_item_claims` 的原�
 
 ## 每日惊喜
 
+每日额度以账号自然日和 `points_log` 中的 `lottery_free` 流水核对，展示和发放共用此口径；`lottery_free_day / lottery_free_used` 仅作兼容快照。切换时区后返回已经使用过的日期，不恢复次数。写入须先锁账号，再用 current read 读取当日流水，避免幂等收据查询产生的旧事务快照漏计并发领取。
+
 ### 每日次数
 
 | 等级 | Lv.1–2 | Lv.3–5 | Lv.6–9 | Lv.10–14 | Lv.15 |
@@ -142,6 +144,8 @@ C5–C9 激活都要求既有 `points-economy-c4-paid-pity-v1` 和 `points-econo
 开关只接受明确的 true/false/1/0，未知值按关闭解析；C9 优先于 C8，C8 优先于 C7，C7 优先于 C6，C6 优先于 C5，C5 优先于 C4。资产与新流水不反向删除，已成功的 C3–C9 请求即使跨版本重试也必须回放原收据。C5 回退到 C4 前必须关闭购买，不能让回退窗口绕过空间限兑。
 
 ## 流水与运营观测
+
+抽奖页按每次成功请求的收据展示时间、花费和实际奖励，十连在同一条抽奖记录内展开全部结果及保底命中。历史数量以收据为准，不从当前奖池反推；未保留完整收据的旧积分流水仍可在积分明细查看，不拼接成虚构的抽奖结果。背包统一展示各渠道的[获得记录](./points-earning.md#背包获得记录)；AI 奖励自动合并永久余额。
 
 新 reason：`lottery_paid_cost`、`lottery_paid_win`、`lottery_paid_asset`、`lottery_paid_compensation`、`lottery_free`、`lottery_free_win`、`lottery_free_asset`；历史 `lottery_cost`、`lottery_win`、`lottery_storage`、`lottery_compensation` 必须继续可查。
 

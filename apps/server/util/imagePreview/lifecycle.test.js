@@ -51,13 +51,11 @@ async function asset() {
 }
 describe.skipIf(!socket)('image lifecycle on isolated local MySQL', () => {
   beforeAll(async () => {
-    if (!socket.startsWith('/tmp/')) throw new Error('ISOLATED_TEST_SOCKET_REQUIRED');
+    if (!/^\/(?:private\/)?tmp\//.test(socket)) throw new Error('ISOLATED_TEST_SOCKET_REQUIRED');
     admin = await mysql.createConnection({ socketPath: socket, user: 'root' });
     await admin.query(`CREATE DATABASE ${database} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`);
     db = mysql.createPool({ socketPath: socket, user: 'root', database, connectionLimit: 4, multipleStatements: true });
-    const dump = await fs
-      .readFile(new URL('../../tag_db.sql', import.meta.url), 'utf8')
-      .catch(() => fs.readFile(new URL('../../../tag_db.sql', import.meta.url), 'utf8'));
+    const dump = await fs.readFile(new URL('../../tag_db.sql', import.meta.url), 'utf8');
     for (const name of ['file_preview_artifacts', 'file_preview_jobs']) {
       const ddl = dump.match(new RegExp('CREATE TABLE `' + name + '` \\([\\s\\S]*?;'))?.[0];
       await db.query(ddl);

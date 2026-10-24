@@ -1,4 +1,10 @@
-vi.mock('../util/services/cloudObjectPublication.js', () => ({ lockCloudObjectForPublication: vi.fn() }));
+vi.mock('../util/services/cloudObjectPublication.js', async (importOriginal) => ({ ...await importOriginal(), lockCloudObjectForPublication: vi.fn() }));
+vi.mock('../util/services/cloudUploadFinalization.js', async (importOriginal) => {
+  const actual = await importOriginal();
+  return { ...actual, trackCloudUpload: vi.fn(), freezeCloudUpload: vi.fn(async (_db, owner, key) => ({
+    objectKey: actual.publishedUploadKey(owner, key), ...await mocks.getObjectMetadataFromObs(key),
+  })) };
+});
 vi.mock('../util/imagePreview/cleanup.js', () => ({
   deleteUnmanagedObject: (...args) => mocks.deleteObjectFromObs(...args),
 }));
@@ -118,6 +124,7 @@ vi.mock('../util/services/managedCloudUploadService.js', () => ({
 }));
 
 await import('./file.js');
+const { publishedUploadKey } = await import('../util/services/cloudUploadFinalization.js');
 
 function response() {
   return {
@@ -198,7 +205,7 @@ describe('云空间普通上传覆盖随机 OBS 对象', () => {
     expect(connection.query).toHaveBeenCalledWith('SELECT id FROM user WHERE id = ? LIMIT 1 FOR UPDATE', ['user-1']);
     expect(mocks.deleteObjectFromObs).toHaveBeenCalledWith('files/user-1/ai/random.png');
     expect(connection.query).toHaveBeenCalledWith('UPDATE files SET ? WHERE id = ? AND create_by = ?', [
-      expect.objectContaining({ file_name: 'avatar.png', obs_key: 'files/user-1/avatar.png' }),
+      expect.objectContaining({ file_name: 'avatar.png', obs_key: publishedUploadKey('user-1', 'files/user-1/avatar.png') }),
       5,
       'user-1',
     ]);
@@ -611,7 +618,11 @@ it('文件分页响应返回持久置顶状态，置顶排序发生在 LIMIT 之
 });
 
 describe('legacy upload namespace and connection lifetime', () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.pool.query.mockReset().mockResolvedValue([[]]);
+    mocks.getObjectMetadataFromObs.mockReset().mockResolvedValue({ contentLength: 12 });
+  });
   const invalidNames = [
     'renamed/5d14916a-335b-4cfe-960e-c45571a5a8a0.pdf',
     'uploads/5d14916a-335b-4cfe-960e-c45571a5a8a0.pdf',
@@ -698,6 +709,20 @@ describe('legacy upload namespace and connection lifetime', () => {
     expect(connection.commit).toHaveBeenCalledOnce();
     expect(connection.release).toHaveBeenCalledOnce();
   });
+  it('does not recreate a saved file that disappeared before the account transaction', async () => {
+    mocks.pool.query.mockResolvedValue([[{ id: 42, file_name: 'saved.pdf', del_flag: 0 }]]);
+    const connection = {
+      beginTransaction: vi.fn(), commit: vi.fn(), rollback: vi.fn(), release: vi.fn(),
+      query: vi.fn(async () => [[]]),
+    };
+    mocks.pool.getConnection.mockResolvedValue(connection);
+    const res = response();
+    await mocks.routes.get('/confirmUpload').at(-1)(request(), res);
+    expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ status: 409 }));
+    expect(mocks.getObjectMetadataFromObs).not.toHaveBeenCalled();
+    expect(connection.query.mock.calls.some(([sql]) => sql.startsWith('INSERT INTO files'))).toBe(false);
+    expect(connection.rollback).toHaveBeenCalledOnce();
+  });
 });
 
 describe('upload routes with the real lifecycle service', () => {
@@ -755,7 +780,7 @@ describe('upload routes with the real lifecycle service', () => {
       expect((await call('/confirmUpload', { files: [file] })).status).toBe(200);
       expect(mocks.getObjectMetadataFromObs).toHaveBeenLastCalledWith(objectKey);
       expect(connection.query).toHaveBeenCalledWith('INSERT INTO files SET ?', [
-        expect.objectContaining({ obs_key: objectKey, file_name: 'report.pdf' }),
+        expect.objectContaining({ obs_key: publishedUploadKey('user-1', objectKey), file_name: 'report.pdf' }),
       ]);
     }
   });

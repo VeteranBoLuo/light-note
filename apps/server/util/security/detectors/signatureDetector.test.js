@@ -67,6 +67,8 @@ describe('请求参数异常检测', () => {
     ['/search/global', 'relevance'],
     ['/api/search/global', 'updated'],
     ['/search/global', 'name'],
+    ['/api/public-resources/search/combined','name'],
+    ['/public-resources/search/combined','updated'],
     ['/bookmark/queryTagSpaces', 'default'],
     ['/api/bookmark/queryTagSpaces', 'recent'],
     ['/bookmark/queryTagSpaces', 'resourceDesc'],

@@ -52,7 +52,7 @@ export function pushFailure(code, attempts) {
   if (attempts >= 8 || (code >= 400 && code < 500 && code !== 408 && code !== 429)) return 'failed';
   return 'pending';
 }
-export const notificationVisibleSql = `(del_flag = 0 AND recalled = 0 AND type <> 'community_feed' AND ${COMMUNITY_CHAT_DELIVERY_NOTIFICATION_SQL})`;
+export const notificationVisibleSql = `(del_flag = 0 AND recalled = 0 AND type NOT IN ('community_feed', 'public_resource', 'email_health') AND ${COMMUNITY_CHAT_DELIVERY_NOTIFICATION_SQL})`;
 
 export const isBrowserPushSubscriptionRequest = (context) =>
   String(context.method).toUpperCase() === 'POST' &&

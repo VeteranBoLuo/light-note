@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
-import { loadExplicitResourceEvidence, prepareExplicitResourceEvidence } from './resourceEvidence.js';
+import {
+  loadExplicitResourceEvidence,
+  prepareExplicitResourceEvidence,
+  loadPreparedResourceExcerpts,
+} from './resourceEvidence.js';
 
 function databaseFor({ notes = [], bookmarks = [], files = [], todos = [], chunks = [] } = {}) {
   return {
@@ -262,4 +266,42 @@ describe('prepareExplicitResourceEvidence', () => {
     await expect(pending).rejects.toBe(reason);
     expect(getStatuses).not.toHaveBeenCalled();
   });
+});
+
+it('简报复用已准备的正文，保留 owner、当前对象、过期边界，不发起解析', async () => {
+  const database = databaseFor({
+    notes: [{ id: 'n', title: '短文', content: '<p>导出不含附件，需要单独备份。</p>' }],
+    bookmarks: [
+      { id: 'b', name: '网页', url: 'https://private.invalid', snapshot_content: '<p>快照正文，有效内容。</p>' },
+    ],
+    files: [
+      { id: 'f', file_name: '资料.pdf', source_id: 'ready', source_status: 'ready' },
+      { id: 'unread', file_name: '未解析.pdf' },
+    ],
+    chunks: [{ source_id: 'ready', chunk_index: 0, content: '文件已准备的真实正文。' }],
+  });
+  const refs = [
+    { type: 'note', id: 'n' },
+    { type: 'bookmark', id: 'b' },
+    { type: 'file', id: 'f' },
+    { type: 'file', id: 'unread' },
+    { type: 'note', id: 'missing' },
+  ];
+  const result = await loadPreparedResourceExcerpts({ database, userId: 'owner', refs });
+  expect(result.map((r) => r.preparedText)).toEqual([
+    '导出不含附件，需要单独备份。',
+    '快照正文，有效内容。',
+    '文件已准备的真实正文。',
+    '',
+  ]);
+  expect(JSON.stringify(result)).not.toContain('https:');
+  const [fileSql, params] = database.query.mock.calls.find(([sql]) => sql.includes('FROM files f'));
+  expect(fileSql).toContain('ds.object_key = f.obs_key');
+  expect(fileSql).toContain('ds.file_size = f.file_size');
+  expect(fileSql).toContain('ds.expires_at > NOW()');
+  expect(params).toEqual(['owner', 'f', 'unread']);
+  expect(database.query.mock.calls.every(([sql]) => sql.trim().startsWith('SELECT'))).toBe(true);
+  await expect(
+    loadPreparedResourceExcerpts({ database, userId: 'owner', refs: Array(21).fill(refs[0]) }),
+  ).rejects.toThrow();
 });

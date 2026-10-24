@@ -1,3 +1,5 @@
+import { startPublicResourceReviewScheduler } from './util/publicResources/reviewWorker.js';
+import { startPublicResourceEventScheduler } from './util/publicResources/notifications.js';
 import { startCommunityReviewScheduler } from './util/communityFeed/reviewWorker.js';
 import { publicFormsRouter } from './router/collectionForms.js';
 import { startCommunityFeedScheduler } from './util/communityFeed/scheduler.js';
@@ -29,6 +31,7 @@ import { startTodoReminderV2Scheduler } from './util/todoReminderV2.js';
 import { startTodoSeriesScheduler } from './util/todoSeriesScheduler.js';
 import { getTodoPlanFeatureState } from './util/todoPlanFeature.js';
 import { startEmailDeliveryLogCleanupScheduler } from './util/emailDelivery.js';
+import { startAccountEmailHealthScheduler } from './util/services/accountEmailHealthService.js';
 import { earlyAnonymousRateLimiter, globalRateLimiter } from './util/requestRateLimit.js';
 import { ensureFeatureRequestTables } from './util/featureRequestSchema.js';
 import { ensureAiDocumentSchema } from './util/aiDocumentSchema.js';
@@ -298,6 +301,8 @@ function scheduleGrowthNudges() {
 scheduleGrowthNudges();
 startCommunityFeedScheduler();
 startCommunityReviewScheduler();
+startPublicResourceReviewScheduler();
+startPublicResourceEventScheduler();
 startTodoReminderScheduler();
 if (getTodoPlanFeatureState().schedulerEnabled) {
   startTodoReminderV2Scheduler();
@@ -306,6 +311,7 @@ if (getTodoPlanFeatureState().schedulerEnabled) {
   console.log('[todo-plan-v2] scheduler disabled by feature flag');
 }
 startEmailDeliveryLogCleanupScheduler();
+startAccountEmailHealthScheduler();
 
 // 启动 Express 服务器
 // 全局兜底:fire-and-forget 漏 catch 或深层依赖异常时留痕,避免 Node 默认行为下无声崩溃(进程守护由 PM2 负责)。

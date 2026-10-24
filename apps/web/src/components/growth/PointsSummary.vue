@@ -1,33 +1,33 @@
 <template>
-  <section class="points-summary" :aria-label="t('growth.pointsUsageOverviewTitle')">
-    <div class="summary-top">
+  <section class="points-summary" :class="{ 'is-compact': compact }" :aria-label="t('growth.pointsUsageOverviewTitle')">
+    <div v-if="!compact" class="summary-top">
       <div class="balance">
         <span>{{ t('growth.pointsCenterBalance') }}</span>
         <strong>{{ summary ? formatNumber(summary.balance) : '—' }}</strong>
       </div>
-      <BButton size="small" @click="$emit('exchange')">{{ t('growth.pointsUsageExchangeAction') }}</BButton>
+      <BButton @click="$emit('exchange')">{{ t('growth.pointsUsageExchangeAction') }}</BButton>
     </div>
     <div v-if="loading && !summary" class="summary-state"><BLoading inline loading /></div>
     <div v-else-if="error" class="summary-state is-error" role="alert">
       <span>{{ t('growth.pointsCenterLoadFailed') }}</span>
-      <BButton size="small" :loading="loading" @click="load">{{ t('common.retry') }}</BButton>
+      <BButton :loading="loading" @click="load">{{ t('common.retry') }}</BButton>
     </div>
     <template v-if="summary">
       <div class="summary-bottom">
+        <strong v-if="compact" class="summary-period">{{ t('growth.pointsPeriod28') }}</strong>
         <div class="totals">
           <div
-            ><span>{{ t('growth.pointsIncome28') }}</span
+            ><span>{{ t(compact ? 'growth.pointsIncome' : 'growth.pointsIncome28') }}</span
             ><b class="income">+{{ formatNumber(earned) }}</b></div
           >
           <div
-            ><span>{{ t('growth.pointsExpense28') }}</span
+            ><span>{{ t(compact ? 'growth.pointsExpense' : 'growth.pointsExpense28') }}</span
             ><b class="expense">{{ spent > 0 ? '-' : '' }}{{ formatNumber(spent) }}</b></div
           >
         </div>
         <div class="summary-actions">
           <BButton
             class="summary-disclosure"
-            size="small"
             :aria-expanded="panel === 'analysis'"
             :aria-controls="`${panelId}-analysis`"
             @click="toggle('analysis')"
@@ -37,7 +37,6 @@
           </BButton>
           <BButton
             class="summary-disclosure"
-            size="small"
             :aria-expanded="panel === 'rules'"
             :aria-controls="`${panelId}-rules`"
             @click="toggle('rules')"
@@ -100,6 +99,7 @@
   import icon from '@/config/icon';
 
   const panelId = useId();
+  withDefaults(defineProps<{ compact?: boolean }>(), { compact: false });
   defineEmits<{ exchange: [] }>();
   const { t, te, locale } = useI18n();
   const summary = ref<any>(null);
@@ -310,6 +310,28 @@
   .rule-stage {
     display: block;
   }
+  .is-compact {
+    .summary-bottom {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr) auto;
+      gap: var(--ui-space-24, 24px);
+      margin-top: 0;
+    }
+    .summary-period {
+      padding-right: var(--ui-space-24, 24px);
+      border-right: 1px solid var(--workspace-divider);
+      font-size: var(--ui-font-15, 15px);
+      white-space: nowrap;
+    }
+    .totals > div {
+      display: flex;
+      align-items: center;
+      gap: var(--ui-space-12, 12px);
+    }
+    .expense {
+      color: var(--text-color);
+    }
+  }
   @media (max-width: 767px) {
     .totals {
       gap: 24px;
@@ -317,6 +339,41 @@
     .source-groups {
       grid-template-columns: 1fr;
       gap: 20px;
+    }
+    .is-compact {
+      .summary-bottom {
+        grid-template-columns: auto minmax(0, 1fr);
+        gap: var(--ui-space-12, 12px) var(--ui-space-8, 8px);
+      }
+      .summary-period {
+        padding-right: 0;
+        border: none;
+        font-size: var(--ui-font-14, 14px);
+      }
+      .summary-actions {
+        justify-content: flex-end;
+        flex-wrap: wrap;
+        grid-column: 2;
+        grid-row: 1;
+        gap: var(--ui-space-2, 2px);
+        min-width: 0;
+      }
+      .summary-disclosure {
+        font-size: var(--ui-font-12, 12px);
+        gap: var(--ui-space-3, 3px);
+        padding: 0 var(--ui-space-3, 3px);
+      }
+      .totals {
+        grid-column: 1 / -1;
+        grid-row: 2;
+        gap: var(--ui-space-24, 24px);
+      }
+      .totals > div {
+        gap: var(--ui-space-10, 10px);
+      }
+      .rules {
+        grid-template-columns: 1fr;
+      }
     }
   }
 </style>

@@ -52,6 +52,7 @@ function tokenAction({
 }
 
 export const AI_BILLING_ACTIONS = Object.freeze([
+  tokenAction({ id: 'public_resource.review_screen', module: 'general', labelKey: 'publicResourceReviewScreen', taskTypes: ['skill_public_resource_review_screen'], allowedBillingPolicies: ['system'], publicCatalog: false }),
   tokenAction({ id: 'community.review_screen', module: 'general', labelKey: 'communityReviewScreen', taskTypes: ['skill_community_review_screen'], allowedBillingPolicies: ['system'], publicCatalog: false }),
   ...['suggest', 'extract'].map(mode => tokenAction({ id: `toolbox.extraction_${mode}`, module: 'toolbox', labelKey: 'toolboxExtraction', taskTypes: [`skill_toolbox_extraction_${mode}`], allowedBillingPolicies: ['user'] })),
   tokenAction({ id: 'toolbox.translation', module: 'toolbox', labelKey: 'toolboxTranslation', taskTypes: ['skill_toolbox_translation'], allowedBillingPolicies: ['user'] }),

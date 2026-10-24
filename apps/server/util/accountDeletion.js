@@ -1,3 +1,4 @@
+import { purgePublicResourceData } from './publicResources/lifecycle.js';
 import { purgeCommunityFeedData } from './communityFeed/lifecycle.js';
 import { deferCloudImageDeletion, deleteUnmanagedObject } from './imagePreview/cleanup.js';
 import crypto from 'node:crypto';
@@ -27,6 +28,7 @@ const DIRECT_DELETE_TABLES = Object.freeze([
   ['collection_submissions', 'respondent_user_id'],
   ['browser_push_subscriptions', 'user_id'],
   ['notification', 'user_id'],
+  ['account_email_health_notices', 'user_id'],
   ['opinion', 'user_id'],
   ['resource_inbox', 'user_id'],
   ['resource_tag_relations', 'user_id'],
@@ -729,6 +731,7 @@ export async function purgeOwnedResources(connection, tables, userId) {
     await connection.query('DELETE j FROM browser_push_jobs j JOIN browser_push_subscriptions s ON s.id = j.subscription_id WHERE s.user_id = ?', [userId]);
   }
   await purgeCommunityFeedData(connection,tables,userId);
+  await purgePublicResourceData(connection,tables,userId);
   if (tables.has('image_assets') && tables.has('image_asset_refs')) {
     if (tables.has('files')) {
       const [images] = await connection.query('SELECT * FROM files WHERE create_by=?', [userId]);

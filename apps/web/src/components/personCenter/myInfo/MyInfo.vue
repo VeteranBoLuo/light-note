@@ -2,10 +2,11 @@
   <BModal
     v-if="visible"
     :visible="true"
-    width="min(var(--ui-layout-560, 560px), 94vw)"
+    width="min(var(--ui-layout-640, 640px), 94vw)"
     :title="t('myInfo.title')"
     :mask-closable="false"
     :show-footer="false"
+    content-class="profile-editor-modal-content"
     :close-disabled="form?.saving"
     @close="form?.requestClose()"
   >
@@ -32,3 +33,12 @@
     window.dispatchEvent(new CustomEvent('light-note:profile-saved'));
   }
 </script>
+
+<style scoped>
+  :global(.modal-view .modal-content.profile-editor-modal-content) {
+    display: flex;
+    min-height: 0;
+    overflow: hidden;
+    padding: 0;
+  }
+</style>

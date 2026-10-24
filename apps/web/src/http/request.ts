@@ -317,7 +317,9 @@ request.interceptors.response.use(
       error.code === 'ECONNRESET' ||
       (error.message && /ECONNRESET|Network Error|Failed to fetch/i.test(error.message));
     if (isNetworkFailure) {
-      console.error('网络连接异常:', error);
+      if (/^(?:\/api)?\/public-resources(?:\/|$)/.test(String(error.config?.url||''))) {
+        console.error('[public-resources] network request failed');
+      } else console.error('网络连接异常:', error);
       const failureMessage = i18n.global.t(
         isOffline ? 'http.offline' : isTimeout ? 'http.requestTimeout' : 'http.networkUnstable',
       );

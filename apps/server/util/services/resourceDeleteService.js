@@ -1,8 +1,11 @@
+import { withdrawDeletedSources } from '../publicResources/lifecycle.js';
 import pool from '../../db/index.js';
 import { cleanupBookmarkIconFiles } from '../bookmarkIconService.js';
 import { invalidatePersonalKnowledgeCache } from '../personalKnowledgeSearch.js';
 import { removeInboxRelations } from '../resourceInbox.js';
 import { queryOwnedResourceIds } from './resourceTagWriteService.js';
+import { deleteOwnedNoteSubtrees, NoteTreeError } from './noteTreeService.js';
+import { MAX_NOTE_BATCH_ACTION_ITEMS } from '@lightnote/shared/resource-selection';
 
 export const DELETABLE_RESOURCE_TYPES = Object.freeze(['bookmark', 'note', 'file', 'tag']);
 
@@ -48,7 +51,7 @@ export async function softDeleteResources(db, { userId, items: rawItems }) {
     if (!requestedIds.length) continue;
     let validCount = 0;
     let affectedCount = 0;
-    for (const requestedChunk of chunks(requestedIds)) {
+    for (const requestedChunk of chunks(requestedIds, type === 'note' ? MAX_NOTE_BATCH_ACTION_ITEMS : 200)) {
       const validIds = await queryOwnedIds(db, { userId, type, ids: requestedChunk });
       validCount += validIds.length;
       if (!validIds.length) continue;
@@ -67,11 +70,21 @@ export async function softDeleteResources(db, { userId, items: rawItems }) {
           [userId, ...validIds],
         );
       } else if (type === 'note') {
-        [result] = await db.query(
-          `UPDATE note SET del_flag = 1, deleted_at = NOW()
-            WHERE create_by = ? AND del_flag = 0 AND id IN (${placeholders})`,
-          [userId, ...validIds],
-        );
+        try {
+          const deleted = await deleteOwnedNoteSubtrees(db, {
+            userId,
+            items: validIds.map((id) => ({ id, expectedDescendantCount: 0 })),
+          });
+          result = { affectedRows: deleted.deletedCount };
+        } catch (error) {
+          if (
+            error instanceof NoteTreeError && error.code === 'NOTE_TREE_DELETE_CONFLICT' &&
+            Number(error.details?.actualDescendantCount || 0) > 0
+          ) {
+            throw new NoteTreeError('NOTE_HAS_CHILDREN', '页面包含子页面，请到笔记库确认后删除整个目录', 409, error.details);
+          }
+          throw error;
+        }
       } else if (type === 'file') {
         [result] = await db.query(
           `UPDATE files SET del_flag = 1, deleted_at = NOW()
@@ -89,7 +102,8 @@ export async function softDeleteResources(db, { userId, items: rawItems }) {
           [userId, ...validIds],
         );
       }
-      if (type !== 'tag') {
+      if (type !== 'note') await withdrawDeletedSources(db, { userId, kind: type, ids: validIds });
+      if (type !== 'tag' && type !== 'note') {
         await removeInboxRelations(db, {
           userId,
           items: validIds.map((id) => ({ resourceType: type, resourceId: id })),

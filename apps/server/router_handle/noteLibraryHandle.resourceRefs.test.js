@@ -14,6 +14,7 @@ const connection = {
 const getConnection = vi.fn(async () => connection);
 const poolQuery = vi.fn();
 const ensureNotVisitor = vi.fn(() => true);
+const withdrawDeletedSources = vi.fn(async () => {});
 const replaceResourceTagRelations = vi.fn();
 const validateUserTags = vi.fn(async () => []);
 const extractOwnedResourceRefs = vi.fn(() => []);
@@ -55,6 +56,7 @@ vi.mock('../util/noteImages.js', () => ({
   filterOwnedImageUrls: vi.fn(async () => []),
 }));
 vi.mock('../util/personalKnowledgeSearch.js', () => ({ invalidatePersonalKnowledgeCache: vi.fn() }));
+vi.mock('../util/publicResources/lifecycle.js', () => ({ withdrawDeletedSources }));
 vi.mock('../util/agent/logSafety.js', () => ({ stableAgentErrorCode: vi.fn(() => 'TEST_CODE') }));
 vi.mock('../util/services/noteReferenceService.js', () => ({
   DEFAULT_RESOURCE_BACKLINK_LIMIT: 5,
@@ -746,10 +748,13 @@ describe('delNote 源笔记软删除生命周期(N0)', () => {
       }
       return [{ affectedRows: 1 }];
     });
-    await delNote({ user: { id: 'u1' }, body: { ids: ['note-1'] } }, mockRes());
+    const res = mockRes();
+    await delNote({ user: { id: 'u1' }, body: { ids: ['note-1'] } }, res);
 
+    expect(lastSent(res)).toMatchObject({ status: 200, data: { deletedCount: 1 } });
     expect(deleteNoteResourceRefsForNotes).not.toHaveBeenCalled();
     expect(connection.query.mock.calls.some(([sql]) => /DELETE FROM note_resource_refs/.test(String(sql)))).toBe(false);
+    expect(withdrawDeletedSources).toHaveBeenCalledWith(connection, { userId: 'u1', kind: 'note', ids: ['note-1'] });
     expect(connection.commit).toHaveBeenCalledTimes(1);
   });
 });

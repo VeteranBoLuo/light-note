@@ -185,7 +185,10 @@ describe.skipIf(!socketPath)('项目证据、结论与行动 · 真实 MySQL', (
       linkedTodo: { status: 'pending', available: true },
     });
     const briefDb = {
-      query: (sql, args) => (sql.includes('FROM toolbox_artifacts') ? Promise.resolve([[]]) : db.query(sql, args)),
+      query: (sql, args) =>
+        sql.includes('FROM toolbox_artifacts') || sql.includes('FROM toolbox_jobs')
+          ? Promise.resolve([[]])
+          : db.query(sql, args),
     };
     const calendar = { date: '2026-10-10', yesterdayStart: '2026-10-09', locale: 'zh-CN' };
     expect(

@@ -1,3 +1,4 @@
+import { ensureRootRole } from '../util/rootRole.js';
 import { buildApproximateFunnelQuery } from '../util/services/conversionFunnelQuery.js';
 import { queryActivitySummary, queryActivityBaseline, activityFailure } from '../util/services/userActivityService.js';
 import { resultData, snakeCaseKeys, insertData, generateUUID, INTERNAL_ROLES } from '../util/common.js';
@@ -226,25 +227,7 @@ export const getConversionFunnel = async (req, res) => {
   }
 };
 
-export const ensureRootRole = async (req, res) => {
-  try {
-    const userId = req.user?.id;
-    if (!userId || req.user?.role !== 'root') {
-      res.send(resultData(null, 403, '无权限操作'));
-      return null;
-    }
-    const [userResult] = await pool.query('SELECT role,del_flag FROM user WHERE id = ? LIMIT 1', [userId]);
-    if (userResult.length === 0 || userResult[0].role !== 'root' || Number(userResult[0].del_flag || 0) !== 0) {
-      res.send(resultData(null, 403, '仅root用户可操作'));
-      return null;
-    }
-    return userId;
-  } catch (e) {
-    console.error('[root-auth] 身份复核失败 code=%s', stableAgentErrorCode(e));
-    res.send(resultData(null, 500, '服务器内部错误'));
-    return null;
-  }
-};
+export { ensureRootRole } from '../util/rootRole.js';
 
 export const getDeepSeekBalance = async (req, res) => {
   const rootUserId = await ensureRootRole(req, res);

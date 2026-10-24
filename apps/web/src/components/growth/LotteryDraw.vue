@@ -1,438 +1,261 @@
 <template>
-  <div class="lt">
+  <div class="lt" :class="{ 'is-mobile': bookmark.isMobile, 'is-narrow': bookmark.isMobileDevice }">
     <header class="lt-header">
-      <div class="lt-heading">
-        <span class="lt-heading__icon" aria-hidden="true">
-          <SvgIcon :src="icon.growth.reward" :size="25" />
-        </span>
-        <div>
-          <h2 id="lottery-title" class="lt-title">{{ t('growth.lotteryTitle') }}</h2>
-          <p class="lt-subtitle">{{ t('growth.lotterySubtitle') }}</p>
-        </div>
-      </div>
-
-      <div class="lt-wallet" :aria-label="t('growth.myPoints')">
-        <div class="lt-wallet__copy">
-          <span>{{ t('growth.myPoints') }}</span>
-          <strong v-if="lottery">
-            <SvgIcon :src="icon.growth.coin" :size="18" aria-hidden="true" />
-            {{ points.toLocaleString('en-US') }}
-          </strong>
-          <BLoading v-else inline :loading="true" />
-        </div>
-        <span v-if="lottery" class="lt-wallet__level">{{
-          t('growth.lotteryLevelBenefit', { level: lottery.level })
-        }}</span>
-      </div>
+      <div class="lt-heading"
+        ><h2 id="lottery-title">{{ t('growth.lotteryTitle') }}</h2
+        ><p>{{ t('growth.lotterySubtitle') }}</p></div
+      >
+      <div class="lt-wallet"
+        ><span>{{ t('growth.myPoints') }}</span
+        ><strong v-if="lottery">{{ points.toLocaleString(locale) }}</strong
+        ><BLoading v-else inline loading
+      /></div>
+      <BButton class="lt-history-button" @click="records?.open()"
+        ><SvgIcon :src="icon.noteDetail.history" :size="17" />{{ t('growth.lotteryHistoryTitle') }}</BButton
+      >
+      <BButton v-if="!bookmark.isMobile" type="text" @click="goBackpack"
+        >{{ t('growth.inventoryTitle') }}<SvgIcon :src="icon.arrow_right" :size="15"
+      /></BButton>
     </header>
-
-    <dl v-if="lottery" class="lt-status-strip" :aria-label="t('growth.lotteryStatusOverview')">
-      <div>
-        <dt>{{ t('growth.myPoints') }}</dt>
-        <dd>{{ points.toLocaleString('en-US') }}</dd>
-      </div>
-      <div>
-        <dt>{{ t('growth.lotteryFreePoolTab') }}</dt>
-        <dd>{{ freeRemaining }}/{{ freeDaily }}</dd>
-      </div>
-      <div>
-        <dt>{{ t('growth.lotteryPaidPityTitle') }}</dt>
-        <dd>{{ pityCurrent }}/{{ pityEvery }}</dd>
-      </div>
-    </dl>
-
-    <div v-if="!lottery && (lotteryLoading || !lotteryError)" class="lt-loading">
-      <BLoading inline :loading="true" :title="t('growth.lotteryLoading')" />
-    </div>
-
-    <div v-else-if="lotteryError && !lottery" class="lt-loading lt-loading--error" role="alert">
-      <SvgIcon :src="icon.message.warning" :size="24" aria-hidden="true" />
-      <strong>{{ t('growth.lotteryLoadFailed') }}</strong>
-      <BButton size="small" @click="loadLottery">{{ t('common.retry') }}</BButton>
-    </div>
-
+    <BTabs v-model:active-tab="activePoolMode" class="lt-pool-tabs" variant="line" :options="poolModeOptions" />
+    <div v-if="!lottery && !lotteryError" class="lt-state"
+      ><BLoading inline loading :title="t('growth.lotteryLoading')"
+    /></div>
+    <div v-else-if="!lottery" class="lt-state" role="alert"
+      >{{ t('growth.lotteryLoadFailed') }}<BButton @click="loadLottery">{{ t('common.retry') }}</BButton></div
+    >
     <div v-else class="lt-layout">
-      <section class="lt-machine" aria-labelledby="lottery-title">
-        <div class="lt-machine__head">
-          <div>
-            <span class="lt-kicker">{{ t('growth.lotteryStageKicker') }}</span>
-            <strong>{{ t('growth.lotteryRewardDelivery') }}</strong>
-          </div>
-          <span
-            v-if="activePoolCountsPity"
-            class="lt-pity-badge"
-            :class="{ 'is-due': isPityDue, 'is-triggered': pityTriggered }"
-          >
-            <SvgIcon
-              :src="isPityDue || pityTriggered ? icon.growth.reward : icon.growth.level"
-              :size="15"
-              aria-hidden="true"
-            />
-            {{
-              pityTriggered
-                ? t('growth.lotteryPityTriggered')
-                : isPityDue
-                  ? t('growth.lotteryPityNow')
-                  : t('growth.lotteryPityLeft', { n: pityRemaining })
-            }}
-          </span>
-          <span v-else class="lt-pity-badge lt-pity-badge--free">
-            <SvgIcon :src="icon.growth.checkin" :size="15" aria-hidden="true" />
-            {{ t('growth.lotteryFreeNoPityBadge') }}
-          </span>
-        </div>
-
-        <div
-          class="lt-stage"
-          :class="{ 'is-rolling': rolling, 'has-result': revealed.length }"
-          :aria-busy="rolling || undefined"
-          aria-live="polite"
+      <section class="lt-machine" :aria-busy="rolling || undefined" aria-labelledby="lottery-title">
+        <div class="lt-machine-head"
+          ><strong>{{
+            t(activePoolMode === 'free' ? 'growth.lotteryFreePoolTab' : 'growth.lotteryPaidPoolTab')
+          }}</strong>
+          <span>{{
+            activePoolMode === 'free'
+              ? t('growth.lotteryLevelBenefit', { level: lottery.level })
+              : t('growth.lotteryPityPoolHint', { n: pityEvery })
+          }}</span></div
         >
-          <span class="lt-stage__glow lt-stage__glow--one" aria-hidden="true"></span>
-          <span class="lt-stage__glow lt-stage__glow--two" aria-hidden="true"></span>
-          <span class="lt-stage__orbit" aria-hidden="true"></span>
-
-          <div v-if="rolling" class="lt-rolling">
-            <div class="lt-prize-core is-rolling" aria-hidden="true">
-              <span class="lt-prize-core__halo"></span>
-              <SvgIcon :src="icon.growth.reward" :size="48" />
-            </div>
-            <strong>{{ t('growth.lotteryRolling') }}</strong>
-            <span>{{ t('growth.lotteryStageIdleHint') }}</span>
-          </div>
-
-          <div v-else-if="revealed.length" class="lt-results">
-            <div class="lt-results__heading" :class="{ 'is-best': hitBest }">
-              <SvgIcon :src="icon.growth.reward" :size="19" aria-hidden="true" />
-              <strong>{{ hitBest ? t('growth.lotteryBestHit') : t('growth.lotteryResultTitle') }}</strong>
-              <span v-if="pityTriggered" class="lt-results__pity-status">
-                {{ t('growth.lotteryPityTriggered') }}
-              </span>
-            </div>
-            <div class="lt-prizes" :class="{ 'is-single': revealed.length === 1 }">
+        <div class="lt-stage" aria-live="polite">
+          <BLoading v-if="rolling" inline loading :title="t('growth.lotteryRolling')" />
+          <template v-else-if="visibleResults.length">
+            <span class="lt-delivered"
+              ><SvgIcon :src="icon.growth.action" :size="18" />{{ t('growth.lotteryDelivered') }}</span
+            >
+            <div class="lt-prizes" :class="{ 'is-single': visibleResults.length === 1 }">
               <div
-                v-for="(prize, index) in revealed"
-                :key="`${prize.id}-${index}`"
+                v-for="(prize, i) in visibleResults"
+                :key="i"
                 class="lt-prize"
-                :class="[{ 'is-rare': prize.rare, 'is-guaranteed': prize.guaranteed }, `is-${prizeTone(prize)}`]"
-                :style="{ animationDelay: `${index * 70}ms` }"
+                :class="{ 'is-guaranteed': prize.guaranteed }"
               >
-                <span class="lt-prize__icon" aria-hidden="true">
-                  <SvgIcon :src="prizeIcon(prize)" :size="25" />
-                </span>
-                <span class="lt-prize__name">{{ prizeLabel(prize) }}</span>
-                <span v-if="prize.compensated" class="lt-prize__compensation">
-                  {{ t('growth.lotteryOverflowCompensated', { n: prize.amount }) }}
-                </span>
-                <span v-if="prize.guaranteed" class="lt-prize__rare is-guaranteed">
-                  {{ t('growth.lotteryPityHitBadge') }}
-                </span>
-                <span v-else-if="prize.rare" class="lt-prize__rare">{{ t('growth.lotteryRare') }}</span>
+                <SvgIcon :src="prizeIcon(prize)" :size="visibleResults.length === 1 ? 32 : 20" />
+                <strong>{{ label(prize) }}</strong>
+                <span v-if="prize.guaranteed" class="lt-prize-rare">{{ t('growth.lotteryPityHitBadge') }}</span>
+                <span v-else-if="prize.rare" class="lt-prize-rare">{{ t('growth.lotteryRare') }}</span>
+                <small v-if="prize.compensated">{{
+                  t('growth.lotteryOverflowCompensated', { n: prize.amount })
+                }}</small>
               </div>
             </div>
-          </div>
-
-          <div v-else class="lt-idle">
-            <div class="lt-prize-core" aria-hidden="true">
-              <span class="lt-prize-core__halo"></span>
-              <SvgIcon :src="icon.growth.reward" :size="52" />
-            </div>
-            <strong>{{ t('growth.lotteryStageIdleTitle') }}</strong>
-            <span>{{ t('growth.lotteryStageIdleHint') }}</span>
-          </div>
-        </div>
-
-        <div
-          class="lt-pity-panel"
-          :class="{
-            'is-due': isPityDue,
-            'is-triggered': pityTriggered,
-            'is-context': !activePoolCountsPity,
-          }"
-        >
-          <span class="lt-pity-panel__icon" aria-hidden="true">
-            <SvgIcon :src="isPityDue || pityTriggered ? icon.growth.reward : icon.growth.level" :size="20" />
-          </span>
-          <div class="lt-pity-panel__body">
-            <div class="lt-pity-panel__copy">
-              <strong>{{ t('growth.lotteryPaidPityTitle') }}</strong>
-              <span>{{ activePoolCountsPity ? pityStatusText : t('growth.lotteryFreeDoesNotCountPity') }}</span>
-            </div>
-            <div
-              class="lt-progress"
-              role="progressbar"
-              :aria-label="t('growth.lotteryPaidPityTitle')"
-              aria-valuemin="0"
-              :aria-valuemax="pityEvery"
-              :aria-valuenow="pityCurrent"
-            >
-              <span :style="{ width: `${pityPercent}%` }"></span>
-            </div>
-          </div>
-          <strong class="lt-pity-panel__count">{{ pityCurrent }}/{{ pityEvery }}</strong>
-        </div>
-
-        <div
-          class="lt-draw-options"
-          :class="{ 'has-no-free': freeDaily <= 0 }"
-          :aria-label="t('growth.lotteryDrawOptions')"
-        >
-          <BButton
-            v-if="freeDaily > 0"
-            class="lt-draw-button lt-draw-button--free"
-            :aria-busy="(rolling && activePoolMode === 'free') || undefined"
-            type="success"
-            :disabled="readOnly || !canFree"
-            :title="readOnly ? t('growth.adminContextActionUnavailable') : ''"
-            @click="onDraw(1, true)"
-          >
-            <span class="lt-draw-button__icon" aria-hidden="true">
-              <BLoading v-if="rolling && activePoolMode === 'free'" inline :loading="true" />
-              <SvgIcon v-else :src="icon.growth.reward" :size="21" />
-            </span>
-            <span class="lt-draw-button__copy">
-              <strong>{{
-                rolling && activePoolMode === 'free' ? t('growth.lotteryRolling') : t('growth.lotteryFreeDrawAction')
-              }}</strong>
-              <small>{{
-                freeRemaining > 0 ? t('growth.lotteryFreeLeft', { n: freeRemaining }) : t('growth.lotteryFreeUsedUp')
-              }}</small>
-            </span>
-          </BButton>
-
-          <BButton
-            class="lt-draw-button lt-draw-button--paid"
-            type="primary"
-            :disabled="readOnly || !canDraw(1)"
-            :title="readOnly ? t('growth.adminContextActionUnavailable') : ''"
-            @click="onDraw(1)"
-          >
-            <span class="lt-draw-button__icon" aria-hidden="true">
-              <SvgIcon :src="icon.growth.coin" :size="21" />
-            </span>
-            <span class="lt-draw-button__copy">
-              <strong>{{ t('growth.lotteryDrawOne') }}</strong>
-              <small>{{ lottery?.paid.singleCost }} {{ t('growth.points') }}</small>
-            </span>
-          </BButton>
-
-          <BButton
-            class="lt-draw-button lt-draw-button--paid lt-draw-button--ten"
-            type="primary"
-            :disabled="readOnly || !canDraw(10)"
-            :title="readOnly ? t('growth.adminContextActionUnavailable') : ''"
-            @click="onDraw(10)"
-          >
-            <span class="lt-draw-button__icon" aria-hidden="true">
-              <SvgIcon :src="icon.growth.reward" :size="21" />
-            </span>
-            <span class="lt-draw-button__copy">
-              <strong>{{ t('growth.lotteryDrawTen') }}</strong>
-              <small>{{ lottery?.paid.tenCost }} {{ t('growth.points') }}</small>
-            </span>
-            <span v-if="tenSavings > 0" class="lt-draw-button__save">
-              {{ t('growth.lotteryTenSave', { n: tenSavings }) }}
-            </span>
-          </BButton>
-        </div>
-
-        <p v-if="lottery?.points !== undefined && !hasEnoughAny && !isVisitor" class="lt-tip">
-          {{ t('growth.shopInsufficient') }}
-        </p>
-        <p v-if="lottery && !activeModeEnabled" class="lt-tip">{{ t('growth.lotteryMaintenance') }}</p>
-        <p v-if="isVisitor" class="lt-tip">{{ t('growth.lotteryVisitorTip') }}</p>
-      </section>
-
-      <aside class="lt-side">
-        <section class="lt-side-card lt-benefit-card">
-          <div class="lt-side-card__head">
-            <span class="lt-side-card__icon" :class="{ 'is-locked': freeDaily <= 0 }" aria-hidden="true">
-              <SvgIcon :src="freeDaily > 0 ? icon.growth.checkin : icon.growth.lock" :size="20" />
-            </span>
-            <div>
-              <strong>{{ t('growth.lotteryFreeTitle') }}</strong>
-              <span>{{ t('growth.lotteryLevelBenefit', { level: lottery?.level || 0 }) }}</span>
-            </div>
-          </div>
-
-          <template v-if="freeDaily > 0">
-            <div class="lt-benefit-card__value">
-              <strong
-                >{{ freeRemaining }}<small>/{{ freeDaily }}</small></strong
-              >
-              <span>{{ t('growth.lotteryTodayAvailability', { remaining: freeRemaining, total: freeDaily }) }}</span>
-            </div>
-            <div
-              class="lt-progress lt-progress--free"
-              role="progressbar"
-              :aria-label="t('growth.lotteryFreeTitle')"
-              aria-valuemin="0"
-              :aria-valuemax="freeDaily"
-              :aria-valuenow="freeRemaining"
-            >
-              <span :style="{ width: `${freePercent}%` }"></span>
-            </div>
-            <p>{{ t('growth.lotteryFreeDaily', { n: freeDaily }) }}</p>
+            <p class="lt-delivery-note">{{ resultDelivery }}</p>
+            <BButton type="text" @click="goBackpack"
+              >{{ t('growth.lotteryViewBackpack') }}<SvgIcon :src="icon.arrow_right" :size="15"
+            /></BButton>
           </template>
-          <p v-else class="lt-benefit-card__locked">{{ t('growth.lotteryFreeLocked') }}</p>
-        </section>
-
-        <section class="lt-side-card lt-pool-card">
-          <div class="lt-side-card__head lt-pool-card__head">
-            <span class="lt-side-card__icon" aria-hidden="true">
-              <SvgIcon :src="icon.growth.reward" :size="20" />
-            </span>
-            <div>
-              <strong>{{ t('growth.lotteryPoolTitle') }}</strong>
-              <span>{{ activePoolHint }}</span>
-            </div>
-          </div>
-
-          <BTabs
-            v-model:active-tab="activePoolMode"
-            class="lt-pool-tabs"
-            variant="segment"
-            :options="poolModeOptions"
-          />
-
-          <div v-if="activePool.length" class="lt-pool-grid">
-            <div
-              v-for="prize in activePool"
-              :key="prize.id"
-              class="lt-pool-item"
-              :class="[{ 'is-rare': prize.rare }, `is-${prizeTone(prize)}`]"
-            >
-              <span class="lt-pool-item__icon" aria-hidden="true">
-                <SvgIcon :src="prizeIcon(prize)" :size="20" />
-              </span>
-              <span class="lt-pool-item__copy">
-                <strong>{{ prizeLabel(prize) }}</strong>
-                <small v-if="prize.rare" class="lt-pool-item__pity-badge">
-                  {{ t('growth.lotteryPityPoolBadge') }}
-                </small>
-              </span>
-            </div>
-          </div>
-
-          <BButton
-            class="lt-odds-toggle"
-            v-click-log="{ module: '成长', operation: '查看抽奖概率说明' }"
-            :aria-expanded="showOdds"
-            aria-controls="lottery-odds"
-            @click="showOdds = !showOdds"
+          <template v-else>
+            <div class="lt-gift"
+              ><span aria-hidden="true"></span><img :src="gift" alt="" width="128" height="128"
+            /></div>
+            <h3>{{
+              t(
+                activePoolMode === 'free'
+                  ? freeRemaining > 0
+                    ? 'growth.lotteryStageIdleTitle'
+                    : freeDaily > 0
+                      ? 'growth.lotteryFreeUsedUp'
+                      : 'growth.lotteryFreeLocked'
+                  : 'growth.lotteryPaidIdle',
+              )
+            }}</h3>
+            <p>{{ t(activePoolMode === 'free' ? 'growth.lotteryStageIdleHint' : 'growth.lotteryPaidIdleHint') }}</p>
+          </template>
+        </div>
+        <div
+          v-if="activePoolCountsPity"
+          class="lt-pity-panel"
+          :class="{ 'is-triggered': pityTriggered && lastMode === activePoolMode }"
+        >
+          <div
+            ><strong>{{
+              pityTriggered && lastMode === activePoolMode
+                ? t('growth.lotteryPityTriggered')
+                : t('growth.lotteryPityLeft', { n: pityRemaining })
+            }}</strong
+            ><span>{{ pityCurrent }}/{{ pityEvery }}</span></div
           >
-            <span>{{ showOdds ? t('growth.lotteryOddsHide') : t('growth.lotteryOdds') }}</span>
-            <SvgIcon
-              class="lt-odds-toggle__icon"
-              :class="{ 'is-open': showOdds }"
-              :src="icon.noteTree.chevron"
-              :size="16"
-              aria-hidden="true"
-            />
-          </BButton>
-
-          <div v-if="showOdds && lottery" id="lottery-odds" class="lt-odds">
-            <div class="lt-odds__header" :class="{ 'is-two-column': !activePoolCountsPity }" aria-hidden="true">
-              <span>{{ t('growth.lotteryOddsPrize') }}</span>
-              <strong>{{ t('growth.lotteryNormalOdds') }}</strong>
-              <strong v-if="activePoolCountsPity">{{ t('growth.lotteryPityOdds') }}</strong>
-            </div>
-            <div
-              v-for="prize in activePool"
-              :key="prize.id"
-              class="lt-odds__row"
-              :class="{ 'is-rare': prize.rare, 'is-two-column': !activePoolCountsPity }"
+          <div
+            class="lt-progress"
+            role="progressbar"
+            :aria-label="t('growth.lotteryPaidPityTitle')"
+            :aria-valuenow="pityCurrent"
+            :aria-valuemax="pityEvery"
+            aria-valuemin="0"
+            ><span :style="{ width: `${pityPercent}%` }"></span
+          ></div>
+          <small>{{ t('growth.lotteryPaidPityOnly') }}</small>
+        </div>
+        <div class="lt-draw-options">
+          <template v-if="activePoolMode === 'free'">
+            <BButton
+              class="lt-draw-button lt-draw-button--free"
+              type="primary"
+              :loading="rolling"
+              :disabled="readOnly || !canFree"
+              @click="onDraw(1, true)"
+              >{{
+                t(
+                  isVisitor
+                    ? 'growth.lotteryVisitorTip'
+                    : freeDaily === 0
+                      ? 'growth.lotteryFreeLocked'
+                      : freeRemaining > 0
+                        ? 'growth.lotteryFreeDrawAction'
+                        : 'growth.lotteryFreeUsedUp',
+                )
+              }}</BButton
             >
-              <span>
-                <SvgIcon :src="prizeIcon(prize)" :size="15" aria-hidden="true" />
-                {{ prizeLabel(prize) }}
-                <small v-if="prize.rare" class="lt-odds__pity-badge">
-                  {{ t('growth.lotteryPityPoolBadge') }}
-                </small>
-              </span>
-              <strong>{{ formatRate(prize.normalRate ?? prize.rate) }}</strong>
-              <strong v-if="activePoolCountsPity">
-                {{ prize.pityRate ? formatRate(prize.pityRate) : t('growth.lotteryPityNotApplicable') }}
-              </strong>
+            <p
+              >{{ t('growth.lotteryTodayAvailability', { remaining: freeRemaining, total: freeDaily }) }} ·
+              {{
+                t(lottery.free.countsPaidPity ? 'growth.lotteryFreeCountsPity' : 'growth.lotteryFreeDoesNotCountPity')
+              }}</p
+            >
+          </template>
+          <template v-else>
+            <div class="lt-paid-actions">
+              <BButton
+                class="lt-draw-button lt-draw-button--paid"
+                type="primary"
+                :loading="rolling && drawingTimes === 1"
+                :disabled="readOnly || !canDraw(1)"
+                @click="onDraw(1)"
+                >{{ t('growth.lotteryDrawOne') }} ·
+                {{ t('growth.lotteryCostLabel', { n: lottery.paid.singleCost.toLocaleString(locale) }) }}</BButton
+              >
+              <BButton
+                class="lt-draw-button lt-draw-button--ten"
+                :loading="rolling && drawingTimes === 10"
+                :disabled="readOnly || !canDraw(10)"
+                @click="onDraw(10)"
+                >{{ t('growth.lotteryDrawTen') }} ·
+                {{ t('growth.lotteryCostLabel', { n: lottery.paid.tenCost.toLocaleString(locale) }) }}</BButton
+              >
             </div>
-            <p v-if="activePoolMode === 'free'" class="lt-odds__note">
-              {{
-                lottery.free.countsPaidPity
-                  ? t('growth.lotteryFreeCountsPity')
-                  : t('growth.lotteryFreeDoesNotCountPity')
-              }}
-            </p>
-            <p v-if="activePoolHasMakeupCard && lottery.paid.overflowPolicy" class="lt-odds__note">
-              {{
-                t('growth.lotteryOverflowPolicy', {
-                  max: lottery.paid.overflowPolicy.maxInventory,
-                  points: lottery.paid.overflowPolicy.compensationPoints,
-                })
-              }}
-            </p>
-          </div>
-        </section>
-      </aside>
+            <p v-if="points < lottery.paid.singleCost">{{ t('growth.shopInsufficient') }}</p>
+          </template>
+          <p v-if="readOnly">{{ t('growth.adminContextActionUnavailable') }}</p>
+          <p v-else-if="isVisitor">{{ t('growth.lotteryVisitorTip') }}</p>
+          <p v-else-if="!activeModeEnabled">{{ t('growth.lotteryModeMaintenance') }}</p>
+        </div>
+        <footer class="lt-machine-footer"
+          ><SvgIcon :src="icon.growth.ai" :size="17" /><span>{{ t('growth.lotteryAutoCreditHint') }}</span></footer
+        >
+      </section>
+      <section class="lt-side" :aria-label="t('growth.lotteryPoolTitle')">
+        <header class="lt-pool-head"
+          ><h3>{{ t(activePoolMode === 'free' ? 'growth.lotteryFreePoolTitle' : 'growth.lotteryPaidPoolTitle') }}</h3>
+          <BButton type="text" :aria-expanded="showOdds" aria-controls="lottery-odds" @click="showOdds = !showOdds"
+            >{{ t('growth.lotteryOdds')
+            }}<SvgIcon :src="icon.noteTree.chevron" :size="14" :class="{ 'is-open': showOdds }" /></BButton
+        ></header>
+        <div class="lt-pool-columns"
+          ><span>{{ t('growth.lotteryOddsPrize') }}</span
+          ><span>{{ t('growth.lotteryNormalOdds') }}</span
+          ><span v-if="showOdds && activePoolCountsPity">{{ t('growth.lotteryPityOdds') }}</span></div
+        >
+        <div
+          v-for="prize in activePool"
+          :key="prize.id"
+          class="lt-pool-item"
+          :class="{ 'show-pity': showOdds && activePoolCountsPity }"
+        >
+          <div
+            ><SvgIcon :src="prizeIcon(prize)" :size="21" /><span
+              >{{ label(prize)
+              }}<small v-if="prize.rare" class="lt-prize-rare">{{ t('growth.lotteryPityPoolBadge') }}</small></span
+            ></div
+          >
+          <span>{{ formatRate(prize.normalRate ?? prize.rate) }}</span
+          ><span v-if="showOdds && activePoolCountsPity">{{
+            prize.pityRate ? formatRate(prize.pityRate) : t('growth.lotteryPityNotApplicable')
+          }}</span>
+        </div>
+        <p class="lt-pool-note">{{ t('growth.lotteryPermanentHint') }}</p>
+        <p v-if="showOdds" id="lottery-odds" class="lt-pool-note">{{
+          t(activePoolCountsPity ? 'growth.lotteryPityExplanation' : 'growth.lotteryFreePoolHint', { n: pityEvery })
+        }}</p>
+        <p v-if="showOdds && activePoolHasMakeupCard && lottery.paid.overflowPolicy" class="lt-pool-note">{{
+          t('growth.lotteryOverflowPolicy', {
+            max: lottery.paid.overflowPolicy.maxInventory,
+            points: lottery.paid.overflowPolicy.compensationPoints,
+          })
+        }}</p>
+      </section>
     </div>
+    <LotteryRecords ref="records" :revision="historyRevision" />
   </div>
 </template>
 
 <script setup lang="ts">
-  import { computed, onMounted, ref } from 'vue';
+  import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import { useGrowth, type LotteryPrize } from '@/composables/useGrowth.ts';
-  import { useUserStore } from '@/store';
+  import { useRouter } from 'vue-router';
+  import { useGrowth, type LotteryPrize } from '@/composables/useGrowth';
+  import { bookmarkStore, useUserStore } from '@/store';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import BTabs from '@/components/base/BasicComponents/BTabs.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
-  import icon from '@/config/icon.ts';
-  import { recordOperation } from '@/api/commonApi.ts';
+  import LotteryRecords from './LotteryRecords.vue';
+  import { prizeIcon, prizeLabel } from '@/utils/lotteryPresentation';
+  import icon from '@/config/icon';
+  import gift from '@/assets/images/growth/lottery-gift.png';
+  import { recordOperation } from '@/api/commonApi';
 
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
+  const router = useRouter();
   const props = withDefaults(defineProps<{ readOnly?: boolean }>(), { readOnly: false });
   const emit = defineEmits<{ 'focus-header': [] }>();
   const readOnly = computed(() => props.readOnly);
-  const { lottery, lotteryLoading, lotteryError, loadLottery, draw } = useGrowth();
-
+  const { lottery, lotteryError, loadLottery, draw } = useGrowth();
+  const bookmark = bookmarkStore();
+  const user = useUserStore();
+  const records = ref<InstanceType<typeof LotteryRecords> | null>(null);
+  const historyRevision = ref(0);
   const rolling = ref(false);
+  const drawingTimes = ref(1);
   const revealed = ref<LotteryPrize[]>([]);
-  const hitBest = ref(false);
   const pityTriggered = ref(false);
   const showOdds = ref(false);
   const activePoolMode = ref<'free' | 'paid'>('free');
-
-  const user = useUserStore();
+  const lastMode = ref<'free' | 'paid'>('free');
+  const visibleResults = computed(() => (lastMode.value === activePoolMode.value ? revealed.value : []));
   const isVisitor = computed(() => !user.id || user.id === 'visitor');
   const points = computed(() => lottery.value?.points || 0);
   const freeDaily = computed(() => lottery.value?.free.daily || 0);
   const freeRemaining = computed(() => lottery.value?.free.remaining || 0);
-  const freePercent = computed(() =>
-    freeDaily.value > 0 ? Math.min(100, Math.max(0, (freeRemaining.value / freeDaily.value) * 100)) : 0,
-  );
   const pityEvery = computed(() => lottery.value?.paid.pityEvery || 10);
   const pityRemaining = computed(() => lottery.value?.paid.toPity || pityEvery.value);
   const pityCurrent = computed(() => Math.max(0, pityEvery.value - pityRemaining.value));
   const pityPercent = computed(() => Math.min(100, (pityCurrent.value / pityEvery.value) * 100));
-  const isPityDue = computed(() => Boolean(lottery.value && pityRemaining.value <= 1));
-  const pityStatusText = computed(() => {
-    if (pityTriggered.value) {
-      return t('growth.lotteryPityTriggeredNext', { current: pityCurrent.value, total: pityEvery.value });
-    }
-    if (isPityDue.value) return t('growth.lotteryPityNow');
-    return t('growth.lotteryPityProgress', { current: pityCurrent.value, total: pityEvery.value });
-  });
-  const tenSavings = computed(() =>
-    lottery.value ? Math.max(0, lottery.value.paid.singleCost * 10 - lottery.value.paid.tenCost) : 0,
-  );
-  const hasEnoughAny = computed(() => Boolean(lottery.value && points.value >= lottery.value.paid.singleCost));
   const canFree = computed(
     () => !rolling.value && !isVisitor.value && Boolean(lottery.value?.free.enabled) && freeRemaining.value > 0,
   );
   const poolModeOptions = computed(() => [
-    { key: 'free', label: t('growth.lotteryFreePoolTab') },
-    { key: 'paid', label: t('growth.lotteryPaidPoolTab') },
+    { key: 'free', label: t('growth.lotteryFreePoolTab'), disabled: rolling.value },
+    { key: 'paid', label: t('growth.lotteryPaidPoolTab'), disabled: rolling.value },
   ]);
   const activePool = computed(() =>
     activePoolMode.value === 'free' ? lottery.value?.free.pool || [] : lottery.value?.paid.pool || [],
@@ -441,1339 +264,476 @@
     () => activePoolMode.value === 'paid' || Boolean(lottery.value?.free.countsPaidPity),
   );
   const activePoolHasMakeupCard = computed(() => activePool.value.some((prize) => prize.kind === 'card'));
-  const activePoolHint = computed(() =>
-    activePoolMode.value === 'free' && !activePoolCountsPity.value
-      ? t('growth.lotteryFreePoolHint')
-      : t('growth.lotteryPoolHint', { n: pityEvery.value }),
-  );
   const activeModeEnabled = computed(() =>
     activePoolMode.value === 'free' ? Boolean(lottery.value?.free.enabled) : Boolean(lottery.value?.paid.enabled),
   );
-
-  function canDraw(times: number) {
-    if (rolling.value || isVisitor.value || !lottery.value) return false;
-    const cost = times === 10 ? lottery.value.paid.tenCost : lottery.value.paid.singleCost;
-    return lottery.value.paid.enabled && lottery.value.points >= cost;
-  }
-
-  const fmtMb = (mb: number) => (mb >= 1024 ? `${+(mb / 1024).toFixed(1)}GB` : `${mb}MB`);
+  const resultDelivery = computed(() =>
+    t(
+      visibleResults.value.every((prize) => prize.kind === 'ai_pack')
+        ? 'growth.lotteryAiCredited'
+        : 'growth.lotteryRewardsDelivered',
+    ),
+  );
+  const label = (prize: LotteryPrize) => prizeLabel(prize, t, locale.value);
   const formatRate = (rate?: number) =>
     `${Number(rate || 0)
       .toFixed(2)
       .replace(/\.00$/, '')}%`;
-
-  function prizeIcon(prize: LotteryPrize) {
+  const goBackpack = () => router.push({ path: '/growth', query: { section: 'rewards', reward: 'inventory' } });
+  function canDraw(times: number) {
+    if (rolling.value || isVisitor.value || !lottery.value) return false;
     return (
-      {
-        points: icon.growth.coin,
-        storage: icon.growth.storage,
-        card: icon.growth.checkin,
-        ai_pack: icon.growth.ai,
-      }[prize.kind] || icon.growth.reward
+      lottery.value.paid.enabled &&
+      points.value >= (times === 10 ? lottery.value.paid.tenCost : lottery.value.paid.singleCost)
     );
   }
-
-  function prizeTone(prize: LotteryPrize) {
-    return (
-      {
-        points: 'points',
-        storage: 'storage',
-        card: 'card',
-        ai_pack: 'ai',
-      }[prize.kind] || 'reward'
-    );
-  }
-
-  function prizeLabel(prize: LotteryPrize) {
-    if (prize.kind === 'points') return t('growth.prizePoints', { n: prize.amount });
-    if (prize.kind === 'storage') return t('growth.prizeStorage', { n: fmtMb(prize.amount) });
-    if (prize.kind === 'card') return t('growth.prizeCard', { n: prize.amount });
-    if (prize.kind === 'ai_pack') return t('growth.prizeAiPack');
-    return prize.name;
-  }
-
+  let generation = 0;
+  watch(
+    () => [user.id, user.adminContext?.id].join('|'),
+    () => {
+      ++generation;
+      rolling.value = false;
+      revealed.value = [];
+      pityTriggered.value = false;
+    },
+  );
+  watch(
+    () => lottery.value?.free.daily,
+    (daily) => {
+      if (daily === 0) activePoolMode.value = 'paid';
+    },
+    { immediate: true },
+  );
+  onBeforeUnmount(() => {
+    ++generation;
+  });
   async function onDraw(times: number, free = false) {
     if (readOnly.value || (free ? !canFree.value : !canDraw(times))) return;
+    const requestGeneration = ++generation;
     rolling.value = true;
+    drawingTimes.value = times;
     revealed.value = [];
-    hitBest.value = false;
     pityTriggered.value = false;
+    lastMode.value = free ? 'free' : 'paid';
+    emit('focus-header');
     try {
-      activePoolMode.value = free ? 'free' : 'paid';
-      // 滚动容器由成长页持有；统一让父页面把“积分抽奖”标题与余额留在视野内。
-      // 禁止在这里对舞台调用 scrollIntoView，否则会越过标题，回到用户反馈的图一位置。
-      emit('focus-header');
       const res = await draw(times, free);
-      // 保留最短揭晓时长，避免网络响应过快导致舞台动画闪烁。
-      await new Promise((resolve) => setTimeout(resolve, 650));
+      if (requestGeneration !== generation) return;
       if (res?.status === 200 && res.data?.ok) {
         revealed.value = res.data.results || [];
         pityTriggered.value = Boolean(res.data.pityTriggered || revealed.value.some((prize) => prize.guaranteed));
-        hitBest.value = revealed.value.some((prize) => prize.kind === 'storage' && prize.amount >= 512);
+        historyRevision.value++;
         recordOperation({
           module: '成长',
-          operation: `积分抽奖 ${free ? '免费抽' : times === 10 ? '十连' : '单抽'}（-${res.data.cost} 积分）${
-            pityTriggered.value ? ' · 触发保底' : ''
-          }`,
+          operation: `积分抽奖 ${free ? '免费抽' : times === 10 ? '十连' : '单抽'}（-${res.data.cost} 积分）`,
         });
       } else if (res?.status === 409 && res.data?.refresh) {
         message.warning(t('growth.economyCatalogChanged'));
-      } else {
-        message.error(res?.data?.msg || t('growth.shopInsufficient'));
+      } else if (res) {
+        message.error(res.data?.msg || res.msg || t('growth.lotteryDrawFailed'));
       }
-    } catch (error) {
-      console.error('抽奖失败:', error);
+    } catch {
+      if (requestGeneration === generation) message.error(t('growth.lotteryDrawFailed'));
     } finally {
-      rolling.value = false;
+      if (requestGeneration === generation) rolling.value = false;
     }
   }
-
-  onMounted(() => {
-    loadLottery();
-  });
+  onMounted(loadLottery);
 </script>
 
 <style scoped lang="less">
   @import (reference) '@/assets/css/ui-density.less';
   .lt {
-    --lt-accent-fg: var(--chip-pin-fg, #5146d9);
-    --lt-accent-bg: var(--chip-pin-bg, #eeecff);
-    --lt-accent-border: var(--chip-pin-border, #d9d4ff);
-    --lt-gold-fg: var(--warning-color, #a05f00);
-    --lt-gold-bg: var(--chip-pending-bg, #fff3df);
-    --lt-gold-border: var(--chip-pending-border, #f3d4a1);
     display: flex;
     flex-direction: column;
-    gap: .ui-space(22px) [];
+    gap: .ui-space(20px) [];
     color: var(--text-color);
   }
-
   .lt-header {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    gap: var(--ui-space-24, 24px);
+    gap: .ui-space(16px) [];
   }
-
   .lt-heading {
-    display: flex;
-    align-items: center;
+    flex: 1;
     min-width: 0;
-    gap: var(--ui-space-14, 14px);
   }
-
-  .lt-heading__icon {
-    width: var(--ui-layout-48, 48px);
-    height: var(--ui-layout-48, 48px);
-    display: grid;
-    flex: 0 0 auto;
-    place-items: center;
-    border: 1px solid var(--lt-accent-border);
-    border-radius: 15px;
-    color: var(--lt-accent-fg);
-    background: var(--lt-accent-bg);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.48);
-  }
-
-  .lt-title {
+  .lt-heading h2 {
     margin: 0;
-    font-size: .ui-font(20px) [];
-    font-weight: 800;
-    letter-spacing: -0.02em;
-  }
-
-  .lt-subtitle {
-    max-width: var(--ui-layout-620, 620px);
-    margin: var(--ui-space-5, 5px) 0 0;
-    color: var(--desc-color);
-    font-size: var(--ui-font-13, 13px);
-    line-height: 1.55;
-  }
-
-  .lt-wallet {
-    min-width: var(--ui-layout-194, 194px);
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--ui-space-16, 16px);
-    padding: var(--ui-space-11, 11px) var(--ui-space-13, 13px) var(--ui-space-11, 11px) var(--ui-space-15, 15px);
-    border: 1px solid var(--lt-gold-border);
-    border-radius: 15px;
-    background: var(--lt-gold-bg);
-  }
-
-  .lt-wallet__copy {
-    display: flex;
-    flex-direction: column;
-    gap: var(--ui-space-2, 2px);
-  }
-
-  .lt-wallet__copy > span {
-    color: var(--desc-color);
-    font-size: var(--ui-font-11, 11px);
-  }
-
-  .lt-wallet__copy strong {
-    display: flex;
-    align-items: center;
-    gap: var(--ui-space-6, 6px);
-    color: var(--lt-gold-fg);
-    font-size: var(--ui-font-20, 20px);
-    font-variant-numeric: tabular-nums;
-    line-height: 1.2;
-  }
-
-  .lt-wallet__level {
-    padding: var(--ui-space-4, 4px) var(--ui-space-8, 8px);
-    border: 1px solid var(--lt-gold-border);
-    border-radius: 999px;
-    color: var(--lt-gold-fg);
-    background: var(--background-color);
-    font-size: var(--ui-font-10, 10px);
+    font-size: .ui-font(24px) [];
     font-weight: 700;
+  }
+  .lt-heading p {
+    margin: .ui-space(6px) [] 0 0;
+    font-size: .ui-font(13px) [];
+    color: var(--desc-color);
+  }
+  .lt-header .b_btn {
+    gap: .ui-space(6px) [];
+    flex-shrink: 0;
+  }
+  .lt-wallet {
+    display: flex;
+    align-items: baseline;
+    gap: .ui-space(8px) [];
+    font-size: .ui-font(13px) [];
     white-space: nowrap;
   }
-
-  .lt-loading {
-    min-height: .ui-layout(420px) [];
-    display: grid;
-    place-items: center;
-    border: 1px solid var(--surface-border-color);
-    border-radius: 20px;
-    background: var(--workbench-subcard-bg);
+  .lt-wallet span {
+    color: var(--desc-color);
   }
-
-  .lt-loading--error {
-    display: flex;
-    flex-direction: column;
-    gap: var(--ui-space-10, 10px);
-    color: var(--warning-color, #a05f00);
+  .lt-wallet strong {
+    font-size: .ui-font(19px) [];
+    font-variant-numeric: tabular-nums;
   }
-
   .lt-layout {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(var(--ui-layout-270, 270px), var(--ui-layout-318, 318px));
-    align-items: start;
-    gap: var(--ui-space-18, 18px);
+    grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+    gap: .ui-space(18px) [];
   }
-
-  .lt-status-strip {
-    margin: 0 0 var(--ui-space-14, 14px);
-    padding: var(--ui-space-9, 9px) var(--ui-space-12, 12px);
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: var(--ui-space-8, 8px);
-    border: 1px solid var(--surface-border-color);
-    border-radius: 13px;
-    background: var(--workbench-subcard-bg);
-  }
-
-  .lt-status-strip div {
-    min-width: 0;
-    display: flex;
-    align-items: baseline;
-    gap: var(--ui-space-7, 7px);
-  }
-
-  .lt-status-strip dt {
-    color: var(--desc-color);
-    font-size: var(--ui-font-10_5, 10.5px);
-  }
-
-  .lt-status-strip dd {
-    margin: 0;
-    color: var(--text-color);
-    font-size: var(--ui-font-12, 12px);
-    font-weight: 750;
-    font-variant-numeric: tabular-nums;
-  }
-
   .lt-machine,
-  .lt-side-card {
-    border: 1px solid var(--surface-border-color);
-    background: var(--surface-raised-background, var(--background-color));
-    box-shadow: var(--surface-raised-shadow);
+  .lt-side {
+    border: 1px solid var(--workspace-border);
+    border-radius: 14px;
+    min-width: 0;
   }
-
   .lt-machine {
-    min-width: 0;
-    padding: var(--ui-space-20, 20px);
-    border-radius: 22px;
+    background: var(--workspace-content);
+    background: color-mix(in srgb, var(--primary-color) 6%, var(--workspace-content));
+    padding: .ui-space(20px) [];
+    display: flex;
+    flex-direction: column;
   }
-
-  .lt-machine__head {
+  .lt-machine-head {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: var(--ui-space-14, 14px);
-    margin-bottom: var(--ui-space-14, 14px);
+    gap: .ui-space(12px) [];
+    font-size: .ui-font(15px) [];
   }
-
-  .lt-machine__head > div {
-    display: flex;
-    flex-direction: column;
-    gap: var(--ui-space-3, 3px);
+  .lt-machine-head > span {
+    color: var(--chip-pin-fg);
+    font-size: .ui-font(12px) [];
+    text-align: right;
   }
-
-  .lt-machine__head strong {
-    font-size: var(--ui-font-12, 12px);
-    font-weight: 500;
-    color: var(--desc-color);
-  }
-
-  .lt-kicker {
-    color: var(--lt-accent-fg);
-    font-size: var(--ui-font-12, 12px);
-    font-weight: 800;
-    letter-spacing: 0.08em;
-  }
-
-  .lt-pity-badge {
-    min-height: var(--ui-layout-28, 28px);
-    display: inline-flex;
-    align-items: center;
-    gap: var(--ui-space-6, 6px);
-    padding: 0 var(--ui-space-10, 10px);
-    border: 1px solid var(--lt-accent-border);
-    border-radius: 999px;
-    color: var(--lt-accent-fg);
-    background: var(--lt-accent-bg);
-    font-size: var(--ui-font-11, 11px);
-    font-weight: 700;
-    white-space: nowrap;
-  }
-
-  .lt-pity-badge.is-due,
-  .lt-pity-badge.is-triggered {
-    border-color: var(--lt-gold-border);
-    color: var(--lt-gold-fg);
-    background: var(--lt-gold-bg);
-  }
-
   .lt-stage {
-    isolation: isolate;
-    position: relative;
-    min-height: var(--ui-layout-320, 320px);
-    display: grid;
-    overflow: hidden;
-    place-items: center;
-    padding: var(--ui-space-26, 26px);
-    border: 1px solid var(--lt-accent-border);
-    border-radius: 20px;
-    background:
-      radial-gradient(circle at 50% 10%, rgba(97, 92, 237, 0.18), transparent 42%),
-      linear-gradient(155deg, var(--background-color) 0%, var(--lt-accent-bg) 52%, var(--background-color) 100%);
-  }
-
-  .lt-stage.has-result {
-    align-items: stretch;
-  }
-
-  .lt-stage__glow {
-    position: absolute;
-    z-index: -1;
-    width: 180px;
-    height: 180px;
-    border-radius: 50%;
-    background: rgba(97, 92, 237, 0.1);
-    filter: blur(4px);
-  }
-
-  .lt-stage__glow--one {
-    top: -95px;
-    left: -55px;
-  }
-
-  .lt-stage__glow--two {
-    right: -70px;
-    bottom: -110px;
-  }
-
-  .lt-stage__orbit {
-    position: absolute;
-    z-index: -1;
-    width: 220px;
-    height: 220px;
-    border: 1px solid rgba(97, 92, 237, 0.22);
-    border-radius: 50%;
-    transform: rotate(-18deg) scaleY(0.45);
-  }
-
-  .lt-idle,
-  .lt-rolling {
-    position: relative;
     display: flex;
+    flex: 1;
     flex-direction: column;
     align-items: center;
-    gap: var(--ui-space-8, 8px);
+    justify-content: center;
+    gap: .ui-space(10px) [];
+    min-height: .ui-layout(240px) [];
+    padding: .ui-space(16px) [] 0;
     text-align: center;
   }
-
-  .lt-idle > strong,
-  .lt-rolling > strong {
-    margin-top: var(--ui-space-5, 5px);
-    font-size: var(--ui-font-16, 16px);
-    font-weight: 800;
+  .lt-stage h3 {
+    margin: 0;
+    font-size: .ui-font(21px) [];
   }
-
-  .lt-idle > span,
-  .lt-rolling > span {
+  .lt-stage p {
+    margin: 0;
     color: var(--desc-color);
-    font-size: var(--ui-font-12, 12px);
+    font-size: .ui-font(13px) [];
+    line-height: 1.6;
   }
-
-  .lt-prize-core {
+  .lt-gift {
     position: relative;
-    width: var(--ui-layout-94, 94px);
-    height: var(--ui-layout-94, 94px);
+    width: .ui-layout(160px) [];
+    height: .ui-layout(128px) [];
     display: grid;
     place-items: center;
-    border: 1px solid var(--lt-accent-border);
-    border-radius: 30px;
-    color: var(--lt-accent-fg);
-    background: var(--background-color);
-    box-shadow: 0 18px 40px -24px rgba(65, 59, 190, 0.7);
-    transform: rotate(-4deg);
   }
-
-  .lt-prize-core__halo {
+  .lt-gift img {
+    position: relative;
+    width: .ui-layout(128px) [];
+    height: .ui-layout(128px) [];
+    object-fit: contain;
+  }
+  .lt-gift > span {
     position: absolute;
-    inset: 7px;
-    border: 1px dashed var(--lt-accent-border);
-    border-radius: 24px;
-  }
-
-  .lt-prize-core.is-rolling {
-    animation: lt-shake 0.55s infinite ease-in-out;
-  }
-
-  .lt-results {
     width: 100%;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    gap: var(--ui-space-14, 14px);
+    height: 55%;
+    border: 1px solid var(--primary-color);
+    opacity: 0.2;
+    border-radius: 50%;
+    transform: rotate(-18deg);
   }
-
-  .lt-results__heading {
+  .lt-delivered {
     display: flex;
-    flex-wrap: wrap;
     align-items: center;
+    gap: .ui-space(6px) [];
+    color: var(--success-color);
+    font-size: .ui-font(13px) [];
+  }
+  .lt-prizes {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: .ui-space(8px) [];
+    width: 100%;
+  }
+  .lt-prize {
+    display: flex;
+    align-items: center;
+    gap: .ui-space(6px) [];
+    padding: .ui-space(10px) [];
+    background: var(--workspace-content);
+    border: 1px solid var(--workspace-border);
+    border-radius: 8px;
+    font-size: .ui-font(12px) [];
+    flex-wrap: wrap;
+    animation: lt-reveal 0.18s ease-out;
+  }
+  .lt-prize > :first-child {
+    color: var(--primary-color);
+    flex-shrink: 0;
+  }
+  .lt-prizes.is-single {
+    display: block;
+  }
+  .is-single .lt-prize {
+    border: 0;
+    padding: .ui-space(16px) [] 0;
     justify-content: center;
-    gap: var(--ui-space-7, 7px);
-    color: var(--lt-accent-fg);
-    font-size: var(--ui-font-15, 15px);
+    background: transparent;
+    font-size: .ui-font(25px) [];
   }
-
-  .lt-results__heading.is-best {
-    color: var(--lt-gold-fg);
+  .lt-prize.is-guaranteed {
+    border-color: var(--primary-color);
   }
-
-  .lt-results__pity-status {
+  .lt-prize-rare {
     display: inline-flex;
     align-items: center;
-    min-height: var(--ui-layout-24, 24px);
-    padding: var(--ui-space-2, 2px) var(--ui-space-8, 8px);
-    border: 1px solid var(--lt-gold-border);
-    border-radius: 999px;
-    color: var(--lt-gold-fg);
-    background: var(--lt-gold-bg);
-    font-size: var(--ui-font-10, 10px);
-    font-weight: 800;
+    border: 1px solid var(--primary-color);
+    color: var(--chip-pin-fg);
+    border-radius: 4px;
+    padding: .ui-space(2px) [] .ui-space(4px) [];
+    font-size: .ui-font(10px) [];
+    font-weight: 500;
+    line-height: 1.2;
   }
-
-  .lt-prizes {
-    width: 100%;
-    display: grid;
-    grid-template-columns: repeat(5, minmax(0, 1fr));
-    gap: var(--ui-space-8, 8px);
-  }
-
-  .lt-prizes.is-single {
-    max-width: var(--ui-layout-220, 220px);
-    grid-template-columns: 1fr;
-    align-self: center;
-  }
-
-  .lt-prize {
-    position: relative;
-    min-width: 0;
-    min-height: var(--ui-layout-96, 96px);
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: var(--ui-space-7, 7px);
-    padding: var(--ui-space-10, 10px) var(--ui-space-7, 7px);
-    border: 1px solid var(--surface-border-color);
-    border-radius: 13px;
-    background: var(--workbench-subcard-bg);
-    text-align: center;
-    animation: lt-pop 0.4s both cubic-bezier(0.2, 0.9, 0.3, 1.35);
-  }
-
-  .lt-prize.is-rare {
-    border-color: var(--lt-gold-border);
-    background: var(--lt-gold-bg);
-    box-shadow: 0 14px 24px -22px rgba(160, 95, 0, 0.9);
-  }
-
-  .lt-prize.is-guaranteed {
-    border-width: 2px;
-    border-color: var(--lt-gold-fg);
-  }
-
-  .lt-prize__icon,
-  .lt-pool-item__icon {
-    display: grid;
-    place-items: center;
-    color: var(--lt-accent-fg);
-  }
-
-  .lt-prize.is-points .lt-prize__icon,
-  .lt-pool-item.is-points .lt-pool-item__icon {
-    color: var(--lt-gold-fg);
-  }
-
-  .lt-prize.is-storage .lt-prize__icon,
-  .lt-pool-item.is-storage .lt-pool-item__icon {
-    color: var(--info-color, #2a63d6);
-  }
-
-  .lt-prize.is-ai .lt-prize__icon,
-  .lt-pool-item.is-ai .lt-pool-item__icon {
-    color: var(--success-color, #1a7d4a);
-  }
-
-  .lt-prize.is-rare .lt-prize__icon,
-  .lt-pool-item.is-rare .lt-pool-item__icon {
-    color: var(--lt-gold-fg);
-  }
-
-  .lt-prize__name {
-    min-width: 0;
-    color: var(--text-color);
-    font-size: var(--ui-font-11, 11px);
-    font-weight: 700;
-    line-height: 1.3;
-    overflow-wrap: anywhere;
-  }
-
-  .lt-prize__compensation {
-    color: var(--success-color, #1a7d4a);
-    font-size: var(--ui-font-9, 9px);
-    font-weight: 700;
-    line-height: 1.35;
-  }
-
-  .lt-prize__rare {
-    padding: var(--ui-space-2, 2px) var(--ui-space-6, 6px);
-    border: 1px solid var(--lt-gold-border);
-    border-radius: 999px;
-    color: var(--lt-gold-fg);
-    background: var(--background-color);
-    font-size: var(--ui-font-9, 9px);
-    font-weight: 800;
-  }
-
-  .lt-prize__rare.is-guaranteed {
-    border-color: var(--lt-gold-fg);
-    color: var(--background-color);
-    background: var(--lt-gold-fg);
-  }
-
   .lt-pity-panel {
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr) auto;
-    align-items: center;
-    gap: var(--ui-space-12, 12px);
-    margin-top: var(--ui-space-12, 12px);
-    padding: var(--ui-space-12, 12px) var(--ui-space-14, 14px);
-    border: 1px solid var(--surface-border-color);
-    border-radius: 15px;
-    background: var(--workbench-subcard-bg);
+    border: 1px solid var(--workspace-border);
+    background: var(--workspace-content);
+    border-radius: 10px;
+    padding: .ui-space(12px) [];
+    margin-bottom: .ui-space(14px) [];
   }
-
-  .lt-pity-panel.is-due,
-  .lt-pity-panel.is-triggered {
-    border-color: var(--lt-gold-border);
-    background: var(--lt-gold-bg);
-  }
-
-  .lt-pity-panel.is-context {
-    border-style: dashed;
-  }
-
-  .lt-pity-panel.is-context .lt-pity-panel__icon {
-    color: var(--desc-color);
-    border-color: var(--surface-border-color);
-    background: var(--background-color);
-  }
-
-  .lt-pity-badge--free {
-    border-color: var(--success-color, #1a7d4a);
-    color: var(--success-color, #1a7d4a);
-    background: var(--workbench-subcard-bg);
-  }
-
-  .lt-pity-panel__icon,
-  .lt-side-card__icon {
-    width: var(--ui-layout-36, 36px);
-    height: var(--ui-layout-36, 36px);
-    display: grid;
-    flex: 0 0 auto;
-    place-items: center;
-    border: 1px solid var(--lt-accent-border);
-    border-radius: 11px;
-    color: var(--lt-accent-fg);
-    background: var(--lt-accent-bg);
-  }
-
-  .lt-pity-panel.is-due .lt-pity-panel__icon,
-  .lt-pity-panel.is-triggered .lt-pity-panel__icon {
-    border-color: var(--lt-gold-border);
-    color: var(--lt-gold-fg);
-    background: var(--background-color);
-  }
-
-  .lt-pity-panel__body {
-    min-width: 0;
+  .lt-pity-panel > div:first-child {
     display: flex;
-    flex-direction: column;
-    gap: var(--ui-space-8, 8px);
-  }
-
-  .lt-pity-panel__copy {
-    display: flex;
-    align-items: baseline;
     justify-content: space-between;
-    gap: var(--ui-space-10, 10px);
+    gap: .ui-space(8px) [];
+    font-size: .ui-font(13px) [];
   }
-
-  .lt-pity-panel__copy strong {
-    font-size: var(--ui-font-12, 12px);
-  }
-
-  .lt-pity-panel__copy span {
+  .lt-pity-panel small {
     color: var(--desc-color);
-    font-size: var(--ui-font-11, 11px);
+    font-size: .ui-font(11px) [];
   }
-
-  .lt-pity-panel__count {
-    color: var(--lt-accent-fg);
-    font-size: var(--ui-font-13, 13px);
-    font-variant-numeric: tabular-nums;
+  .lt-pity-panel.is-triggered {
+    border-color: var(--primary-color);
   }
-
-  .lt-pity-panel.is-due .lt-pity-panel__count,
-  .lt-pity-panel.is-triggered .lt-pity-panel__count {
-    color: var(--lt-gold-fg);
-  }
-
   .lt-progress {
-    height: 6px;
+    height: .ui-layout(8px) [];
+    background: var(--workspace-divider);
+    border-radius: 4px;
+    margin: .ui-space(8px) [] 0;
     overflow: hidden;
-    border-radius: 999px;
-    background: var(--surface-border-color);
   }
-
   .lt-progress > span {
     height: 100%;
     display: block;
-    min-width: 0;
-    border-radius: inherit;
     background: var(--primary-color);
-    transition: width 0.35s ease;
+    border-radius: inherit;
   }
-
-  .lt-pity-panel.is-due .lt-progress > span,
-  .lt-pity-panel.is-triggered .lt-progress > span {
-    background: var(--lt-gold-fg);
-  }
-
   .lt-draw-options {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: var(--ui-space-10, 10px);
-    margin-top: var(--ui-space-14, 14px);
-  }
-
-  .lt-draw-options.has-no-free {
-    grid-template-columns: repeat(2, minmax(0, var(--ui-layout-220, 220px)));
-    justify-content: center;
-  }
-
-  .lt-draw-options :deep(.lt-draw-button.b_btn) {
-    position: relative;
-    width: 100%;
-    height: var(--ui-control-64, 64px);
-    min-width: 0;
-    justify-content: flex-start;
-    gap: var(--ui-space-10, 10px);
-    padding: 0 var(--ui-space-14, 14px);
-    overflow: hidden;
-    border: 1px solid var(--surface-border-color) !important;
-    border-radius: 14px;
-    line-height: 1.2;
-    box-shadow: none;
-  }
-
-  .lt-draw-options :deep(.lt-draw-button--free.b_btn) {
-    border-color: #16834d !important;
-    color: #fff;
-    background: #16834d;
-  }
-
-  .lt-draw-options :deep(.lt-draw-button--paid.b_btn) {
-    border-color: var(--primary-color) !important;
-    color: #fff;
-    background: linear-gradient(135deg, #514ad8 0%, #6f69ee 100%);
-  }
-
-  .lt-draw-options :deep(.lt-draw-button--ten.b_btn) {
-    background: linear-gradient(135deg, #4841c9 0%, #6f69ee 72%, #847ff4 100%);
-  }
-
-  .lt-draw-options :deep(.lt-draw-button.b_btn:not(.disabled):hover) {
-    transform: translateY(-1px);
-    filter: brightness(1.03);
-  }
-
-  .lt-draw-button__icon {
-    width: var(--ui-layout-34, 34px);
-    height: var(--ui-layout-34, 34px);
-    display: grid;
-    flex: 0 0 auto;
-    place-items: center;
-    border-radius: 10px;
-    background: rgba(255, 255, 255, 0.16);
-  }
-
-  .lt-draw-button--free .lt-draw-button__icon {
-    background: rgba(255, 255, 255, 0.16);
-  }
-
-  .lt-draw-options :deep(.lt-draw-button--free.b_btn:focus-visible) {
-    outline: 2px solid #16834d;
-    outline-offset: 3px;
-  }
-
-  .lt-draw-options :deep(.lt-draw-button--free.b_btn:not(.disabled):active) {
-    transform: translateY(0);
-    filter: brightness(0.9);
-  }
-
-  .lt-draw-button__copy {
-    min-width: 0;
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: var(--ui-space-3, 3px);
-  }
-
-  .lt-draw-button__copy strong {
-    font-size: var(--ui-font-13, 13px);
-    font-weight: 800;
-  }
-
-  .lt-draw-button__copy small {
-    max-width: 100%;
-    overflow: hidden;
-    font-size: var(--ui-font-10, 10px);
-    opacity: 0.82;
-    text-overflow: ellipsis;
-  }
-
-  .lt-draw-button__save {
-    position: absolute;
-    top: 6px;
-    right: 6px;
-    padding: var(--ui-space-2, 2px) var(--ui-space-5, 5px);
-    border: 1px solid rgba(255, 255, 255, 0.35);
-    border-radius: 999px;
-    color: #fff;
-    background: rgba(255, 255, 255, 0.16);
-    font-size: var(--ui-font-8, 8px);
-    font-weight: 800;
-  }
-
-  .lt-tip {
-    margin: var(--ui-space-10, 10px) 0 0;
-    color: var(--lt-accent-fg);
-    font-size: var(--ui-font-12, 12px);
     text-align: center;
   }
-
-  .lt-side {
-    min-width: 0;
-    display: flex;
-    flex-direction: column;
-    gap: var(--ui-space-14, 14px);
+  .lt-draw-button {
+    min-height: .ui-control(44px) [];
+    height: auto;
+    white-space: normal;
   }
-
-  .lt-side-card {
-    padding: var(--ui-space-16, 16px);
-    border-radius: 18px;
+  .lt-draw-button--free {
+    width: 70%;
   }
-
-  .lt-side-card__head {
-    display: flex;
-    align-items: center;
-    gap: var(--ui-space-10, 10px);
-  }
-
-  .lt-side-card__head > div {
-    min-width: 0;
-    display: flex;
-    flex-direction: column;
-    gap: var(--ui-space-2, 2px);
-  }
-
-  .lt-side-card__head strong {
-    font-size: var(--ui-font-13, 13px);
-    font-weight: 800;
-  }
-
-  .lt-side-card__head span:not(.lt-side-card__icon) {
-    color: var(--desc-color);
-    font-size: var(--ui-font-10, 10px);
-    line-height: 1.35;
-  }
-
-  .lt-side-card__icon.is-locked {
-    border-color: var(--surface-border-color);
-    color: var(--desc-color);
-    background: var(--workbench-subcard-bg);
-  }
-
-  .lt-benefit-card__value {
-    display: flex;
-    align-items: flex-end;
-    justify-content: space-between;
-    gap: var(--ui-space-10, 10px);
-    margin: var(--ui-space-18, 18px) 0 var(--ui-space-10, 10px);
-  }
-
-  .lt-benefit-card__value strong {
-    color: var(--lt-accent-fg);
-    font-size: var(--ui-font-28, 28px);
-    font-variant-numeric: tabular-nums;
-    line-height: 1;
-  }
-
-  .lt-benefit-card__value strong small {
-    color: var(--desc-color);
-    font-size: var(--ui-font-13, 13px);
-  }
-
-  .lt-benefit-card__value > span,
-  .lt-benefit-card p {
-    color: var(--desc-color);
-    font-size: var(--ui-font-10, 10px);
-  }
-
-  .lt-progress--free > span {
-    background: var(--success-color, #1a7d4a);
-  }
-
-  .lt-benefit-card p {
-    margin: var(--ui-space-9, 9px) 0 0;
-    line-height: 1.45;
-  }
-
-  .lt-benefit-card__locked {
-    padding: var(--ui-space-13, 13px) 0 0;
-  }
-
-  .lt-pool-card__head {
-    margin-bottom: var(--ui-space-14, 14px);
-  }
-
-  .lt-pool-tabs.tab-container {
-    margin-bottom: var(--ui-space-12, 12px);
-    border-radius: 10px;
-  }
-
-  .lt-pool-grid {
+  .lt-paid-actions {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: var(--ui-space-7, 7px);
+    gap: .ui-space(10px) [];
   }
-
-  .lt-pool-item {
-    min-width: 0;
-    display: flex;
-    align-items: center;
-    gap: var(--ui-space-8, 8px);
-    padding: var(--ui-space-9, 9px);
-    border: 1px solid var(--surface-border-color);
-    border-radius: 11px;
-    background: var(--workbench-subcard-bg);
-  }
-
-  .lt-pool-item.is-rare {
-    border-color: var(--lt-gold-border);
-    background: var(--lt-gold-bg);
-  }
-
-  .lt-pool-item__icon {
-    width: var(--ui-layout-28, 28px);
-    height: var(--ui-layout-28, 28px);
-    flex: 0 0 auto;
-    border-radius: 9px;
-    background: var(--background-color);
-  }
-
-  .lt-pool-item__copy {
-    min-width: 0;
-    display: flex;
-    flex-direction: column;
-    gap: var(--ui-space-2, 2px);
-  }
-
-  .lt-pool-item__copy strong {
-    overflow: hidden;
-    font-size: var(--ui-font-10, 10px);
-    font-weight: 700;
-    line-height: 1.25;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .lt-pool-item__copy small {
-    color: var(--lt-gold-fg);
-    font-size: var(--ui-font-9, 9px);
-    font-weight: 800;
-  }
-
-  .lt-pool-item__pity-badge,
-  .lt-odds__pity-badge {
-    width: fit-content;
-    padding: var(--ui-space-1, 1px) var(--ui-space-5, 5px);
-    border: 1px solid var(--lt-gold-border);
-    border-radius: 999px;
-    color: var(--lt-gold-fg);
-    background: var(--background-color);
-    font-size: var(--ui-font-8, 8px);
-    font-weight: 800;
-    line-height: 1.35;
-    white-space: nowrap;
-  }
-
-  .lt-odds-toggle {
+  .lt-paid-actions .lt-draw-button {
     width: 100%;
-    height: var(--ui-control-36, 36px);
+  }
+  .lt-draw-options p {
+    margin: .ui-space(8px) [] 0 0;
+    color: var(--desc-color);
+    font-size: .ui-font(12px) [];
+    line-height: 1.6;
+  }
+  .lt-machine-footer {
+    display: flex;
+    gap: .ui-space(6px) [];
+    align-items: center;
+    justify-content: center;
+    border-top: 1px solid var(--workspace-divider);
+    padding-top: .ui-space(14px) [];
+    margin-top: .ui-space(16px) [];
+    font-size: .ui-font(12px) [];
+    color: var(--desc-color);
+  }
+  .lt-machine-footer > :first-child {
+    flex-shrink: 0;
+    color: var(--primary-color);
+  }
+  .lt-side {
+    background: var(--workspace-content);
+    padding: .ui-space(18px) [];
+  }
+  .lt-pool-head {
     display: flex;
     justify-content: space-between;
-    margin-top: var(--ui-space-12, 12px);
-    padding: 0 var(--ui-space-10, 10px);
-    border: 1px solid var(--surface-border-color) !important;
-    border-radius: 10px;
-    color: var(--text-color);
-    background: var(--workbench-subcard-bg);
-    font-size: var(--ui-font-11, 11px);
-    font-weight: 700;
+    align-items: center;
+    gap: .ui-space(8px) [];
+    margin-bottom: .ui-space(12px) [];
   }
-
-  .lt-odds-toggle__icon {
-    color: var(--desc-color);
-    transition: transform 0.2s ease;
+  .lt-pool-head h3 {
+    margin: 0;
+    font-size: .ui-font(16px) [];
   }
-
-  .lt-odds-toggle__icon.is-open {
+  .lt-pool-head .b_btn {
+    gap: .ui-space(4px) [];
+    font-size: .ui-font(12px) [];
+  }
+  .lt-pool-head .is-open {
     transform: rotate(180deg);
   }
-
-  .lt-odds {
+  .lt-pool-columns {
     display: flex;
-    flex-direction: column;
-    gap: var(--ui-space-6, 6px);
-    margin-top: var(--ui-space-10, 10px);
-    padding: var(--ui-space-10, 10px);
-    border: 1px solid var(--surface-border-color);
-    border-radius: 11px;
-    background: var(--background-color);
+    gap: .ui-space(10px) [];
+    color: var(--desc-color);
+    font-size: .ui-font(11px) [];
+    padding-bottom: .ui-space(6px) [];
   }
-
-  .lt-odds__row {
+  .lt-pool-columns > :first-child {
+    flex: 1;
+  }
+  .lt-pool-item {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) var(--ui-layout-54, 54px) var(--ui-layout-54, 54px);
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: .ui-space(12px) [];
     align-items: center;
-    gap: var(--ui-space-10, 10px);
-    color: var(--desc-color);
-    font-size: var(--ui-font-10, 10px);
+    padding: .ui-space(15px) [] 0;
+    border-top: 1px solid var(--workspace-divider);
+    font-size: .ui-font(14px) [];
   }
-
-  .lt-odds__header {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) var(--ui-layout-54, 54px) var(--ui-layout-54, 54px);
-    gap: var(--ui-space-10, 10px);
-    padding-bottom: var(--ui-space-5, 5px);
-    border-bottom: 1px solid var(--surface-border-color);
-    color: var(--desc-color);
-    font-size: var(--ui-font-9, 9px);
+  .lt-pool-item.show-pity {
+    grid-template-columns: minmax(0, 1fr) auto auto;
   }
-
-  .lt-odds__row.is-two-column,
-  .lt-odds__header.is-two-column {
-    grid-template-columns: minmax(0, 1fr) var(--ui-layout-70, 70px);
-  }
-
-  .lt-odds__header strong,
-  .lt-odds__row > strong {
-    text-align: right;
-  }
-
-  .lt-odds__row > span {
+  .lt-pool-item > div {
+    display: flex;
+    gap: .ui-space(10px) [];
+    align-items: center;
     min-width: 0;
+  }
+  .lt-pool-item > div > :first-child {
+    color: var(--primary-color);
+    flex-shrink: 0;
+  }
+  .lt-pool-item > div > span {
     display: flex;
     align-items: center;
-    gap: var(--ui-space-5, 5px);
+    gap: .ui-space(6px) [];
+    flex-wrap: wrap;
   }
-
-  .lt-odds__pity-badge {
-    flex: 0 0 auto;
-  }
-
-  .lt-odds__row strong {
-    color: var(--text-color);
-    font-variant-numeric: tabular-nums;
-  }
-
-  .lt-odds__row.is-rare,
-  .lt-odds__row.is-rare strong {
-    color: var(--lt-gold-fg);
-    font-weight: 700;
-  }
-
-  .lt-odds__note {
-    margin: var(--ui-space-2, 2px) 0 0;
+  .lt-pool-note {
+    font-size: .ui-font(12px) [];
+    line-height: 1.6;
     color: var(--desc-color);
-    font-size: var(--ui-font-9, 9px);
-    line-height: 1.45;
+    border-top: 1px solid var(--workspace-divider);
+    padding-top: .ui-space(12px) [];
+    margin: 0;
   }
-
-  @keyframes lt-shake {
-    0%,
-    100% {
-      transform: rotate(-8deg) translateY(0);
-    }
-    50% {
-      transform: rotate(8deg) translateY(-7px) scale(1.04);
-    }
+  .lt-pool-note + .lt-pool-note {
+    margin-top: .ui-space(10px) [];
   }
-
-  @keyframes lt-pop {
-    0% {
+  .lt-state {
+    display: flex;
+    gap: .ui-space(12px) [];
+    justify-content: center;
+    align-items: center;
+    padding: .ui-space(48px) [] 0;
+    color: var(--desc-color);
+  }
+  .is-narrow .lt-layout {
+    grid-template-columns: 1fr;
+  }
+  .is-mobile.lt {
+    gap: .ui-space(14px) [];
+  }
+  .is-mobile .lt-header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: .ui-space(8px) [];
+  }
+  .is-mobile .lt-heading h2 {
+    font-size: .ui-font(21px) [];
+  }
+  .is-mobile .lt-heading p {
+    display: none;
+  }
+  .is-mobile .lt-wallet {
+    grid-row: 2;
+    grid-column: 1 / -1;
+  }
+  .is-mobile .lt-history-button {
+    grid-row: 1;
+    grid-column: 2;
+    font-size: .ui-font(12px) [];
+  }
+  .is-mobile .lt-machine,
+  .is-mobile .lt-side {
+    padding: .ui-space(14px) [];
+  }
+  .is-mobile .lt-stage {
+    min-height: .ui-layout(140px) [];
+    padding: .ui-space(12px) [] 0;
+  }
+  .is-mobile .lt-gift {
+    height: .ui-layout(96px) [];
+  }
+  .is-mobile .lt-gift img {
+    width: .ui-layout(96px) [];
+    height: .ui-layout(96px) [];
+  }
+  .is-mobile .lt-draw-button--free {
+    width: 100%;
+  }
+  .is-mobile .lt-paid-actions {
+    gap: .ui-space(8px) [];
+  }
+  .is-mobile .lt-draw-button {
+    font-size: .ui-font(12px) [];
+    padding-left: .ui-space(8px) [];
+    padding-right: .ui-space(8px) [];
+  }
+  .is-mobile .lt-pool-item {
+    padding: .ui-space(12px) [] 0;
+    font-size: .ui-font(13px) [];
+  }
+  @keyframes lt-reveal {
+    from {
       opacity: 0;
-      transform: translateY(10px) scale(0.72);
     }
-    100% {
+    to {
       opacity: 1;
-      transform: translateY(0) scale(1);
     }
   }
-
-  @media (max-width: 1040px) {
-    .lt-layout {
-      grid-template-columns: 1fr;
-    }
-
-    .lt-side {
-      display: grid;
-      grid-template-columns: minmax(220px, 0.7fr) minmax(0, 1.3fr);
-    }
-
-    .lt-pool-grid {
-      grid-template-columns: repeat(4, minmax(0, 1fr));
-    }
-  }
-
-  @media (max-width: 760px) {
-    .lt {
-      gap: 16px;
-    }
-
-    .lt-header {
-      align-items: stretch;
-      gap: 12px;
-    }
-
-    .lt-heading__icon {
-      width: 42px;
-      height: 42px;
-      border-radius: 13px;
-    }
-
-    .lt-title {
-      font-size: 18px;
-    }
-
-    .lt-subtitle {
-      font-size: 12px;
-    }
-
-    .lt-wallet {
-      min-width: 130px;
-      flex-direction: column;
-      align-items: flex-end;
-      justify-content: center;
-      gap: 4px;
-      padding: 8px 10px;
-    }
-
-    .lt-wallet__copy {
-      align-items: flex-end;
-    }
-
-    .lt-wallet__copy strong {
-      font-size: 17px;
-    }
-
-    .lt-wallet__level {
-      padding: 2px 6px;
-    }
-
-    .lt-machine {
-      padding: 14px;
-      border-radius: 18px;
-    }
-
-    .lt-stage {
-      min-height: 280px;
-      padding: 18px;
-      border-radius: 17px;
-    }
-
-    .lt-prizes {
-      grid-template-columns: repeat(5, minmax(0, 1fr));
-      gap: 6px;
-    }
-
-    .lt-prize {
-      min-height: 76px;
-      gap: 5px;
-      padding: 8px 4px;
-    }
-
-    .lt-draw-options {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-
-    .lt-draw-options:not(.has-no-free) > :first-child {
-      grid-column: 1 / -1;
-    }
-
-    .lt-draw-options.has-no-free {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-
-    .lt-draw-options :deep(.lt-draw-button.b_btn) {
-      min-height: 58px;
-    }
-
-    .lt-side {
-      display: flex;
-    }
-
-    .lt-pool-grid {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-  }
-
-  @media (max-width: 520px) {
-    .lt-header {
-      align-items: center;
-      flex-direction: row;
-      gap: 8px;
-    }
-
-    .lt-heading {
-      flex: 1;
-      gap: 9px;
-    }
-
-    .lt-heading__icon {
-      width: 38px;
-      height: 38px;
-      border-radius: 12px;
-    }
-
-    .lt-title {
-      font-size: 17px;
-      white-space: nowrap;
-    }
-
-    .lt-subtitle {
-      display: none;
-    }
-
-    .lt-wallet {
-      width: auto;
-      min-width: 104px;
-      flex-direction: column;
-      align-items: flex-end;
-      gap: 2px;
-      padding: 6px 8px;
-    }
-
-    .lt-wallet__copy {
-      align-items: flex-end;
-    }
-
-    .lt-wallet__copy > span {
-      display: none;
-    }
-
-    .lt-wallet__copy strong {
-      font-size: 16px;
-    }
-
-    .lt-wallet__level {
-      padding: 1px 5px;
-      font-size: 9px;
-    }
-
-    .lt-machine__head {
-      align-items: center;
-      flex-direction: row;
-      margin-bottom: 10px;
-    }
-
-    .lt-machine {
-      padding: 10px;
-    }
-
-    .lt-machine__head > div {
-      flex: 1;
-    }
-
-    .lt-machine__head strong {
-      display: none;
-    }
-
-    .lt-kicker {
-      font-size: 11px;
-    }
-
-    .lt-pity-badge {
-      min-height: 26px;
-      align-self: auto;
-      justify-content: center;
-      padding: 0 8px;
-      font-size: 10px;
-    }
-
-    .lt-stage {
-      min-height: 210px;
-      padding: 10px;
-    }
-
-    .lt-results {
-      gap: 10px;
-    }
-
-    .lt-results__heading {
-      gap: 5px;
-      font-size: 13px;
-    }
-
-    .lt-results__pity-status {
-      min-height: 21px;
-      padding: 1px 6px;
-      font-size: 9px;
-    }
-
-    .lt-prize {
-      min-height: 72px;
-      gap: 4px;
-      padding: 7px 3px;
-      border-radius: 10px;
-    }
-
-    .lt-prize__name {
-      font-size: 9px;
-      line-height: 1.2;
-    }
-
-    .lt-prize__rare {
-      padding: 1px 4px;
-      font-size: 8px;
-    }
-
-    .lt-prize-core {
-      width: 76px;
-      height: 76px;
-      border-radius: 24px;
-    }
-
-    .lt-idle > strong,
-    .lt-rolling > strong {
-      font-size: 14px;
-    }
-
-    .lt-idle > span,
-    .lt-rolling > span {
-      font-size: 10px;
-    }
-
-    .lt-pity-panel {
-      grid-template-columns: auto minmax(0, 1fr);
-      gap: 10px;
-      padding: 10px;
-    }
-
-    .lt-pity-panel__icon {
-      width: 32px;
-      height: 32px;
-    }
-
-    .lt-pity-panel__copy {
-      align-items: flex-start;
-      flex-direction: column;
-      gap: 2px;
-    }
-
-    .lt-pity-panel__count {
-      display: none;
-    }
-
-    .lt-draw-options :deep(.lt-draw-button.b_btn) {
-      gap: 7px;
-      padding: 0 10px;
-    }
-
-    .lt-draw-button__icon {
-      width: 30px;
-      height: 30px;
-    }
-
-    .lt-draw-button__save {
-      display: none;
-    }
-  }
-
-  @media (max-width: 380px) {
-    .lt-prizes {
-      grid-template-columns: repeat(4, minmax(0, 1fr));
-    }
-  }
-
-  :global(.disable-animations .lt .lt-prize),
-  :global(.disable-animations .lt .lt-prize-core),
-  :global(.disable-animations .lt .lt-progress > span),
-  :global(.disable-animations .lt .lt-odds-toggle__icon) {
-    animation: none !important;
-    transition: none !important;
-  }
-
   @media (prefers-reduced-motion: reduce) {
-    .lt-prize,
-    .lt-prize-core,
-    .lt-progress > span,
-    .lt-odds-toggle__icon {
+    .lt-prize {
       animation: none;
-      transition: none;
     }
+  }
+  :global(.disable-animations .lt .lt-prize) {
+    animation: none;
   }
 </style>

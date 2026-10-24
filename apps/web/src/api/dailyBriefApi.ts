@@ -14,10 +14,19 @@ export interface DailyBriefItem {
 export interface DailyBriefInsight {
   id: string;
   text: string;
+  /** 服务端核实的成果名称与处理状态；与可复用的成果摘要分开。 */
+  context?: string;
   factIds: string[];
   sources?: Array<{
     type:
-      'bookmark' | 'note' | 'file' | 'toolbox_task' | 'research_workspace' | 'learning_workspace' | 'writing_workspace';
+      | 'bookmark'
+      | 'note'
+      | 'file'
+      | 'todo'
+      | 'toolbox_task'
+      | 'research_workspace'
+      | 'learning_workspace'
+      | 'writing_workspace';
     id: string;
     title: string;
     url?: string;
@@ -29,10 +38,18 @@ export interface DailyBriefInsight {
 export interface DailyBrief {
   version: 2;
   date: string;
-  generatedBy: 'ai';
+  generatedBy: 'ai' | 'facts';
   headline: string;
   insights: DailyBriefInsight[];
   recommendation: string;
+  adviceStatus?: 'ready' | 'no_value' | 'no_evidence' | 'not_evaluated' | 'deferred' | 'paused' | 'failed';
+  lastAdviceResult?: Pick<
+    DailyBrief,
+    'adviceStatus' | 'recommendation' | 'recommendationKind' | 'recommendationFactIds' | 'recommendationSources'
+  >;
+  recommendationKind?: 'action' | 'ai';
+  recommendationFactIds?: string[];
+  recommendationSources?: DailyBriefInsight['sources'];
   sections?: Array<{
     id: DailyBriefSectionId;
     title: string;

@@ -25,8 +25,8 @@ describe.skipIf(!socket)('legacy upload retirement coordination (isolated MySQL)
   const key = 'files/owner/report.pdf';
   const prepare = () =>
     prepareLegacyCloudUpload({ userId: 'owner', fileName: 'report.pdf', fileType: 'application/pdf', database });
-  const row = async () => (await database.query('SELECT * FROM cloud_legacy_object_lifecycle'))[0][0];
-  const due = () => database.query('UPDATE cloud_legacy_object_lifecycle SET available_at=NOW()');
+  const row = async () => (await database.query('SELECT * FROM cloud_legacy_object_lifecycle WHERE object_key=?', [key]))[0][0];
+  const due = () => database.query('UPDATE cloud_legacy_object_lifecycle SET available_at=NOW() WHERE object_key=?', [key]);
   const retire = () => queueLegacyObjectRetirement(database, 'owner', key);
   beforeAll(async () => {
     if (!/^\/(?:private\/)?tmp\//.test(socket)) throw Error('Temporary socket required');

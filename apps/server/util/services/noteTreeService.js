@@ -1,3 +1,4 @@
+import { withdrawDeletedSources } from '../publicResources/lifecycle.js';
 import { MAX_NOTE_BATCH_ACTION_ITEMS } from '@lightnote/shared/resource-selection';
 import pool from '../../db/index.js';
 import { randomUUID } from 'node:crypto';
@@ -1215,6 +1216,7 @@ export async function deleteOwnedNoteSubtrees(connection, { userId, items } = {}
     });
   }
 
+  await withdrawDeletedSources(db, { userId: normalizedUserId, kind: 'note', ids: deletedIds });
   await removeInboxRelations(db, {
     userId: normalizedUserId,
     items: deletedIds.map((resourceId) => ({ resourceType: 'note', resourceId })),

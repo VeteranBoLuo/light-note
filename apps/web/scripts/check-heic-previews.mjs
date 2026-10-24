@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { mkdir, readFile } from 'node:fs/promises';
 import { chromium } from 'playwright-core';
-const origin = process.env.LIGHTNOTE_WEB_ORIGIN || 'http://127.0.0.1:5187';
+const origin = process.env.LIGHTNOTE_WEB_ORIGIN || 'http://localhost:5173';
 const output = '/tmp/lightnote-heic-browser';
 const english = process.env.LIGHTNOTE_PREVIEW_LANG === 'en';
 const mobileOnly = process.env.LIGHTNOTE_HEIC_MOBILE_ONLY === '1';

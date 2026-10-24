@@ -11,10 +11,16 @@
       :options="filterOptions"
       @select="handleFilterSelect"
     />
+    <div v-if="settingsLayout && rows.length" class="ledger-columns" aria-hidden="true">
+      <span>{{ t('growth.pointsLedgerEvent') }}</span
+      ><span>{{ t('settingsRefine.ledger.source') }}</span> <span>{{ t('settingsRefine.ledger.time') }}</span
+      ><span>{{ t('growth.pointsLedgerChange') }}</span
+      ><span></span>
+    </div>
     <div v-if="(loading || !initialized) && !rows.length" class="ledger-loading"><BLoading inline loading /></div>
     <div v-else-if="loadError && !rows.length" class="ledger-empty">
       <span>{{ t('growth.pointsLogFailed') }}</span
-      ><BButton size="small" @click="reload">{{ t('common.retry') }}</BButton>
+      ><BButton @click="reload">{{ t('common.retry') }}</BButton>
     </div>
     <div v-else-if="!rows.length" class="ledger-empty">{{ t('growth.pointsLogEmpty') }}</div>
     <BVirtualList
@@ -22,7 +28,7 @@
       :key="filter"
       class="ledger-list"
       :items="rows"
-      :item-height="settingsLayout ? 88 : 64"
+      :item-height="64"
       dynamic-height
       scroll-mode="ancestor"
       :loading="loading"
@@ -37,6 +43,7 @@
           @click="settingsLayout && (selected = row)"
         >
           <div class="ledger-main">
+            <SvgIcon v-if="settingsLayout" class="ledger-icon" :src="icon.growth.coin" size="20" aria-hidden="true" />
             <b>{{ labelOf(row.reason) }}</b>
             <span
               >{{ sourceOf(row)
@@ -45,15 +52,17 @@
               ></span
             >
           </div>
+          <span v-if="settingsLayout" class="ledger-source">{{ sourceOf(row) || '—' }}</span>
           <time v-if="settingsLayout" class="ledger-time">{{ fmtTime(row.createTime || row.create_time || '') }}</time>
           <strong :class="row.delta > 0 || row.assetChange ? 'up' : row.delta < 0 ? 'down' : 'flat'">
             {{ amountOf(row) }}
           </strong>
+          <SvgIcon v-if="settingsLayout" class="ledger-chevron" :src="icon.arrow_right" size="14" aria-hidden="true" />
         </component>
       </template>
     </BVirtualList>
     <p v-if="loadError && rows.length" role="alert" class="ledger-page-error"
-      >{{ t('growth.pointsLogFailed') }} <BButton size="small" @click="loadMore">{{ t('common.retry') }}</BButton></p
+      >{{ t('growth.pointsLogFailed') }} <BButton @click="loadMore">{{ t('common.retry') }}</BButton></p
     >
     <span v-if="rows.length && !hasMore && !loadError" class="ledger-all">{{ t('growth.pointsLogAll') }}</span>
     <BModal
@@ -86,6 +95,8 @@
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import BVirtualList from '@/components/base/BasicComponents/BVirtualList.vue';
   import BTabs from '@/components/base/BasicComponents/BTabs.vue';
+  import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
+  import icon from '@/config/icon';
   import { formatGrowthAssetChange, type GrowthAssetChange } from '@/utils/growthAssetChange.ts';
 
   interface LogRow {
@@ -162,7 +173,7 @@
         filter: filter.value,
       });
       if (generation !== requestGeneration) return;
-      if (response?.status !== 200 || !response.data) throw new Error('POINTS_LOG_FAILED');
+      if (response?.status !== 200 || !Array.isArray(response.data?.rows)) throw new Error('POINTS_LOG_FAILED');
       if (response?.status === 200 && response.data) {
         const list = (response.data.rows || []) as LogRow[];
         rows.value = [...new Map((reset ? list : [...rows.value, ...list]).map((row) => [row.id, row])).values()];
@@ -245,7 +256,7 @@
   .ledger-main b {
     font-size: var(--ui-font-13, 13px);
   }
-  .ledger-main span {
+  .ledger-main > span {
     color: var(--desc-color);
     font-size: var(--ui-font-11, 11px);
   }
@@ -293,10 +304,12 @@
     overflow-wrap: anywhere;
   }
   .ledger.is-settings {
-    gap: var(--ui-space-18, 18px);
+    gap: var(--ui-space-12, 12px);
     .ledger-head {
-      border-bottom: 1px solid var(--card-border-color);
-      padding-bottom: var(--ui-space-18, 18px);
+      display: flex;
+      align-items: baseline;
+      flex-wrap: wrap;
+      gap: var(--ui-space-6, 6px) var(--ui-space-12, 12px);
     }
     .ledger-head h3 {
       font-size: var(--ui-font-16, 16px);
@@ -312,21 +325,36 @@
       white-space: normal;
       background: transparent;
       line-height: 1.6;
-      padding: var(--ui-space-20, 20px) 0;
-      min-height: var(--ui-layout-78, 78px);
+      padding: var(--ui-space-14, 14px) var(--ui-space-8, 8px);
+      min-height: var(--ui-layout-64, 64px);
       display: grid;
-      grid-template-columns: minmax(0, 1fr) minmax(var(--ui-layout-140, 140px), 20%) minmax(
+      grid-template-columns:
+        minmax(0, 1.1fr) minmax(0, 0.9fr) minmax(var(--ui-layout-140, 140px), 1fr) minmax(
           var(--ui-layout-80, 80px),
-          15%
-        );
+          0.5fr
+        )
+        auto;
+      border-inline: 1px solid var(--workspace-border);
+      &:hover {
+        background: var(--workspace-hover);
+      }
+      &:focus-visible {
+        outline: 2px solid var(--primary-color);
+        outline-offset: -2px;
+      }
     }
     .ledger-main {
-      gap: var(--ui-space-7, 7px);
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr);
+      gap: var(--ui-space-4, 4px) var(--ui-space-10, 10px);
+      align-items: center;
     }
     .ledger-main b {
       font-size: var(--ui-font-14, 14px);
     }
-    .ledger-main span {
+    .ledger-main > span {
+      display: none;
+      grid-column: 2;
       font-size: var(--ui-font-12, 12px);
     }
     .ledger-row > strong {
@@ -337,6 +365,43 @@
       color: var(--desc-color);
       font-size: var(--ui-font-12, 12px);
     }
+    .ledger-source {
+      color: var(--desc-color);
+      font-size: var(--ui-font-12, 12px);
+      overflow-wrap: anywhere;
+    }
+    .ledger-icon {
+      grid-column: 1;
+      grid-row: 1 / span 2;
+      color: var(--primary-color);
+    }
+    .ledger-chevron {
+      color: var(--desc-color);
+    }
+    .down {
+      color: var(--text-color);
+    }
+    .ledger-columns {
+      display: grid;
+      grid-template-columns:
+        minmax(0, 1.1fr) minmax(0, 0.9fr) minmax(var(--ui-layout-140, 140px), 1fr) minmax(
+          var(--ui-layout-80, 80px),
+          0.5fr
+        )
+        var(--ui-layout-14, 14px);
+      gap: var(--ui-space-12, 12px);
+      padding: var(--ui-space-12, 12px) var(--ui-space-8, 8px);
+      margin-bottom: calc(-1 * var(--ui-space-12, 12px));
+      border: 1px solid var(--workspace-border);
+      border-bottom: none;
+      border-radius: 10px 10px 0 0;
+      background: var(--workspace-content);
+      color: var(--desc-color);
+      font-size: var(--ui-font-12, 12px);
+      > span:nth-child(4) {
+        text-align: right;
+      }
+    }
     .ledger-time-inline {
       display: none;
     }
@@ -346,11 +411,21 @@
   }
   @media (max-width: 767px) {
     .ledger.is-settings {
-      .ledger-row {
-        grid-template-columns: minmax(0, 1fr) auto;
-      }
-      .ledger-time {
+      .ledger-head {
         display: none;
+      }
+      .ledger-row {
+        grid-template-columns: minmax(0, 1fr) auto auto;
+        padding: var(--ui-space-14, 14px) 0;
+        border-inline: none;
+      }
+      .ledger-time,
+      .ledger-source,
+      .ledger-columns {
+        display: none;
+      }
+      .ledger-main > span {
+        display: block;
       }
       .ledger-time-inline {
         display: inline;

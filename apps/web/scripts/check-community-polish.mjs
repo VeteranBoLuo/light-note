@@ -45,18 +45,19 @@ try {
       await p.screenshot({ path: `${output}/${width}-${theme}-manage.png` });
       await p.getByRole('button', { name: '发布内容', exact: true }).click();
       await p.locator('.b-drawer-wrapper.is-settled').waitFor();
+      await p.getByRole('tab', { name: 'Markdown', exact: true }).click();
       await p
         .locator('.writing-body .cm-content')
         .fill('整理资料时，先给每个项目留一个入口。\n\n每周回顾一次，让记录成为可复用的经验。');
       await p.locator('#feed-title').fill('把零散记录整理成自己的知识');
       assert.equal(await p.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
       await p.screenshot({ path: `${output}/${width}-${theme}-editor.png` });
-      await p.getByRole('button', { name: '预览', exact: true }).click();
+      await p.locator('.b-drawer-header-actions').getByRole('button', { name: '预览', exact: true }).click();
       await p.locator('.writing-preview').waitFor();
       await p.getByRole('button', { name: '继续编辑', exact: true }).click();
       assert.match(await p.locator('.writing-body .cm-content').innerText(), /整理资料/);
       await p.getByRole('button', { name: '发布', exact: true }).click();
-      await p.locator('.community-publish-confirm').waitFor();
+      await p.locator(width < 768 ? '.mobile-submit' : '.community-publish-confirm').waitFor();
       await p.waitForTimeout(350);
       await p.screenshot({ path: `${output}/${width}-${theme}-confirm.png` });
       await p.close();

@@ -30,6 +30,7 @@
         @add-tag="goAddTag"
         @view-snapshot="snapVisible = true"
       />
+      <PublicResourceSavedSource v-if="isEdit && bookmarkId" :resource-id="bookmarkId" />
       <ResourceBacklinks v-if="isEdit && bookmarkId" target-type="bookmark" :target-id="bookmarkId" />
     </BLoading>
     <BookmarkSnapshotModal v-model:visible="snapVisible" :bookmark-id="bookmarkId" />
@@ -42,6 +43,7 @@
   import BookmarkEditorForm from '@/components/manage/bookmarkEditMg/BookmarkEditorForm.vue';
   import BookmarkSnapshotModal from '@/components/manage/bookmarkEditMg/BookmarkSnapshotModal.vue';
   import ResourceBacklinks from '@/components/noteLibrary/detail/ResourceBacklinks.vue';
+  import PublicResourceSavedSource from '@/components/publicResources/PublicResourceSavedSource.vue';
   import { useMobileTopBar } from '@/composables/useMobileTopBar';
   import { useBookmarkEditor } from '@/composables/useBookmarkEditor';
 

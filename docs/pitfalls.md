@@ -13,9 +13,9 @@
 
 ### LN-PIT-192：跨历史数据域比较必须统一文本字符集与排序规则
 
-**约束：** 书签、笔记、文件和后建业务表跨域做 `UNION ALL`、`JOIN` 或列间比较时，必须显式转成同一 `utf8mb4` 字符集及 MySQL 5.7 可用的排序规则；新表同时显式声明项目统一排序规则。查询转换优先作用于投影或非索引一侧，不为修一个读接口批量改线上表，也不退回内存拼接。
+**约束：** 书签、笔记、文件和后建业务表跨域做 `UNION ALL` 时，投影显式统一为 `utf8mb4` 及 MySQL 5.7 可用的排序规则；新表同时显式声明项目统一排序规则。跨域主键关联按被查索引列的既有字符集和排序规则转换引用键，不转换索引列本身。新表的 `utf8mb4` 键直接关联旧表 `utf8` 键可能不报错，却因隐式转换退化为全索引扫描；不能只以查询成功判断兼容。不为修一个读接口批量改线上表，也不退回内存拼接。
 
-**验收：** 在真实异构 Schema 上验证跨类型排序、翻页和跨域关联；至少覆盖 `utf8mb4_unicode_ci` 旧表关联 `utf8mb4_general_ci` 新表。遇到 `ER_CANT_AGGREGATE_NCOLLATIONS` 或 `ER_CANT_AGGREGATE_2COLLATIONS` 先查 `information_schema.COLUMNS`。
+**验收：** 在真实异构 Schema 上验证跨类型排序、翻页和跨域关联；覆盖 `utf8mb4_unicode_ci` 与 `utf8mb4_general_ci`，以及 `utf8_general_ci` 历史主键。用足量无关行和 `EXPLAIN` 核对关联仍使用主键或唯一索引点查，同时验证账号、原稿存活与屏蔽条件。遇到 `ER_CANT_AGGREGATE_NCOLLATIONS` 或 `ER_CANT_AGGREGATE_2COLLATIONS` 先查 `information_schema.COLUMNS`。
 
 ### 事务提交、唯一键竞争与旁路副作用
 

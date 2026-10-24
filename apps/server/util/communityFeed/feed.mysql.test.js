@@ -1,6 +1,8 @@
 import { consumePostReview } from './reviewWorker.js';
 import { communityGrowthMetrics, communityWeekPosts } from './growthMetrics.js';
 import { taskRewardStates, claimTaskRewards } from './taskRewards.js';
+import { resolveAchievements } from '../growth.js';
+import { POINTS_EARNING_C5_POLICY_VERSION, POINTS_EARNING_C8_POLICY_VERSION } from '../pointsEarningPolicy.js';
 import { listTopics, topicDetail, saveTopic } from './topics.js';
 import { prepareResource, readResource, discardResource, cleanupResources, resourcesReady } from './resources.js';
 import { readImage, uploadImage, discardImage, cleanupImages, imagesReady } from './images.js';
@@ -9,7 +11,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import mysql from 'mysql2/promise';
-import { beforeAll, afterAll, beforeEach, describe, it, expect, vi } from 'vitest';
+import { beforeAll, afterAll, beforeEach, afterEach, describe, it, expect, vi } from 'vitest';
 import { ensureCommunityFeedSchema, communityFeedSchemaReady } from './schema.js';
 import { COMMUNITY_CHAT_TABLE_SQL } from '../communityChatSchema.js';
 import { submitPost, moderatePost, listPosts, postDetail, withdrawPost, deletePost, ownPosts } from './posts.js';
@@ -115,6 +117,7 @@ describe.skipIf(!socketPath)('P2 real database boundaries', () => {
       await admin.end();
     }
   });
+  afterEach(() => vi.unstubAllEnvs());
   beforeEach(async () => {
     const [tables] = await db.query('SELECT table_name FROM information_schema.tables WHERE table_schema=DATABASE()');
     for (const row of tables) {
@@ -1578,69 +1581,91 @@ describe.skipIf(!socketPath)('P2 real database boundaries', () => {
       await db.query('ALTER TABLE community_revision_resources ADD UNIQUE KEY uk_order(revision_id,sort_order)');
     }
   });
-  it('counts first publication once, uses the approval week and persists adopted answers without self-awards', async () => {
-    const draft = await run(submitPost, A, postInput());
-    expect(await communityGrowthMetrics(A.id, { db, env })).toEqual({ communityPostCount: 0, communityAnswerCount: 0 });
-    await run(
-      moderatePost,
-      ROOT,
-      input({ postId: draft.publicId, expectedRevision: draft.revision, action: 'approve', reason: 'ok' }),
-    );
-    let post = await postDetail({ user: A, id: draft.publicId, env, db });
-    await db.query("UPDATE community_posts SET published_at='2026-09-20 23:30:00' WHERE public_id=?", [post.publicId]);
-    const edited = await run(
-      submitPost,
-      A,
-      postInput({ postId: post.publicId, expectedRevision: post.revision, body: '更新正文' }),
-    );
-    await run(
-      moderatePost,
-      ROOT,
-      input({ postId: post.publicId, expectedRevision: edited.revision, action: 'approve', reason: 'ok' }),
-    );
-    expect((await communityGrowthMetrics(A.id, { db, env })).communityPostCount).toBe(1);
-    expect(await communityWeekPosts(A.id, { db, env, calendar: { shiftMinutes: 0 }, weekKey: '202638' })).toBe(1);
-    expect(await communityWeekPosts(A.id, { db, env, calendar: { shiftMinutes: 60 }, weekKey: '202639' })).toBe(1);
-    expect(await communityWeekPosts(A.id, { db, env, calendar: { shiftMinutes: 0 }, weekKey: '202639' })).toBe(0);
-    const self = await run(createComment, A, input({ postId: post.publicId, body: '自己的回答', mentions: [] }));
-    const answer = await run(createComment, B, input({ postId: post.publicId, body: '帮助回答', mentions: [] }));
-    const resolve = async (resolved, commentId) => {
-      const current = await postDetail({ user: A, id: post.publicId, env, db });
-      return run(
-        resolveQuestion,
-        A,
-        input({
-          postId: post.publicId,
-          expectedRevision: current.revision,
-          resolved,
-          ...(commentId ? { commentId } : {}),
-        }),
+  it.each([POINTS_EARNING_C5_POLICY_VERSION, POINTS_EARNING_C8_POLICY_VERSION])(
+    'counts first publication once, uses the approval week and persists adopted answers without self-awards (%s)',
+    async (policyVersion) => {
+      vi.stubEnv('POINTS_EARNING_C5_ENABLED', 'true');
+      vi.stubEnv('POINTS_EARNING_C5_EFFECTIVE_DAY', '20200101');
+      vi.stubEnv('POINTS_EARNING_C5_EFFECTIVE_WEEK', '202001');
+      const c8 = policyVersion === POINTS_EARNING_C8_POLICY_VERSION;
+      vi.stubEnv('POINTS_EARNING_C8_ENABLED', String(c8));
+      vi.stubEnv('POINTS_EARNING_C8_EFFECTIVE_DAY', c8 ? '20200101' : '');
+      vi.stubEnv('POINTS_EARNING_C8_EFFECTIVE_WEEK', c8 ? '202001' : '');
+      const achievementsCatalog = resolveAchievements(policyVersion);
+      const draft = await run(submitPost, A, postInput());
+      expect(await communityGrowthMetrics(A.id, { db, env })).toEqual({
+        communityPostCount: 0,
+        communityAnswerCount: 0,
+      });
+      await run(
+        moderatePost,
+        ROOT,
+        input({ postId: draft.publicId, expectedRevision: draft.revision, action: 'approve', reason: 'ok' }),
       );
-    };
-    await resolve(true, self.publicId);
-    expect((await communityGrowthMetrics(A.id, { db, env })).communityAnswerCount).toBe(0);
-    await resolve(true, answer.publicId);
-    await resolve(false);
-    await resolve(true, answer.publicId);
-    expect((await communityGrowthMetrics(B.id, { db, env })).communityAnswerCount).toBe(1);
-    while (await consumeCommunityEvent({ db, env })) {}
-    const [achievements] = await db.query(
-      'SELECT user_id,achievement_key,reward_points_snapshot FROM user_achievements ORDER BY user_id',
-    );
-    expect(achievements).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ user_id: 'a', achievement_key: 'community_post_1', reward_points_snapshot: 20 }),
-        expect.objectContaining({ user_id: 'b', achievement_key: 'community_answer_1', reward_points_snapshot: 30 }),
-      ]),
-    );
-    const current = await postDetail({ user: A, id: post.publicId, env, db });
-    await run(withdrawPost, A, input({ postId: post.publicId, expectedRevision: current.revision }));
-    expect((await communityGrowthMetrics(A.id, { db, env })).communityPostCount).toBe(1);
-    expect(await communityGrowthMetrics(A.id, { db, env: {} })).toEqual({
-      communityPostCount: 0,
-      communityAnswerCount: 0,
-    });
-  });
+      let post = await postDetail({ user: A, id: draft.publicId, env, db });
+      await db.query("UPDATE community_posts SET published_at='2026-09-20 23:30:00' WHERE public_id=?", [
+        post.publicId,
+      ]);
+      const edited = await run(
+        submitPost,
+        A,
+        postInput({ postId: post.publicId, expectedRevision: post.revision, body: '更新正文' }),
+      );
+      await run(
+        moderatePost,
+        ROOT,
+        input({ postId: post.publicId, expectedRevision: edited.revision, action: 'approve', reason: 'ok' }),
+      );
+      expect((await communityGrowthMetrics(A.id, { db, env })).communityPostCount).toBe(1);
+      expect(await communityWeekPosts(A.id, { db, env, calendar: { shiftMinutes: 0 }, weekKey: '202638' })).toBe(1);
+      expect(await communityWeekPosts(A.id, { db, env, calendar: { shiftMinutes: 60 }, weekKey: '202639' })).toBe(1);
+      expect(await communityWeekPosts(A.id, { db, env, calendar: { shiftMinutes: 0 }, weekKey: '202639' })).toBe(0);
+      const self = await run(createComment, A, input({ postId: post.publicId, body: '自己的回答', mentions: [] }));
+      const answer = await run(createComment, B, input({ postId: post.publicId, body: '帮助回答', mentions: [] }));
+      const resolve = async (resolved, commentId) => {
+        const current = await postDetail({ user: A, id: post.publicId, env, db });
+        return run(
+          resolveQuestion,
+          A,
+          input({
+            postId: post.publicId,
+            expectedRevision: current.revision,
+            resolved,
+            ...(commentId ? { commentId } : {}),
+          }),
+        );
+      };
+      await resolve(true, self.publicId);
+      expect((await communityGrowthMetrics(A.id, { db, env })).communityAnswerCount).toBe(0);
+      await resolve(true, answer.publicId);
+      await resolve(false);
+      await resolve(true, answer.publicId);
+      expect((await communityGrowthMetrics(B.id, { db, env })).communityAnswerCount).toBe(1);
+      while (await consumeCommunityEvent({ db, env })) {}
+      const [achievements] = await db.query(
+        'SELECT user_id,achievement_key,reward_points_snapshot FROM user_achievements ORDER BY user_id',
+      );
+      expect(achievements).toEqual([
+        {
+          user_id: 'a',
+          achievement_key: 'community_post_1',
+          reward_points_snapshot: achievementsCatalog.find((item) => item.key === 'community_post_1').reward,
+        },
+        {
+          user_id: 'b',
+          achievement_key: 'community_answer_1',
+          reward_points_snapshot: achievementsCatalog.find((item) => item.key === 'community_answer_1').reward,
+        },
+      ]);
+      const current = await postDetail({ user: A, id: post.publicId, env, db });
+      await run(withdrawPost, A, input({ postId: post.publicId, expectedRevision: current.revision }));
+      expect((await communityGrowthMetrics(A.id, { db, env })).communityPostCount).toBe(1);
+      expect(await communityGrowthMetrics(A.id, { db, env: {} })).toEqual({
+        communityPostCount: 0,
+        communityAnswerCount: 0,
+      });
+    },
+  );
 
   it('provides the replied-to comment for navigation and hides root self-publication results', async () => {
     const post = await published();

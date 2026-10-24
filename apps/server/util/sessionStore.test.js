@@ -3,13 +3,15 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const query = vi.fn();
 const getConnection = vi.fn();
 const redisDel = vi.fn();
+const redisGet = vi.fn();
+const redisSet = vi.fn();
 
 vi.mock('../db/index.js', () => ({ default: { query, getConnection } }));
 vi.mock('./redisClient.js', () => ({
-  default: { get: vi.fn(), expire: vi.fn(), setEx: vi.fn(), del: redisDel },
+  default: { get: redisGet, expire: vi.fn(), setEx: redisSet, del: redisDel },
 }));
 
-const { createSession, getSessionDeviceKey, groupUserSessions, touchUserLastActive, removeUserSessions } =
+const { createSession, getSession, getSessionDeviceKey, groupUserSessions, touchUserLastActive, removeUserSessions } =
   await import('./sessionStore.js');
 
 function createConnection() {
@@ -160,5 +162,60 @@ describe('密码变更后的整账号会话撤销', () => {
     await removeUserSessions('password-user');
     expect(query).toHaveBeenCalledWith('DELETE FROM user_sessions WHERE user_id = ?', ['password-user']);
     expect(redisDel).toHaveBeenCalledWith(['session:desktop-sid', 'session:android-sid']);
+  });
+});
+
+describe('撤销会话的数据库事实优先于缓存', () => {
+  const cached = () => ({
+    user_id: 'cached-owner',
+    expires_at: new Date(Date.now() + 3_600_000).toISOString(),
+    create_time: new Date().toISOString(),
+  });
+  beforeEach(() => {
+    query.mockReset();
+    redisGet.mockReset().mockImplementation(async () => JSON.stringify(cached()));
+    redisSet.mockReset().mockResolvedValue('OK');
+    redisDel.mockReset().mockResolvedValue(1);
+  });
+  it('缓存删除失败后重复请求也不能使用已撤销会话', async () => {
+    query.mockImplementation(async (sql) => (sql.startsWith('SELECT') ? [[]] : [{ affectedRows: 0 }]));
+    redisDel.mockRejectedValue(new Error('unavailable'));
+    expect(await getSession('revoked')).toBeNull();
+    expect(await getSession('revoked')).toBeNull();
+    expect(redisSet).not.toHaveBeenCalled();
+    expect(query.mock.calls.filter(([sql]) => sql.startsWith('UPDATE user_sessions'))).toHaveLength(2);
+  });
+  it('缓存命中也要等数据库验证完成才返回身份', async () => {
+    let finish;
+    query.mockImplementationOnce(() => new Promise((resolve) => (finish = resolve)));
+    query.mockResolvedValue([{ affectedRows: 1 }]);
+    let returned = false;
+    const reading = getSession('active').then((value) => {
+      returned = true;
+      return value;
+    });
+    await Promise.resolve();
+    expect(returned).toBe(false);
+    finish([{ affectedRows: 1 }]);
+    expect(await reading).toMatchObject({ user_id: 'cached-owner', expires_in_seconds: 86_400 });
+    expect(query.mock.calls[0]).toEqual([
+      expect.stringContaining('AND user_id = ? AND expires_at > NOW()'),
+      [86_400, 'active', 'cached-owner'],
+    ]);
+    expect(redisSet).toHaveBeenCalledWith('session:active', 900, expect.any(String));
+  });
+  it('数据库不可用时不凭缓存放行', async () => {
+    query.mockRejectedValue(new Error('database unavailable'));
+    await expect(getSession('active')).rejects.toThrow('database unavailable');
+    expect(redisSet).not.toHaveBeenCalled();
+  });
+  it('同秒更新 affectedRows 为零时重读有效记录，不误退出正常用户', async () => {
+    query.mockResolvedValueOnce([{ affectedRows: 0 }]).mockResolvedValueOnce([[{ sid: 'active' }]]);
+    expect(await getSession('active')).toMatchObject({ user_id: 'cached-owner' });
+  });
+  it('数据库已过期的会话不能凭未过期缓存续期', async () => {
+    query.mockResolvedValueOnce([{ affectedRows: 0 }]).mockResolvedValueOnce([[]]);
+    expect(await getSession('expired')).toBeNull();
+    expect(redisSet).not.toHaveBeenCalled();
   });
 });

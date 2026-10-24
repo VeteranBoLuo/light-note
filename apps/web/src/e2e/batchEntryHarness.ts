@@ -193,6 +193,8 @@ const router = createRouter({
     },
   ],
 });
+// 浏览器验收直接复用页面正在使用的内存路由，避免动态导入/HMR 生成另一个 Web history 实例。
+Object.assign(window, { batchEntryFixture: { router } });
 // 笔记树和库内预览沿用模块路由，验收时同步到内存路由，避免跳出夹具。
 if (params.has('tree')) {
   const { default: moduleRouter } = await import('@/router');

@@ -5,13 +5,14 @@ import {
   getSupportCatalog,
   getSupportPackageFeatureState,
   normalizeSupportCampaignSkus,
+  supportFirstPurchaseClaimKey,
   supportFirstPurchaseCompatibleClaimKeys,
   supportProviderIdentityHash,
 } from './afdianSupportPackageCatalog.js';
 
-describe('爱发电 v3 常驻与活动套餐目录', () => {
-  it('常驻目录锁定 12 个 SKU、AI 账号首购 +20%、空间分档首购和组合节省金额', () => {
-    expect(SUPPORT_PACKAGE_CATALOG_VERSION).toBe('support-packages-v3');
+describe('爱发电 v5 常驻与活动套餐目录', () => {
+  it('常驻目录锁定 12 个 SKU、固定永久权益和组合节省金额', () => {
+    expect(SUPPORT_PACKAGE_CATALOG_VERSION).toBe('support-packages-v5');
     expect(SUPPORT_PACKAGE_CATALOG).toHaveLength(12);
     expect(
       SUPPORT_PACKAGE_CATALOG.map(({ skuId, firstPurchaseScope, amount, base, firstPurchase, comboSavings }) => ({
@@ -25,98 +26,98 @@ describe('爱发电 v3 常驻与活动套餐目录', () => {
     ).toEqual([
       {
         skuId: 'ai-6',
-        firstPurchaseScope: 'ai_account',
+        firstPurchaseScope: 'none',
         amount: 6,
-        base: { aiTokens: 600_000, storageMb: 0 },
-        firstPurchase: { aiTokens: 720_000, storageMb: 0 },
+        base: { aiTokens: 300_000, storageMb: 0 },
+        firstPurchase: { aiTokens: 300_000, storageMb: 0 },
         comboSavings: 0,
       },
       {
         skuId: 'ai-18',
-        firstPurchaseScope: 'ai_account',
+        firstPurchaseScope: 'none',
         amount: 18,
-        base: { aiTokens: 1_800_000, storageMb: 0 },
-        firstPurchase: { aiTokens: 2_160_000, storageMb: 0 },
+        base: { aiTokens: 900_000, storageMb: 0 },
+        firstPurchase: { aiTokens: 900_000, storageMb: 0 },
         comboSavings: 0,
       },
       {
         skuId: 'ai-50',
-        firstPurchaseScope: 'ai_account',
+        firstPurchaseScope: 'none',
         amount: 50,
-        base: { aiTokens: 5_000_000, storageMb: 0 },
-        firstPurchase: { aiTokens: 6_000_000, storageMb: 0 },
+        base: { aiTokens: 2_500_000, storageMb: 0 },
+        firstPurchase: { aiTokens: 2_500_000, storageMb: 0 },
         comboSavings: 0,
       },
       {
         skuId: 'ai-100',
-        firstPurchaseScope: 'ai_account',
+        firstPurchaseScope: 'none',
         amount: 100,
-        base: { aiTokens: 10_000_000, storageMb: 0 },
-        firstPurchase: { aiTokens: 12_000_000, storageMb: 0 },
+        base: { aiTokens: 5_000_000, storageMb: 0 },
+        firstPurchase: { aiTokens: 5_000_000, storageMb: 0 },
         comboSavings: 0,
       },
       {
         skuId: 'storage-6',
-        firstPurchaseScope: 'sku',
+        firstPurchaseScope: 'none',
         amount: 6,
-        base: { aiTokens: 0, storageMb: 128 },
-        firstPurchase: { aiTokens: 0, storageMb: 160 },
+        base: { aiTokens: 0, storageMb: 256 },
+        firstPurchase: { aiTokens: 0, storageMb: 256 },
         comboSavings: 0,
       },
       {
         skuId: 'storage-18',
-        firstPurchaseScope: 'sku',
+        firstPurchaseScope: 'none',
         amount: 18,
-        base: { aiTokens: 0, storageMb: 512 },
-        firstPurchase: { aiTokens: 0, storageMb: 640 },
+        base: { aiTokens: 0, storageMb: 768 },
+        firstPurchase: { aiTokens: 0, storageMb: 768 },
         comboSavings: 0,
       },
       {
         skuId: 'storage-50',
-        firstPurchaseScope: 'sku',
+        firstPurchaseScope: 'none',
         amount: 50,
-        base: { aiTokens: 0, storageMb: 1_536 },
+        base: { aiTokens: 0, storageMb: 2_048 },
         firstPurchase: { aiTokens: 0, storageMb: 2_048 },
         comboSavings: 0,
       },
       {
         skuId: 'storage-100',
-        firstPurchaseScope: 'sku',
+        firstPurchaseScope: 'none',
         amount: 100,
-        base: { aiTokens: 0, storageMb: 3_072 },
+        base: { aiTokens: 0, storageMb: 4_096 },
         firstPurchase: { aiTokens: 0, storageMb: 4_096 },
         comboSavings: 0,
       },
       {
         skuId: 'combo-10',
-        firstPurchaseScope: 'ai_account',
+        firstPurchaseScope: 'none',
         amount: 10,
-        base: { aiTokens: 600_000, storageMb: 128 },
-        firstPurchase: { aiTokens: 720_000, storageMb: 128 },
+        base: { aiTokens: 300_000, storageMb: 256 },
+        firstPurchase: { aiTokens: 300_000, storageMb: 256 },
         comboSavings: 2,
       },
       {
         skuId: 'combo-30',
-        firstPurchaseScope: 'ai_account',
+        firstPurchaseScope: 'none',
         amount: 30,
-        base: { aiTokens: 1_800_000, storageMb: 512 },
-        firstPurchase: { aiTokens: 2_160_000, storageMb: 512 },
+        base: { aiTokens: 900_000, storageMb: 768 },
+        firstPurchase: { aiTokens: 900_000, storageMb: 768 },
         comboSavings: 6,
       },
       {
         skuId: 'combo-88',
-        firstPurchaseScope: 'ai_account',
+        firstPurchaseScope: 'none',
         amount: 88,
-        base: { aiTokens: 5_000_000, storageMb: 1_536 },
-        firstPurchase: { aiTokens: 6_000_000, storageMb: 1_536 },
+        base: { aiTokens: 2_500_000, storageMb: 2_048 },
+        firstPurchase: { aiTokens: 2_500_000, storageMb: 2_048 },
         comboSavings: 12,
       },
       {
         skuId: 'combo-168',
-        firstPurchaseScope: 'ai_account',
+        firstPurchaseScope: 'none',
         amount: 168,
-        base: { aiTokens: 10_000_000, storageMb: 3_072 },
-        firstPurchase: { aiTokens: 12_000_000, storageMb: 3_072 },
+        base: { aiTokens: 5_000_000, storageMb: 4_096 },
+        firstPurchase: { aiTokens: 5_000_000, storageMb: 4_096 },
         comboSavings: 32,
       },
     ]);
@@ -161,45 +162,56 @@ describe('爱发电 v3 常驻与活动套餐目录', () => {
     ).toThrowError(/40%/);
   });
 
-  it('含 AI 套餐共享账号首购状态，空间套餐仍按档合并账号与付款身份记录', async () => {
-    const providerHash = supportProviderIdentityHash('afdian-user-1');
-    const db = {
-      query: vi.fn(async (sql) => {
-        const statement = String(sql);
-        if (statement.includes('FROM support_account_links')) return [[{ provider_user_id: 'afdian-user-1' }], []];
-        if (statement.includes('WHERE user_id = ?')) return [[{ sku_id: 'ai-6' }], []];
-        if (statement.includes('provider_identity_hash')) {
-          expect(providerHash).toMatch(/^[0-9a-f]{64}$/);
-          return [[{ sku_id: 'storage-6' }], []];
-        }
-        throw new Error(`UNHANDLED_SUPPORT_CATALOG_SQL:${statement}`);
-      }),
-    };
+  it.each([true, false])('新目录固定权益，不读取历史首购或付款身份（登录：%s）', async (authenticated) => {
+    const db = { query: vi.fn() };
     const catalog = await getSupportCatalog({
       userId: 'user-1',
-      authenticated: true,
+      authenticated,
       db,
       env: { SUPPORT_PACKAGES_CATALOG_ENABLED: 'true' },
     });
-    expect(catalog.packages.find((item) => item.skuId === 'ai-6')?.firstPurchaseStatus).toBe('used');
-    expect(catalog.packages.find((item) => item.skuId === 'storage-6')?.firstPurchaseStatus).toBe('used');
-    expect(catalog.packages.find((item) => item.skuId === 'combo-10')?.firstPurchaseStatus).toBe('used');
+    expect(catalog.packages).toHaveLength(12);
+    for (const item of catalog.packages) {
+      expect(item.firstPurchaseStatus).toBe('not_applicable');
+      expect(item.firstPurchase).toEqual(item.base);
+      expect(supportFirstPurchaseClaimKey(item)).toBe('');
+      expect(supportFirstPurchaseCompatibleClaimKeys(item)).toEqual([]);
+    }
+    expect(db.query).not.toHaveBeenCalled();
+    const providerHash = supportProviderIdentityHash('afdian-user-1');
+    expect(providerHash).toMatch(/^[0-9a-f]{64}$/);
     expect(providerHash).not.toContain('afdian-user-1');
   });
 
-  it('账号级首购兼容键显式冻结全部 v2 AI 与组合 SKU', () => {
-    const aiPackage = SUPPORT_PACKAGE_CATALOG.find((item) => item.skuId === 'ai-6');
-    expect(supportFirstPurchaseCompatibleClaimKeys(aiPackage)).toEqual([
-      'scope-ai-account-v3',
-      'ai-6',
-      'ai-18',
-      'ai-50',
-      'ai-100',
-      'combo-10',
-      'combo-30',
-      'combo-88',
-      'combo-168',
-    ]);
+  it.each(['support-packages-v2', 'support-packages-v3', 'support-packages-v4'])(
+    '%s 旧 AI 订单仍兼容全部历史 AI 与组合首购记录',
+    (catalogVersion) => {
+      const aiPackage = SUPPORT_PACKAGE_CATALOG.find((item) => item.skuId === 'ai-6');
+      expect(supportFirstPurchaseCompatibleClaimKeys(aiPackage, catalogVersion)).toEqual([
+        'scope-ai-account-v3',
+        'ai-6',
+        'ai-18',
+        'ai-50',
+        'ai-100',
+        'combo-10',
+        'combo-30',
+        'combo-88',
+        'combo-168',
+      ]);
+      expect(supportFirstPurchaseClaimKey(aiPackage, catalogVersion)).toBe('scope-ai-account-v3');
+    },
+  );
+
+  it('旧空间首购只适用于 v2/v3，v4/v5 固定空间不产生首购键', () => {
+    const item = SUPPORT_PACKAGE_CATALOG.find((entry) => entry.skuId === 'storage-6');
+    for (const version of ['support-packages-v2', 'support-packages-v3']) {
+      expect(supportFirstPurchaseClaimKey(item, version)).toBe('storage-6');
+      expect(supportFirstPurchaseCompatibleClaimKeys(item, version)).toEqual(['storage-6']);
+    }
+    for (const version of ['support-packages-v4', 'support-packages-v5']) {
+      expect(supportFirstPurchaseClaimKey(item, version)).toBe('');
+      expect(supportFirstPurchaseCompatibleClaimKeys(item, version)).toEqual([]);
+    }
   });
 
   it('活动套餐只返回活动期内最终权益，不叠加常驻首充', async () => {
@@ -207,8 +219,6 @@ describe('爱发电 v3 常驻与活动套餐目录', () => {
     const db = {
       query: vi.fn(async (sql) => {
         const statement = String(sql);
-        if (statement.includes('FROM support_account_links')) return [[], []];
-        if (statement.includes('FROM support_first_purchase_claims')) return [[], []];
         if (statement.includes('FROM support_campaigns c')) {
           return [
             [

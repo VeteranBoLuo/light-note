@@ -13,6 +13,7 @@ import { POINTS_SYSTEM_VERSION } from './pointsEarningPolicy.js';
 import { INTERNAL_ROLES } from './internalRoles.js';
 import { pointsOperationHash } from './pointsOperationHash.js';
 import { creditAiBonusTokens } from './aiBonusWallet.js';
+import { acquisitionMeta, recordAssetAcquisition, ACQUISITION_VERSION } from './assetAcquisition.js';
 
 // 积分系统:经验(EXP)管段位、只增;积分(points)管消费、可赚可花。
 // 余额存 user_growth.points(权威),points_log 记流水(审计 + 按天幂等)。
@@ -523,22 +524,24 @@ export async function earnStorage(userId, mb, reason, ref = null, conn = pool) {
     }
   }
   const logReason = ('storage:' + reason).slice(0, 32);
+  const meta = JSON.stringify(acquisitionMeta('storage', mb, reason));
   if (ref) {
     // 原子幂等,同 earnPoints:防里程碑存储奖励并发重复发放
     const [ins] = await conn.query(
-      `INSERT INTO points_log (user_id, delta, reason, ref)
-       SELECT ?, 0, ?, ? FROM DUAL
+      `INSERT INTO points_log (user_id, delta, reason, ref, meta)
+       SELECT ?, 0, ?, ?, ? FROM DUAL
        WHERE NOT EXISTS (SELECT 1 FROM points_log WHERE user_id = ? AND reason = ? AND ref = ?)`,
-      [userId, logReason, ref, userId, logReason, ref],
+      [userId, logReason, ref, meta, userId, logReason, ref],
     );
     if (!ins.affectedRows) return false;
     await conn.query('UPDATE user_growth SET storage_bonus_mb = storage_bonus_mb + ? WHERE user_id = ?', [mb, userId]);
     return true;
   }
-  await conn.query('INSERT INTO points_log (user_id, delta, reason, ref) VALUES (?, 0, ?, ?)', [
+  await conn.query('INSERT INTO points_log (user_id, delta, reason, ref, meta) VALUES (?, 0, ?, ?, ?)', [
     userId,
     logReason,
     null,
+    meta,
   ]);
   await conn.query('UPDATE user_growth SET storage_bonus_mb = storage_bonus_mb + ? WHERE user_id = ?', [mb, userId]);
   return true;
@@ -590,13 +593,13 @@ export async function getPointsLog(userId, { limit = 30, offset = 0, cursor = nu
   const [rawRows] = await pool.query(
     `SELECT id, delta, reason, ref, policy_version AS policyVersion, meta, create_time
        FROM points_log
-      WHERE user_id = ? AND reason <> 'ach_unlock' AND ${filterSql} ${cursorSql}
+      WHERE user_id = ? AND reason NOT IN ('ach_unlock', 'asset_grant') AND ${filterSql} ${cursorSql}
       ORDER BY id DESC LIMIT ${lim + 1} ${pagingSql}`,
     cursorId ? [userId, cursorId] : [userId],
   );
   const [[c]] = await pool.query(
     `SELECT COUNT(*) AS c FROM points_log
-      WHERE user_id = ? AND reason <> 'ach_unlock' AND ${filterSql}`,
+      WHERE user_id = ? AND reason NOT IN ('ach_unlock', 'asset_grant') AND ${filterSql}`,
     [userId],
   );
   const hasMore = rawRows.length > lim;
@@ -1062,7 +1065,12 @@ export async function adminGrantPoints(
     if (s) {
       await conn.query(
         "INSERT INTO points_log (user_id, delta, reason, ref, policy_version, meta) VALUES (?, 0, 'storage:admin', ?, ?, ?)",
-        [normalizedUserId, ref, POINTS_SYSTEM_VERSION, ledgerMeta],
+        [
+          normalizedUserId,
+          ref,
+          POINTS_SYSTEM_VERSION,
+          s > 0 ? JSON.stringify({ ...JSON.parse(ledgerMeta), ...acquisitionMeta('storage', s, 'admin') }) : ledgerMeta,
+        ],
       );
     }
     await conn.query(
@@ -1071,6 +1079,15 @@ export async function adminGrantPoints(
         WHERE user_id = ?`,
       [nextPoints, nextStorage, nextCards, normalizedUserId],
     );
+    if (c > 0) {
+      await recordAssetAcquisition(conn, {
+        userId: normalizedUserId,
+        kind: 'card',
+        amount: c,
+        sourceType: 'admin',
+        sourceRef: requestId || null,
+      });
+    }
     const businessResult = {
       ok: true,
       points: nextPoints,
@@ -1099,6 +1116,7 @@ export async function adminGrantPoints(
             resultingPoints: nextPoints,
             resultingStorageMb: nextStorage,
             resultingCards: nextCards,
+            acquisitionVersion: ACQUISITION_VERSION,
             reasonCode: normalizedReasonCode,
             ticketRef: normalizedTicketRef || null,
           },
@@ -1300,7 +1318,10 @@ export async function buyItem(
       item.id,
     ]);
     if (item.effect === 'makeup_card') {
-      const grant = await grantItem(conn, userId, 'makeup_card', 1);
+      const grant = await grantItem(conn, userId, 'makeup_card', 1, {
+        sourceType: 'points_shop',
+        sourceRef: String(operation.operationId || item.id),
+      });
       if (!grant.ok || grant.qty !== 1) throw new Error('MAKEUP_CARD_GRANT_FAILED');
     } else if (item.effect === 'storage') {
       // 永久扩容即时生效；C5 的每档一次资格已在同一事务内由唯一领取事实锁定。
@@ -1308,6 +1329,13 @@ export async function buyItem(
         item.storageMb,
         userId,
       ]);
+      await recordAssetAcquisition(conn, {
+        userId,
+        kind: 'storage',
+        amount: item.storageMb,
+        sourceType: 'points_shop',
+        sourceRef: String(operation.operationId || item.id),
+      });
     } else if (item.effect === 'ai_pack') {
       // AI 加油包是永久余额：兑换即到账；AI 闸门始终先用等级每日额度，耗尽后才自动扣这里。
       const mutationRef = String(operation.operationId || randomUUID());
@@ -1342,6 +1370,7 @@ export async function buyItem(
     const result = {
       ok: true,
       idempotent: false,
+      acquisitionVersion: ACQUISITION_VERSION,
       economyVersion: runtime.economyVersion,
       points: Number(balance.points || 0),
       item: item.id,

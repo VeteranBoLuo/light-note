@@ -13,10 +13,15 @@ export async function summarizePendingOrganizeReview(database, userId) {
     WHERE s.user_id=? AND s.run_id=? AND r.status<>'preview' AND ${pendingReviewSql()}`;
   const [rows] = await database.query(
     `SELECT COUNT(*) total,
-    CONCAT(COALESCE(SUM(CRC32(JSON_ARRAY(s.id,s.status))),0),':',BIT_XOR(CRC32(JSON_ARRAY(s.id,s.status)))) revision ${from}`,
+    GROUP_CONCAT(DISTINCT i.resource_type ORDER BY i.resource_type) resourceTypes,
+    GROUP_CONCAT(DISTINCT s.kind ORDER BY s.kind) kinds,
+    CONCAT(COALESCE(SUM(CRC32(JSON_ARRAY(s.id,s.status,s.kind,i.resource_type))),0),':',BIT_XOR(CRC32(JSON_ARRAY(s.id,s.status,s.kind,i.resource_type)))) revision ${from}`,
     [userId, runId],
   );
-  const summary = { total: Number(rows[0]?.total || 0), revision: `current:${runId}:${rows[0]?.revision || '0:0'}` };
+  const summary = {
+    total: Number(rows[0]?.total || 0),
+    revision: `current:${runId}:${rows[0]?.revision || '0:0'}`,
+  };
   if (!Number(summary.total)) return summary;
   const [targets] = await database.query(
     `SELECT r.id runId,i.resource_type resourceType ${from}
@@ -26,6 +31,12 @@ export async function summarizePendingOrganizeReview(database, userId) {
   const target = targets[0];
   return {
     ...summary,
+    resourceTypes: String(rows[0]?.resourceTypes || '')
+      .split(',')
+      .filter(Boolean),
+    kinds: String(rows[0]?.kinds || '')
+      .split(',')
+      .filter(Boolean),
     ...(target
       ? {
           route: `/organize?issue=ai_suggestions&review=pending&runId=${encodeURIComponent(target.runId)}&resourceType=${encodeURIComponent(target.resourceType)}`,

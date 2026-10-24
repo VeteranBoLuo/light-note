@@ -87,8 +87,8 @@ function markCommitOutcomeUnknown(error) {
   return wrapped;
 }
 
-async function findOwnedNoteById({ userId, noteId }) {
-  const [rows] = await pool.query(
+async function findOwnedNoteById({ userId, noteId, database = pool }) {
+  const [rows] = await database.query(
     'SELECT id, title, type, parent_id, revision FROM note WHERE id = ? AND create_by = ? LIMIT 1',
     [noteId, userId],
   );
@@ -110,7 +110,10 @@ export async function createNote({
   idempotencyKey = null,
   shareExposureAcknowledged = false,
   placementBatchNoteIds = [],
+  transactionConnection = null,
+  afterCommit = null,
 } = {}) {
+  if (transactionConnection && typeof afterCommit !== 'function') throw new Error('AFTER_COMMIT_REQUIRED');
   if (!userId) throw new Error('USER_REQUIRED: 缺少用户');
   const type = normalizeNoteType(note.type || 'html');
   if (!CREATABLE_NOTE_TYPES.has(type)) throw new Error('INVALID_NOTE_TYPE: 笔记类型无效');
@@ -130,7 +133,7 @@ export async function createNote({
   }
   const idempotentNoteId = actionIdempotencyUuid(idempotencyKey, 'note');
   if (idempotentNoteId) {
-    const existing = await findOwnedNoteById({ userId, noteId: idempotentNoteId });
+    const existing = await findOwnedNoteById({ userId, noteId: idempotentNoteId, database: transactionConnection || pool });
     if (existing) {
       return {
         id: existing.id,
@@ -151,13 +154,13 @@ export async function createNote({
     createBy: userId,
   });
 
-  const connection = await pool.getConnection();
+  const connection = transactionConnection || await pool.getConnection();
   let transactionStarted = false;
   let commitAttempted = false;
   let transactionError = null;
   try {
-    await connection.beginTransaction();
-    transactionStarted = true;
+    if (!transactionConnection) await connection.beginTransaction();
+    transactionStarted = !transactionConnection;
     const placement = await prepareOwnedNotePlacement(connection, {
       userId,
       parentId: note.parentId ?? null,
@@ -200,8 +203,8 @@ export async function createNote({
       await syncNoteImageReferences(connection,data.id);
     }
     if (managedImportImages.length) await syncNoteImageReferences(connection, data.id);
-    commitAttempted = true;
-    await connection.commit();
+    commitAttempted = !transactionConnection;
+    if (!transactionConnection) await connection.commit();
   } catch (error) {
     transactionError = error;
     if (transactionStarted) {
@@ -212,9 +215,10 @@ export async function createNote({
       }
     }
   } finally {
-    connection.release();
+    if (!transactionConnection) connection.release();
   }
 
+  if (transactionError && transactionConnection) throw transactionError;
   let recoveredExisting = false;
   if (transactionError && idempotentNoteId) {
     try {
@@ -242,20 +246,24 @@ export async function createNote({
     if (!committed) throw transactionError;
   }
 
-  if (!recoveredExisting) {
-    try {
-      await triggerResourceCreateEffects({
-        request,
-        userId,
-        userRole,
-        resourceType: 'note',
-        resourceId: data.id,
-        suppressUserRewards,
-      });
-    } catch {
-      // 资源已提交；成长与转化是旁路副作用，任何同步异常都不能反向伪装成创建失败。
+  const runAfterCommit = async () => {
+    if (!recoveredExisting) {
+      try {
+        await triggerResourceCreateEffects({
+          request,
+          userId,
+          userRole,
+          resourceType: 'note',
+          resourceId: data.id,
+          suppressUserRewards,
+        });
+      } catch {
+        // 资源已提交；成长与转化是旁路副作用，任何同步异常都不能反向伪装成创建失败。
+      }
     }
-  }
+  };
+  if (transactionConnection) afterCommit(runAfterCommit);
+  else await runAfterCommit();
   return {
     id: data.id,
     title,

@@ -47,7 +47,7 @@
       <p class="package-card__scenario">{{ scenarioLabel }}</p>
       <div class="package-card__benefits">
         <div
-          v-if="regularItem.firstPurchaseStatus !== 'used'"
+          v-if="hasFirstPurchase && regularItem.firstPurchaseStatus !== 'used'"
           class="package-card__benefit-row package-card__benefit-row--primary"
           :class="{ 'is-highlighted': regularItem.firstPurchaseStatus === 'available' && !previewMode }"
         >
@@ -55,7 +55,7 @@
           <strong>{{ formatBenefit(expectedBenefit) }}</strong>
         </div>
         <div class="package-card__benefit-row package-card__benefit-row--base">
-          <span>{{ t('entitlementStore.baseArrival') }}</span>
+          <span>{{ t(hasFirstPurchase ? 'entitlementStore.baseArrival' : 'entitlementStore.purchaseArrival') }}</span>
           <strong>{{ formatBenefit(regularItem.base) }}</strong>
         </div>
       </div>
@@ -115,6 +115,7 @@
   const isRecommended = computed(() => !isCampaign.value && props.index === (props.item.category === 'ai' ? 0 : 1));
   const campaignItem = computed(() => props.item as SupportCampaignPackage);
   const regularItem = computed(() => props.item as SupportPackage);
+  const hasFirstPurchase = computed(() => regularItem.value.firstPurchaseScope !== 'none');
   const tierKey = computed(() => ['light', 'regular', 'frequent', 'heavy'][Math.min(Math.max(props.index, 0), 3)]);
   const categoryLabel = computed(() => t(`entitlementStore.categoryNames.${props.item.category}`));
   const tierLabel = computed(() => t(`entitlementStore.tiers.${tierKey.value}`));
@@ -125,12 +126,19 @@
     return icon.growth.reward;
   });
   const firstPurchaseLabel = computed(() => {
+    if (!hasFirstPurchase.value)
+      return t(
+        regularItem.value.category === 'storage'
+          ? 'entitlementStore.storagePermanentTitle'
+          : 'entitlementStore.aiPermanentTitle',
+      );
     if (props.previewMode) return t('entitlementStore.previewFirstStatus');
     if (regularItem.value.firstPurchaseStatus === 'used') return t('entitlementStore.firstUsed');
     if (regularItem.value.firstPurchaseStatus === 'login_required') return t('entitlementStore.firstLogin');
     return t('entitlementStore.firstAvailable');
   });
   const firstPurchaseTone = computed<ChipTone>(() => {
+    if (!hasFirstPurchase.value) return 'neutral';
     if (props.previewMode || regularItem.value.firstPurchaseStatus === 'login_required') return 'pending';
     return regularItem.value.firstPurchaseStatus === 'available' ? 'success' : 'neutral';
   });
@@ -143,6 +151,12 @@
       : t('entitlementStore.expectedArrival'),
   );
   const firstPurchaseNote = computed(() => {
+    if (!hasFirstPurchase.value)
+      return t(
+        regularItem.value.category === 'storage'
+          ? 'entitlementStore.storagePermanentNote'
+          : 'entitlementStore.aiPermanentNote',
+      );
     if (props.previewMode) return t('entitlementStore.previewNote');
     if (regularItem.value.firstPurchaseStatus === 'used') return t('entitlementStore.usedNote');
     if (regularItem.value.firstPurchaseStatus === 'login_required') return t('entitlementStore.loginNote');

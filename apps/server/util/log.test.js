@@ -18,6 +18,10 @@ const { logFunction, sanitizeLogUrl, sanitizeSensitivePayload } = await import('
 const { summarizeApiLogPayload } = await import('./logPolicy.js');
 
 describe('API 日志脱敏', () => {
+  it('公开搜索日志不保存关键词、网址或用户正文',()=>{
+    expect(sanitizeLogUrl('/api/public-resources/search?q=private-keyword#body')).toBe('/api/public-resources/search');
+    expect(summarizeApiLogPayload('/api/public-resources/search/combined',{keyword:'private',url:'https://private.invalid/',body:'private-text',requestId:'operation'})).toEqual({payloadSummary:'public_resource_content_omitted',requestId:'operation'});
+  });
   beforeEach(() => {
     query.mockReset();
     query.mockResolvedValue([{}, []]);

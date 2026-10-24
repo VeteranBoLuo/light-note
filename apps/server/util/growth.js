@@ -15,6 +15,7 @@ import pool from '../db/index.js';
 import { communityGrowthMetrics } from './communityFeed/growthMetrics.js';
 import { earnPoints, earnStorage, getAchievementFrameByKey, titleName } from './points.js';
 import { grantItem } from './items.js';
+import { recordAssetAcquisition, ACQUISITION_VERSION } from './assetAcquisition.js';
 import { createNotification } from './notification.js';
 import { notificationSchedulerEnabled } from './notificationSchedulerPolicy.js';
 import { stableAgentErrorCode } from './agent/logSafety.js';
@@ -314,7 +315,7 @@ export async function grantExp(userId, source, opts = {}, conn = null) {
           [userId, `level_up_L${L}`, JSON.stringify({ from: L - 1, to: L, rank: rankName })],
         );
         if (MAKEUP_CARD_SUPPLY_POLICY.levelMilestones.includes(L)) {
-          await grantItem(c, userId, 'makeup_card', 1);
+          await grantItem(c, userId, 'makeup_card', 1, { sourceType: 'level_up', sourceRef: `level:${L}` });
         }
         if (notifyLevelUp) await writeLevelUpNotification(c, userId, L);
       }
@@ -1576,7 +1577,10 @@ export async function checkin(userId, { userRole = null, calendar = null } = {})
       if (firstHit) {
         if (ms.storageMb) await earnStorage(userId, ms.storageMb, 'streak_milestone', String(ms.days), conn);
         if (ms.cards) {
-          await grantItem(conn, userId, 'makeup_card', ms.cards);
+          await grantItem(conn, userId, 'makeup_card', ms.cards, {
+            sourceType: 'streak_milestone',
+            sourceRef: String(ms.days),
+          });
         }
         milestone = { days: ms.days, points: ms.points, storageMb: ms.storageMb || 0, cards: ms.cards || 0 };
       }
@@ -1726,6 +1730,16 @@ export async function adminAdjustGrowth(
       cards,
       userId,
     ]);
+    const grantedCards = cards - Number(g.streak_protect_cards || 0);
+    if (grantedCards > 0) {
+      await recordAssetAcquisition(conn, {
+        userId,
+        kind: 'card',
+        amount: grantedCards,
+        sourceType: 'admin',
+        sourceRef: actionContext?.requestId,
+      });
+    }
     if (level > fromLevel && (await isLevelUpNotificationEnabled(conn, userId))) {
       await writeLevelUpNotification(conn, userId, level, { source: 'admin_adjust' });
     }
@@ -1739,6 +1753,7 @@ export async function adminAdjustGrowth(
             resultingExp: exp,
             resultingLevel: level,
             resultingCards: cards,
+            acquisitionVersion: ACQUISITION_VERSION,
           },
           db: conn,
         })

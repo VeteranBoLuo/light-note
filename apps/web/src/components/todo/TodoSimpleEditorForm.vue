@@ -234,6 +234,7 @@
 </template>
 
 <script setup lang="ts">
+  import { getTodoFixedReminderTimes } from '@lightnote/shared/todo-reminder';
   import TodoOrganizationFields from './TodoOrganizationFields.vue';
   import { todoTodayInTimezone } from '@/utils/todoPlanning';
   import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
@@ -604,7 +605,7 @@
         once?.type === 'at_start'
           ? { type: 'at_start' }
           : once?.type === 'fixed_at'
-            ? { type: 'fixed_time', fixedTime: once.fixedAt?.slice(11, 16) || '09:00' }
+            ? { type: 'fixed_time', fixedTime: getTodoFixedReminderTimes(once)[0]?.slice(11, 16) || '09:00' }
             : { type: 'before_due', offsetMinutes: once?.type === 'before_due' ? once.offsetMinutes || 60 : 0 },
       channels: [...draft.reminder.channels],
       targetEmail: draft.reminder.targetEmail,

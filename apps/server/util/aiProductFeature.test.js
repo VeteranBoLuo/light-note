@@ -21,6 +21,7 @@ describe('aiProductFeature', () => {
         tag: true,
         routine: true,
         community: false,
+        public_resource:false,
       },
       archive: { readonly: true },
     });

@@ -137,7 +137,10 @@ export const getObjectMetadataFromObs = async (objectKey) => {
     Key: objectKey,
   });
   return {
-    contentLength: Number(result?.InterfaceResult?.ContentLength || 0),
+    contentLength:
+      result?.InterfaceResult?.ContentLength == null || result.InterfaceResult.ContentLength === ''
+        ? NaN
+        : Number(result.InterfaceResult.ContentLength),
     contentType: String(result?.InterfaceResult?.ContentType || ''),
     etag: String(result?.InterfaceResult?.ETag || ''),
   };

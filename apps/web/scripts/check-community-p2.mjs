@@ -20,6 +20,17 @@ async function page(account, width = 1440, theme = 'day') {
   return p;
 }
 const go = (p, path) => p.evaluate((path) => window.communityFixture.router.push(path), path);
+async function waitForComment(p, link) {
+  const id = new URL(link, origin).searchParams.get('comment');
+  assert.ok(id, 'notification includes its target comment');
+  await p.waitForFunction((id) => {
+    const element = document.getElementById('comment-' + id);
+    const list = element?.closest('.comment-list');
+    if (!element || !list) return false;
+    const item = element.getBoundingClientRect(), viewport = list.getBoundingClientRect();
+    return item.bottom > viewport.top && item.top < viewport.bottom;
+  }, id);
+}
 async function notifications(account) {
   return (
     await (
@@ -66,10 +77,10 @@ try {
   const n = an.find((x) => JSON.parse(typeof x.meta === 'string' ? x.meta : JSON.stringify(x.meta)).kind === 'comment');
   assert.ok(n, 'author receives comment notification');
   await go(a, n.link);
-  await a.waitForSelector('.is-located');
+  await waitForComment(a, n.link);
   await a.locator('.feed-comment').first().getByRole('button', { name: '回复', exact: true }).click();
-  await a.locator('.feed-comment .comment-composer textarea').fill('谢谢，这个方法很实用。');
-  await a.locator('.feed-comment .comment-composer').getByRole('button', { name: '回复', exact: true }).click();
+  await a.locator('.community-comments-panel > .comment-composer textarea').fill('谢谢，这个方法很实用。');
+  await a.locator('.community-comments-panel > .comment-composer').getByRole('button', { name: '回复', exact: true }).click();
   await a.getByText('谢谢，这个方法很实用。', { exact: true }).waitFor();
   const bn = await notifications('b');
   const replyNotification = bn.find(
@@ -77,11 +88,15 @@ try {
   );
   assert.ok(replyNotification);
   await go(b, replyNotification.link);
-  await b.waitForSelector('.is-located');
+  await waitForComment(b, replyNotification.link);
   await b.getByRole('dialog').getByRole('button', { name: '关闭', exact: true }).click();
+  const beforeLike = (await notifications('a')).filter((item) => item.source_type === 'community_feed_post_like');
+  const beforeModerator = (await notifications('root')).length;
   await b.getByRole('button', { name: '点赞', exact: true }).click();
   await b.getByRole('button', { name: '已赞', exact: true }).waitFor();
-  assert.equal((await notifications('a')).length, an.length);
+  const afterLike = (await notifications('a')).filter((item) => item.source_type === 'community_feed_post_like');
+  assert.equal(afterLike.length, beforeLike.length + 1, 'a post like notifies its author');
+  assert.equal((await notifications('root')).length, beforeModerator, 'likes do not notify moderators');
   await go(a, '/community');
   await a.waitForSelector('.community-workspace');
   assert.equal(await a.locator('.community-message.is-focused').count(), 0);
@@ -105,7 +120,7 @@ try {
       await p.close();
     }
   console.log(
-    'P2 browser passed: isolated MySQL two-account publishing/review/reply/notification locate; likes silent; fixed chat entry without spurious focus; pagination and 8 viewport/theme combinations.',
+    'P2 browser passed: isolated MySQL two-account publishing/review/reply/notification locate; likes notify the author only; fixed chat entry without spurious focus; pagination and 8 viewport/theme combinations.',
   );
   assert.deepEqual(errors, []);
 } finally {

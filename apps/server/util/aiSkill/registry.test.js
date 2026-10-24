@@ -43,6 +43,7 @@ const EXPECTED_INTERNAL_SKILLS = Object.freeze([
   ['toolbox.extraction_suggest', 'toolbox', 'read'],
   ['toolbox.extraction_extract', 'toolbox', 'read'],
   ['community.review_screen', 'community', 'read'],
+  ['public_resource.review_screen', 'public_resource', 'read'],
 ]);
 const ALL_EXPECTED_SKILLS = Object.freeze([...EXPECTED_SKILLS, ...EXPECTED_INTERNAL_SKILLS]);
 
@@ -53,18 +54,28 @@ const RESULT_KINDS = new Set(AI_SKILL_RESULT_KINDS);
 describe('AI Skill registry contract', () => {
   it('固定登记公共 Skill 与工具箱内部 Profile，避免能力静默增删或改名', () => {
     expect(listAiSkills()).toEqual(
-      ALL_EXPECTED_SKILLS.map(([id, domain, effect]) => ({ id, version: 1, domain, effect })),
+      ALL_EXPECTED_SKILLS.map(([id, domain, effect]) => ({
+        id,
+        version: id === 'routine.daily_brief' ? 2 : 1,
+        domain,
+        effect,
+      })),
     );
     expect(listAiSkills({ includeInternal: false })).toEqual(
-      EXPECTED_SKILLS.map(([id, domain, effect]) => ({ id, version: 1, domain, effect })),
+      EXPECTED_SKILLS.map(([id, domain, effect]) => ({
+        id,
+        version: id === 'routine.daily_brief' ? 2 : 1,
+        domain,
+        effect,
+      })),
     );
   });
 
   it.each(ALL_EXPECTED_SKILLS)('%s 的定义遵守统一能力、安全和上下文契约', (id, domain, effect) => {
-    const definition = resolveAiSkill(id, 1);
+    const definition = resolveAiSkill(id, id === 'routine.daily_brief' ? 2 : 1);
     const policy = definition.contextPolicy;
 
-    expect(definition).toMatchObject({ id, version: 1, domain, effect });
+    expect(definition).toMatchObject({ id, version: id === 'routine.daily_brief' ? 2 : 1, domain, effect });
     expect(Object.isFrozen(definition)).toBe(true);
     expect(definition.allowedRoles).toEqual(expect.arrayContaining(AI_SKILL_AUTHENTICATED_ROLES));
     expect(definition.allowedRoles.every((role) => ALLOWED_ROLES.has(role))).toBe(true);

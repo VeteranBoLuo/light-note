@@ -6,6 +6,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 const mocks = vi.hoisted(() => ({
   realLifecycle: false,
   putObjectToObs: vi.fn(),
+  copyObjectInObs: vi.fn(),
   routes: new Map(),
   pool: { query: vi.fn(), getConnection: vi.fn() },
   getUserSpaceMb: vi.fn(),
@@ -50,6 +51,7 @@ vi.mock('../util/obsClient.js', () => ({
   deleteObjectFromObs: mocks.deleteObjectFromObs,
   getObjectMetadataFromObs: mocks.getObjectMetadataFromObs,
   putObjectToObs: mocks.putObjectToObs,
+  copyObjectInObs: mocks.copyObjectInObs,
 }));
 vi.mock('../util/fileCategory.js', () => ({
   FILE_CATEGORY_ORDER: ['pdf', 'image'],
@@ -93,6 +95,7 @@ const { cleanupLegacyCloudObject } = await import('../util/services/cloudLegacyO
 const { deleteUnmanagedObject } = await import('../util/imagePreview/cleanup.js');
 const { abortManagedCloudUpload, confirmManagedCloudUpload } =
   await import('../util/services/managedCloudUploadService.js');
+const { publishedUploadKey } = await import('../util/services/cloudUploadFinalization.js');
 const socketPath = process.env.LIGHTNOTE_TEST_MYSQL_SOCKET;
 const schema = `upload_integrity_${randomUUID().replaceAll('-', '')}`;
 let admin, db;
@@ -163,6 +166,7 @@ describe.skipIf(!socketPath)('ordinary upload integrity with real MySQL transact
     mocks.pool.getConnection.mockImplementation(() => db.getConnection());
   });
   beforeEach(async () => {
+    mocks.copyObjectInObs.mockReset().mockResolvedValue({});
     await db.query('DELETE FROM file_shares');
     await db.query('DELETE FROM files');
     await db.query('DELETE FROM image_assets');
@@ -229,12 +233,25 @@ describe.skipIf(!socketPath)('ordinary upload integrity with real MySQL transact
     expect(again.data[0]).toMatchObject({ fileId: first.data[0].fileId, filename: 'a.pdf', alreadyConfirmed: true });
     expect((await db.query('SELECT * FROM files'))[0]).toHaveLength(1);
   });
+  it('replays a saved file after its disposable upload object has been retired', async () => {
+    const objectKey = key();
+    const first = await confirm(objectKey, 'a.pdf');
+    await db.query(
+      "UPDATE cloud_legacy_object_lifecycle SET state='retired',available_at=NULL WHERE object_key=?",
+      [objectKey],
+    );
+    mocks.getObjectMetadataFromObs.mockRejectedValue(new Error('Temporary object no longer exists'));
+    const retry = await confirm(objectKey, 'old-name.pdf', 999);
+    expect(retry.status).toBe(200);
+    expect(retry.data[0]).toMatchObject({ fileId: first.data[0].fileId, filename: 'a.pdf', alreadyConfirmed: true });
+    expect(mocks.copyObjectInObs).toHaveBeenCalledOnce();
+  });
   it.each([0, 1])('preserves objects with another historical file reference, del_flag=%s', async (delFlag) => {
     const objectKey = key();
     await confirm(objectKey, 'a.pdf');
     await db.query(
       "INSERT INTO files (create_by,file_name,file_size,obs_key,del_flag) VALUES ('user-1','b.pdf',12,?,?)",
-      [objectKey, delFlag],
+      [publishedUploadKey('user-1', objectKey), delFlag],
     );
     expect((await confirm(key(), 'a.pdf')).status).toBe(200);
     expect(mocks.deleteObjectFromObs).not.toHaveBeenCalled();
@@ -331,12 +348,12 @@ describe.skipIf(!socketPath)('ordinary upload integrity with real MySQL transact
     });
     expect(await cleanupLegacyCloudObject({ database: db, remove, env: { LIGHTNOTE_RUNTIME_ENV: 'test' } })).toBe(true);
     expect(remove).toHaveBeenCalledWith(objectKey);
-    expect((await db.query('SELECT state FROM cloud_legacy_object_lifecycle'))[0]).toEqual([{ state: 'retired' }]);
+    expect((await db.query('SELECT state FROM cloud_legacy_object_lifecycle WHERE object_key=?', [objectKey]))[0]).toEqual([{ state: 'retired' }]);
   });
   it('publication winning first protects the object from later cleanup', async () => {
     const objectKey = key();
     expect((await confirm(objectKey)).status).toBe(200);
-    await deleteUnmanagedObject(objectKey);
+    await deleteUnmanagedObject(publishedUploadKey('user-1', objectKey));
     expect(mocks.deleteObjectFromObs).not.toHaveBeenCalled();
   });
   it('image assets protect an object even without a cloud file row', async () => {

@@ -25,6 +25,48 @@ function createRes() {
 }
 
 describe('adminRoutePolicyMiddleware', () => {
+  it.each(['readonly', 'maintain'])('更换邮箱全部入口拒绝 %s 代管', (mode) => {
+    for (const [method, suffix] of [['GET', 'status'], ['POST', 'request'], ['POST', 'confirm']]) {
+      const next = vi.fn(), res = createRes();
+      adminRoutePolicyMiddleware(createReq(`/user/email-change/${suffix}`, method, mode), res, next);
+      expect(next).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(403);
+    }
+  });
+  it.each(['readonly', 'maintain'])('GitHub 绑定确认拒绝 %s 代管', (mode) => {
+    const next = vi.fn(), res = createRes();
+    adminRoutePolicyMiddleware(createReq('/user/github/bind', 'POST', mode), res, next);
+    expect(next).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(403);
+  });
+  it.each(['readonly', 'maintain'])('全部公开资源接口拒绝 %s 代管', (mode) => {
+    const id = '10000000-0000-4000-8000-000000000001';
+    for (const [method, path] of [
+      ['GET', 'capabilities'],
+      ['GET', 'workspace'],
+      ['GET', 'saved-source'],
+      ['GET', 'search'],
+      ['POST', 'search/combined'],
+      ['GET', id],
+      ['POST', id + '/save'],
+      ['POST', 'submit'],
+      ['POST', 'batch/preview'],
+      ['POST', 'batch'],
+      ['POST', 'moderation/batch'],
+      ['GET', 'own'],
+      ['POST', 'own/resolve'],
+      ['GET', 'moderation'],
+      ['POST', 'moderation/' + id + '/decide'],
+      ['GET', 'moderation/reports/' + id],
+      ['GET', 'moderation/' + id + '/history'],
+    ]) {
+      const next = vi.fn(),
+        res = createRes();
+      adminRoutePolicyMiddleware(createReq('/public-resources/' + path, method, mode), res, next);
+      expect(next).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(403);
+    }
+  });
   it.each(['readonly', 'maintain'])('allows only explicit community preview reads in %s', (mode) => {
     for (const path of [
       '/community/feed/capabilities',
@@ -101,6 +143,7 @@ describe('adminRoutePolicyMiddleware', () => {
       'organize.js': '/organize',
       'resourceGovernance.js': '/resource-governance',
       'search.js': '/search',
+      'publicResources.js': '/public-resources',
       'security.js': '/security',
       'seo.js': '',
       'support.js': '/support',
@@ -473,7 +516,9 @@ describe('adminRoutePolicyMiddleware', () => {
       '/growth/heatmap',
       '/growth/shop',
       '/growth/inventory',
+      '/growth/inventory/acquisitions',
       '/growth/lottery',
+      '/growth/lottery/history',
       '/growth/recap',
       '/growth/claimable',
       '/growth/preferences',

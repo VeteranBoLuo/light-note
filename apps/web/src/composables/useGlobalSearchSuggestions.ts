@@ -1,8 +1,11 @@
+import { fetchCombinedSearch } from '@/api/publicResources';
+import { usePublicResourceScope } from '@/store/publicResourceScope';
 import { onBeforeUnmount, ref, watch } from 'vue';
 import { fetchGlobalSearchSuggestions, type SearchResultItem } from '@/api/search';
 import { GLOBAL_SEARCH_TYPES, type GlobalSearchType } from '@/utils/globalSearchTypes';
 import { dedupeSearchItems, diversifySearchItems } from '@/utils/globalSearchDiversify';
 import { useUserStore } from '@/store';
+import { useForegroundRefresh } from '@/composables/useForegroundRefresh';
 
 const DEBOUNCE_MS = 200;
 
@@ -16,9 +19,11 @@ export function useGlobalSearchSuggestions(
   types: readonly GlobalSearchType[] = GLOBAL_SEARCH_TYPES,
   /** 当前页面的主资源类型：只做同档位内的弱加权，不缩小搜索范围 */
   getSourceType: () => GlobalSearchType | '' = () => '',
-  options: { includeRecent?: boolean; suggestLayout?: 'compact' | 'grouped' } = {},
+  options: { includeRecent?: boolean; suggestLayout?: 'compact' | 'grouped'; allowPublicScope?: boolean } = {},
 ) {
   const user = useUserStore();
+  const publicScope = options.allowPublicScope ? usePublicResourceScope() : null;
+  const publicFailed = ref(false);
   const items = ref<SearchResultItem[]>([]);
   const loading = ref(false);
   const failed = ref(false);
@@ -43,6 +48,7 @@ export function useGlobalSearchSuggestions(
     // 递增序号，让已经在途的响应无法再写入状态
     requestSeq += 1;
     items.value = [];
+    publicFailed.value = false;
     loading.value = false;
     failed.value = false;
     hasMore.value = false;
@@ -64,13 +70,39 @@ export function useGlobalSearchSuggestions(
     failed.value = false;
 
     try {
-      const res = await fetchGlobalSearchSuggestions(normalized, {
-        types: [...types],
-        sourceType: getSourceType(),
-        signal,
-        ...(options.suggestLayout ? { suggestLayout: options.suggestLayout } : {}),
-        ...(options.includeRecent ? { includeRecent: true } : {}),
-      });
+      const personal = () =>
+        fetchGlobalSearchSuggestions(normalized, {
+          types: [...types],
+          sourceType: getSourceType(),
+          signal,
+          ...(options.suggestLayout ? { suggestLayout: options.suggestLayout } : {}),
+          ...(options.includeRecent ? { includeRecent: true } : {}),
+        });
+      let res;
+      publicFailed.value = false;
+      // A restored choice can precede the first capability response after login/reload.
+      if (publicScope?.included) {
+        await publicScope.ensure();
+        if (signal.aborted || seq !== requestSeq) return;
+      }
+      if (publicScope?.included && publicScope.caps.enabled) {
+        try {
+          res = await fetchCombinedSearch(
+            normalized,
+            {
+              types: [...types],
+              mode: 'suggest',
+              suggestLayout: options.suggestLayout || 'compact',
+              sourceType: getSourceType(),
+            },
+            signal,
+          );
+        } catch (error) {
+          if (signal.aborted || seq !== requestSeq) return;
+          publicFailed.value = true;
+          res = await personal();
+        }
+      } else res = await personal();
       if (seq !== requestSeq) return;
       const uniqueItems = dedupeSearchItems(res.items);
       items.value = options.suggestLayout === 'grouped' ? uniqueItems : diversifySearchItems(uniqueItems);
@@ -83,7 +115,7 @@ export function useGlobalSearchSuggestions(
       hasMore.value = false;
       failed.value = true;
       lastKeyword.value = normalized;
-      console.warn('[globalSearch] suggestions failed', error);
+      console.warn('[globalSearch] suggestions failed');
     } finally {
       if (seq === requestSeq) loading.value = false;
     }
@@ -106,11 +138,25 @@ export function useGlobalSearchSuggestions(
 
   // 账号切换后旧结果不能残留
   watch(
-    () => [user.id, user.role],
+    () => [user.id, user.role, user.adminContext?.id],
     () => reset(),
   );
 
+  if (publicScope) {
+    useForegroundRefresh({
+      staleMs: 0,
+      enabled: () => publicScope.included,
+      canRefresh: () => !loading.value && items.value.length > 0,
+      refresh: async () => {
+        const keyword = lastKeyword.value;
+        reset();
+        await publicScope.ensure(true);
+        await run(keyword);
+      },
+    });
+  }
+
   onBeforeUnmount(cancelPending);
 
-  return { items, loading, failed, hasMore, lastKeyword, schedule, run, reset };
+  return { items, loading, failed, publicFailed, hasMore, lastKeyword, schedule, run, reset };
 }

@@ -1100,3 +1100,47 @@ describe('todoSeriesService v2', () => {
     expect(updatedIds).toEqual(['in-app-1', 'email-1']);
   });
 });
+
+it('多固定时间复用同一待办规则，按时刻和渠道生成不同 Job', () => {
+  const preview = previewTodoPlan({
+    taskMode: 'single', title: '指定两次提醒', timing: { timezone: 'Asia/Shanghai', anchorDate: null }, plan: { type: 'once' },
+    singleTaskReminder: { version: 1, mode: 'once', once: { type: 'fixed_at', fixedAts: ['2026-08-08T10:17', '2026-08-07T09:00'] }, channels: ['in_app', 'email'], targetEmail: 'owner@example.com' },
+  }, { now: new Date('2026-08-06T00:00:00Z') });
+  const jobs = todoSeriesInternals.jobRowsForOccurrence({ userId: 'user-1', todoId: 'todo-1', seriesId: null, rule: { id: 'rule-1', version: 1 }, occurrence: preview.occurrences[0], momentEntry: preview.reminderMoments[0], reminder: preview.normalizedPlan.reminder });
+  expect(jobs).toHaveLength(4);
+  expect(new Set(jobs.map(job => job.todo_id))).toEqual(new Set(['todo-1']));
+  expect(new Set(jobs.map(job => job.dedupe_key)).size).toBe(4);
+  expect(jobs.map(job => [job.sequence_no, job.channel, job.scheduled_at_local])).toEqual([
+    [1, 'in_app', '2026-08-07 09:00:00'], [1, 'email', '2026-08-07 09:00:00'],
+    [2, 'in_app', '2026-08-08 10:17:00'], [2, 'email', '2026-08-08 10:17:00'],
+  ]);
+  expect(preview.displaySummary.reminder).toContain('2 个指定时间');
+});
+
+it('多固定时间中较晚的提醒被延期时，编辑回显保留所有待投递时刻并合并双渠道', async () => {
+  const schedule = { version: 1, mode: 'once', once: { type: 'fixed_at', fixedAt: '2026-08-07 09:00:00', fixedAts: ['2026-08-07 09:00:00', '2026-08-08 09:00:00'] }, channels: ['in_app', 'email'] };
+  const jobs = ['in_app', 'email'].flatMap(channel => [
+    { todoId: 'todo-1', channel, sequenceNo: 2, scheduledAtLocal: '2026-08-08 09:00:00', status: 'pending', cancelReason: null },
+    { todoId: 'todo-1', channel, sequenceNo: 1, scheduledAtLocal: '2026-08-09 14:17:00', status: 'pending', cancelReason: 'user_snoozed' },
+  ]).sort((a,b) => a.scheduledAtLocal.localeCompare(b.scheduledAtLocal));
+  const db = { query: vi.fn().mockResolvedValueOnce([[{ id: 'rule-1', todoId: 'todo-1', mode: 'single_schedule', channels: JSON.stringify(schedule.channels), scheduleJson: JSON.stringify({ version: 2, schedule }) }]]).mockResolvedValueOnce([jobs]) };
+  const result = await loadV2ReminderMap(db, 'user-1', [{ id: 'todo-1' }]);
+  expect(result.get('todo-1').once).toEqual({ type: 'fixed_at', fixedAt: '2026-08-08 09:00:00', fixedAts: ['2026-08-08 09:00:00', '2026-08-09 14:17:00'] });
+  expect(result.get('todo-1').remainingCount).toBe(2);
+});
+
+it('保存多固定时间时只创建一条待办，完整列表保存在同一规则 JSON 中', async () => {
+  const draft = {
+    taskMode: 'single', title: '分两次提醒', timing: { timezone: 'Asia/Shanghai', anchorDate: null }, plan: { type: 'once' },
+    singleTaskReminder: { version: 1, mode: 'once', once: { type: 'fixed_at', fixedAts: ['2026-08-07T09:00', '2026-08-08T10:17'] }, channels: ['in_app'] },
+  };
+  const options = { now: new Date('2026-08-06T00:00:00Z'), suppressUserRewards: true };
+  const preview = previewTodoPlan(draft, options);
+  const db = { query: vi.fn(async sql => sql.includes('FROM todo_plan_requests') ? [[]] : [{ affectedRows: 1 }]) };
+  await createTodoPlan(db, 'user-1', { ...draft, previewHash: preview.previewHash, idempotencyKey: 'fixed-times-create' }, options);
+  expect(db.query.mock.calls.filter(([sql]) => sql.includes('INSERT INTO todo_items'))).toHaveLength(1);
+  const rules = db.query.mock.calls.filter(([sql]) => sql.includes('INSERT INTO todo_reminder_rules'));
+  expect(rules).toHaveLength(1);
+  const saved = JSON.parse(rules[0][1][0].schedule_json);
+  expect(saved.schedule.once.fixedAts).toEqual(['2026-08-07 09:00:00', '2026-08-08 10:17:00']);
+});

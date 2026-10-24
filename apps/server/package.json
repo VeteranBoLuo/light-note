@@ -46,7 +46,9 @@
     "migrate:root-chat-subscription": "node scripts/migrateRootChatSubscription.js",
     "migrate:community-feed-schema": "node scripts/ensureCommunityFeedSchema.js",
     "worker:data-exports": "node dataExportWorker.js",
-    "check:data-exports": "node scripts/checkDataExportRuntime.js"
+    "check:data-exports": "node scripts/checkDataExportRuntime.js",
+    "migrate:public-resources-schema": "node scripts/ensurePublicResourcesSchema.js",
+    "migrate:account-email-health": "node scripts/ensureAccountEmailHealthSchema.js"
   },
   "keywords": [],
   "author": "",

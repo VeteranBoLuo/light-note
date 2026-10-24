@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { mkdir } from 'node:fs/promises';
 import { chromium } from 'playwright-core';
 
-const origin = process.env.LIGHTNOTE_WEB_ORIGIN || 'http://127.0.0.1:5175';
+const origin = process.env.LIGHTNOTE_WEB_ORIGIN || 'http://localhost:5173';
 const output = process.env.LIGHTNOTE_SCREENSHOT_DIR || '/tmp/lightnote-image-formats';
 const english = process.env.LIGHTNOTE_PREVIEW_LANG === 'en';
 await mkdir(output, { recursive: true });

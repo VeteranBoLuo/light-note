@@ -1,4 +1,5 @@
 import { lockCloudObjectForPublication } from '../util/services/cloudObjectPublication.js';
+import { freezeCloudUpload, publishedUploadKey, trackCloudUpload } from '../util/services/cloudUploadFinalization.js';
 import { assertOwnedCloudFolder } from '../util/services/cloudFolderAccess.js';
 import {
   prepareLegacyCloudUpload,
@@ -379,13 +380,20 @@ router.post('/confirmUpload', async (req, res) => {
     const verifiedFiles = await Promise.all(
       reservedFiles.map(async (file) => {
         if (!file.fileName) return file;
-        const metadata = await getObjectMetadataFromObs(file.objectKey);
-        const fileSize = Number(metadata?.contentLength);
-        if (!Number.isSafeInteger(fileSize) || fileSize < 0) throw new Error('OBS_UPLOAD_INVALID_SIZE');
-        return { ...file, fileSize };
+        const publicationKey = publishedUploadKey(userId, file.objectKey);
+        const [confirmed] = await pool.query(
+          'SELECT id, file_name, del_flag FROM files WHERE create_by = ? AND obs_key IN (?, ?) LIMIT 1',
+          [userId, file.objectKey, publicationKey],
+        );
+        // 已入库文件不依赖暂存对象继续存活；账号事务内仍复核当前记录。
+        if (confirmed.length) return { ...file, publicationKey, confirmedBeforeFreeze: true };
+        await trackCloudUpload(pool, userId, file.objectKey);
+        const frozen = await freezeCloudUpload(pool, userId, file.objectKey);
+        return { ...file, publicationKey: frozen.objectKey, fileSize: frozen.contentLength };
       }),
     );
     connection = await pool.getConnection();
+    await connection.query('SET TRANSACTION ISOLATION LEVEL READ COMMITTED');
     await connection.beginTransaction();
     transactionStarted = true;
     // 与 AI“保存到云空间”共用账号行锁，串行化同一账号的选名、覆盖和容量核算。
@@ -401,17 +409,22 @@ router.post('/confirmUpload', async (req, res) => {
     // even if it was renamed or moved after the first successful confirmation.
     for (const file of verifiedFiles) {
       if (!file.fileName) continue;
-      await lockCloudObjectForPublication(connection, userId, file.objectKey);
       const [rows] = await connection.query(
-        'SELECT id, file_name, del_flag FROM files WHERE create_by = ? AND obs_key = ? LIMIT 1 FOR UPDATE',
-        [userId, file.objectKey],
+        'SELECT id, file_name, del_flag FROM files WHERE create_by = ? AND obs_key IN (?, ?) LIMIT 1 FOR UPDATE',
+        [userId, file.objectKey, publishedUploadKey(userId, file.objectKey)],
       );
       if (rows.length) {
         if (Number(rows[0].del_flag) === 1) {
           throw Object.assign(new Error('文件已在回收站，请先恢复'), { code: 'UPLOAD_FILE_TRASHED', status: 409 });
         }
         file.confirmed = rows[0];
+        continue;
       }
+      if (file.confirmedBeforeFreeze) {
+        throw Object.assign(new Error('原文件状态已变化，请重新上传'), { code: 'UPLOAD_OBJECT_RETIRED', status: 409 });
+      }
+      await lockCloudObjectForPublication(connection, userId, file.objectKey);
+      await lockCloudObjectForPublication(connection, userId, file.publicationKey);
     }
 
     const targetFolderId = verifiedFiles.some((file) => file.fileName && !file.confirmed)
@@ -453,7 +466,7 @@ router.post('/confirmUpload', async (req, res) => {
         });
         continue;
       }
-      const objectKey = file.objectKey || buildObjectKey(userId, fileName);
+      const objectKey = file.publicationKey;
       const directory = `${bucketBaseUrl}/files/${userId}/`;
 
       const fileInfo = {

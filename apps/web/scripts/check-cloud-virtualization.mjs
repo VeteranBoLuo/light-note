@@ -64,7 +64,7 @@ try {
           const before = await visibleNames(page);
           await page.evaluate(
             async ({ density, mobile }) => {
-              (await import('/src/composables/useUiDensity.ts')).applyUiDensity(density, mobile);
+              window.__cloudBatchFixture.applyUiDensity(density, mobile);
             },
             { density, mobile: width < 768 },
           );

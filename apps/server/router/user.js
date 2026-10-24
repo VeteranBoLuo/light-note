@@ -6,6 +6,7 @@ import dataExports from './dataExports.js';
 router.use('/dataExports', dataExports);
 
 import * as userHandle from '../router_handle/userHandle.js';
+import * as accountEmailHandle from '../router_handle/accountEmailHandle.js';
 import { saveAdminUserRemark } from '../router_handle/adminUserRemarkHandle.js';
 import { disableAdminUser, restoreAdminUser, updateAdminUser } from '../router_handle/adminUserOperationsHandle.js';
 
@@ -107,6 +108,7 @@ router.get('/deleteUserById', userHandle.deleteUserById);
 router.post('/github/authorize', githubOAuthStartLimiter, userHandle.startGithubOAuth);
 
 router.post('/github', githubOAuthCallbackLimiter, userHandle.github);
+router.post('/github/bind', githubOAuthCallbackLimiter, userHandle.bindGithub);
 
 router.post('/extension/authorize', extensionAuthorizeLimiter, userHandle.authorizeExtension);
 
@@ -115,6 +117,10 @@ router.post('/extension/exchange', extensionExchangeLimiter, userHandle.exchange
 router.post('/logout', userHandle.logout);
 
 router.post('/configPassword', verifyCodeLimiter, userHandle.configPassword);
+
+router.get('/email-change/status', accountEmailHandle.status);
+router.post('/email-change/request', sendEmailLimiter, accountEmailHandle.requestCode);
+router.post('/email-change/confirm', verifyCodeLimiter, accountEmailHandle.confirm);
 
 router.post('/getMySessions', userHandle.getMySessions);
 

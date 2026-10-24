@@ -2,6 +2,8 @@ import { createApp, nextTick } from 'vue';
 import { createI18n } from 'vue-i18n';
 import { beforeEach, afterEach, describe, it, expect, vi } from 'vitest';
 import zh from '@/i18n/locales/zh-CN';
+vi.mock('@/components/base/SvgIcon/src/SvgIcon.vue', () => ({ default: { render: () => null } }));
+
 const get = vi.hoisted(() => vi.fn());
 vi.mock('@/api/growthApi.ts', () => ({ default: { getPointsLog: get } }));
 vi.mock('@/components/base/BasicComponents/BVirtualList.vue', async () => {
@@ -54,6 +56,14 @@ afterEach(() => {
   host?.remove();
 });
 describe('积分流水并发与分页', () => {
+  it('缺失流水数组显示失败而非空记录，并可重试恢复', async () => {
+    get.mockResolvedValueOnce({ status: 200, data: {} }).mockResolvedValueOnce(response([row(1, 40)]));
+    await mount();
+    expect(host.textContent).toContain(zh.growth.pointsLogFailed);
+    (host.querySelector('.ledger-empty button') as HTMLButtonElement).click();
+    await flush();
+    expect(host.querySelector('.ledger-row strong')?.textContent?.trim()).toBe('+40');
+  });
   it('筛选切换不接收旧请求回执', async () => {
     let resolveOld!: (x: any) => void;
     get.mockReturnValueOnce(new Promise((resolve) => (resolveOld = resolve)));

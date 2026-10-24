@@ -1,5 +1,6 @@
 import { writeTodoOrganization, copyTodoOrganization, readTodoOrganization } from './todoOrganizationService.js';
 import crypto from 'crypto';
+import { getTodoFixedReminderTimes } from '@lightnote/shared/todo-reminder';
 import { Temporal } from '@js-temporal/polyfill';
 import { insertData } from '../agent/data.js';
 import { invalidatePersonalKnowledgeCache } from '../personalKnowledgeSearch.js';
@@ -158,7 +159,9 @@ function previewSummary(preview) {
       at_due: '截止时提醒',
       at_start: '开始时提醒',
       before_due: `截止前 ${reminder.once?.offsetMinutes || 0} 分钟提醒`,
-      fixed_at: `${reminder.once?.fixedAt || ''} 提醒`,
+      fixed_at: getTodoFixedReminderTimes(reminder.once).length > 1
+        ? `在 ${getTodoFixedReminderTimes(reminder.once).length} 个指定时间提醒`
+        : `${reminder.once?.fixedAt || ''} 提醒`,
     };
     reminderLabel = `${onceLabels[reminder.once?.type] || '提醒一次'} · ${channelLabel}`;
   } else if (reminder.mode === 'repeat') {
@@ -1620,12 +1623,13 @@ export async function loadV2ReminderMap(db, userId, items) {
         targetEmail: rule.targetEmail || null,
         quietPolicy: rule.quietPolicy || 'defer_once',
       };
-    } else if (!item.seriesId && schedule?.mode === 'once' && nextJob?.cancelReason === 'user_snoozed' && nextAt) {
-      // 单次提醒被延期后，Job 的 scheduledAtLocal 是当前有效执行时间；规则中的原始
+    } else if (!item.seriesId && schedule?.mode === 'once' && activeJobs.some((job) => job.cancelReason === 'user_snoozed') && nextAt) {
+      // 定时提醒被延期后，保留全部待投递 Job 的当前执行时间；规则中的原始
       // at_start/at_due/fixed_at 只用于历史解释。编辑与原样保存都必须沿用延期后的绝对时间。
+      const fixedAts = [...new Set(activeJobs.map((job) => job.scheduledAtLocal))].sort();
       schedule = {
         ...schedule,
-        once: { type: 'fixed_at', fixedAt: nextAt },
+        once: { type: 'fixed_at', fixedAt: fixedAts[0], ...(fixedAts.length > 1 ? { fixedAts } : {}) },
       };
     }
     const current = {

@@ -62,7 +62,7 @@ try {
     };
     const navigate = async (query) =>
       page.evaluate(async (query) => {
-        const { default: router } = await import('/src/router/index.ts');
+        const { router } = window.batchEntryFixture;
         await router.push({ path: '/noteLibrary', query });
       }, query);
     const ready = async (expected) => {

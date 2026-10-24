@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { SUPPORT_PACKAGE_CATALOG_VERSION } from '@lightnote/shared';
 
 const entitlementMocks = vi.hoisted(() => ({
   creditAi: vi.fn(async (_connection, input) => ({
@@ -228,28 +229,171 @@ describe('爱发电 v2 通用权益原子发放', () => {
     expect(firstClaim?.[1]).toEqual(expect.arrayContaining(['scope-ai-account-v3']));
   });
 
-  it('纯空间套餐继续按 SKU 独立占用首购资格', async () => {
-    const connection = connectionFor();
+  it.each(['support-packages-v2', 'support-packages-v3'])(
+    '历史 %s 空间订单保留冻结容量和 SKU 首购资格',
+    async (catalogVersion) => {
+      const connection = connectionFor();
+      await expect(
+        syncAfdianPackageEntitlementForOrder(
+          connection,
+          packageOrder({
+            catalog_version: catalogVersion,
+            sku_id: 'storage-6',
+            total_amount: '6.00',
+            quoted_amount: '6.00',
+            base_ai_tokens: 0,
+            quoted_ai_tokens: 0,
+            base_storage_mb: 128,
+            quoted_storage_mb: 160,
+          }),
+          { env: ENABLED_ENV },
+        ),
+      ).resolves.toMatchObject({ aiTokens: 0, storageMb: 160, firstPurchaseApplied: true });
+      const firstClaim = connection.query.mock.calls.find(([sql]) =>
+        String(sql).includes('INSERT INTO support_first_purchase_claims'),
+      );
+      expect(firstClaim?.[1]).toEqual(expect.arrayContaining(['storage-6']));
+      expect(firstClaim?.[1]).not.toEqual(expect.arrayContaining(['scope-ai-account-v3']));
+    },
+  );
+
+  it.each([
+    ['ai-6', 6, 600_000, 0],
+    ['ai-18', 18, 1_800_000, 0],
+    ['ai-50', 50, 5_000_000, 0],
+    ['ai-100', 100, 10_000_000, 0],
+    ['combo-10', 10, 600_000, 256],
+    ['combo-30', 30, 1_800_000, 768],
+    ['combo-88', 88, 5_000_000, 2_048],
+    ['combo-168', 168, 10_000_000, 4_096],
+  ])('v4 历史 %s 按原基础额度和首购资格结算，不套用 v5 额度', async (skuId, amount, aiTokens, storageMb) => {
+    for (const alreadyUsed of [false, true]) {
+      const connection = connectionFor({ existingUserFirstClaim: alreadyUsed });
+      const expectedAiTokens = alreadyUsed ? aiTokens : aiTokens * 1.2;
+      await expect(
+        syncAfdianPackageEntitlementForOrder(
+          connection,
+          packageOrder({
+            catalog_version: 'support-packages-v4',
+            sku_id: skuId,
+            total_amount: amount.toFixed(2),
+            quoted_amount: amount.toFixed(2),
+            base_ai_tokens: aiTokens,
+            quoted_ai_tokens: aiTokens * 1.2,
+            base_storage_mb: storageMb,
+            quoted_storage_mb: storageMb,
+          }),
+          { env: ENABLED_ENV },
+        ),
+      ).resolves.toMatchObject({
+        status: SUPPORT_ENTITLEMENT_STATUS.CREDITED,
+        aiTokens: expectedAiTokens,
+        storageMb,
+        firstPurchaseApplied: !alreadyUsed,
+      });
+      expect(entitlementMocks.creditAi).toHaveBeenCalledWith(
+        connection,
+        expect.objectContaining({ amountTokens: expectedAiTokens }),
+      );
+      const firstClaim = connection.query.mock.calls.find(([sql]) =>
+        String(sql).includes('INSERT INTO support_first_purchase_claims'),
+      );
+      if (alreadyUsed) expect(firstClaim).toBeUndefined();
+      else expect(firstClaim?.[1]).toEqual(expect.arrayContaining(['scope-ai-account-v3']));
+    }
+  });
+
+  it.each([
+    ['ai-6', 6, 300_000, 0],
+    ['ai-18', 18, 900_000, 0],
+    ['ai-50', 50, 2_500_000, 0],
+    ['ai-100', 100, 5_000_000, 0],
+    ['combo-10', 10, 300_000, 256],
+    ['combo-30', 30, 900_000, 768],
+    ['combo-88', 88, 2_500_000, 2_048],
+    ['combo-168', 168, 5_000_000, 4_096],
+  ])('v5 %s 固定发放，不读取或登记首购记录', async (skuId, amount, aiTokens, storageMb) => {
+    const connection = connectionFor({ existingUserFirstClaim: true, existingIdentityFirstClaim: true });
     await expect(
       syncAfdianPackageEntitlementForOrder(
         connection,
         packageOrder({
-          sku_id: 'storage-6',
-          total_amount: '6.00',
-          quoted_amount: '6.00',
-          base_ai_tokens: 0,
-          quoted_ai_tokens: 0,
-          base_storage_mb: 128,
-          quoted_storage_mb: 160,
+          catalog_version: SUPPORT_PACKAGE_CATALOG_VERSION,
+          sku_id: skuId,
+          total_amount: amount.toFixed(2),
+          quoted_amount: amount.toFixed(2),
+          base_ai_tokens: aiTokens,
+          quoted_ai_tokens: aiTokens,
+          base_storage_mb: storageMb,
+          quoted_storage_mb: storageMb,
+          first_purchase_candidate: 0,
         }),
         { env: ENABLED_ENV },
       ),
-    ).resolves.toMatchObject({ aiTokens: 0, storageMb: 160, firstPurchaseApplied: true });
-    const firstClaim = connection.query.mock.calls.find(([sql]) =>
-      String(sql).includes('INSERT INTO support_first_purchase_claims'),
+    ).resolves.toMatchObject({
+      status: SUPPORT_ENTITLEMENT_STATUS.CREDITED,
+      aiTokens,
+      storageMb,
+      firstPurchaseApplied: false,
+    });
+    expect(entitlementMocks.creditAi).toHaveBeenCalledWith(
+      connection,
+      expect.objectContaining({ amountTokens: aiTokens }),
     );
-    expect(firstClaim?.[1]).toEqual(expect.arrayContaining(['storage-6']));
-    expect(firstClaim?.[1]).not.toEqual(expect.arrayContaining(['scope-ai-account-v3']));
+    if (storageMb) {
+      expect(entitlementMocks.earnStorage).toHaveBeenCalledWith(
+        'user-1',
+        storageMb,
+        'support_package',
+        'support-v2:support-order-1',
+        connection,
+      );
+    } else expect(entitlementMocks.earnStorage).not.toHaveBeenCalled();
+    expect(connection.query.mock.calls.some(([sql]) => String(sql).includes('support_first_purchase_claims'))).toBe(
+      false,
+    );
+  });
+
+  it.each([
+    [6, 256],
+    [18, 768],
+    [50, 2_048],
+    [100, 4_096],
+  ])('新版空间 ¥%i 固定发放 %i MB，不读取或登记首购记录', async (amount, storageMb) => {
+    const connection = connectionFor({ existingUserFirstClaim: true, existingIdentityFirstClaim: true });
+    await expect(
+      syncAfdianPackageEntitlementForOrder(
+        connection,
+        packageOrder({
+          sku_id: `storage-${amount}`,
+          catalog_version: SUPPORT_PACKAGE_CATALOG_VERSION,
+          total_amount: amount.toFixed(2),
+          quoted_amount: amount.toFixed(2),
+          base_ai_tokens: 0,
+          quoted_ai_tokens: 0,
+          base_storage_mb: storageMb,
+          quoted_storage_mb: storageMb,
+          first_purchase_candidate: 0,
+        }),
+        { env: ENABLED_ENV },
+      ),
+    ).resolves.toMatchObject({
+      status: SUPPORT_ENTITLEMENT_STATUS.CREDITED,
+      aiTokens: 0,
+      storageMb,
+      firstPurchaseApplied: false,
+    });
+    expect(entitlementMocks.creditAi).not.toHaveBeenCalled();
+    expect(entitlementMocks.earnStorage).toHaveBeenCalledWith(
+      'user-1',
+      storageMb,
+      'support_package',
+      'support-v2:support-order-1',
+      connection,
+    );
+    expect(connection.query.mock.calls.some(([sql]) => String(sql).includes('support_first_purchase_claims'))).toBe(
+      false,
+    );
   });
 
   it('活动套餐使用最终快照和独立限购，不读取或消耗常驻首充资格', async () => {

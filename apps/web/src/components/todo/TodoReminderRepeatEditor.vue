@@ -52,9 +52,12 @@
       </label>
       <label>
         <span>{{ t('inbox.todoReminderLocalTime') }}</span>
-        <BTimePicker v-model:value="localTime" :aria-label="t('inbox.todoReminderLocalTime')" />
+        <BTimePicker v-model:value="localTime" block :aria-label="t('inbox.todoReminderLocalTime')" />
       </label>
-      <label v-if="repeatKind === 'monthly'">
+      <p class="todo-reminder-repeat__hint todo-reminder-repeat__wide">
+        {{ t(repeatKind === 'weekly' ? 'inbox.todoReminderWeeklyStartHint' : 'inbox.todoReminderMonthlyStartHint') }}
+      </p>
+      <label v-if="repeatKind === 'monthly' && needsShortMonthPolicy">
         <span>{{ t('inbox.todoReminderShortMonth') }}</span>
         <BSelect v-model:value="shortMonthPolicy" :options="shortMonthOptions" />
       </label>
@@ -78,7 +81,7 @@
 </template>
 
 <script setup lang="ts">
-  import { computed } from 'vue';
+  import { computed, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BDateTimePicker from '@/components/base/BasicComponents/BDateTimePicker.vue';
@@ -139,17 +142,52 @@
     set: (kind) => {
       const defaults =
         kind === 'weekly'
-          ? { weekdays: [1, 3, 5], localTime: '09:00' }
+          ? { weekdays: reminder.value.repeat?.weekdays || [1, 3, 5] }
           : kind === 'monthly'
-            ? { monthDays: [1], localTime: '09:00', shortMonthPolicy: 'last_day' as const }
-            : { intervalMinutes: 1440 };
-      updateRepeat({ kind, ...defaults });
+            ? {
+                monthDays: reminder.value.repeat?.monthDays || [],
+                shortMonthPolicy: reminder.value.repeat?.shortMonthPolicy || 'last_day',
+              }
+            : { intervalMinutes: reminder.value.repeat?.intervalMinutes || 1440 };
+      const currentStartAt = startAt.value;
+      updateRepeat({
+        kind,
+        ...defaults,
+        startAt: currentStartAt,
+        startDate: currentStartAt.slice(0, 10),
+        localTime: currentStartAt.slice(11, 16) || reminder.value.repeat?.localTime || '09:00',
+      });
     },
   });
   const startAt = computed({
-    get: () => reminder.value.repeat?.startAt || '',
-    set: (value) => updateRepeat({ startAt: value }),
+    get: () => {
+      const repeat = reminder.value.repeat;
+      if (repeat?.kind === 'interval') return repeat.startAt || '';
+      const date = repeat?.startDate ?? repeat?.startAt?.slice(0, 10) ?? '';
+      return date ? `${date}T${repeat?.localTime || '09:00'}` : '';
+    },
+    set: (value) =>
+      updateRepeat({
+        startAt: value,
+        startDate: value.slice(0, 10),
+        localTime: value.slice(11, 16),
+      }),
   });
+  const startDate = computed({
+    get: () => reminder.value.repeat?.startDate ?? reminder.value.repeat?.startAt?.slice(0, 10) ?? '',
+    set: (value) => {
+      const date = value.slice(0, 10);
+      updateRepeat({ startDate: date, startAt: date ? `${date}T${localTime.value}` : '' });
+    },
+  });
+  const localTime = computed({
+    get: () => reminder.value.repeat?.localTime || '09:00',
+    set: (value) => {
+      const time = value.slice(0, 5);
+      updateRepeat({ localTime: time, startAt: startDate.value ? `${startDate.value}T${time}` : '' });
+    },
+  });
+  const needsShortMonthPolicy = computed(() => reminder.value.repeat?.monthDays?.some((day) => day > 28));
   const intervalUnit = computed<keyof typeof intervalUnitFactors>({
     get: () => inferIntervalUnit(reminder.value.repeat?.intervalMinutes || 1440),
     set: (unit) => {
@@ -169,14 +207,6 @@
       updateRepeat({ intervalMinutes: Math.round(count * intervalUnitFactors[intervalUnit.value]) });
     },
   });
-  const startDate = computed({
-    get: () => reminder.value.repeat?.startDate || '',
-    set: (value) => updateRepeat({ startDate: String(value).slice(0, 10) }),
-  });
-  const localTime = computed({
-    get: () => reminder.value.repeat?.localTime || '09:00',
-    set: (value) => updateRepeat({ localTime: String(value).slice(0, 5) }),
-  });
   const weekdays = computed(() => reminder.value.repeat?.weekdays || []);
   function toggleWeekday(day: number) {
     const next = weekdays.value.includes(day)
@@ -184,16 +214,34 @@
       : [...weekdays.value, day];
     updateRepeat({ weekdays: next.sort((a, b) => a - b) });
   }
+  function parseMonthDays(value: string) {
+    return [
+      ...new Set(
+        value
+          .split(/[,，、\s]+/)
+          .map(Number)
+          .filter((day) => Number.isInteger(day) && day >= 1 && day <= 31),
+      ),
+    ].sort((a, b) => a - b);
+  }
+  // 保留正在输入的分隔符和两位日期，不能每次按键都用解析后的数组回填。
+  const monthDaysInput = ref((reminder.value.repeat?.monthDays || []).join('、'));
   const monthDaysText = computed({
-    get: () => (reminder.value.repeat?.monthDays || []).join('、'),
+    get: () => monthDaysInput.value,
     set: (value) => {
-      const days = String(value)
-        .split(/[,，、\s]+/)
-        .map(Number)
-        .filter((day) => Number.isInteger(day) && day >= 1 && day <= 31);
-      updateRepeat({ monthDays: [...new Set(days)].sort((a, b) => a - b) });
+      monthDaysInput.value = String(value);
+      updateRepeat({ monthDays: parseMonthDays(monthDaysInput.value) });
     },
   });
+  watch(
+    () => reminder.value.repeat?.monthDays,
+    (days) => {
+      if (JSON.stringify(days || []) !== JSON.stringify(parseMonthDays(monthDaysInput.value))) {
+        monthDaysInput.value = (days || []).join('、');
+      }
+    },
+    { deep: true },
+  );
   const shortMonthPolicy = computed({
     get: () => reminder.value.repeat?.shortMonthPolicy || 'last_day',
     set: (value) => updateRepeat({ shortMonthPolicy: value }),
@@ -286,13 +334,19 @@
     font-weight: 700;
   }
 
-  .todo-reminder-repeat label :deep(.b-popover-trigger),
-  .todo-reminder-repeat label :deep(.b-time-trigger) {
+  .todo-reminder-repeat label :deep(.b-popover-trigger) {
     width: 100%;
   }
 
+  .todo-reminder-repeat__hint {
+    margin: 0;
+    color: var(--desc-color);
+    font-size: var(--ui-font-12, 12px);
+    line-height: 1.5;
+  }
+
   .todo-reminder-repeat label :deep(.b-time-trigger) {
-    min-height: var(--ui-layout-38, 38px);
+    min-height: var(--ui-control-38, 38px);
   }
 
   .todo-reminder-repeat__stop {

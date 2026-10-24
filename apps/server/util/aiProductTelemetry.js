@@ -90,6 +90,7 @@ const ENUM_DIMENSIONS = Object.freeze({
     'desktop_workbench',
     'toolbox',
     'community_review',
+    'public_resource_review',
     'organize_center',
     'tag_icon_picker',
   ]),

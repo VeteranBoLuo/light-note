@@ -1,24 +1,29 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp, nextTick, reactive } from 'vue';
 import { useGlobalSearchSuggestions } from './useGlobalSearchSuggestions';
-const mocks = vi.hoisted(() => ({ fetch: vi.fn(), user: {} as any }));
+const mocks = vi.hoisted(() => ({ fetch: vi.fn(), combined: vi.fn(), scope: {} as any, user: {} as any }));
+vi.mock('@/api/publicResources', () => ({ fetchCombinedSearch: mocks.combined }));
+vi.mock('@/store/publicResourceScope', () => ({ usePublicResourceScope: () => mocks.scope }));
 vi.mock('@/api/search', () => ({ fetchGlobalSearchSuggestions: mocks.fetch }));
 vi.mock('@/store', () => ({ useUserStore: () => mocks.user }));
 let unmount: () => void;
 beforeEach(() => {
   vi.useFakeTimers();
   mocks.fetch.mockReset();
+  mocks.combined.mockReset();
+  mocks.scope = reactive({ included: true, caps: { enabled: true }, ensure: vi.fn().mockResolvedValue(undefined) });
   mocks.user = reactive({ id: 'one', role: 'user' });
 });
 afterEach(() => {
   unmount?.();
+  vi.restoreAllMocks();
   vi.useRealTimers();
 });
-function setup(includeRecent = false, suggestLayout?: 'grouped') {
+function setup(includeRecent = false, suggestLayout?: 'grouped', allowPublicScope = false) {
   let search!: ReturnType<typeof useGlobalSearchSuggestions>;
   const app = createApp({
     setup() {
-      search = useGlobalSearchSuggestions(undefined, undefined, { includeRecent, suggestLayout });
+      search = useGlobalSearchSuggestions(undefined, undefined, { includeRecent, suggestLayout, allowPublicScope });
       return () => null;
     },
   });
@@ -92,4 +97,101 @@ it('PC 分组保留服务端五类 25 条结果，不再经过 8 条裁剪', asy
   await search.run('项目');
   expect(search.items.value).toHaveLength(25);
   expect(mocks.fetch).toHaveBeenCalledWith('项目', expect.objectContaining({ suggestLayout: 'grouped' }));
+});
+
+it('V4 混排保持既有分组容量，来源纳入去重键', async () => {
+  const items = Array.from({ length: 15 }, (_, i) => ({
+    type: i < 5 ? 'bookmark' : i < 10 ? 'note' : 'file',
+    id: String(i),
+    origin: i % 2 ? 'public' : 'personal',
+  }));
+  items[1] = { ...items[0], origin: 'public' };
+  mocks.combined.mockResolvedValue({ items, hasMore: true });
+  const search = setup(true, 'grouped', true);
+  await search.run('资料');
+  expect(search.items.value).toHaveLength(15);
+  expect(mocks.fetch).not.toHaveBeenCalled();
+  expect(mocks.combined).toHaveBeenCalledWith(
+    '资料',
+    expect.objectContaining({ mode: 'suggest', suggestLayout: 'grouped' }),
+    expect.anything(),
+  );
+});
+it('恢复开启后首次搜索等待能力结果，直接读取混排建议', async () => {
+  mocks.scope.caps.enabled = false;
+  let finish!: () => void;
+  mocks.scope.ensure.mockImplementationOnce(
+    () =>
+      new Promise<void>((resolve) => {
+        finish = resolve;
+      }),
+  );
+  mocks.combined.mockResolvedValue({ items: [{ type: 'note', id: 'public', origin: 'public' }], hasMore: false });
+  const search = setup(true, 'grouped', true);
+  const pending = search.run('资料');
+  expect(mocks.fetch).not.toHaveBeenCalled();
+  expect(mocks.combined).not.toHaveBeenCalled();
+  mocks.scope.caps.enabled = true;
+  finish();
+  await pending;
+  expect(mocks.combined).toHaveBeenCalledTimes(1);
+  expect(mocks.fetch).not.toHaveBeenCalled();
+  expect(search.items.value[0].id).toBe('public');
+});
+it('等待能力期间关闭搜索，迟到结果不再发起查询', async () => {
+  let finish!: () => void;
+  mocks.scope.ensure.mockImplementationOnce(
+    () =>
+      new Promise<void>((resolve) => {
+        finish = resolve;
+      }),
+  );
+  const search = setup(true, 'grouped', true);
+  const pending = search.run('资料');
+  search.reset();
+  finish();
+  await pending;
+  expect(mocks.fetch).not.toHaveBeenCalled();
+  expect(mocks.combined).not.toHaveBeenCalled();
+  expect(search.loading.value).toBe(false);
+});
+it('公开请求失败保留完整个人建议并明确标记公开数量未知', async () => {
+  mocks.combined.mockRejectedValue(new Error('unavailable'));
+  mocks.fetch.mockResolvedValue({ items: [{ type: 'note', id: 'mine' }], hasMore: false });
+  const search = setup(true, 'grouped', true);
+  await search.run('资料');
+  expect(search.items.value[0].id).toBe('mine');
+  expect(search.publicFailed.value).toBe(true);
+  expect(search.failed.value).toBe(false);
+  mocks.scope.included = false;
+  await search.run('私人');
+  expect(mocks.combined).toHaveBeenCalledTimes(1);
+  expect(search.publicFailed.value).toBe(false);
+});
+
+it('恢复前台先清除公开建议并重新校验，关闭后不再请求', async () => {
+  vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
+  mocks.combined.mockResolvedValue({ items: [{ id: 'public', type: 'note', origin: 'public' }], hasMore: false });
+  const search = setup(true, 'grouped', true);
+  await search.run('资料');
+  let finish!: (value: any) => void;
+  mocks.combined.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  window.dispatchEvent(new Event('focus'));
+  expect(search.items.value).toEqual([]);
+  await vi.advanceTimersByTimeAsync(0);
+  expect(mocks.scope.ensure).toHaveBeenCalledWith(true);
+  expect(mocks.combined).toHaveBeenCalledTimes(2);
+  finish({ items: [], hasMore: false });
+  await nextTick();
+  await nextTick();
+  expect(search.items.value).toEqual([]);
+  search.reset();
+  await vi.advanceTimersByTimeAsync(1000);
+  window.dispatchEvent(new Event('focus'));
+  expect(mocks.combined).toHaveBeenCalledTimes(2);
 });

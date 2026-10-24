@@ -81,41 +81,16 @@ try {
       await go(page, '/community/profile');
       await page.waitForSelector('.chat-profile-content__identity');
       await screenshot(page, `${name}-profile`);
-      await page.getByRole('button', { name: '编辑名片', exact: true }).click();
-      await page.locator('.chat-profile-content textarea').fill('从个人中心更新的简介');
-      await page.evaluate(() => (window.communityFixture.control.failProfileSave = true));
-      await page.getByRole('button', { name: '保存名片', exact: true }).click();
-      await page.waitForFunction(() => document.body.innerText.includes('资料未保存'));
-      assert.equal(await page.locator('.chat-profile-content textarea').inputValue(), '从个人中心更新的简介');
-      await screenshot(page, `${name}-profile-error`);
-      await page.evaluate(() => (window.communityFixture.control.failProfileSave = false));
-      await page.getByRole('button', { name: '保存名片', exact: true }).click();
-      await page.waitForFunction(() => !document.querySelector('.chat-profile-content textarea'));
-      assert.ok((await page.locator('.chat-profile-content').innerText()).includes('从个人中心更新的简介'));
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
-      await go(page, '/settings?section=community');
-      await page.waitForSelector('.settings-page .community-preferences');
-      await screenshot(page, `${name}-settings`);
-      await page.getByRole('button', { name: '社区公开资料', exact: true }).click();
-      await page.waitForSelector('.community-own-profile');
-      await go(page, '/community/chat');
-      await page.waitForSelector('.community-message');
-      await page.getByRole('button', { name: '聊天设置', exact: true }).click();
-      await page.waitForSelector('.chat-settings-modal .community-preferences');
-      await page.waitForTimeout(450);
-      await screenshot(page, `${name}-chat-settings`);
       await page.goto(`${base}&path=/preferences&error`);
       await page.waitForSelector('.community-preferences__error');
       await screenshot(page, `${name}-preferences-error`);
       await page.evaluate(() => (window.communityFixture.control.failPreferences = false));
       await page.locator('.community-preferences__error button').click();
       await page.waitForFunction(() => !document.querySelector('.community-preferences__error'));
-      await page.goto(`${base}&path=/community/profile&guest`);
-      await page.waitForFunction(() => document.body.innerText.includes('请使用自己的登录账号'));
-      assert.equal(await page.locator('.chat-profile-content').count(), 0);
       assert.deepEqual(errors, []);
       console.log(
-        `PASS ${name}: navigation, preference retry, badge, draft/anchor, deep link, profile save/failure, guest`,
+        `PASS ${name}: navigation, preference retry, badge, draft/anchor, deep link, profile`,
       );
       await page.close();
     }

@@ -100,7 +100,6 @@ function calcSlidingExpiry(session) {
   return { renewSeconds: 0, expiresIn: remaining };
 }
 
-// 只更新 MySQL 的滑过期（fire-and-forget，缓存命中时不同步等它）
 export async function touchUserLastActive(userId, now = Date.now()) {
   if (!userId) return false;
   const lastTouch = userActivityTouches.get(userId) || 0;
@@ -126,23 +125,33 @@ export async function touchUserLastActive(userId, now = Date.now()) {
   }
 }
 
+// 缓存不能作为会话有效性的事实源；续期与有效性判断使用同一条数据库写入。
 async function renewSessionInDb(sid, renewSeconds, userId) {
-  try {
-    if (renewSeconds > 0) {
-      await pool.query(
-        `UPDATE user_sessions
+  let result;
+  if (renewSeconds > 0) {
+    [result] = await pool.query(
+      `UPDATE user_sessions
          SET expires_at = DATE_ADD(NOW(), INTERVAL ? SECOND),
              last_active_time = NOW()
-         WHERE sid = ?`,
-        [renewSeconds, sid],
-      );
-    } else {
-      await pool.query('UPDATE user_sessions SET last_active_time = NOW() WHERE sid = ?', [sid]);
-    }
-    await touchUserLastActive(userId);
-  } catch (e) {
-    // 静默忽略
+         WHERE sid = ? AND user_id = ? AND expires_at > NOW()`,
+      [renewSeconds, sid, userId],
+    );
+  } else {
+    [result] = await pool.query(
+      'UPDATE user_sessions SET last_active_time = NOW() WHERE sid = ? AND user_id = ? AND expires_at > NOW()',
+      [sid, userId],
+    );
   }
+  // 部分客户端仅返回 changed rows；同秒活跃时间未变化不能被误判为注销。
+  if (!result.affectedRows) {
+    const [rows] = await pool.query(
+      'SELECT sid FROM user_sessions WHERE sid = ? AND user_id = ? AND expires_at > NOW() LIMIT 1',
+      [sid, userId],
+    );
+    if (!rows.length) return false;
+  }
+  await touchUserLastActive(userId);
+  return true;
 }
 
 export const createSession = async ({ userId, role, maxAgeMs, ip = '', userAgent = '', deviceId = '' }) => {
@@ -175,15 +184,18 @@ export const getSession = async (sid) => {
     if (cached) {
       const session = JSON.parse(cached);
       const { renewSeconds } = calcSlidingExpiry(session);
-      // 异步续 MySQL（不等结果）
-      renewSessionInDb(sid, renewSeconds, session.user_id);
-      // 续 Redis TTL
-      redisClient.expire(cacheKey, CACHE_TTL).catch(() => {});
+      if (!(await renewSessionInDb(sid, renewSeconds, session.user_id))) {
+        await clearSessionCache([sid]);
+        return null;
+      }
+      if (renewSeconds > 0) session.expires_at = new Date(Date.now() + renewSeconds * 1000).toISOString();
       // 重新计算 expires_in_seconds（确保返回准确的剩余时间）
       session.expires_in_seconds = Math.max(
         0,
         Math.floor((new Date(session.expires_at).getTime() - Date.now()) / 1000),
       );
+      const cacheTTL = Math.min(CACHE_TTL, session.expires_in_seconds);
+      if (cacheTTL > 0) await redisClient.setEx(cacheKey, cacheTTL, JSON.stringify(session)).catch(() => {});
       return session;
     }
   } catch (e) {

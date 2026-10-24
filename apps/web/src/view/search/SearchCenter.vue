@@ -31,6 +31,16 @@
       layout="workspace"
       :class="{ 'search-center-shell--mobile': bookmark.isMobile }"
     >
+      <template #actions>
+        <BButton
+          v-if="publicScope.eligible && publicScope.caps.enabled"
+          class="publications-entry"
+          @click="router.push('/search/publications')"
+        >
+          <SvgIcon class="publications-entry__icon" :src="icon.cloudSpace.preview.globe" size="16" aria-hidden="true" />
+          <span>{{ t('publicResources.title') }}</span>
+        </BButton>
+      </template>
       <template v-if="!bookmark.isMobile" #meta>
         <ResourceCenterSectionNav />
       </template>
@@ -138,7 +148,14 @@
             </section>
           </aside>
 
-          <BCard v-if="!bookmark.isMobile" as="section" variant="raised" padding="16px 20px" class="search-header">
+          <BCard
+            v-if="!bookmark.isMobile"
+            as="section"
+            variant="raised"
+            padding="16px 20px"
+            class="search-header"
+            :class="{ 'search-header--public': publicScope.eligible && publicScope.caps.enabled }"
+          >
             <div class="search-header-input">
               <b-input
                 id="search-center-input"
@@ -203,15 +220,26 @@
                 </BButton>
               </BTooltip>
             </div>
+            <PublicSearchScopeControl />
           </BCard>
 
           <!-- 移动端不放一排类型 Tab：用户搜索时先看最佳匹配，而不是先决定类型。
                类型收进底部筛选抽屉，这里只保留一行类型数量作为结果概览。 -->
           <BCard as="main" variant="card" padding="16px" class="result-panel">
+            <PublicSearchScopeControl v-if="bookmark.isMobile" class="search-public-scope" />
+            <p v-if="publicSearchFailed" class="search-public-failure" role="status"
+              >{{ t('publicResources.publicFailed') }}
+              <BButton size="small" @click="refreshData()">{{ t('publicResources.retry') }}</BButton></p
+            >
+            <p v-if="publicScope.included" class="search-public-hint">{{ t('publicResources.privateFilters') }}</p>
             <div class="result-toolbar result-toolbar--summary">
               <div class="result-heading">
                 <template v-if="bookmark.isMobile">
-                  <div class="result-title"><BButton class="mobile-result-title-reset" @click="resetSearchView">{{ t('resourceCenter.results') }}</BButton></div>
+                  <div class="result-title"
+                    ><BButton class="mobile-result-title-reset" @click="resetSearchView">{{
+                      t('resourceCenter.results')
+                    }}</BButton></div
+                  >
                   <div class="result-subtitle">{{ mobileResultSubtitle }}</div>
                 </template>
                 <div v-else class="desktop-result-heading">
@@ -245,6 +273,14 @@
                   <SvgIcon :src="icon.cloudSpace.filter" size="15" aria-hidden="true" />
                   <span>{{ t('common.filter') }}</span>
                   <span v-if="mobileActiveFilterCount" class="mobile-filter-count">{{ mobileActiveFilterCount }}</span>
+                </BButton>
+                <BButton
+                  v-if="publicScope.eligible && publicScope.caps.enabled"
+                  class="mobile-toolbar-btn"
+                  @click="router.push('/search/publications')"
+                >
+                  <SvgIcon class="publications-entry__icon" :src="icon.cloudSpace.preview.globe" size="16" aria-hidden="true" />
+                  {{ t('publicResources.title') }}
                 </BButton>
               </div>
               <div v-else class="toolbar-actions">
@@ -303,9 +339,6 @@
               @touchend.passive="pullRefresh.onTouchEnd"
               @touchcancel.passive="pullRefresh.onTouchCancel"
             >
-              <p v-if="batchMode && selectedTypes.includes('todo')" class="batch-scope-hint" role="status">
-                {{ t('resourceCenter.todo.batchHint') }}
-              </p>
               <TagMatchStrip v-if="!shouldShowLoadingSkeleton" :items="viewState.tagMatches" @open="openTagMatch" />
 
               <div
@@ -339,8 +372,8 @@
                       :menu="menuForSearchItem(item)"
                       @select="handleItemMenu($event, item)"
                       v-for="item in group.items"
-                      v-range-select="{ controller: !allMatchingActive && isTaggableResourceType(item.type) ? rangeSelection : undefined, key: getItemSelectionKey(item), group: group.type }"
-                      :key="`${item.type}-${item.id}`"
+                      v-range-select="{ controller: !allMatchingActive && item.origin !== 'public' && isTaggableResourceType(item.type) ? rangeSelection : undefined, key: getItemSelectionKey(item), group: group.type }"
+                      :key="getItemSelectionKey(item)"
                       class="resource-result-entry"
                       :data-search-resource-key="getItemSelectionKey(item)"
                       :class="{
@@ -352,7 +385,7 @@
                         :type-label="getSearchTypeLabel(t, item.type)"
                         :keyword="queryState.keyword"
                         :selected="isItemSelected(item)"
-                        :selectable="batchMode && isTaggableResourceType(item.type)"
+                        :selectable="batchMode && item.origin !== 'public' && isTaggableResourceType(item.type)"
                         :view="effectiveView"
                         :compact="bookmark.isMobile"
                         @open="handleResultOpen(item)"
@@ -409,6 +442,9 @@
                 <BLoading v-if="viewState.loadingMore" inline loading :title="t('common.loading')" />
                 <BButton v-else size="small" @click="loadMoreResults">{{ t('common.loadMore') }}</BButton>
               </div>
+              <div v-if="appendError" role="alert"
+                ><BButton @click="retryMoreResults">{{ t('common.retry') }}</BButton></div
+              >
             </div>
           </BCard>
 
@@ -429,6 +465,12 @@
               :auto-run-action-id="searchAiAutoRunActionId"
               :icon-src="icon.ai.organize"
               presentation="sidebar"
+            />
+            <PublicResourceReader
+              v-else-if="inspectedResource?.origin === 'public'"
+              :key="inspectedResource.id"
+              :resource-id="inspectedResource.id"
+              embedded
             />
             <ResourceInspectorPanel
               v-else
@@ -563,7 +605,13 @@
       body-padding="14px 16px max(16px, env(safe-area-inset-bottom))"
       @close="mobileInspectorVisible = false"
     >
+      <PublicResourceReader
+        v-if="inspectedResource?.origin === 'public'"
+        :resource-id="inspectedResource.id"
+        embedded
+      />
       <ResourceInspectorPanel
+        v-else
         :resource="inspectedResource"
         :icon-src="inspectedResourceIcon"
         :type-label="inspectedResource ? getSearchTypeLabel(t, inspectedResource.type) : ''"
@@ -661,6 +709,10 @@
 <script setup lang="ts">
   import { useRangeSelection } from '@/composables/useRangeSelection';
   import { vRangeSelect, vRangeSelectionScroll } from '@/directives/rangeSelection';
+  import { usePublicResourceScope } from '@/store/publicResourceScope';
+  import { fetchCombinedSearch } from '@/api/publicResources';
+  import PublicSearchScopeControl from '@/components/publicResources/PublicSearchScopeControl.vue';
+  import PublicResourceReader from '@/components/publicResources/PublicResourceReader.vue';
   import { useProjectResourceAction } from '@/composables/useProjectResourceAction';
   const { canJoinProject, joinProject } = useProjectResourceAction();
   import { useResourceSelection } from '@/composables/useResourceSelection';
@@ -761,6 +813,11 @@
   const route = useRoute();
   const router = useRouter();
   const user = useUserStore();
+  const publicScope = usePublicResourceScope();
+  const publicSearchFailed = ref(false);
+  const appendError = ref(false);
+  const personalSummaryTotals = ref<Record<string, number>>({});
+  let usingPersonalFallback = false;
   const searchReturnScope = computed(() => buildNoteDetailRequestScope(user));
   trackSearchReturnNavigation(router);
   const bookmark = bookmarkStore();
@@ -769,7 +826,7 @@
   const { t } = useI18n();
 
   const SEARCH_VIEW_STORAGE_KEY = 'resource-center-view-mode';
-  const SEARCH_QUERY_KEYS = ['q', 'type', 'sort', 'view', 'tags', 'date', 'untagged'] as const;
+  const SEARCH_QUERY_KEYS = ['q', 'type', 'sort', 'view', 'tags', 'date', 'untagged', 'public'] as const;
   const SKELETON_DELAY_MS = 140;
   const syncTimer = ref<number | null>(null);
   const isRouteApplying = ref(false);
@@ -813,6 +870,7 @@
    */
   useForegroundRefresh({
     refresh: () => refreshData({ silent: true }),
+    enabled: computed(() => !publicScope.included),
     // 批量选择中刷新会让已勾选的项消失,等用户退出批量模式再说。
     canRefresh: () => !batchMode.value && !viewState.loading && !viewState.loadingMore,
   });
@@ -872,7 +930,7 @@
 
   const selectionSession = useResourceSelection(
     'search',
-    computed(() => viewState.rawItems.filter((item) => isTaggableResourceType(item.type))),
+    computed(() => viewState.rawItems.filter((item) => item.origin !== 'public' && isTaggableResourceType(item.type))),
     undefined,
     computed(() => viewState.loading),
     () => loadData(true, SKELETON_DELAY_MS, false, true, true),
@@ -982,14 +1040,14 @@
   });
   // 标签是筛选条件与空间导航，不进入资源勾选、批量处理或右侧检查器。
   const selectableVisibleItems = computed(() =>
-    allVisibleItems.value.filter((item) => isTaggableResourceType(item.type)),
+    allVisibleItems.value.filter((item) => item.origin !== 'public' && isTaggableResourceType(item.type)),
   );
   const selectedTypes = computed<SearchCenterType[]>(() =>
     queryState.types.length ? queryState.types : [...SEARCH_CENTER_TYPE_LIST],
   );
   const batchTypes = computed(() => selectedTypes.value.filter(isTaggableResourceType));
   const batchResultTotal = computed(() =>
-    batchTypes.value.reduce((sum, type) => sum + Number(summaryTotals.value[type] || 0), 0),
+    batchTypes.value.reduce((sum, type) => sum + Number(personalSummaryTotals.value[type] || 0), 0),
   );
   watch(batchTypes, (types) => {
     if (!types.length) exitBatchMode();
@@ -1006,7 +1064,7 @@
       visibleGroups.value.map((group) => ({
         id: group.type,
         keys: group.items
-          .filter((item) => isTaggableResourceType(item.type))
+          .filter((item) => item.origin !== 'public' && isTaggableResourceType(item.type))
           .map(getItemSelectionKey),
       })),
     scope: () => JSON.stringify([queryState, selectionStore.session]),
@@ -1268,7 +1326,7 @@
       label: t(item.type === 'todo' ? 'resourceCenter.todo.open' : 'resourceCenter.openResource'),
       icon: icon.noteTree.openPage,
     };
-    if (item.type === 'todo') return [openItem];
+    if (item.origin === 'public' || item.type === 'todo') return [openItem];
     const deleteItem = {
       key: 'delete',
       label: t('common.delete'),
@@ -1382,6 +1440,8 @@
     return {
       id,
       type,
+      origin: rawItem.origin === 'public' ? 'public' : 'personal',
+      publicResource: rawItem.origin === 'public' ? rawItem.publicResource : undefined,
       title: String(rawItem.title || rawItem.name || rawItem.fileName || rawItem.label || '').trim(),
       description: String(rawItem.description || rawItem.desc || '').trim(),
       extra: rawItem.extra ? String(rawItem.extra) : '',
@@ -1401,13 +1461,15 @@
     };
   }
 
-  function getItemSelectionKey(item: { id: string; type: GlobalSearchType }) {
-    return `${item.type}:${item.id}`;
+  function getItemSelectionKey(item: { id: string; type: GlobalSearchType; origin?: string }) {
+    return item.origin === 'public' ? `public:${item.type}:${item.id}` : `${item.type}:${item.id}`;
   }
 
-  function applyRouteState() {
+  function applyRouteState(resetPublic = false) {
     isRouteApplying.value = true;
     try {
+      if (resetPublic) publicScope.restoreIncluded();
+      else if (route.query.public !== undefined) publicScope.setIncluded(String(route.query.public) === '1');
       queryState.keyword = Array.isArray(route.query.q) ? String(route.query.q[0] || '') : String(route.query.q || '');
       queryState.types = parseTypes(route.query.type);
       queryState.type = queryState.types.length === 1 ? queryState.types[0] : 'all';
@@ -1428,6 +1490,7 @@
   function buildQueryPayload() {
     const q = queryState.keyword.trim();
     return {
+      ...(publicScope.included || route.query.public !== undefined ? { public: publicScope.included ? '1' : '0' } : {}),
       ...(q ? { q } : {}),
       ...(queryState.types.length ? { type: queryState.types.join(',') } : {}),
       ...(queryState.sort !== defaultSortForKeyword(q) ? { sort: queryState.sort } : {}),
@@ -1471,6 +1534,30 @@
     );
   }
 
+  async function fetchSearchPage(
+    keyword: string,
+    pageSize: number,
+    force: boolean,
+    query: Parameters<typeof fetchGlobalSearch>[3],
+    seq: number,
+  ) {
+    if (publicScope.included && publicScope.caps.enabled && !usingPersonalFallback) {
+      try {
+        return await fetchCombinedSearch(keyword, { ...query, pageSize });
+      } catch (error) {
+        if (seq !== requestSeq) throw error;
+        publicSearchFailed.value = true;
+        if (query?.cursor) {
+          viewState.hasMore = false;
+          throw error;
+        }
+        usingPersonalFallback = true;
+      }
+    }
+    const result = await fetchGlobalSearch(keyword, pageSize, force, query);
+    return { ...result, publicSearchFailed: usingPersonalFallback };
+  }
+
   /**
    * @param silent 下拉刷新用：不进 loading、不排骨架屏定时器，旧结果留在屏幕上，
    *   顶部指示器负责表达进度。游标仍要重置（刷新等于回到第一页），
@@ -1489,6 +1576,13 @@
     const loadedCount = returnSnapshot?.loadedCount ?? (preserveLoaded ? viewState.rawItems.length : 0);
     if (append && (viewState.loading || viewState.loadingMore || !viewState.hasMore)) return false;
     const seq = append ? requestSeq : ++requestSeq;
+    if (!append) {
+      appendError.value = false;
+      usingPersonalFallback = false;
+      publicSearchFailed.value = false;
+      if (silent && publicScope.included)
+        viewState.rawItems = viewState.rawItems.filter((item) => item.origin !== 'public');
+    }
     const previousPagination =
       silent && !append
         ? {
@@ -1498,6 +1592,7 @@
         : null;
     let loadSucceeded = false;
     if (append) {
+      appendError.value = false;
       viewState.loadingMore = true;
     } else if (silent) {
       viewState.loadingMore = false;
@@ -1516,34 +1611,48 @@
       }, skeletonDelayMs);
     }
     try {
-      const res = await fetchGlobalSearch(queryState.keyword, SEARCH_PAGE_SIZE, force || Boolean(returnSnapshot), {
-        type: queryState.types.length === 1 ? queryState.types[0] : 'all',
-        types: selectedTypes.value,
-        sort: queryState.sort,
-        date: queryState.date,
-        tags: queryState.tags,
-        untagged: queryState.untagged,
-        paginationMode: 'ordered',
-        cursor: append ? viewState.nextCursor : null,
-        includeMetadata: !append,
-        separateTagMatches: true,
-      });
+      await publicScope.ensure();
+      if (seq !== requestSeq) return false;
+      const res = await fetchSearchPage(
+        queryState.keyword,
+        SEARCH_PAGE_SIZE,
+        force || Boolean(returnSnapshot),
+        {
+          type: queryState.types.length === 1 ? queryState.types[0] : 'all',
+          types: selectedTypes.value,
+          sort: queryState.sort,
+          date: queryState.date,
+          tags: queryState.tags,
+          untagged: queryState.untagged,
+          paginationMode: 'ordered',
+          cursor: append ? viewState.nextCursor : null,
+          includeMetadata: !append,
+          separateTagMatches: true,
+        },
+        seq,
+      );
       if (preserveLoaded || returnSnapshot) {
         const refreshedItems = normalizeSearchResultItems(res);
         while (res.hasMore && res.nextCursor && refreshedItems.length < loadedCount) {
           if (seq !== requestSeq) return false;
-          const next = await fetchGlobalSearch(queryState.keyword, SEARCH_PAGE_SIZE, true, {
-            type: queryState.types.length === 1 ? queryState.types[0] : 'all',
-            types: selectedTypes.value,
-            sort: queryState.sort,
-            date: queryState.date,
-            tags: queryState.tags,
-            untagged: queryState.untagged,
-            paginationMode: 'ordered',
-            cursor: res.nextCursor,
-            includeMetadata: false,
-            separateTagMatches: true,
-          });
+          const next = await fetchSearchPage(
+            queryState.keyword,
+            SEARCH_PAGE_SIZE,
+            true,
+            {
+              type: queryState.types.length === 1 ? queryState.types[0] : 'all',
+              types: selectedTypes.value,
+              sort: queryState.sort,
+              date: queryState.date,
+              tags: queryState.tags,
+              untagged: queryState.untagged,
+              paginationMode: 'ordered',
+              cursor: res.nextCursor,
+              includeMetadata: false,
+              separateTagMatches: true,
+            },
+            seq,
+          );
           if (seq !== requestSeq) return false;
           refreshedItems.push(...normalizeSearchResultItems(next));
           const unchangedCursor = res.nextCursor === next.nextCursor;
@@ -1562,6 +1671,7 @@
       viewState.hasMore = Boolean(res.hasMore);
       if (Array.isArray(res.tagOptions)) viewState.tagOptions = res.tagOptions;
       if (!append) viewState.tagMatches = queryState.keyword.trim() ? res.tagMatches || [] : [];
+      if (res.typeTotals) personalSummaryTotals.value = { ...(res.personalTypeTotals || res.typeTotals) };
       if (res.typeTotals) {
         summaryTotals.value = {
           bookmark: Number(res.typeTotals.bookmark || 0),
@@ -1596,6 +1706,10 @@
       return true;
     } catch (error) {
       if (seq !== requestSeq) return false;
+      if (append) {
+        viewState.hasMore = false;
+        appendError.value = true;
+      }
       const requestError = error as Error & { requestId?: string };
       // 静默刷新失败必须保留旧结果:下拉一下就把列表清成错误态,比不刷新更糟
       if (!append && !silent) {
@@ -1610,7 +1724,19 @@
       }
       // 抛回给下拉刷新的调用方，由它统一提示；按钮刷新路径已在上面提示过
       if (silent) {
-        if (previousPagination) {
+        if (publicScope.included) {
+          // A mixed cursor must never be reused after falling back to the personal protocol.
+          viewState.nextCursor = null;
+          viewState.hasMore = false;
+          appendError.value = false;
+          summaryTotals.value = {
+            bookmark: Number(personalSummaryTotals.value.bookmark || 0),
+            note: Number(personalSummaryTotals.value.note || 0),
+            file: Number(personalSummaryTotals.value.file || 0),
+            tag: Number(personalSummaryTotals.value.tag || 0),
+            todo: Number(personalSummaryTotals.value.todo || 0),
+          };
+        } else if (previousPagination) {
           viewState.nextCursor = previousPagination.nextCursor;
           viewState.hasMore = previousPagination.hasMore;
         }
@@ -1629,6 +1755,10 @@
     }
   }
 
+  function retryMoreResults() {
+    viewState.hasMore = true;
+    return loadMoreResults();
+  }
   function loadMoreResults() {
     return loadData(false, 0, true);
   }
@@ -1687,7 +1817,7 @@
     reconcileImplicitSortForKeyword();
     const q = queryState.keyword.trim();
     if (q) {
-      recordOperation({ module: '资源中心', operation: `搜索资源【${q}】` });
+      recordOperation({ module: '资源中心', operation: '搜索资源' });
     }
     syncQueryNow();
   }
@@ -1700,7 +1830,7 @@
   }
 
   function openTagMatch(item: TagMatchItem) {
-    recordOperation({ module: '资源中心', operation: `打开匹配标签【${item.name}】` });
+    recordOperation({ module: '资源中心', operation: '打开匹配标签' });
     void router.push(item.route || `/tag/${encodeURIComponent(item.id)}`);
   }
 
@@ -1709,6 +1839,11 @@
   }
 
   function handleResultOpen(item: DisplaySearchItem) {
+    if (item.origin === 'public' && bookmark.isMobile) {
+      openItem(item);
+      return;
+    }
+
     if (bookmark.isMobile) {
       inspectResource(item);
       closeSearchAi();
@@ -1800,7 +1935,7 @@
 
   onBeforeRouteLeave((to) => {
     if (
-      to.path.startsWith('/noteLibrary/') &&
+      (to.path.startsWith('/noteLibrary/') || to.path.startsWith('/public-resources/')) &&
       resolveSearchReturnPath(to.query.from) === route.fullPath &&
       !viewState.loading
     ) {
@@ -1829,6 +1964,7 @@
   }
 
   function toggleSelect(item: DisplaySearchItem) {
+    if (item.origin === 'public') return;
     if (!isTaggableResourceType(item.type)) return;
     if (!batchMode.value || selectionStore.busy || viewState.loading) return;
     const key = getItemSelectionKey(item);
@@ -1898,6 +2034,7 @@
   }
 
   function isItemSelected(item: DisplaySearchItem) {
+    if (item.origin === 'public') return false;
     if (!isTaggableResourceType(item.type)) return false;
     const key = getItemSelectionKey(item);
     return allMatchingActive.value ? !excludedSelectionIds.value.includes(key) : selectedIds.value.includes(key);
@@ -2001,6 +2138,7 @@
   }
 
   function openResourceAi(item: DisplaySearchItem) {
+    if (item.origin === 'public') return;
     if (!isTaggableResourceType(item.type)) return;
     inspectResource(item);
     explicitSearchAiResourceContext.value = {
@@ -2037,6 +2175,7 @@
   }
 
   async function openBookmarkArchive(item: DisplaySearchItem) {
+    if (item.origin === 'public') return;
     if (item.type !== 'bookmark' || !String(item.id || '').trim()) return;
     const id = String(item.id);
     const generation = ++archiveOpenGeneration;
@@ -2060,6 +2199,7 @@
   }
 
   function openSingleTagWorkspace(item: DisplaySearchItem) {
+    if (item.origin === 'public') return;
     if (!isTaggableResourceType(item.type)) return;
     const selectedItem = { id: String(item.id), type: item.type as TaggableResourceType, title: item.title };
     void closeMobileInspectorThen(() => selectionSession.openTags('add', [selectedItem]));
@@ -2081,6 +2221,10 @@
   }
 
   function handleItemMenu(action: string, item: DisplaySearchItem) {
+    if (item.origin === 'public') {
+      if (action === 'open') openItem(item);
+      return;
+    }
     if (action === 'readArchive') {
       void openBookmarkArchive(item);
       return;
@@ -2138,7 +2282,7 @@
 
   async function addItemsToInbox(items: DisplaySearchItem[]) {
     const resources = items
-      .filter((item) => isTaggableResourceType(item.type))
+      .filter((item) => item.origin !== 'public' && isTaggableResourceType(item.type))
       .map((item) => ({ resourceType: item.type as 'bookmark' | 'note' | 'file', resourceId: String(item.id) }));
     await addResourcesToInbox(resources, '资源中心');
   }
@@ -2209,6 +2353,26 @@
     });
   }
 
+  watch(
+    () => publicScope.included,
+    () => {
+      if (isRouteApplying.value || route.path !== '/search') return;
+      exitBatchMode();
+      closeSearchAi();
+      if (!publicScope.included) viewState.rawItems = viewState.rawItems.filter((item) => item.origin !== 'public');
+      syncQueryNow();
+    },
+    { flush: 'sync' },
+  );
+  useForegroundRefresh({
+    staleMs: 0,
+    enabled: computed(() => publicScope.included),
+    refresh: async () => {
+      await publicScope.ensure(true);
+      if (publicScope.included) await loadData(true, SKELETON_DELAY_MS, false, true, true);
+    },
+    canRefresh: () => !viewState.loading && !viewState.loadingMore,
+  });
   let isInitialRouteLoad = true;
   watch(
     // 移动抽屉会用同 URL 的 history state 管理返回栈；可见 URL 变化只同步筛选，显式选择由模块会话维护。
@@ -2221,7 +2385,16 @@
       archiveCapture = null;
       if (route.path !== '/search') return;
       mobileInspectorVisible.value = false;
-      applyRouteState();
+      const identityChanged = Boolean(previous?.[1] && previous[1] !== searchReturnScope.value);
+      applyRouteState(identityChanged);
+      if (
+        identityChanged &&
+        route.query.public !== undefined &&
+        String(route.query.public) !== (publicScope.included ? '1' : '0')
+      ) {
+        void router.replace({ path: '/search', query: { ...route.query, public: publicScope.included ? '1' : '0' } });
+        return;
+      }
       nextTick(() => {
         const scrollRoot = resultScrollContainer();
         scrollRoot?.scrollTo({ top: 0 });
@@ -2309,8 +2482,66 @@
 </script>
 
 <style scoped lang="less">
-  .mobile-result-title-reset.b_btn { height: auto; padding: 0; background: transparent; color: inherit; font: inherit; }
-  .mobile-result-title-reset.b_btn:hover { color: var(--primary-color); }
+  .publications-entry.b_btn {
+    height: var(--ui-control-36, 36px);
+    padding: 0 var(--ui-space-12, 12px);
+    gap: var(--ui-space-8, 8px);
+    border: 1px solid var(--surface-border-color);
+    border-radius: 10px;
+    color: var(--text-color);
+    background: transparent;
+    font-weight: 500;
+    transition: color 0.2s, background-color 0.2s, border-color 0.2s;
+  }
+
+  .publications-entry__icon {
+    flex-shrink: 0;
+    color: var(--workspace-purple-text);
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    .publications-entry.b_btn:hover {
+      border-color: var(--workspace-purple-text);
+      color: var(--workspace-purple-text);
+      background: var(--workspace-purple-selected);
+    }
+  }
+
+  .publications-entry.b_btn:active {
+    border-color: var(--workspace-purple-text);
+    color: var(--workspace-purple-text);
+    background: var(--workspace-purple-selected);
+  }
+  .search-header.search-header--public {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .search-header--public > .public-search-scope {
+    width: 100%;
+  }
+  .search-public-scope {
+    margin-bottom: var(--ui-space-12, 12px);
+  }
+  .search-public-hint {
+    font-size: var(--ui-font-12, 12px);
+    color: var(--desc-color);
+    margin-bottom: var(--ui-space-8, 8px);
+  }
+  .search-public-failure {
+    font-size: var(--ui-font-12, 12px);
+    color: var(--warning-color);
+    padding: var(--ui-space-8, 8px) 0;
+  }
+  .mobile-result-title-reset.b_btn {
+    height: auto;
+    padding: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+  }
+  .mobile-result-title-reset.b_btn:hover {
+    color: var(--primary-color);
+  }
   @import (reference) '@/assets/css/workspace-surfaces.less';
   .search-center-route {
     width: 100%;
@@ -2647,12 +2878,6 @@
 
   .filter-dot--tag {
     background: var(--resource-tag-color);
-  }
-
-  .batch-scope-hint {
-    margin: 0 0 var(--ui-space-12, 12px);
-    color: var(--desc-color);
-    font-size: var(--ui-font-12, 12px);
   }
 
   .filter-dot--todo {
@@ -3026,7 +3251,11 @@
       flex: 1 1 auto;
       min-height: 0;
       margin-top: 0;
-      grid-template-columns: clamp(var(--ui-layout-220, 220px), 14vw, var(--ui-layout-280, 280px)) minmax(0, 1fr) clamp(var(--ui-layout-350, 350px), 20vw, var(--ui-layout-410, 410px));
+      grid-template-columns: clamp(var(--ui-layout-220, 220px), 14vw, var(--ui-layout-280, 280px)) minmax(0, 1fr) clamp(
+          var(--ui-layout-350, 350px),
+          20vw,
+          var(--ui-layout-410, 410px)
+        );
       grid-template-rows: auto minmax(0, 1fr);
       gap: var(--ui-space-12, 12px) var(--ui-space-14, 14px);
       align-items: stretch;
@@ -3239,7 +3468,10 @@
 
   @media (min-width: 768px) and (max-width: 1380px) {
     .search-layout {
-      grid-template-columns: minmax(var(--ui-layout-176, 176px), var(--ui-layout-200, 200px)) minmax(0, 1fr) minmax(var(--ui-layout-270, 270px), var(--ui-layout-300, 300px));
+      grid-template-columns: minmax(var(--ui-layout-176, 176px), var(--ui-layout-200, 200px)) minmax(0, 1fr) minmax(
+          var(--ui-layout-270, 270px),
+          var(--ui-layout-300, 300px)
+        );
       gap: var(--ui-space-10, 10px);
     }
 
@@ -3250,7 +3482,9 @@
 
   @media (min-width: 768px) and (max-width: 980px) {
     .search-layout {
-      grid-template-columns: minmax(var(--ui-layout-96, 96px), var(--ui-layout-120, 120px)) minmax(var(--ui-layout-240, 240px), 1fr) minmax(var(--ui-layout-210, 210px), 28vw);
+      grid-template-columns:
+        minmax(var(--ui-layout-96, 96px), var(--ui-layout-120, 120px)) minmax(var(--ui-layout-240, 240px), 1fr)
+        minmax(var(--ui-layout-210, 210px), 28vw);
       gap: var(--ui-space-8, 8px);
     }
 

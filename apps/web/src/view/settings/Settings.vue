@@ -162,7 +162,7 @@
           </div>
         </BCard>
 
-        <!-- 积分概览和明细也在设置壳内呈现；独立旧路由仅保留兼容。 -->
+        <!-- 旧积分设置深链接保留游客登录提示；登录后统一进入背包积分明细。 -->
         <BCard as="section" v-if="sectionVisible('points')" class="settings-card settings-card--points" id="set-points">
           <div v-if="pointsLoginRequired" class="field">
             <div class="field-head">
@@ -170,7 +170,7 @@
             </div>
             <BButton @click="bookmark.isShowLogin = true">{{ t('personCenter.loginRegister') }}</BButton>
           </div>
-          <PointsUsagePage v-else class="settings-embedded-content" embedded />
+          <BLoading v-else inline loading />
         </BCard>
 
         <!-- 浏览器收集：完整扩展与轻量书签栏入口并列，避免把能力不同的两种方式混成一个按钮。 -->
@@ -273,7 +273,8 @@
   import DataExportControl from '@/components/settings/DataExportControl.vue';
   import AccountSecurity from '@/components/settings/AccountSecurity.vue';
   import AiUsagePage from '@/view/aiUsage/AiUsagePage.vue';
-  import PointsUsagePage from '@/view/pointsUsage/PointsUsagePage.vue';
+  import { inventoryPointsRoute } from '@/utils/inventoryNavigation';
+  import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import BSwitch from '@/components/base/BasicComponents/BSwitch.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BCard from '@/components/base/BasicComponents/BCard.vue';
@@ -326,6 +327,15 @@
    * 桌面无 section 时默认外观；移动无 section 时仍显示紧凑目录。
    */
   const settingsEnv = computed<SettingsEnv>(() => ({ isGuest: isGuestUser() }));
+  watch(
+    () => [route.path, route.query.section, settingsEnv.value.isGuest],
+    () => {
+      if (route.path === '/settings' && route.query.section === 'points' && !settingsEnv.value.isGuest) {
+        void router.replace(inventoryPointsRoute());
+      }
+    },
+    { immediate: true },
+  );
   const pointsLoginRequired = computed(
     () => settingsEnv.value.isGuest && parseSettingsSection(route.query.section, { isGuest: false }) === 'points',
   );
@@ -373,6 +383,10 @@
   }
 
   function openDesktopSection(id: SettingsIndexSectionId) {
+    if (id === 'points' && !settingsEnv.value.isGuest) {
+      void router.push(inventoryPointsRoute());
+      return;
+    }
     const targetPanel = id === 'ai' ? 'usage' : undefined;
     if (desktopSection.value === id && route.query.section === id && route.query.panel === targetPanel) return;
     const query: LocationQueryRaw = { ...route.query, section: id, panel: targetPanel };
@@ -399,6 +413,10 @@
   let enteredFromIndex = false;
 
   function openSection(id: SettingsIndexSectionId) {
+    if (id === 'points' && !settingsEnv.value.isGuest) {
+      void router.push(inventoryPointsRoute());
+      return;
+    }
     indexScrollTop.value = pageRef.value?.scrollTop ?? 0;
     if (id === 'ai') {
       recordOperation({ module: 'AI 用量与计费', operation: '打开页面【设置】' });

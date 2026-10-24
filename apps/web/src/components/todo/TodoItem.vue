@@ -309,6 +309,7 @@
 </template>
 
 <script setup lang="ts">
+  import { getTodoFixedReminderTimes } from '@lightnote/shared/todo-reminder';
   import type { RangeSelectionController } from '@/composables/useRangeSelection';
   import { vRangeSelect } from '@/directives/rangeSelection';
   import TodoSubitems from './TodoSubitems.vue';
@@ -477,7 +478,9 @@
             ? t('inbox.todoReminderAtStart')
             : once.type === 'before_due'
               ? t('inbox.todoReminderBeforeDueMinutes', { minutes: once.offsetMinutes || 0 })
-              : t('inbox.todoReminderFixedAtSummary', { time: once.fixedAt || '' });
+              : getTodoFixedReminderTimes(once).length > 1
+                ? t('inbox.todoReminderFixedTimesSummary', { count: getTodoFixedReminderTimes(once).length })
+                : t('inbox.todoReminderFixedAtSummary', { time: once.fixedAt || '' });
       return `${schedule} · ${channelLabels.join(' + ')}`;
     }
     return t('inbox.todoReminderOnceSummary', { channels: channelLabels.join(' + ') });

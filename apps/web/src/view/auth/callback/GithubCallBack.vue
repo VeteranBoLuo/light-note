@@ -15,10 +15,10 @@
     </span>
     <div class="callback-actions">
       <template v-if="status !== 200">
-        <BButton type="primary" :loading="restarting" @click="restartGithubOAuth">
+        <BButton v-if="!emailConflict" type="primary" :loading="restarting" @click="restartGithubOAuth">
           {{ t('auth.githubCallbackRetry') }}
         </BButton>
-        <BButton @click="goEmailLogin">{{ t('auth.githubCallbackEmailLogin') }}</BButton>
+        <BButton :type="emailConflict ? 'primary' : undefined" @click="goEmailLogin">{{ t('auth.githubCallbackEmailLogin') }}</BButton>
       </template>
       <BButton v-else class="callback-back" @click="goBack">{{ t('common.back') }}</BButton>
     </div>
@@ -53,6 +53,7 @@
   const oauthFlow = consumeGithubOAuthFlow();
   const status = ref(200);
   const errorMessage = ref('');
+  const emailConflict = ref(false);
   const requestId = ref('');
   const restarting = ref(false);
   // 用户点「返回」离开本页后:中止换票请求、不再弹提示/跳转,避免邮箱登录成功后又收到迟到的「GitHub 认证失败」。
@@ -83,18 +84,15 @@
     return new Promise((resolve) => window.setTimeout(resolve, ms));
   }
 
-  async function submitGithubCallback(code, state) {
+  async function submitGithubRequest(path, body) {
     let transportRetryUsed = false;
     for (let attempt = 0; attempt < 3; attempt += 1) {
+      if (disposed) return null;
       try {
-        const cRes = await apiBasePost(
-          '/api/user/github',
-          { code, state },
-          {
-            silent: true,
-            signal: abortController.signal,
-          },
-        );
+        const cRes = await apiBasePost(path, body, {
+          silent: true,
+          signal: abortController.signal,
+        });
         if (disposed) return null;
         if (cRes.data?.retryable && attempt < 2) {
           await wait(900 + attempt * 700);
@@ -124,7 +122,7 @@
       return;
     }
     // 页面级一次性锁：刷新 / 浏览器后退 / dev HMR 重挂载时不再开启一条新的回调流程。
-    // 当前挂载内的本站请求恢复由 submitGithubCallback 控制，后端 completed 状态保证不会重放 GitHub code。
+    // 当前挂载内的本站请求恢复由 submitGithubRequest 控制，后端 completed 状态保证不会重放 GitHub code。
     const lockKey = `gh_oauth_handled:${code}`;
     if (sessionStorage.getItem(lockKey)) {
       toHome();
@@ -134,8 +132,9 @@
     // 立刻抹掉 URL 上的 code,让刷新 / 后退无 code 可重放(同路由仅去 query,不会重挂载本组件)
     router.replace({ path: '/auth/callback' }).catch(() => {});
     try {
-      const cRes = await submitGithubCallback(code, state);
+      const cRes = await submitGithubRequest('/api/user/github', { code, state });
       if (disposed || !cRes) return;
+      emailConflict.value = cRes.data?.code === 'GITHUB_OAUTH_EMAIL_CONFLICT' || Boolean(cRes.data?.bindingRequired);
       status.value = cRes.status;
       if (cRes.status === 200) {
         markLoggedIn();
@@ -176,7 +175,7 @@
         if (quickSaveReturnPath) clearQuickSaveAuthReturnPath();
         clearAuthNavigationIntent();
       } else {
-        const failureMessage = cRes.msg || t('auth.githubCallbackFailed');
+        const failureMessage = emailConflict.value ? t('auth.githubEmailConflict') : cRes.msg || t('auth.githubCallbackFailed');
         message.error(failureMessage);
         showFailure(failureMessage, String(cRes.data?.requestId || ''));
       }

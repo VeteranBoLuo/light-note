@@ -23,6 +23,8 @@
         <BButton class="gs-layer__cancel" @click="cancel">{{ t('globalSearch.cancel') }}</BButton>
       </header>
 
+      <PublicSearchScopeControl class="gs-layer__scope" />
+      <p v-if="publicFailed" class="gs-layer__public-error" role="status">{{ t('publicResources.publicFailed') }}</p>
       <div class="gs-layer__body">
         <template v-if="!trimmedKeyword">
           <section v-if="recentKeywords.length" class="gs-layer__section">
@@ -33,12 +35,7 @@
               </BButton>
             </div>
             <div class="gs-layer__recent">
-              <BButton
-                v-for="word in recentKeywords"
-                :key="word"
-                class="gs-layer__chip"
-                @click="applyRecent(word)"
-              >
+              <BButton v-for="word in recentKeywords" :key="word" class="gs-layer__chip" @click="applyRecent(word)">
                 {{ word }}
               </BButton>
             </div>
@@ -76,7 +73,7 @@
             </div>
             <GlobalSearchSuggestionItem
               v-for="item in items"
-              :key="`${item.type}-${item.id}`"
+              :key="`${item.origin || 'personal'}-${item.type}-${item.id}`"
               :item="item"
               :keyword="trimmedKeyword"
               @open="openItem"
@@ -101,6 +98,8 @@
 </template>
 
 <script setup lang="ts">
+  import PublicSearchScopeControl from '@/components/publicResources/PublicSearchScopeControl.vue';
+  import { usePublicResourceScope } from '@/store/publicResourceScope';
   import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useRoute, useRouter } from 'vue-router';
@@ -111,21 +110,23 @@
   import icon from '@/config/icon';
   import type { SearchResultItem } from '@/api/search';
   import { GLOBAL_SEARCH_TYPES, type GlobalSearchType } from '@/utils/globalSearchTypes';
-  import { locateSearchResult, navigateToSearchResult } from '@/utils/globalSearchNavigation';
+  import { locateSearchResult, navigateToSearchResult, searchNavigationKey } from '@/utils/globalSearchNavigation';
   import { useGlobalSearchSuggestions } from '@/composables/useGlobalSearchSuggestions';
   import { useMobileGlobalSearch } from '@/composables/useMobileGlobalSearch';
   import { getMobileTopBarBinding } from '@/composables/useMobileTopBar';
   import { recordOperation } from '@/api/commonApi';
 
   const { t } = useI18n();
+  const publicScope = usePublicResourceScope();
   const route = useRoute();
   const router = useRouter();
   const { open, keyword, recentKeywords, closeSearch, dismiss, rememberKeyword, clearRecentKeywords } =
     useMobileGlobalSearch();
   // 搜索层是全局单例，来源页按打开时所在路由的顶栏绑定决定
-  const { items, loading, failed, schedule, run, reset } = useGlobalSearchSuggestions(
+  const { items, loading, failed, publicFailed, schedule, run, reset } = useGlobalSearchSuggestions(
     GLOBAL_SEARCH_TYPES,
     () => getMobileTopBarBinding(route.name)?.searchSourceType || '',
+    { allowPublicScope: true },
   );
 
   const inputRef = ref<InstanceType<typeof BInput> | null>(null);
@@ -176,7 +177,10 @@
     rememberKeyword(trimmedKeyword.value);
     recordOperation({ module: '全局搜索', operation: `打开移动端搜索结果【${item.type}】` });
     // 先让 sentinel 出栈，再跳目标路由，否则返回键会把新页面一起弹掉
-    closeSearch(() => navigateToSearchResult(router, snapshot));
+    const from = route.fullPath;
+    closeSearch(() =>
+      navigateToSearchResult(router, snapshot, snapshot.origin === 'public' ? { publicReturnPath: from } : {}),
+    );
   }
 
   function locateItem(item: SearchResultItem) {
@@ -190,16 +194,34 @@
     const query = trimmedKeyword.value;
     rememberKeyword(query);
     closeSearch(() => {
-      void router.push({ path: '/search', query: query ? { q: query } : {} });
+      void router.push({
+        path: '/search',
+        query: { ...(query ? { q: query } : {}), public: publicScope.included ? '1' : '0' },
+      });
     });
   }
 
   // 由 keyword 单点驱动取数：输入、点最近搜索、点清除按钮、关闭时清空都走同一条路径，
   // 不依赖 BInput 是否为每种交互都派发 input 事件。
   watch(keyword, (value) => schedule(value));
+  watch(
+    () => publicScope.included,
+    () => {
+      reset();
+      if (open.value) void run(trimmedKeyword.value);
+    },
+  );
+  watch(
+    () => publicScope.identity,
+    () => {
+      reset();
+      if (open.value) closeSearch();
+    },
+  );
 
   watch(open, (visible) => {
     if (visible) {
+      void publicScope.ensure(true);
       syncViewport();
       window.visualViewport?.addEventListener('resize', syncViewport);
       window.visualViewport?.addEventListener('scroll', syncViewport);
@@ -213,7 +235,7 @@
 
   // 兜底：路由若由其他来源改变（sentinel 已失效），只收起界面，不再动 history
   watch(
-    () => route.fullPath,
+    () => searchNavigationKey(route),
     () => {
       if (open.value) dismiss();
     },
@@ -226,6 +248,16 @@
 </script>
 
 <style scoped lang="less">
+  .gs-layer__scope {
+    padding: var(--ui-space-12, 12px) var(--ui-space-16, 16px);
+    border-bottom: 1px solid var(--workspace-border);
+    flex-shrink: 0;
+  }
+  .gs-layer__public-error {
+    font-size: var(--ui-font-12, 12px);
+    color: var(--warning-color);
+    padding: 0 var(--ui-space-16, 16px);
+  }
   .gs-layer {
     position: fixed;
     left: 0;

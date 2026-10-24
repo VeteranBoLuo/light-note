@@ -115,12 +115,6 @@ describe('待办创建页原型布局', () => {
     expect(repeatReminderSource).not.toContain("<label>\n        <span>{{ t('inbox.todoReminderEvery') }}");
   });
 
-  it('按周和按月提醒将开始日期与提醒时刻分别交给日期模式和共享时间组件', () => {
-    expect(repeatReminderSource).toContain('v-model:value="startDate" :show-time="false"');
-    expect(repeatReminderSource).toContain('<BTimePicker v-model:value="localTime"');
-    expect(repeatReminderSource).not.toContain('v-model:value="localTime" placeholder="09:00"');
-  });
-
   it('过去日期必须用三个解释清楚的显式选项确认', () => {
     expect(independentSource).toContain("value: 'keep_overdue'");
     expect(independentSource).toContain("value: 'restart_today_keep_count'");

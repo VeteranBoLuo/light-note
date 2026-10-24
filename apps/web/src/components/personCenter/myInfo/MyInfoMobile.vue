@@ -46,8 +46,9 @@
     } else router.back();
   }
   onBeforeRouteLeave(() => {
-    if (leaving || !form.value?.dirty) return true;
+    if (leaving) return true;
     if (form.value?.saving) return false;
+    if (!form.value?.dirty) return true;
     return new Promise<boolean>((resolve) => {
       resolveLeave = resolve;
       form.value?.requestClose(() => {
@@ -100,9 +101,8 @@
   }
   .mobile-profile-editor {
     box-sizing: border-box;
-    max-width: var(--ui-layout-560, 560px);
+    max-width: var(--ui-layout-640, 640px);
     margin-inline: auto;
-    padding: var(--ui-space-18, 18px) var(--ui-space-20, 20px);
-    padding-bottom: calc(var(--ui-space-108, 108px) + env(safe-area-inset-bottom));
+    padding: 0;
   }
 </style>

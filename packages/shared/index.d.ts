@@ -94,7 +94,7 @@ export declare const AFDIAN_ORDER_PURPOSE: {
 export declare const AFDIAN_CHECKOUT_OPTIONS: readonly AfdianCheckoutOptionDefinition[];
 
 export type SupportPackageCategory = 'ai' | 'storage' | 'combo';
-export type SupportFirstPurchaseScope = 'ai_account' | 'sku';
+export type SupportFirstPurchaseScope = 'ai_account' | 'sku' | 'none';
 
 export interface SupportPackageEntitlement {
   readonly aiTokens: number;
@@ -112,8 +112,8 @@ export interface SupportPackageDefinition {
 }
 
 /** 已发布的爱发电常驻套餐目录版本。 */
-export declare const SUPPORT_PACKAGE_CATALOG_VERSION: 'support-packages-v3';
-/** 常驻套餐的价格、基础权益和首购范围唯一事实源。 */
+export declare const SUPPORT_PACKAGE_CATALOG_VERSION: 'support-packages-v5';
+/** 常驻套餐的价格、固定权益与历史首购兼容字段的唯一事实源。 */
 export declare const SUPPORT_PACKAGE_CATALOG: readonly SupportPackageDefinition[];
 
 export type FilePreviewStrategy = 'archive_manifest' | 'converted_pdf';

@@ -14,6 +14,8 @@ import { bucketBaseUrl, createUploadSignedUrl, deleteObjectFromObs, getObjectMet
 import { BYTES_PER_MB, getAccountedStorageBytes, storageBytesToMb } from '../storageUsage.js';
 import { enqueueResources } from '../resourceInbox.js';
 import { triggerResourceCreateEffects } from './resourceCreateEffects.js';
+import { freezeCloudUpload, publishedUploadKey, trackCloudUpload } from './cloudUploadFinalization.js';
+import { withUploadObjectLock } from './cloudUploadObjectLock.js';
 
 const MANAGED_UPLOAD_PREFIX = 'uploads';
 const MANAGED_OBJECT_KEY_PATTERN = /^files\/([^/]+)\/uploads\/([0-9a-f-]{36})(\.[a-z0-9]{1,16})?$/iu;
@@ -74,11 +76,11 @@ export function assertOwnedManagedObjectKey(userId, objectKey) {
 
 async function findFileByObjectKey(db, userId, objectKey) {
   const [rows] = await db.query(
-    `SELECT id, file_name, file_type, file_size, folder_id, obs_key
+    `SELECT id, file_name, file_type, file_size, folder_id, obs_key, del_flag
        FROM files
-      WHERE create_by = ? AND obs_key = ? AND del_flag = 0
+      WHERE create_by = ? AND obs_key IN (?, ?)
       LIMIT 1`,
-    [userId, objectKey],
+    [userId, objectKey, publishedUploadKey(userId, objectKey)],
   );
   return rows[0] || null;
 }
@@ -137,6 +139,7 @@ export async function prepareManagedCloudUpload({ userId, userRole, fileName, fi
     throw quotaError(quotaMB, usedBytes, normalizedSize);
   }
   const objectKey = buildManagedCloudObjectKey(userId, normalizedName);
+  await trackCloudUpload(pool, userId, objectKey);
   const signed = createUploadSignedUrl({ objectKey, contentType: normalizedType });
   return {
     filename: normalizedName,
@@ -146,25 +149,6 @@ export async function prepareManagedCloudUpload({ userId, userRole, fileName, fi
     headers: signed.headers,
     expiresIn: signed.expiresIn,
   };
-}
-
-// Fail fast instead of waiting while holding an owner row lock. This also covers
-// maintenance callers which insert verified files inside an existing transaction.
-async function withUploadObjectLock(connection, objectKey, operation) {
-  const name = `ln-upload:${crypto.createHash('sha256').update(objectKey).digest('hex').slice(0, 48)}`;
-  const [rows] = await connection.query('SELECT GET_LOCK(?, 0) AS acquired', [name]);
-  if (Number(rows[0]?.acquired) !== 1) throw serviceError('UPLOAD_BUSY', '文件正在处理，请稍后重试');
-  try {
-    return await operation();
-  } finally {
-    try {
-      const [released] = await connection.query('SELECT RELEASE_LOCK(?) AS released', [name]);
-      if (Number(released[0]?.released) !== 1) connection.destroy();
-    } catch {
-      // A session lock must never return to the pool on an uncertain release.
-      connection.destroy();
-    }
-  }
 }
 
 export async function abortManagedCloudUpload({ userId, objectKey } = {}) {
@@ -214,12 +198,14 @@ export async function abortManagedCloudUpload({ userId, objectKey } = {}) {
 /** Caller holds the owner row lock and owns commit/rollback. Metadata and quota stay authoritative. */
 export async function insertVerifiedCloudFile(
   connection,
-  { userId, objectKey, fileName, fileType, folderId, quotaMB },
+  { userId, objectKey, fileName, fileType, folderId, quotaMB, frozenUpload = null },
 ) {
   const ownedKey = assertOwnedManagedObjectKey(userId, objectKey);
-  return withUploadObjectLock(connection, ownedKey, async () => {
+  const publish = async () => {
     await lockCloudObjectForPublication(connection, userId, ownedKey);
-    const metadata = await getObjectMetadataFromObs(ownedKey);
+    const metadata = frozenUpload || (await getObjectMetadataFromObs(ownedKey));
+    const publicationKey = frozenUpload?.objectKey || ownedKey;
+    if (publicationKey !== ownedKey) await lockCloudObjectForPublication(connection, userId, publicationKey);
     const verifiedSize = normalizeFileSize(metadata?.contentLength);
     const targetFolderId = await assertOwnedCloudFolder(connection, userId, folderId);
     const usedBytes = await getAccountedStorageBytes(connection, userId);
@@ -236,7 +222,7 @@ export async function insertVerifiedCloudFile(
         directory: `${bucketBaseUrl}/files/${userId}/`,
         folder_id: targetFolderId,
         del_flag: 0,
-        obs_key: ownedKey,
+        obs_key: publicationKey,
       },
     ]);
     const createdFile = {
@@ -245,10 +231,11 @@ export async function insertVerifiedCloudFile(
       file_type: normalizeFileType(fileType),
       file_size: verifiedSize,
       folder_id: targetFolderId,
-      obs_key: ownedKey,
+      obs_key: publicationKey,
     };
     return createdFile;
-  });
+  };
+  return frozenUpload ? publish() : withUploadObjectLock(connection, ownedKey, publish);
 }
 
 export async function confirmManagedCloudUpload({
@@ -266,7 +253,12 @@ export async function confirmManagedCloudUpload({
   const normalizedName = normalizeFileName(fileName);
   const normalizedType = normalizeFileType(fileType);
   const alreadyConfirmed = await findFileByObjectKey(pool, userId, ownedKey);
+  if (Number(alreadyConfirmed?.del_flag) === 1)
+    throw serviceError('UPLOAD_FILE_TRASHED', '文件已在回收站，请先恢复', { status: 409 });
   if (alreadyConfirmed && !addToInbox) return formatResult(alreadyConfirmed, true);
+
+  await trackCloudUpload(pool, userId, ownedKey);
+  const frozenUpload = alreadyConfirmed ? null : await freezeCloudUpload(pool, userId, ownedKey);
 
   const quotaMB = await getUserSpaceMb(userId, userRole);
   const connection = await pool.getConnection();
@@ -277,15 +269,22 @@ export async function confirmManagedCloudUpload({
   let transactionError = null;
   let inbox = null;
   try {
+    // 账号行锁已串行化选名与容量；RC 避免不同账号的空索引区间互相锁住插入。
+    await connection.query('SET TRANSACTION ISOLATION LEVEL READ COMMITTED');
     await connection.beginTransaction();
     transactionStarted = true;
     await connection.query('SELECT id FROM user WHERE id = ? LIMIT 1 FOR UPDATE', [userId]);
 
     const confirmedWhileWaiting = await findFileByObjectKey(connection, userId, ownedKey);
+    if (Number(confirmedWhileWaiting?.del_flag) === 1)
+      throw serviceError('UPLOAD_FILE_TRASHED', '文件已在回收站，请先恢复', { status: 409 });
     if (confirmedWhileWaiting) {
       createdFile = confirmedWhileWaiting;
       alreadyConfirmedInTransaction = true;
     } else {
+      // 初查已有文件时没有冻结新副本；文件若已删除，不能回落到内部维护的原键写入路径。
+      if (!frozenUpload)
+        throw serviceError('UPLOAD_OBJECT_RETIRED', '原文件状态已变化，请重新上传', { status: 409 });
       createdFile = await insertVerifiedCloudFile(connection, {
         userId,
         objectKey: ownedKey,
@@ -293,6 +292,7 @@ export async function confirmManagedCloudUpload({
         fileType: normalizedType,
         folderId,
         quotaMB,
+        frozenUpload,
       });
     }
     if (addToInbox) {

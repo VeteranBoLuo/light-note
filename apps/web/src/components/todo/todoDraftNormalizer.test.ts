@@ -180,3 +180,11 @@ describe('todoDraftNormalizer', () => {
     });
   });
 });
+
+it('已有多固定时间经过编辑和提交归一仍完整保留', () => {
+  const times = ['2026-10-23T09:17', '2026-10-24T10:23'];
+  const draft = scheduledDraft('', '');
+  draft.independentTasks.enabled = false;
+  draft.reminder = { version: 1, mode: 'once', once: { type: 'fixed_at', fixedAt: times[0], fixedAts: times }, channels: ['in_app'] };
+  expect(normalizeTodoCreateDraft(draft).singleTaskReminder?.once?.fixedAts).toEqual(times);
+});

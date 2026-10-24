@@ -13,7 +13,7 @@ describe('积分资产入口与明细页契约', () => {
   const ledgerSource = readSource('src/components/growth/PointsLedger.vue');
   const desktopProfileSource = readSource('src/view/personCenter/PersonCenter.vue');
   const mobileProfileSource = readSource('src/view/personCenter/PersonCenterMobile.vue');
-  const usagePageSource = readSource('src/view/pointsUsage/PointsUsagePage.vue');
+  const usagePageSource = readSource('src/components/growth/InventoryPointsDetails.vue');
   const zhLocaleSource = readSource('src/i18n/locales/zh-CN-core.ts');
   const enLocaleSource = readSource('src/i18n/locales/en-US-core.ts');
 
@@ -52,13 +52,11 @@ describe('积分资产入口与明细页契约', () => {
     expect(balanceSource).not.toContain('<button');
   });
 
-  it('成长、设置和独立明细复用摘要与单列账本', () => {
+  it('背包积分明细复用现有摘要与账本', () => {
     expect(usagePageSource).toContain('<PointsSummary');
     expect(usagePageSource).toContain('<PointsLedger :key="accountKey" settings-layout');
     expect(usagePageSource).toContain("t('growth.pointsUsageSettlementHint')");
-    expect(usagePageSource).toContain(
-      "router.push({ path: '/growth', query: { section: 'rewards', reward: 'shop' } })",
-    );
+    expect(usagePageSource).toContain('compact class="inventory-points-summary"');
   });
 
   it('知识工坊入口明确纯 AI 工具每次只选择一种结算介质', () => {

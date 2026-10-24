@@ -5,33 +5,21 @@ import {
   formatWeeklyReportExperience,
 } from "./notificationPresentation.js";
 describe("shared notification presentation", () => {
-  it.each([
-    [10, "+10"],
-    [0, "+0"],
-    [-9283, "-9283"],
-  ])("formats weekly experience %s with one sign", (value, expected) => {
-    expect(formatWeeklyReportExperience(value)).toBe(expected);
-  });
-  it.each([
-    "本周 +-9283 经验 · 签到 1 天",
-    "Last week +-9283 EXP · 1 check-in days",
-  ])("fixes double signs in historical weekly notifications: %s", (content) => {
-    const item = {
-      type: "system",
-      content,
-      meta: JSON.stringify({ weeklyReport: { exp: -9283 } }),
-    };
-    expect(notificationPresentation(item).content).toBe(
-      content.replace("+-9283", "-9283"),
-    );
-    expect(browserNotificationPresentation(item).body).toBe(
-      content.replace("+-9283", "-9283"),
-    );
-    expect(notificationPresentation({ ...item, meta: null }).content).toBe(
-      content,
-    );
-  });
-
+  it.each([[10, "+10"], [0, "+0"], [-9283, "-9283"]])(
+    "formats weekly experience %s with one sign",
+    (value, expected) => {
+      expect(formatWeeklyReportExperience(value)).toBe(expected);
+    },
+  );
+  it.each(["本周 +-9283 经验 · 签到 1 天", "Last week +-9283 EXP · 1 check-in days"])(
+    "fixes double signs in historical weekly notifications: %s",
+    (content) => {
+      const item = { type: "system", content, meta: JSON.stringify({ weeklyReport: { exp: -9283 } }) };
+      expect(notificationPresentation(item).content).toBe(content.replace("+-9283", "-9283"));
+      expect(browserNotificationPresentation(item).body).toBe(content.replace("+-9283", "-9283"));
+      expect(notificationPresentation({ ...item, meta: null }).content).toBe(content);
+    },
+  );
   it("localizes new submission notices without exposing answer content", () => {
     const formTitle = "活动反馈 $& {title}";
     const item = {
@@ -140,4 +128,21 @@ it("distinguishes existing review, result and conversation notifications", () =>
       "en-US",
     ).title,
   ).toBe("New post awaiting review");
+});
+
+it("public-resource notices contain only localized metadata and never submission text",()=>{
+  expect(notificationPresentation({type:"public_resource",meta:{kind:"review"}}).title).toBe("有公开资源待审核");
+  expect(notificationPresentation({type:"public_resource",meta:{kind:"result"}},"en-US").title).toBe("Public resource review result");
+});
+
+it('邮箱健康提醒按用户语言展示脱敏地址及找回说明', () => {
+  const item = { type: 'email_health', title: 'stored fallback', content: 'stored fallback', meta: { maskedEmail: 'n***@example.com' } };
+  const zh = notificationPresentation(item, 'zh-CN');
+  const en = notificationPresentation(item, 'en-US');
+  expect(zh.title).toBe('请检查账号邮箱');
+  expect(zh.content).toContain('n***@example.com');
+  expect(zh.content).toContain('正常登录和使用不受影响');
+  expect(en.title).toBe('Check your account email');
+  expect(en.content).toContain('n***@example.com');
+  expect(en.content).not.toContain('stored fallback');
 });

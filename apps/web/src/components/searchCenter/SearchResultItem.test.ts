@@ -51,6 +51,7 @@ async function mountItem(view: ResourceView, selectable: boolean, result = item)
       locale: 'zh-CN',
       messages: {
         'zh-CN': {
+          publicResources: { public: '站内公开', author: '作者', publicTime: '公开时间' },
           tagManage: { relatedTag: '关联标签' },
           tagGraph: { panel: { updateTime: '更新时间' } },
           resourceCenter: { locateFile: '在云空间定位' },
@@ -73,6 +74,33 @@ afterEach(() => {
 });
 
 describe('SearchResultItem', () => {
+  it.each(['list', 'card'] as const)(
+    '公开结果即使收到 selectable=true 也只能打开，不能进入批量选择：%s',
+    async (view) => {
+      const result: DisplaySearchItem = {
+        ...item,
+        origin: 'public',
+        publicResource: {
+          origin: 'public',
+          publicId: 'publication',
+          kind: 'note',
+          title: item.title,
+          summary: item.description,
+          author: { publicId: 'author', name: '作者', communityId: 'LN123' },
+          publishedAt: '2026-10-21T00:00:00Z',
+          revision: 1,
+          version: 2,
+        },
+      };
+      const { host, onOpen, onToggleSelect } = await mountItem(view, true, result);
+      expect(host.querySelector('[role="checkbox"]')).toBeNull();
+      expect(host.querySelector('input[type="checkbox"]')).toBeNull();
+      host.querySelector<HTMLButtonElement>('button')!.click();
+      await nextTick();
+      expect(onOpen).toHaveBeenCalledTimes(1);
+      expect(onToggleSelect).not.toHaveBeenCalled();
+    },
+  );
   it.each(['card', 'list'] as const)('%s 文件定位只触发定位，不打开或切换选择', async (view) => {
     const file = { ...item, type: 'file' as const, title: '报告.pdf' };
     const { host, onOpen, onToggleSelect, onLocate } = await mountItem(view, false, file);

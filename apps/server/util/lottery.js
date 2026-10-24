@@ -14,6 +14,7 @@ import {
   PointsEconomyError,
 } from './pointsEconomyOperations.js';
 import { creditAiBonusTokens } from './aiBonusWallet.js';
+import { acquisitionMeta, ACQUISITION_VERSION } from './assetAcquisition.js';
 
 export const DRAW_COST = 170;
 export const TEN_DRAW_COST = 1600;
@@ -24,6 +25,18 @@ export function freeDrawsFor(level, version) {
 
 function levelOf(exp) {
   return levelForExp(Number(exp) || 0);
+}
+
+// 最近日期快照会被时区切换覆盖；逐日额度必须读取不可变流水。
+// 写入方已锁住成长账号，current read 避免收据查询建立的 RR 旧快照。
+async function freeDrawsUsed(db, userId, day, growth, { lock = false } = {}) {
+  const [rows] = await db.query(
+    `SELECT id FROM points_log WHERE user_id = ? AND reason = 'lottery_free' AND ref = ?
+     LIMIT 5${lock ? ' FOR UPDATE' : ''}`,
+    [userId, day],
+  );
+  const snapshot = growth.lottery_free_day === day ? Math.max(0, Number(growth.lottery_free_used) || 0) : 0;
+  return Math.max(rows.length, snapshot);
 }
 
 function poolWeight(pool) {
@@ -83,11 +96,14 @@ async function grantReward(conn, userId, prize, { mode, version, operationRef, d
       userId,
       c4 ? 'lottery_paid_asset' : 'lottery_storage',
       prize.id,
-      JSON.stringify({ assetType: 'storage_mb', assetAmount: prize.amount }),
+      JSON.stringify(acquisitionMeta('storage', prize.amount, reasonPrefix)),
     ]);
   } else if (prize.kind === 'card') {
     if (mode === 'free' && c4) throw new Error('FREE_LOTTERY_ASSET_POLICY_VIOLATION');
-    const grant = await grantItem(conn, userId, 'makeup_card', prize.amount);
+    const grant = await grantItem(conn, userId, 'makeup_card', prize.amount, {
+      sourceType: reasonPrefix,
+      sourceRef: `${operationRef}:${drawIndex}`,
+    });
     if (!grant?.ok || Number(grant.qty) !== prize.amount) throw new Error('MAKEUP_CARD_GRANT_FAILED');
   } else if (prize.kind === 'ai_pack') {
     await creditAiBonusTokens(conn, {
@@ -191,7 +207,7 @@ export async function drawLottery(
     const today = accountCalendar?.dayKey || dayKeyAtOffset();
     if (drawMode === 'free') {
       const allowance = freeDrawsFor(levelOf(growth.exp), runtime.economyVersion);
-      const usedToday = growth.lottery_free_day === today ? Number(growth.lottery_free_used) || 0 : 0;
+      const usedToday = await freeDrawsUsed(conn, userId, today, growth, { lock: true });
       if (usedToday >= allowance) {
         await conn.rollback();
         return { ok: false, reason: 'no_free', msg: '今日免费次数已用完' };
@@ -272,6 +288,7 @@ export async function drawLottery(
     const result = {
       ok: true,
       idempotent: false,
+      acquisitionVersion: ACQUISITION_VERSION,
       economyVersion: runtime.economyVersion,
       mode: drawMode,
       cost,
@@ -330,7 +347,7 @@ export async function getLotteryStatus(userId, { userRole = null, calendar = nul
   const today = accountCalendar?.dayKey || dayKeyAtOffset();
   const level = levelOf(growth.exp);
   const freeDaily = freeDrawsFor(level, runtime.economyVersion);
-  const usedToday = growth.lottery_free_day === today ? Number(growth.lottery_free_used) || 0 : 0;
+  const usedToday = userId && userId !== 'visitor' ? await freeDrawsUsed(pool, userId, today, growth) : 0;
   const freeRemaining = Math.max(0, freeDaily - usedToday);
   const c4 = runtime.economyVersion !== LEGACY_POINTS_ECONOMY_VERSION;
   const pityEvery = runtime.catalog.paidPolicy.pityEvery;

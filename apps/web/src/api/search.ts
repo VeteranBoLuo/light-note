@@ -1,3 +1,4 @@
+import type { PublicResourceItem } from '@lightnote/shared/public-resources';
 import { apiBasePost } from '@/http/request.ts';
 import i18n from '@/i18n';
 import {
@@ -23,6 +24,8 @@ export interface SearchCursor {
 }
 
 export interface SearchResultItem {
+  origin?: 'personal' | 'public';
+  publicResource?: PublicResourceItem;
   id: string;
   type: GlobalSearchType;
   title: string;
@@ -70,6 +73,10 @@ export interface TagMatchItem {
 }
 
 export interface GlobalSearchResponse {
+  publicSearchFailed?: boolean;
+  publicTotal?: number;
+  personalTotal?: number;
+  personalTypeTotals?: Partial<Record<GlobalSearchType, number>>;
   keyword: string;
   items: SearchResultItem[];
   groups: SearchGroup[];

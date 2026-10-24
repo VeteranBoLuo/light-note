@@ -41,7 +41,7 @@
       <BButton
         size="small"
         type="primary"
-        :disabled="selectedCount < 1"
+        :disabled="selectedCount < 1 || selectionDisabled"
         :aria-label="t('inbox.completeSelected')"
         @click="emit('completeSelected')"
       >
@@ -50,7 +50,7 @@
       <BButton
         size="small"
         type="danger"
-        :disabled="selectedCount < 1"
+        :disabled="selectedCount < 1 || selectionDisabled"
         :aria-label="t('inbox.deleteSelected')"
         @click="emit('deleteSelected')"
       >
@@ -103,6 +103,7 @@
       compactTitle?: boolean;
       showMenu?: boolean;
       selectionMode?: boolean;
+      selectionDisabled?: boolean;
       selectedCount?: number;
       selectionVariant?: 'inbox' | 'basic';
       allowBatch?: boolean;

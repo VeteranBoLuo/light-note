@@ -27,7 +27,13 @@
               <div class="store-section__heading">
                 <div>
                   <h2 id="store-catalog-title">{{ t('entitlementStore.catalogTitle') }}</h2>
-                  <p>{{ t('entitlementStore.catalogDescription') }}</p>
+                  <p>{{
+                    t(
+                      activeCategory === 'storage'
+                        ? 'entitlementStore.storageDescription'
+                        : 'entitlementStore.catalogDescription',
+                    )
+                  }}</p>
                 </div>
                 <div v-if="catalog?.catalogEnabled"
                   ><BTabs
@@ -359,7 +365,7 @@
     const item = selectedItem.value;
     if (!item) return { aiTokens: 0, storageMb: 0 };
     if ('campaignSkuId' in item) return item.benefit;
-    return item.firstPurchaseStatus === 'used' ? item.base : item.firstPurchase;
+    return item.firstPurchaseScope === 'none' || item.firstPurchaseStatus === 'used' ? item.base : item.firstPurchase;
   });
   const selectedPackageName = computed(() => {
     const item = selectedItem.value;

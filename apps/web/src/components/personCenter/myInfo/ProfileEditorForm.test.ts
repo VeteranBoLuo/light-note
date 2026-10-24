@@ -4,10 +4,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import zhCN from '@/i18n/locales/zh-CN';
 
 const actions = vi.hoisted(() => ({
+  account: vi.fn(),
   update: vi.fn(),
   read: vi.fn(),
   saveCommunity: vi.fn(),
   loadCommunity: vi.fn(),
+  closeProfile: vi.fn(),
   alert: vi.fn(),
   success: vi.fn(),
   warning: vi.fn(),
@@ -16,6 +18,7 @@ const actions = vi.hoisted(() => ({
 }));
 const mobile = ref(true);
 const user = reactive({
+  adminContext: null as null | { targetUserId: string },
   id: 'profile-test',
   role: 'root',
   alias: '菠萝',
@@ -37,6 +40,15 @@ const ownLoading = ref(false);
 const ownError = ref(false);
 const growth = ref({ equippedFrame: 'frame_dragon', equippedBackground: 'background_coast', level: 15, name: '文圣' });
 
+vi.mock('@/http/request', () => ({ apiBaseGet: actions.account }));
+vi.mock('@/components/settings/AccountEmailDialog.vue', () => ({
+  default: {
+    props: ['visible'],
+    emits: ['update:visible'],
+    template:
+      '<div v-if="visible" role="dialog" aria-label="更换邮箱"><button @click="$emit(\'update:visible\', false)">取消更换</button></div>',
+  },
+}));
 vi.mock('@/store', () => ({ useUserStore: () => user, bookmarkStore: () => bookmark }));
 vi.mock('@/api/userApi.ts', () => ({ default: { updateUserInfo: actions.update, getUserInfoById: actions.read } }));
 vi.mock('@/api/commonApi.ts', () => ({ recordOperation: vi.fn() }));
@@ -50,6 +62,7 @@ vi.mock('@/composables/useCommunityChatProfile', () => ({
     ownLoading,
     ownError,
     loadOwnProfile: actions.loadCommunity,
+    closeProfile: actions.closeProfile,
     saveOwnProfile: actions.saveCommunity,
   }),
 }));
@@ -96,6 +109,8 @@ const flush = async () => {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  user.adminContext = null;
+  actions.account.mockImplementation(async () => ({ status: 200, data: { id: user.id, hasPassword: true } }));
   mobile.value = true;
   Object.assign(user, {
     id: 'profile-test',
@@ -117,7 +132,10 @@ beforeEach(() => {
   growth.value = { equippedFrame: 'frame_dragon', equippedBackground: 'background_coast', level: 15, name: '文圣' };
   actions.loadCommunity.mockImplementation(async () => ownProfile.value);
   actions.update.mockResolvedValue({ status: 200 });
-  actions.read.mockImplementation(async () => ({ data: { alias: user.alias, email: user.email } }));
+  actions.read.mockImplementation(async () => ({
+    status: 200,
+    data: { id: user.id, alias: user.alias, email: user.email },
+  }));
   actions.saveCommunity.mockImplementation(async (input) => {
     ownProfile.value = { ...ownProfile.value, bio: input.bio };
     return ownProfile.value;
@@ -167,7 +185,7 @@ describe('profile editor layout and existing flows', () => {
           finish = resolve;
         }),
     );
-    actions.read.mockResolvedValueOnce({ data: { alias: '新的昵称', email: user.email } });
+    actions.read.mockResolvedValueOnce({ status: 200, data: { id: user.id, alias: '新的昵称', email: user.email } });
     button('保存修改').click();
     await nextTick();
     expect(button('保存修改').getAttribute('aria-busy')).toBe('true');
@@ -175,12 +193,132 @@ describe('profile editor layout and existing flows', () => {
     expect(host.querySelector<HTMLInputElement>('input')!.disabled).toBe(true);
     finish({ status: 200 });
     await flush();
-    expect(actions.update).toHaveBeenCalledWith({ id: user.id, alias: '新的昵称', email: user.email });
+    expect(actions.update).toHaveBeenCalledWith({ id: user.id, alias: '新的昵称' });
+    expect(host.querySelector('.profile-account-fields')?.textContent).toContain(user.email);
+    expect(host.querySelector('.profile-account-fields input')).toBeNull();
     expect(actions.saveCommunity).not.toHaveBeenCalled();
     expect(onSaved).toHaveBeenCalledOnce();
     expect(onClose).toHaveBeenCalledOnce();
   });
 
+  it('更换邮箱使用独立弹框，取消后保留昵称与简介草稿，普通资料保存不提交邮箱', async () => {
+    const { host, button } = mount();
+    await flush();
+    input(host.querySelector('input')!, '昵称草稿');
+    input(host.querySelector('textarea')!, '简介草稿');
+    await nextTick();
+    button('更换邮箱').click();
+    await nextTick();
+    expect(host.querySelector('[aria-label="更换邮箱"]')).not.toBeNull();
+    button('取消更换').click();
+    await nextTick();
+    expect(host.querySelector<HTMLInputElement>('input')!.value).toBe('昵称草稿');
+    expect(host.querySelector<HTMLTextAreaElement>('textarea')!.value).toBe('简介草稿');
+    expect(actions.update).not.toHaveBeenCalled();
+    button('保存修改').click();
+    await flush();
+    expect(actions.update).toHaveBeenCalledWith({ id: user.id, alias: '昵称草稿' });
+  });
+  it.each(['update', 'read'] as const)('保存的 %s 阶段切号后不回写身份，也不继续提交旧简介', async (stage) => {
+    const { host, button, onSaved } = mount();
+    await flush();
+    input(host.querySelector('input')!, '旧账号昵称');
+    input(host.querySelector('textarea')!, '旧账号简介');
+    await nextTick();
+    let finish!: (value: unknown) => void;
+    actions[stage].mockImplementationOnce(() => new Promise((resolve) => (finish = resolve)));
+    button('保存修改').click();
+    await flush();
+    Object.assign(user, { id: 'new-owner', alias: '新账号', email: 'new-owner@example.com' });
+    finish({ status: 200, data: { id: 'profile-test', alias: '旧账号昵称', email: 'demo@example.com' } });
+    await flush();
+    expect(user.id).toBe('new-owner');
+    expect(user.alias).toBe('新账号');
+    expect(actions.saveCommunity).not.toHaveBeenCalled();
+    expect(onSaved).not.toHaveBeenCalled();
+    expect(actions.success).not.toHaveBeenCalled();
+    if (stage === 'update') expect(actions.read).not.toHaveBeenCalled();
+  });
+  it.each([
+    { status: 500, data: null },
+    { status: 200, data: { id: 'other-owner', alias: '别人的昵称' } },
+  ])('保存后刷新返回异常时保留草稿，不覆盖登录身份', async (response) => {
+    const { host, button, onSaved } = mount();
+    await flush();
+    input(host.querySelector('input')!, '保留的昵称');
+    await nextTick();
+    actions.read.mockResolvedValueOnce(response);
+    button('保存修改').click();
+    await flush();
+    expect(user.id).toBe('profile-test');
+    expect(host.querySelector<HTMLInputElement>('input')!.value).toBe('保留的昵称');
+    expect(actions.warning).toHaveBeenCalled();
+    expect(onSaved).not.toHaveBeenCalled();
+    expect(button('保存修改').disabled).toBe(false);
+  });
+  it('卸载后忽略迟到的保存响应', async () => {
+    const { host, button, onSaved } = mount();
+    await flush();
+    input(host.querySelector('input')!, '已离开页面的昵称');
+    await nextTick();
+    let finish!: (value: unknown) => void;
+    actions.update.mockImplementationOnce(() => new Promise((resolve) => (finish = resolve)));
+    button('保存修改').click();
+    await nextTick();
+    cleanup?.();
+    cleanup = undefined;
+    finish({ status: 200 });
+    await flush();
+    expect(actions.read).not.toHaveBeenCalled();
+    expect(onSaved).not.toHaveBeenCalled();
+  });
+  it('管理员代看不能更换邮箱，身份切换会关闭已打开的安全弹框', async () => {
+    const { host, button } = mount();
+    await flush();
+    button('更换邮箱').click();
+    await nextTick();
+    user.adminContext = { targetUserId: 'someone' };
+    await flush();
+    expect(button('更换邮箱').disabled).toBe(true);
+    expect(host.querySelector('[aria-label="更换邮箱"]')).toBeNull();
+  });
+  it('密码状态以服务端事实为准，未知时仍提供专用验证入口', async () => {
+    actions.account.mockResolvedValueOnce({ status: 200, data: { id: user.id, hasPassword: null } });
+    const { button } = mount();
+    await flush();
+    expect(button('设置或修改密码')).toBeDefined();
+    expect(button('修改密码')).toBeUndefined();
+  });
+
+  it('未设置密码时提供设置入口，取消资料编辑保留未保存确认', async () => {
+    actions.account.mockResolvedValueOnce({ status: 200, data: { id: user.id, hasPassword: false } });
+    const { host, button, onClose } = mount();
+    await flush();
+    expect(button('设置密码')).toBeDefined();
+    input(host.querySelector('input')!, '草稿');
+    await nextTick();
+    button('取消').click();
+    expect(actions.alert).toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
+  });
+  it('旧账号的密码状态响应不会覆盖新身份', async () => {
+    let resolve!: (value: unknown) => void;
+    actions.account.mockImplementationOnce(
+      () =>
+        new Promise((done) => {
+          resolve = done;
+        }),
+    );
+    const { button, onClose } = mount();
+    await nextTick();
+    user.id = 'new-owner';
+    await flush();
+    resolve({ status: 200, data: { id: 'profile-test', hasPassword: false } });
+    await flush();
+    expect(button('修改密码')).toBeDefined();
+    expect(button('设置密码')).toBeUndefined();
+    expect(onClose).toHaveBeenCalled();
+  });
   it('社区保存失败保留输入和重试入口，成功后才关闭', async () => {
     const { host, button, onClose } = mount();
     await flush();
@@ -246,7 +384,7 @@ describe('profile editor layout and existing flows', () => {
     const { host, button } = mount();
     await flush();
     expect(host.querySelector('[role="toolbar"]')).toBeNull();
-    expect(button('保存')).toBeDefined();
+    expect(button('保存修改')).toBeDefined();
     user.role = 'visitor';
     user.id = '';
     await nextTick();

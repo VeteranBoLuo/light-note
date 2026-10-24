@@ -59,11 +59,47 @@
   });
   let observer: ResizeObserver | null = null;
   let revision = 0;
-  type GridScrollAnchor = NonNullable<ReturnType<InstanceType<typeof BVirtualList>['captureScrollAnchor']>>;
+  type GridScrollAnchor = NonNullable<ReturnType<InstanceType<typeof BVirtualList>['captureScrollAnchor']>> & {
+    rowHeight: number;
+  };
+  function captureFileAnchor(): GridScrollAnchor | null {
+    const root = probeRef.value?.parentElement;
+    if (!root) return null;
+    const top = root.getBoundingClientRect().top;
+    // 同步密度监听时数值 token 已改变，但 DOM 仍是旧布局；从可见行读取旧锚点。
+    const card = [...root.querySelectorAll<HTMLElement>('[data-cloud-file-id]')].find(
+      (element) => element.getBoundingClientRect().bottom > top + 1,
+    );
+    const row = card?.closest<HTMLElement>('[data-virtual-index]');
+    if (!card || !row) return null;
+    const rect = row.getBoundingClientRect();
+    return {
+      key: card.dataset.cloudFileId!,
+      index: Number(row.dataset.virtualIndex),
+      offset: top - rect.top,
+      rowHeight: rect.height,
+    };
+  }
   let pendingAnchor: GridScrollAnchor | null = null;
-  function restoreFileAnchor(anchor: GridScrollAnchor) {
+  async function restoreFileAnchor(
+    anchor: GridScrollAnchor,
+    isCurrent: () => boolean = () => true,
+    layoutChanged = false,
+  ) {
     const index = rows.value.findIndex((row) => row.items.some((item) => String(item.id) === anchor.key));
-    if (index >= 0) listRef.value?.restoreScrollAnchor({ ...anchor, key: String(rows.value[index].id), index });
+    if (index < 0 || !isCurrent()) return;
+    const key = String(rows.value[index].id);
+    listRef.value?.restoreScrollAnchor({ ...anchor, offset: 0, key, index });
+    await nextTick();
+    if (!isCurrent()) return;
+    const row = probeRef.value?.parentElement?.querySelector<HTMLElement>(`[data-virtual-index="${index}"]`);
+    const height = row?.getBoundingClientRect().height;
+    // 仅在布局变化时缩放行内阅读比例；上传更新仍保留原像素偏移。
+    const offset =
+      layoutChanged && height && anchor.rowHeight && height < anchor.rowHeight
+        ? (anchor.offset * height) / anchor.rowHeight
+        : anchor.offset;
+    listRef.value?.restoreScrollAnchor({ ...anchor, offset, key, index });
   }
   watch(
     () => props.items,
@@ -73,13 +109,14 @@
         cancelled = true;
       });
       // 父组件更新前，子列表仍持有旧分行；新增文件后按文件键找到新的所在行。
-      const anchor = listRef.value?.captureScrollAnchor();
+      const anchor = captureFileAnchor();
       if (!anchor || (anchor.index === 0 && anchor.offset <= 0)) return;
       await nextTick();
       await nextTick();
-      const current = listRef.value?.captureScrollAnchor();
+      const current = captureFileAnchor();
       // 筛选或排序可能显式回到顶部，不能用旧阅读位置覆盖该操作。
-      if (!cancelled && current && (current.index > 0 || current.offset > 0)) restoreFileAnchor(anchor);
+      if (!cancelled && current && (current.index > 0 || current.offset > 0))
+        await restoreFileAnchor(anchor, () => !cancelled);
     },
     { flush: 'pre' },
   );
@@ -92,7 +129,7 @@
     const tracks = getComputedStyle(probe).gridTemplateColumns;
     const nextColumns = Math.max(1, tracks === 'none' ? 1 : tracks.split(/\s+/).length);
     const nextGap = window.matchMedia('(max-width: 720px)').matches ? 12 : 14;
-    const anchor = pendingAnchor || listRef.value?.captureScrollAnchor();
+    const anchor = pendingAnchor || captureFileAnchor();
     pendingAnchor = null;
     if (nextColumns === columns.value && nextGap === gap.value) return;
     const focused = document.activeElement as HTMLElement | null;
@@ -113,7 +150,8 @@
     await nextTick();
     await nextTick();
     if (ticket !== revision) return;
-    if (anchor) restoreFileAnchor(anchor);
+    if (anchor) await restoreFileAnchor(anchor, () => ticket === revision, true);
+    if (ticket !== revision) return;
     if (
       ownsFocus &&
       regroupingFocusKey.value !== null &&
@@ -130,7 +168,7 @@
   watch(
     density,
     () => {
-      pendingAnchor = listRef.value?.captureScrollAnchor() || null;
+      pendingAnchor = captureFileAnchor() || null;
     },
     { flush: 'sync' },
   );

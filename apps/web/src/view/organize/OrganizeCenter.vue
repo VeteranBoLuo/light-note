@@ -108,7 +108,6 @@
             <section
               v-else-if="activeView === 'untagged'"
               class="organize-issue-view"
-              :class="{ 'organize-issue-view--batch-active': untaggedBatchMode }"
             >
               <header class="organize-view-heading organize-view-heading--compact">
                 <div>
@@ -124,9 +123,6 @@
                   class="organize-filter-bar__search"
                   :placeholder="t('organize.untagged.searchPlaceholder')"
                   clearable
-                  @input="scheduleUntaggedSearch"
-                  @compositionstart="startUntaggedComposition"
-                  @compositionend="endUntaggedComposition"
                   @enter="applyUntaggedFilters"
                 />
                 <BSelect
@@ -136,6 +132,9 @@
                   :options="resourceTypeOptions"
                   @change="applyUntaggedFilters"
                 />
+                <BButton class="organize-filter-bar__submit" @click="applyUntaggedFilters">
+                  {{ t('organize.search') }}
+                </BButton>
                 <BBatchToggle
                   class="organize-filter-bar__batch"
                   :disabled="!untaggedBatchMode && (!untaggedItems.length || untaggedList.loading)"
@@ -629,7 +628,7 @@
   import type { BatchSelection } from '@/api/search';
   import { computed, nextTick, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router';
+  import { useRoute, useRouter } from 'vue-router';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BBatchToggle from '@/components/base/BasicComponents/BBatchToggle.vue';
   import BChip from '@/components/base/BasicComponents/BChip.vue';
@@ -675,11 +674,11 @@
   import { generateUUID } from '@/utils/common';
   import { scrollIntoContainer } from '@/utils/scrolling';
   import {
-    clearUntaggedResourceReturn,
-    readUntaggedResourceReturn,
-    rememberUntaggedResourceReturn,
-    trackUntaggedResourceReturn,
-  } from '@/utils/untaggedResourceReturn';
+    clearUntaggedNoteReturn,
+    readUntaggedNoteReturn,
+    rememberUntaggedNoteReturn,
+    trackUntaggedNoteReturn,
+  } from '@/utils/untaggedNoteReturn';
   import icon from '@/config/icon';
 
   type OrganizeView = 'overview' | 'pending' | 'ai_suggestions' | OrganizeIssueType;
@@ -687,7 +686,7 @@
   const { t, locale } = useI18n();
   const route = useRoute();
   const router = useRouter();
-  trackUntaggedResourceReturn(router);
+  trackUntaggedNoteReturn(router);
   const bookmark = bookmarkStore();
   const user = useUserStore();
   const organize = organizeStore();
@@ -700,8 +699,6 @@
   const untaggedVirtualListRef = ref<InstanceType<typeof BVirtualList> | null>(null);
   const restoringUntagged = ref(false);
   let untaggedLoadGeneration = 0;
-  let untaggedSearchTimer: ReturnType<typeof setTimeout> | undefined;
-  let untaggedComposing = false;
   const untaggedBatchMode = ref(false);
   const selectedUntaggedKeys = ref<string[]>([]);
   const ignoringUntagged = ref(false);
@@ -1023,7 +1020,7 @@
     const generation = ++untaggedLoadGeneration;
     const scope = buildNoteDetailRequestScope(user);
     const path = route.fullPath;
-    const snapshot = reset ? readUntaggedResourceReturn(scope, path) : null;
+    const snapshot = reset ? readUntaggedNoteReturn(scope, path) : null;
     restoringUntagged.value = Boolean(snapshot);
     if (snapshot) {
       untaggedKeyword.value = snapshot.keyword;
@@ -1075,12 +1072,9 @@
       } else {
         untaggedScrollContainer()?.scrollTo({ top: snapshot.top, behavior: 'auto' });
       }
-      clearUntaggedResourceReturn(snapshot);
+      clearUntaggedNoteReturn(snapshot);
     }
     restoringUntagged.value = false;
-    if (loaded && snapshot && untaggedKeyword.value.trim() !== appliedUntaggedFilters.value.keyword) {
-      scheduleUntaggedSearch();
-    }
   }
 
   function untaggedScrollContainer() {
@@ -1106,37 +1100,8 @@
     };
   }
 
-  function cancelUntaggedSearch() {
-    clearTimeout(untaggedSearchTimer);
-    untaggedSearchTimer = undefined;
-  }
-
-  function scheduleUntaggedSearch() {
-    cancelUntaggedSearch();
-    if (untaggedComposing || activeView.value !== 'untagged') return;
-    untaggedSearchTimer = setTimeout(applyUntaggedFilters, 300);
-  }
-
-  function startUntaggedComposition() {
-    untaggedComposing = true;
-    cancelUntaggedSearch();
-  }
-
-  function endUntaggedComposition() {
-    untaggedComposing = false;
-    scheduleUntaggedSearch();
-  }
-
   function applyUntaggedFilters() {
-    cancelUntaggedSearch();
-    if (untaggedComposing || activeView.value !== 'untagged') return;
-    if (
-      !untaggedList.value.error &&
-      untaggedKeyword.value.trim() === appliedUntaggedFilters.value.keyword &&
-      untaggedType.value === appliedUntaggedFilters.value.resourceType
-    )
-      return;
-    clearUntaggedResourceReturn();
+    clearUntaggedNoteReturn();
     organizeMainRef.value?.querySelector<HTMLElement>('.organize-issue-view')?.scrollTo({ top: 0 });
     void loadUntagged(true);
   }
@@ -1353,26 +1318,28 @@
   }
 
   function openResource(item: UntaggedResourceItem) {
-    rememberUntaggedResourceReturn({
-      scope: buildNoteDetailRequestScope(user),
-      path: route.fullPath,
-      keyword: untaggedKeyword.value,
-      resourceType: untaggedType.value,
-      appliedKeyword: appliedUntaggedFilters.value.keyword,
-      appliedResourceType: appliedUntaggedFilters.value.resourceType,
-      loadedCount: untaggedItems.value.length,
-      anchor: captureUntaggedAnchor(),
-      top: untaggedScrollContainer()?.scrollTop || 0,
-    });
-    const query = { organize: 'untagged', from: route.fullPath };
     if (item.resourceType === 'bookmark') {
-      void router.push({ path: `/manage/editBookmark/${item.resourceId}`, query });
+      void router.push({ path: `/manage/editBookmark/${item.resourceId}`, query: { organize: 'untagged' } });
     } else if (item.resourceType === 'note') {
-      void router.push({ path: `/noteLibrary/${item.resourceId}`, query });
+      rememberUntaggedNoteReturn({
+        scope: buildNoteDetailRequestScope(user),
+        path: route.fullPath,
+        keyword: untaggedKeyword.value,
+        resourceType: untaggedType.value,
+        appliedKeyword: appliedUntaggedFilters.value.keyword,
+        appliedResourceType: appliedUntaggedFilters.value.resourceType,
+        loadedCount: untaggedItems.value.length,
+        anchor: captureUntaggedAnchor(),
+        top: untaggedScrollContainer()?.scrollTop || 0,
+      });
+      void router.push({
+        path: `/noteLibrary/${item.resourceId}`,
+        query: { organize: 'untagged', from: route.fullPath },
+      });
     } else {
       void router.push({
         path: '/cloudSpace',
-        query: { ...query, fileId: item.resourceId, fileName: item.title },
+        query: { fileId: item.resourceId, fileName: item.title, organize: 'untagged' },
       });
     }
   }
@@ -1546,9 +1513,7 @@
   }
 
   function resetOrganizer() {
-    cancelUntaggedSearch();
-    untaggedComposing = false;
-    clearUntaggedResourceReturn();
+    clearUntaggedNoteReturn();
     untaggedKeyword.value = '';
     untaggedType.value = 'all';
     untaggedBatchMode.value = false;
@@ -1569,8 +1534,6 @@
   });
 
   watch(organizeOwnerKey, async (ownerKey) => {
-    cancelUntaggedSearch();
-    untaggedComposing = false;
     stopHealthPolling();
     healthRequestGeneration += 1;
     healthSummary.value = null;
@@ -1593,8 +1556,6 @@
     () => [route.query.issue, route.query._rt, bookmark.isDesktop],
     async () => {
       if (!mounted) return;
-      cancelUntaggedSearch();
-      untaggedComposing = false;
       void scrollMobileNavigationToActive();
       if (activeView.value !== 'bookmark_health') stopHealthPolling();
       if (activeView.value !== 'untagged') {
@@ -1624,17 +1585,9 @@
     void Promise.all([organize.loadSummary({ silent: true }), loadActiveView(true)]);
   });
 
-  onBeforeRouteLeave(() => {
-    cancelUntaggedSearch();
-    untaggedComposing = false;
-  });
-  onDeactivated(() => {
-    cancelUntaggedSearch();
-    stopHealthPolling();
-  });
+  onDeactivated(stopHealthPolling);
 
   onBeforeUnmount(() => {
-    cancelUntaggedSearch();
     untaggedLoadGeneration += 1;
     stopHealthPolling();
     healthRequestGeneration += 1;
@@ -1868,7 +1821,7 @@
   .organize-filter-bar {
     flex: 0 0 auto;
     display: grid;
-    grid-template-columns: minmax(var(--ui-layout-220, 220px), 1fr) var(--ui-layout-150, 150px) auto;
+    grid-template-columns: minmax(var(--ui-layout-220, 220px), 1fr) var(--ui-layout-150, 150px) auto auto;
     gap: var(--ui-space-8, 8px);
     margin-bottom: var(--ui-space-10, 10px);
   }
@@ -1895,10 +1848,6 @@
 
   .organize-list-state__content {
     min-height: 100%;
-  }
-
-  .organize-issue-view--batch-active {
-    padding-bottom: var(--ui-space-96, 96px);
   }
 
   .organize-resource-row,
@@ -2549,16 +2498,12 @@
       min-height: 44px;
     }
 
-    .organize-filter-bar__search {
-      grid-column: 1 / -1;
+    .organize-filter-bar__submit {
+      grid-column: 1;
     }
 
     .organize-filter-bar__batch {
       grid-column: 2;
-    }
-
-    .organize-issue-view--batch-active {
-      padding-bottom: calc(132px + env(safe-area-inset-bottom));
     }
 
     .organize-health-scan {

@@ -15,6 +15,15 @@
         </div>
       </div>
 
+      <div class="account-field">
+        <div class="field-head">
+          <span class="field-label">{{ t('accountSettings.changeEmail') }}</span>
+          <span class="field-desc">{{ t('accountSettings.changeEmailDesc') }}</span>
+        </div>
+        <BButton size="small" :disabled="accountLoading || accountFailed || !!user.adminContext" @click="emailVisible = true">
+          {{ t('accountSettings.changeEmail') }}
+        </BButton>
+      </div>
       <!-- 修改密码 -->
       <div class="account-field">
         <div class="field-head">
@@ -80,6 +89,7 @@
       </div>
     </SettingsSectionCard>
     <AccountPasswordDialog v-model:visible="pwVisible" />
+    <AccountEmailDialog v-model:visible="emailVisible" />
 
     <BModal
       v-model:visible="deletionVisible"
@@ -181,10 +191,12 @@
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
   import { apiBaseGet, apiBasePost } from '@/http/request';
   import AccountPasswordDialog from './AccountPasswordDialog.vue';
+  import AccountEmailDialog from './AccountEmailDialog.vue';
   import { clearLoginHistory } from '@/utils/authStorage';
 
   const { t } = useI18n();
   const user = useUserStore();
+  const emailVisible = ref(false);
   let generation = 0;
   const accountFailed = ref(false);
   const accountLoading = ref(true);
@@ -496,6 +508,7 @@
       deleting.value = false;
       revokingId.value = null;
       pwVisible.value = false;
+      emailVisible.value = false;
       deletionVisible.value = false;
       resetDeletionFlow();
       void loadAccount();

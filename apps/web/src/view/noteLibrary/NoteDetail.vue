@@ -361,7 +361,7 @@
   import { useI18n } from 'vue-i18n';
   import { isNavigationFailure, onBeforeRouteLeave, onBeforeRouteUpdate, useRouter } from 'vue-router';
   import { trackSearchReturnNavigation } from '@/utils/searchReturnNavigation';
-  import { resolveUntaggedReturnPath, trackUntaggedResourceReturn } from '@/utils/untaggedResourceReturn';
+  import { resolveUntaggedReturnPath, trackUntaggedNoteReturn } from '@/utils/untaggedNoteReturn';
   import { cloneDeep } from 'lodash-es';
   import { apiBasePost } from '@/http/request.ts';
   import Catalog from '@/components/noteLibrary/detail/Catalog.vue';
@@ -475,7 +475,7 @@
   });
   const router = useRouter();
   trackSearchReturnNavigation(router);
-  trackUntaggedResourceReturn(router);
+  trackUntaggedNoteReturn(router);
   const bookmark = bookmarkStore();
   const { t, locale } = useI18n();
   const user = useUserStore();

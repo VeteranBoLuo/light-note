@@ -67,8 +67,8 @@ beforeEach(() => {
 
 afterEach(() => vi.unstubAllEnvs());
 
-describe('爱发电 v3 套餐结算意图', () => {
-  it('常驻套餐生成精确金额和一次性随机码，只在数据库保存摘要与不可变首充快照', async () => {
+describe('爱发电 v5 套餐结算意图', () => {
+  it('常驻套餐生成精确金额和一次性随机码，只在数据库保存摘要与不可变权益快照', async () => {
     const connection = connectionFor();
     const result = await createAfdianPackageCheckoutIntent({
       userId: 'user-1',
@@ -87,7 +87,7 @@ describe('爱发电 v3 套餐结算意图', () => {
     expect(url.searchParams.get('user_id')).toBe('creator-user');
     expect(url.searchParams.get('custom_price')).toBe('10.00');
     expect(token).toMatch(/^[A-Za-z0-9_-]{32,128}$/);
-    expect(result).toMatchObject({ expiresIn: 30 * 24 * 60 * 60, firstPurchaseCandidate: true });
+    expect(result).toMatchObject({ expiresIn: 30 * 24 * 60 * 60, firstPurchaseCandidate: false });
     const insert = connection.query.mock.calls.find(([sql]) =>
       String(sql).includes('INSERT INTO support_checkout_intents'),
     );
@@ -99,15 +99,46 @@ describe('爱发电 v3 套餐结算意图', () => {
         'combo-10',
         SUPPORT_PACKAGE_CATALOG_VERSION,
         '10.00',
-        600_000,
-        128,
-        720_000,
-        128,
-        1,
+        300_000,
+        256,
+        300_000,
+        256,
+        0,
       ]),
     );
     expect(connection.commit).toHaveBeenCalledOnce();
     expect(connection.rollback).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [6, 256],
+    [18, 768],
+    [50, 2_048],
+    [100, 4_096],
+  ])('空间 ¥%i 每次固定快照 %i MB，不核验或占用首购', async (amount, storageMb) => {
+    for (const firstPurchaseUsed of [false, true]) {
+      const connection = connectionFor({ firstPurchaseUsed });
+      const result = await createAfdianPackageCheckoutIntent({
+        userId: 'user-1',
+        skuId: `storage-${amount}`,
+        catalogVersion: SUPPORT_PACKAGE_CATALOG_VERSION,
+        db: { getConnection: vi.fn().mockResolvedValue(connection) },
+        env: {
+          SUPPORT_PACKAGES_CATALOG_ENABLED: 'true',
+          SUPPORT_PACKAGES_CHECKOUT_ENABLED: 'true',
+          SUPPORT_PACKAGES_GRANT_ENABLED: 'true',
+        },
+      });
+      expect(new URL(result.url).searchParams.get('custom_price')).toBe(amount.toFixed(2));
+      expect(result.firstPurchaseCandidate).toBe(false);
+      const insert = connection.query.mock.calls.find(([sql]) =>
+        String(sql).includes('INSERT INTO support_checkout_intents'),
+      );
+      expect(insert?.[1]?.slice(7, 12)).toEqual([0, storageMb, 0, storageMb, 0]);
+      expect(connection.query.mock.calls.some(([sql]) => String(sql).includes('support_first_purchase_claims'))).toBe(
+        false,
+      );
+    }
   });
 
   it('活动期内生成独立 24 小时意图，直接快照最终权益且不携带首充倍率', async () => {
@@ -153,25 +184,40 @@ describe('爱发电 v3 套餐结算意图', () => {
     ).toBe(true);
   });
 
-  it('任一历史 AI 或组合首购已用时，其他含 AI 档位只快照基础权益', async () => {
-    const connection = connectionFor({ firstPurchaseUsed: true });
-    const result = await createAfdianPackageCheckoutIntent({
-      userId: 'user-1',
-      skuId: 'ai-6',
-      catalogVersion: SUPPORT_PACKAGE_CATALOG_VERSION,
-      db: { getConnection: vi.fn().mockResolvedValue(connection) },
-      env: {
-        SUPPORT_PACKAGES_CATALOG_ENABLED: 'true',
-        SUPPORT_PACKAGES_CHECKOUT_ENABLED: 'true',
-        SUPPORT_PACKAGES_GRANT_ENABLED: 'true',
-      },
-    });
+  it.each([
+    ['ai-6', 6, 300_000, 0],
+    ['ai-18', 18, 900_000, 0],
+    ['ai-50', 50, 2_500_000, 0],
+    ['ai-100', 100, 5_000_000, 0],
+    ['combo-10', 10, 300_000, 256],
+    ['combo-30', 30, 900_000, 768],
+    ['combo-88', 88, 2_500_000, 2_048],
+    ['combo-168', 168, 5_000_000, 4_096],
+  ])('%s 价格不变，固定 AI 与组合权益不受历史首购影响', async (skuId, amount, aiTokens, storageMb) => {
+    for (const firstPurchaseUsed of [false, true]) {
+      const connection = connectionFor({ firstPurchaseUsed });
+      const result = await createAfdianPackageCheckoutIntent({
+        userId: 'user-1',
+        skuId,
+        catalogVersion: SUPPORT_PACKAGE_CATALOG_VERSION,
+        db: { getConnection: vi.fn().mockResolvedValue(connection) },
+        env: {
+          SUPPORT_PACKAGES_CATALOG_ENABLED: 'true',
+          SUPPORT_PACKAGES_CHECKOUT_ENABLED: 'true',
+          SUPPORT_PACKAGES_GRANT_ENABLED: 'true',
+        },
+      });
 
-    expect(result.firstPurchaseCandidate).toBe(false);
-    const insert = connection.query.mock.calls.find(([sql]) =>
-      String(sql).includes('INSERT INTO support_checkout_intents'),
-    );
-    expect(insert?.[1]?.slice(7, 12)).toEqual([600_000, 0, 600_000, 0, 0]);
+      expect(result.firstPurchaseCandidate).toBe(false);
+      const insert = connection.query.mock.calls.find(([sql]) =>
+        String(sql).includes('INSERT INTO support_checkout_intents'),
+      );
+      expect(new URL(result.url).searchParams.get('custom_price')).toBe(amount.toFixed(2));
+      expect(insert?.[1]?.slice(7, 12)).toEqual([aiTokens, storageMb, aiTokens, storageMb, 0]);
+      expect(connection.query.mock.calls.some(([sql]) => String(sql).includes('support_first_purchase_claims'))).toBe(
+        false,
+      );
+    }
   });
 
   it('结算目录关闭时在取数据库连接前失败关闭', async () => {

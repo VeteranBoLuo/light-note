@@ -45,7 +45,7 @@ describe('权益商店开发环境只读目录', () => {
     const preview = createLocalSupportCatalogPreview();
 
     expect(preview).toMatchObject({
-      catalogVersion: 'support-packages-v3',
+      catalogVersion: 'support-packages-v5',
       catalogEnabled: true,
       checkoutEnabled: false,
       grantEnabled: false,
@@ -53,16 +53,50 @@ describe('权益商店开发环境只读目录', () => {
       previewMode: true,
     });
     expect(preview.packages).toHaveLength(12);
+    for (const category of ['ai', 'combo']) {
+      expect(
+        preview.packages
+          .filter((item) => item.category === category)
+          .map(({ amount, base, firstPurchase }) => ({ amount, base: base.aiTokens, first: firstPurchase.aiTokens })),
+      ).toEqual([
+        { amount: category === 'ai' ? 6 : 10, base: 300_000, first: 300_000 },
+        { amount: category === 'ai' ? 18 : 30, base: 900_000, first: 900_000 },
+        { amount: category === 'ai' ? 50 : 88, base: 2_500_000, first: 2_500_000 },
+        { amount: category === 'ai' ? 100 : 168, base: 5_000_000, first: 5_000_000 },
+      ]);
+    }
     expect(
       preview.packages
         .filter((item) => item.category === 'storage')
         .map(({ amount, base, firstPurchase }) => ({ amount, base: base.storageMb, first: firstPurchase.storageMb })),
     ).toEqual([
-      { amount: 6, base: 128, first: 160 },
-      { amount: 18, base: 512, first: 640 },
-      { amount: 50, base: 1_536, first: 2_048 },
-      { amount: 100, base: 3_072, first: 4_096 },
+      { amount: 6, base: 256, first: 256 },
+      { amount: 18, base: 768, first: 768 },
+      { amount: 50, base: 2_048, first: 2_048 },
+      { amount: 100, base: 4_096, first: 4_096 },
     ]);
+    expect(
+      preview.packages.every(
+        (item) => item.firstPurchaseScope === 'none' && item.firstPurchaseStatus === 'not_applicable',
+      ),
+    ).toBe(true);
+  });
+
+  it('本地旧版本后端目录不开放结算，回退为新版固定权益预览', async () => {
+    mocks.apiBaseGet.mockResolvedValueOnce({
+      status: 200,
+      data: { catalogVersion: 'support-packages-v4', catalogEnabled: true, checkoutEnabled: true },
+    });
+    const catalog = await getSupportCatalog({ allowLocalPreview: true });
+    expect(catalog).toMatchObject({
+      catalogVersion: 'support-packages-v5',
+      previewMode: true,
+      checkoutEnabled: false,
+    });
+    expect(catalog.packages.find((item) => item.skuId === 'storage-6')).toMatchObject({
+      base: { storageMb: 256 },
+      firstPurchaseStatus: 'not_applicable',
+    });
   });
 
   it('本地后端目录缺失或关闭时回退只读预览，不把结算误开放', async () => {
@@ -75,7 +109,7 @@ describe('权益商店开发环境只读目录', () => {
     mocks.apiBaseGet.mockResolvedValueOnce({
       status: 200,
       data: {
-        catalogVersion: 'support-packages-v3',
+        catalogVersion: 'support-packages-v5',
         catalogEnabled: false,
         checkoutEnabled: false,
         grantEnabled: false,
@@ -98,7 +132,7 @@ describe('权益商店开发环境只读目录', () => {
     mocks.apiBaseGet.mockResolvedValueOnce({
       status: 200,
       data: {
-        catalogVersion: 'support-packages-v3',
+        catalogVersion: 'support-packages-v5',
         catalogEnabled: false,
         checkoutEnabled: false,
         grantEnabled: false,

@@ -2,6 +2,7 @@ import pool from '../db/index.js';
 import { insertData } from './common.js';
 import nodeMail, { smtpUser } from './nodemailer.js';
 import { redactSensitiveText } from './agent/logSafety.js';
+import { mailboxNotFoundError } from './services/accountEmailPolicy.js';
 
 const DEFAULT_PROVIDER = 'qq_smtp';
 const DEFAULT_FROM = `"轻笺"<${smtpUser}>`;
@@ -9,6 +10,7 @@ const CLEANUP_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_RETENTION_DAYS = 180;
 
 function stableEmailErrorCode(error) {
+  if (mailboxNotFoundError(error)) return 'EMAIL_MAILBOX_NOT_FOUND';
   const directCode = String(error?.code || '')
     .trim()
     .toUpperCase();
