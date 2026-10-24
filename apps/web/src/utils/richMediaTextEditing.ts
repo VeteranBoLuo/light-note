@@ -1,10 +1,10 @@
 import type { Editor } from 'tinymce';
 import { liftRichMediaTextOutOfLists, restoreRichMediaTextBlockTags } from './richMediaText';
 
-/** 图文保持独立块；点击右侧外沿时直接在块下方进入普通段落。 */
+/** 图文保持独立块；文字区的列表继续使用原生编辑行为。 */
 export function bindRichMediaTextEditing(
   editor: Editor,
-  options: { isReadonly: () => boolean; onMutation: () => void; onParagraphFocus: () => void },
+  options: { isReadonly: () => boolean; onMutation: () => void },
 ) {
   editor.on('PreInit', () => {
     // 提示和选中标记只属于展示层；原生临时属性机制也会将它们排除出撤销快照比较。
@@ -16,56 +16,6 @@ export function bindRichMediaTextEditing(
     ].forEach((attribute) => editor.serializer.addTempAttr(attribute));
   });
   let applyingList = false;
-  const createParagraph = () => {
-    const paragraph = editor.getDoc().createElement('p');
-    paragraph.append(editor.dom.create('br', { 'data-mce-bogus': '1' }));
-    return paragraph;
-  };
-  const focus = (node: HTMLElement) => {
-    editor.selection.setCursorLocation(node, 0);
-    editor.selection.scrollIntoView(node);
-    editor.nodeChanged();
-  };
-  const onClick = (event: MouseEvent) => {
-    if (options.isReadonly() || event.button !== 0 || event.shiftKey || event.ctrlKey || event.metaKey || event.altKey)
-      return;
-    const body = editor.getBody();
-    const target = event.target as Element | null;
-    if (target?.closest?.('section.ln-media-text')) return;
-    const edge = body.getBoundingClientRect().right;
-    const gutter = Number.parseFloat(editor.dom.getStyle(body, 'padding-right', true)) || 0;
-    const scope = target && body.contains(target) ? target : body;
-    // 图文右侧到正文外沿之间的留白属于块后落点，文字区和图片自身继续使用原交互。
-    const block = Array.from(scope.querySelectorAll<HTMLElement>('section.ln-media-text')).find((candidate) => {
-      const rectangle = candidate.getBoundingClientRect();
-      const cell = candidate.closest('td,th');
-      if (cell !== (target?.closest?.('td,th') || null)) return false;
-      const rightEdge = cell ? Math.min(edge, cell.getBoundingClientRect().right) : edge;
-      return (
-        event.clientX >= rectangle.right &&
-        event.clientX <= Math.min(rightEdge, rectangle.right + gutter) &&
-        event.clientY >= rectangle.top &&
-        event.clientY <= rectangle.bottom
-      );
-    });
-    if (!block) return;
-    event.preventDefault();
-    event.stopImmediatePropagation();
-    options.onParagraphFocus();
-    editor.focus();
-    const next = block.nextElementSibling as HTMLElement | null;
-    if (next?.matches('p') && editor.dom.isEmpty(next)) {
-      focus(next);
-      return;
-    }
-    editor.undoManager.transact(() => {
-      const paragraph = createParagraph();
-      block.after(paragraph);
-      focus(paragraph);
-    });
-    options.onMutation();
-  };
-
   const normalizeLists = () => {
     const body = editor.getBody();
     if (!body || options.isReadonly()) return;
@@ -126,8 +76,6 @@ export function bindRichMediaTextEditing(
       options.onMutation();
     }
   };
-  // 在原生 mouseup 选区处理之后落到真实段落，仅处理一次 click，避免重复换行。
-  editor.on('click', onClick, true);
   editor.on('BeforeExecCommand', onBeforeCommand, true);
   editor.on('SetContent ExecCommand', normalizeLists);
 }
