@@ -126,6 +126,8 @@ export function liftRichMediaTextOutOfLists(block: HTMLElement, boundary?: HTMLE
   let outerList: HTMLElement | null = null;
   const ordinals = new WeakMap<Element, number>();
   for (let ancestor = block.parentElement; ancestor && ancestor !== boundary; ancestor = ancestor.parentElement) {
+    // 单元格是内容边界；不能为移出外层列表而拆开表格或移动相邻单元格。
+    if (ancestor.matches('td,th')) break;
     if (!ancestor.matches('ul,ol')) continue;
     outerList = ancestor;
     if (ancestor.tagName !== 'OL') continue;

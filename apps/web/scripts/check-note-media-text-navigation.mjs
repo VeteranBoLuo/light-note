@@ -104,7 +104,11 @@ try {
         await page.keyboard.press(key);
         assert.equal((await inspect()).html, state.html, 'Repeated arrows must not add blank paragraphs');
         await page.getByRole('button', { name: '撤销', exact: true }).click();
-        assert.equal((await inspect()).html, original, 'Undo restores the original document');
+        assert.equal(
+          (await inspect()).html,
+          original,
+          `${id}/${item.name}/${key}: Undo restores the original document`,
+        );
         if (profile.mobile) {
           await page.getByRole('button', { name: '更多格式', exact: true }).click();
           await page.getByText('重做', { exact: true }).click();
@@ -112,7 +116,13 @@ try {
         } else {
           await page.getByRole('button', { name: '重做', exact: true }).click();
         }
-        await page.locator('.note-editor-body section.ln-media-text + p').waitFor({ state: 'visible' });
+        await page
+          .locator('.note-editor-body section.ln-media-text + p')
+          .waitFor({ state: 'visible' })
+          .catch(async (error) => {
+            console.error(`${id}/${item.name}/${key}: redo state`, await inspect());
+            throw error;
+          });
         assert.equal((await inspect()).afterBlock, true, 'Redo restores the caret');
         await page.keyboard.type('Continue below');
         const saved = (await inspect()).html;
@@ -349,6 +359,76 @@ try {
     );
     assert.equal(await page.locator('.note-editor-body section').count(), 1);
     checked++;
+
+    const tableHtml = `<ol start="3"><li>表格前<table style="width:100%"><tbody><tr><td style="width:50%;padding:12px"><ul><li>单元格前${block('<p>单元格图注</p>')}单元格后</li><li>单元格后项</li></ul></td><td style="width:50%;padding:12px"><p>相邻文字</p></td></tr></tbody></table>表格后</li><li>下一项</li></ol>`;
+    const tableOriginal = await prepare(tableHtml);
+    assert.equal(
+      await page.locator('.note-editor-body table').count(),
+      1,
+      'Loading a nested media block keeps the table intact',
+    );
+    assert.equal(await page.locator('.note-editor-body td').count(), 2);
+    assert.equal(await page.locator('.note-editor-body td:first-child > section').count(), 1);
+    const neighbor = page.locator('.note-editor-body td:last-child p');
+    await neighbor.click();
+    assert.equal(
+      await page.locator('[data-ln-media-after-caret]').count(),
+      0,
+      'Clicking the neighboring cell must not select the block',
+    );
+    assert.equal(
+      await page.evaluate(
+        () =>
+          window.tinymce.activeEditor.selection.getNode().closest('td') ===
+          window.tinymce.activeEditor.getBody().querySelector('td:last-child'),
+      ),
+      true,
+    );
+    await page.keyboard.press('End');
+    await page.keyboard.press('Backspace');
+    assert.equal(await neighbor.textContent(), '相邻文');
+    assert.equal(
+      await page.locator('.note-editor-body section').count(),
+      1,
+      'Editing the neighboring cell must not delete media',
+    );
+    checked++;
+
+    await prepare(tableHtml);
+    await clickBoundary();
+    await page.keyboard.press('Backspace');
+    assert.equal(await page.locator('.note-editor-body section').count(), 0);
+    assert.equal(await page.locator('.note-editor-body table').count(), 1);
+    assert.equal(await page.locator('.note-editor-body td').count(), 2);
+    assert.equal(await neighbor.textContent(), '相邻文字');
+    assert.equal(await page.locator('.note-editor-body td:first-child').textContent(), '单元格前单元格后单元格后项');
+    await page.evaluate(() => window.tinymce.activeEditor.undoManager.undo());
+    assert.equal((await inspect()).html, tableOriginal, 'Undo restores the exact table contents');
+    checked++;
+
+    for (const command of ['Bold', 'Italic', 'ForeColor']) {
+      await prepare(block('<p>原图注</p>') + '<p>原后文</p>');
+      await clickBoundary();
+      await page.evaluate(
+        (command) =>
+          window.tinymce.activeEditor.execCommand(command, false, command === 'ForeColor' ? '#ff0000' : undefined),
+        command,
+      );
+      await page.keyboard.type('新增文字');
+      assert.equal(await page.locator('figcaption').textContent(), '原图注');
+      assert.equal(await page.locator('.note-editor-body > p').last().textContent(), '原后文');
+      const format = command === 'Bold' ? 'strong' : command === 'Italic' ? 'em' : 'span[style]';
+      const savedText = await page.evaluate((format) => {
+        const doc = new DOMParser().parseFromString(window.tinymce.activeEditor.getContent(), 'text/html');
+        return {
+          paragraph: doc.querySelector('section + p').textContent,
+          formatted: doc.querySelector(`section + p ${format}`).textContent,
+        };
+      }, format);
+      assert.equal(savedText.paragraph, '新增文字', 'Saved text has no temporary formatting caret characters');
+      assert.equal(savedText.formatted, '新增文字');
+      checked++;
+    }
     console.log(`PASS ${id}`);
     await page.close();
   }
