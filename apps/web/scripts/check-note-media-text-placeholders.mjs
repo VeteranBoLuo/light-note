@@ -35,7 +35,7 @@ let png;
 const names = (profile) =>
   profile.locale === 'en-US'
     ? { add: /Add image/, remove: 'Delete image', undo: 'Undo', retry: /Add image again/ }
-    : { add: /点击添加图片/, remove: '删除图片', undo: '撤销', retry: /重新添加图片/ };
+    : { add: /添加图片/, remove: '删除图片', undo: '撤销', retry: /重新添加/ };
 async function open(profile, extra = '') {
   const page = await browser.newPage({
     viewport: { width: profile.width, height: 900 },
@@ -44,6 +44,8 @@ async function open(profile, extra = '') {
     permissions: ['clipboard-read', 'clipboard-write'],
   });
   page.on('pageerror', (error) => errors.push(error.message));
+  page.pickerCount = 0;
+  page.on('filechooser', () => page.pickerCount++);
   page.setDefaultTimeout(15000);
   const url = new URL('/e2e/note-image-tools.html', origin);
   for (const key of ['theme', 'density', 'locale']) url.searchParams.set(key, profile[key]);
@@ -119,6 +121,9 @@ try {
     const name = names(profile);
     const id = `${profile.width}-${profile.theme}-${profile.density}-${profile.locale}`;
     const add = page.getByRole('button', { name: name.add }).first();
+    const pasteArea = page
+      .getByRole('textbox', { name: profile.locale === 'en-US' ? 'Paste image here' : '在此粘贴图片' })
+      .first();
     const before = await prepare(page);
     const originalCaption = await captionHtml(page);
     assert(!before.includes('data-ln-media-image-placeholder'));
@@ -126,10 +131,25 @@ try {
     assert.equal(await page.evaluate(() => window.tinymce.activeEditor.isDirty()), false);
     const bounds = await add.boundingBox();
     assert(bounds.width > 0 && bounds.x >= 0 && bounds.x + bounds.width <= profile.width);
-    await add.focus();
+    await pasteArea.click();
+    assert.equal(page.pickerCount, 0, 'Clicking the paste area must not open a file picker');
+    assert(await pasteArea.evaluate((element) => document.activeElement === element && element.isContentEditable));
+    await pasteArea.click({ button: 'right' });
+    await page.keyboard.press('Escape');
+    assert.equal(page.pickerCount, 0);
+    await pasteArea.press('Enter');
+    await page.keyboard.type('不应变成笔记文字');
+    assert.equal(await pasteArea.textContent(), '');
+    assert.equal(await page.evaluate(() => window.tinymce.activeEditor.getContent()), before);
+    assert.equal(await page.evaluate(() => window.tinymce.activeEditor.isDirty()), false);
     for (const key of ['Backspace', 'Delete', 'ArrowRight', 'ArrowDown']) {
-      await add.press(key);
+      await pasteArea.press(key);
       assert.equal(await page.evaluate(() => window.tinymce.activeEditor.getContent()), before);
+      assert(
+        await pasteArea.evaluate(
+          (element) => document.activeElement === element && element.contains(window.getSelection().anchorNode),
+        ),
+      );
     }
     await page.screenshot({ path: join(output, `empty-${id}.png`), caret: 'initial' });
     checked++;
@@ -157,8 +177,8 @@ try {
     await add.waitFor();
     checked++;
 
-    await add.focus();
-    await paste(page, add);
+    await pasteArea.click();
+    await paste(page, pasteArea);
     await page.locator('section img').waitFor();
     assert.equal(await captionHtml(page), originalCaption);
     await undo(page, profile);
@@ -172,7 +192,7 @@ try {
     await page.keyboard.type('右侧新增');
     assert((await captionHtml(page)).includes('右侧新增'));
     const typed = await page.evaluate(() => window.tinymce.activeEditor.getContent());
-    await add.evaluate((element) => {
+    await pasteArea.evaluate((element) => {
       const data = new DataTransfer();
       data.setData('text/plain', '不应写入图片位');
       element.dispatchEvent(new ClipboardEvent('paste', { bubbles: true, cancelable: true, clipboardData: data }));
@@ -232,7 +252,8 @@ try {
       page,
       '<table><tbody><tr><td>' + fixture + '</td><td><p>相邻单元格保留</p></td></tr></tbody></table>',
     );
-    await choose(page, add);
+    await pasteArea.click();
+    await paste(page, pasteArea);
     await page.locator('section img').waitFor();
     assert.equal(await page.locator('table').count(), 1);
     assert.equal(await page.locator('td').count(), 2);
@@ -293,7 +314,7 @@ try {
     const bytes = Uint8Array.from(atob(png), (ch) => ch.charCodeAt(0));
     await navigator.clipboard.write([new ClipboardItem({ 'image/png': new Blob([bytes], { type: 'image/png' }) })]);
   }, png);
-  await native.getByRole('button', { name: /点击添加图片/ }).focus();
+  await native.getByRole('textbox', { name: '在此粘贴图片' }).click();
   await native.keyboard.press(process.platform === 'darwin' ? 'Meta+V' : 'Control+V');
   await native.locator('section img').waitFor();
   assert.equal(await captionHtml(native), nativeCaption);
@@ -312,13 +333,13 @@ try {
     ),
   );
   await prepare(native);
-  await native.getByRole('button', { name: /点击添加图片/ }).focus();
+  await native.getByRole('textbox', { name: '在此粘贴图片' }).click();
   await native.keyboard.press(process.platform === 'darwin' ? 'Meta+V' : 'Control+V');
   await native.locator('section img').waitFor();
   assert.equal(await native.locator('section img').getAttribute('src'), copiedSource);
   assert.equal(await captionHtml(native), nativeCaption);
   await undo(native, profiles[1]);
-  await native.getByRole('button', { name: /点击添加图片/ }).waitFor();
+  await native.getByRole('button', { name: /添加图片/ }).waitFor();
   checked++;
   await native.evaluate(async () =>
     navigator.clipboard.write([
@@ -329,7 +350,7 @@ try {
       }),
     ]),
   );
-  await native.getByRole('button', { name: /点击添加图片/ }).focus();
+  await native.getByRole('textbox', { name: '在此粘贴图片' }).click();
   await native.keyboard.press(process.platform === 'darwin' ? 'Meta+V' : 'Control+V');
   await native.locator('section img').waitFor();
   assert.equal(await native.locator('section img').getAttribute('alt'), '复制的图片');
@@ -337,7 +358,7 @@ try {
   assert(!(await native.evaluate(() => window.tinymce.activeEditor.getContent())).includes('不替换原文'));
   checked++;
   const unsafeBefore = await prepare(native);
-  await native.getByRole('button', { name: /点击添加图片/ }).evaluate((element) => {
+  await native.getByRole('textbox', { name: '在此粘贴图片' }).evaluate((element) => {
     const data = new DataTransfer();
     data.setData('text/html', '<img src="javascript:alert(1)" onerror="alert(2)">');
     element.dispatchEvent(new ClipboardEvent('paste', { bubbles: true, cancelable: true, clipboardData: data }));
@@ -349,7 +370,8 @@ try {
 
   const readonly = await open(profiles[0], 'readonly');
   await prepare(readonly);
-  assert.equal(await readonly.getByRole('button', { name: /点击添加图片/ }).count(), 0);
+  assert.equal(await readonly.getByRole('button', { name: /添加图片/ }).count(), 0);
+  assert.equal(await readonly.getByRole('textbox', { name: '在此粘贴图片' }).count(), 0);
   assert.equal(await readonly.locator('[data-ln-media-image-placeholder]').textContent(), '暂无图片');
   const readHtml = await readonly.evaluate(() => window.tinymce.activeEditor.getContent());
   assert(!readHtml.includes('暂无图片'));

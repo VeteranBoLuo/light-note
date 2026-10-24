@@ -2,12 +2,13 @@
   <Teleport v-for="slot in slots" :key="slot.key" :to="slot.media">
     <div
       class="rich-media-image-slot"
-      :class="{ 'is-error': failedItem === slot.item }"
+      :class="{ 'is-error': failedItem === slot.item, 'is-readonly': readonly }"
       data-ln-media-image-placeholder="true"
       data-mce-bogus="all"
       contenteditable="false"
       @mousedown.stop="focusPlaceholder"
-      @click.stop
+      @click.stop="focusPasteArea"
+      @contextmenu.stop="focusPasteArea"
       @keydown.stop
       @keyup.stop
       @paste="pasteImage($event, slot)"
@@ -16,26 +17,46 @@
         t('noteDetail.editor.mediaTextImageEmpty')
       }}</span>
       <template v-else>
+        <div class="rich-media-image-slot__surface">
+          <div
+            class="rich-media-image-slot__paste"
+            contenteditable="true"
+            role="textbox"
+            tabindex="0"
+            :aria-label="t('noteDetail.editor.mediaTextImagePaste')"
+            :aria-disabled="busy || undefined"
+            :aria-busy="busyItem === slot.item || undefined"
+            spellcheck="false"
+            @keydown="keepPasteAreaFocus"
+            @beforeinput.stop.prevent
+            @input.stop="clearPasteInput"
+            @drop.stop.prevent
+          ></div>
+          <div class="rich-media-image-slot__prompt" aria-hidden="true">
+            <SvgIcon :src="icon.noteDetail.toolbar.image" size="22" />
+            <span>{{
+              busyItem === slot.item
+                ? t('noteDetail.editor.mediaTextImageUploading')
+                : t('noteDetail.editor.mediaTextImagePaste')
+            }}</span>
+          </div>
+        </div>
         <BButton
           class="rich-media-image-slot__button"
+          size="small"
           :loading="busyItem === slot.item"
           :disabled="busy && busyItem !== slot.item"
           @click="emit('pick', slot.block, slot.item)"
         >
-          <SvgIcon :src="icon.noteDetail.toolbar.image" size="22" aria-hidden="true" />
           <span>{{
-            busyItem === slot.item
-              ? t('noteDetail.editor.mediaTextImageUploading')
-              : failedItem === slot.item
-                ? t('noteDetail.editor.mediaTextImageRetry')
-                : t('noteDetail.editor.mediaTextImageAdd')
-          }}</span>
-          <span class="rich-media-image-slot__hint">{{
             failedItem === slot.item
-              ? t('noteDetail.editor.mediaTextImageFailed')
-              : t('noteDetail.editor.mediaTextImagePaste')
+              ? t('noteDetail.editor.mediaTextImageRetry')
+              : t('noteDetail.editor.mediaTextImageAdd')
           }}</span>
         </BButton>
+        <span v-if="failedItem === slot.item" class="rich-media-image-slot__hint" role="status">{{
+          t('noteDetail.editor.mediaTextImageFailed')
+        }}</span>
         <BProgress
           v-if="busyItem === slot.item && progress !== null"
           :percent="progress"
@@ -78,9 +99,27 @@
 
   function focusPlaceholder(event: MouseEvent) {
     if (props.readonly) return;
-    // 保留按钮键盘焦点供粘贴使用，避免浏览器同时在不可编辑入口旁放置正文光标。
-    event.preventDefault();
-    (event.target as Element)?.closest('button')?.focus();
+    const button = (event.target as Element)?.closest('button');
+    if (button) {
+      event.preventDefault();
+      button.focus();
+    }
+  }
+
+  function focusPasteArea(event: MouseEvent) {
+    if (props.readonly || (event.target as Element)?.closest('button')) return;
+    (event.currentTarget as HTMLElement).querySelector<HTMLElement>('.rich-media-image-slot__paste')?.focus();
+  }
+
+  function clearPasteInput(event: Event) {
+    // 这里只接收粘贴事件；IME 等绕过 beforeinput 的临时文字也不能变成笔记内容。
+    (event.currentTarget as HTMLElement).replaceChildren();
+  }
+
+  function keepPasteAreaFocus(event: KeyboardEvent) {
+    // 嵌套编辑区的原生方向键会越过空区域进入图注；粘贴位不承担正文导航或文字编辑。
+    if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Backspace', 'Delete', 'Enter'].includes(event.key))
+      event.preventDefault();
   }
 
   function pasteImage(event: ClipboardEvent, slot: Slot) {
@@ -172,19 +211,53 @@
     min-width: 0;
     display: grid;
     gap: var(--ui-space-6, 6px);
+    box-sizing: border-box;
+    padding: var(--ui-space-6, 6px);
+    border: 1px dashed var(--surface-border-color);
+    border-radius: 6px;
     color: var(--desc-color);
-    caret-color: transparent;
+    &:focus-within {
+      border-color: var(--primary-color);
+      border-style: solid;
+    }
+    &.is-readonly {
+      border: none;
+    }
+  }
+  .rich-media-image-slot__surface {
+    position: relative;
+    min-height: var(--ui-layout-64, 64px);
+    display: grid;
+  }
+  .rich-media-image-slot__paste {
+    position: absolute;
+    inset: 0;
+    padding: var(--ui-space-6, 6px);
+    // TinyMCE 默认给嵌套编辑区常驻描边；这里由外层 focus-within 显示真实焦点。
+    outline: none !important;
+    cursor: text;
+    caret-color: var(--text-color);
+    font-size: var(--ui-font-13, 13px);
+  }
+  .rich-media-image-slot__prompt {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--ui-space-6, 6px);
+    padding: var(--ui-space-6, 6px);
+    pointer-events: none;
+    text-align: center;
+    overflow-wrap: anywhere;
+    font-size: var(--ui-font-13, 13px);
+    line-height: 1.4;
   }
   .rich-media-image-slot__button {
     width: 100%;
     min-width: 0;
     height: auto;
-    min-height: var(--ui-layout-116, 116px);
-    padding: var(--ui-space-10, 10px);
-    display: flex;
-    flex-direction: column;
-    gap: var(--ui-space-6, 6px);
-    border-style: dashed;
+    min-height: var(--ui-control-24, 24px);
+    padding: var(--ui-space-6, 6px);
     white-space: normal;
     overflow-wrap: anywhere;
     font-size: var(--ui-font-13, 13px);
@@ -192,13 +265,11 @@
   }
   .rich-media-image-slot__hint {
     font-size: var(--ui-font-12, 12px);
-    color: var(--desc-color);
-  }
-  .is-error .rich-media-image-slot__button {
-    border-color: var(--danger-color);
-  }
-  .is-error .rich-media-image-slot__hint {
+    text-align: center;
     color: var(--danger-color);
+  }
+  .rich-media-image-slot.is-error {
+    border-color: var(--danger-color);
   }
   .rich-media-image-slot__readonly {
     padding: var(--ui-space-10, 10px);
