@@ -1,0 +1,3341 @@
+/* ===== v19：游戏化布局与动效（覆盖 v17 场景样式） ===== */
+:root {
+  --hud-bg: #fbffeee0;
+  --hud-line: #ffffffcc;
+  --hud-ink: #24452f;
+  --hud-ink-2: #5a7660;
+  --hud-track: #dfe9c8;
+  --res-bg: #ffffff8c;
+  --dock-bg: #fbffeed6;
+  --bubble-bg: #fffff5f5;
+  --hud-shadow: 0 6px 18px #1f3d2a1f;
+}
+:root[data-theme="dark"] {
+  --hud-bg: #1b302ae6;
+  --hud-line: #b7d69e3d;
+  --hud-ink: #e3eed6;
+  --hud-ink-2: #a9c19f;
+  --hud-track: #2f483b;
+  --res-bg: #ffffff0f;
+  --dock-bg: #172a24e0;
+  --bubble-bg: #22392ff5;
+  --hud-shadow: 0 6px 18px #0006;
+}
+
+/* 游戏界面禁止选中文字、拖拽图片；输入框除外 */
+#shell,
+.modal-backdrop,
+.toast,
+.fx-layer,
+.catch-reveal {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+#shell input,
+#shell textarea,
+.dialog input,
+.dialog textarea {
+  -webkit-user-select: text;
+  user-select: text;
+}
+#shell img,
+.dialog img {
+  -webkit-user-drag: none;
+  pointer-events: none;
+}
+#shell button,
+.dialog button {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* ---------- 顶部 HUD ---------- */
+.game-hud {
+  position: absolute;
+  z-index: 14;
+  top: calc(14px * var(--d));
+  left: calc(16px * var(--d));
+  right: calc(16px * var(--d));
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  pointer-events: none;
+}
+.game-hud > * {
+  pointer-events: auto;
+}
+.hud-identity {
+  display: grid;
+  gap: calc(6px * var(--d));
+  padding: calc(10px * var(--d)) calc(14px * var(--d)) calc(12px * var(--d));
+  border-radius: 18px;
+  background: var(--hud-bg);
+  border: 1px solid var(--hud-line);
+  box-shadow: var(--hud-shadow);
+  backdrop-filter: blur(12px) saturate(1.2);
+}
+.hud-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: "Songti SC", "STSong", serif;
+  font-size: calc(24px * var(--d));
+  font-weight: 700;
+  color: var(--hud-ink);
+  line-height: 1.15;
+}
+.hud-icon {
+  width: calc(26px * var(--d));
+  height: calc(26px * var(--d));
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--hud-ink-2);
+  font-size: calc(15px * var(--d));
+}
+.hud-icon:hover {
+  background: var(--res-bg);
+}
+.hud-stage {
+  display: grid;
+  gap: calc(5px * var(--d));
+  padding: 0;
+  border: 0;
+  background: none;
+  text-align: left;
+  color: var(--hud-ink-2);
+  font-size: var(--small);
+  cursor: pointer;
+}
+.hud-stage-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  color: var(--hud-ink);
+}
+.hud-growth {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.hud-growth-bar {
+  position: relative;
+  width: calc(132px * var(--d));
+  height: 8px;
+  border-radius: 6px;
+  background: var(--hud-track);
+  overflow: hidden;
+  box-shadow: inset 0 1px 2px #0002;
+}
+.hud-growth-bar i {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #6fb352, #c4df73);
+  transition: width 1s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.hud-growth-bar i.flowing::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, #fffbe0cc, transparent);
+  animation: sheen 1s ease-out;
+}
+@keyframes sheen {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(100%);
+  }
+}
+.hud-growth-num {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.hud-growth-num b {
+  color: var(--hud-ink);
+}
+.hud-right {
+  display: grid;
+  justify-items: end;
+  gap: calc(8px * var(--d));
+}
+.hud-resources {
+  display: flex;
+  gap: calc(6px * var(--d));
+  padding: calc(5px * var(--d));
+  border-radius: 16px;
+  background: var(--hud-bg);
+  border: 1px solid var(--hud-line);
+  box-shadow: var(--hud-shadow);
+  backdrop-filter: blur(12px) saturate(1.2);
+}
+.res-pill {
+  display: flex;
+  align-items: center;
+  gap: calc(6px * var(--d));
+  height: calc(38px * var(--d));
+  padding: 0 calc(12px * var(--d)) 0 calc(4px * var(--d));
+  border: 0;
+  border-radius: 12px;
+  background: var(--res-bg);
+  color: var(--hud-ink);
+  transition: background 0.15s;
+}
+.res-pill:hover {
+  background: #ffffffd0;
+}
+:root[data-theme="dark"] .res-pill:hover {
+  background: #ffffff1c;
+}
+.res-icon {
+  position: relative;
+  display: block;
+  width: calc(30px * var(--d));
+  height: calc(30px * var(--d));
+  flex: none;
+}
+.res-icon .game-sprite {
+  position: absolute;
+  width: 124%;
+  height: 124%;
+  left: -12%;
+  top: -14%;
+}
+.res-icon.coin {
+  display: grid;
+  place-items: center;
+  width: calc(24px * var(--d));
+  height: calc(24px * var(--d));
+  margin-left: calc(4px * var(--d));
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #fff0b8, #e6ad3d 60%, #b67a1c);
+  color: #6b4310;
+  font-size: calc(12px * var(--d));
+  font-weight: 800;
+  box-shadow: inset 0 -2px 0 #9c6417;
+}
+.res-pill b {
+  min-width: 1.6em;
+  font-size: calc(15px * var(--d));
+  font-variant-numeric: tabular-nums;
+  text-align: left;
+}
+.res-pill small {
+  font-size: calc(11px * var(--d));
+  color: var(--hud-ink-2);
+}
+.bump {
+  animation: bump 0.5s cubic-bezier(0.3, 1.6, 0.5, 1);
+}
+@keyframes bump {
+  30% {
+    transform: scale(1.14);
+  }
+  65% {
+    transform: scale(0.96);
+  }
+}
+.hud-utils {
+  display: flex;
+  gap: calc(6px * var(--d));
+}
+.util-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: calc(32px * var(--d));
+  padding: 0 calc(10px * var(--d)) 0 calc(4px * var(--d));
+  border-radius: 16px;
+  border: 1px solid var(--hud-line);
+  background: var(--hud-bg);
+  color: var(--hud-ink);
+  font-size: var(--small);
+  box-shadow: var(--hud-shadow);
+  backdrop-filter: blur(10px);
+}
+.util-btn .game-sprite {
+  width: calc(26px * var(--d));
+  height: calc(26px * var(--d));
+}
+.util-btn b {
+  font-variant-numeric: tabular-nums;
+  color: var(--hud-ink-2);
+  font-weight: 600;
+}
+.util-btn.plain {
+  padding-left: calc(10px * var(--d));
+}
+.util-btn.round {
+  width: calc(32px * var(--d));
+  padding: 0;
+  justify-content: center;
+  font-family: Georgia, serif;
+  font-size: calc(17px * var(--d));
+}
+.util-btn.has-todo b {
+  color: #b5741a;
+}
+
+/* ---------- 底部操作坞 ---------- */
+#app .garden-play .game-dock {
+  position: absolute;
+  z-index: 14;
+  left: 50%;
+  bottom: calc(14px * var(--d));
+  translate: -50% 0;
+  display: flex;
+  align-items: flex-end;
+  gap: calc(8px * var(--d));
+  padding: calc(8px * var(--d)) calc(14px * var(--d)) calc(9px * var(--d));
+  border-radius: 26px;
+  background: var(--dock-bg);
+  border: 1px solid var(--hud-line);
+  box-shadow: 0 10px 30px #1b38203a;
+  backdrop-filter: blur(14px) saturate(1.2);
+}
+.dock-btn {
+  display: grid;
+  justify-items: center;
+  gap: 1px;
+  width: calc(74px * var(--d));
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--hud-ink);
+  cursor: pointer;
+}
+.dock-disc {
+  position: relative;
+  display: block;
+  width: calc(52px * var(--d));
+  height: calc(52px * var(--d));
+  border-radius: 17px;
+  background: linear-gradient(160deg, #fffdf0, #e8ecce);
+  border: 1px solid #fff;
+  box-shadow:
+    0 3px 0 #a3b282,
+    0 6px 14px #2a4a2a2b;
+  transition:
+    transform 0.18s ease,
+    box-shadow 0.18s ease;
+}
+.dock-disc .game-sprite,
+.dock-disc svg {
+  position: absolute;
+  width: 118%;
+  height: 118%;
+  left: -9%;
+  top: -13%;
+}
+.dock-disc svg {
+  width: 74%;
+  height: 74%;
+  left: 13%;
+  top: 13%;
+}
+.dock-btn:hover .dock-disc,
+html.kbd-nav .dock-btn:focus-visible .dock-disc {
+  transform: translateY(-4px);
+  box-shadow:
+    0 6px 0 #a3b282,
+    0 10px 20px #2a4a2a33;
+}
+.dock-btn:active .dock-disc {
+  transform: translateY(2px) scale(0.96);
+  box-shadow:
+    0 1px 0 #a3b282,
+    0 3px 8px #2a4a2a2b;
+}
+.dock-title {
+  margin-top: calc(4px * var(--d));
+  font-size: calc(12.5px * var(--d));
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+.dock-sub {
+  font-size: calc(11px * var(--d));
+  color: var(--hud-ink-2);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.dock-btn.primary {
+  width: calc(88px * var(--d));
+}
+.dock-btn.primary .dock-disc {
+  width: calc(70px * var(--d));
+  height: calc(70px * var(--d));
+  margin-top: calc(-30px * var(--d));
+  border-radius: 50%;
+  border-color: #e6fbff;
+  background: radial-gradient(circle at 35% 28%, #f2fdff, #9fdbea 55%, #3f9db7);
+  box-shadow:
+    0 4px 0 #2f7d91,
+    0 10px 24px #1e5e6e55;
+}
+.dock-btn.primary .dock-sub {
+  color: #1f6f82;
+  font-weight: 700;
+}
+:root[data-theme="dark"] .dock-btn.primary .dock-sub {
+  color: #9fdcec;
+}
+.dock-btn.primary.has-free .dock-disc::after {
+  content: "";
+  position: absolute;
+  inset: -6px;
+  border-radius: 50%;
+  border: 2px solid #bdeefa;
+  animation: ring 2.2s ease-out infinite;
+}
+@keyframes ring {
+  from {
+    transform: scale(0.9);
+    opacity: 0.9;
+  }
+  to {
+    transform: scale(1.25);
+    opacity: 0;
+  }
+}
+.dock-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+:root[data-theme="dark"] .dock-disc {
+  background: linear-gradient(160deg, #e7efd8, #a8b993);
+  border-color: #d6e3bf;
+}
+
+/* ---------- 场景内的提示气泡 ---------- */
+.tree-bubble {
+  position: absolute;
+  left: 50%;
+  top: 2%;
+  z-index: 9;
+  translate: -50% 0;
+}
+.scene-bubble {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: calc(5px * var(--d)) calc(14px * var(--d)) calc(5px * var(--d)) calc(8px * var(--d));
+  border: 1px solid #fff;
+  border-radius: 20px;
+  background: var(--bubble-bg);
+  box-shadow: 0 6px 18px #2e4d2a33;
+  color: var(--hud-ink);
+  font-size: var(--small);
+  font-weight: 700;
+  white-space: nowrap;
+  animation: bubble-float 2.8s ease-in-out infinite;
+  cursor: pointer;
+}
+.scene-bubble::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: -6px;
+  width: 11px;
+  height: 11px;
+  background: inherit;
+  border-right: 1px solid #fff;
+  border-bottom: 1px solid #fff;
+  transform: translateX(-50%) rotate(45deg);
+}
+.scene-bubble svg {
+  width: calc(18px * var(--d));
+  height: calc(27px * var(--d));
+}
+.scene-bubble .game-sprite {
+  width: calc(28px * var(--d));
+  height: calc(28px * var(--d));
+}
+.scene-bubble small {
+  color: var(--hud-ink-2);
+  font-weight: 500;
+}
+:root[data-theme="dark"] .scene-bubble {
+  border-color: #b7d69e55;
+}
+@keyframes bubble-float {
+  50% {
+    translate: 0 -5px;
+  }
+}
+
+/* 场景三块区域的位置给 HUD 与操作坞让位 */
+#app .garden-play .scene-tree {
+  bottom: 21%;
+}
+/* 池名改为气泡样式的入口 */
+.pond-name {
+  pointer-events: auto;
+}
+.pond-name .pond-cast {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: calc(5px * var(--d)) calc(12px * var(--d));
+  border-radius: 18px;
+  border: 1px solid #fff;
+  background: var(--bubble-bg);
+  color: var(--hud-ink);
+  font-size: var(--small);
+  font-weight: 700;
+  box-shadow: 0 6px 18px #2e4d2a33;
+  text-shadow: none;
+  animation: bubble-float 3.1s ease-in-out infinite;
+}
+.pond-name .pond-cast small {
+  color: #1f6f82;
+  font-weight: 700;
+}
+.scene-pond.casting .pond-cast {
+  animation: none;
+  opacity: 0.6;
+}
+
+/* ---------- 环境氛围 ---------- */
+.ambient-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+  overflow: hidden;
+}
+.ambient-layer.paused * {
+  animation-play-state: paused !important;
+}
+.cloud {
+  position: absolute;
+  left: -30%;
+  width: 26%;
+  height: 9%;
+  border-radius: 50%;
+  background:
+    radial-gradient(closest-side at 30% 60%, #ffffffcc, transparent),
+    radial-gradient(closest-side at 55% 45%, #ffffffd9, transparent),
+    radial-gradient(closest-side at 78% 62%, #ffffffb3, transparent);
+  filter: blur(6px);
+  opacity: 0.55;
+  animation: cloud-drift linear infinite;
+}
+.cloud.c0 {
+  top: 3%;
+  animation-duration: 120s;
+  animation-delay: -20s;
+}
+.cloud.c1 {
+  top: 9%;
+  width: 18%;
+  animation-duration: 150s;
+  animation-delay: -80s;
+  opacity: 0.4;
+}
+.cloud.c2 {
+  top: 1%;
+  width: 22%;
+  animation-duration: 170s;
+  animation-delay: -130s;
+  opacity: 0.35;
+}
+@keyframes cloud-drift {
+  to {
+    transform: translateX(560%);
+  }
+}
+:root[data-theme="dark"] .cloud {
+  opacity: 0.12;
+}
+.butterfly {
+  position: absolute;
+  width: 18px;
+  height: 14px;
+  animation: flutter-path 16s ease-in-out infinite;
+}
+.butterfly.b0 {
+  left: 18%;
+  top: 62%;
+}
+.butterfly.b1 {
+  left: 58%;
+  top: 70%;
+  animation-duration: 21s;
+  animation-delay: -7s;
+}
+.butterfly .wing {
+  position: absolute;
+  top: 0;
+  width: 9px;
+  height: 13px;
+  border-radius: 80% 20% 70% 40%;
+  background: radial-gradient(circle at 40% 40%, #fff6d8, #f2b86b 60%, #c97a3a);
+  transform-origin: 100% 60%;
+  animation: wing 0.24s ease-in-out infinite alternate;
+}
+.butterfly.b1 .wing {
+  background: radial-gradient(circle at 40% 40%, #f6f2ff, #b9a7f0 60%, #7d68c9);
+}
+.butterfly .wing.l {
+  left: 0;
+}
+.butterfly .wing.r {
+  left: 9px;
+  transform-origin: 0 60%;
+  border-radius: 20% 80% 40% 70%;
+}
+@keyframes wing {
+  to {
+    transform: scaleX(0.25);
+  }
+}
+@keyframes flutter-path {
+  0% {
+    transform: translate(0, 0);
+  }
+  20% {
+    transform: translate(80px, -60px);
+  }
+  40% {
+    transform: translate(160px, -20px);
+  }
+  60% {
+    transform: translate(90px, 30px);
+  }
+  80% {
+    transform: translate(20px, -40px);
+  }
+  100% {
+    transform: translate(0, 0);
+  }
+}
+:root[data-theme="dark"] .butterfly {
+  display: none;
+}
+.mote {
+  position: absolute;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #fffbd8, #ffe28a88 50%, transparent 70%);
+  opacity: 0;
+  animation: mote-rise 9s ease-in-out infinite;
+}
+:root[data-theme="dark"] .mote {
+  background: radial-gradient(circle, #f4ffb0, #d8ff7d99 50%, transparent 70%);
+  width: 6px;
+  height: 6px;
+}
+@keyframes mote-rise {
+  0% {
+    transform: translate(0, 0);
+    opacity: 0;
+  }
+  20% {
+    opacity: 0.9;
+  }
+  100% {
+    transform: translate(18px, -90px);
+    opacity: 0;
+  }
+}
+.fall-leaf {
+  position: absolute;
+  width: 10px;
+  height: 17px;
+  border-radius: 80% 0 80% 0;
+  background: linear-gradient(130deg, #c4d871, #6b9b3e 52%, #426e2e);
+  animation: leaf-fall 6s ease-in forwards;
+}
+@keyframes leaf-fall {
+  0% {
+    transform: translate(0, 0) rotate(0deg);
+    opacity: 0;
+  }
+  10% {
+    opacity: 1;
+  }
+  35% {
+    transform: translate(calc(var(--drift) * 0.5), calc(var(--fall) * 0.35)) rotate(120deg);
+  }
+  70% {
+    transform: translate(calc(var(--drift) * -0.2), calc(var(--fall) * 0.75)) rotate(230deg);
+  }
+  100% {
+    transform: translate(var(--drift), var(--fall)) rotate(320deg);
+    opacity: 0;
+  }
+}
+.dragonfly {
+  position: absolute;
+  left: 60%;
+  bottom: 30%;
+  width: 34px;
+  height: 17px;
+  animation: dart 11s ease-in-out infinite;
+}
+.dragonfly .dw {
+  animation: wing 0.08s linear infinite alternate;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+@keyframes dart {
+  0%,
+  12% {
+    transform: translate(0, 0);
+  }
+  18%,
+  40% {
+    transform: translate(110px, -26px);
+  }
+  46%,
+  70% {
+    transform: translate(40px, 12px) scaleX(-1);
+  }
+  76%,
+  100% {
+    transform: translate(0, 0) scaleX(-1);
+  }
+}
+:root[data-theme="dark"] .dragonfly {
+  opacity: 0.6;
+}
+
+/* ---------- 操作反馈 ---------- */
+.fx-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 950;
+  pointer-events: none;
+}
+/* 切到背包等弹框时，地块里的短时动作留在遮罩后。 */
+#modal:not([hidden]) ~ .fx-layer { visibility: hidden; }
+.fly-item {
+  position: fixed;
+  display: grid;
+  place-items: center;
+  grid-template: minmax(0, 1fr) / minmax(0, 1fr);
+  filter: drop-shadow(0 4px 6px #3b2a0b40);
+}
+.fly-item > * {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+.fly-item img, .fly-item svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+.float-text {
+  position: fixed;
+  translate: -50% -50%;
+  font-weight: 800;
+  font-size: 16px;
+  color: #3f7d34;
+  text-shadow:
+    0 1px 0 #fff,
+    0 0 8px #fff;
+  animation: float-up 1.4s ease-out forwards;
+  white-space: nowrap;
+}
+.float-text.gold {
+  color: #b5741a;
+}
+.float-text.blue {
+  color: #2477a0;
+}
+@keyframes float-up {
+  0% {
+    transform: translateY(6px) scale(0.8);
+    opacity: 0;
+  }
+  15% {
+    transform: translateY(0) scale(1.05);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(-48px);
+    opacity: 0;
+  }
+}
+.particle {
+  position: fixed;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  opacity: 0;
+  animation: particle 1.1s ease-out forwards;
+}
+.particle.spark {
+  background: radial-gradient(circle, #fff, #ffe48a 45%, transparent 70%);
+}
+.particle.leaf {
+  width: 9px;
+  height: 15px;
+  border-radius: 80% 0 80% 0;
+  background: linear-gradient(130deg, #c9de7a, #6aa043);
+}
+.particle.drop {
+  width: 6px;
+  height: 9px;
+  border-radius: 50% 50% 50% 50% / 60% 60% 40% 40%;
+  background: linear-gradient(#e6fbff, #66c3e4);
+}
+.particle.sprout {
+  width: 6px;
+  height: 6px;
+  background: radial-gradient(circle, #f2ffd0, #8fd35a 55%, transparent 72%);
+  animation: sprinkle 1.2s ease-in forwards;
+}
+@keyframes particle {
+  0% {
+    transform: translate(0, 0) rotate(0) scale(0.6);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(var(--tx), var(--ty)) rotate(var(--rot)) scale(1);
+    opacity: 0;
+  }
+}
+@keyframes sprinkle {
+  0% {
+    transform: translate(0, 0);
+    opacity: 0;
+  }
+  15% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate(var(--tx), var(--ty));
+    opacity: 0;
+  }
+}
+.fx-can,
+.fx-bag {
+  position: fixed;
+  width: calc(56px * var(--d));
+  height: calc(56px * var(--d));
+}
+.fx-can {
+  width: calc(56px * var(--d));
+  height: calc(56px * var(--d));
+  translate: none;
+  animation: can-pour 1s ease-in-out forwards;
+  transform-origin: 18% 36%;
+  filter: drop-shadow(0 4px 4px #2a1e0e59);
+}
+.fx-can .game-sprite,
+.fx-bag .game-sprite { width: 100%; height: 100%; }
+@keyframes can-pour {
+  0% { transform: rotate(0); opacity: 1; }
+  22%, 68% { transform: rotate(-32deg); opacity: 1; }
+  86% { transform: rotate(0); opacity: 1; }
+  100% { transform: rotate(0); opacity: 0; }
+}
+.fx-drops {
+  position: fixed;
+}
+.fx-drops i {
+  position: absolute;
+  top: 0;
+  width: calc(3px * var(--d));
+  height: calc(5px * var(--d));
+  border-radius: 50% 50% 50% 50% / 62% 62% 38% 38%;
+  background: linear-gradient(#e6fbff, #5bbde3);
+  opacity: 0;
+  animation: rain-drop 0.45s ease-in forwards;
+}
+@keyframes rain-drop {
+  0% {
+    transform: translateY(0);
+    opacity: 0;
+  }
+  20% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(var(--h, 140px));
+    opacity: 0;
+  }
+}
+.fx-bag {
+  animation: bag-shake 1.1s ease-in-out forwards;
+  transform-origin: 50% 20%;
+  filter: drop-shadow(0 4px 4px #2a1e0e59);
+}
+.fx-bag > img, .fx-bag > svg { display: block; width: 100%; height: 100%; object-fit: contain; }
+@keyframes bag-shake {
+  0% { transform: rotate(0); opacity: 1; }
+  24% { transform: rotate(-108deg); }
+  38%, 58% { transform: rotate(-120deg); }
+  48%, 68% { transform: rotate(-108deg); opacity: 1; }
+  88% { transform: rotate(0); opacity: 1; }
+  100% { transform: rotate(0); opacity: 0; }
+}
+.fx-bag.organic { animation-name: organic-spread; }
+@keyframes organic-spread {
+  0% { transform: translateY(0); opacity: 1; }
+  30% { transform: translateY(-8px) rotate(-12deg); opacity: 1; }
+  70% { transform: translateY(4px) scale(.85); opacity: .8; }
+  100% { transform: translateY(12px) scale(.7); opacity: 0; }
+}
+.fx-fertilizer-grains { position: fixed; }
+.fx-fertilizer-grains i {
+  position: absolute; left: 0; top: 0;
+  width: calc(4px * var(--d)); height: calc(4px * var(--d));
+  border-radius: 50%; background: #b8d65c; border: 1px solid #567b29;
+  opacity: 0; animation: fertilizer-fall .48s ease-in forwards;
+}
+.fx-fertilizer-grains.organic i { background: #b2854b; border-color: #73502f; }
+@keyframes fertilizer-fall {
+  0% { transform: translate(0, 0); opacity: 0; }
+  15% { opacity: 1; }
+  80% { opacity: 1; }
+  100% { transform: translate(var(--dx), var(--fall)); opacity: 0; }
+}
+
+.fx-bite {
+  position: fixed;
+  translate: -50% -100%;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: #ffcf4d;
+  color: #6b3e00;
+  font-weight: 900;
+  font-size: 19px;
+  box-shadow: 0 4px 12px #6b3e0040;
+  animation: bite-pop 1.1s cubic-bezier(0.3, 1.6, 0.5, 1) forwards;
+}
+@keyframes bite-pop {
+  0% {
+    transform: scale(0);
+  }
+  25% {
+    transform: scale(1.25);
+  }
+  40%,
+  80% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(-10px) scale(0.9);
+    opacity: 0;
+  }
+}
+.fx-splash {
+  position: fixed;
+  width: 90px;
+  height: 26px;
+  translate: -50% -50%;
+  border-radius: 50%;
+  border: 2px solid #f1fdff;
+  animation: splash 1s ease-out forwards;
+}
+@keyframes splash {
+  from {
+    transform: scale(0.2);
+    opacity: 0.9;
+  }
+  to {
+    transform: scale(1.6);
+    opacity: 0;
+  }
+}
+.fx-leap {
+  position: fixed;
+  width: 144px;
+  height: 88px;
+  translate: -50% -50%;
+  filter: drop-shadow(0 3px 4px #184b5266);
+  animation: leap 1.7s ease-out forwards;
+}
+.fx-leap > :is(svg,img) {display:block;width:100%;height:100%;object-fit:contain;}
+@keyframes leap {
+  0% {transform:translateY(15px) rotate(10deg) scale(.72);opacity:1;}
+  15% {opacity:1;}
+  42% {transform:translateY(calc(var(--leap-rise,150px) * -.85)) rotate(-6deg) scale(1.08);opacity:1;}
+  80% {transform:translateY(calc(var(--leap-rise,150px) * -1)) rotate(-9deg) scale(1.1);opacity:1;}
+  100% {transform:translateY(calc(var(--leap-rise,150px) * -1.04)) rotate(-9deg) scale(1.1);opacity:0;}
+}
+
+/* 出鱼揭晓卡片：常见绿、稀有蓝、珍稀紫、传说金 */
+.catch-reveal {
+  position: fixed;
+  inset: 0;
+  z-index: 960;
+  display: grid;
+  place-items: center;
+  background: radial-gradient(circle, #0b1f1a55, #0b1f1aa6);
+  animation: fade-in 0.25s ease-out;
+  cursor: pointer;
+  --q: #6fae5e;
+  --q-soft: #e7f5df;
+}
+.catch-reveal.rare {
+  --q: #3f8fd1;
+  --q-soft: #e1effb;
+}
+.catch-reveal.precious {
+  --q: #8a62d6;
+  --q-soft: #efe7fb;
+}
+.catch-reveal.legend {
+  --q: #d9a227;
+  --q-soft: #fff4d4;
+}
+.catch-reveal.leaving {
+  opacity: 0;
+  transition: opacity 0.25s;
+}
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+.reveal-rays {
+  position: absolute;
+  width: 560px;
+  height: 560px;
+  border-radius: 50%;
+  background: repeating-conic-gradient(from 0deg, color-mix(in srgb, var(--q) 38%, transparent) 0 10deg, transparent 10deg 24deg);
+  mask: radial-gradient(circle, #000 20%, transparent 68%);
+  -webkit-mask: radial-gradient(circle, #000 20%, transparent 68%);
+  animation: rays-spin 14s linear infinite;
+  opacity: 0.85;
+}
+.catch-reveal.common .reveal-rays {
+  opacity: 0.45;
+}
+@keyframes rays-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.reveal-card {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  grid-template-columns: minmax(0, 1fr);
+  gap: calc(6px * var(--d));
+  width: min(calc(340px * var(--d)), calc(100vw - 40px));
+  max-height: calc(100vh - 40px);
+  max-height: calc(100dvh - 40px);
+  overflow: auto;
+  padding: calc(22px * var(--d)) calc(20px * var(--d)) calc(16px * var(--d));
+  border-radius: calc(24px * var(--d));
+  text-align: center;
+  border: 2px solid var(--q);
+  background: linear-gradient(180deg, var(--q-soft), #fffef6);
+  box-shadow:
+    0 0 0 6px color-mix(in srgb, var(--q) 22%, transparent),
+    0 24px 60px #0b1f1a66;
+  color: #24452f;
+  animation: card-pop 0.5s cubic-bezier(0.3, 1.5, 0.5, 1);
+}
+@keyframes card-pop {
+  from {
+    transform: scale(0.6) translateY(30px);
+    opacity: 0;
+  }
+}
+.reveal-stamp {
+  position: absolute;
+  top: calc(8px * var(--d));
+  right: calc(12px * var(--d));
+  padding: calc(3px * var(--d)) calc(12px * var(--d));
+  border-radius: calc(14px * var(--d));
+  background: #d9533b;
+  color: #fff;
+  font-size: calc(12px * var(--d));
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  rotate: 6deg;
+  box-shadow: 0 4px 10px #d9533b55;
+}
+.reveal-fish {
+  display: grid; place-items: center;
+  width: 100%; min-width: 0;
+  height: calc(140px * var(--d));
+}
+.reveal-fish > svg, .reveal-fish > img {
+  display: block; width: 100%; height: 100%; min-width: 0; min-height: 0;
+  object-fit: contain;
+}
+.reveal-fish > img { max-width: calc(150px * var(--d)); }
+.reveal-quality {
+  padding: calc(2px * var(--d)) calc(10px * var(--d));
+  border-radius: calc(12px * var(--d));
+  background: var(--q);
+  color: #fff;
+  font-size: calc(12px * var(--d));
+  font-weight: 700;
+}
+.reveal-card h3 {
+  margin: calc(4px * var(--d)) 0 0;
+  font-family: "Songti SC", "STSong", serif;
+  font-size: calc(22px * var(--d));
+}
+.reveal-card p {
+  margin: 0;
+  color: #5a7660;
+  font-size: calc(13px * var(--d));
+}
+.reveal-card small {
+  margin-top: 8px;
+  color: #8a9a86;
+  font-size: 11px;
+}
+
+/* 升阶段横幅 */
+.stage-banner {
+  position: absolute;
+  z-index: 16;
+  left: 50%;
+  top: 22%;
+  translate: -50% 0;
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  padding: 14px 30px;
+  border-radius: 20px;
+  background: linear-gradient(180deg, #fffbe6f5, #f3f8dcf2);
+  border: 1px solid #fff;
+  box-shadow: 0 16px 40px #2e4d2a40;
+  color: #2c5236;
+  animation: card-pop 0.55s cubic-bezier(0.3, 1.5, 0.5, 1);
+  transition:
+    opacity 0.4s,
+    translate 0.4s;
+}
+.stage-banner.leaving {
+  opacity: 0;
+  translate: -50% -14px;
+}
+.stage-banner small {
+  color: #6f8a63;
+  font-size: 12px;
+  letter-spacing: 0.12em;
+}
+.stage-banner strong {
+  font-family: "Songti SC", "STSong", serif;
+  font-size: 24px;
+}
+.stage-banner em {
+  font-style: normal;
+  color: #b5741a;
+  font-size: 13px;
+  font-weight: 700;
+}
+.stage-banner-rays {
+  position: absolute;
+  inset: -60px;
+  z-index: -1;
+  border-radius: 50%;
+  background: repeating-conic-gradient(#fff3b866 0 8deg, transparent 8deg 20deg);
+  mask: radial-gradient(circle, #000 25%, transparent 70%);
+  -webkit-mask: radial-gradient(circle, #000 25%, transparent 70%);
+  animation: rays-spin 10s linear infinite;
+}
+:root[data-theme="dark"] .stage-banner {
+  background: linear-gradient(180deg, #2a4535f5, #21382df2);
+  border-color: #b7d69e55;
+  color: #e3eed6;
+}
+
+/* 待养区：放生按钮 */
+.farm-row .row-actions {
+  display: flex;
+  gap: 6px;
+}
+.button.ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--muted);
+}
+
+/* ---------- 手机布局 ---------- */
+.light-note-mobile-rendering .game-hud {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "id utils"
+    "res res";
+  top: 10px;
+  left: 10px;
+  right: 10px;
+  gap: 8px;
+}
+.light-note-mobile-rendering .hud-right {
+  display: contents;
+}
+.light-note-mobile-rendering .hud-identity {
+  grid-area: id;
+  padding: 8px 12px 9px;
+  gap: 4px;
+  border-radius: 16px;
+}
+.light-note-mobile-rendering .hud-name {
+  font-size: 19px;
+}
+.light-note-mobile-rendering .hud-growth-bar {
+  width: 64px;
+}
+.light-note-mobile-rendering .hud-icon {
+  display: none;
+}
+.light-note-mobile-rendering .hud-utils {
+  grid-area: utils;
+  align-self: start;
+  gap: 4px;
+}
+.light-note-mobile-rendering .util-btn > span:not(.game-sprite):not(.util-days) {
+  display: none;
+}
+.light-note-mobile-rendering .util-btn {
+  height: 30px;
+  padding: 0 7px 0 3px;
+  font-size: 11px;
+}
+.light-note-mobile-rendering .util-btn.plain {
+  padding: 0 8px;
+}
+.light-note-mobile-rendering .util-btn.round {
+  width: 30px;
+  padding: 0;
+}
+.light-note-mobile-rendering .util-btn .game-sprite {
+  width: 22px;
+  height: 22px;
+}
+.light-note-mobile-rendering .hud-identity {
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  column-gap: 10px;
+}
+.light-note-mobile-rendering .hud-stage {
+  gap: 3px;
+}
+.light-note-mobile-rendering .hud-growth-num {
+  font-size: 11px;
+}
+.light-note-mobile-rendering .hud-resources {
+  grid-area: res;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 4px;
+  padding: 4px;
+  border-radius: 14px;
+}
+.light-note-mobile-rendering .res-pill {
+  height: 34px;
+  padding: 0 6px 0 2px;
+  gap: 3px;
+  justify-content: center;
+}
+.light-note-mobile-rendering .res-pill small {
+  display: none;
+}
+.light-note-mobile-rendering .res-icon {
+  width: 26px;
+  height: 26px;
+}
+.light-note-mobile-rendering .res-icon.coin {
+  width: 20px;
+  height: 20px;
+  font-size: 11px;
+}
+.light-note-mobile-rendering .res-pill b {
+  font-size: 14px;
+}
+.light-note-mobile-rendering #app .garden-play .game-dock {
+  left: 8px;
+  right: 8px;
+  bottom: max(8px, env(safe-area-inset-bottom));
+  translate: none;
+  justify-content: space-around;
+  gap: 0;
+  padding: 6px 4px 7px;
+  border-radius: 22px;
+}
+.light-note-mobile-rendering .dock-btn {
+  width: auto;
+  flex: 1;
+}
+.light-note-mobile-rendering .dock-btn.primary {
+  flex: 1.2;
+}
+.light-note-mobile-rendering .dock-disc {
+  width: 42px;
+  height: 42px;
+  border-radius: 14px;
+}
+.light-note-mobile-rendering .dock-btn.primary .dock-disc {
+  width: 58px;
+  height: 58px;
+  margin-top: -26px;
+}
+.light-note-mobile-rendering .dock-title {
+  font-size: 11.5px;
+}
+.light-note-mobile-rendering .dock-sub {
+  font-size: 10px;
+}
+.light-note-mobile-rendering #app .garden-play .scene-tree {
+  top: 19%;
+}
+.light-note-mobile-rendering #app .garden-play .scene-tree.young {
+  top: 24%;
+}
+.light-note-mobile-rendering .scene-bubble {
+  font-size: 11.5px;
+  padding: 4px 10px 4px 6px;
+}
+.light-note-mobile-rendering .stage-banner {
+  top: 26%;
+  padding: 12px 22px;
+}
+.light-note-mobile-rendering .stage-banner strong {
+  font-size: 20px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scene-bubble,
+  .pond-name .pond-cast,
+  .dock-btn.primary.has-free .dock-disc::after,
+  .bump,
+  .reveal-rays,
+  .stage-banner-rays,
+  .hud-growth-bar i.flowing::after {
+    animation: none !important;
+  }
+  .hud-growth-bar i,
+  .dock-disc {
+    transition: none;
+  }
+}
+
+/* 池边：平时只显示「星澜灵池」入口气泡，抛竿过程中才显示状态提示 */
+#app .garden-play .scene-pond:not(.casting) .pond-hint {
+  display: none;
+}
+:root[data-theme="dark"] .pond-name .pond-cast small {
+  color: #9fdcec;
+}
+:root[data-theme="dark"] .pond-name .pond-cast {
+  border-color: #b7d69e55;
+}
+
+/* ===== v19 第 2 版：去重、布局、轻量反馈 ===== */
+/* 顶部只留积分与任务入口，横向一排；树名卡更紧凑 */
+.hud-right {
+  display: flex;
+  align-items: center;
+  gap: calc(8px * var(--d));
+}
+.hud-resources {
+  padding: calc(3px * var(--d));
+  border-radius: 14px;
+}
+.res-pill {
+  height: calc(30px * var(--d));
+}
+.hud-identity {
+  gap: calc(4px * var(--d));
+  padding: calc(8px * var(--d)) calc(12px * var(--d)) calc(9px * var(--d));
+  border-radius: 16px;
+}
+.hud-name {
+  font-size: calc(20px * var(--d));
+}
+.hud-growth-bar {
+  width: calc(108px * var(--d));
+  height: 7px;
+}
+/* 场景标牌只写名字，低调 */
+.world-plaque {
+  display: inline-block;
+  padding: calc(2px * var(--d)) calc(10px * var(--d));
+  border-radius: 10px;
+  background: #fbffe9b8;
+  border: 1px solid #ffffffa8;
+  color: #3e6248;
+  font-family: "Songti SC", "STSong", serif;
+  font-size: calc(12px * var(--d));
+  letter-spacing: 0.08em;
+  box-shadow: 0 2px 8px #1f3d2a1a;
+  backdrop-filter: blur(6px);
+  pointer-events: none;
+}
+:root[data-theme="dark"] .world-plaque {
+  background: #1d322bc4;
+  color: #d3e6c6;
+  border-color: #b7d69e33;
+}
+.pond-name {
+  top: 6%;
+  right: auto;
+  left: 50%;
+  translate: -50% -100%;
+  align-items: center;
+}
+#app .garden-play .tank-caption {
+  top: 0;
+}
+/* 成熟金果靠发光与「摘果」气泡提示，不再在每颗果上重复写「采摘 +2」 */
+.fruit-button.ripe .fruit-tooltip {
+  display: none;
+}
+/* 养鱼舱有待安置的鱼 */
+.dock-dot {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: #e5533d;
+  border: 2px solid #fffdf0;
+  box-shadow: 0 1px 3px #0003;
+}
+
+/* 场景布局：用场景自身宽高约束三块区域，矮屏也不会让养鱼舱压到灵池 */
+#app .garden-play .garden-scene {
+  container-type: size;
+}
+#app .garden-play .scene-tree {
+  left: 5%;
+  bottom: 15%;
+  top: auto;
+  width: min(34cqw, 66cqh);
+  max-width: none;
+}
+@media (min-width: 701px) and (max-width: 1100px) {
+  #app .garden-play .scene-tree {
+    left: 2%;
+    width: min(38cqw, 62cqh);
+  }
+}
+
+/* 空竿：水面上方一行淡字 */
+.fx-miss {
+  position: fixed;
+  translate: -50% -50%;
+  display: grid;
+  justify-items: center;
+  gap: 1px;
+  color: #f3fffd;
+  text-shadow:
+    0 1px 3px #1d4d55,
+    0 0 10px #1d4d5599;
+  animation: miss-fade 1.7s ease-out forwards;
+  white-space: nowrap;
+}
+.fx-miss strong {
+  font-size: 15px;
+  letter-spacing: 0.2em;
+}
+.fx-miss small {
+  font-size: 11.5px;
+  opacity: 0.9;
+}
+@keyframes miss-fade {
+  0% {
+    transform: translateY(6px);
+    opacity: 0;
+  }
+  18% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+  70% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(-14px);
+    opacity: 0;
+  }
+}
+.fx-splash.soft {
+  width: 70px;
+  height: 20px;
+  border-width: 1.5px;
+  opacity: 0.7;
+}
+
+/* 揭晓卡：底部给出去向选项 */
+.catch-reveal {
+  cursor: default;
+}
+.reveal-actions {
+  display: grid;
+  gap: calc(8px * var(--d));
+  width: 100%;
+  margin-top: calc(12px * var(--d));
+}
+.reveal-btn {
+  min-height: calc(38px * var(--d));
+  border-radius: calc(12px * var(--d));
+  border: 1px solid #d8e2cc;
+  background: #ffffffd9;
+  color: #2f5139;
+  font-size: calc(14px * var(--d));
+  font-weight: 600;
+  cursor: pointer;
+}
+.reveal-btn:hover {
+  background: #fff;
+}
+.reveal-btn.primary {
+  border-color: transparent;
+  background: var(--q);
+  color: #fff;
+}
+.reveal-btn.primary:hover {
+  filter: brightness(1.05);
+}
+.reveal-card small {
+  display: none;
+}
+
+/* 蝴蝶：位置与朝向由脚本控制 */
+.butterfly {
+  left: 0;
+  top: 0;
+  animation: none;
+}
+.butterfly .bf-body {
+  position: absolute;
+  inset: 0;
+  transition: transform 0.25s ease;
+}
+.butterfly.resting .wing {
+  animation-duration: 0.7s;
+}
+
+/* 手机：树名卡占左侧两行，右侧上积分下任务 */
+.light-note-mobile-rendering .game-hud {
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "id res"
+    "id utils";
+  row-gap: 6px;
+}
+.light-note-mobile-rendering .hud-resources {
+  grid-area: res;
+  display: flex;
+  justify-self: end;
+  padding: 3px;
+}
+.light-note-mobile-rendering .res-pill {
+  height: 28px;
+  padding: 0 8px 0 2px;
+}
+.light-note-mobile-rendering .hud-identity {
+  grid-template-columns: 1fr;
+  align-self: stretch;
+}
+.light-note-mobile-rendering .hud-name {
+  font-size: 18px;
+}
+.light-note-mobile-rendering .hud-growth-bar {
+  width: 84px;
+}
+.light-note-mobile-rendering .hud-utils {
+  justify-self: end;
+}
+.light-note-mobile-rendering #app .garden-play .scene-tree {
+  left: 0;
+  top: 18%;
+  bottom: auto;
+  width: min(50cqw, 29cqh);
+}
+@media (prefers-reduced-motion: reduce) {
+  .fx-miss {
+    animation: none;
+  }
+}
+/* 手机：场景高度跟随可视区，操作坞不被裁掉 */
+.light-note-mobile-rendering #app .garden-play .garden-scene {
+  min-height: 560px;
+}
+/* 电脑：矮窗口也能完整放下场景 */
+#app .garden-play .garden-scene {
+  min-height: 440px;
+}
+/* 养鱼舱名牌放在底座上，催熟肥气泡在舱顶右角，避免顶到 HUD */
+#app .garden-play .tank-caption {
+  inset: 0;
+  top: 0;
+  left: 0;
+  translate: none;
+  pointer-events: none;
+}
+#app .garden-play .tank-caption .world-plaque {
+  position: absolute;
+  left: 50%;
+  bottom: 7%;
+  translate: -50% 0;
+}
+#app .garden-play .tank-caption .fert-bubble {
+  right: 5%;
+  top: 4%;
+  pointer-events: auto;
+}
+#app .garden-play .scene-tree {
+  left: 4%;
+  width: min(31cqw, 64cqh);
+}
+
+/* ===== 第 3 版：养鱼舱按入住鱼体型分三档放大 ===== */
+/* 舱高 = 单位 × 档位倍数（--tank-k），舱宽由 --tank-aspect 决定；两者与舱内鱼的缩放同源，换档时同一种鱼在屏幕上一样大 */
+#app .garden-play .scene-tank,
+#app .garden-play .scene-tank.large,
+#app .garden-play .scene-tank.ocean {
+  --tank-unit: min(35.5cqh, 13.8cqw);
+  top: max(7%, 58px);
+  right: 2.5%;
+  bottom: auto;
+  left: auto;
+  width: calc(var(--tank-unit) * var(--tank-k, 1) * var(--tank-aspect, 1.807));
+  height: calc(var(--tank-unit) * var(--tank-k, 1));
+  transition: none;
+}
+#app .garden-play .scene-tank.tank-growing {
+  transition:
+    width 0.7s cubic-bezier(0.2, 0.8, 0.2, 1),
+    height 0.7s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+#app .garden-play .scene-pond {
+  right: 7%;
+  bottom: 13%;
+  top: auto;
+  width: min(27cqw, 40cqh);
+}
+/* 手机竖屏：养鱼舱居中、只等比放大 */
+.light-note-mobile-rendering #app .garden-play .scene-tank,
+.light-note-mobile-rendering #app .garden-play .scene-tank.large,
+.light-note-mobile-rendering #app .garden-play .scene-tank.ocean {
+  --tank-unit: min(36cqw, 18cqh);
+  top: 38%;
+  right: auto;
+  bottom: auto;
+  left: 50%;
+  translate: -50% 0;
+  width: calc(var(--tank-unit) * var(--tank-k, 1) * var(--tank-aspect, 1.807));
+  height: calc(var(--tank-unit) * var(--tank-k, 1));
+}
+.light-note-mobile-rendering #app .garden-play .scene-pond {
+  right: 12%;
+  bottom: max(19%, 120px);
+  width: min(48cqw, 23cqh);
+}
+.light-note-mobile-rendering #app .garden-play .scene-tree {
+  width: min(46cqw, 26cqh);
+}
+@media (prefers-reduced-motion: reduce) {
+  #app .garden-play .scene-tank.tank-growing {
+    transition: none;
+  }
+}
+/* 游戏场景只在 Tab 键导航时显示焦点框：鼠标点击、触摸、关闭弹框后焦点回到场景物件时都不画框 */
+html:not(.kbd-nav) #app :focus-visible {
+  outline: none;
+}
+html.kbd-nav #app .garden-play .aquarium-hit:focus-visible,
+html.kbd-nav #app .garden-play .pond-hit:focus-visible {
+  outline: 2px solid #fffffff0;
+  outline-offset: 2px;
+  box-shadow: 0 0 0 5px #5b8f4a66;
+}
+
+/* ===== 第 4 版：小树与大树同一画框、同一位置，图里的树更小；随成长值从 72% 长到 100% ===== */
+#app .garden-play .scene-tree.young {
+  left: 4%;
+  bottom: 15%;
+  top: auto;
+  width: min(31cqw, 64cqh);
+}
+/* 手机：小树树干细长，画框底边对齐养鱼舱顶，树干不被舱体挡住 */
+.light-note-mobile-rendering #app .garden-play .scene-tree.young {
+  left: 0;
+  top: calc(38% - min(46cqw, 25cqh) + 8px);
+  bottom: auto;
+  width: min(46cqw, 25cqh);
+}
+#app .garden-play .scene-tree.young .tree-idle {
+  inset: 0;
+}
+#app .garden-play .scene-tree.young .tree-image {
+  display: block;
+}
+#app .garden-play .scene-tree.young .tree-interactive {
+  scale: var(--young-scale, 1);
+  transform-origin: 50% 99%;
+  transition: scale 0.8s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+#app .garden-play .scene-tree.young .tree-ground {
+  scale: calc(var(--young-scale, 1) * 0.62);
+}
+#app .garden-play .scene-tree.young .tree-touch {
+  inset: 34% 25% 1%;
+  border-radius: 42%;
+}
+#app .garden-play .scene-tree.young .tree-bubble {
+  top: calc(99% - 64% * var(--young-scale, 1) - 52px);
+}
+@media (prefers-reduced-motion: reduce) {
+  #app .garden-play .scene-tree.young .tree-interactive {
+    transition: none;
+  }
+}
+/* 矮屏手机：小树提示气泡不顶到左上角的树名卡 */
+.light-note-mobile-rendering #app .garden-play .scene-tree.young .tree-bubble {
+  top: max(
+    calc(99% - 64% * var(--young-scale, 1) - 52px),
+    calc(100px - 38cqh + min(46cqw, 25cqh) - 8px)
+  );
+}
+
+/* ===== 第 5 版 ===== */
+/* 图鉴：只看外观的标本格，名字与数据点开再看 */
+.atlas-grid {
+  grid-template-columns: repeat(auto-fill, minmax(calc(128px * var(--d)), 1fr));
+}
+.atlas-card {
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 4 / 3;
+  padding: calc(6px * var(--d));
+}
+.atlas-card .fish-art {
+  width: 100%;
+  height: 100%;
+  padding: 0;
+}
+.atlas-card:not(.discovered) {
+  border-style: dashed;
+  background: var(--surface-2, var(--surface));
+}
+.light-note-mobile-rendering .atlas-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+/* 手机：树的画框底边对齐养鱼舱顶，树不被舱体挡住；矮屏时整棵树等比缩小，提示气泡也不顶到树名卡 */
+.light-note-mobile-rendering #app .garden-play .scene-tree,
+.light-note-mobile-rendering #app .garden-play .scene-tree.young {
+  --tree-w: min(46cqw, 27cqh, calc(38cqh - 96px));
+  left: 0;
+  top: calc(38% - var(--tree-w) + 8px);
+  bottom: auto;
+  width: var(--tree-w);
+}
+.light-note-mobile-rendering #app .garden-play .scene-tree.young .tree-bubble {
+  top: calc(99% - 64% * var(--young-scale, 1) - 52px);
+}
+/* 弹框容器只为读屏聚焦，不画焦点框；弹框里的按钮同样只在 Tab 导航时显示 */
+#dialog:focus {
+  outline: none;
+}
+html:not(.kbd-nav) .modal-backdrop :focus-visible {
+  outline: none;
+}
+
+/* ===== 第 9 版：其他水族 ===== */
+/* 所有住客共用立体画布；透明水族和鱼统一排序，逐个加载完成后替换 SVG。 */
+#app .garden-play .tank-swim-canvas { z-index: 1; }
+#app .garden-play .aquarium-hit { z-index: 3; }
+/* 半透明的水族在白底卡片上衬一层水色 */
+.fish-art.is-creature {
+  border-radius: 14px;
+  background: radial-gradient(ellipse 60% 70% at 50% 45%, #9fd9e0 0%, #cdeef0 55%, #e9f7f7 85%, transparent 100%);
+}
+[data-theme="dark"] .fish-art.is-creature {
+  background: radial-gradient(ellipse 60% 70% at 50% 45%, #2f6f78 0%, #1f4c55 55%, #183c44 85%, transparent 100%);
+}
+/* 钓获揭晓卡里的按钮同样只在 Tab 导航时显示焦点框 */
+html:not(.kbd-nav) .catch-reveal :focus-visible {
+  outline: none;
+}
+/* 加载画面 */
+.garden-loader {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: grid;
+  place-items: center;
+  background: radial-gradient(ellipse at 50% 40%, #e9f6d8, #b9dca0 70%, #8fc27a);
+  transition: opacity 0.4s ease;
+}
+[data-theme="dark"] .garden-loader {
+  background: radial-gradient(ellipse at 50% 40%, #2c4430, #1c2f22 70%, #132018);
+}
+.garden-loader.leaving {
+  opacity: 0;
+}
+.garden-loader-card {
+  width: min(280px, 80vw);
+  text-align: center;
+  color: #2f5a33;
+}
+[data-theme="dark"] .garden-loader-card {
+  color: #cfe8c6;
+}
+.garden-loader-card p {
+  margin: 14px 0 10px;
+  font-size: 15px;
+  font-weight: 600;
+}
+.garden-loader-card small {
+  display: block;
+  margin-top: 6px;
+  opacity: 0.7;
+  font-variant-numeric: tabular-nums;
+}
+.garden-loader-sprout {
+  width: 64px;
+  height: 64px;
+  margin: 0 auto;
+  border-radius: 50%;
+  background: radial-gradient(circle at 50% 70%, #8a5a34 0 18%, transparent 19%), radial-gradient(ellipse 34% 26% at 34% 42%, #6fae4a 98%, transparent), radial-gradient(ellipse 34% 26% at 66% 38%, #8cc65a 98%, transparent), #fffbe9;
+  box-shadow: 0 6px 18px #2a4a2a33;
+  animation: loader-sway 1.6s ease-in-out infinite;
+}
+.garden-loader-bar {
+  height: 10px;
+  border-radius: 99px;
+  background: #ffffff8a;
+  border: 1px solid #6c9a5a55;
+  overflow: hidden;
+}
+.garden-loader-bar i {
+  display: block;
+  width: 0;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #7cc062, #4f9a46);
+  transition: width 0.25s ease;
+}
+@keyframes loader-sway {
+  50% {
+    transform: rotate(-6deg) scale(1.03);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .garden-loader-sprout {
+    animation: none;
+  }
+}
+
+/* ===== 第 11 版 ===== */
+/* 鱼池：游戏风鱼竿鼠标；抛竿等待时竿梢压弯、浮漂下沉，不再出现十字和系统转圈 */
+#app .garden-play .pond-hit {
+  cursor: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2232%22 height=%2232%22 viewBox=%220 0 32 32%22%3E%3Cpath d=%22M29 29 Q18 18 9 5%22 fill=%22none%22 stroke=%22%23fff%22 stroke-width=%225%22 stroke-linecap=%22round%22/%3E %3Cpath d=%22M9 5 L6 18%22 stroke=%22%23fff%22 stroke-width=%222.6%22/%3E %3Ccircle cx=%226%22 cy=%2221%22 r=%225%22 fill=%22%23fff%22/%3E %3Cpath d=%22M29 29 Q18 18 9 5%22 fill=%22none%22 stroke=%22%238a5a2c%22 stroke-width=%222.4%22 stroke-linecap=%22round%22/%3E %3Cpath d=%22M29 29 L24 24%22 stroke=%22%234a2c14%22 stroke-width=%223.6%22 stroke-linecap=%22round%22/%3E %3Ccircle cx=%2223.6%22 cy=%2225.6%22 r=%222.3%22 fill=%22%23d6ad55%22 stroke=%22%236a4818%22 stroke-width=%221%22/%3E %3Cpath d=%22M9 5 L6 18%22 stroke=%22%2333404a%22 stroke-width=%220.9%22/%3E %3Cpath d=%22M2.6 21 a3.4 3.4 0 0 1 6.8 0z%22 fill=%22%23e5533d%22 stroke=%22%233a2a22%22 stroke-width=%220.9%22/%3E %3Cpath d=%22M2.6 21 a3.4 3.4 0 0 0 6.8 0z%22 fill=%22%23fffdf6%22 stroke=%22%233a2a22%22 stroke-width=%220.9%22/%3E %3Cpath d=%22M6 17.6 v-2%22 stroke=%22%233a2a22%22 stroke-width=%221.1%22 stroke-linecap=%22round%22/%3E%3C/svg%3E") 6 24, pointer;
+}
+#app .garden-play .pond-hit:disabled,
+#app .garden-play .scene-pond.casting .pond-hit {
+  cursor: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2232%22 height=%2232%22 viewBox=%220 0 32 32%22%3E%3Cpath d=%22M29 29 Q15 15 9 8%22 fill=%22none%22 stroke=%22%23fff%22 stroke-width=%225%22 stroke-linecap=%22round%22/%3E %3Cpath d=%22M9 8 L6 22%22 stroke=%22%23fff%22 stroke-width=%222.6%22/%3E %3Ccircle cx=%226%22 cy=%2225%22 r=%225%22 fill=%22%23fff%22/%3E %3Cpath d=%22M29 29 Q15 15 9 8%22 fill=%22none%22 stroke=%22%238a5a2c%22 stroke-width=%222.4%22 stroke-linecap=%22round%22/%3E %3Cpath d=%22M29 29 L24 24%22 stroke=%22%234a2c14%22 stroke-width=%223.6%22 stroke-linecap=%22round%22/%3E %3Ccircle cx=%2223.6%22 cy=%2225.6%22 r=%222.3%22 fill=%22%23d6ad55%22 stroke=%22%236a4818%22 stroke-width=%221%22/%3E %3Cpath d=%22M9 8 L6 22%22 stroke=%22%2333404a%22 stroke-width=%220.9%22/%3E %3Cpath d=%22M2.6 25 a3.4 3.4 0 0 1 6.8 0z%22 fill=%22%23e5533d%22 stroke=%22%233a2a22%22 stroke-width=%220.9%22/%3E %3Cpath d=%22M2.6 25 a3.4 3.4 0 0 0 6.8 0z%22 fill=%22%23fffdf6%22 stroke=%22%233a2a22%22 stroke-width=%220.9%22/%3E %3Cpath d=%22M6 21.6 v-2%22 stroke=%22%233a2a22%22 stroke-width=%221.1%22 stroke-linecap=%22round%22/%3E%3Cellipse cx=%226%22 cy=%2227.6%22 rx=%225.4%22 ry=%221.6%22 fill=%22none%22 stroke=%22%23fff%22 stroke-width=%221.2%22 opacity=%22.9%22/%3E%3C/svg%3E") 6 27, default;
+}
+
+/* ---------- 游戏风格的弹框：奶油色面板 + 木框 + 绿色绸带标题 + 圆形关闭钮 + 立体按钮 ---------- */
+:root {
+  --g-panel-1: #fffaf0;
+  --g-panel-2: #f6ead0;
+  --g-frame: #dcbb7e;
+  --g-frame-dark: #b48a4a;
+  --g-well: #f1e3c3;
+  --g-well-line: #e3cd9e;
+  --g-tile: #fffdf7;
+  --g-ink: #4a3418;
+  --g-muted: #8a7350;
+  --g-ribbon: #5f9f48;
+  --g-ribbon-dark: #3f7a32;
+}
+[data-theme="dark"] {
+  --g-panel-1: #2a3b2d;
+  --g-panel-2: #203024;
+  --g-frame: #8e6d3c;
+  --g-frame-dark: #5e4522;
+  --g-well: #18251c;
+  --g-well-line: #33483a;
+  --g-tile: #23352a;
+  --g-ink: #f1e6cc;
+  --g-muted: #b7aa86;
+  --g-ribbon: #4f8a3e;
+  --g-ribbon-dark: #2f5f26;
+}
+#modal.modal-backdrop {
+  background: radial-gradient(ellipse at 50% 45%, #1f3a2a55, #0e1d1599);
+}
+#modal .dialog {
+  position: relative;
+  overflow: visible;
+  margin-top: calc(22px * var(--d));
+  color: var(--g-ink);
+  background: linear-gradient(180deg, var(--g-panel-1), var(--g-panel-2));
+  border: calc(4px * var(--d)) solid var(--g-frame);
+  border-radius: calc(26px * var(--d));
+  box-shadow:
+    inset 0 0 0 2px #fff8e6a0,
+    0 calc(8px * var(--d)) 0 var(--g-frame-dark),
+    0 30px 80px #0b1d1450;
+}
+[data-theme="dark"] #modal .dialog {
+  box-shadow:
+    inset 0 0 0 2px #ffffff12,
+    0 calc(8px * var(--d)) 0 var(--g-frame-dark),
+    0 30px 80px #00000070;
+}
+#modal .dialog-body {
+  border-radius: 0 0 calc(22px * var(--d)) calc(22px * var(--d));
+}
+#modal .dialog-head {
+  position: relative;
+  justify-content: center;
+  text-align: center;
+  padding-top: calc(var(--space) * 1.2);
+}
+#modal .dialog-head > div {
+  flex: 1;
+  min-width: 0;
+}
+/* 圆角标题牌：不保留负层级的绸带尾，避免入场 transform 期间闪现。 */
+#modal .dialog-head p {
+  color: var(--g-muted);
+}
+#modal .dialog-close {
+  position: absolute;
+  top: calc(-18px * var(--d));
+  right: calc(-18px * var(--d));
+  width: calc(42px * var(--d));
+  height: calc(42px * var(--d));
+  border-radius: 50%;
+  border: 3px solid #fff3df;
+  background: radial-gradient(circle at 40% 35%, #ffa684, #e0613f 70%);
+  color: #fff;
+  font-size: calc(22px * var(--d));
+  font-weight: 700;
+  box-shadow:
+    0 3px 0 #a8432a,
+    0 6px 14px #0004;
+}
+#modal .dialog-foot {
+  background: transparent;
+  border-top: 2px dashed var(--g-well-line);
+  border-radius: 0 0 calc(22px * var(--d)) calc(22px * var(--d));
+}
+#modal .dialog-foot .foot-info,
+#modal .muted,
+#modal .farm-copy p,
+#modal .small {
+  color: var(--g-muted);
+}
+/* 立体按钮：底边一道深色厚边，按下时下沉 */
+/* 卖出：金币按钮 */
+.coin-dot {
+  width: calc(13px * var(--d));
+  height: calc(13px * var(--d));
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #fff1b0, #f2b928 60%, #b98010);
+  box-shadow: inset 0 0 0 1px #9a6a0c;
+  flex: none;
+}
+/* 养鱼舱：左右两块各自成框，固定高度、各自滚动，待养区铺满右侧 */
+#modal .farm-layout {
+  gap: var(--space);
+  align-items: stretch;
+  height: min(58vh, 620px);
+}
+#modal .farm-layout > section {
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: var(--space);
+  border: 2px solid var(--g-well-line);
+  border-radius: calc(18px * var(--d));
+  background: var(--g-well);
+  box-shadow: inset 0 2px 8px #a07a3a22;
+}
+#modal .farm-layout > section > h3,
+#modal .farm-layout .row.between h3 {
+  display: flex;
+  align-items: center;
+  gap: calc(6px * var(--d));
+  color: var(--g-ink);
+  margin-bottom: calc(8px * var(--d));
+}
+#modal .farm-layout > section > h3::before,
+#modal .farm-layout .row.between h3::before {
+  content: "";
+  width: calc(10px * var(--d));
+  height: calc(10px * var(--d));
+  border-radius: 50% 0;
+  background: #6fb24f;
+  transform: rotate(-45deg);
+}
+#modal .farm-list {
+  max-height: none;
+  overflow: visible;
+}
+#modal .farm-row {
+  margin-bottom: calc(8px * var(--d));
+  padding: calc(8px * var(--d)) calc(10px * var(--d));
+  border: 2px solid var(--g-well-line);
+  border-radius: calc(14px * var(--d));
+  background: var(--g-tile);
+  box-shadow: 0 2px 0 var(--g-well-line);
+}
+#modal .farm-row h3 {
+  color: var(--g-ink);
+}
+/* 生物格子：所有生物都放在一小片水里 */
+#modal .farm-row .fish-art,
+#modal .fish-detail-art {
+  border-radius: calc(12px * var(--d));
+  background: radial-gradient(ellipse 60% 70% at 50% 45%, #a8dde3 0%, #d3eff0 55%, #ecf8f6 85%, transparent 100%);
+}
+[data-theme="dark"] #modal .farm-row .fish-art,
+[data-theme="dark"] #modal .fish-detail-art {
+  background: radial-gradient(ellipse 60% 70% at 50% 45%, #2f6f78 0%, #1f4c55 55%, #183c44 85%, transparent 100%);
+}
+#modal .dose {
+  border: 2px dashed var(--g-frame);
+  background: var(--g-panel-1);
+  color: var(--g-frame-dark);
+}
+#modal .farm-empty {
+  color: var(--g-muted);
+}
+#modal .info-box {
+  border: 2px dashed var(--g-well-line);
+  background: var(--g-well);
+  color: var(--g-muted);
+}
+#modal .info-box strong {
+  color: var(--g-ink);
+}
+/* 图鉴：分类标签做成小药丸按钮，卡片像收藏格 */
+#modal .fish-tabs button {
+  border: 2px solid var(--g-well-line);
+  border-radius: 999px;
+  background: var(--g-tile);
+  color: var(--g-muted);
+  font-weight: 700;
+  box-shadow: 0 2px 0 var(--g-well-line);
+}
+#modal .fish-tabs button.active {
+  border-color: #4b8f39;
+  background: linear-gradient(180deg, #92d26c, #58a443);
+  color: #fff;
+  box-shadow: 0 2px 0 #3a7a2c;
+}
+#modal .atlas-card {
+  border: 2px solid var(--g-well-line);
+  border-radius: calc(16px * var(--d));
+  background: var(--g-tile);
+  box-shadow: 0 3px 0 var(--g-well-line);
+}
+#modal .atlas-card.discovered .fish-art {
+  border-radius: calc(12px * var(--d));
+  background: radial-gradient(ellipse 60% 70% at 50% 45%, #a8dde3 0%, #d3eff0 55%, #ecf8f6 85%, transparent 100%);
+}
+[data-theme="dark"] #modal .atlas-card.discovered .fish-art {
+  background: radial-gradient(ellipse 60% 70% at 50% 45%, #2f6f78 0%, #1f4c55 55%, #183c44 85%, transparent 100%);
+}
+#modal .atlas-card:hover {
+  border-color: #8fc26a;
+  transform: none;
+}
+#modal .detail-grid > div,
+#modal .rule-card {
+  border: 2px solid var(--g-well-line);
+  background: var(--g-tile);
+  border-radius: calc(14px * var(--d));
+}
+.light-note-mobile-rendering #modal .farm-layout {
+  height: auto;
+}
+.light-note-mobile-rendering #modal .farm-layout > section {
+  overflow: visible;
+}
+.light-note-mobile-rendering #modal .dialog-close {
+  top: -14px;
+  right: -6px;
+}
+/* 手机：生物行改成上下两层——图、名字一层，操作按钮一层，不挤压名字 */
+.light-note-mobile-rendering #modal .farm-row {
+  flex-wrap: wrap;
+  row-gap: 8px;
+}
+.light-note-mobile-rendering #modal .farm-row .farm-copy {
+  flex: 1 1 0;
+  min-width: 0;
+}
+.light-note-mobile-rendering #modal .farm-row .row-actions,
+.light-note-mobile-rendering #modal .farm-row > .button {
+  flex: 1 0 100%;
+  justify-content: flex-end;
+}
+.light-note-mobile-rendering #modal .farm-row > .button {
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+.light-note-mobile-rendering #modal .farm-layout > section {
+  padding: 10px;
+}
+.light-note-mobile-rendering #modal .dialog {
+  border-width: 3px;
+}
+
+/* 咬钩：浮漂被猛地拽进水里又冒头、鱼线绷紧，竿梢连着往下抽两三下（绕握把转） */
+#app .garden-play .scene-pond[data-phase="bite"] .line-and-float {
+  opacity: 1;
+}
+#app .garden-play .scene-pond[data-phase="bite"] .rod-body {
+  animation: rodTwitch 0.9s ease-in-out both;
+}
+#app .garden-play .scene-pond[data-phase="bite"] .bobber {
+  transform-box: fill-box;
+  transform-origin: 50% 0;
+  animation: bobberDunk 0.9s cubic-bezier(0.3, 0, 0.3, 1) both;
+}
+#app .garden-play .scene-pond[data-phase="bite"] .fishing-line {
+  animation: lineTaut 0.9s ease-in-out both;
+}
+@keyframes rodTwitch {
+  0% { rotate: 0deg; }
+  12% { rotate: -5.5deg; }
+  24% { rotate: -1deg; }
+  38% { rotate: -6.5deg; }
+  52% { rotate: -1.5deg; }
+  66% { rotate: -4.5deg; }
+  100% { rotate: -2deg; }
+}
+@keyframes bobberDunk {
+  0% { transform: translateY(0); opacity: 1; }
+  14% { transform: translateY(22px) scaleY(0.55); opacity: 0.35; }
+  30% { transform: translateY(8px); opacity: 0.9; }
+  44% { transform: translateY(26px) scaleY(0.4); opacity: 0.25; }
+  62% { transform: translateY(12px); opacity: 0.8; }
+  100% { transform: translateY(24px) scaleY(0.5); opacity: 0.3; }
+}
+@keyframes lineTaut {
+  0%, 100% { stroke-width: 2.4; }
+  14%, 44% { stroke-width: 3.4; }
+}
+#app .garden-play .pond-hint,
+.fx-bite {
+  display: none !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  #app .garden-play .scene-pond[data-phase="bite"] .rod-body,
+  #app .garden-play .scene-pond[data-phase="bite"] .bobber,
+  #app .garden-play .scene-pond[data-phase="bite"] .fishing-line {
+    animation: none;
+  }
+}
+
+/* ===== 第 12 版 ===== */
+/* 轻笺顶栏：搜索左边的知识花园入口 */
+.app-bar .nav-actions {
+  display: flex;
+  align-items: center;
+  gap: calc(6px * var(--d));
+}
+.nav-icon {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: calc(38px * var(--d));
+  height: calc(38px * var(--d));
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+}
+.nav-icon svg {
+  width: calc(22px * var(--d));
+  height: calc(22px * var(--d));
+}
+.nav-icon:hover {
+  background: var(--soft);
+}
+.nav-garden {
+  color: #3f8a3a;
+}
+.nav-dot {
+  position: absolute;
+  top: calc(6px * var(--d));
+  right: calc(6px * var(--d));
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #e5533d;
+  border: 1.5px solid var(--surface);
+}
+.light-note-mobile-rendering .nav-icon:not(.nav-garden) {
+  display: none;
+}
+
+/* 花园沉浸模式：没有轻笺顶栏，整页就是游戏场景 */
+html.garden-immersive .app-bar {
+  display: none;
+}
+html.garden-immersive #app .garden-play {
+  padding: 0;
+}
+html.garden-immersive #app .garden-play .garden-frame {
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+html.garden-immersive #app .garden-play .garden-scene {
+  height: calc(100vh - 28px);
+  height: calc(100svh - 28px);
+  max-height: none;
+}
+html.garden-immersive.light-note-mobile-rendering #app .garden-play .garden-scene {
+  height: calc(100vh - 24px);
+  height: calc(100svh - 24px);
+}
+
+/* 顶部 HUD：返回按钮 + 木框奶油色面板，与弹框同一套游戏风格 */
+#app .garden-play .game-hud {
+  justify-content: flex-start;
+  align-items: flex-start;
+}
+#app .garden-play .hud-right {
+  margin-left: auto;
+}
+.hud-back {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: calc(46px * var(--d));
+  height: calc(46px * var(--d));
+  border-radius: 50%;
+  border: 3px solid var(--g-frame);
+  background: radial-gradient(circle at 40% 30%, #fffaf0, #f2e1bb);
+  color: var(--g-ink);
+  box-shadow:
+    0 3px 0 var(--g-frame-dark),
+    0 6px 14px #1b382033;
+  cursor: pointer;
+}
+.hud-back svg {
+  width: 55%;
+  height: 55%;
+}
+.hud-back:active {
+  transform: translateY(2px);
+  box-shadow: 0 1px 0 var(--g-frame-dark);
+}
+[data-theme="dark"] .hud-back {
+  background: radial-gradient(circle at 40% 30%, #3e5341, #2a3b2d);
+}
+.hud-identity,
+.hud-resources,
+.util-btn,
+#app .garden-play .game-dock {
+  border: 2px solid var(--g-frame);
+  background: linear-gradient(180deg, var(--g-panel-1), var(--g-panel-2));
+  box-shadow:
+    0 3px 0 var(--g-frame-dark),
+    0 8px 18px #1b382026;
+  backdrop-filter: none;
+  color: var(--g-ink);
+}
+#app .garden-play .game-dock {
+  border-width: 3px;
+  box-shadow:
+    0 5px 0 var(--g-frame-dark),
+    0 14px 30px #1b38203a;
+}
+.res-pill {
+  background: transparent;
+  color: var(--g-ink);
+}
+.res-pill small,
+.util-btn b,
+.hud-stage,
+.hud-growth-num {
+  color: var(--g-muted);
+}
+.hud-stage-name {
+  color: var(--g-ink);
+  font-size: calc(15px * var(--d));
+  font-weight: 800;
+}
+.hud-tree-badge {
+  width: calc(22px * var(--d));
+  height: calc(22px * var(--d));
+  flex: none;
+  border-radius: 50%;
+  background: radial-gradient(circle at 50% 78%, #8a5a34 0 14%, transparent 15%), radial-gradient(ellipse 38% 30% at 36% 46%, #6fae4a 98%, transparent), radial-gradient(ellipse 38% 30% at 64% 40%, #8cc65a 98%, transparent), #fff6dd;
+  box-shadow: inset 0 0 0 1.5px var(--g-frame);
+}
+.hud-growth-bar {
+  height: 10px;
+  border-radius: 99px;
+  background: var(--g-well);
+  box-shadow: inset 0 1px 2px #6a4a1a40;
+}
+.hud-growth-bar i {
+  background: linear-gradient(180deg, #9ad46f, #58a443);
+  border-radius: inherit;
+}
+.dock-btn .dock-title {
+  color: var(--g-ink);
+}
+/* 果实倒计时、场景气泡、提示条也换成木框牌子 */
+.fruit-button .fruit-tooltip {
+  border: 1.5px solid var(--g-frame);
+  background: var(--g-panel-1);
+  color: var(--g-ink);
+  box-shadow: 0 2px 0 var(--g-frame-dark);
+  font-weight: 700;
+}
+[data-theme="dark"] .fruit-button .fruit-tooltip {
+  border-color: var(--g-frame);
+  background: var(--g-panel-1);
+  color: var(--g-ink);
+}
+.scene-bubble {
+  border: 2px solid var(--g-frame);
+  background: linear-gradient(180deg, #fffaf0, #f6e6c2);
+  color: var(--g-ink);
+  box-shadow: 0 3px 0 var(--g-frame-dark), 0 6px 14px #1b382026;
+}
+:root[data-theme="dark"] .scene-bubble {
+  border-color: var(--g-frame);
+  background: linear-gradient(180deg, var(--g-panel-1), var(--g-panel-2));
+  color: var(--g-ink);
+}
+.toast {
+  border: 2px solid var(--g-frame);
+  border-radius: 16px;
+  background: linear-gradient(180deg, var(--g-panel-1), var(--g-panel-2));
+  color: var(--g-ink);
+  font-weight: 700;
+  box-shadow:
+    0 3px 0 var(--g-frame-dark),
+    0 10px 24px #0b1d1440;
+}
+/* 手机 HUD：返回按钮占左侧一列 */
+.light-note-mobile-rendering .game-hud {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas:
+    "back id res"
+    "back id utils";
+  column-gap: 8px;
+}
+.light-note-mobile-rendering .hud-back {
+  grid-area: back;
+  width: 40px;
+  height: 40px;
+  border-width: 2px;
+}
+.light-note-mobile-rendering .hud-identity {
+  min-width: 0;
+  overflow: hidden;
+}
+.light-note-mobile-rendering .hud-growth-bar {
+  width: 52px;
+}
+.light-note-mobile-rendering .hud-growth-num {
+  font-size: 11px;
+  white-space: nowrap;
+}
+.light-note-mobile-rendering .hud-stage-name {
+  font-size: 14px;
+}
+[data-theme="dark"] #modal .dose {
+  color: #e8c98e;
+  border-color: #a8834a;
+}
+
+/* ===== 第 13 版：首次进入 · 领养并亲手种下知识树 ===== */
+.scene-tree.plot .soil-plot {
+  position: absolute;
+  left: 0;
+  bottom: -6%;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+  pointer-events: none;
+}
+.scene-tree.plot .plot-hit {
+  position: absolute;
+  left: 26%;
+  right: 24%;
+  bottom: -3%;
+  height: 22%;
+  border-radius: 50%;
+  background: transparent;
+  cursor: pointer;
+  z-index: 3;
+}
+.soil-plot .plot-hole,
+.soil-plot .plot-seed,
+.soil-plot .plot-cover,
+.soil-plot .plot-sprout,
+.soil-plot .plot-ring {
+  opacity: 0;
+  transition: opacity 0.35s ease;
+}
+.soil-plot.dug .plot-hole {
+  opacity: 1;
+}
+.soil-plot.seeded .plot-seed {
+  opacity: 1;
+  transform-box: view-box;
+  animation: seedDrop 0.75s cubic-bezier(0.45, 0, 0.6, 1) both;
+}
+.soil-plot.covered .plot-seed,
+.soil-plot.covered .plot-hole {
+  opacity: 0;
+}
+.soil-plot.covered .plot-cover {
+  opacity: 1;
+}
+.soil-plot.sprouting .plot-sprout {
+  opacity: 1;
+  transform-box: view-box;
+  transform-origin: 523px 960px;
+  animation: sproutUp 1.2s cubic-bezier(0.2, 0.9, 0.3, 1.3) both;
+}
+.soil-plot.sprouting .leaf-l {
+  transform-box: view-box;
+  transform-origin: 526px 892px;
+  animation: leafOpenL 1s 0.35s ease-out both;
+}
+.soil-plot.sprouting .leaf-r {
+  transform-box: view-box;
+  transform-origin: 527px 888px;
+  animation: leafOpenR 1s 0.45s ease-out both;
+}
+.garden-scene[data-guide="plant"] .soil-plot .plot-ring {
+  opacity: 1;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: plotRing 1.6s ease-out infinite;
+}
+@keyframes seedDrop {
+  0% { transform: translateY(-300px); opacity: 0; }
+  20% { opacity: 1; }
+  80% { transform: translateY(8px); }
+  100% { transform: translateY(0); opacity: 1; }
+}
+@keyframes sproutUp {
+  0% { transform: scale(0.05, 0.02); }
+  60% { transform: scale(1.06, 1.12); }
+  100% { transform: scale(1); }
+}
+@keyframes leafOpenL {
+  from { transform: rotate(70deg) scale(0.3); }
+  to { transform: none; }
+}
+@keyframes leafOpenR {
+  from { transform: rotate(-70deg) scale(0.3); }
+  to { transform: none; }
+}
+@keyframes plotRing {
+  0% { transform: scale(0.75); opacity: 0.95; }
+  100% { transform: scale(1.18); opacity: 0; }
+}
+.plot-hint {
+  position: absolute;
+  left: 52%;
+  bottom: 11%;
+  translate: -50% 0;
+  z-index: 4;
+  display: none;
+  flex-direction: column-reverse;
+  align-items: center;
+  gap: 6px;
+  pointer-events: none;
+}
+.garden-scene[data-guide="plant"] .plot-hint {
+  display: flex;
+}
+.plot-hint-text {
+  padding: calc(7px * var(--d)) calc(14px * var(--d));
+  border: 2px solid var(--g-frame);
+  border-radius: 14px;
+  background: linear-gradient(180deg, var(--g-panel-1), var(--g-panel-2));
+  color: var(--g-ink);
+  font-weight: 800;
+  font-size: var(--small);
+  white-space: nowrap;
+  box-shadow: 0 3px 0 var(--g-frame-dark), 0 8px 18px #1b382033;
+}
+.plot-hint-arrow {
+  width: 0;
+  height: 0;
+  border-left: 12px solid transparent;
+  border-right: 12px solid transparent;
+  border-top: 16px solid #ffd76a;
+  filter: drop-shadow(0 2px 0 #b8862a);
+  animation: hintBounce 0.9s ease-in-out infinite;
+}
+@keyframes hintBounce {
+  50% { transform: translateY(8px); }
+}
+.particle.soil {
+  width: 9px;
+  height: 7px;
+  border-radius: 40% 55% 45% 50%;
+  background: radial-gradient(circle at 35% 30%, #b07f55, #5a3820 70%);
+}
+.fx-shovel {
+  position: fixed;
+  z-index: 60;
+  width: var(--h, 60px);
+  aspect-ratio: 60 / 120;
+  pointer-events: none;
+  transform-origin: 50% 90%;
+  animation: shovelDig 0.38s ease-in-out infinite;
+  filter: drop-shadow(0 6px 6px #2a1a0e44);
+}
+.fx-shovel svg {
+  width: 100%;
+  height: 100%;
+}
+.fx-shovel.leaving {
+  animation: none;
+  opacity: 0;
+  transition: opacity 0.35s;
+}
+@keyframes shovelDig {
+  0% { transform: translateY(-26px) rotate(-18deg); }
+  55% { transform: translateY(6px) rotate(6deg); }
+  100% { transform: translateY(-26px) rotate(-18deg); }
+}
+/* 小树破土后从泥土里长出来 */
+.scene-tree.just-planted .tree-interactive {
+  animation: treeRise 1.5s cubic-bezier(0.2, 0.9, 0.25, 1.15) both;
+}
+@keyframes treeRise {
+  0% { scale: 0.12; opacity: 0; }
+  30% { opacity: 1; }
+  100% { scale: var(--young-scale, 0.72); opacity: 1; }
+}
+
+/* 引导期间：其他元素先安静下来，只突出当前要做的事 */
+.garden-scene.unplanted .hud-identity,
+.garden-scene.unplanted .hud-right {
+  visibility: hidden;
+}
+.garden-scene.onboarding .scene-tank,
+.garden-scene.onboarding .scene-pond {
+  pointer-events: none;
+  filter: saturate(0.75);
+}
+.garden-scene.onboarding:not([data-guide="water"]) .game-dock {
+  pointer-events: none;
+  opacity: 0.55;
+  filter: saturate(0.6);
+}
+.garden-scene[data-guide="water"] .dock-btn:not([data-dock="water"]) {
+  pointer-events: none;
+  opacity: 0.45;
+  filter: saturate(0.5);
+}
+.garden-scene[data-guide="water"] [data-dock="water"] .dock-disc {
+  animation: waterCall 1.3s ease-in-out infinite;
+}
+@keyframes waterCall {
+  0%, 100% { box-shadow: 0 0 0 0 #ffe27aa0, 0 4px 0 #a3b282; }
+  50% { box-shadow: 0 0 0 10px #ffe27a00, 0 4px 0 #a3b282; }
+}
+.dock-callout {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 16px);
+  width: max-content;
+  max-width: min(320px, 80vw);
+  padding: calc(10px * var(--d)) calc(14px * var(--d));
+  border: 2px solid var(--g-frame);
+  border-radius: 16px;
+  background: linear-gradient(180deg, var(--g-panel-1), var(--g-panel-2));
+  color: var(--g-ink);
+  font-weight: 800;
+  font-size: var(--font);
+  line-height: 1.45;
+  box-shadow: 0 3px 0 var(--g-frame-dark), 0 10px 24px #1b382033;
+  animation: dialogIn 0.3s ease-out;
+}
+.dock-callout small {
+  display: block;
+  margin-top: 3px;
+  font-weight: 600;
+  font-size: var(--small);
+  color: var(--g-muted);
+}
+.dock-callout::after {
+  content: "";
+  position: absolute;
+  left: calc(34px * var(--d));
+  bottom: -11px;
+  border-left: 10px solid transparent;
+  border-right: 10px solid transparent;
+  border-top: 11px solid var(--g-frame);
+}
+/* 领养卡与「以后怎么玩」卡：场景里的游戏面板 */
+#gardenGuide {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  pointer-events: none;
+}
+#gardenGuide > * {
+  pointer-events: auto;
+}
+.guide-veil {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at 50% 45%, #0e2a1a33, #0b1d14a0);
+  animation: veilIn 0.4s ease-out;
+}
+.guide-veil.soft {
+  background: radial-gradient(ellipse at 50% 45%, #0e2a1a1a, #0b1d1470);
+}
+@keyframes veilIn {
+  from { opacity: 0; }
+}
+.guide-card {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  translate: -50% -50%;
+  width: min(420px, calc(100% - 32px));
+  padding: calc(34px * var(--d)) calc(26px * var(--d)) calc(24px * var(--d));
+  border: calc(4px * var(--d)) solid var(--g-frame);
+  border-radius: calc(26px * var(--d));
+  background: linear-gradient(180deg, var(--g-panel-1), var(--g-panel-2));
+  color: var(--g-ink);
+  text-align: center;
+  box-shadow:
+    inset 0 0 0 2px #fff8e6a0,
+    0 calc(8px * var(--d)) 0 var(--g-frame-dark),
+    0 30px 80px #0b1d1460;
+  animation: guideIn 0.45s cubic-bezier(0.2, 0.9, 0.3, 1.2) both;
+}
+@keyframes guideIn {
+  from { opacity: 0; transform: translateY(18px) scale(0.92); }
+}
+.guide-card h2 {
+  position: absolute;
+  left: 50%;
+  top: calc(-22px * var(--d));
+  translate: -50% 0;
+  margin: 0;
+  padding: calc(8px * var(--d)) calc(28px * var(--d));
+  border-radius: calc(12px * var(--d));
+  background: linear-gradient(180deg, #86c56a, var(--g-ribbon));
+  color: #fff;
+  font-size: calc(19px * var(--d));
+  white-space: nowrap;
+  text-shadow: 0 1px 0 #2e5a2299;
+  box-shadow: inset 0 2px 0 #ffffff55, 0 calc(4px * var(--d)) 0 var(--g-ribbon-dark);
+}
+.guide-card p {
+  margin: calc(6px * var(--d)) 0 calc(14px * var(--d));
+  color: var(--g-muted);
+  font-size: var(--font);
+  line-height: 1.75;
+}
+.guide-card p strong {
+  color: var(--g-ink);
+}
+.welcome-gift-art {
+  position:relative;width:calc(174px * var(--d));height:calc(132px * var(--d));
+  margin:calc(8px * var(--d)) auto calc(6px * var(--d));
+}
+.welcome-gift-art .gift-crate {position:absolute;left:calc(25px * var(--d));bottom:0;width:calc(118px * var(--d));height:calc(118px * var(--d));}
+.welcome-gift-art .gift-water {position:absolute;left:0;bottom:calc(2px * var(--d));width:calc(78px * var(--d));height:calc(78px * var(--d));rotate:-10deg;filter:drop-shadow(0 calc(3px * var(--d)) calc(2px * var(--d)) #6d421737);}
+.welcome-gift-art .gift-water .game-sprite {display:block;width:100%;height:100%;}
+.welcome-gift-art .gift-seeds {position:absolute;right:0;bottom:0;width:calc(72px * var(--d));height:calc(88px * var(--d));rotate:10deg;filter:drop-shadow(0 calc(3px * var(--d)) calc(2px * var(--d)) #6d421737);}
+.welcome-gift-art .gift-seeds img {display:block;width:100%;height:100%;object-fit:contain;}
+.guide-gift {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: calc(16px * var(--d));
+  padding: calc(4px * var(--d)) calc(14px * var(--d)) calc(4px * var(--d)) calc(6px * var(--d));
+  border: 2px dashed var(--g-well-line);
+  border-radius: 999px;
+  background: var(--g-well);
+  font-weight: 800;
+  font-size: var(--small);
+}
+.guide-gift .game-sprite {
+  width: calc(28px * var(--d));
+  height: calc(28px * var(--d));
+}
+.guide-cta {
+  display: block;
+  width: 100%;
+  min-height: calc(var(--control) * 1.25);
+  border: 2px solid #4b8f39;
+  border-radius: calc(16px * var(--d));
+  background: linear-gradient(180deg, #92d26c, #58a443);
+  color: #fff;
+  font-size: calc(17px * var(--d));
+  font-weight: 800;
+  text-shadow: 0 1px 0 #2e6a2488;
+  box-shadow: 0 4px 0 #3a7a2c, 0 10px 20px #1b382033;
+  cursor: pointer;
+}
+.guide-cta:active {
+  transform: translateY(3px);
+  box-shadow: 0 1px 0 #3a7a2c;
+}
+.guide-steps {
+  list-style: none;
+  margin: calc(8px * var(--d)) 0 calc(18px * var(--d));
+  padding: 0;
+  display: grid;
+  gap: calc(8px * var(--d));
+  text-align: left;
+}
+.guide-steps li {
+  display: flex;
+  align-items: center;
+  gap: calc(10px * var(--d));
+  padding: calc(8px * var(--d)) calc(12px * var(--d));
+  border: 2px solid var(--g-well-line);
+  border-radius: 14px;
+  background: var(--g-tile);
+  color: var(--g-muted);
+  font-size: var(--small);
+  line-height: 1.5;
+}
+.guide-steps li > .game-sprite,
+.guide-steps li > svg {
+  width: calc(34px * var(--d));
+  height: calc(34px * var(--d));
+  flex: none;
+}
+.guide-steps b {
+  display: block;
+  color: var(--g-ink);
+  font-size: var(--font);
+}
+html:not(.kbd-nav) #gardenGuide :focus-visible {
+  outline: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .plot-hint-arrow,
+  .fx-shovel,
+  .garden-scene[data-guide="water"] [data-dock="water"] .dock-disc,
+  .garden-scene[data-guide="plant"] .soil-plot .plot-ring {
+    animation: none;
+  }
+}
+/* 场景里的小动物：动物只在空地上活动，所以画在树、养鱼舱、灵池上面一层（青蛙蹲在池边、蜻蜓停在睡莲上） */
+.critter-layer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 4;
+  pointer-events: none;
+}
+.garden-scene.critter-hover {
+  cursor: pointer;
+}
+
+/* ===== 第 14 版 ===== */
+/* 水不够时，浇水按钮的数字变成提醒色 */
+.dock-btn.short .dock-sub {
+  color: #c0721e;
+}
+/* 电脑端：一直是全景养鱼舱，压低高度、靠右上铺开，左边缘停在小路分叉处之外 */
+#app .garden-play .scene-tank,
+#app .garden-play .scene-tank.large,
+#app .garden-play .scene-tank.ocean {
+  --tank-unit: min(22.6cqh, 10.6cqw);
+  top: max(6.5%, 58px);
+  right: 2%;
+}
+
+/* 养鱼舱：内容区只分配可用高度，桌面左右栏分别承接滚动。 */
+#modal .farm-dialog > .dialog-body {
+  display: flex;
+  overflow: hidden;
+}
+#modal .farm-board {
+  display: grid;
+  flex: 1;
+  min-height: 0;
+  grid-template-columns: minmax(0, 1.12fr) minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  gap: var(--space);
+  align-items: stretch;
+}
+#modal .tank-panel {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: calc(12px * var(--d));
+  border: 2px solid var(--g-well-line);
+  border-radius: calc(18px * var(--d));
+  background: var(--g-well);
+  box-shadow: inset 0 2px 8px #a07a3a22;
+}
+#modal .stored-panel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+#modal .stored-panel > .panel-head {
+  flex: none;
+}
+#modal .stored-scroll {
+  position: relative;
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  margin: 0 calc(-4px * var(--d));
+  padding: 0 calc(4px * var(--d)) calc(4px * var(--d));
+}
+#modal .panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: calc(8px * var(--d));
+}
+#modal .panel-head h3 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  color: var(--g-ink);
+  font-size: var(--font);
+}
+#modal .panel-head h3::before {
+  content: "";
+  width: calc(10px * var(--d));
+  height: calc(10px * var(--d));
+  border-radius: 50% 0;
+  background: #6fb24f;
+  transform: rotate(-45deg);
+}
+#modal .panel-head h3 b {
+  color: var(--g-muted);
+  font-weight: 700;
+  font-size: var(--small);
+}
+#modal .panel-head > span {
+  color: var(--g-muted);
+  font-size: var(--small);
+}
+#modal .show-head {
+  margin-top: calc(12px * var(--d));
+}
+#modal .collect-btn {
+  width: 100%;
+  margin-top: calc(10px * var(--d));
+}
+#modal .fish-tabs.mini button {
+  padding: 2px 10px;
+  font-size: calc(11.5px * var(--d));
+}
+#modal .tile-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: calc(8px * var(--d));
+}
+#modal .tank-tile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 0;
+  padding: calc(6px * var(--d)) calc(6px * var(--d)) calc(7px * var(--d));
+  border: 2px solid var(--g-well-line);
+  border-radius: calc(14px * var(--d));
+  background: var(--g-tile);
+  box-shadow: 0 2px 0 var(--g-well-line);
+  color: var(--g-ink);
+  text-align: center;
+}
+#modal .tank-tile.rare {
+  border-color: #8fc0e8;
+}
+#modal .tank-tile.precious {
+  border-color: #c3a2e6;
+}
+#modal .tank-tile.legend {
+  border-color: #e7be5a;
+  box-shadow: 0 2px 0 #c9982f, 0 0 0 3px #ffe9a644;
+}
+#modal .tank-tile .tile-art {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+}
+#modal .tank-tile .tile-art .fish-art {
+  width: 100%;
+  height: 100%;
+  border-radius: calc(10px * var(--d));
+  background: radial-gradient(ellipse 60% 70% at 50% 45%, #a8dde3 0%, #d3eff0 55%, #ecf8f6 85%, transparent 100%);
+}
+[data-theme="dark"] #modal .tank-tile .tile-art .fish-art {
+  background: radial-gradient(ellipse 60% 70% at 50% 45%, #2f6f78 0%, #1f4c55 55%, #183c44 85%, transparent 100%);
+}
+#modal .tile-name {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  max-width: 100%;
+  margin-top: 3px;
+  font-weight: 800;
+  font-size: var(--small);
+}
+#modal .tile-name > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.q-dot {
+  width: 7px;
+  height: 7px;
+  flex: none;
+  border-radius: 50%;
+  background: #b9b09a;
+}
+.q-dot.rare {
+  background: #4f9be0;
+}
+.q-dot.precious {
+  background: #9a66d6;
+}
+.q-dot.legend {
+  background: #e5a91e;
+  box-shadow: 0 0 0 2px #ffe7a2;
+}
+#modal .tile-status {
+  margin-top: 1px;
+  color: var(--g-muted);
+  font-size: calc(11px * var(--d));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+#modal .tile-status.ready {
+  color: #3f8a3a;
+  font-weight: 800;
+}
+#modal .tile-progress {
+  width: 86%;
+  height: 4px;
+  margin-top: 4px;
+  border-radius: 99px;
+  background: var(--g-well);
+  overflow: hidden;
+}
+#modal .tile-progress span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #8fd16a, #4f9a46);
+}
+#modal .tile-actions {
+  display: flex;
+  justify-content: center;
+  gap: 4px;
+  width: 100%;
+  margin-top: calc(6px * var(--d));
+}
+#modal .tile-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  min-width: 0;
+  flex: 1 1 0;
+  height: calc(26px * var(--d));
+  padding: 0 4px;
+  border: 1.5px solid var(--g-well-line);
+  border-radius: 9px;
+  background: var(--g-panel-1);
+  color: var(--g-ink);
+  font-size: calc(11.5px * var(--d));
+  font-weight: 800;
+  box-shadow: 0 2px 0 var(--g-well-line);
+  cursor: pointer;
+  white-space: nowrap;
+}
+#modal .tile-btn.sell {
+  border-color: #e3b84f;
+  background: linear-gradient(180deg, #fff6cf, #ffe18c);
+  color: #7d520a;
+  box-shadow: 0 2px 0 #c99a33;
+}
+#modal .tile-btn.primary {
+  border-color: #4b8f39;
+  background: linear-gradient(180deg, #92d26c, #58a443);
+  color: #fff;
+  box-shadow: 0 2px 0 #3a7a2c;
+}
+[data-theme="dark"] #modal .tile-btn {
+  background: #2f4334;
+}
+[data-theme="dark"] #modal .tile-btn.sell {
+  background: linear-gradient(180deg, #5c4a1d, #4a3b14);
+  border-color: #a37e2c;
+  color: #ffe6a0;
+  box-shadow: 0 2px 0 #2e2408;
+}
+#modal .tile-btn .coin-dot {
+  width: 11px;
+  height: 11px;
+}
+#modal .tank-tile.empty {
+  justify-content: center;
+  gap: 4px;
+  min-height: calc(118px * var(--d));
+  border-style: dashed;
+  background: transparent;
+  box-shadow: none;
+  color: var(--g-muted);
+  cursor: pointer;
+}
+#modal .tank-tile.empty:hover,
+#modal .tank-tile.pick:hover {
+  border-color: #8fc26a;
+  background: var(--g-tile);
+}
+#modal .tank-tile.pick {
+  cursor: pointer;
+}
+#modal .tile-plus {
+  display: grid;
+  place-items: center;
+  width: calc(34px * var(--d));
+  height: calc(34px * var(--d));
+  border-radius: 50%;
+  border: 2px dashed var(--g-frame);
+  color: var(--g-frame-dark);
+  font-size: 18px;
+  font-weight: 800;
+}
+#modal .tile-empty-text {
+  font-size: calc(11.5px * var(--d));
+  font-weight: 700;
+}
+.atlas-progress {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: calc(10px * var(--d));
+}
+.atlas-bar {
+  flex: 1;
+  height: 10px;
+  border-radius: 99px;
+  background: var(--g-well);
+  box-shadow: inset 0 1px 2px #6a4a1a40;
+  overflow: hidden;
+}
+.atlas-bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #9ad46f, #58a443);
+}
+.atlas-progress b {
+  color: var(--g-ink);
+  font-size: var(--small);
+}
+#modal .fish-tabs {
+  margin-bottom: calc(10px * var(--d));
+}
+/* 手机：上下排，格子两列 */
+.light-note-mobile-rendering #modal .farm-dialog > .dialog-body {
+  display: block;
+  overflow: auto;
+}
+.light-note-mobile-rendering #modal .farm-board {
+  grid-template-columns: 1fr;
+  grid-template-rows: auto;
+}
+.light-note-mobile-rendering #modal .tank-panel {
+  overflow: visible;
+}
+.light-note-mobile-rendering #modal .stored-scroll {
+  flex: none;
+  overflow: visible;
+}
+.light-note-mobile-rendering #modal .tile-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+/* 压缩格子高度：桌面 760px 高的屏幕也能一眼看到观赏位 */
+#modal .tank-tile .tile-art {
+  aspect-ratio: 2.3 / 1;
+}
+#modal .tank-tile.empty {
+  min-height: 0;
+  height: 100%;
+}
+#modal .tile-grid {
+  align-items: stretch;
+}
+#modal .tank-panel .tile-grid .tank-tile.empty {
+  min-height: calc(112px * var(--d));
+}
+.collect-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: calc(28px * var(--d));
+  padding: 0 10px 0 4px;
+  border: 1.5px solid #a8cf86;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #ebf7da, #d3ecb7);
+  color: #3f6f2c;
+  font-weight: 800;
+  font-size: var(--small);
+  box-shadow: 0 2px 0 #8db96a;
+  cursor: pointer;
+}
+.collect-chip .game-sprite {
+  width: calc(24px * var(--d));
+  height: calc(24px * var(--d));
+}
+.collect-chip:disabled {
+  opacity: 0.6;
+  cursor: default;
+  box-shadow: none;
+}
+[data-theme="dark"] .collect-chip {
+  background: linear-gradient(180deg, #34552f, #284426);
+  border-color: #4e7a3f;
+  color: #cfeab8;
+  box-shadow: 0 2px 0 #1d3419;
+}
+#modal .farm-dialog > .dialog-head {
+  padding-bottom: calc(6px * var(--d));
+}
+#modal .tank-tile .tile-art {
+  aspect-ratio: auto;
+  height: calc(66px * var(--d));
+  overflow: hidden;
+}
+#modal .tank-tile .tile-art .fish-art {
+  display: block;
+}
+#modal .tank-panel .tile-grid .tank-tile.empty {
+  min-height: calc(118px * var(--d));
+}
+/* 手机：空位压成一行矮条，观赏位不被挤出首屏 */
+.light-note-mobile-rendering #modal .tank-panel .tile-grid .tank-tile.empty {
+  flex-direction: row;
+  gap: 8px;
+  min-height: calc(54px * var(--d));
+}
+.light-note-mobile-rendering #modal .tank-tile.empty .tile-plus {
+  width: calc(28px * var(--d));
+  height: calc(28px * var(--d));
+  font-size: 15px;
+}
+
+/* ===== 第 15 版 ===== */
+/* 底部操作坞：钓鱼与其他按钮同尺寸、同形状，只用浅蓝底色和免费次数提示区分 */
+.dock-btn.primary {
+  width: calc(74px * var(--d));
+}
+.dock-btn.primary .dock-disc {
+  width: calc(52px * var(--d));
+  height: calc(52px * var(--d));
+  margin-top: 0;
+  border-radius: 17px;
+  border-color: #fff;
+  background: linear-gradient(160deg, #f4fdff, #c4e9f1);
+  box-shadow:
+    0 3px 0 #6fa9b7,
+    0 6px 14px #1e5e6e2b;
+}
+.dock-btn.primary:hover .dock-disc,
+html.kbd-nav .dock-btn.primary:focus-visible .dock-disc {
+  box-shadow:
+    0 6px 0 #6fa9b7,
+    0 10px 20px #1e5e6e33;
+}
+.dock-btn.primary:active .dock-disc {
+  box-shadow:
+    0 1px 0 #6fa9b7,
+    0 3px 8px #1e5e6e2b;
+}
+.dock-btn.primary.has-free .dock-disc::after {
+  inset: -5px;
+  border-radius: 21px;
+}
+.light-note-mobile-rendering .dock-btn.primary {
+  flex: 1;
+}
+.light-note-mobile-rendering .dock-btn.primary .dock-disc {
+  width: 42px;
+  height: 42px;
+  margin-top: 0;
+  border-radius: 14px;
+}
+.light-note-mobile-rendering .dock-btn.primary.has-free .dock-disc::after {
+  border-radius: 18px;
+}
+
+/* 手机竖屏：取草地左侧没有小路的一段；树在左上、养鱼舱在右中、灵池在左下，错落摆放互不遮挡 */
+/* 图片只露出左边 31%（小路从 33% 开始）：按宽度定尺寸，矮屏也不会把右边的小路带进来 */
+.light-note-mobile-rendering #app .garden-play .garden-backdrop {
+  inset: auto;
+  left: 0;
+  top: 50%;
+  width: 322cqw;
+  height: max(100cqh, 215cqw);
+  max-width: none;
+  translate: 0 -50%;
+  object-position: 0% 50%;
+}
+.light-note-mobile-rendering #app .garden-play .scene-tree,
+.light-note-mobile-rendering #app .garden-play .scene-tree.young {
+  --tree-w: min(70cqw, 33cqh);
+  left: -3%;
+  top: max(12.5%, 100px);
+  bottom: auto;
+  width: var(--tree-w);
+}
+.light-note-mobile-rendering #app .garden-play .scene-tank,
+.light-note-mobile-rendering #app .garden-play .scene-tank.large,
+.light-note-mobile-rendering #app .garden-play .scene-tank.ocean {
+  --tank-unit: min(36cqw, 16.5cqh);
+  top: calc(max(12.5%, 100px) + min(70cqw, 33cqh) * 0.97);
+  right: 3%;
+  left: auto;
+  translate: none;
+}
+.light-note-mobile-rendering #app .garden-play .scene-pond {
+  left: 3%;
+  right: auto;
+  top: auto;
+  bottom: 128px;
+  width: min(50cqw, 23cqh);
+}
+/* 手机上树小，青果不写倒计时（会互相压住、挡住别的果子），改画一圈成熟进度；最近一颗的时间在树上的气泡里 */
+.light-note-mobile-rendering .fruit-button.unripe .fruit-tooltip {
+  display: none;
+}
+.light-note-mobile-rendering .fruit-button.unripe::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 60%;
+  width: 150%;
+  aspect-ratio: 1;
+  translate: -50% -50%;
+  border-radius: 50%;
+  background: conic-gradient(#f4c23d calc(var(--p, 0) * 360deg), #fffbeab3 0);
+  -webkit-mask: radial-gradient(farthest-side, #0000 calc(100% - 3.5px), #000 calc(100% - 3px));
+  mask: radial-gradient(farthest-side, #0000 calc(100% - 3.5px), #000 calc(100% - 3px));
+  pointer-events: none;
+}
+.scene-bubble.clock {
+  cursor: default;
+  font-weight: 500;
+  animation: none;
+}
+.scene-bubble.clock b {
+  font-variant-numeric: tabular-nums;
+  font-weight: 800;
+}
+
+/* 新鱼落水的水花：一圈涟漪 + 几滴溅起的水珠 + 两串小气泡 */
+#app .garden-play .tank-splash {
+  position: absolute;
+  z-index: 3;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+.tank-splash::before {
+  content: "";
+  position: absolute;
+  left: -26px;
+  top: -7px;
+  width: 52px;
+  height: 14px;
+  border: 2px solid #f4fffff0;
+  border-radius: 50%;
+  animation: splashRing 0.9s ease-out forwards;
+}
+.tank-splash i {
+  position: absolute;
+  left: -3px;
+  top: -3px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #f4ffff;
+  box-shadow: 0 0 0 1px #9ed8e6;
+  animation: splashDrop 0.7s cubic-bezier(0.2, 0.7, 0.4, 1) forwards;
+}
+.tank-splash i:nth-child(1) { --dx: -22px; --dy: -26px; }
+.tank-splash i:nth-child(2) { --dx: -9px; --dy: -38px; animation-delay: 0.03s; }
+.tank-splash i:nth-child(3) { --dx: 4px; --dy: -42px; }
+.tank-splash i:nth-child(4) { --dx: 16px; --dy: -32px; animation-delay: 0.05s; }
+.tank-splash i:nth-child(5) { --dx: 26px; --dy: -20px; }
+.tank-splash b {
+  position: absolute;
+  left: -4px;
+  top: 6px;
+  width: 7px;
+  height: 7px;
+  border: 1.5px solid #effffff0;
+  border-radius: 50%;
+  animation: splashBubble 1.2s ease-out 0.25s forwards;
+  opacity: 0;
+}
+.tank-splash b:nth-of-type(2) {
+  left: 8px;
+  width: 5px;
+  height: 5px;
+  animation-delay: 0.45s;
+}
+@keyframes splashRing {
+  from { transform: scale(0.3); opacity: 1; }
+  to { transform: scale(2.2); opacity: 0; }
+}
+@keyframes splashDrop {
+  0% { transform: translate(0, 0) scale(1); opacity: 1; }
+  60% { transform: translate(var(--dx), var(--dy)) scale(0.9); opacity: 1; }
+  100% { transform: translate(calc(var(--dx) * 1.3), calc(var(--dy) * 0.2)) scale(0.5); opacity: 0; }
+}
+@keyframes splashBubble {
+  0% { transform: translateY(40px); opacity: 0; }
+  20% { opacity: 1; }
+  100% { transform: translateY(0); opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tank-splash { display: none; }
+}

@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>知识庄园</title>
+    <link rel="stylesheet" href="knowledge-garden-v19/garden.css?v=219" />
+    <link rel="stylesheet" href="knowledge-garden-v19/garden-game.css?v=219" />
+    <link rel="stylesheet" href="knowledge-garden-v19/garden-v19.css?v=219" />
+    <link rel="stylesheet" href="knowledge-garden-v19/garden-courtyard.css?v=219" />
+    <link rel="stylesheet" href="knowledge-garden-v19/garden-farm.css?v=219" />
+    <link rel="stylesheet" href="knowledge-garden-v19/farm-facilities.css?v=219" />
+    <link rel="stylesheet" href="knowledge-garden-v19/garden-r19.css?v=219" />
+  </head>
+  <body>
+    <script src="knowledge-garden-v19/garden-loader.js?v=219"></script>
+    <details class="prototype-lab" hidden style="display:none">
+      <summary>原型 v19（种田 P0） · 体验设置 <span>示例数据 · 请用本地服务打开</span></summary>
+      <div class="prototype-toolbar">
+        <div class="prototype-label">
+          <strong>知识庄园 · 原型 v19（游戏布局）</strong
+          ><span>示例数据，仅用于确认体验</span>
+        </div>
+        <div class="prototype-controls">
+          <label
+            >页面
+            <select id="viewSelect" aria-label="预览页面">
+              <option value="tree">庄园</option>
+              <option value="workbench">工作台 · 顶栏入口</option>
+              <option value="rules">玩法说明</option>
+            </select></label
+          >
+          <label
+            >场景
+            <select id="sceneSelect" aria-label="体验场景">
+              <option value="first">首次进入 · 领见面礼</option>
+              <option value="garden">日常 · 庄园 Lv.8</option>
+              <option value="early">起步 · 第 3 天</option>
+              <option value="full">后期 · 8 块地全开</option>
+              <option value="empty">空地 · 种子充足</option>
+              <option value="sizes">体型对照 · 7 / 18 / 55 cm</option>
+              <option value="large">大型鱼 · 舱内游动</option>
+              <option value="atlas">图鉴 · 全部水族</option>
+              <option value="atlas-new">图鉴 · 新物种未读</option>
+              <option value="poor">水滴与积分不足</option>
+              <option value="facilities">新设备 · 材料充足</option>
+              <option value="purifier">净化器 · 升级备料齐</option>
+            </select></label
+          >
+          <label
+            >钓鱼结果
+            <select id="castResult" aria-label="钓鱼结果演示">
+              <option value="random">随机</option>
+              <option value="empty">演示空竿</option>
+              <option value="whale">演示鲸鲨</option>
+              <option value="octopus">演示章鱼</option>
+              <option value="purplejelly">演示紫纹水母</option>
+            </select></label
+          >
+          <button id="timeAdvance">推进 6 小时</button
+          ><button id="dayAdvance">推进一天</button
+          ><button id="deviceToggle">手机预览</button
+          ><button id="themeToggle">深色</button
+          ><label
+            >轻笺密度
+            <select id="densitySelect" aria-label="界面密度" title="庄园固定游戏比例；此设置只影响轻笺页面">
+              <option value="standard">标准</option>
+              <option value="compact">紧凑</option>
+              <option value="comfortable">宽松</option>
+            </select></label
+          ><button id="reset">重置</button>
+        </div>
+      </div>
+    </details>
+    <div id="shell">
+      <div id="app"></div>
+    </div>
+    <div class="modal-backdrop" id="modal" hidden>
+      <section
+        class="dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="dialogTitle"
+        tabindex="-1"
+        id="dialog"
+      ></section>
+    </div>
+    <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+    <span class="sr-only" id="announce" aria-live="polite"></span>
+    <script src="knowledge-garden-v19/creature-art.js?v=219"></script>
+    <script src="knowledge-garden-v19/fish-art.js?v=219"></script>
+    <script src="garden-model.js?v=knowledge-manor-v1"></script>
+    <script src="knowledge-garden-v19/garden-habitat.js?v=219"></script>
+    <script src="knowledge-garden-v19/garden-art.js?v=219"></script>
+    <script src="knowledge-garden-v19/garden-motion.js?v=219"></script>
+    <script src="knowledge-garden-v19/fish-motion.js?v=219"></script>
+    <script src="knowledge-garden-v19/creature-motion.js?v=219"></script>
+    <script src="knowledge-garden-v19/garden-fx.js?v=219"></script>
+    <script src="knowledge-garden-v19/garden-animal-pose.js?v=219"></script>
+    <script src="knowledge-garden-v19/vendor/three-0.160.1.min.js"></script>
+    <script src="knowledge-garden-v19/garden-animal-skin.js?v=219"></script><script src="knowledge-garden-v19/garden-animals-3d.js?v=219"></script>
+    <script src="knowledge-garden-v19/garden-critters.js?v=219"></script>
+    <script src="knowledge-garden-v19/garden-companions.js?v=219"></script>
+    <script src="knowledge-garden-v19/garden-environment.js?v=219"></script>
+    <script src="knowledge-garden-v19/garden-life.js?v=219"></script>
+    <script src="knowledge-garden-v19/farm-calibration.js?v=219"></script>
+    <script src="knowledge-garden-v19/farm-stage.js?v=219"></script>
+    <script src="knowledge-garden-v19/garden-courtyard.js?v=219"></script>
+    <script src="knowledge-garden-v19/farm-art.js?v=219"></script>
+    <script src="knowledge-garden-v19/farm-ui.js?v=219"></script>
+    <script src="knowledge-garden-v19/farm-facilities.js?v=219"></script>
+    <script src="knowledge-garden-v19/garden-area.js?v=219"></script>
+    <script src="knowledge-garden-v19/fishing-input.js?v=219"></script>
+    <script src="knowledge-garden-v19/garden-tooltips.js?v=219"></script>
+    <script src="manor-live.js" data-ui-script="knowledge-garden-v19/garden-ui.js"></script>
+  </body>
+</html>

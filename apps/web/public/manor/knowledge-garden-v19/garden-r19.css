@@ -1,0 +1,437 @@
+/* Shared manor game presentation. The standalone manor keeps --d=1 in all product density modes. */
+#app .garden-play :focus, #app .garden-play :focus-visible, #app .garden-play :focus-visible *, #modal button:focus-visible *, #modal button:focus, #modal button:focus-visible { outline:none !important; }
+#modal .level-stop[aria-pressed="true"] {outline:none;border-color:#638b35;box-shadow:none;background:#e8f0c6;color:#47642f;}
+#app .garden-play .garden-backdrop {filter:none;}
+.farm-plot .plot-canvas {width:512px;height:512px;}
+.farm-plot .plot-soil {position:absolute;left:0;top:0;z-index:0;background:#64371e;pointer-events:none;}
+.farm-plot .soil-hl {z-index:1;}
+.farm-plot .plot-crop {z-index:2;}
+.farm-plot :is(.plot-badge,.plot-timer,.plot-lock,.plot-pollen) {z-index:3;}
+.bait-chest-art {position:absolute;inset:0;display:block;width:100%;height:100%;object-fit:contain;pointer-events:none;}
+.farm-plot .plot-timer {opacity:1;}
+.crop-preview .crop-preview-img {height:auto;aspect-ratio:1;object-fit:contain;}
+
+/* Inventory spacing. Shared leaf titles are defined below. */
+#modal .inventory-dialog .dialog-head {padding:calc(20px * var(--d)) calc(24px * var(--d)) calc(12px * var(--d));}
+#modal .inventory-dialog .dialog-head p {margin:0;line-height:1.65;letter-spacing:.025em;}
+
+.purifier-grade {display:block;position:relative;width:100%;height:100%;overflow:hidden;}
+.purifier-cell {display:block;position:absolute;left:var(--grade-left);top:var(--grade-top);width:var(--grade-size);height:var(--grade-size);overflow:hidden;}
+.purifier-cell > img {display:block;position:absolute;left:0;top:0;width:200%;height:200%;max-width:none;transform:translate(var(--grade-x),var(--grade-y));}
+.scene-purifier .purifier-grade {position:absolute;inset:0;}
+.scene-purifier[data-state="working"] .purifier-state {opacity:1;}
+.light-note-mobile-rendering .scene-purifier .purifier-state {left:0;translate:none;}
+.upgrade-preview .purifier-grade {width:calc(150px * var(--d));height:calc(150px * var(--d));}
+
+/* Wood main tabs and smaller illustrated category tokens. */
+#modal .farm-shop-dialog .dialog-head {padding:calc(18px * var(--d)) calc(24px * var(--d)) calc(8px * var(--d));}
+#modal .farm-shop-dialog .shop-toolbar {margin:0 0 calc(10px * var(--d));}
+#modal .shop-main-tabs {display:flex;width:min(100%,calc(550px * var(--d)));gap:calc(7px * var(--d));padding:0;border:0;background:none;box-shadow:none;}
+#modal .shop-main-tabs > button {flex:1;display:flex;align-items:center;justify-content:center;gap:calc(8px * var(--d));min-height:calc(42px * var(--d));padding:calc(5px * var(--d)) calc(12px * var(--d));border:calc(2px * var(--d)) solid #bb8345;border-radius:calc(9px * var(--d));background:repeating-linear-gradient(0deg,#c59054 0,#c59054 4px,#c9985f 5px,#ce9e64 10px);color:#fff9e7;box-shadow:inset 0 calc(2px * var(--d)) #ecc28a,0 calc(3px * var(--d)) #98682f;text-shadow:0 1px #89552c;font-size:calc(15px * var(--d));}
+#modal .shop-main-tabs > button::after {content:none;}
+#modal .shop-main-tabs > button.active {background:linear-gradient(#7cbb4d,#508e31);border-color:#60822f;box-shadow:inset 0 0 0 calc(2px * var(--d)) #c2d969,0 calc(3px * var(--d)) #486e29;color:white;}
+#modal .shop-main-tabs :is(.fert-sack,.farm-icon) {display:block;width:calc(30px * var(--d));height:calc(30px * var(--d));object-fit:contain;flex:none;}
+#modal .farm-shop-dialog .shop-tabs {display:flex;gap:calc(8px * var(--d));width:max-content;max-width:100%;padding:calc(4px * var(--d)) 0 calc(8px * var(--d));margin:0;border:0;background:none;box-shadow:none;}
+#modal .farm-shop-dialog .shop-tabs > button {display:flex;align-items:center;justify-content:center;gap:calc(6px * var(--d));min-height:calc(34px * var(--d));padding:calc(4px * var(--d)) calc(14px * var(--d));border:calc(1px * var(--d)) solid #dbc28b;border-radius:calc(20px * var(--d));background:#fbf0d0;color:#82603c;font-size:calc(12px * var(--d));}
+#modal .farm-shop-dialog .shop-tabs > button.active {border-color:#88a852;background:#e7edc3;color:#466e2e;box-shadow:inset 0 -2px #c4d799;}
+#modal .farm-shop-dialog .shop-tabs > button::after,
+#modal .farm-shop-dialog .shop-tabs > button.active::after {content:none;}
+.shop-tabs .farm-packet,.shop-tabs .farm-fry,.shop-tabs .r18-sprite {width:calc(25px * var(--d));height:calc(25px * var(--d));object-fit:contain;flex:none;}
+
+#modal .game-facility-card {gap:calc(7px * var(--d));padding:calc(12px * var(--d));}
+#modal .game-facility-card h3 {font-size:calc(16px * var(--d));}
+#modal .facility-card-art {--facility-art-size:clamp(calc(84px * var(--d)),16vh,calc(136px * var(--d)));height:var(--facility-art-size);display:grid;place-items:center;}
+#modal .facility-card-art > :is(.r18-sprite,.purifier-grade,.purifier-image) {width:var(--facility-art-size);max-width:100%;height:var(--facility-art-size);object-fit:contain;}
+#modal .facility-card-metric {padding:calc(6px * var(--d)) 0;gap:calc(5px * var(--d));}
+#modal .facility-card-metric b {font-size:calc(14px * var(--d));}
+#modal .facility-card-metric span {font-size:calc(10px * var(--d));}
+#modal .game-facility-card p {font-size:calc(11px * var(--d));line-height:1.5;min-height:3em;}
+#modal .game-facility-card .market-price {min-height:calc(26px * var(--d));margin:0;}
+#modal .facility-card-actions {display:flex;align-items:center;gap:calc(6px * var(--d));margin-top:auto;}
+#modal .game-facility-card .tile-btn {flex:1 1 0;min-height:calc(36px * var(--d));height:calc(36px * var(--d));padding:calc(5px * var(--d)) calc(8px * var(--d));font-size:calc(12px * var(--d));}
+#modal .game-facility-card .facility-details {background:linear-gradient(#dca96c,#be8548);border-color:#ad753c;color:#fff9e8;text-shadow:0 1px #8e5e34;box-shadow:inset 0 1px #f1d1a4,0 2px #92612e;}
+
+#modal :is(.facility-detail-dialog,.workshop-dialog) {width:min(calc(850px * var(--d)),calc(100vw - 32px));height:min(calc(650px * var(--d)),calc(100vh - 36px * var(--d)));height:min(calc(650px * var(--d)),calc(100dvh - 36px * var(--d)));min-height:0;max-height:calc(100vh - 36px * var(--d));max-height:calc(100dvh - 36px * var(--d));}
+#modal :is(.facility-detail-dialog,.workshop-dialog) .dialog-body {flex:1 1 auto;min-height:0;}
+.facility-detail-overview {display:grid;grid-template-columns:42% minmax(0,1fr);align-items:center;gap:calc(20px * var(--d));}
+.facility-detail-art {height:calc(220px * var(--d));grid-template-rows:minmax(0,1fr);overflow:hidden;}
+.facility-detail-art,.hive-illustration,.workshop-illustration {display:grid;place-items:center;}
+.facility-detail-art > :is(.r18-sprite,.purifier-grade,.purifier-image) {width:calc(220px * var(--d));height:calc(220px * var(--d));max-width:100%;}
+.hive-illustration > .r18-sprite {width:calc(185px * var(--d));height:calc(185px * var(--d));}
+.workshop-illustration > .r18-sprite {width:calc(145px * var(--d));height:calc(145px * var(--d));}
+
+.facility-detail-state {display:inline-block;padding:calc(6px * var(--d)) calc(12px * var(--d));border:1px solid #d7b77b;border-radius:calc(18px * var(--d));background:#f4dfb1;font-weight:700;font-size:calc(13px * var(--d));color:#7c552d;}
+.facility-detail-facts {display:grid;gap:calc(6px * var(--d));font-size:calc(13px * var(--d));margin:calc(10px * var(--d)) 0;}
+.facility-detail-facts > div {display:flex;justify-content:space-between;gap:calc(12px * var(--d));border-bottom:1px solid #e6d2ac;padding-bottom:calc(5px * var(--d));}
+.facility-detail-facts dt {color:#967750;flex:none;}
+.facility-detail-facts dd {margin:0;color:#614429;text-align:right;}
+.facility-detail-recipes {display:flex;gap:calc(10px * var(--d));}
+.facility-detail-recipes > div {flex:1;display:grid;grid-template-columns:1fr auto 1fr;align-items:center;text-align:center;border:1px solid #e0c48b;border-radius:calc(10px * var(--d));padding:calc(6px * var(--d));background:#fff3d6;}
+.facility-detail-recipes :is(.farm-icon,.r18-sprite) {width:calc(40px * var(--d));height:calc(40px * var(--d));object-fit:contain;}
+.facility-detail-recipes span:last-child {grid-column:1/-1;font-size:calc(11px * var(--d));}
+
+/* Compact hive overview and naturally proportioned, bounded crop previews. */
+#modal .beehive-dialog {width:min(calc(820px * var(--d)),calc(100vw - 32px));}
+#modal .beehive-dialog .dialog-head {padding-top:calc(20px * var(--d));padding-bottom:calc(6px * var(--d));}
+.beehive-hero {grid-template-columns:40% minmax(0,1fr);gap:calc(18px * var(--d));}
+.hive-illustration {height:calc(185px * var(--d));}
+.pollen-tray {grid-template-columns:repeat(6,calc(28px * var(--d)));padding:calc(8px * var(--d));background:linear-gradient(#e6bc78,#b78245);}
+.pollen-tray i {width:calc(28px * var(--d));height:calc(29px * var(--d));}
+.pollination-targets {grid-template-columns:repeat(3,minmax(0,1fr));gap:calc(10px * var(--d));}
+.pollination-target {grid-template-columns:1fr;grid-template-rows:auto auto auto;gap:calc(5px * var(--d));padding:calc(8px * var(--d));}
+.pollination-crop {width:calc(100px * var(--d));max-width:100%;height:calc(85px * var(--d));}
+.pollination-target strong {font-size:calc(12px * var(--d));}
+.pollination-benefit {margin-top:calc(12px * var(--d));padding:calc(8px * var(--d));}
+.beehive-dialog .facility-hint {margin-top:calc(7px * var(--d));}
+
+html:not(.light-note-mobile-rendering) .hud-identity {position:relative;width:calc(254px * var(--d));padding:calc(8px * var(--d)) calc(12px * var(--d));border:calc(3px * var(--d)) solid #e2b56c;border-radius:calc(13px * var(--d));background:repeating-linear-gradient(1deg,#b47a43 0,#b47a43 5px,#bd8850 6px,#c18d54 11px);box-shadow:inset 0 0 0 2px #f3d497,0 4px #85582f,0 6px 14px #43371d40;}
+html:not(.light-note-mobile-rendering) .hud-stage {position:relative;display:grid;grid-template-columns:calc(48px * var(--d)) minmax(0,1fr);grid-template-rows:auto auto;align-items:center;column-gap:calc(10px * var(--d));row-gap:calc(4px * var(--d));width:100%;}
+html:not(.light-note-mobile-rendering) .hud-stage:is(:hover,:active) {transform:none;filter:none;}
+html:not(.light-note-mobile-rendering) .hud-stage-name {display:contents;font-size:calc(17px * var(--d));color:#fff7df;text-shadow:0 1px #6b4124;white-space:nowrap;}
+html:not(.light-note-mobile-rendering) .hud-stage #phaseLabel {grid-column:2;grid-row:1;}
+html:not(.light-note-mobile-rendering) .hud-stage .hud-growth {grid-column:2;grid-row:2;min-width:0;}
+html:not(.light-note-mobile-rendering) .hud-garden-badge {position:static;grid-column:1;grid-row:1 / 3;transform:none;width:calc(48px * var(--d));height:calc(48px * var(--d));box-sizing:border-box;border:calc(3px * var(--d)) solid #e9bd70;background:radial-gradient(circle at 40% 35%,#c8df7b,#527c34);box-shadow:inset 0 0 0 2px #fff0bd,0 3px #86602d;}
+html:not(.light-note-mobile-rendering) .hud-garden-badge img {width:85%;height:85%;}
+html:not(.light-note-mobile-rendering) .hud-growth {gap:calc(5px * var(--d));}
+html:not(.light-note-mobile-rendering) .hud-growth-bar {background:#72502d;border-color:#e1b46c;box-shadow:inset 0 2px 3px #4d311a80;}
+html:not(.light-note-mobile-rendering) .hud-growth-num {color:#fff5d7;font-size:calc(11px * var(--d));}
+html:not(.light-note-mobile-rendering) .hud-growth-num b {color:#fffce8;}
+html:not(.light-note-mobile-rendering) .level-hud-pending {position:absolute;right:calc(-7px * var(--d));top:calc(-9px * var(--d));border:2px solid #ffdfa0;box-shadow:0 2px #914622;}
+
+.light-note-mobile-rendering #modal .inventory-dialog .dialog-head {padding:calc(18px * var(--d)) calc(16px * var(--d)) calc(12px * var(--d));}
+.light-note-mobile-rendering #modal .shop-main-tabs {width:100%;}
+.light-note-mobile-rendering #modal .shop-main-tabs > button {min-height:calc(44px * var(--d));padding:calc(4px * var(--d));font-size:calc(13px * var(--d));gap:calc(4px * var(--d));}
+.light-note-mobile-rendering #modal .shop-main-tabs :is(.fert-sack,.farm-icon) {width:calc(24px * var(--d));height:calc(24px * var(--d));}
+.light-note-mobile-rendering #modal .farm-shop-dialog .shop-tabs {width:100%;gap:calc(5px * var(--d));}
+.light-note-mobile-rendering #modal .farm-shop-dialog .shop-tabs > button {flex:1;min-height:calc(44px * var(--d));padding:calc(4px * var(--d));font-size:calc(11px * var(--d));gap:calc(4px * var(--d));}
+.light-note-mobile-rendering #modal .facility-grid {gap:calc(8px * var(--d));}
+.light-note-mobile-rendering #modal .game-facility-card {grid-template-columns:calc(84px * var(--d)) minmax(0,1fr);grid-template-rows:repeat(5,auto);gap:calc(5px * var(--d)) calc(8px * var(--d));padding:calc(9px * var(--d));}
+.light-note-mobile-rendering #modal .game-facility-card header {grid-column:2;grid-row:1;}
+.light-note-mobile-rendering #modal .game-facility-card header h3 {font-size:calc(14px * var(--d));}
+.light-note-mobile-rendering #modal .game-facility-card header > span {font-size:calc(9px * var(--d));}
+.light-note-mobile-rendering #modal .facility-card-art {--facility-art-size:calc(84px * var(--d));grid-column:1;grid-row:1 / 5;align-self:center;}
+.light-note-mobile-rendering #modal .game-facility-card .facility-card-metric {grid-column:2;grid-row:2;display:flex;justify-content:space-between;align-items:baseline;padding:0;border:0;}
+.light-note-mobile-rendering #modal .game-facility-card .facility-card-metric b {font-size:calc(12px * var(--d));}
+.light-note-mobile-rendering #modal .game-facility-card .facility-card-metric span {font-size:calc(10px * var(--d));}
+.light-note-mobile-rendering #modal .game-facility-card > p {grid-column:2;grid-row:3;font-size:calc(12px * var(--d));line-height:1.45;}
+.light-note-mobile-rendering #modal .game-facility-card > .facility-card-status {grid-column:2;grid-row:4;font-size:calc(11px * var(--d));}
+.light-note-mobile-rendering #modal .game-facility-card > .market-price {grid-column:1;grid-row:5;align-self:center;}
+.light-note-mobile-rendering #modal .game-facility-card > .market-price strong {font-size:calc(19px * var(--d));}
+.light-note-mobile-rendering #modal .game-facility-card > .facility-card-actions {grid-column:2;grid-row:5;}
+.light-note-mobile-rendering #modal .game-facility-card p {min-height:0;}
+.light-note-mobile-rendering #modal .game-facility-card .tile-btn {height:calc(44px * var(--d));min-height:calc(44px * var(--d));}
+.light-note-mobile-rendering .facility-detail-overview {grid-template-columns:1fr;gap:calc(10px * var(--d));}
+.light-note-mobile-rendering .facility-detail-art {height:calc(175px * var(--d));}
+.light-note-mobile-rendering .facility-detail-art > :is(.r18-sprite,.purifier-grade,.purifier-image) {width:calc(175px * var(--d));height:calc(175px * var(--d));}
+.light-note-mobile-rendering .facility-detail-state {display:block;text-align:center;}
+.light-note-mobile-rendering .facility-detail-facts {gap:calc(7px * var(--d));margin:calc(12px * var(--d)) 0;font-size:calc(12px * var(--d));}
+.light-note-mobile-rendering .facility-detail-recipes :is(.farm-icon,.r18-sprite) {width:calc(36px * var(--d));height:calc(36px * var(--d));}
+.light-note-mobile-rendering .beehive-hero {grid-template-columns:38% minmax(0,1fr);gap:calc(8px * var(--d));}
+.light-note-mobile-rendering .hive-illustration {height:calc(136px * var(--d));}
+.light-note-mobile-rendering .hive-illustration > .r18-sprite {width:calc(136px * var(--d));height:calc(136px * var(--d));}
+.light-note-mobile-rendering .pollen-tray {grid-template-columns:repeat(3,calc(23px * var(--d)));padding:calc(6px * var(--d));}
+.light-note-mobile-rendering .pollen-tray i {width:calc(23px * var(--d));height:calc(24px * var(--d));}
+.light-note-mobile-rendering .pollination-targets {grid-template-columns:repeat(2,minmax(0,1fr));}
+.light-note-mobile-rendering .pollination-crop {width:calc(90px * var(--d));height:calc(75px * var(--d));}
+.light-note-mobile-rendering .pollination-benefit {gap:calc(6px * var(--d));font-size:calc(12px * var(--d));}
+.light-note-mobile-rendering .pollination-benefit > span:last-child {padding-left:calc(8px * var(--d));font-size:calc(11px * var(--d));}
+@media(max-height:760px) {
+  html:not(.light-note-mobile-rendering) #modal .facility-card-art {--facility-art-size:calc(90px * var(--d));}
+  html:not(.light-note-mobile-rendering) #modal .game-facility-card {gap:calc(5px * var(--d));}
+  html:not(.light-note-mobile-rendering) #modal .hive-illustration {height:calc(140px * var(--d));}
+  html:not(.light-note-mobile-rendering) .hive-illustration > .r18-sprite {width:calc(140px * var(--d));height:calc(140px * var(--d));}
+}
+@media(prefers-reduced-motion:reduce) {.farm-plot .plot-timer {transition:none;}}
+
+
+/* One icon atlas and one title/button treatment for every manor dialog. */
+.game-icon {display:inline-block;flex:none;width:calc(25px * var(--d));height:calc(25px * var(--d));vertical-align:middle;background-image:url("farm/game-ui-r20.png");background-repeat:no-repeat;pointer-events:none;}
+.scene-detail-tile {position:absolute;z-index:0;pointer-events:none;}
+.scene-detail-tile > img {display:block;width:100%;height:100%;object-fit:fill;}
+#modal .dialog .dialog-head {padding:calc(18px * var(--d)) calc(24px * var(--d)) calc(12px * var(--d));}
+#modal .dialog .game-title {position:relative;display:inline-flex;align-items:center;justify-content:center;max-width:calc(100% - 45px * var(--d));margin:0 auto calc(8px * var(--d));padding:calc(6px * var(--d)) calc(35px * var(--d));border:calc(2px * var(--d)) solid #c8a35a;border-radius:calc(9px * var(--d));background:repeating-linear-gradient(1deg,#657e36 0,#657e36 5px,#6c883c 6px,#739244 14px);box-shadow:inset 0 2px #afc96c,0 3px #486329;}
+#modal .dialog .game-title #dialogTitle {display:block;position:static;min-width:0;width:auto;margin:0;padding:0;border:0;border-radius:0;box-shadow:none;background:none;color:#fff9e1;font-size:calc(22px * var(--d));line-height:1.35;letter-spacing:.04em;text-shadow:0 2px #3e5225;}
+#modal .dialog .game-title .title-leaves {position:absolute;width:calc(53px * var(--d));height:calc(53px * var(--d));top:50%;translate:0 -50%;}
+#modal .game-title .title-leaves:first-child {left:calc(-19px * var(--d));}
+#modal .game-title .title-leaves:last-child {right:calc(-19px * var(--d));}
+#modal .dialog .dialog-head p {margin:calc(7px * var(--d)) 0 0;font-size:calc(12px * var(--d));line-height:1.55;color:#8a6a40;}
+#modal .dialog .dialog-head .shop-wallet {display:flex;align-items:center;gap:calc(5px * var(--d));}
+#modal .farm-shop-dialog .game-title {flex-shrink:0;width:max-content;max-width:none;white-space:nowrap;}
+#modal .dialog :is(.button,.tile-btn) {display:inline-flex;align-items:center;justify-content:center;gap:calc(6px * var(--d));font-weight:700;border-radius:calc(8px * var(--d));border:calc(2px * var(--d)) solid #ba8346;background:linear-gradient(#dca66a,#bd8243);color:#fff9e6;box-shadow:inset 0 1px #f4d399,0 3px #956330;text-shadow:0 1px #936331;transition:filter .12s,border-color .12s;}
+#modal .dialog :is(.button,.tile-btn).primary {border-color:#598c32;background:linear-gradient(#8cc957,#549b35);color:#fffdf2;box-shadow:inset 0 1px #cae998,0 3px #44752a;}
+#modal .dialog :is(.button,.tile-btn).danger {border-color:#ab693d;background:linear-gradient(#d39155,#af693b);color:#fff9ed;}
+#modal .dialog :is(.button,.tile-btn):is(:hover,:active):not(:disabled),#modal .dialog-close:active {transform:none;translate:none;}
+#modal .dialog :is(.button,.tile-btn):hover:not(:disabled) {filter:brightness(1.07);}
+#modal .dialog :is(.button,.tile-btn):active:not(:disabled) {filter:brightness(.94);border-color:#755329;}
+#modal .dialog :is(.button,.tile-btn):disabled {opacity:1;background:#e9e2c9;color:#9b916f;border-color:#c5b994;box-shadow:inset 0 1px #faf2de,0 2px #b6aa8b;text-shadow:none;cursor:default;}
+#modal .dialog :is(.button,.tile-btn):disabled .game-icon {filter:saturate(.35);opacity:.65;}
+#modal .dialog .action-art {display:block;width:calc(25px * var(--d));height:calc(25px * var(--d));object-fit:contain;flex:none;}
+#modal .dialog-foot {flex:none;border-top:calc(1px * var(--d)) solid #d9bd83;background:#f6e9c9;}
+#modal .dialog-foot .button {min-height:calc(42px * var(--d));}
+html:not(.light-note-mobile-rendering) .hud-garden-badge {padding:0;overflow:visible;}
+html:not(.light-note-mobile-rendering) .hud-garden-badge > .game-icon {width:100%;height:100%;}
+.facility-card-metric b,.facility-card-status {display:flex;align-items:center;gap:calc(5px * var(--d));flex-wrap:wrap;}
+.facility-card-metric .game-icon {width:calc(23px * var(--d));height:calc(23px * var(--d));}
+.facility-card-status .game-icon {width:calc(18px * var(--d));height:calc(18px * var(--d));}
+.card-pollen-track {display:block;flex-basis:100%;height:calc(7px * var(--d));border:1px solid #dcc28c;border-radius:calc(5px * var(--d));background:#eee0b9;overflow:hidden;}
+.card-pollen-track i {display:block;height:100%;background:linear-gradient(#a5ce63,#659a39);}
+.market-estimate {display:flex;align-items:center;gap:calc(4px * var(--d));font-size:calc(11px * var(--d));color:#6c7e3c;}
+.market-estimate .game-icon {width:calc(22px * var(--d));height:calc(22px * var(--d));}
+.market-price > .game-icon {width:calc(28px * var(--d));height:calc(28px * var(--d));}
+.facility-detail-name {margin:0 0 calc(7px * var(--d));font-size:calc(22px * var(--d));color:#54371e;}
+.facility-detail-hero {min-width:0;text-align:center;}
+.facility-detail-description {margin:0;color:#866239;font-size:calc(13px * var(--d));line-height:1.6;}
+.facility-detail-state {display:inline-flex;align-items:center;justify-content:center;gap:calc(6px * var(--d));}
+.facility-detail-state .game-icon {width:calc(19px * var(--d));height:calc(19px * var(--d));}
+.facility-detail-facts dt {display:flex;align-items:center;gap:calc(5px * var(--d));}
+.facility-detail-facts .game-icon {width:calc(23px * var(--d));height:calc(23px * var(--d));}
+.facility-recipe-panel {border:1px solid #e1c58c;border-radius:calc(10px * var(--d));background:#fff3d5;padding:calc(9px * var(--d));}
+.facility-recipe-panel h4 {margin:0 0 calc(7px * var(--d));font-size:calc(12px * var(--d));color:#846332;}
+.detail-recipe {display:flex;align-items:center;justify-content:space-around;gap:calc(4px * var(--d));margin:calc(6px * var(--d)) 0;}
+.detail-recipe > span {display:grid;justify-items:center;gap:calc(4px * var(--d));min-width:0;}
+.detail-recipe :is(.farm-icon,.r18-sprite,.game-icon) {width:calc(37px * var(--d));height:calc(37px * var(--d));object-fit:contain;}
+.detail-recipe small {font-size:calc(10px * var(--d));color:#775332;}
+.detail-recipe b {font-size:calc(15px * var(--d));color:#bb9257;}
+.purifier-tier-row {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:calc(4px * var(--d));}
+.purifier-tier-row > div {display:grid;justify-items:center;padding:calc(4px * var(--d));border:1px solid transparent;border-radius:calc(7px * var(--d));font-size:calc(11px * var(--d));color:#795833;}
+.purifier-tier-row > .current {border-color:#8ca755;background:#edf0cc;}
+.purifier-tier-row .purifier-grade {width:calc(68px * var(--d));height:calc(68px * var(--d));max-width:100%;}
+.purifier-tier-row .game-icon {width:calc(15px * var(--d));height:calc(15px * var(--d));}
+.manual-entry {display:flex;align-items:center;gap:calc(9px * var(--d));padding:calc(10px * var(--d));margin-top:calc(10px * var(--d));border:1px solid #e0c389;border-radius:calc(10px * var(--d));background:#fcf0d1;}
+.manual-entry > span:nth-child(2) {display:grid;gap:calc(4px * var(--d));flex:1;min-width:0;}
+.manual-entry b {font-size:calc(13px * var(--d));color:#6f512d;}
+.manual-entry small {font-size:calc(11px * var(--d));color:#90764e;}
+.workshop-navigation {display:flex;align-items:center;gap:calc(12px * var(--d));margin-bottom:calc(10px * var(--d));}
+.workshop-tabs {flex:1;display:flex;gap:calc(8px * var(--d));}
+.workshop-detail-link {display:inline-flex;align-items:center;gap:calc(5px * var(--d));flex:none;padding:calc(8px * var(--d));border:0;background:transparent;color:#7c5a31;font:inherit;font-size:calc(12px * var(--d));font-weight:700;cursor:pointer;}
+.workshop-detail-link:hover {color:#4e762e;}
+.workshop-tabs > button {display:flex;align-items:center;justify-content:center;gap:calc(8px * var(--d));flex:1;min-height:calc(42px * var(--d));border:2px solid #c79e60;border-radius:calc(9px * var(--d));background:linear-gradient(#e0b274,#c38d4e);color:#fff9e5;font:inherit;font-weight:700;cursor:pointer;}
+.workshop-tabs > button.selected {border-color:#6b8e37;background:linear-gradient(#8aba50,#5f9437);box-shadow:inset 0 0 0 1px #c6d98a;}
+
+html:not(.light-note-mobile-rendering) #modal :is(.workshop-dialog,.facility-detail-dialog) .dialog-body {padding:calc(10px * var(--d)) calc(22px * var(--d)) calc(10px * var(--d));}
+html:not(.light-note-mobile-rendering) #modal :is(.workshop-dialog,.facility-detail-dialog) .dialog-head {padding-block:calc(14px * var(--d)) calc(6px * var(--d));}
+html:not(.light-note-mobile-rendering) #modal :is(.workshop-dialog,.facility-detail-dialog) .dialog-foot {padding:calc(10px * var(--d)) calc(22px * var(--d));}
+.manual-formula {grid-template-columns:1fr auto 1fr;}
+.manual-output-art {display:block;width:calc(50px * var(--d));height:calc(50px * var(--d));}
+.manual-output-art img {width:100%;height:100%;object-fit:contain;}
+.recipe-choice .manual-output-art {width:calc(70px * var(--d));height:calc(70px * var(--d));max-width:100%;}
+.craft-output small {font-size:calc(12px * var(--d));color:#8e7348;}
+.workshop-locked {display:grid;justify-items:center;gap:calc(8px * var(--d));padding:calc(10px * var(--d));text-align:center;color:#806039;}
+.workshop-locked .workshop-illustration {width:calc(220px * var(--d));height:calc(200px * var(--d));}
+.workshop-locked p {margin:0;}
+.workshop-locked strong {display:flex;align-items:center;gap:calc(7px * var(--d));}
+.light-note-mobile-rendering #modal .dialog .dialog-head {padding:calc(16px * var(--d)) calc(12px * var(--d)) calc(8px * var(--d));}
+.light-note-mobile-rendering #modal .dialog .game-title {padding:calc(6px * var(--d)) calc(26px * var(--d));}
+.light-note-mobile-rendering #modal .dialog .game-title #dialogTitle {font-size:calc(18px * var(--d));}
+.light-note-mobile-rendering #modal .dialog .game-title .title-leaves {width:calc(42px * var(--d));height:calc(42px * var(--d));}
+.light-note-mobile-rendering #modal .dialog .dialog-foot {padding:calc(10px * var(--d)) calc(12px * var(--d));display:flex;flex-wrap:wrap;gap:calc(8px * var(--d));}
+.light-note-mobile-rendering #modal .dialog-foot .button {min-height:calc(44px * var(--d));min-width:0;font-size:calc(12px * var(--d));padding:calc(7px * var(--d)) calc(10px * var(--d));}
+.light-note-mobile-rendering .facility-detail-name {font-size:calc(19px * var(--d));}
+.light-note-mobile-rendering .manual-entry {flex-wrap:wrap;}
+.light-note-mobile-rendering .manual-entry > .tile-btn {flex-basis:100%;min-height:calc(44px * var(--d));}
+.light-note-mobile-rendering #modal :is(.workshop-dialog,.facility-detail-dialog) {height:calc(100vh - 56px * var(--d));height:calc(100dvh - 56px * var(--d));max-height:calc(100vh - 56px * var(--d));max-height:calc(100dvh - 56px * var(--d));}
+.light-note-mobile-rendering .workshop-illustration > .r18-sprite {width:calc(150px * var(--d));height:calc(150px * var(--d));}
+.light-note-mobile-rendering .recipe-choice .manual-output-art {width:calc(64px * var(--d));height:calc(64px * var(--d));}
+.light-note-mobile-rendering .workshop-navigation {flex-wrap:wrap;gap:calc(5px * var(--d));}
+.light-note-mobile-rendering .workshop-navigation .workshop-tabs {flex-basis:100%;}
+.light-note-mobile-rendering .workshop-detail-link {margin-left:auto;}
+.light-note-mobile-rendering .workshop-tabs > button {min-height:calc(44px * var(--d));font-size:calc(13px * var(--d));}
+.light-note-mobile-rendering .manual-output-art {width:calc(48px * var(--d));height:calc(48px * var(--d));}
+
+html:not(.light-note-mobile-rendering) #modal .farm-shop-dialog {height:min(calc(760px * var(--d)),calc(100vh - 72px * var(--d)));}
+.scene-facility .fixture-art {transform:matrix(1,var(--fixture-shear,0),0,1,0,0);transform-origin:0 0;}
+.workshop-fixture .fixture-state {bottom:12%;}
+html:not(.light-note-mobile-rendering) .workshop-fixture .fixture-state {bottom:20%;}
+
+.light-note-mobile-rendering #modal .farm-shop-dialog .dialog-head > div {display:contents;}
+.light-note-mobile-rendering #modal .farm-shop-dialog .game-title {grid-column:1;grid-row:1;justify-self:start;margin:0 0 0 calc(15px * var(--d));}
+.light-note-mobile-rendering #modal .farm-shop-dialog .shop-wallet {grid-column:2;grid-row:1;}
+.light-note-mobile-rendering #modal .farm-shop-dialog .dialog-head p {grid-column:1 / -1;grid-row:2;text-align:left;font-size:calc(11px * var(--d));margin:0;}
+.light-note-mobile-rendering #modal .game-facility-card .market-price {display:flex;flex-wrap:nowrap;gap:calc(3px * var(--d));white-space:nowrap;}
+.light-note-mobile-rendering #modal .game-facility-card .market-price > .game-icon {width:calc(20px * var(--d));height:calc(20px * var(--d));}
+.light-note-mobile-rendering #modal .game-facility-card .market-price strong {font-size:calc(18px * var(--d));}
+.light-note-mobile-rendering #modal .game-facility-card .market-price > span {font-size:calc(10px * var(--d));}
+
+html:not(.light-note-mobile-rendering) #app .garden-play .seaside-courtyard.farm-staged {min-height:var(--farm-min-height,0px);}
+/* PC destinations share the resource row; labels remain in tooltips and accessible names. */
+html:not(.light-note-mobile-rendering) #app .garden-play .seaside-courtyard.farm-staged .game-dock {position:static;inset:auto;translate:none;transform:none;flex:none;margin-left:auto;align-items:center;box-sizing:border-box;height:calc(44px * var(--d));padding:calc(3px * var(--d)) calc(6px * var(--d));border-width:2px;border-radius:calc(14px * var(--d));box-shadow:0 3px 0 var(--g-frame-dark),0 8px 18px #1b382026;}
+html:not(.light-note-mobile-rendering) .farm-staged .farm-destinations {display:flex;gap:calc(2px * var(--d));}
+html:not(.light-note-mobile-rendering) .farm-staged .farm-destinations .dock-btn {display:grid;place-items:center;width:calc(40px * var(--d));height:calc(36px * var(--d));}
+html:not(.light-note-mobile-rendering) .farm-staged .game-dock .dock-title {display:none;}
+html:not(.light-note-mobile-rendering) .farm-staged .game-dock .dock-disc {width:calc(32px * var(--d));height:calc(32px * var(--d));border:0;box-shadow:none;background:none;border-radius:calc(8px * var(--d));}
+html:not(.light-note-mobile-rendering) .farm-staged .game-dock .dock-chip {right:calc(-3px * var(--d));bottom:calc(-2px * var(--d));height:auto;min-width:0;padding:0 calc(3px * var(--d));font-size:calc(9px * var(--d));line-height:1.3;}
+html:not(.light-note-mobile-rendering) #app .garden-play .hud-right {margin-left:0;}
+html:not(.light-note-mobile-rendering) .farm-staged :is(.hud-resources,.util-btn,.hud-back) {box-sizing:border-box;height:calc(44px * var(--d));min-height:calc(44px * var(--d));}
+html:not(.light-note-mobile-rendering) .farm-staged .hud-resources {display:flex;align-items:center;}
+html:not(.light-note-mobile-rendering) .farm-staged .util-btn.round {width:calc(44px * var(--d));}
+html:not(.light-note-mobile-rendering) #app .garden-play .seaside-courtyard.farm-staged::before {inset:0;background:linear-gradient(#329af2,#69b6f6);filter:none;}
+html:not(.light-note-mobile-rendering) #app .garden-play .seaside-courtyard.farm-staged .scene-stage .garden-backdrop {-webkit-mask-image:linear-gradient(transparent,#000 48px);mask-image:linear-gradient(transparent,#000 48px);}
+html:not(.light-note-mobile-rendering) #app .garden-play .seaside-courtyard.farm-staged .scene-stage .environment-motion {-webkit-mask-image:none;mask-image:none;}
+.scene-sky-bleed {position:absolute;z-index:-3;max-width:none;pointer-events:none;}
+
+/* The PC hive uses the reference silhouette; feet, rather than transparent margins, anchor it. */
+.hive-native-art > .hive-built-img {width:100%;height:100%;object-fit:contain;transform:none;}
+.hive-native-art > .hive-sealed-img {left:-100%;width:200%;height:100%;transform:none;}
+.hive-native-art[data-frame] > .hive-sealed-img {transform:none;}
+.scene-measured-detail > img {max-width:none;mask-image:linear-gradient(90deg,transparent,#000 4%,#000 96%,transparent),linear-gradient(180deg,transparent,#000 5%,#000 95%,transparent);mask-composite:intersect;}
+html:not(.light-note-mobile-rendering) .workshop-illustration {position:relative;overflow:hidden;}
+html:not(.light-note-mobile-rendering) .workshop-illustration > .workshop-native-art {position:absolute;left:50%;top:50%;width:calc(230px * var(--d));height:calc(230px * var(--d));translate:-50% -52%;}
+@media (max-height:760px) {
+  html:not(.light-note-mobile-rendering) .supply-art {height:calc(72px * var(--d));}
+  html:not(.light-note-mobile-rendering) #modal .farm-shop-dialog .dialog-head p {display:none;}
+}
+.hive-native-art[data-frame="0"] > .hive-sealed-img,.hive-native-art[data-frame="1"] > .hive-built-img {display:none;}
+.scene-facility .hive-native-art > .hive-built-img {object-fit:fill;}
+html:not(.light-note-mobile-rendering) .beehive-fixture .fixture-state {top:100%;bottom:auto;translate:-50% calc(5px * var(--d));}
+
+/* Running clocks sit on the object foot, using the same quiet treatment as crop clocks. */
+.scene-purifier[data-state="working"] .purifier-state,
+.scene-facility[data-state="crafting"] .fixture-state {
+  border:0;border-radius:calc(3px * var(--d));padding:calc(2px * var(--d)) calc(4px * var(--d));
+  background:#482d148c;color:#fff7df;box-shadow:none;font-size:calc(11px * var(--d));font-weight:600;line-height:1.2;
+  font-variant-numeric:tabular-nums;text-shadow:0 1px 2px #39240d;
+}
+.scene-purifier[data-state="working"] .purifier-state {top:auto;bottom:4%;left:50%;translate:-50% 0;}
+.scene-purifier .purifier-plinth {position:absolute;left:var(--plinth-x);top:var(--plinth-y);width:var(--plinth-w);height:var(--plinth-h);max-width:none;object-fit:fill;pointer-events:none;}
+html.light-note-mobile-rendering .purifier-plinth {display:none;}
+/* Compact illustrated category rail, with quantity separate from category name. */
+#modal .inventory-dialog .bag-tabs {gap:calc(4px * var(--d));padding:calc(4px * var(--d));margin:0;border:1px solid #d6bb88;border-radius:calc(12px * var(--d));background:#f4e9cf;}
+#modal .inventory-dialog .bag-tabs > button {display:flex;flex-direction:row;align-items:center;gap:calc(7px * var(--d));min-height:calc(46px * var(--d));padding:calc(5px * var(--d)) calc(8px * var(--d));border:1px solid transparent;border-radius:calc(8px * var(--d));background:transparent;box-shadow:none;color:#7e6340;font-size:calc(14px * var(--d));}
+#modal .inventory-dialog .bag-tabs > button.active {border-color:#8aa35e;background:#e4edcb;color:#3f6129;box-shadow:0 1px 2px #7450251a;}
+#modal .inventory-dialog .bag-tabs > button:focus-visible {outline:2px solid #486b2e !important;outline-offset:-3px;}
+#modal .inventory-dialog .bag-tab-art {width:calc(28px * var(--d));height:calc(28px * var(--d));flex:none;}
+.bag-tab-count {min-width:calc(20px * var(--d));padding:calc(2px * var(--d)) calc(5px * var(--d));border-radius:calc(7px * var(--d));background:#e7d9b7;font-size:calc(11px * var(--d));font-variant-numeric:tabular-nums;line-height:1.3;}
+.active > .bag-tab-count {background:#cadbad;color:#3f6129;}
+html.light-note-mobile-rendering #modal .inventory-dialog .bag-tabs > button {display:grid;grid-template-columns:auto auto;gap:2px 4px;min-height:56px;padding:4px;font-size:12px;}
+html.light-note-mobile-rendering #modal .inventory-dialog .bag-tab-art {grid-column:1/-1;justify-self:center;width:24px;height:24px;}
+html.light-note-mobile-rendering #modal .bag-tab-count {font-size:10px;min-width:16px;padding:1px 3px;}
+
+/* Mobile props are native pieces with independent precise hit areas. Transparent art never receives clicks. */
+.scene-native-prop {display:block;position:relative;width:100%;height:100%;overflow:visible;}
+.scene-native-prop .native-prop-frame {position:absolute;inset:0;display:block;overflow:hidden;}
+.scene-native-prop .native-prop-frame > img {position:absolute;max-width:none;object-fit:fill;transform:none;}
+.scene-native-prop[data-frame="0"] [data-native-frame="1"],.scene-native-prop[data-frame="1"] [data-native-frame="0"] {display:none;}
+.scene-facility.precise-hit {pointer-events:none;}
+.precise-hit :is(.fixture-art,.facility-bees) {pointer-events:none;}
+.fixture-hit {pointer-events:none;}
+.precise-hit .fixture-hit {position:absolute;clip-path:var(--fixture-hit);transform:matrix(1,var(--fixture-shear,0),0,1,0,0);transform-origin:0 0;pointer-events:auto;}
+.precise-hit .fixture-state {pointer-events:auto;}
+.precise-hit[data-state="idle"] .fixture-state,.precise-hit.hide-caption .fixture-state {pointer-events:none;}
+.bait-chest {pointer-events:none;}
+.bait-chest-hit {position:absolute;inset:0;clip-path:var(--bait-hit);pointer-events:auto;}
+.bait-chest-tag {pointer-events:auto;}
+.light-note-mobile-rendering .scene-purifier.native-purifier .purifier-art {left:50%;bottom:0;}
+.light-note-mobile-rendering .scene-purifier .scene-native-prop {position:absolute;inset:0;}
+.light-note-mobile-rendering .scene-purifier.native-purifier .purifier-water {display:none;}
+.light-note-mobile-rendering .scene-purifier .purifier-state {top:100%;bottom:auto;font-size:calc(10px * var(--d));}
+.light-note-mobile-rendering .sea-rod-highlight {stroke:#b75e2d;stroke-width:1.5;stroke-dasharray:14 8;}
+
+/* The return board is a foreground object; its 44px target stays independent of the workbench. */
+.light-note-mobile-rendering [data-manor-area="bay"] > .area-road-sign {z-index:12;}
+.light-note-mobile-rendering [data-manor-area="bay"] > .area-road-sign > span {position:relative;font-size:inherit;}
+.road-sign-art {position:absolute;left:50%;top:50%;translate:-50% -50%;width:var(--road-art-w);height:var(--road-art-h);overflow:hidden;clip-path:polygon(0 21%,100% 0,100% 80%,0 100%);pointer-events:none;}
+.road-sign-art > img {position:absolute;max-width:none;object-fit:fill;}
+
+.light-note-mobile-rendering [data-manor-area="bay"] .fishing-tackle {opacity:1;}
+
+/* One mobile shell for every dialog; real viewports and the existing 390px phone preview share safe gutters. */
+html.light-note-mobile-rendering #modal .dialog {
+  box-sizing:border-box;
+  width:100%;
+  max-width:min(calc(560px * var(--d)),calc(100vw - 32px * var(--d)));
+  height:auto;
+  min-height:0;
+  max-height:calc(100vh - 56px * var(--d));
+  max-height:calc(100dvh - 56px * var(--d));
+  margin:0;
+  border-radius:calc(20px * var(--d));
+}
+html.force-mobile.light-note-mobile-rendering #modal .dialog {max-width:min(calc((390px - 32px) * var(--d)),calc(100vw - 32px * var(--d)));}
+html.light-note-mobile-rendering #modal .dialog > .dialog-body {flex:1 1 auto;min-width:0;min-height:0;overflow:auto;}
+html.light-note-mobile-rendering #modal .dialog-close {right:calc(-8px * var(--d));top:calc(-14px * var(--d));width:calc(44px * var(--d));height:calc(44px * var(--d));}
+html.light-note-mobile-rendering #modal .dialog-foot {flex:none;padding:calc(10px * var(--d)) calc(12px * var(--d));}
+html.light-note-mobile-rendering #modal .dialog-foot .button {flex:1 1 auto;white-space:normal;}
+html.light-note-mobile-rendering #modal .fish-detail-art {height:clamp(calc(120px * var(--d)),22vh,calc(180px * var(--d)));}
+.light-note-mobile-rendering .manor-quest {display:grid;grid-template-columns:calc(28px * var(--d)) minmax(0,1fr) auto;column-gap:calc(8px * var(--d));row-gap:calc(2px * var(--d));}
+.light-note-mobile-rendering .manor-quest > .quest-art {grid-column:1;grid-row:1/3;}
+.light-note-mobile-rendering .manor-quest > div:nth-child(2) {grid-column:2;grid-row:1;}
+.light-note-mobile-rendering .manor-quest > .quest-water {grid-column:2;grid-row:2;margin:0;}
+.light-note-mobile-rendering #modal .manor-quest > .tile-btn {grid-column:3;grid-row:1/3;padding:calc(8px * var(--d));font-size:calc(12px * var(--d));}
+
+/* Mobile machines keep their identity in the model and accessible label; only purification time remains on scene. */
+.light-note-mobile-rendering .scene-facility .fixture-state,
+.light-note-mobile-rendering .scene-purifier:not([data-state="working"]) .purifier-state {display:none;}
+.light-note-mobile-rendering .scene-purifier[data-state="working"] .purifier-state {left:50%;translate:-50% 0;white-space:nowrap;}
+
+/* Visual feedback leaves calibrated fixture hit areas and perspective matrices fixed. */
+.garden-scene :is(.scene-facility,.scene-purifier):is(:hover,:active) {transform:none;filter:none;}
+.scene-facility .fixture-art,.scene-purifier .purifier-art {transition:translate .16s ease,filter .16s ease;}
+@media (hover:hover) and (pointer:fine) {
+  .scene-facility:hover .fixture-art {translate:0 calc(.75px * var(--d));filter:brightness(1.07);}
+  .scene-purifier:hover .purifier-art {translate:-50% calc(.75px * var(--d));filter:brightness(1.07);}
+}
+.scene-facility:focus-visible .fixture-art {translate:0 calc(.75px * var(--d));filter:brightness(1.07);}
+.scene-purifier:focus-visible .purifier-art {translate:-50% calc(.75px * var(--d));filter:brightness(1.07);}
+.scene-facility:active .fixture-art {translate:0 calc(1.5px * var(--d));filter:brightness(1.02);}
+.scene-purifier:active .purifier-art {translate:-50% calc(1.5px * var(--d));filter:brightness(1.02);}
+@media (prefers-reduced-motion:reduce) {
+  .scene-facility .fixture-art,.scene-purifier .purifier-art {transition:none;}
+}
+
+/* Loose dry pellets appear on the ground; collected fertilizer keeps its inventory sack. */
+.rabbit-droppings {position:relative;display:block;width:calc(34px * var(--d));height:calc(25px * var(--d));filter:drop-shadow(0 calc(2px * var(--d)) calc(1px * var(--d)) #48250c55);}
+.rabbit-droppings i {position:absolute;width:calc(9px * var(--d));height:calc(8px * var(--d));border:calc(1px * var(--d)) solid #68431e;border-radius:48% 52% 45% 55%;background:radial-gradient(ellipse at 35% 28%,#b38a4e 0%,#8f642f 33%,#62401d 78%);box-shadow:inset calc(1px * var(--d)) calc(1px * var(--d)) #c2a16c77;}
+.rabbit-droppings i::after {content:"";position:absolute;left:22%;top:30%;width:37%;height:15%;rotate:-25deg;background:#d4b87b88;}
+.rabbit-droppings i:nth-child(1) {left:8%;top:19%;rotate:-22deg;}
+.rabbit-droppings i:nth-child(2) {left:42%;top:5%;rotate:35deg;}
+.rabbit-droppings i:nth-child(3) {left:69%;top:38%;rotate:-12deg;}
+.rabbit-droppings i:nth-child(4) {left:31%;top:43%;rotate:16deg;}
+.rabbit-droppings i:nth-child(5) {left:5%;top:66%;rotate:45deg;}
+.rabbit-droppings i:nth-child(6) {left:54%;top:72%;rotate:-31deg;}
+
+.game-tooltip {--d:1;position:fixed;z-index:20000;max-width:min(calc(230px * var(--d)),calc(100vw - 16px * var(--d)));padding:calc(7px * var(--d)) calc(11px * var(--d));border:calc(1px * var(--d)) solid #b28b4f;border-radius:calc(9px * var(--d));background:linear-gradient(#fff9e7,#f5e7c4);box-shadow:0 calc(3px * var(--d)) calc(8px * var(--d)) #573d2533,inset 0 calc(1px * var(--d)) #fffdf3;color:#684b2a;font:600 calc(12px * var(--d))/1.5 system-ui,-apple-system,sans-serif;overflow-wrap:anywhere;pointer-events:none;}
+.game-tooltip[hidden] {display:none;}
+.game-tooltip::before {content:"";position:absolute;left:var(--tip-arrow);top:calc(-5px * var(--d));width:calc(8px * var(--d));height:calc(8px * var(--d));translate:-50% 0;rotate:45deg;border-top:calc(1px * var(--d)) solid #b28b4f;border-left:calc(1px * var(--d)) solid #b28b4f;background:#fff9e7;}
+.game-tooltip[data-side="above"]::before {top:auto;bottom:calc(-5px * var(--d));rotate:225deg;background:#f5e7c4;}
+
+.fish-output > span {display:flex;align-items:center;gap:calc(7px * var(--d));margin:calc(4px * var(--d)) 0;}
+.fish-output .fert-sack {flex:none;width:calc(32px * var(--d));height:calc(34px * var(--d));}
+.fish-output > small:last-child {display:block;}
+.fert-item-source {display:block;min-height:3em;margin-bottom:calc(8px * var(--d));color:#806545;font-size:calc(11px * var(--d));line-height:1.5;}
+
+
+/* 首次收录的未读提示：只在对应物种详情被打开后清除。 */
+#modal .atlas-card { position:relative; }
+.atlas-unread-dot {
+  position:absolute;z-index:2;right:calc(9px * var(--d));top:calc(9px * var(--d));
+  width:calc(10px * var(--d));height:calc(10px * var(--d));border-radius:50%;
+  background:#df5937;border:calc(2px * var(--d)) solid #fff9e9;
+}
+.atlas-tab-dot {
+  display:inline-block;vertical-align:top;margin-left:calc(4px * var(--d));
+  width:calc(6px * var(--d));height:calc(6px * var(--d));border-radius:50%;background:#df5937;
+}
+
+/* Six stable categories avoid orphan pills and sideways scrolling on phones. */
+.light-note-mobile-rendering #modal .atlas-dialog .fish-tabs {
+  display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:calc(6px * var(--d));
+  padding:calc(6px * var(--d));margin-bottom:calc(8px * var(--d));
+  border:1px solid var(--g-well-line);border-radius:calc(14px * var(--d));background:var(--g-well);
+}
+.light-note-mobile-rendering #modal .atlas-dialog .fish-tabs > button {
+  display:flex;align-items:center;justify-content:center;gap:calc(3px * var(--d));
+  min-width:0;min-height:calc(44px * var(--d));padding:calc(6px * var(--d)) calc(3px * var(--d));
+  border:1px solid transparent;border-radius:calc(9px * var(--d));
+  background:transparent;box-shadow:none;color:var(--g-muted);font-size:calc(12px * var(--d));white-space:nowrap;
+}
+.light-note-mobile-rendering #modal .atlas-dialog .fish-tabs > button.active {
+  border-color:#547d35;background:#648d42;color:#fffbed;box-shadow:0 calc(1px * var(--d)) calc(3px * var(--d)) #6d55262b;
+}
+.light-note-mobile-rendering #modal .atlas-dialog > .dialog-head p {min-height:0;margin-block:calc(8px * var(--d));}
+.species-acquisition {color:var(--g-muted);font-size:calc(13px * var(--d));}
+
+.seed-output-note {display:none;}
+.light-note-mobile-rendering #modal .inventory-dialog .seed-choice .seed-output-note {
+  display:block;grid-column:1/-1;margin:0;padding-top:calc(6px * var(--d));
+  border-top:1px solid var(--g-well-line);color:#71542e;font-size:calc(11px * var(--d));line-height:1.5;
+}

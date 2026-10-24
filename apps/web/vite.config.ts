@@ -10,6 +10,7 @@ import dynamicViewportFallback from './src/vite/dynamicViewportFallback';
 import earlyAppEntryBootstrap from './src/vite/earlyAppEntryBootstrap';
 import { assertLocalViteBackend, createLocalBackendProxy } from './src/vite/localBackendProxy';
 import seoPreviewRoutes from './src/vite/seoPreviewRoutes';
+import manorRuntime from './src/vite/manorRuntime';
 
 import path from 'path';
 export default defineConfig(({ command, mode }) => {
@@ -27,6 +28,7 @@ export default defineConfig(({ command, mode }) => {
       sourcemap: false, // 默认就是false
     },
     plugins: [
+      manorRuntime(),
       earlyAppEntryBootstrap(),
       seoPreviewRoutes(),
       vue(),

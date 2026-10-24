@@ -1,0 +1,613 @@
+{
+  "note": "第三批物种：每张图集 6 只，按阅读顺序对应 species；生成后用 tools/atlas-extract.py 切图接入。",
+  "batches": [
+    {
+      "atlas": "fish-3d-brook.png",
+      "group": "fish",
+      "title": "淡水小屋",
+      "species": [
+        {
+          "key": "zebra",
+          "name": "银纹斑马鱼",
+          "quality": "常见",
+          "size": 4,
+          "description": "蓝银相间的细纹从头贯到尾，一群游过像一阵风。",
+          "fertilizer": "eco"
+        },
+        {
+          "key": "platy",
+          "name": "橘月鱼",
+          "quality": "常见",
+          "size": 5,
+          "description": "圆鼓鼓的橘红色小鱼，尾柄上挂着一弯黑色的月牙。",
+          "fertilizer": "eco"
+        },
+        {
+          "key": "cory",
+          "name": "熊猫鼠鱼",
+          "quality": "常见",
+          "size": 5,
+          "description": "趴在沙底找吃的，黑眼圈和黑背鳍让它像只小熊猫。",
+          "fertilizer": "eco"
+        },
+        {
+          "key": "ryukin",
+          "name": "绯红琉金",
+          "quality": "稀有",
+          "size": 15,
+          "description": "高高拱起的背，红白相间，三叶长尾像一袭纱裙。",
+          "fertilizer": "nourish"
+        },
+        {
+          "key": "gourami",
+          "name": "珍珠马甲",
+          "quality": "稀有",
+          "size": 11,
+          "description": "银紫色的身体缀满珍珠点，两根细长的腹鳍像在探路。",
+          "fertilizer": "nourish"
+        },
+        {
+          "key": "pleco",
+          "name": "雪花皇冠豹",
+          "quality": "珍稀",
+          "size": 10,
+          "description": "黑白曲折的斑马纹，吸盘嘴贴着石头，一动不动就是一块小玉。",
+          "fertilizer": "fertile"
+        }
+      ],
+      "prompt": "Use case: stylized-concept.\nAsset type: transparent fish sprite atlas for an elegant immersive garden aquarium prototype.\nCreate ONE production-quality 3D-rendered atlas of SIX distinct fish. 1536 x 1024 landscape canvas, exact 3 columns by 2 rows grid of equal 512 x 512 cells. No visible grid. One complete fish centered in each cell. Every fish stays inside its cell with generous 48 pixel transparent gutters, no overlaps. Uniform maximum full silhouette length about 410 pixels. Keep every fin, whisker, tail uncut.\nStyle: premium high-poly sculpted 3D aquatic creature render, physically based materials, delicate iridescent wet scales, smooth volumetric bodies, translucent fin membranes with fine rays and subsurface scattering, glassy realistic small eyes. Beautiful semi-realistic cozy fantasy game art, not a flat vector, not a drawing, not emoji, not plastic cartoon toys. Strong curved-body light and shade, darker belly and occlusion under fins, luminous soft studio key from upper left with restrained cool rim. Colorful but tasteful. Each fish is swimming freely, isolated, no aquarium, no bubbles, no pedestal, no cast shadow, no backdrop. TRUE TRANSPARENT ALPHA.\nCamera: mostly side view facing RIGHT, turned about 20 degrees toward camera to reveal the rounded forehead, chest volume and far pectoral fin. The back half gently curved in swimming pose. Do not render any fish perfectly orthographic-flat. Show all creatures at consistent render quality. No text, numbers, labels, badges, frames, watermarks.\nCell subjects in exact reading order:\nTop left: zebra danio, slender silver body with crisp horizontal sapphire-blue stripes running from gill to tail, clear fins.\nTop center: orange mickey-mouse platy, compact deep-bodied bright tangerine fish, small black crescent-and-dots mark at the tail base, rounded fins.\nTop right: panda corydoras catfish, small armored cream-pink body, black eye patch, black dorsal fin and black tail-base spot, tiny barbels, slightly downturned mouth.\nBottom left: red-and-white ryukin fancy goldfish, high arched back, deep egg-shaped body with vivid red and pearl-white patches, flowing triple veil tail.\nBottom center: pearl gourami, laterally flat oval body, lavender-silver covered in fine white pearl dots, a dark horizontal line, orange-red throat, two long thread-like pelvic feelers.\nBottom right: zebra pleco, flattened armored catfish body with bold black-and-white zigzag stripes, sucker mouth underneath, broad sail-like dorsal fin, spined pectoral fins."
+    },
+    {
+      "atlas": "fish-3d-stream.png",
+      "group": "fish",
+      "title": "山溪冷水",
+      "species": [
+        {
+          "key": "bitterling",
+          "name": "彩虹鳑鲏",
+          "quality": "常见",
+          "size": 6,
+          "description": "巴掌大的溪鱼，侧身泛着粉紫和湖蓝的虹光。",
+          "fertilizer": "eco"
+        },
+        {
+          "key": "loach",
+          "name": "金线泥鳅",
+          "quality": "常见",
+          "size": 15,
+          "description": "细长柔软的金色身体，最爱钻进沙里只露出一颗头。",
+          "fertilizer": "eco"
+        },
+        {
+          "key": "trout",
+          "name": "虹鳟",
+          "quality": "稀有",
+          "size": 50,
+          "description": "身侧一条玫瑰色的彩虹带，背上撒满黑色小点。",
+          "fertilizer": "nourish"
+        },
+        {
+          "key": "char",
+          "name": "红点鲑",
+          "quality": "稀有",
+          "size": 40,
+          "description": "冷水里的宝石，深色身体上点着一颗颗带蓝圈的红点。",
+          "fertilizer": "nourish"
+        },
+        {
+          "key": "salmon",
+          "name": "洄游红鲑",
+          "quality": "珍稀",
+          "size": 70,
+          "description": "回到出生的溪流时，会换上一身火红，头变成青绿色。",
+          "fertilizer": "fertile"
+        },
+        {
+          "key": "sturgeon",
+          "name": "中华鲟",
+          "quality": "传说",
+          "size": 300,
+          "description": "从恐龙时代游来的古老巨鱼，背上排着一列骨板。",
+          "fertilizer": "legend"
+        }
+      ],
+      "prompt": "Use case: stylized-concept.\nAsset type: transparent fish sprite atlas for an elegant immersive garden aquarium prototype.\nCreate ONE production-quality 3D-rendered atlas of SIX distinct fish. 1536 x 1024 landscape canvas, exact 3 columns by 2 rows grid of equal 512 x 512 cells. No visible grid. One complete fish centered in each cell. Every fish stays inside its cell with generous 48 pixel transparent gutters, no overlaps. Uniform maximum full silhouette length about 410 pixels. Keep every fin, whisker, tail uncut.\nStyle: premium high-poly sculpted 3D aquatic creature render, physically based materials, delicate iridescent wet scales, smooth volumetric bodies, translucent fin membranes with fine rays and subsurface scattering, glassy realistic small eyes. Beautiful semi-realistic cozy fantasy game art, not a flat vector, not a drawing, not emoji, not plastic cartoon toys. Strong curved-body light and shade, darker belly and occlusion under fins, luminous soft studio key from upper left with restrained cool rim. Colorful but tasteful. Each fish is swimming freely, isolated, no aquarium, no bubbles, no pedestal, no cast shadow, no backdrop. TRUE TRANSPARENT ALPHA.\nCamera: mostly side view facing RIGHT, turned about 20 degrees toward camera to reveal the rounded forehead, chest volume and far pectoral fin. The back half gently curved in swimming pose. Do not render any fish perfectly orthographic-flat. Show all creatures at consistent render quality. No text, numbers, labels, badges, frames, watermarks.\nCell subjects in exact reading order:\nTop left: rosy bitterling, small flat oval body, iridescent pink-violet flanks with a turquoise stripe toward the tail, reddish fins.\nTop center: golden dojo weather loach, long slender cylindrical golden-yellow body, small barbels around the mouth, tiny rounded fins, gently S-curved.\nTop right: rainbow trout, streamlined olive-green back with black speckles, wide pink-magenta rainbow band along the side, silver belly.\nBottom left: brook trout char, dark olive body with cream vermiculation, small red dots with blue halos, orange belly, white leading edges on lower fins.\nBottom center: spawning sockeye salmon, brilliant crimson-red body, olive-green head with hooked jaw, slight humped back, powerful tail.\nBottom right: Chinese sturgeon, long ancient shark-like body, rows of bony diamond scutes along back and sides, pointed snout with barbels underneath, heterocercal tail, slate gray-brown with pale belly."
+    },
+    {
+      "atlas": "fish-3d-amazon.png",
+      "group": "fish",
+      "title": "雨林河道",
+      "species": [
+        {
+          "key": "rummy",
+          "name": "红鼻剪刀",
+          "quality": "常见",
+          "size": 4,
+          "description": "鼻头红得像颗樱桃，尾巴上是黑白相间的剪刀纹。",
+          "fertilizer": "eco"
+        },
+        {
+          "key": "ram",
+          "name": "七彩凤凰",
+          "quality": "稀有",
+          "size": 6,
+          "description": "小小的身体铺满蓝宝石亮片，眼睛周围一圈红。",
+          "fertilizer": "nourish"
+        },
+        {
+          "key": "oscar",
+          "name": "地图鱼",
+          "quality": "稀有",
+          "size": 30,
+          "description": "黑褐色身体上一块块橘红斑，像一张旧地图。",
+          "fertilizer": "nourish"
+        },
+        {
+          "key": "redtail",
+          "name": "红尾鲶",
+          "quality": "稀有",
+          "size": 100,
+          "description": "宽扁的大头，长长的胡须，尾巴是一抹火红。",
+          "fertilizer": "nourish"
+        },
+        {
+          "key": "eel",
+          "name": "电鳗",
+          "quality": "珍稀",
+          "size": 200,
+          "description": "看上去不起眼的长身体，其实藏着一整座发电站。",
+          "fertilizer": "fertile"
+        },
+        {
+          "key": "arapaima",
+          "name": "巨骨舌鱼",
+          "quality": "珍稀",
+          "size": 250,
+          "description": "雨林河里最大的鱼，后半身的鳞片红得像燃烧的炭。",
+          "fertilizer": "fertile"
+        }
+      ],
+      "prompt": "Use case: stylized-concept.\nAsset type: transparent fish sprite atlas for an elegant immersive garden aquarium prototype.\nCreate ONE production-quality 3D-rendered atlas of SIX distinct fish. 1536 x 1024 landscape canvas, exact 3 columns by 2 rows grid of equal 512 x 512 cells. No visible grid. One complete fish centered in each cell. Every fish stays inside its cell with generous 48 pixel transparent gutters, no overlaps. Uniform maximum full silhouette length about 410 pixels. Keep every fin, whisker, tail uncut.\nStyle: premium high-poly sculpted 3D aquatic creature render, physically based materials, delicate iridescent wet scales, smooth volumetric bodies, translucent fin membranes with fine rays and subsurface scattering, glassy realistic small eyes. Beautiful semi-realistic cozy fantasy game art, not a flat vector, not a drawing, not emoji, not plastic cartoon toys. Strong curved-body light and shade, darker belly and occlusion under fins, luminous soft studio key from upper left with restrained cool rim. Colorful but tasteful. Each fish is swimming freely, isolated, no aquarium, no bubbles, no pedestal, no cast shadow, no backdrop. TRUE TRANSPARENT ALPHA.\nCamera: mostly side view facing RIGHT, turned about 20 degrees toward camera to reveal the rounded forehead, chest volume and far pectoral fin. The back half gently curved in swimming pose. Do not render any fish perfectly orthographic-flat. Show all creatures at consistent render quality. No text, numbers, labels, badges, frames, watermarks.\nCell subjects in exact reading order:\nTop left: rummy-nose tetra, tiny slender silver body, bright cherry-red head, black-and-white striped scissor tail.\nTop center: German blue ram cichlid, small deep body with electric blue spangles over gold, orange-red belly, black bar through the red-ringed eye, black spiny dorsal front.\nTop right: oscar cichlid, large oval chunky body, velvety dark charcoal with irregular orange-red marbled patches, orange-ringed eyespot on tail base, big expressive lips.\nBottom left: redtail catfish, broad flat head with long whiskers, dark gray back, crisp white side band and belly, bright orange-red tail.\nBottom center: electric eel, very long cylindrical dark olive-gray body with orange-yellow throat, long undulating ventral fin along the belly, small eyes, flat head; body gently waved to fit the cell.\nBottom right: arapaima, massive long torpedo body, large scales grading from olive-gray front to vivid crimson edges on the rear half and tail, flat bony head, upturned mouth."
+    },
+    {
+      "atlas": "fish-3d-coral.png",
+      "group": "fish",
+      "title": "珊瑚礁 · 二",
+      "species": [
+        {
+          "key": "damsel",
+          "name": "蓝魔鬼",
+          "quality": "常见",
+          "size": 7,
+          "description": "电光蓝的小雀鲷，在珊瑚之间来回巡逻。",
+          "fertilizer": "eco"
+        },
+        {
+          "key": "chromis",
+          "name": "青翠光鳃鱼",
+          "quality": "常见",
+          "size": 8,
+          "description": "翡翠到湖蓝的渐变，成群时像撒出一把玻璃珠。",
+          "fertilizer": "eco"
+        },
+        {
+          "key": "boxfish",
+          "name": "黄金箱鲀",
+          "quality": "常见",
+          "size": 10,
+          "description": "方方的黄色小盒子点着黑点，扑扇小鳍原地悬停。",
+          "fertilizer": "eco"
+        },
+        {
+          "key": "moorish",
+          "name": "镰鱼",
+          "quality": "稀有",
+          "size": 18,
+          "description": "黑白黄三色宽条纹，背鳍拖着一根长长的白丝。",
+          "fertilizer": "nourish"
+        },
+        {
+          "key": "parrot",
+          "name": "彩虹鹦嘴鱼",
+          "quality": "稀有",
+          "size": 60,
+          "description": "嘴像鹦鹉的喙，啃珊瑚时咔咔作响，鳞片是一片彩虹。",
+          "fertilizer": "nourish"
+        },
+        {
+          "key": "mandarin",
+          "name": "七彩麒麟",
+          "quality": "珍稀",
+          "size": 6,
+          "description": "蓝橙交织的花纹像上了釉的青花瓷，是海里最艳的小鱼之一。",
+          "fertilizer": "fertile"
+        }
+      ],
+      "prompt": "Use case: stylized-concept.\nAsset type: transparent fish sprite atlas for an elegant immersive garden aquarium prototype.\nCreate ONE production-quality 3D-rendered atlas of SIX distinct fish. 1536 x 1024 landscape canvas, exact 3 columns by 2 rows grid of equal 512 x 512 cells. No visible grid. One complete fish centered in each cell. Every fish stays inside its cell with generous 48 pixel transparent gutters, no overlaps. Uniform maximum full silhouette length about 410 pixels. Keep every fin, whisker, tail uncut.\nStyle: premium high-poly sculpted 3D aquatic creature render, physically based materials, delicate iridescent wet scales, smooth volumetric bodies, translucent fin membranes with fine rays and subsurface scattering, glassy realistic small eyes. Beautiful semi-realistic cozy fantasy game art, not a flat vector, not a drawing, not emoji, not plastic cartoon toys. Strong curved-body light and shade, darker belly and occlusion under fins, luminous soft studio key from upper left with restrained cool rim. Colorful but tasteful. Each fish is swimming freely, isolated, no aquarium, no bubbles, no pedestal, no cast shadow, no backdrop. TRUE TRANSPARENT ALPHA.\nCamera: mostly side view facing RIGHT, turned about 20 degrees toward camera to reveal the rounded forehead, chest volume and far pectoral fin. The back half gently curved in swimming pose. Do not render any fish perfectly orthographic-flat. Show all creatures at consistent render quality. No text, numbers, labels, badges, frames, watermarks.\nCell subjects in exact reading order:\nTop left: blue devil damselfish, small oval body in brilliant electric blue, fine darker blue spots, transparent tail tips.\nTop center: blue-green chromis, small forked-tail fish with gradient iridescent apple-green to aqua body, glassy translucent fins.\nTop right: yellow boxfish juvenile, cube-shaped bright lemon-yellow body with neat black polka dots, tiny fins and pursed mouth, rounded and cute but realistic.\nBottom left: Moorish idol, tall disc-shaped body with bold black, white and yellow vertical bands, long trailing white dorsal filament, tubular snout.\nBottom center: rainbow parrotfish, stout body with large scales in turquoise, green and coral-orange patterns, beak-like fused teeth, crescent tail.\nBottom right: mandarin dragonet, small rounded body with swirling orange and electric-blue maze pattern, big fan-like pectoral fins, tall spiny first dorsal fin."
+    },
+    {
+      "atlas": "fish-3d-deep.png",
+      "group": "fish",
+      "title": "远洋深海",
+      "species": [
+        {
+          "key": "flyingfish",
+          "name": "银翼飞鱼",
+          "quality": "常见",
+          "size": 30,
+          "description": "张开一对透明的长胸鳍，能贴着海面滑翔几十米。",
+          "fertilizer": "eco"
+        },
+        {
+          "key": "lantern",
+          "name": "灯笼鱼",
+          "quality": "常见",
+          "size": 8,
+          "description": "深海里的小精灵，身侧一串发光点像夜里的窗灯。",
+          "fertilizer": "eco"
+        },
+        {
+          "key": "swordfish",
+          "name": "剑鱼",
+          "quality": "稀有",
+          "size": 300,
+          "description": "长剑一样的上颌劈开海浪，是海里游得最快的鱼之一。",
+          "fertilizer": "nourish"
+        },
+        {
+          "key": "angler",
+          "name": "提灯鮟鱇",
+          "quality": "珍稀",
+          "size": 20,
+          "description": "头顶挑着一盏小灯，在漆黑的深海里慢慢钓鱼。",
+          "fertilizer": "fertile"
+        },
+        {
+          "key": "sunfish",
+          "name": "翻车鱼",
+          "quality": "珍稀",
+          "size": 250,
+          "description": "像一个被切掉后半截的大圆盘，喜欢侧躺在海面晒太阳。",
+          "fertilizer": "fertile"
+        },
+        {
+          "key": "oarfish",
+          "name": "皇带鱼",
+          "quality": "传说",
+          "size": 800,
+          "description": "银色长带上竖着一排红鬃，传说中的“海龙王”。",
+          "fertilizer": "legend"
+        }
+      ],
+      "prompt": "Use case: stylized-concept.\nAsset type: transparent fish sprite atlas for an elegant immersive garden aquarium prototype.\nCreate ONE production-quality 3D-rendered atlas of SIX distinct fish. 1536 x 1024 landscape canvas, exact 3 columns by 2 rows grid of equal 512 x 512 cells. No visible grid. One complete fish centered in each cell. Every fish stays inside its cell with generous 48 pixel transparent gutters, no overlaps. Uniform maximum full silhouette length about 410 pixels. Keep every fin, whisker, tail uncut.\nStyle: premium high-poly sculpted 3D aquatic creature render, physically based materials, delicate iridescent wet scales, smooth volumetric bodies, translucent fin membranes with fine rays and subsurface scattering, glassy realistic small eyes. Beautiful semi-realistic cozy fantasy game art, not a flat vector, not a drawing, not emoji, not plastic cartoon toys. Strong curved-body light and shade, darker belly and occlusion under fins, luminous soft studio key from upper left with restrained cool rim. Colorful but tasteful. Each fish is swimming freely, isolated, no aquarium, no bubbles, no pedestal, no cast shadow, no backdrop. TRUE TRANSPARENT ALPHA.\nCamera: mostly side view facing RIGHT, turned about 20 degrees toward camera to reveal the rounded forehead, chest volume and far pectoral fin. The back half gently curved in swimming pose. Do not render any fish perfectly orthographic-flat. Show all creatures at consistent render quality. No text, numbers, labels, badges, frames, watermarks.\nCell subjects in exact reading order:\nTop left: flying fish, streamlined silvery-blue body with wing-like enlarged translucent pectoral fins spread wide, forked tail with longer lower lobe.\nTop center: lanternfish, small dark slender body with big eyes and rows of glowing blue-white photophores along the belly and sides.\nTop right: swordfish, powerful streamlined dark purple-bronze back and silver belly, very long flat sword bill, tall crescent dorsal fin, crescent tail.\nBottom left: deep-sea anglerfish, round dark brown-black body, large mouth with fine needle teeth (elegant, not scary), small eyes, glowing teal lure on a stalk above the head.\nBottom center: ocean sunfish mola, huge flat rounded disc body, tall dorsal and anal fins, scalloped clavus instead of a tail, silvery-gray skin, small mouth and gentle eye.\nBottom right: giant oarfish, extremely long ribbon-like silver body with faint bluish streaks, continuous crimson dorsal fin crest along the whole length, red head plume rays, body gracefully curved in an S to fit the cell."
+    },
+    {
+      "atlas": "fish-3d-coast.png",
+      "group": "fish",
+      "title": "温带海岸",
+      "species": [
+        {
+          "key": "seabream",
+          "name": "真鲷",
+          "quality": "常见",
+          "size": 40,
+          "description": "粉红的身体撒着蓝色小点，是宴席上的喜庆鱼。",
+          "fertilizer": "eco"
+        },
+        {
+          "key": "mackerel",
+          "name": "青花鱼",
+          "quality": "常见",
+          "size": 35,
+          "description": "背上墨绿色的波浪纹，肚子雪白，游起来像一道闪电。",
+          "fertilizer": "eco"
+        },
+        {
+          "key": "flounder",
+          "name": "牙鲆",
+          "quality": "稀有",
+          "size": 50,
+          "description": "两只眼睛长在同一边，平躺在沙上就和沙子融为一体。",
+          "fertilizer": "nourish"
+        },
+        {
+          "key": "garibaldi",
+          "name": "橘焰雀鲷",
+          "quality": "稀有",
+          "size": 25,
+          "description": "一身亮橘色，在海藻林里远远就能看见。",
+          "fertilizer": "nourish"
+        },
+        {
+          "key": "seadragon",
+          "name": "叶海龙",
+          "quality": "珍稀",
+          "size": 30,
+          "description": "身上长满叶子一样的附肢，往海藻里一漂就不见了。",
+          "fertilizer": "fertile"
+        },
+        {
+          "key": "manta",
+          "name": "鬼蝠魟",
+          "quality": "珍稀",
+          "size": 500,
+          "description": "张开一对宽大的“翅膀”在海里翱翔，温柔又安静。",
+          "fertilizer": "fertile"
+        }
+      ],
+      "prompt": "Use case: stylized-concept.\nAsset type: transparent fish sprite atlas for an elegant immersive garden aquarium prototype.\nCreate ONE production-quality 3D-rendered atlas of SIX distinct fish. 1536 x 1024 landscape canvas, exact 3 columns by 2 rows grid of equal 512 x 512 cells. No visible grid. One complete fish centered in each cell. Every fish stays inside its cell with generous 48 pixel transparent gutters, no overlaps. Uniform maximum full silhouette length about 410 pixels. Keep every fin, whisker, tail uncut.\nStyle: premium high-poly sculpted 3D aquatic creature render, physically based materials, delicate iridescent wet scales, smooth volumetric bodies, translucent fin membranes with fine rays and subsurface scattering, glassy realistic small eyes. Beautiful semi-realistic cozy fantasy game art, not a flat vector, not a drawing, not emoji, not plastic cartoon toys. Strong curved-body light and shade, darker belly and occlusion under fins, luminous soft studio key from upper left with restrained cool rim. Colorful but tasteful. Each fish is swimming freely, isolated, no aquarium, no bubbles, no pedestal, no cast shadow, no backdrop. TRUE TRANSPARENT ALPHA.\nCamera: mostly side view facing RIGHT, turned about 20 degrees toward camera to reveal the rounded forehead, chest volume and far pectoral fin. The back half gently curved in swimming pose. Do not render any fish perfectly orthographic-flat. Show all creatures at consistent render quality. No text, numbers, labels, badges, frames, watermarks.\nCell subjects in exact reading order:\nTop left: red sea bream, deep oval pink-red body with tiny scattered sky-blue spots, silver-pink fins, gentle face.\nTop center: Atlantic mackerel, slim torpedo body, iridescent blue-green back with dark wavy tiger stripes, silver-white belly, small finlets.\nTop right: flounder, flat oval body tilted toward the camera, both eyes on the upper side, sandy brown speckled skin, frilled fin all around the edge.\nBottom left: garibaldi damselfish, deep oval body in solid vivid orange, slightly translucent orange fins.\nBottom center: leafy seadragon, delicate seahorse-like elongated body covered with ornate leaf-shaped golden-olive appendages, tubular snout, curled posture, translucent tiny fins.\nBottom right: manta ray in graceful flight, wide diamond-shaped wings, black back with white shoulder patches, white belly, cephalic lobes curled forward, thin tail; three-quarter view from above-front."
+    },
+    {
+      "atlas": "creature-atlas-sand.png",
+      "group": "creature",
+      "title": "沙地小客",
+      "species": [
+        {
+          "key": "hermit",
+          "name": "螺居寄居蟹",
+          "quality": "常见",
+          "size": 6,
+          "description": "背着一枚旋纹螺壳，慢吞吞地在沙上找新家。",
+          "fertilizer": null,
+          "group": "creature",
+          "habitat": "bottom"
+        },
+        {
+          "key": "shrimp",
+          "name": "樱桃小虾",
+          "quality": "常见",
+          "size": 3,
+          "description": "通体樱桃红，细长的触须一刻不停地探路。",
+          "fertilizer": null,
+          "group": "creature",
+          "habitat": "bottom"
+        },
+        {
+          "key": "urchin",
+          "name": "紫海胆",
+          "quality": "常见",
+          "size": 8,
+          "description": "一颗长满紫色长刺的小球，在礁石上慢慢挪动。",
+          "fertilizer": null,
+          "group": "creature",
+          "habitat": "bottom"
+        },
+        {
+          "key": "seaslug",
+          "name": "紫蓑海蛞蝓",
+          "quality": "稀有",
+          "size": 5,
+          "description": "背上一丛紫橙相间的触角，像移动的小花园。",
+          "fertilizer": null,
+          "group": "creature",
+          "habitat": "bottom"
+        },
+        {
+          "key": "crab",
+          "name": "珊瑚蟹",
+          "quality": "稀有",
+          "size": 12,
+          "description": "一对大钳子举过头顶，横着走得飞快。",
+          "fertilizer": null,
+          "group": "creature",
+          "habitat": "bottom"
+        },
+        {
+          "key": "mantis",
+          "name": "孔雀虾蛄",
+          "quality": "珍稀",
+          "size": 15,
+          "description": "身上集齐了彩虹的颜色，一对“拳头”能敲碎贝壳。",
+          "fertilizer": null,
+          "group": "creature",
+          "habitat": "bottom"
+        }
+      ],
+      "prompt": "Use case: stylized-concept.\nAsset type: transparent creature sprite atlas for an elegant immersive garden aquarium prototype; must match an existing atlas of 3D-rendered fish.\nCreate ONE production-quality 3D-rendered atlas of SIX distinct aquatic creatures. 1536 x 1024 landscape canvas, exact 3 columns by 2 rows grid of equal 512 x 512 cells. No visible grid. One complete creature centered in each cell. Every creature stays inside its cell with generous 48 pixel transparent gutters, no overlaps, no parts touching. Uniform maximum size about 400 pixels. Keep every leg, antenna, tentacle, spine and fin uncut.\nStyle: premium high-poly sculpted 3D aquatic creature render, physically based materials, wet glossy skin, shell or carapace with fine surface detail, translucent membranes and tentacles with subsurface scattering, glassy realistic small eyes. Beautiful semi-realistic cozy fantasy game art, not a flat vector, not a drawing, not emoji, not plastic cartoon toys. Strong volumetric light and shade, contact occlusion between parts, luminous soft studio key from upper left with restrained cool rim. Colorful but tasteful. Each creature isolated, no aquarium, no sand, no rocks, no bubbles, no pedestal, no cast shadow, no backdrop. TRUE TRANSPARENT ALPHA.\nCamera: three-quarter side view facing RIGHT and slightly from above, so bottom dwellers show their top surface and floating creatures show their full bell or body. Show all creatures at consistent render quality. No text, numbers, labels, badges, frames, watermarks.\nCell subjects in exact reading order:\nTop left: hermit crab in a cream-and-amber spiral seashell, orange striped legs, curious stalked eyes.\nTop center: tiny cherry shrimp, glossy translucent cherry-red body, long fine antennae, delicate swimmerets.\nTop right: purple sea urchin, round spiny globe with long glossy violet spines, tiny tube feet visible at the bottom.\nBottom left: nudibranch sea slug, violet body with a tuft of orange-tipped purple cerata along its back, two rhinophores.\nBottom center: red coral crab, rounded carapace with cream speckles, both claws raised.\nBottom right: peacock mantis shrimp, segmented body in vivid green with orange legs and blue-red accents, stalked iridescent eyes, folded raptorial clubs."
+    },
+    {
+      "atlas": "creature-atlas-reef.png",
+      "group": "creature",
+      "title": "礁石花园",
+      "species": [
+        {
+          "key": "sanddollar",
+          "name": "沙钱",
+          "quality": "常见",
+          "size": 8,
+          "description": "扁扁的圆饼，背上印着一朵五瓣花。",
+          "fertilizer": null,
+          "group": "creature",
+          "habitat": "bottom"
+        },
+        {
+          "key": "scallop",
+          "name": "蓝眼扇贝",
+          "quality": "常见",
+          "size": 8,
+          "description": "壳一张一合就能往前跳，壳缘一圈亮蓝色的小眼睛。",
+          "fertilizer": null,
+          "group": "creature",
+          "habitat": "bottom"
+        },
+        {
+          "key": "featherstar",
+          "name": "金羽星",
+          "quality": "稀有",
+          "size": 20,
+          "description": "十几条羽毛般的腕轮流划水，像一朵会游泳的金色花。",
+          "fertilizer": null,
+          "group": "creature",
+          "habitat": "drift"
+        },
+        {
+          "key": "seapen",
+          "name": "夜光海鳃",
+          "quality": "稀有",
+          "size": 25,
+          "description": "像一支插在沙里的羽毛笔，被碰到时泛起蓝绿色的光。",
+          "fertilizer": null,
+          "group": "creature",
+          "habitat": "bottom"
+        },
+        {
+          "key": "anemone",
+          "name": "珊瑚海葵",
+          "quality": "珍稀",
+          "size": 30,
+          "description": "触手随水摆动，像一丛会呼吸的花。",
+          "fertilizer": null,
+          "group": "creature",
+          "habitat": "bottom"
+        },
+        {
+          "key": "clam",
+          "name": "七彩砗磲",
+          "quality": "珍稀",
+          "size": 60,
+          "description": "张开的外套膜闪着蓝绿色的光，一只能活上百年。",
+          "fertilizer": null,
+          "group": "creature",
+          "habitat": "bottom"
+        }
+      ],
+      "prompt": "Use case: stylized-concept.\nAsset type: transparent creature sprite atlas for an elegant immersive garden aquarium prototype; must match an existing atlas of 3D-rendered fish.\nCreate ONE production-quality 3D-rendered atlas of SIX distinct aquatic creatures. 1536 x 1024 landscape canvas, exact 3 columns by 2 rows grid of equal 512 x 512 cells. No visible grid. One complete creature centered in each cell. Every creature stays inside its cell with generous 48 pixel transparent gutters, no overlaps, no parts touching. Uniform maximum size about 400 pixels. Keep every leg, antenna, tentacle, spine and fin uncut.\nStyle: premium high-poly sculpted 3D aquatic creature render, physically based materials, wet glossy skin, shell or carapace with fine surface detail, translucent membranes and tentacles with subsurface scattering, glassy realistic small eyes. Beautiful semi-realistic cozy fantasy game art, not a flat vector, not a drawing, not emoji, not plastic cartoon toys. Strong volumetric light and shade, contact occlusion between parts, luminous soft studio key from upper left with restrained cool rim. Colorful but tasteful. Each creature isolated, no aquarium, no sand, no rocks, no bubbles, no pedestal, no cast shadow, no backdrop. TRUE TRANSPARENT ALPHA.\nCamera: three-quarter side view facing RIGHT and slightly from above, so bottom dwellers show their top surface and floating creatures show their full bell or body. Show all creatures at consistent render quality. No text, numbers, labels, badges, frames, watermarks.\nCell subjects in exact reading order:\nTop left: sand dollar, flat round disc with velvety lavender-gray surface and a delicate five-petal flower pattern on top, tilted to show the top.\nTop center: scallop, ribbed fan-shaped shell in warm coral and cream, slightly open with a row of tiny bright blue eyes along the mantle edge.\nTop right: feather star crinoid, many long feathery golden-orange arms radiating and curling, small central disc, swimming pose.\nBottom left: orange sea pen, upright feather-quill shaped colony with a fleshy stalk and rows of translucent polyp leaves, soft bioluminescent cyan glow on the edges.\nBottom center: sea anemone, thick column with a crown of many plump bubble-tipped tentacles in magenta and pale green, soft translucent tips.\nBottom right: giant clam, heavy wavy-edged ivory shell slightly open, vivid iridescent blue-green-purple patterned mantle."
+    },
+    {
+      "atlas": "creature-atlas-fresh.png",
+      "group": "creature",
+      "title": "溪畔两栖",
+      "species": [
+        {
+          "key": "applesnail",
+          "name": "金苹果螺",
+          "quality": "常见",
+          "size": 5,
+          "description": "背着一枚金黄的大圆壳，伸出长长的呼吸管。",
+          "fertilizer": null,
+          "group": "creature",
+          "habitat": "bottom"
+        },
+        {
+          "key": "crayfish",
+          "name": "小龙虾",
+          "quality": "常见",
+          "size": 10,
+          "description": "举着一对大红钳，倒退比前进还快。",
+          "fertilizer": null,
+          "group": "creature",
+          "habitat": "bottom"
+        },
+        {
+          "key": "axolotl",
+          "name": "粉腮六角恐龙",
+          "quality": "稀有",
+          "size": 22,
+          "description": "永远长不大的笑脸，三对粉色外鳃轻轻飘动。",
+          "fertilizer": null,
+          "group": "creature",
+          "habitat": "bottom"
+        },
+        {
+          "key": "peachjelly",
+          "name": "桃花水母",
+          "quality": "稀有",
+          "size": 2,
+          "description": "淡水里的小水母，像一朵漂在水里的桃花。",
+          "fertilizer": null,
+          "group": "creature",
+          "habitat": "drift"
+        },
+        {
+          "key": "horseshoe",
+          "name": "中华鲎",
+          "quality": "珍稀",
+          "size": 50,
+          "description": "比恐龙还古老的活化石，血液是蓝色的。",
+          "fertilizer": null,
+          "group": "creature",
+          "habitat": "bottom"
+        },
+        {
+          "key": "seaturtle",
+          "name": "碧波海龟",
+          "quality": "珍稀",
+          "size": 90,
+          "description": "背甲上的纹路像古老的地图，划水不紧不慢。",
+          "fertilizer": null,
+          "group": "creature",
+          "habitat": "glide"
+        }
+      ],
+      "prompt": "Use case: stylized-concept.\nAsset type: transparent creature sprite atlas for an elegant immersive garden aquarium prototype; must match an existing atlas of 3D-rendered fish.\nCreate ONE production-quality 3D-rendered atlas of SIX distinct aquatic creatures. 1536 x 1024 landscape canvas, exact 3 columns by 2 rows grid of equal 512 x 512 cells. No visible grid. One complete creature centered in each cell. Every creature stays inside its cell with generous 48 pixel transparent gutters, no overlaps, no parts touching. Uniform maximum size about 400 pixels. Keep every leg, antenna, tentacle, spine and fin uncut.\nStyle: premium high-poly sculpted 3D aquatic creature render, physically based materials, wet glossy skin, shell or carapace with fine surface detail, translucent membranes and tentacles with subsurface scattering, glassy realistic small eyes. Beautiful semi-realistic cozy fantasy game art, not a flat vector, not a drawing, not emoji, not plastic cartoon toys. Strong volumetric light and shade, contact occlusion between parts, luminous soft studio key from upper left with restrained cool rim. Colorful but tasteful. Each creature isolated, no aquarium, no sand, no rocks, no bubbles, no pedestal, no cast shadow, no backdrop. TRUE TRANSPARENT ALPHA.\nCamera: three-quarter side view facing RIGHT and slightly from above, so bottom dwellers show their top surface and floating creatures show their full bell or body. Show all creatures at consistent render quality. No text, numbers, labels, badges, frames, watermarks.\nCell subjects in exact reading order:\nTop left: golden apple snail, round glossy golden-yellow spiral shell, soft cream body with long tentacles and a breathing siphon.\nTop center: red swamp crayfish, glossy deep red segmented body, large bumpy claws raised, long antennae.\nTop right: pink axolotl smiling, three pairs of feathery coral-pink external gills, soft pale-pink skin, small legs.\nBottom left: freshwater peach-blossom jellyfish, tiny transparent bell with four pale peach-pink cross-shaped gonads, fine short tentacles around the rim.\nBottom center: horseshoe crab, smooth domed olive-brown horseshoe-shaped carapace, hinged abdomen with small spines, long straight tail spike.\nBottom right: green sea turtle swimming, olive-green shell with a beautiful hexagonal scute pattern, cream flippers and head."
+    },
+    {
+      "atlas": "creature-atlas-abyss.png",
+      "group": "creature",
+      "title": "深海秘境",
+      "species": [
+        {
+          "key": "krill",
+          "name": "南极磷虾",
+          "quality": "常见",
+          "size": 5,
+          "description": "小小的身体透着橘红，成群时能把海水染红。",
+          "fertilizer": null,
+          "group": "creature",
+          "habitat": "drift"
+        },
+        {
+          "key": "glasssquid",
+          "name": "玻璃乌贼",
+          "quality": "稀有",
+          "size": 20,
+          "description": "身体透明得像玻璃，只看得见一对眼睛和小小的内脏。",
+          "fertilizer": null,
+          "group": "creature",
+          "habitat": "drift"
+        },
+        {
+          "key": "seapig",
+          "name": "海猪",
+          "quality": "稀有",
+          "size": 12,
+          "description": "其实是一种海参，用胖乎乎的小腿在深海泥地上散步。",
+          "fertilizer": null,
+          "group": "creature",
+          "habitat": "bottom"
+        },
+        {
+          "key": "vampire",
+          "name": "幽灵蛸",
+          "quality": "珍稀",
+          "size": 30,
+          "description": "披着一件黑红色的斗篷，一对眼睛在深海里幽幽发蓝。",
+          "fertilizer": null,
+          "group": "creature",
+          "habitat": "drift"
+        },
+        {
+          "key": "sealily",
+          "name": "深海海百合",
+          "quality": "珍稀",
+          "size": 50,
+          "description": "长在细茎上的一朵“花”，其实是海星的远亲。",
+          "fertilizer": null,
+          "group": "creature",
+          "habitat": "bottom"
+        },
+        {
+          "key": "dumbo",
+          "name": "小飞象章鱼",
+          "quality": "传说",
+          "size": 20,
+          "description": "头顶一对耳朵似的鳍，扑扇着从深海飘上来。",
+          "fertilizer": null,
+          "group": "creature",
+          "habitat": "drift"
+        }
+      ],
+      "prompt": "Use case: stylized-concept.\nAsset type: transparent creature sprite atlas for an elegant immersive garden aquarium prototype; must match an existing atlas of 3D-rendered fish.\nCreate ONE production-quality 3D-rendered atlas of SIX distinct aquatic creatures. 1536 x 1024 landscape canvas, exact 3 columns by 2 rows grid of equal 512 x 512 cells. No visible grid. One complete creature centered in each cell. Every creature stays inside its cell with generous 48 pixel transparent gutters, no overlaps, no parts touching. Uniform maximum size about 400 pixels. Keep every leg, antenna, tentacle, spine and fin uncut.\nStyle: premium high-poly sculpted 3D aquatic creature render, physically based materials, wet glossy skin, shell or carapace with fine surface detail, translucent membranes and tentacles with subsurface scattering, glassy realistic small eyes. Beautiful semi-realistic cozy fantasy game art, not a flat vector, not a drawing, not emoji, not plastic cartoon toys. Strong volumetric light and shade, contact occlusion between parts, luminous soft studio key from upper left with restrained cool rim. Colorful but tasteful. Each creature isolated, no aquarium, no sand, no rocks, no bubbles, no pedestal, no cast shadow, no backdrop. TRUE TRANSPARENT ALPHA.\nCamera: three-quarter side view facing RIGHT and slightly from above, so bottom dwellers show their top surface and floating creatures show their full bell or body. Show all creatures at consistent render quality. No text, numbers, labels, badges, frames, watermarks.\nCell subjects in exact reading order:\nTop left: Antarctic krill, small translucent shrimp-like body with orange-red pigment spots, feathery legs, big black eyes, tiny glowing photophores.\nTop center: glass squid, almost fully transparent glassy balloon-like body with faint pink speckles, two large eyes, short arms.\nTop right: sea pig, plump translucent pinkish sea cucumber with several stubby tube-feet legs and soft antenna-like papillae on top.\nBottom left: vampire squid, deep wine-red velvety body, webbed arms forming a cloak, two small ear-like fins, large blue-glowing eyes.\nBottom center: stalked sea lily crinoid, long slender segmented stalk with cirri, crown of feathery pale cream-yellow arms open like a flower.\nBottom right: dumbo octopus, soft pale peach translucent bell-like body, two large ear-like fins on top, short webbed arms, gentle eyes."
+    }
+  ]
+}

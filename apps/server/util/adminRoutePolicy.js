@@ -14,6 +14,12 @@ export const ADMIN_POLICIES = Object.freeze({
 
 const routePolicies = new Map();
 
+// Manor actions always use the real account and its shared points balance.
+declare(ADMIN_POLICIES.ACCOUNT_WRITE, 'manor', [
+  ['GET', '/growth/manor'],
+  ['POST', '/growth/manor/commands'],
+]);
+
 // V1 public-resource reads and writes always use the real signed-in identity.
 declare(ADMIN_POLICIES.ACCOUNT_WRITE, 'public_resource', [
   ['GET', '/public-resources/capabilities'],
