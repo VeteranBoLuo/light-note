@@ -8,6 +8,8 @@
       contenteditable="false"
       @mousedown.stop="focusPlaceholder"
       @click.stop
+      @keydown.stop
+      @keyup.stop
       @paste="pasteImage($event, slot)"
     >
       <span v-if="readonly" class="rich-media-image-slot__readonly">{{

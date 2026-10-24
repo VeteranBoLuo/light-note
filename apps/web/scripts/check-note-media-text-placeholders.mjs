@@ -77,9 +77,15 @@ async function prepare(page, html = fixture, expectEmpty = true) {
   if (expectEmpty) await page.locator('[data-ln-media-image-placeholder]').first().waitFor();
   return page.evaluate(() => window.tinymce.activeEditor.getContent());
 }
-async function choose(page, button) {
+async function choose(page, button, activation = 'click') {
+  const before = await page.evaluate(() => window.tinymce.activeEditor.getContent());
   const pending = page.waitForEvent('filechooser');
-  await button.click();
+  if (activation === 'click') await button.click();
+  else {
+    await button.focus();
+    await button.press(activation);
+  }
+  assert.equal(await page.evaluate(() => window.tinymce.activeEditor.getContent()), before);
   await (await pending).setFiles(imageFile());
 }
 async function paste(page, target) {
@@ -121,10 +127,14 @@ try {
     const bounds = await add.boundingBox();
     assert(bounds.width > 0 && bounds.x >= 0 && bounds.x + bounds.width <= profile.width);
     await add.focus();
+    for (const key of ['Backspace', 'Delete', 'ArrowRight', 'ArrowDown']) {
+      await add.press(key);
+      assert.equal(await page.evaluate(() => window.tinymce.activeEditor.getContent()), before);
+    }
     await page.screenshot({ path: join(output, `empty-${id}.png`), caret: 'initial' });
     checked++;
 
-    await choose(page, add);
+    await choose(page, add, profile.density === 'small' ? 'Enter' : 'Space');
     await page.locator('section img').waitFor();
     assert.equal(await captionHtml(page), originalCaption);
     assert.equal(await page.locator('.note-editor-body > p').textContent(), '后文保留');
