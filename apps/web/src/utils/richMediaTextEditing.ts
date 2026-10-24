@@ -6,6 +6,15 @@ export function bindRichMediaTextEditing(
   editor: Editor,
   options: { isReadonly: () => boolean; onMutation: () => void; onBoundaryFocus: () => void },
 ) {
+  editor.on('PreInit', () => {
+    // 提示和选中标记只属于展示层；原生临时属性机制也会将它们排除出撤销快照比较。
+    [
+      'data-mce-placeholder',
+      'data-ln-media-selected',
+      'data-ln-media-item-selected',
+      'data-ln-media-after-caret',
+    ].forEach((attribute) => editor.serializer.addTempAttr(attribute));
+  });
   let afterBlock: HTMLElement | null = null;
   let restoringBoundary = false;
   let applyingList = false;
@@ -54,13 +63,23 @@ export function bindRichMediaTextEditing(
     if (options.isReadonly() || event.button !== 0 || event.shiftKey || event.ctrlKey || event.metaKey || event.altKey)
       return;
     const body = editor.getBody();
+    const target = event.target as Element | null;
+    if (target?.closest?.('section.ln-media-text')) {
+      clear();
+      return;
+    }
     const edge = body.getBoundingClientRect().right;
+    const gutter = Number.parseFloat(editor.dom.getStyle(body, 'padding-right', true)) || 0;
+    const scope = target && body.contains(target) ? target : body;
     // 图文右侧到正文外沿之间的留白属于块后落点，文字区和图片自身继续使用原交互。
-    const block = Array.from(body.querySelectorAll<HTMLElement>('section.ln-media-text')).find((candidate) => {
+    const block = Array.from(scope.querySelectorAll<HTMLElement>('section.ln-media-text')).find((candidate) => {
       const rectangle = candidate.getBoundingClientRect();
+      const cell = candidate.closest('td,th');
+      if (cell !== (target?.closest?.('td,th') || null)) return false;
+      const rightEdge = cell ? Math.min(edge, cell.getBoundingClientRect().right) : edge;
       return (
         event.clientX >= rectangle.right &&
-        event.clientX <= edge &&
+        event.clientX <= Math.min(rightEdge, rectangle.right + gutter) &&
         event.clientY >= rectangle.top &&
         event.clientY <= rectangle.bottom
       );

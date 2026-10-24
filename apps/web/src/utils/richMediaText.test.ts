@@ -98,6 +98,18 @@ describe('richMediaText', () => {
     expect(holder.textContent).toBe('外层界面说明加粗图注列表正文后项界面后文');
   });
 
+  it('keeps the table and its outer list intact while extracting lists inside a cell', () => {
+    const source = `<ul><li>表格项<table><tbody><tr><td>单元格前<ul><li>图前${mediaBlock}图后</li><li>后项</li></ul></td><td>相邻内容<img src="/other.png"></td></tr></tbody></table>表格后</li></ul>`;
+    const holder = parse(normalizeRichMediaTextHtml(source));
+    expect(holder.textContent).toBe(parse(source).textContent);
+    expect(holder.querySelectorAll('table')).toHaveLength(1);
+    expect(holder.querySelectorAll('tr')).toHaveLength(1);
+    expect(holder.querySelectorAll('td')).toHaveLength(2);
+    expect(holder.querySelector('section')?.parentElement?.tagName).toBe('TD');
+    expect(holder.querySelector('td:last-child')?.innerHTML).toBe('相邻内容<img src="/other.png">');
+    expect(holder.querySelectorAll('img')).toHaveLength(2);
+  });
+
   it('removes the temporary block-after caret from serialized content', () => {
     const holder = parse(
       normalizeRichMediaTextHtml(
