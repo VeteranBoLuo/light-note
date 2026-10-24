@@ -48,6 +48,47 @@ describe('richMediaText', () => {
     expect(holder.querySelectorAll(':scope > ol > li')).toHaveLength(2);
   });
 
+  it.each([
+    { list: 'ul', attrs: '', item: '', starts: [] },
+    { list: 'ol', attrs: 'start="5"', item: 'value="12"', starts: ['5', '13'] },
+    { list: 'ol', attrs: 'reversed', item: '', starts: ['3', '1'] },
+  ])('repairs media blocks whose section became a list item: $list/$attrs', ({ list, attrs, item, starts }) => {
+    const oldBlock = mediaBlock
+      .replace(
+        '<section class="ln-media-text">',
+        `<li class="ln-media-text" id="media-id" ${item} data-ln-media-width="42" data-ln-media-position="right">`,
+      )
+      .replace('</section>', '</li>');
+    const source = `<${list} ${attrs}><li>前项</li>${oldBlock}<li>后项</li></${list}>`;
+    const normalized = normalizeRichMediaTextHtml(source);
+    const holder = parse(normalized);
+    expect(holder.textContent).toBe(parse(source).textContent);
+    expect(Array.from(holder.children).map((node) => node.tagName)).toEqual([
+      list.toUpperCase(),
+      'SECTION',
+      list.toUpperCase(),
+    ]);
+    expect(holder.querySelectorAll('img')).toHaveLength(1);
+    expect(holder.querySelector('section a')?.getAttribute('href')).toBe('/original');
+    expect(holder.querySelector('section')?.getAttribute('data-ln-media-width')).toBe('42');
+    expect(holder.querySelector('section')?.getAttribute('data-ln-media-position')).toBe('right');
+    expect(holder.querySelector('figcaption li')?.textContent).toBe('图注列表');
+    expect(holder.querySelectorAll('#media-id')).toHaveLength(1);
+    expect(holder.querySelector('.ln-media-text')?.tagName).toBe('SECTION');
+    expect(Array.from(holder.querySelectorAll(':scope > ol')).map((node) => node.getAttribute('start'))).toEqual(
+      starts,
+    );
+    expect(normalizeRichMediaTextHtml(normalized)).toBe(normalized);
+  });
+
+  it('repairs a changed block tag without touching unrelated elements or losing sibling text', () => {
+    const source = `<p>前文</p>${mediaBlock.replace('<section', '<div').replace('</section>', '</div>')}<div class="ln-media-text">普通文字</div><p>后文</p>`;
+    const holder = parse(normalizeRichMediaTextHtml(source));
+    expect(holder.textContent).toBe(parse(source).textContent);
+    expect(holder.querySelectorAll('section')).toHaveLength(1);
+    expect(holder.querySelector('div.ln-media-text')?.textContent).toBe('普通文字');
+  });
+
   it('retains the original item number on text split across a media block', () => {
     const holder = parse(
       normalizeRichMediaTextHtml(`<ol start="5"><li>前一项</li><li>前半${mediaBlock}后半</li><li>后一项</li></ol>`),

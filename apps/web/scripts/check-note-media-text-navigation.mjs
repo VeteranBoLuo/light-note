@@ -270,6 +270,35 @@ try {
     assert.equal(await page.locator('figcaption').textContent(), '原图');
     checked++;
 
+    // 旧版原生列表命令会将 section 本身改为 li，不能只覆盖 li 内嵌 section。
+    const changedTag = block('<p>旧图注<strong>加粗</strong></p><ul><li>内部列表</li></ul>')
+      .replace('<section ', '<li ')
+      .replace('</section>', '</li>');
+    const changedTagSource =
+      block('<p>上方图文</p>') + `<ol start="5"><li>前项</li>${changedTag}${changedTag}<li>后项</li></ol>`;
+    const repaired = await prepare(changedTagSource);
+    assert.equal(await page.locator('.note-editor-body > section').count(), 3);
+    assert.equal(await page.locator('.note-editor-body li.ln-media-text').count(), 0);
+    assert.deepEqual(
+      await page.locator('.note-editor-body > ol').evaluateAll((lists) => lists.map((list) => list.start)),
+      [5, 8],
+    );
+    await clickBoundary(1);
+    assert.equal((await inspect()).html, repaired, 'Clicking a repaired legacy block does not change content');
+    await page.screenshot({ path: join(output, `legacy-boundary-${id}.png`) });
+    await page.keyboard.press('Backspace');
+    assert.equal(await page.locator('.note-editor-body > section').count(), 2);
+    assert.equal(await page.locator('.note-editor-body img').count(), 2);
+    await page.evaluate(() => window.tinymce.activeEditor.undoManager.undo());
+    assert.equal((await inspect()).html, repaired, 'Undo restores the repaired block with all its content');
+    await clickBoundary(2);
+    await page.keyboard.press('Enter');
+    await page.keyboard.type('旧块后续行');
+    assert.equal(await page.locator('.note-editor-body > section + p').last().textContent(), '旧块后续行');
+    assert.equal(await page.locator('figcaption strong').count(), 2);
+    assert.equal(await page.locator('figcaption li').count(), 2);
+    checked++;
+
     const legacy = `<ol start="5"><li>前项</li><li>前半${block('<p>图注</p><ul><li>内部列表</li></ul>')}后半</li><li>后项</li></ol>`;
     await prepare(legacy);
     assert.equal(await page.locator('.note-editor-body > section').count(), 1, 'Legacy media loads outside the list');
