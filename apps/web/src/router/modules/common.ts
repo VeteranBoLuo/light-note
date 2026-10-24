@@ -4,6 +4,11 @@ import { inventoryPointsRoute } from '@/utils/inventoryNavigation';
 
 const commonRouter: RouteRecordRaw[] = [
   {
+    meta: { title: '知识庄园', keepAlive: false, requireAuth: true, mobileTopBar: false, mobileBottomNav: false, roles: [RoleEnum.Root] },
+    // Keep direct app entry separate from the /manor/ static scene directory.
+    path: '/knowledge-manor', name: 'knowledgeManor', component: () => import('@/view/manor/KnowledgeManor.vue'),
+  },
+  {
     meta: {
       title: '帮助文档',
       keepAlive: true,

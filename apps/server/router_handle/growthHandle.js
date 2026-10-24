@@ -81,6 +81,7 @@ export const getMyGrowth = async (req, res) => {
     growth.features = {
       growthCenterV2: isGrowthCenterV2Enabled({ userId, userRole }),
       pointsCenter: getPointsEarningRuntime().pointsCenterEnabled,
+      manor: process.env.KNOWLEDGE_MANOR_ENABLED === 'true' && userRole === 'root' && !req.adminContext,
     };
     res.send(resultData(growth));
   } catch (error) {

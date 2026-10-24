@@ -1,7 +1,11 @@
 import express from 'express';
 import * as growthHandle from '../router_handle/growthHandle.js';
+import { getKnowledgeManor, runKnowledgeManorCommand } from '../router_handle/knowledgeManorHandle.js';
 
 const router = express.Router();
+
+router.get('/manor', getKnowledgeManor);
+router.post('/manor/commands', runKnowledgeManorCommand);
 
 router.get('/me', growthHandle.getMyGrowth);
 router.get('/dashboard', growthHandle.getDashboard);

@@ -48,7 +48,8 @@
     "worker:data-exports": "node dataExportWorker.js",
     "check:data-exports": "node scripts/checkDataExportRuntime.js",
     "migrate:public-resources-schema": "node scripts/ensurePublicResourcesSchema.js",
-    "migrate:account-email-health": "node scripts/ensureAccountEmailHealthSchema.js"
+    "migrate:account-email-health": "node scripts/ensureAccountEmailHealthSchema.js",
+    "migrate:knowledge-manor": "node scripts/ensureKnowledgeManorSchema.js"
   },
   "keywords": [],
   "author": "",

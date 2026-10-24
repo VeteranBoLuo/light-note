@@ -60,6 +60,7 @@ import { startAfdianReconciliationScheduler } from './util/afdianSupportService.
 import { ensureAiBonusWalletSchema } from './util/aiBonusWalletSchema.js';
 import { ensureToolboxSchema } from './util/toolboxSchema.js';
 import { ensureDailyBriefSchema } from './util/dailyBriefSchema.js';
+import { knowledgeManorSchemaReady } from './util/services/knowledgeManorSchema.js';
 
 import dotenv from 'dotenv';
 import path from 'path';
@@ -136,6 +137,9 @@ try {
   await assertPointsEconomyActivationReady();
   await ensureGrowthTaskSchema();
   await ensureGrowthCenterSchema();
+  if (process.env.KNOWLEDGE_MANOR_ENABLED === 'true' && !(await knowledgeManorSchemaReady(pool))) {
+    throw new Error('KNOWLEDGE_MANOR_SCHEMA_MISSING');
+  }
   await ensureDailyReviewSchema();
   await assertPointsEarningActivationReady({
     db: pool,

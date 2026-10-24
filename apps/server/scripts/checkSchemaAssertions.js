@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import pool from '../db/index.js';
+import { knowledgeManorSchemaReady } from '../util/services/knowledgeManorSchema.js';
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const assertionPath = path.resolve(scriptDir, '../migrations/schema-assertions.sql');
@@ -19,6 +20,9 @@ function splitStatements(source) {
 let failed = false;
 try {
   const source = await readFile(assertionPath, 'utf8');
+  if (process.env.KNOWLEDGE_MANOR_ENABLED === 'true' && !(await knowledgeManorSchemaReady(pool))) {
+    throw new Error('KNOWLEDGE_MANOR_SCHEMA_MISSING');
+  }
   const statements = splitStatements(source);
   for (const statement of statements) {
     if (!/^SELECT\b/i.test(statement)) {

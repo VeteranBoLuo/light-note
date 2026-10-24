@@ -125,7 +125,12 @@
     "./public-resources": {
       "types": "./publicResources.d.ts",
       "default": "./publicResources.js"
-    }
+    },
+    "./manor": {
+      "types": "./manor.d.ts",
+      "default": "./manor.js"
+    },
+    "./manor-model": "./manorModel.js"
   },
   "devDependencies": {
     "vitest": "^3.2.6"

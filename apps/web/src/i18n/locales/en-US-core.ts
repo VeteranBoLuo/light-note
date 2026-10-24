@@ -22,6 +22,7 @@ import { accountSettingsEn } from './accountSettings';
 import { settingsRefineEn } from './settingsRefine';
 import { notificationMessages } from '@lightnote/shared/notification-presentation';
 export default {
+  manor: { title: 'Knowledge Manor', loading: 'Waking up your manor', loadFailed: 'The manor is unavailable. Please try again.', returnToApp: 'Back to LightNote', actionFailed: 'The action did not complete. Please retry.' },
   publicResources: publicResourcesEn,
   profileBackgrounds: profileBackgroundsEn,
   profileAppearance: profileAppearanceEn,
@@ -9825,6 +9826,8 @@ export default {
     pointsLogMore: 'Load more',
     pointsLogAll: 'No more',
     pointsReason: {
+      manor_sale: 'Manor sales',
+      manor_cost: 'Manor purchases and construction',
       checkin: 'Daily check-in',
       quest: 'Daily quests',
       streak_milestone: 'Streak milestone',
@@ -9851,6 +9854,8 @@ export default {
       toolbox_release: 'Knowledge Workshop points return',
     },
     pointsSourceType: {
+      manor_sale: 'Manor sales',
+      manor_cost: 'Manor purchases and construction',
       checkin: 'Check-in reward',
       quest: 'Daily task milestone',
       streak_milestone: 'Streak milestone',

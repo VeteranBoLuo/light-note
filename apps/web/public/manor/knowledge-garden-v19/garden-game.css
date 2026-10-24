@@ -1,0 +1,943 @@
+/* Scene geometry is independent of UI density; controls use --d. */
+.prototype-lab {
+  position: relative;
+  z-index: 30;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+}
+.prototype-lab > summary {
+  padding: calc(5px * var(--d)) var(--pad);
+  font-size: calc(11px * var(--d));
+  color: var(--muted);
+  cursor: pointer;
+}
+.prototype-lab > summary span {
+  float: right;
+}
+.prototype-lab .prototype-toolbar {
+  border: 0;
+}
+.prototype-lab[open] .prototype-toolbar {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  box-shadow: 0 12px 30px #152d3422;
+}
+.app-bar {
+  height: calc(56px * var(--d));
+  padding-inline: var(--pad);
+}
+#app .garden-play {
+  padding: calc(12px * var(--d));
+}
+#app .garden-play .garden-frame {
+  border: 1px solid #d4dfcb;
+  border-radius: 20px;
+  overflow: hidden;
+  box-shadow: 0 6px 24px #1b382019;
+}
+#app .garden-play .garden-scene {
+  height: calc(100vh - 114px * var(--d));
+  height: calc(100svh - 114px * var(--d));
+  min-height: 620px;
+  max-height: 1050px;
+  aspect-ratio: auto;
+  overflow: hidden;
+  background: #d7e4b1;
+}
+#app .garden-play .garden-backdrop {
+  object-position: 50% 54%;
+  filter: saturate(0.88) brightness(1.03);
+}
+.garden-vignette {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    180deg,
+    #eff9e05c,
+    transparent 30%,
+    transparent 75%,
+    #1d3a2b4d
+  );
+}
+#app .garden-play .scene-heading {
+  top: 4%;
+  left: 4%;
+  color: #234b39;
+  z-index: 8;
+  text-shadow: 0 1px 12px #fcffe8;
+}
+.garden-eyebrow {
+  display: block;
+  font-size: calc(12px * var(--d));
+  letter-spacing: 0.18em;
+  color: #48644e;
+  margin-bottom: calc(4px * var(--d));
+}
+#app .garden-play .scene-heading h2 {
+  font-size: calc(34px * var(--d));
+  gap: calc(10px * var(--d));
+}
+#app .garden-play .scene-heading h2 button {
+  color: #456b53;
+  font-size: calc(20px * var(--d));
+  width: calc(32px * var(--d));
+  height: calc(32px * var(--d));
+}
+.garden-level {
+  display: flex;
+  align-items: center;
+  gap: calc(7px * var(--d));
+  margin-top: calc(6px * var(--d));
+  min-height: calc(29px * var(--d));
+  padding: calc(3px * var(--d)) calc(12px * var(--d));
+  border-radius: 20px;
+  border: 1px solid #fff8;
+  background: #f6ffe1c9;
+  box-shadow: 0 2px 8px #4860410b;
+  font-size: var(--small);
+  color: #3e674d;
+}
+.garden-level > span:last-child {
+  margin-left: calc(6px * var(--d));
+}
+.garden-level.level-growing {
+  box-shadow: 0 0 0 5px #c9e4b34d;
+}
+.growth-feedback {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  width: calc(170px * var(--d));
+  padding: calc(10px * var(--d));
+  background: var(--scene-label);
+  border-radius: 12px;
+  box-shadow: 0 3px 20px #3151311f;
+  font-size: var(--small);
+  color: var(--green);
+  text-shadow: none;
+  animation: feedback-in 0.3s ease-out;
+  transition:
+    opacity 0.4s,
+    translate 0.4s;
+}
+.growth-feedback > span {
+  display: block;
+  margin-bottom: calc(6px * var(--d));
+}
+.growth-feedback.leaving {
+  opacity: 0;
+  translate: 0 -8px;
+}
+@keyframes feedback-in {
+  from {
+    opacity: 0;
+    translate: 0 8px;
+  }
+}
+.garden-utilities {
+  position: absolute;
+  right: 3%;
+  top: 4%;
+  z-index: 9;
+  display: flex;
+  align-items: flex-start;
+  gap: calc(10px * var(--d));
+}
+.memory-seal {
+  display: grid;
+  place-content: center;
+  width: calc(62px * var(--d));
+  height: calc(66px * var(--d));
+  color: #466148;
+  background: linear-gradient(135deg, #ffffefed, #e4eecfdb);
+  border: 1px solid #fffbd5;
+  border-radius: 20px 20px 26px 26px;
+  box-shadow:
+    0 3px 10px #314d2922,
+    inset 0 0 0 3px #81966425;
+}
+.memory-seal > span {
+  font-family: Georgia, serif;
+  font-size: calc(24px * var(--d));
+  line-height: 1.1;
+}
+.memory-seal > small {
+  font-size: calc(10px * var(--d));
+  margin-top: calc(3px * var(--d));
+}
+.help-seal {
+  width: calc(32px * var(--d));
+  height: calc(32px * var(--d));
+  border: 1px solid #fff8;
+  border-radius: 50%;
+  background: #f8ffdfc9;
+  color: #4b6950;
+  font-family: Georgia, serif;
+  font-size: calc(19px * var(--d));
+}
+#app .garden-play .scene-tree {
+  width: 32%;
+  max-width: 535px;
+  left: 8%;
+  bottom: 24%;
+  top: auto;
+}
+#app .garden-play .tree-idle,
+#app .garden-play .tree-interactive {
+  animation: none;
+  transform: none;
+}
+#app .garden-play .tree-image {
+  filter: drop-shadow(0 10px 6px #22401c19);
+}
+#app .garden-play .scene-tree.young {
+  width: 26%;
+  left: 11%;
+  bottom: 24%;
+}
+#app .garden-play .scene-tank {
+  width: 37%;
+  right: 8%;
+  top: 7%;
+  bottom: auto;
+}
+#app .garden-play .scene-tank.large {
+  width: 40%;
+  right: 7%;
+  top: 6%;
+}
+#app .garden-play .scene-tank.ocean {
+  width: 44%;
+  right: 5%;
+  top: 5%;
+}
+#app .garden-play .scene-pond {
+  width: 36%;
+  right: 10%;
+  bottom: 13%;
+  top: auto;
+}
+#app .garden-play .pond-art {
+  transform: scaleY(0.94);
+  transform-origin: center bottom;
+}
+#app .garden-play .aquarium-art {
+  filter: drop-shadow(0 12px 8px #234f3026);
+}
+/* Artwork geometry stays independent of UI density; its containers use --d. */
+.fish-render {
+  overflow: hidden;
+  pointer-events: none;
+}
+.aquarium-swimmer {
+  animation-name: aquarium-idle;
+  animation-duration: 12s;
+  transform-box: view-box;
+  transform-origin: 50px 30px;
+}
+.aquarium-art .tank-resident[data-motion-ready="true"] {
+  opacity: 0;
+}
+.tank-swim-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+.aquarium-hit {
+  z-index: 2;
+}
+/* Keep the waterline readable after scaling the illustration down. */
+.pond-art .surface-ring {
+  animation-name: pond-visible-ripple;
+  animation-duration: 5.8s;
+  stroke-width: 1.25px;
+  stroke: #edfffc;
+  vector-effect: non-scaling-stroke;
+  filter: drop-shadow(0 1px 0 #236d7990);
+}
+.pond-art .cast-ring {
+  stroke-width: 1.6px;
+  vector-effect: non-scaling-stroke;
+  stroke: #f4fffd;
+}
+.pond-art .water-shimmer {
+  mix-blend-mode: screen;
+}
+@keyframes pond-visible-ripple {
+  0% { transform: scale(0.3); opacity: 0; }
+  15% { opacity: 0.85; }
+  60% { opacity: 0.48; }
+  100% { transform: scale(1.85); opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pond-art .surface-ring { animation: none; opacity: 0.35; }
+}
+@keyframes aquarium-idle {
+  0%, 100% { transform: translateY(1px); }
+  50% { transform: translateY(-2px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .aquarium-swimmer { animation: none; }
+}
+.atlas-card .fish-art {
+  height: calc(var(--control) * 3.2);
+  margin-block: calc(5px * var(--d));
+  background: radial-gradient(ellipse, #e5f2ed80, transparent 72%);
+}
+.fish-detail-art {
+  height: calc(var(--control) * 6.5);
+  background: radial-gradient(ellipse, #d4eee6c9, transparent 72%);
+}
+.fish-detail-art > .fish-art {
+  width: min(94%, calc(var(--control) * 11));
+}
+:root[data-theme="dark"] .atlas-card .fish-art,
+:root[data-theme="dark"] .fish-detail-art {
+  background: radial-gradient(ellipse, #426b654f, transparent 72%);
+}
+#app .garden-play .tank-caption {
+  position: absolute;
+  top: 3%;
+  left: 50%;
+  translate: -50% -100%;
+  z-index: 7;
+  white-space: nowrap;
+}
+.world-pill {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: calc(10px * var(--d));
+  padding: calc(5px * var(--d)) calc(13px * var(--d));
+  min-height: calc(30px * var(--d));
+  font-size: var(--small);
+  border: 1px solid #ffffecb5;
+  border-radius: 22px;
+  background: #f9ffe4d9;
+  color: #38614e;
+  box-shadow: 0 4px 14px #193d3220;
+  backdrop-filter: blur(8px);
+}
+.world-pill small {
+  opacity: 0.7;
+  font-variant-numeric: tabular-nums;
+}
+.fert-bubble {
+  position: absolute;
+  right: calc(-60px * var(--d));
+  top: calc(40px * var(--d));
+  width: calc(46px * var(--d));
+  height: calc(46px * var(--d));
+  border: 1px solid #fff9;
+  background: #fbffddd9;
+  border-radius: 50%;
+  box-shadow: 0 4px 16px #294f3433;
+  animation: bubble-drift 3.6s ease-in-out infinite;
+}
+.fert-bubble .game-sprite {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  inset: 0;
+}
+.fert-bubble b {
+  position: absolute;
+  right: -3px;
+  bottom: -3px;
+  min-width: calc(22px * var(--d));
+  padding-inline: 3px;
+  border-radius: 10px;
+  background: #436b43;
+  color: #fffadd;
+  font-size: calc(11px * var(--d));
+  box-shadow: 0 1px 5px #24462a24;
+}
+@keyframes bubble-drift {
+  50% {
+    translate: 0 -5px;
+  }
+}
+.pond-name {
+  position: absolute;
+  top: 52%;
+  right: calc(100% + 6px * var(--d));
+  translate: 0 -50%;
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: calc(4px * var(--d));
+  color: #29483c;
+  text-shadow: 0 1px 3px #ffffec;
+  pointer-events: none;
+  white-space: nowrap;
+}
+.pond-name strong {
+  font-family: "Songti SC", "STSong", serif;
+  font-size: calc(13px * var(--d));
+  font-weight: 600;
+  letter-spacing: 0.06em;
+}
+.pond-name span {
+  font-size: calc(11px * var(--d));
+  color: #386148;
+  background: #ffffece6;
+  padding: calc(2px * var(--d)) calc(7px * var(--d));
+  border: 1px solid #ffffeccc;
+  border-radius: 10px;
+  text-shadow: none;
+}
+.pond-name span[hidden] {
+  display: none;
+}
+[data-theme="dark"] .pond-name {
+  color: #f5f7d6;
+  text-shadow: 0 1px 3px #17382d;
+}
+#app .garden-play .pond-hint {
+  bottom: 27%;
+  font-size: var(--small);
+  color: #fffbe4;
+  background: #215854aa;
+  border-color: #fff5;
+}
+#app .garden-play .scene-note {
+  left: 9%;
+  bottom: 21%;
+  top: auto;
+  max-width: 29%;
+  padding: calc(4px * var(--d)) calc(11px * var(--d));
+  border-radius: 20px;
+  background: #fbffe1cc;
+  color: #3c6147;
+  font-size: var(--small);
+}
+.garden-catch {
+  position: absolute;
+  z-index: 15;
+  width: min(40%, calc(470px * var(--d)));
+  right: 7%;
+  bottom: 16%;
+}
+.garden-catch[hidden] {
+  display: none;
+}
+.garden-catch .catch-inline {
+  padding: calc(12px * var(--d));
+  gap: calc(10px * var(--d));
+  background: #fffff1f2;
+  border: 1px solid #fff;
+  border-radius: 16px;
+  box-shadow: 0 8px 30px #183e3b33;
+  color: #35583f;
+  backdrop-filter: blur(16px);
+  animation: feedback-in 0.35s ease-out;
+}
+.garden-catch .catch-inline small {
+  color: #70806e;
+}
+.garden-catch .fishing-live {
+  width: max-content;
+  max-width: 100%;
+  margin: auto;
+  padding: calc(7px * var(--d)) calc(14px * var(--d));
+  border-radius: 22px;
+  color: #fff9df;
+  background: #214f4bd9;
+}
+#app .garden-play .garden-tools {
+  position: absolute;
+  z-index: 12;
+  bottom: 3%;
+  left: 50%;
+  translate: -50% 0;
+  display: flex;
+  align-items: flex-end;
+  gap: calc(22px * var(--d));
+  padding: 0;
+}
+.game-tool {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(5px * var(--d));
+  padding: 0;
+  color: #fffbe4;
+}
+.tool-disc {
+  position: relative;
+  display: block;
+  width: calc(66px * var(--d));
+  height: calc(66px * var(--d));
+  border-radius: 23px;
+  background: linear-gradient(145deg, #fffce6f2, #e6e7cadd);
+  border: 1px solid #f5f9d9;
+  box-shadow:
+    0 4px 0 #687e5377,
+    0 5px 16px #1d3f322e,
+    inset 0 0 0 3px #59753e17;
+  transition:
+    translate 0.2s ease,
+    box-shadow 0.2s ease;
+}
+.game-sprite {
+  display: block;
+  background-image: url("garden-tools.webp");
+  background-size: 300% 200%;
+  background-repeat: no-repeat;
+  width: 100%;
+  height: 100%;
+}
+.tool-disc .game-sprite {
+  width: 110%;
+  height: 110%;
+  position: absolute;
+  left: -5%;
+  top: -8%;
+  filter: drop-shadow(0 2px 2px #45361c26);
+}
+.sprite-water {
+  background-position: 0 0;
+}
+.sprite-fertilizer {
+  background-position: 50% 0;
+}
+.sprite-bait {
+  background-position: 100% 0;
+}
+.sprite-atlas {
+  background-position: 0 100%;
+}
+.sprite-growth {
+  background-position: 50% 100%;
+}
+.sprite-daily {
+  background-position: 100% 100%;
+}
+.tool-count {
+  position: absolute;
+  bottom: -3px;
+  right: -5px;
+  background: #486a46;
+  border: 1px solid #e4ebc7;
+  border-radius: 12px;
+  color: #fffbe4;
+  font-size: calc(10px * var(--d));
+  line-height: 1.6;
+  min-width: calc(24px * var(--d));
+  padding: 0 calc(5px * var(--d));
+  font-variant-numeric: tabular-nums;
+}
+.tool-title {
+  font-size: calc(12px * var(--d));
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-shadow:
+    0 1px 3px #29432e,
+    0 0 8px #193a2777;
+}
+.game-tool:hover .tool-disc,
+.game-tool:focus-visible .tool-disc {
+  translate: 0 -5px;
+  box-shadow:
+    0 7px 0 #687e5355,
+    0 10px 22px #1d3f3233,
+    inset 0 0 0 3px #59753e17;
+}
+.game-tool:active {
+  transform: none;
+}
+.game-tool:active .tool-disc {
+  translate: 0 0;
+}
+.care-preview {
+  display: flex;
+  align-items: center;
+  gap: var(--space);
+  padding: 0 0 var(--space);
+}
+.care-preview .game-sprite {
+  width: calc(88px * var(--d));
+  height: calc(88px * var(--d));
+  flex-shrink: 0;
+}
+.care-preview strong {
+  font-size: var(--large);
+  color: var(--green);
+}
+.care-preview strong small {
+  font-size: var(--font);
+}
+.care-preview p {
+  color: var(--muted);
+}
+.dialog .growth-strip {
+  padding: var(--space) 0;
+  grid-template-columns: 1fr;
+  gap: var(--space);
+  border: 0;
+}
+.dialog .growth-strip > .text-button {
+  display: none;
+}
+.growth-summary {
+  display: flex;
+  gap: var(--space);
+  padding: var(--space) 0;
+  border-top: 1px solid var(--line);
+}
+.growth-summary > div {
+  flex: 1;
+  display: grid;
+  gap: 4px;
+}
+.growth-summary strong {
+  font-family: Georgia, serif;
+  color: var(--green);
+  font-size: var(--large);
+}
+.growth-summary small {
+  color: var(--muted);
+}
+/* Leaf particles are separate from the rooted tree and finish their own fall. */
+.tree-shed-leaf {
+  position: absolute;
+  width: 10px;
+  height: 18px;
+  border-radius: 80% 0 80% 0;
+  background: linear-gradient(130deg, #c4d871, #6b9b3e 52%, #426e2e);
+  box-shadow:
+    inset 1px 0 #dce89d80,
+    1px 2px 2px #31582b15;
+  pointer-events: none;
+  z-index: 9;
+}
+.tree-shed-leaf::after {
+  content: "";
+  position: absolute;
+  height: 90%;
+  width: 1px;
+  background: #e1e7a68a;
+  left: 48%;
+  top: 4%;
+  rotate: 25deg;
+}
+:root[data-theme="dark"] #app .garden-play .garden-backdrop {
+  filter: brightness(0.52) saturate(0.65) hue-rotate(10deg);
+}
+:root[data-theme="dark"] #app .garden-play .scene-heading {
+  color: #e0edca;
+  text-shadow: 0 1px 12px #18322c;
+}
+:root[data-theme="dark"] .garden-eyebrow {
+  color: #c9d8ba;
+}
+:root[data-theme="dark"] .garden-level,
+:root[data-theme="dark"] .world-pill,
+:root[data-theme="dark"] .help-seal,
+:root[data-theme="dark"] #app .garden-play .scene-note {
+  background: #203e31e6;
+  color: #d3eac7;
+  border-color: #b7d69e5c;
+}
+:root[data-theme="dark"] .memory-seal {
+  background: linear-gradient(135deg, #375440, #1f3a30);
+  color: #d5e5bc;
+  border-color: #a8bc8066;
+}
+:root[data-theme="dark"] .tool-disc {
+  background: linear-gradient(135deg, #dce8cbe6, #819a73ed);
+  border-color: #d0dda6;
+}
+:root[data-theme="dark"] .garden-catch .catch-inline {
+  background: #253e34f2;
+  color: #e4eed8;
+  border-color: #a2c79666;
+}
+:root[data-theme="dark"] .garden-catch .catch-inline small {
+  color: #bbcdb0;
+}
+:root[data-theme="dark"] .fert-bubble {
+  background: #b9cc98;
+}
+@media (min-width: 701px) and (max-width: 1100px) {
+  #app .garden-play .scene-tree {
+    width: 38%;
+    left: 3%;
+    bottom: 30%;
+  }
+  #app .garden-play .scene-tank {
+    width: 41%;
+    right: 6%;
+    top: 17%;
+  }
+  #app .garden-play .scene-tank.large {
+    width: 44%;
+    right: 5%;
+    top: 16%;
+  }
+  #app .garden-play .scene-tank.ocean {
+    width: 47%;
+    right: 3%;
+    top: 15%;
+  }
+  #app .garden-play .scene-pond {
+    width: 40%;
+    right: 8%;
+    bottom: 17%;
+  }
+  #app .garden-play .scene-note {
+    left: 5%;
+    bottom: 27%;
+    max-width: 32%;
+  }
+}
+/* The shared mobile class also supports the toolbar's mobile preview. */
+.light-note-mobile-rendering #app .garden-play {
+  padding: 0;
+}
+.light-note-mobile-rendering #app .garden-play .garden-frame {
+  border-radius: 0;
+  border: 0;
+}
+.light-note-mobile-rendering #app .garden-play .garden-scene {
+  min-height: 740px;
+  height: calc(100vh - 90px);
+  height: calc(100svh - 90px);
+  max-height: none;
+}
+.light-note-mobile-rendering .app-bar {
+  height: 48px;
+  padding-inline: 14px;
+}
+.light-note-mobile-rendering .prototype-lab > summary {
+  padding: 4px 14px;
+  font-size: 10px;
+}
+.light-note-mobile-rendering #app .garden-play .garden-backdrop {
+  object-position: 47% 50%;
+}
+.light-note-mobile-rendering #app .garden-play .scene-heading {
+  left: 6%;
+  top: 3%;
+}
+.light-note-mobile-rendering .garden-eyebrow {
+  font-size: 11px;
+}
+.light-note-mobile-rendering #app .garden-play .scene-heading h2 {
+  font-size: 29px;
+}
+.light-note-mobile-rendering .garden-level {
+  font-size: 11px;
+  margin-top: 2px;
+}
+.light-note-mobile-rendering .garden-utilities {
+  top: 3%;
+  right: 4%;
+  gap: 7px;
+}
+.light-note-mobile-rendering .memory-seal {
+  width: 49px;
+  height: 54px;
+  border-radius: 17px;
+  padding: 0;
+  white-space: nowrap;
+}
+.light-note-mobile-rendering .memory-seal > span {
+  font-size: 22px;
+}
+.light-note-mobile-rendering .memory-seal > small {
+  font-size: 9px;
+}
+.light-note-mobile-rendering .help-seal {
+  width: 32px;
+  height: 32px;
+}
+.light-note-mobile-rendering #app .garden-play .scene-tree {
+  width: 52%;
+  left: -3%;
+  bottom: auto;
+  top: 14%;
+}
+.light-note-mobile-rendering #app .garden-play .scene-tree.young {
+  width: 56%;
+  left: 0;
+  bottom: auto;
+  top: 22%;
+}
+.light-note-mobile-rendering #app .garden-play .scene-tank {
+  width: 73%;
+  right: 1%;
+  top: 41%;
+}
+.light-note-mobile-rendering #app .garden-play .scene-tank.large {
+  width: 78%;
+  right: 1%;
+  top: 40%;
+}
+.light-note-mobile-rendering #app .garden-play .scene-tank.ocean {
+  width: 83%;
+  right: 0;
+  top: 39%;
+}
+.light-note-mobile-rendering #app .garden-play .scene-pond {
+  width: 78%;
+  right: 9%;
+  bottom: 13%;
+  top: auto;
+}
+.light-note-mobile-rendering #app .garden-play .tank-caption {
+  top: 0;
+}
+.light-note-mobile-rendering .world-pill {
+  font-size: 10px;
+  min-height: 28px;
+  padding: 4px 10px;
+  gap: 6px;
+}
+.light-note-mobile-rendering .fert-bubble {
+  width: 36px;
+  height: 36px;
+  right: -32px;
+  top: 34px;
+}
+.light-note-mobile-rendering .fert-bubble b {
+  font-size: 9px;
+  min-width: 18px;
+}
+.light-note-mobile-rendering .pond-name {
+  top: 6%;
+  right: 4%;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+.light-note-mobile-rendering .pond-name strong {
+  font-size: 12px;
+}
+.light-note-mobile-rendering .pond-name span {
+  font-size: 10px;
+}
+.light-note-mobile-rendering #app .garden-play .scene-note {
+  /* Fruit labels already convey this status; keep the enlarged tank clear. */
+  display: none;
+}
+.light-note-mobile-rendering #app .garden-play .garden-tools {
+  gap: 10px;
+  width: calc(100% - 20px);
+  justify-content: space-around;
+  bottom: 3%;
+}
+.light-note-mobile-rendering .tool-disc {
+  width: 44px;
+  height: 44px;
+  border-radius: 15px;
+}
+.light-note-mobile-rendering .tool-count {
+  font-size: 9px;
+  min-width: 19px;
+  padding: 0 3px;
+  right: -4px;
+}
+.light-note-mobile-rendering .tool-title {
+  font-size: 11px;
+}
+.light-note-mobile-rendering .game-tool {
+  gap: 5px;
+}
+.light-note-mobile-rendering .garden-catch {
+  width: 92%;
+  right: 4%;
+  bottom: 16%;
+}
+.light-note-mobile-rendering .garden-catch .catch-inline {
+  padding: 10px;
+  font-size: 12px;
+  gap: 8px;
+}
+.light-note-mobile-rendering .garden-catch .catch-mini {
+  width: 44px;
+}
+.light-note-mobile-rendering .garden-catch .catch-inline small {
+  font-size: 10px;
+}
+.light-note-mobile-rendering .garden-catch .text-button {
+  font-size: 12px;
+}
+.light-note-mobile-rendering .garden-catch .catch-close {
+  padding: 4px;
+}
+.light-note-mobile-rendering .growth-feedback {
+  width: 140px;
+  padding: 8px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .fert-bubble {
+    animation: none;
+  }
+  .growth-feedback,
+  .game-tool .tool-disc {
+    transition: none;
+    animation: none;
+  }
+}
+
+@media (max-width: 360px) {
+  .light-note-mobile-rendering #app .garden-play .garden-tools {
+    gap: 6px;
+  }
+  .light-note-mobile-rendering .tool-disc {
+    width: 42px;
+    height: 42px;
+  }
+}
+
+/* Status messages never block a scene action. */
+.toast {
+  pointer-events: none;
+}
+.light-note-mobile-rendering .toast {
+  bottom: 110px;
+  max-width: calc(100% - 32px);
+}
+
+#app .garden-play .scene-pond .garden-catch {
+  width: min(90%, calc(470px * var(--d)));
+  left: 50%;
+  right: auto;
+  bottom: 24%;
+  translate: -50% 0;
+}
+#app .garden-play .scene-pond.has-result .pond-hint {
+  opacity: 0;
+}
+.garden-catch .catch-inline.empty {
+  width: max-content;
+  max-width: 100%;
+  margin-inline: auto;
+  padding: calc(8px * var(--d)) calc(12px * var(--d));
+  background: #234d48ed;
+  border-color: #c8dfb766;
+  color: #fffbe4;
+  border-radius: 18px;
+}
+.garden-catch .catch-inline.empty small {
+  color: #d1dfc6;
+}
+.toast {
+  bottom: calc(116px * var(--d));
+}
+.light-note-mobile-rendering .fruit-button::before {
+  content: "";
+  position: absolute;
+  width: 44px;
+  height: 44px;
+  left: 50%;
+  top: 50%;
+  translate: -50% -50%;
+}

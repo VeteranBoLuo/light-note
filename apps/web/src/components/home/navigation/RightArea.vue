@@ -4,6 +4,11 @@
     :class="{ 'phone-top-menu': bookmark.isMobile }"
     :style="{ marginLeft: 'auto', gap: bookmark.isMobile ? '15px' : 'var(--ui-space-5, 5px)' }"
   >
+    <BTooltip v-if="growth?.features?.manor && !user.adminContext && user.role === 'root'" :title="t('manor.title')">
+      <BButton class="workshop-entry-btn" :aria-label="t('manor.title')" @click="manorRouter.push('/knowledge-manor')">
+        <SvgIcon size="26" :src="icon.noteTree.root" />
+      </BButton>
+    </BTooltip>
     <GlobalSearch />
     <BTooltip v-if="!bookmark.isMobile" :title="t('navigation.toolbox')">
       <BButton
@@ -78,7 +83,7 @@
   import AvatarFramePreview from '@/components/growth/AvatarFramePreview.vue';
   import { bookmarkStore, useUserStore } from '@/store';
   import router from '@/router';
-  import { useRoute } from 'vue-router';
+  import { useRoute, useRouter } from 'vue-router';
   import { recordOperation } from '@/api/commonApi.ts';
   import { OPERATION_LOG_MAP } from '@/config/logMap.ts';
   import GlobalSearch from '@/components/search/GlobalSearch.vue';
@@ -96,6 +101,7 @@
 
   const user = useUserStore();
   const route = useRoute();
+  const manorRouter = useRouter();
   const { growth, load: loadGrowth } = useGrowth();
   const equippedFrameId = computed(() => {
     const id = growth.value?.equippedFrame;

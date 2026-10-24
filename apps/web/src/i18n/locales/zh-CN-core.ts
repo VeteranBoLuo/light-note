@@ -22,6 +22,7 @@ import { accountSettingsZh } from './accountSettings';
 import { settingsRefineZh } from './settingsRefine';
 import { notificationMessages } from '@lightnote/shared/notification-presentation';
 export default {
+  manor: { title: '知识庄园', loading: '正在唤醒庄园', loadFailed: '庄园暂时无法打开，请稍后重试', returnToApp: '返回轻笺', actionFailed: '操作未完成，请稍后重试' },
   publicResources: publicResourcesZh,
   profileBackgrounds: profileBackgroundsZh,
   profileAppearance: profileAppearanceZh,
@@ -9381,6 +9382,8 @@ export default {
     pointsLogMore: '加载更多',
     pointsLogAll: '没有更多了',
     pointsReason: {
+      manor_sale: '庄园出售',
+      manor_cost: '庄园购买与建设',
       checkin: '每日签到',
       quest: '每日任务',
       streak_milestone: '连签里程碑',
@@ -9407,6 +9410,8 @@ export default {
       toolbox_release: '知识工坊积分退回',
     },
     pointsSourceType: {
+      manor_sale: '庄园出售',
+      manor_cost: '庄园购买与建设',
       checkin: '签到奖励',
       quest: '日常任务阶段',
       streak_milestone: '连签里程碑',

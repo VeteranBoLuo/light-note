@@ -10,6 +10,7 @@ const suites = {
   'util/services/accountEmail.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
   'util/securityRegressions.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
   'util/growth.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
+  'util/services/knowledgeManor.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
   'util/services/lotteryHistoryService.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
   'util/services/inventoryAcquisitionService.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
   'util/pointsEarningC8Preparation.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',

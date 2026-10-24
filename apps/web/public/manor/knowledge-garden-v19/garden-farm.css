@@ -1,0 +1,1945 @@
+/* 种田场景：舞台按安全区缩放居中（FarmStage 写入 CSS 变量），出血填满其余区域，不再拉伸背景。
+   舞台内单位是安全区像素；角标、倒计时等界面元素用 1 / --stage-s 反向缩放，保持固定的屏幕大小。尺寸跟随密度变量 --d。 */
+
+/* ---------- 舞台与背景 ---------- */
+html #app .garden-play .seaside-courtyard.farm-staged {
+  /* 平板、矮屏等底图盖不满的比例：同一张图模糊放大垫底，不拉伸 */
+  background: #2f86b8;
+  /* 码头点击框会伸出场景：用 clip 而不是 hidden，键盘聚焦或 scrollIntoView 时场景不会被滚动错位 */
+  overflow: clip;
+}
+html #app .garden-play .seaside-courtyard.farm-staged::before {
+  content: "";
+  position: absolute;
+  inset: -24px;
+  z-index: 0;
+  background: var(--farm-fill, none) center / cover no-repeat;
+  filter: blur(14px) saturate(1.05);
+  pointer-events: none;
+}
+html #app .garden-play .farm-staged .scene-stage {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 0;
+  transform-origin: 0 0;
+}
+html #app .garden-play .seaside-courtyard.farm-staged .scene-stage .garden-backdrop,
+html #app .garden-play .seaside-courtyard.farm-staged .scene-stage .environment-motion {
+  position: absolute;
+  inset: auto;
+  left: var(--bg-l);
+  top: var(--bg-t);
+  width: var(--bg-w);
+  height: var(--bg-h);
+  max-width: none;
+  translate: none;
+  object-fit: fill;
+}
+html #app .garden-play .seaside-courtyard.farm-staged .scene-stage .environment-motion {
+  z-index: 1;
+}
+/* 底图四边渐隐，盖不满时和模糊留边之间没有硬接缝；边缘本是出血，平常在窗口外 */
+html #app .garden-play .seaside-courtyard.farm-staged .scene-stage :is(.garden-backdrop, .environment-motion) {
+  -webkit-mask-image: linear-gradient(to bottom, transparent, #000 3% 97%, transparent), linear-gradient(to right, transparent, #000 3% 97%, transparent);
+  -webkit-mask-composite: source-in;
+  mask-image: linear-gradient(to bottom, transparent, #000 3% 97%, transparent), linear-gradient(to right, transparent, #000 3% 97%, transparent);
+  mask-composite: intersect;
+}
+
+/* ---------- 水仓与码头：位置来自标定 ---------- */
+html #app .garden-play .seaside-courtyard.farm-staged .scene-tank {
+  left: var(--tank-x);
+  top: var(--tank-y);
+  right: auto;
+  bottom: auto;
+  width: var(--tank-w);
+  height: var(--tank-h);
+  translate: none;
+  aspect-ratio: auto;
+}
+html #app .garden-play .seaside-courtyard.farm-staged :is(.aquarium-art, .tank-swim-canvas) {
+  clip-path: var(--tank-clip);
+}
+html #app .garden-play .seaside-courtyard.farm-staged .aquarium-hit {
+  inset: 0;
+  border-radius: 0;
+  clip-path: var(--tank-clip);
+}
+html #app .garden-play .seaside-courtyard.farm-staged .scene-pond {
+  left: var(--pier-x);
+  top: var(--pier-y);
+  right: auto;
+  bottom: auto;
+  width: var(--pier-w);
+  height: var(--pier-h);
+}
+/* 码头：可抛竿的是码头前的一整片水面（castRegion），点击区域裁成水面形状，落点就是点的位置 */
+html #app .garden-play .seaside-courtyard.farm-staged .pond-hit,
+html #app .garden-play .seaside-courtyard.farm-staged .pond-hit:hover,
+html #app .garden-play .seaside-courtyard.farm-staged .pond-hit:focus-visible {
+  inset: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  clip-path: var(--pier-clip);
+}
+html .seaside-courtyard.farm-staged .rod-body {
+  transform-origin: var(--rod-origin);
+}
+
+/* ---------- 菜园 ---------- */
+#app .garden-play .farm-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+}
+.farm-plot,
+.seed-stall,
+.poop-spot {
+  position: absolute;
+  padding: 0;
+  border: 0;
+  background: none;
+  pointer-events: auto;
+  -webkit-tap-highlight-color: transparent;
+}
+.farm-plot {
+  cursor: pointer;
+}
+/* 土地是固定场景坐标，按压只给亮度反馈，不移动整株及其状态牌。 */
+.farm-plot:active:not(:disabled) {
+  transform: none;
+}
+/* 地块里的图层以舞台原点定位（左上角偏移由脚本写入），只有地块本身的点击区域响应 */
+.farm-plot .plot-art {
+  position: absolute;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+.farm-plot .soil-hl {
+  position: absolute;
+  left: 0;
+  top: 0;
+  overflow: visible;
+}
+.farm-plot .soil-hl polygon {
+  fill: transparent;
+  stroke: none;
+  stroke-width: 0;
+  stroke-linejoin: round;
+  transition: fill 0.18s ease;
+}
+/* 空地用土面淡亮提示；有植物时只照亮植物，不再画容易错位的选框。 */
+.farm-plot[data-state="empty"]:hover .soil-hl polygon,
+html.kbd-nav .farm-plot[data-state="empty"]:focus-visible .soil-hl polygon {
+  fill: #fff6c824;
+}
+.farm-plot:focus-visible { outline: none; }
+/* 通用按钮的 filter 会把整块地合成一层，压到相邻地块土面下；只高亮植株自身。 */
+.farm-plot:hover:not(:disabled) { filter: none; }
+.farm-plot:is(:hover, :focus-visible) .plot-crop {
+  filter: brightness(1.16) drop-shadow(0 0 7px #fff0acb3);
+}
+/* 键盘焦点另有实色角标轮廓，避免只依靠光晕。 */
+html.kbd-nav .farm-plot:focus-visible :is(.plot-badge, .plot-timer, .plot-lock) {
+  outline: 2px solid #fff5bd;
+  outline-offset: 3px;
+}
+.farm-plot .plot-overlay {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 512px;
+  height: 512px;
+  transform-origin: 0 0;
+}
+.farm-plot .plot-cover {
+  position: absolute;
+  inset: 0 auto auto 0;
+  background: #d8c5a2;
+  pointer-events: none;
+}
+.farm-plot .plot-crop {
+  position: absolute;
+  transform-origin: 50% 78%;
+  transition: filter 0.16s ease;
+}
+.farm-plot[data-state="locked"] {
+  cursor: default;
+}
+.farm-plot .plot-lock {
+  position: absolute;
+  translate: -50% -50%;
+  scale: calc(1 / var(--stage-s, 1));
+  padding: 2px 8px;
+  border: 1.5px solid #8a5a2c;
+  border-radius: 6px;
+  background: #d9a666;
+  color: #4b2f14;
+  font-size: calc(12px * var(--d));
+  font-weight: 800;
+  white-space: nowrap;
+  box-shadow: 0 2px 0 #8a5a2c66;
+}
+.farm-plot.just-opened .plot-art {
+  animation: plotOpen 1.2s ease-out both;
+}
+@keyframes plotOpen {
+  0% {
+    filter: brightness(1.6) saturate(0.6);
+  }
+}
+/* 工具指针：场景同画风的位图跟随鼠标、代替系统光标（FarmUI 写入位置）；空地种子袋、待浇水水壶。
+   指针点落在工具的“作用点”上：袋底、壶嘴。生长中仍是普通手型（点开看详情） */
+.garden-scene.tool-active,
+.garden-scene.tool-active .farm-plot {
+  cursor: none;
+}
+.tool-cursor {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 40;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+  opacity: 0;
+}
+.tool-cursor.on {
+  opacity: 1;
+}
+.tool-cursor .tool-art {
+  position: absolute;
+  display: block;
+  width: calc(56px * var(--d));
+  height: calc(56px * var(--d));
+  object-fit: contain;
+  filter: drop-shadow(0 4px 4px #2a1e0e59);
+}
+.tool-cursor .tool-art .game-sprite,
+.tool-cursor .tool-art svg {
+  width: 100%;
+  height: 100%;
+}
+/* 工具光标只预览；实际操作成功后由反馈层播放一次动作。 */
+.tool-cursor.seed .tool-art {
+  left: calc(-28px * var(--d));
+  top: calc(-50px * var(--d));
+  transform-origin: 50% 92%;
+  rotate: -12deg;
+}
+/* 水壶待机保持直立，壶嘴对应点击位置。 */
+.tool-cursor.water .tool-art {
+  left: calc(-10px * var(--d));
+  top: calc(-20px * var(--d));
+  transform-origin: 18% 36%;
+}
+.tool-cursor.water.short .tool-art {
+  filter: grayscale(0.7) drop-shadow(0 4px 4px #2a1e0e59);
+}
+.farm-plot[data-state="ripe"] { cursor: grab; }
+/* 状态贴近苗床前沿：去掉圆形按钮底，沿用农具素材；空地只在悬停/触屏提示。 */
+.plot-badge {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: calc(2px * var(--d));
+  translate: -50% -15%;
+  scale: calc(1 / var(--stage-s, 1));
+  transform-origin: 50% 0;
+  white-space: nowrap;
+  color: #fff8df;
+  font-size: max(11px, calc(11px * var(--d)));
+  font-weight: 700;
+  line-height: 1;
+  text-shadow: 0 1px 3px #3e260c, 0 0 3px #3e260c;
+}
+.plot-badge img { width: calc(23px * var(--d)); height: calc(23px * var(--d)); object-fit: contain; filter: drop-shadow(0 1px 1px #38270988); }
+.plot-badge.dry { color: #d6f6ff; }
+.plot-badge.empty { opacity: 0; transition: opacity .15s; }
+.farm-plot:is(:hover, :focus-visible) .plot-badge.empty, .light-note-mobile-rendering .plot-badge.empty { opacity: 1; }
+/* 生长时间常驻苗床前沿，与成熟/缺水状态共用位置，不遮挡植物。 */
+.plot-timer {
+  position: absolute;
+  translate: -50% -5%;
+  scale: calc(1 / var(--stage-s, 1));
+  transform-origin: 50% 0;
+  padding: calc(2px * var(--d)) calc(4px * var(--d));
+  border-radius: calc(3px * var(--d));
+  background: #482d147a;
+  color: #fff7df;
+  font-size: max(11px,calc(11px * var(--d)));
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  line-height: 1.2;
+  text-shadow: 0 1px 2px #39240d;
+}
+/* 场景摊位不画矩形光框；小招牌常驻，悬停与键盘聚焦只提亮招牌。 */
+.seed-stall { cursor: pointer; }
+.seed-stall .stall-sign {
+  position: absolute; left: 50%; bottom: 1%; translate: -50% 0;
+  scale: calc(1 / var(--stage-s, 1)); transform-origin: center bottom;
+  padding: calc(4px * var(--d)) calc(8px * var(--d));
+  border: 1px solid #b98b50; border-radius: calc(5px * var(--d));
+  background: #f6e1b9; color: #5b3c20;
+  font-size: max(11px, calc(11px * var(--d))); font-weight: 700; white-space: nowrap;
+  box-shadow: 0 2px 0 #8f683b; transition: filter .15s, translate .15s;
+}
+.seed-stall:hover .stall-sign { filter: brightness(1.12); translate: -50% -2px; }
+.seed-stall:focus-visible { outline: none; }
+.seed-stall:focus-visible .stall-sign { outline: 2px solid #fff9df; outline-offset: 3px; }
+/* 兔子便便：每天一份，点一下拾取。草地上不显眼，底下垫一圈呼吸的暖光，便便本身描一圈浅色边 */
+.poop-spot {
+  width: calc(40px * var(--d));
+  height: calc(27px * var(--d));
+  translate: -50% -50%;
+  scale: calc(1 / var(--stage-s, 1));
+  cursor: pointer;
+  z-index: 1;
+}
+.poop-spot[hidden] {
+  display: none;
+}
+.poop-spot svg {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: block;
+  filter: drop-shadow(0 0 1.5px #fffbe8) drop-shadow(0 0 1.5px #fffbe8);
+}
+.poop-spot::before {
+  content: "";
+  position: absolute;
+  inset: -70% -45%;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, #fff8d2e6, #ffefa066 55%, #ffefa000);
+  animation: poopGlow 1.8s ease-in-out infinite;
+}
+@keyframes poopGlow {
+  50% {
+    opacity: 0.5;
+    scale: 0.82;
+  }
+}
+.poop-spot::after {
+  content: "";
+  position: absolute;
+  inset: -40%;
+}
+.fly-poop svg {
+  width: 100%;
+  height: 100%;
+}
+
+/* HUD：花园等级徽章与水滴；底栏背包图标 */
+.hud-garden-badge {
+  display: inline-grid;
+  width: calc(22px * var(--d));
+  height: calc(22px * var(--d));
+  place-items: center;
+  border-radius: 50%;
+  background: #eaf4d8;
+  border: 1.5px solid #b9d39a;
+  overflow: hidden;
+}
+.hud-garden-badge img {
+  width: 130%;
+  height: 130%;
+  object-fit: contain;
+}
+.res-pill.water .game-sprite {
+  width: calc(22px * var(--d));
+  height: calc(22px * var(--d));
+  flex: none;
+}
+.res-pill.water small {
+  margin-left: 1px;
+}
+/* 底栏：只有图标和名称两层（旧样式表 garden.css 里同名的 .dock-title 带下边距，这里清掉） */
+html #app .garden-play .farm-staged .game-dock {
+  padding: calc(6px * var(--d)) calc(12px * var(--d)) calc(5px * var(--d));
+}
+.farm-staged .game-dock .dock-title {
+  display: block;
+  margin: calc(3px * var(--d)) 0 0;
+  line-height: 1.25;
+}
+.farm-staged .game-dock .dock-disc {
+  width: calc(48px * var(--d));
+  height: calc(48px * var(--d));
+}
+/* 数量小牌子：贴在图标右下角；右上角留给待处理红点 */
+.dock-chip {
+  position: absolute;
+  z-index: 1;
+  right: calc(-7px * var(--d));
+  bottom: calc(-5px * var(--d));
+  min-width: calc(18px * var(--d));
+  height: calc(18px * var(--d));
+  padding: 0 calc(5px * var(--d));
+  border: 1.5px solid #c9a46a;
+  border-radius: 999px;
+  background: #fffaf0;
+  box-shadow: 0 1px 2px #5a3d1e33;
+  color: #5a3d1e;
+  font-size: calc(10.5px * var(--d));
+  font-weight: 800;
+  line-height: calc(15px * var(--d));
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+/* 弹框里的作物展示：一块土 + 作物（作物锚点在格内 50% / 78%） */
+.crop-card {
+  position: relative;
+  display: block;
+  width: 100%;
+  aspect-ratio: 1;
+}
+.crop-card .card-soil {
+  position: absolute;
+  left: 12%;
+  right: 12%;
+  top: 68%;
+  height: 20%;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, #4a2d18, #5e3a20 70%, #5e3a2000);
+}
+.crop-card img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+#modal .plot-card-art {
+  width: min(100%, calc(220px * var(--d)));
+  margin: 0 auto calc(10px * var(--d));
+}
+/* 详情的预览按可见内容居中，不改变地块上作物的根部定位。 */
+.crop-preview { position: relative; display: block; width: 100%; height: 100%; overflow: hidden; }
+.crop-preview .crop-preview-img {
+  position: absolute;
+  left: 50%; top: 50%;
+  width: var(--crop-size); height: var(--crop-size);
+  max-width: none;
+  transform: translate(var(--crop-x), var(--crop-y));
+}
+#modal .plot-dialog { width: min(100%, calc(680px * var(--d))); }
+#modal .plot-dialog .dialog-head { padding-bottom: calc(12px * var(--d)); }
+#modal .plot-dialog .dialog-body { padding-bottom: calc(14px * var(--d)); }
+#modal .plot-overview {
+  display: flex; align-items: center; gap: calc(18px * var(--d));
+  padding: calc(8px * var(--d)) calc(14px * var(--d));
+  margin-bottom: calc(16px * var(--d));
+  border: 1px solid #e4d5b3;
+  border-radius: calc(16px * var(--d));
+  background: #fffaf0;
+}
+#modal .plot-overview .plot-card-art {
+  flex: none; width: calc(80px * var(--d)); height: calc(80px * var(--d)); margin: 0;
+}
+#modal .plot-status { min-width: 0; display: grid; gap: calc(4px * var(--d)); }
+#modal .plot-status > small { color: #82704e; font-size: calc(11px * var(--d)); }
+#modal .plot-status > strong { color: #3f692e; font-size: calc(18px * var(--d)); font-variant-numeric: tabular-nums; }
+#modal .plot-status p { margin: 0; color: #82704e; font-size: calc(12px * var(--d)); }
+#modal .plot-section-head { display: flex; align-items: center; justify-content: space-between; gap: calc(6px * var(--d)); margin: calc(12px * var(--d)) 0 calc(8px * var(--d)); }
+#modal .plot-section-head h3 { margin: 0; color: #4a3a22; font-size: calc(14px * var(--d)); }
+#modal .plot-section-head > span { color: #82704e; font-size: calc(11px * var(--d)); }
+#modal .plot-card .fert-row { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: calc(6px * var(--d)); }
+#modal .plot-card .fert-chip { min-width: 0; padding: calc(6px * var(--d)) calc(2px * var(--d)); }
+#modal .plot-care-note { margin: calc(12px * var(--d)) 0 0; text-align: center; color: #82704e; font-size: calc(11px * var(--d)); line-height: 1.5; }
+#modal .plot-card-art.small {
+  width: calc(150px * var(--d));
+}
+.farm-card-art .crop-card {
+  width: 70%;
+  margin: 0 auto;
+}
+
+/* ---------- 弹框：背包、商店、仓库 ---------- */
+#modal .bag-tabs {
+  margin-bottom: calc(12px * var(--d));
+}
+#modal .seed-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(calc(220px * var(--d)), 1fr));
+  gap: calc(10px * var(--d));
+}
+#modal .seed-tile {
+  display: grid;
+  grid-template-columns: calc(46px * var(--d)) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: calc(10px * var(--d));
+  padding: calc(8px * var(--d)) calc(10px * var(--d));
+  border: 2px solid var(--g-well-line, #e3d3b0);
+  border-radius: calc(14px * var(--d));
+  background: var(--g-tile, #fffaf0);
+  box-shadow: 0 2px 0 var(--g-well-line, #e3d3b0);
+}
+#modal .seed-tile.rare {
+  border-color: #e9b949;
+  background: linear-gradient(135deg, #fffaf0, #fff1c9);
+}
+#modal .seed-tile.locked {
+  opacity: 0.72;
+}
+#modal .seed-pack img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+#modal .seed-copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+#modal .seed-copy strong {
+  color: var(--g-ink, #3e3020);
+  font-size: calc(14px * var(--d));
+}
+#modal .seed-copy small {
+  color: var(--g-muted, #7a6a50);
+  font-size: calc(11.5px * var(--d));
+  line-height: 1.35;
+}
+#modal .seed-count {
+  color: #8a5a2c;
+  font-weight: 800;
+  font-size: calc(12.5px * var(--d));
+  font-variant-numeric: tabular-nums;
+}
+#modal .tile-lock {
+  justify-self: end;
+  padding: calc(3px * var(--d)) calc(8px * var(--d));
+  border-radius: 999px;
+  background: #efe4cc;
+  color: #7a6a50;
+  font-size: calc(11px * var(--d));
+  font-weight: 700;
+  white-space: nowrap;
+}
+#modal .seed-tile .tile-actions {
+  display: flex;
+  flex-direction: column;
+  gap: calc(4px * var(--d));
+}
+#modal .shop-balance {
+  margin-bottom: calc(10px * var(--d));
+  color: var(--g-muted, #7a6a50);
+}
+#modal .shop-balance b {
+  color: #8a5a2c;
+  font-size: calc(15px * var(--d));
+}
+#modal .sub-head {
+  margin: calc(16px * var(--d)) 0 calc(8px * var(--d));
+  font-size: calc(14px * var(--d));
+  color: var(--g-ink, #3e3020);
+}
+/* 地块卡片 */
+
+#modal .fert-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(calc(96px * var(--d)), 1fr));
+  gap: calc(8px * var(--d));
+}
+#modal .fert-chip {
+  display: grid;
+  gap: 1px;
+  justify-items: center;
+  padding: calc(7px * var(--d)) calc(6px * var(--d));
+  border: 2px solid #c9dfb0;
+  border-radius: calc(12px * var(--d));
+  background: #f4faea;
+  color: #3e5a2a;
+  cursor: pointer;
+}
+#modal .fert-chip b {
+  font-size: calc(14px * var(--d));
+}
+#modal .fert-chip span {
+  font-size: calc(11px * var(--d));
+}
+#modal .fert-chip small {
+  color: #6f8a5a;
+  font-size: calc(10.5px * var(--d));
+}
+#modal .fert-chip:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+/* R2 肥料各有轮廓，不再依赖右下角色点辨别。 */
+.fert-icon {
+  position: relative;
+  display: block;
+  flex: 0 0 auto;
+  width: calc(34px * var(--d));
+  height: calc(34px * var(--d));
+}
+.fert-icon img { display: block; width: 100%; height: 100%; object-fit: contain; }
+#modal .fert-chip:disabled .fert-icon {
+  filter: grayscale(0.6);
+}
+
+/* ---------- 成长进度：各阶段小图 + 名字 + 还要多久；底下一条进度轨道，--pos 为 0–1 ---------- */
+#modal .growth-steps {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(var(--n), minmax(0, 1fr));
+  margin: 0 0 calc(8px * var(--d));
+  padding: 0;
+  list-style: none;
+}
+#modal .growth-steps::before,
+#modal .growth-steps::after {
+  content: "";
+  position: absolute;
+  top: calc(30px * var(--d));
+  left: calc(100% / var(--n) / 2);
+  height: calc(6px * var(--d));
+  border-radius: 999px;
+}
+#modal .growth-steps::before {
+  right: calc(100% / var(--n) / 2);
+  background: #eadfc6;
+}
+#modal .growth-steps::after {
+  width: calc((100% - 100% / var(--n)) * var(--pos));
+  background: linear-gradient(90deg, #9ad46f, #58a443);
+  transition: width 0.6s linear;
+}
+#modal .growth-steps li {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  justify-items: center;
+  gap: calc(2px * var(--d));
+  text-align: center;
+}
+/* 米白底托上展示完整植株，当前阶段用实色边框和文字共同标识。 */
+.gs-art {
+  display: block;
+  width: calc(64px * var(--d)); height: calc(64px * var(--d));
+  border: 2px solid #e2d3b4;
+  border-radius: calc(18px * var(--d));
+  background: linear-gradient(#fffdf7, #f1e7ce);
+  box-shadow: 0 calc(3px * var(--d)) 0 #d9c7a2;
+}
+#modal .growth-steps b {
+  margin-top: calc(2px * var(--d));
+  color: #4a3a22;
+  font-size: calc(12px * var(--d));
+}
+#modal .growth-steps small {
+  max-width: 100%;
+  padding-inline: calc(2px * var(--d));
+  color: #8a7a5e;
+  font-size: calc(10.5px * var(--d));
+  line-height: 1.25;
+  text-wrap: balance;
+}
+#modal .growth-steps .done .gs-art {
+  border-color: #9ccf78;
+}
+#modal .growth-steps .now .gs-art {
+  border: 3px solid #58a443;
+  background: #f4fae9;
+  box-shadow: 0 0 0 3px #d7efc4, 0 calc(3px * var(--d)) 0 #8aaf68;
+}
+#modal .growth-steps .now small {
+  color: #3f7d2c;
+  font-weight: 800;
+}
+#modal .growth-steps .next .gs-art {
+  filter: saturate(0.75);
+}
+#modal .button.danger {
+  border-color: #d9826f;
+  background: linear-gradient(#fff3ef, #f8d8cf);
+  color: #8a2e1c;
+}
+#modal .option-row.current {
+  border-color: #e9b949;
+}
+#modal .option-row.muted-row {
+  opacity: 0.7;
+}
+/* 作物图鉴 */
+#modal .crop-grid .atlas-card {
+  padding: calc(6px * var(--d));
+}
+#modal .crop-card-art img {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+#modal .silhouette img {
+  filter: brightness(0) opacity(0.22);
+}
+#modal .crop-grid .atlas-card.rare.discovered {
+  border-color: #e9b949;
+}
+#modal .crop-detail-art .crop-card {
+  width: min(100%, calc(240px * var(--d)));
+  margin: 0 auto;
+}
+#modal .guide-pack img,
+.guide-pack img {
+  width: calc(34px * var(--d));
+  height: auto;
+}
+
+/* ---------- 首次引导：只突出第 1 块地 ---------- */
+.guide-tip {
+  position: absolute;
+  z-index: 15;
+  left: clamp(150px, var(--guide-x, 21%), calc(100% - 150px));
+  top: var(--guide-y, 30%);
+  translate: -50% -100%;
+  display: grid;
+  gap: 2px;
+  max-width: min(280px, 80vw);
+  padding: calc(9px * var(--d)) calc(14px * var(--d));
+  border: calc(2px * var(--d)) solid #d7b77c;
+  border-radius: calc(14px * var(--d));
+  background: linear-gradient(#fffdf4, #f5e7c8);
+  box-shadow: 0 calc(3px * var(--d)) 0 #ae8852, 0 8px 20px #1b382033;
+  color: #503c23;
+  font-size: calc(13px * var(--d));
+  pointer-events: none;
+  animation: batchIn 0.3s ease-out;
+}
+.guide-tip strong {
+  font-size: calc(14px * var(--d));
+}
+.guide-tip::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: calc(-9px * var(--d));
+  width: calc(14px * var(--d));
+  height: calc(14px * var(--d));
+  translate: -50% 0;
+  rotate: 45deg;
+  background: #f5e7c8;
+  border-right: calc(2px * var(--d)) solid #d7b77c;
+  border-bottom: calc(2px * var(--d)) solid #d7b77c;
+}
+.garden-scene[data-guide="plant"] .farm-plot:not([data-plot="0"]),
+.garden-scene[data-guide="water"] .farm-plot:not([data-plot="0"]),
+.garden-scene.onboarding .seed-stall {
+  pointer-events: none;
+  filter: saturate(0.6) brightness(0.92);
+}
+.garden-scene:is([data-guide="plant"], [data-guide="water"]) .farm-plot[data-plot="0"] .soil-hl polygon {
+  animation: guidePulse 1.3s ease-in-out infinite;
+}
+@keyframes guidePulse {
+  50% {
+    fill: #fff6c840;
+    stroke-width: 10;
+  }
+}
+html.light-note-mobile-rendering #app .garden-play .seaside-courtyard.farm-staged .game-dock {
+  padding: 5px 4px 4px;
+  border-radius: 20px;
+}
+html.light-note-mobile-rendering .seaside-courtyard.farm-staged .game-dock .dock-disc {
+  width: 40px;
+  height: 40px;
+  border-radius: 13px;
+}
+html.light-note-mobile-rendering .seaside-courtyard.farm-staged .game-dock .dock-title {
+  font-size: 11.5px;
+}
+/* 手机矮屏（地址栏、工具栏占掉一截高度）：顶栏收紧、底栏图标缩小，把高度留给菜地 */
+@media (max-height: 700px) {
+  html.light-note-mobile-rendering #app .garden-play .seaside-courtyard.farm-staged .game-hud {
+    top: 6px;
+    padding: 4px;
+    gap: 4px 6px;
+  }
+  html.light-note-mobile-rendering .seaside-courtyard.farm-staged .hud-identity {
+    padding: 3px 4px;
+  }
+  html.light-note-mobile-rendering .seaside-courtyard.farm-staged .hud-stage {
+    padding: 4px 6px;
+    gap: 2px;
+  }
+  html.light-note-mobile-rendering .seaside-courtyard.farm-staged .hud-resources {
+    padding: 1px 6px;
+  }
+  html.light-note-mobile-rendering .seaside-courtyard.farm-staged .res-pill,
+  html.light-note-mobile-rendering .seaside-courtyard.farm-staged .util-btn {
+    height: 28px;
+    min-height: 28px;
+  }
+  html.light-note-mobile-rendering .seaside-courtyard.farm-staged .util-btn.round {
+    width: 28px;
+  }
+  html.light-note-mobile-rendering .seaside-courtyard.farm-staged .hud-back {
+    width: 30px;
+    height: 30px;
+  }
+  html.light-note-mobile-rendering #app .garden-play .seaside-courtyard.farm-staged .game-dock {
+    padding: 4px 4px 3px;
+    border-radius: 18px;
+  }
+  html.light-note-mobile-rendering .seaside-courtyard.farm-staged .game-dock .dock-disc {
+    width: 34px;
+    height: 34px;
+    border-radius: 11px;
+  }
+}
+.light-note-mobile-rendering #modal .seed-grid {
+  grid-template-columns: 1fr;
+}
+.light-note-mobile-rendering #modal .growth-steps .gs-art {
+  width: calc(44px * var(--d));
+  height: calc(44px * var(--d));
+  border-radius: calc(13px * var(--d));
+}
+.light-note-mobile-rendering #modal .growth-steps::before,
+.light-note-mobile-rendering #modal .growth-steps::after {
+  top: calc(20px * var(--d));
+}
+.light-note-mobile-rendering #modal .plot-dialog .dialog-body { padding-inline: calc(12px * var(--d)); }
+.light-note-mobile-rendering #modal .plot-overview { gap: calc(10px * var(--d)); padding: calc(6px * var(--d)); margin-bottom: calc(16px * var(--d)); }
+.light-note-mobile-rendering #modal .plot-overview .plot-card-art { width: calc(68px * var(--d)); height: calc(68px * var(--d)); }
+.light-note-mobile-rendering #modal .plot-status > strong { font-size: calc(15px * var(--d)); }
+.light-note-mobile-rendering #modal .plot-section-head { flex-wrap: wrap; }
+.light-note-mobile-rendering #modal .plot-card .fert-row { gap: calc(4px * var(--d)); }
+.light-note-mobile-rendering #modal .plot-card .fert-chip b { font-size: calc(11px * var(--d)); }
+.light-note-mobile-rendering #modal .plot-card .fert-chip > span:not(.fert-icon) { font-size: calc(10px * var(--d)); line-height: 1.25; }
+.light-note-mobile-rendering #modal .plot-card .fert-chip small { font-size: calc(10px * var(--d)); }
+@media (prefers-reduced-motion: reduce) {
+  .poop-spot::before,
+  #modal .growth-steps::after,
+  .tool-cursor .tool-art,
+  .tool-drops b,
+  .plot-badge.ripe,
+  .guide-tip,
+  .garden-scene .farm-plot .soil-hl polygon {
+    animation: none !important;
+  }
+}
+
+/* 紧凑反馈固定在 HUD 下方，避开田地、兔子与底栏；普通消息不挡点击。 */
+html #toast.toast {
+  bottom: auto;
+  width: max-content;
+  max-width: min(calc(440px * var(--d)), calc(100vw - 24px));
+  padding: calc(7px * var(--d)) calc(13px * var(--d));
+  border-width: 1px;
+  border-radius: calc(12px * var(--d));
+  font-size: max(13px, calc(13px * var(--d)));
+  line-height: 1.5;
+  font-weight: 600;
+  background: #fff8e8;
+  color: #50371e;
+  border-color: #a98549;
+  box-shadow: 0 2px 5px #33210e24;
+}
+.farm-tool-mode {
+  position: absolute;
+  left: 50%;
+  translate: -50% 0;
+  z-index: 42;
+  display: flex;
+  align-items: center;
+  gap: calc(8px * var(--d));
+  max-width: calc(100% - 24px);
+  padding: calc(4px * var(--d)) calc(6px * var(--d)) calc(4px * var(--d)) calc(10px * var(--d));
+  border: 1px solid #d7b578;
+  border-radius: calc(14px * var(--d));
+  background: #fff9e9;
+  color: #50371e;
+  box-shadow: 0 2px 6px #33210e24;
+}
+.farm-tool-mode[hidden] { display: none; }
+.farm-tool-mode > span { display: grid; gap: 1px; }
+.farm-tool-mode b { font-size: max(12px, calc(12px * var(--d))); white-space: nowrap; }
+.farm-tool-mode small { font-size: max(12px, calc(12px * var(--d))); color: #594a32; }
+.farm-tool-mode button {
+  min-width: calc(44px * var(--d));
+  min-height: calc(36px * var(--d));
+  padding: calc(6px * var(--d));
+  border: 1px solid #c9b896;
+  border-radius: calc(9px * var(--d));
+  background: #f3ecd9;
+  color: #50371e;
+  font-size: calc(12px * var(--d));
+  cursor: pointer;
+}
+.farm-tool-selected .farm-plot[data-tool-eligible="false"] .plot-crop { filter: saturate(.7); }
+.farm-tool-selected .farm-plot[data-tool-eligible="true"]:hover .plot-crop {
+  filter: brightness(1.2) drop-shadow(0 0 8px #e4f9ae);
+}
+.tool-cursor.fert .tool-art {
+  left: calc(-28px * var(--d));
+  top: calc(-48px * var(--d));
+  transform-origin: 50% 86%;
+}
+.tool-cursor.fert.short .tool-art { filter: grayscale(1) opacity(.65); }
+.tool-cursor.harvest .tool-art { left: calc(-28px * var(--d)); top: calc(-28px * var(--d)); }
+#modal .fert-picker-dialog {
+  width: min(calc(620px * var(--d)), calc(100vw - 28px));
+}
+#modal .fert-picker-dialog .dialog-head { padding: calc(22px * var(--d)) calc(22px * var(--d)) calc(10px * var(--d)); }
+#modal .fert-picker-dialog .dialog-head p { margin-top: calc(7px * var(--d)); font-size: calc(13px * var(--d)); }
+#modal .fert-picker-dialog .dialog-body { padding: calc(12px * var(--d)) calc(22px * var(--d)); }
+#modal .fert-picker-dialog .dialog-foot { padding: calc(10px * var(--d)) calc(22px * var(--d)); }
+#modal .fert-picker { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: calc(8px * var(--d)); }
+#modal .fert-picker .fert-chip { min-height: calc(120px * var(--d)); }
+#modal .fert-picker .fert-icon { width: calc(44px * var(--d)); height: calc(44px * var(--d)); }
+#modal .fert-note { margin: calc(12px * var(--d)) 0 0; font-size: max(12px, calc(12px * var(--d))); color: #77664a; }
+.light-note-mobile-rendering #modal .fert-picker { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.light-note-mobile-rendering .farm-tool-mode button { min-width: 44px; min-height: 44px; }
+
+.light-note-mobile-rendering .tool-cursor { display: none; }
+#modal .fert-picker .fert-chip:disabled { opacity: .65; }
+
+/* 紧凑档缩小面板，说明与库存文字仍保留可读字号。 */
+#modal .fert-picker .fert-chip > span { font-size: max(12px, calc(12px * var(--d))); }
+#modal .fert-picker .fert-chip small { font-size: max(11px, calc(11px * var(--d))); }
+
+/* 农具与功能入口共用原有底栏；手机通过“农具”展开同一组控件。 */
+.farm-tools, .farm-destinations { display: flex; align-items: center; gap: calc(6px * var(--d)); }
+.farm-tools { align-self: stretch; padding-right: calc(12px * var(--d)); margin-right: calc(4px * var(--d)); border-right: 1px solid #d7bd8d; }
+.farm-tool {
+  position: relative; display: grid; justify-items: center; align-content: center;
+  gap: calc(2px * var(--d)); width: calc(52px * var(--d)); min-height: calc(62px * var(--d));
+  padding: calc(3px * var(--d)); border: 1px solid transparent; border-radius: 12px;
+  background: transparent; color: #64472a; cursor: pointer;
+  font-size: max(11px, calc(11px * var(--d))); font-weight: 650;
+}
+.farm-tool-icon { display: block; width: calc(35px * var(--d)); height: calc(35px * var(--d)); object-fit: contain; }
+.farm-tool[aria-pressed="true"] { border-color: #658f43; background: #e6efce; color: #385924; box-shadow: inset 0 -2px 0 #b8cc96; }
+.farm-tool[aria-pressed="true"]::after { content: "✓"; position: absolute; top: 1px; right: 3px; color: #42682d; font-size: max(10px, calc(10px * var(--d))); }
+.farm-tool:hover { background: #f3e7cc; }
+.farm-tool[aria-pressed="true"]:hover { background: #dceabf; }
+.farm-tool:focus-visible { outline: 2px solid #537a37; outline-offset: 2px; }
+.farm-staged [data-dock="tools"] { display: none; }
+.farm-staged .farm-destinations .dock-btn { width: calc(62px * var(--d)); }
+.farm-staged .farm-destinations .dock-disc { width: calc(42px * var(--d)); height: calc(42px * var(--d)); }
+.farm-staged .dock-disc > .farm-tool-icon { position: absolute; inset: 0; width: 100%; height: 100%; }
+.farm-tool-mode > .farm-tool-icon { width: calc(30px * var(--d)); height: calc(30px * var(--d)); flex: none; }
+.tool-cursor.shovel .tool-art { left: calc(-39px * var(--d)); top: calc(-46px * var(--d)); transform-origin: 72% 82%; }
+.tool-cursor.shovel.short .tool-art { filter: grayscale(1) opacity(.65); }
+.farm-tool-selected .farm-plot[data-tool-eligible="true"] .plot-badge { color: #f3ffd2; }
+.farm-tool-selected .farm-plot[data-tool-eligible="true"] .plot-crop { filter: brightness(1.08) drop-shadow(0 0 4px #f4ffd366); }
+.light-note-mobile-rendering .farm-tools {
+  display: none; position: static; width: 100%; margin: 0; padding: 0;
+  border: 0; justify-content: space-around;
+}
+.light-note-mobile-rendering .tools-open .farm-tools { display: flex; }
+.light-note-mobile-rendering .tools-open .farm-destinations { display: none; }
+.light-note-mobile-rendering .farm-tool { width: 54px; min-height: 58px; }
+.light-note-mobile-rendering .farm-tool-icon { width: 32px; height: 32px; }
+.light-note-mobile-rendering .farm-staged [data-dock="tools"] { display: grid; }
+.light-note-mobile-rendering .farm-destinations { width: 100%; justify-content: space-around; gap: 4px; }
+.light-note-mobile-rendering .farm-staged .farm-destinations .dock-btn { width: 58px; }
+.light-note-mobile-rendering .tool-chosen .dock-disc { outline: 2px solid #658f43; background: #e6efce; }
+.light-note-mobile-rendering .tool-chosen .dock-title { color: #42682d; }
+
+/* 浮漂的内部几何按屏幕像素标定，小幅随水起伏；玻璃/地形不跟着变形。 */
+#app .garden-play .farm-staged .scene-pond .sea-rod { stroke: #40553a; stroke-width: 3.2; }
+#app .garden-play .farm-staged .scene-pond .rod-grip { stroke: #bd8d4b; stroke-width: 7; }
+#app .garden-play .farm-staged .scene-pond .fishing-line { stroke: #fff8e5bd; stroke-width: .85; animation: none; }
+#app .garden-play .farm-staged .scene-pond .bobber { animation: small-float-drift 2.8s ease-in-out infinite; }
+#app .garden-play .farm-staged .scene-pond[data-phase="wait"] .bobber { animation: small-float-drift 1.8s ease-in-out infinite; }
+#app .garden-play .farm-staged .scene-pond[data-phase="bite"] .bobber { animation: small-float-bite .9s ease-in-out both; transform-origin: 0 0; }
+#app .garden-play .farm-staged .scene-pond .cast-ring { stroke-width: .8; }
+#app .garden-play .farm-staged .scene-pond:not(.casting) .cast-ring {display:none;}
+@keyframes small-float-drift { 50% { transform: translateY(1px) rotate(4deg); } }
+@keyframes small-float-bite { 0%, 35% { transform: translateY(0); opacity: 1; } 18%, 68%, 100% { transform: translateY(5px); opacity: .35; } }
+@media (prefers-reduced-motion: reduce) {
+  #app .garden-play .farm-staged .scene-pond .bobber,
+  #app .garden-play .farm-staged .scene-pond[data-phase] .bobber,
+  #app .garden-play .farm-staged .scene-pond.casting .cast-ring { animation: none; }
+}
+
+.farm-tool:disabled { opacity: .55; cursor: wait; }
+
+.light-note-mobile-rendering .farm-staged .farm-destinations .dock-btn { width: 50px; }
+.light-note-mobile-rendering .farm-tool { width: 68px; }
+
+/* 背包沿用一个弹框，物品改为有数量角标的游戏格；不让说明挤占主体。 */
+#modal .inventory-dialog { width: min(calc(780px * var(--d)), calc(100vw - 28px)); }
+#modal .inventory-dialog .dialog-head { padding: calc(20px * var(--d)) calc(24px * var(--d)) calc(8px * var(--d)); }
+#modal .inventory-dialog .dialog-body { padding: calc(12px * var(--d)) calc(24px * var(--d)); }
+#modal .inventory-dialog .seed-grid, .bag-fish-grid { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: calc(12px * var(--d)); }
+#modal .inventory-dialog .seed-tile { position: relative; display: flex; flex-direction: column; align-items: center; padding: calc(10px * var(--d)); gap: calc(7px * var(--d)); background: linear-gradient(#fffcf1,#f6e4ba); border: 1px solid #cda971; border-radius: calc(10px * var(--d)); box-shadow: inset 0 1px #fff9dd,0 3px #c5a06a; text-align: center; }
+#modal .inventory-dialog .seed-pack { width: calc(74px * var(--d)); height: calc(74px * var(--d)); margin: 0; border-radius: calc(8px * var(--d)); background: radial-gradient(ellipse,#fff6ce, #e8c991); box-shadow: inset 0 2px 4px #805a2d26; }
+#modal .inventory-dialog .seed-pack img { width: 100%; height: 100%; object-fit: contain; }
+#modal .inventory-dialog .seed-copy { display: flex; flex-direction: column; align-items: center; min-width: 0; gap: calc(4px * var(--d)); }
+#modal .inventory-dialog .seed-copy strong { font-size: max(13px,calc(14px * var(--d))); }
+#modal .inventory-dialog .seed-copy small { font-size: max(11px,calc(11px * var(--d))); line-height: 1.4; }
+#modal .inventory-dialog .seed-count { position: absolute; top: calc(8px * var(--d)); right: calc(8px * var(--d)); padding: calc(2px * var(--d)) calc(5px * var(--d)); background: #fff9e9; border: 1px solid #c4a36a; border-radius: calc(5px * var(--d)); color: #674225; font-size: max(12px,calc(13px * var(--d))); }
+#modal .inventory-dialog .tile-btn { flex: 0 0 auto; min-width: calc(64px * var(--d)); min-height: calc(32px * var(--d)); padding: calc(5px * var(--d)) calc(14px * var(--d)); margin-top: auto; }
+#modal .inventory-dialog .tile-actions { flex-wrap: wrap; justify-content: center; margin-top: auto; }
+.bag-hint { margin: calc(16px * var(--d)) 0 0; color: #796448; font-size: max(12px,calc(12px * var(--d))); line-height: 1.6; }
+.bag-fish-slot { display: flex; flex-direction: column; align-items: center; gap: calc(8px * var(--d)); padding: calc(12px * var(--d)); border: 1px solid #a7c3b2; border-radius: calc(10px * var(--d)); background: linear-gradient(#f2fbef,#d8e8cc); box-shadow: 0 3px #96ae86; text-align: center; }
+.bag-fish-art { width: 100%; height: calc(90px * var(--d)); }
+.bag-fish-art svg { width: 100%; height: 100%; }
+.bag-fish-slot strong { font-size: max(13px,calc(14px * var(--d))); }
+.bag-fish-slot small { font-size: max(11px,calc(11px * var(--d))); color: #56714e; }
+#modal .purchase-dialog { width: min(calc(380px * var(--d)),calc(100vw - 28px)); }
+.purchase-item { display: flex; align-items: center; gap: calc(16px * var(--d)); }
+.purchase-art { width: calc(72px * var(--d)); height: calc(82px * var(--d)); flex-shrink: 0; }
+.purchase-art img { width: 100%; height: 100%; object-fit: contain; }
+.purchase-item h3 { font-size: calc(17px * var(--d)); margin: 0 0 calc(6px * var(--d)); }
+.purchase-item p, .purchase-balance { font-size: max(12px,calc(13px * var(--d))); color: #7b684b; }
+.purchase-total { display: flex; justify-content: space-between; border-top: 1px solid #dfc797; padding-top: calc(16px * var(--d)); margin-top: calc(18px * var(--d)); }
+.purchase-total strong { color: #875721; }
+.fert-rabbit svg { width: 100%; height: 100%; }
+.light-note-mobile-rendering #modal .inventory-dialog .dialog-body { padding: 12px; }
+.light-note-mobile-rendering #modal .inventory-dialog .seed-grid { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; }
+.light-note-mobile-rendering #modal .inventory-dialog .seed-tile { padding: 7px 4px; }
+.light-note-mobile-rendering #modal .inventory-dialog .seed-pack { width: 62px; height: 62px; }
+.light-note-mobile-rendering #modal .inventory-dialog .tile-btn { flex: 0 0 auto; min-width: calc(64px * var(--d)); min-height: 44px; padding: 5px 9px; }
+.light-note-mobile-rendering .bag-fish-grid { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; }
+
+/* 掉落物本身就是领取入口；说明只在悬停/键盘聚焦出现，保留至少 44px 触控区。 */
+.bird-seed-spot { position: absolute; pointer-events: auto; cursor: pointer; translate: -50% -50%; scale: calc(1 / var(--stage-s,1)); z-index: 3; }
+.bird-seed-spot[hidden] { display: none; }
+.scene-gift { display: grid; place-items: center; width: max(44px,calc(52px * var(--d))); height: max(44px,calc(52px * var(--d))); padding: 0; border: 0; border-radius: 50%; background: radial-gradient(ellipse,#fff4b4d9 0%,#ffe69870 40%,#ffe69800 70%); color: #5c461f; box-shadow: none; animation: gift-arrive .45s ease-out; }
+.scene-gift > img { display: block; width: 100%; height: 100%; object-fit: contain; filter: drop-shadow(0 1px 1px #fff8d8) drop-shadow(0 2px 3px #47381490); transition: transform .15s; }
+.scene-gift .gift-count { position: absolute; right: 0; bottom: 0; min-width: calc(20px * var(--d)); padding: calc(2px * var(--d)) calc(3px * var(--d)); border: 1px solid #b28a43; border-radius: calc(6px * var(--d)); background: #fff5d6; box-shadow: 0 1px 2px #47381450; font-size: max(11px,calc(11px * var(--d))); line-height: 1; text-align: center; }
+.scene-gift::after { content: attr(data-gift-tip); position: absolute; left: 50%; bottom: calc(100% + 5px * var(--d)); transform: translateX(-50%); padding: calc(4px * var(--d)) calc(7px * var(--d)); border: 1px solid #d7b77c; border-radius: calc(5px * var(--d)); background: #fff8e6; color: #5c461f; font-size: max(11px,calc(11px * var(--d))); white-space: nowrap; pointer-events: none; opacity: 0; }
+@media (hover: hover) {
+  .scene-gift:hover > img { transform: translateY(-2px); }
+  .scene-gift:hover::after { opacity: 1; }
+}
+html.kbd-nav .scene-gift:focus-visible::after { opacity: 1; }
+.scene-gift:focus-visible { outline: 3px solid #41652b; outline-offset: 4px; }
+@keyframes gift-arrive { from { opacity: 0; transform: translateY(7px); } to { opacity: 1; transform: translateY(0); } }
+@media (prefers-reduced-motion: reduce) { .scene-gift { animation: none; } .scene-gift > img { transition: none; } }
+.poop-spot { height: calc(34px * var(--d)); }
+.aquarium-life, .seabird-life { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.aquarium-life { z-index: 1; clip-path: var(--tank-clip); }
+.seabird-life { z-index: 1; }
+@media (prefers-reduced-motion: reduce) { .aquarium-life,.seabird-life { display: none; } }
+
+/* 有分类的面板固定外框，内容变多时只在内层滚动；密度与矮屏共同限制高度。 */
+#modal .tabbed-dialog {
+  height: min(calc(660px * var(--d)), calc(100vh - 72px * var(--d)));
+  height: min(calc(660px * var(--d)), calc(100dvh - 72px * var(--d)));
+}
+#modal .tabbed-dialog > .dialog-body { flex: 1; min-height: 0; scrollbar-gutter: stable; }
+#modal .tabbed-dialog > .dialog-head p { min-height: 1.5em; }
+#modal .tabbed-dialog > .dialog-foot { border-top-style: solid; }
+#modal .atlas-dialog > .dialog-head p { min-height: 3em; }
+.light-note-mobile-rendering #modal .tabbed-dialog {
+  height: calc(100vh - 76px);
+  height: calc(100dvh - 76px);
+  max-height: none;
+}
+
+/* 每五级一段奖励路线；固定标题与进度，详情写明每件奖励的用途。 */
+#modal .level-dialog { width: min(calc(720px * var(--d)), calc(100vw - 28px)); height: min(calc(700px * var(--d)), calc(100vh - 72px * var(--d))); height: min(calc(700px * var(--d)), calc(100dvh - 72px * var(--d))); }
+#modal .level-dialog .dialog-head { flex-shrink: 0; padding: calc(12px * var(--d)) calc(22px * var(--d)) calc(8px * var(--d)); }
+#modal .level-dialog .dialog-head p { margin: calc(8px * var(--d)) 0; font-size: max(12px,calc(12px * var(--d))); }
+#modal .level-dialog .dialog-body { padding: 0 calc(22px * var(--d)) calc(10px * var(--d)); }
+#modal .level-dialog .dialog-foot { flex-shrink: 0; justify-content: space-between; align-items: center; gap: calc(10px * var(--d)); padding: calc(10px * var(--d)) calc(22px * var(--d)); }
+.level-hero { display: flex; align-items: center; gap: calc(16px * var(--d)); padding: calc(10px * var(--d)) calc(16px * var(--d)); background: linear-gradient(110deg,#e8f3cc,#f8f3d9); border: 1px solid #b6c98e; border-radius: calc(16px * var(--d)); box-shadow: inset 0 2px #ffffed; text-align: left; }
+.level-medal { display: grid; place-content: center; flex: 0 0 auto; width: calc(54px * var(--d)); height: calc(54px * var(--d)); border: calc(4px * var(--d)) solid #f9e2a1; outline: 1px solid #bc9149; border-radius: 50%; background: radial-gradient(circle at 36% 24%,#fff4ca,#dfb65e); color: #6d431b; box-shadow: 0 calc(3px * var(--d)) 0 #b28c47; text-align: center; }
+.level-medal small { font-size: calc(11px * var(--d)); font-weight: 800; line-height: 1; }
+.level-medal b { font-size: calc(26px * var(--d)); line-height: 1.1; }
+.level-journey { display: grid; gap: calc(4px * var(--d)); flex: 1; min-width: 0; }
+.level-journey strong { color: #42642b; font-size: calc(15px * var(--d)); }
+.level-journey > span { color: #5a623c; font-weight: 700; font-size: max(12px,calc(12px * var(--d))); }
+.level-xp { height: calc(12px * var(--d)); padding: 2px; border: 1px solid #c8b682; border-radius: calc(8px * var(--d)); background: #ddcea5; box-shadow: inset 0 1px 2px #88622333; }
+.level-xp i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(#a7d66a,#66a543); min-width: 2px; }
+.level-pending { display: grid; gap: calc(2px * var(--d)); padding: calc(7px * var(--d)) calc(10px * var(--d)); border: 1px solid #c6a761; border-radius: calc(10px * var(--d)); background: #fff6d6; color: #775021; font-size: max(12px,calc(13px * var(--d))); font-weight: 700; cursor: pointer; }
+.level-pending span,.level-all-claimed { font-size: max(11px,calc(11px * var(--d))); color: #736340; }
+.level-route-heading { display: flex; align-items: center; justify-content: space-between; margin-block: calc(4px * var(--d)) calc(8px * var(--d)); color: #7c603a; font-size: max(12px,calc(13px * var(--d))); }
+.level-route-heading button { width: calc(34px * var(--d)); height: calc(30px * var(--d)); border: 1px solid #d9bd88; border-radius: calc(8px * var(--d)); background: #fff9e9; color: #78542c; font-size: calc(22px * var(--d)); cursor: pointer; display: grid; place-items: center; padding: 0; line-height: 1; }
+.level-route-heading button > span { display: block; line-height: 1; transform: translateY(-.06em); }
+.level-route-heading button:disabled { opacity: .35; cursor: default; }
+.level-route { display: grid; grid-template-columns: repeat(5,minmax(0,1fr)); gap: calc(10px * var(--d)); padding-bottom: calc(4px * var(--d)); }
+.level-stop { position: relative; display: grid; justify-items: center; gap: calc(3px * var(--d)); min-width: 0; padding: calc(7px * var(--d)) calc(4px * var(--d)); border: 1px solid #dac79e; border-radius: calc(12px * var(--d)); background: #f6efd9; color: #796444; cursor: pointer; }
+.level-stop strong { font-size: max(12px,calc(13px * var(--d))); }
+.level-stop small { font-size: max(10px,calc(11px * var(--d))); white-space: nowrap; }
+.level-stop.milestone { border-color: #d3ac5b; background: linear-gradient(#fff5ce,#f1dca7); color: #875c20; }
+.level-stop[aria-pressed="true"] { outline: 2px solid #6b973d; outline-offset: 1px; background: #edf4d7; color: #43652c; }
+.level-stop.ready i { position: absolute; right: calc(6px * var(--d)); top: calc(6px * var(--d)); width: calc(7px * var(--d)); height: calc(7px * var(--d)); border-radius: 50%; background: #699b3c; border: 1px solid #fff8df; }
+.level-stop-art { display: block; width: calc(42px * var(--d)); height: calc(42px * var(--d)); }
+.level-stop-art img,.level-gift-art img { display: block; width: 100%; height: 100%; object-fit: contain; }
+.level-gift { margin-top: calc(14px * var(--d)); padding: calc(14px * var(--d)); border: 1px solid #c7c891; border-radius: calc(14px * var(--d)); background: linear-gradient(#fffdf4,#f3efd9); box-shadow: 0 calc(3px * var(--d)) #d6c493; }
+.level-gift.milestone { border-color: #d1a859; background: linear-gradient(115deg,#fff9de,#f7e7bd); }
+.level-gift-heading { display: flex; align-items: center; justify-content: space-between; gap: calc(10px * var(--d)); margin-bottom: calc(10px * var(--d)); }
+.level-gift-heading h3 { margin: 0; font-size: calc(17px * var(--d)); color: #735024; }
+.level-gift-heading > span { font-size: max(11px,calc(11px * var(--d))); color: #796544; white-space: nowrap; }
+.level-gift.milestone .level-gift-heading > span { padding: calc(3px * var(--d)) calc(7px * var(--d)); border-radius: calc(7px * var(--d)); background: #e5bd67; color: #603e13; }
+.level-gift-items { display: grid; gap: calc(8px * var(--d)); }
+.level-gift-item { display: flex; align-items: center; gap: calc(12px * var(--d)); min-width: 0; padding: calc(6px * var(--d)) calc(10px * var(--d)); background: #fffdf3a8; border: 1px solid #e7d9b5; border-radius: calc(10px * var(--d)); }
+.level-gift-art { display: block; flex: 0 0 auto; width: calc(42px * var(--d)); height: calc(42px * var(--d)); }
+.level-gift-item > div { flex: 1; min-width: 0; }
+.level-gift-item strong { display: flex; justify-content: space-between; gap: calc(8px * var(--d)); color: #654822; font-size: max(13px,calc(14px * var(--d))); }
+.level-gift-item strong b { white-space: nowrap; color: #97631f; }
+.level-gift-item p { margin: calc(3px * var(--d)) 0 0; color: #806d4b; font-size: max(12px,calc(12px * var(--d))); line-height: 1.5; }
+.level-unlocks { margin: calc(10px * var(--d)) 0 0; color: #4f7336; font-size: max(12px,calc(12px * var(--d))); line-height: 1.6; }
+.level-gift-note { margin: calc(8px * var(--d)) 0 0; font-size: max(11px,calc(11px * var(--d))); line-height: 1.6; color: #807155; }
+.level-reward-actions {display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:calc(10px * var(--d));}
+.level-claim-state { font-size: max(12px,calc(13px * var(--d))); color: #6a774e; font-weight: 700; }
+.light-note-mobile-rendering #modal .level-dialog .dialog-head { padding: 12px 12px 6px; }
+.light-note-mobile-rendering #modal .level-dialog .dialog-body { padding: 0 12px 12px; }
+.light-note-mobile-rendering #modal .level-dialog .dialog-foot { padding: 10px 12px; }
+.light-note-mobile-rendering .level-reward-actions {flex:1;gap:8px;}
+.light-note-mobile-rendering .level-reward-actions .button {flex:1;}
+.light-note-mobile-rendering .level-achievements {flex-basis:100%;order:2;}
+.light-note-mobile-rendering .level-hero { gap: 10px; padding: 10px; }
+.light-note-mobile-rendering .level-medal { width: 46px; height: 46px; }
+.light-note-mobile-rendering .level-pending { padding: 6px; }
+.light-note-mobile-rendering .level-route { gap: 6px; }
+.light-note-mobile-rendering .level-route-heading { margin-block: 0 6px; }
+.light-note-mobile-rendering .level-route-heading button { width: 44px; height: 44px; }
+.light-note-mobile-rendering .level-stop { padding: 6px 2px; }
+.light-note-mobile-rendering .level-stop-art { width: 34px; height: 34px; }
+.light-note-mobile-rendering .level-gift { padding: 10px; margin-top: 12px; }
+.light-note-mobile-rendering .level-gift-heading h3 { font-size: 15px; }
+.light-note-mobile-rendering .level-gift-item { gap: 8px; padding: 6px; }
+.light-note-mobile-rendering .level-gift-art { width: 36px; height: 36px; }
+
+#modal .collect-chip > img { width: calc(26px * var(--d)); height: calc(26px * var(--d)); object-fit: contain; }
+.light-note-mobile-rendering #modal .tabbed-dialog .fish-tabs button { min-height: 44px; }
+
+/* 四个目的地共用一套插画、底座和光学尺寸。 */
+.farm-staged .farm-destinations .dock-disc > .dock-art {
+  display: block; position: absolute; inset: 0; width: 100%; height: 100%;
+  max-width: 100%; max-height: 100%; object-fit: contain;
+  filter: drop-shadow(0 1px 1px #74532830);
+}
+/* 肥料放在舱沿，尺寸与鸟礼物一致。 */
+html #app .garden-play .seaside-courtyard .tank-caption .tank-collect {
+  position: absolute; right: 10%; bottom: 3%; pointer-events: auto; cursor: pointer;
+}
+
+/* 菜单中的养鱼管理：PC 锚定顶栏，手机在底栏上方展开。 */
+.tank-production {position:absolute;z-index:15;left:var(--production-left);top:var(--production-top);bottom:var(--production-bottom);width:var(--production-width,calc(340px * var(--d)));max-width:calc(100% - 16px * var(--d));max-height:var(--production-max-height);display:flex;flex-direction:column;padding:calc(12px * var(--d));color:#654822;background:linear-gradient(120deg,#fffaf0,#fcf0d2);border:calc(2px * var(--d)) solid #d7b77c;border-radius:calc(18px * var(--d));box-shadow:0 calc(3px * var(--d)) 0 #ae8852,0 calc(8px * var(--d)) calc(24px * var(--d)) #35261136;}
+.tank-production::before {content:"";position:absolute;top:calc(-8px * var(--d));left:var(--production-arrow);width:calc(14px * var(--d));height:calc(14px * var(--d));translate:-50% 0;rotate:45deg;background:#fff8e8;border-left:calc(2px * var(--d)) solid #d7b77c;border-top:calc(2px * var(--d)) solid #d7b77c;}
+.tank-production[hidden],.production-scrim[hidden] {display:none;}
+.production-scrim {display:none;}
+.tank-production button {font:inherit;cursor:pointer;color:inherit;}
+.production-header {position:relative;display:flex;align-items:center;flex:none;gap:calc(4px * var(--d));padding-bottom:calc(8px * var(--d));}
+.production-title {display:flex;align-items:baseline;gap:calc(8px * var(--d));flex:1;min-width:0;margin:0;color:#513719;font-size:calc(19px * var(--d));font-weight:700;white-space:nowrap;}
+.production-title small {color:#8a6b40;font-size:calc(13px * var(--d));font-weight:600;}
+.production-title:focus {outline:none;}
+.production-close {display:grid;place-items:center;flex:none;width:calc(32px * var(--d));height:calc(32px * var(--d));padding:0;border:0;border-radius:50%;background:none;font-size:calc(25px * var(--d))!important;font-weight:400;line-height:1;}
+.production-close:hover {background:#efdfba;}
+#productionBody {display:flex;flex:1;flex-direction:column;min-height:0;overflow:hidden;}
+.production-tabs {display:flex;flex:none;margin:0 0 calc(10px * var(--d));gap:calc(2px * var(--d));border:1px solid #eddcb4;border-radius:calc(12px * var(--d));background:#f3e5c5;}
+.production-tabs button {flex:1;min-height:calc(34px * var(--d));padding:calc(4px * var(--d));border:1px solid transparent;background:none;border-radius:calc(11px * var(--d));color:#9d8159;font-size:calc(13px * var(--d));}
+.production-tabs b {margin-left:calc(3px * var(--d));font-size:calc(11px * var(--d));}
+.production-tabs [aria-selected="true"] {color:#66431b;background:linear-gradient(#ffe1a0,#efbd5b);border-color:#d7a447;box-shadow:inset 0 1px #fff0c4,0 1px 2px #91683240;font-weight:700;}
+.production-list {display:flex;flex-direction:column;gap:calc(8px * var(--d));min-height:0;overflow-y:auto;scrollbar-width:thin;scrollbar-color:#bb9e6a transparent;}
+.production-row {display:flex;align-items:center;flex:none;gap:calc(10px * var(--d));min-height:calc(68px * var(--d));padding:calc(8px * var(--d));border:1px solid #eadbb8;border-radius:calc(12px * var(--d));background:#fff9e7;}
+.production-fish {display:grid;place-items:center;flex:0 0 calc(54px * var(--d));width:calc(54px * var(--d));height:calc(44px * var(--d));border-radius:calc(8px * var(--d));background:#f4ecd2;}
+.production-fish :is(img,svg) {display:block;width:100%;height:100%;max-width:100%;max-height:100%;object-fit:contain;}
+.production-info {display:flex;flex-direction:column;justify-content:center;align-self:stretch;flex:1;min-width:0;}
+.production-detail {border:0;background:none;padding:0;font-weight:700!important;font-size:calc(13px * var(--d))!important;text-align:left;}
+.production-detail strong {font-size:inherit;line-height:1.4;}
+.production-info > :is(span,small) {display:block;margin-top:calc(4px * var(--d));color:#99805a;font-size:calc(11px * var(--d));font-weight:400;line-height:1.4;font-variant-numeric:tabular-nums;}
+.production-row.ready .production-info > span {color:#557a34;}
+.production-progress {display:block;width:100%;height:calc(5px * var(--d));margin-top:calc(5px * var(--d));appearance:none;border:0;border-radius:calc(4px * var(--d));overflow:hidden;background:#e6d9b9;}
+.production-progress::-webkit-progress-bar {background:#e6d9b9;}
+.production-progress::-webkit-progress-value {background:#8da75b;border-radius:calc(4px * var(--d));}
+.production-progress::-moz-progress-bar {background:#8da75b;}
+.production-claim {flex:none;min-height:calc(32px * var(--d));padding:calc(4px * var(--d)) calc(13px * var(--d));border:1px solid #648b3e;border-radius:calc(12px * var(--d));background:linear-gradient(#8eb461,#648f42);box-shadow:inset 0 1px #c7dda4;color:#fff8e7!important;font-size:calc(12px * var(--d))!important;font-weight:700!important;}
+.production-note,.production-empty {flex:none;margin:calc(8px * var(--d)) 0 0;color:#99815a;font-size:calc(10px * var(--d));line-height:1.6;}
+.production-empty {margin:0;padding:calc(24px * var(--d)) calc(8px * var(--d));text-align:center;font-size:calc(12px * var(--d));}
+.production-actions {display:flex;flex:none;gap:calc(8px * var(--d));padding-top:calc(10px * var(--d));}
+.production-actions > button {min-height:calc(42px * var(--d));padding:calc(7px * var(--d)) calc(16px * var(--d));border:calc(2px * var(--d)) solid #c9aa70;border-radius:calc(12px * var(--d));background:linear-gradient(#fffaf0,#f1dfb8);background-clip:padding-box;box-shadow:0 calc(2px * var(--d)) calc(4px * var(--d)) #73572d1a;font-size:calc(13px * var(--d));font-weight:700;white-space:nowrap;}
+.production-actions > .production-all {flex:1;color:#fff9df;background:linear-gradient(#92b765,#648f42);border-color:#648b3e;box-shadow:0 calc(2px * var(--d)) calc(4px * var(--d)) #42632f26;}
+.production-actions > .production-all:disabled {color:#9d9071;background:#ece3cb;border-color:#d0c19a;box-shadow:none;cursor:default;}
+.tank-production button:focus-visible,.production-list:focus-visible {outline:2px solid #618c3e;outline-offset:-2px;}
+#gameTools [aria-expanded="true"] .dock-disc {outline:calc(2px * var(--d)) solid #d9b46c;outline-offset:calc(2px * var(--d));background:#f6dfa7;}
+.light-note-mobile-rendering .production-scrim {display:block;position:absolute;inset:0;z-index:13;background:#173e492e;}
+.light-note-mobile-rendering .production-scrim[hidden] {display:none;}
+.light-note-mobile-rendering .tank-production {top:auto;padding:calc(16px * var(--d)) calc(12px * var(--d)) calc(12px * var(--d));border-radius:calc(20px * var(--d));}
+.light-note-mobile-rendering .tank-production::before {top:calc(7px * var(--d));left:50%;width:calc(42px * var(--d));height:calc(4px * var(--d));rotate:none;border:0;border-radius:calc(4px * var(--d));background:#dfc699;}
+.light-note-mobile-rendering .tank-production :is(.production-close,.production-claim,.production-actions > button,.production-tabs button) {min-height:calc(44px * var(--d));}
+.light-note-mobile-rendering .production-close {width:calc(44px * var(--d));}
+.light-note-mobile-rendering [data-manor-area="garden"] :is(.tank-production,.production-scrim) {display:none;}
+@media (prefers-reduced-motion: reduce) { .tank-collect img { transition: none; } }
+
+/* 连续播种、交易数量与收藏路线共用现有游戏面板，尺寸随密度变化。 */
+.seed-tool-art { display: block; }
+.seed-tool-art img, .seed-tool-art .seed-packet { display: block; width: 100%; height: 100%; object-fit: contain; }
+.quantity-picker { display: inline-flex; align-items: center; gap: calc(12px * var(--d)); margin-top: calc(8px * var(--d)); }
+.quantity-picker button { min-width: calc(36px * var(--d)); min-height: calc(36px * var(--d)); border: 1px solid #bb985c; border-radius: calc(9px * var(--d)); background: #fff9e6; color: #654322; font: inherit; cursor: pointer; }
+.quantity-picker b { min-width: 2ch; text-align: center; font-variant-numeric: tabular-nums; }
+.quantity-picker button:disabled { opacity: .4; cursor: default; }
+.level-hud-pending { display: inline-grid; place-items: center; min-width: calc(19px * var(--d)); height: calc(19px * var(--d)); border-radius: 50%; background: #bb5d27; color: #fff9e6; border: 1px solid #fff3c6; font-size: max(10px,calc(11px * var(--d))); }
+#modal .collections-dialog { width: min(calc(720px * var(--d)),calc(100vw - 28px)); }
+.collection-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: calc(12px * var(--d)); }
+.collection-card { align-items: center; border: 1px solid #ceb17a; border-radius: calc(14px * var(--d)); background: linear-gradient(#fffdf1,#f6e8c4); text-align: center; }
+.collection-card.complete { border-color: #85a752; background: linear-gradient(#f8fce8,#e9efc7); }
+.collection-art { width: calc(54px * var(--d)); height: calc(54px * var(--d)); }
+.collection-art img { width: 100%; height: 100%; object-fit: contain; }
+#modal .collection-card h3 { margin: 0; font-size: max(14px,calc(16px * var(--d))); }
+#modal .collection-card p { margin: 0; font-size: max(12px,calc(13px * var(--d))); line-height: 1.5; }
+.collection-card small { font-size: max(11px,calc(12px * var(--d))); color: #78633e; }
+.collection-card progress { width: 80%; height: calc(10px * var(--d)); accent-color: #6c9e41; }
+.collection-card .tile-btn { margin-top: calc(5px * var(--d)); }
+.resident-comparison { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: calc(12px * var(--d)); text-align: center; }
+.resident-comparison > div { display: flex; flex-direction: column; align-items: center; gap: calc(6px * var(--d)); }
+.resident-comparison svg { width: 100%; height: calc(100px * var(--d)); }
+.resident-comparison small { font-size: max(11px,calc(12px * var(--d))); color: #736349; }
+.rabbit-hit { position: absolute; z-index: 7; width: max(44px,calc(58px * var(--d))); height: max(44px,calc(52px * var(--d))); padding: 0; border: 0; border-radius: 50%; background: transparent; translate: -50% -50%; cursor: pointer; }
+.rabbit-hit:focus-visible { outline: 2px solid #fff4b6; outline-offset: 2px; }
+.companion-layer { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; z-index:7; }
+.animal-model-layer { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; z-index:7; }
+.wildlife-hit { position:absolute; z-index:8; width:calc(44px * var(--d)); height:calc(44px * var(--d)); padding:0; border:0; border-radius:50%; background:transparent; translate:-50% -50%; cursor:pointer; }
+.wildlife-hit:focus-visible { outline:2px solid #fff4b6; outline-offset:2px; }
+.light-note-mobile-rendering .quantity-picker button { min-width: 44px; min-height: 44px; }
+.light-note-mobile-rendering #modal .collection-card { padding: 10px; }
+.light-note-mobile-rendering .collection-grid { grid-template-columns: 1fr; gap: 10px; }
+#modal .dialog-foot { flex-wrap: wrap; }
+#modal .collection-card { display: grid; grid-template-columns: calc(54px * var(--d)) minmax(0,1fr); gap: calc(5px * var(--d)); padding: calc(12px * var(--d)); }
+.collection-card > * { grid-column: 1 / -1; }
+.collection-card .collection-art { grid-column: 1; grid-row: 1 / 3; }
+#modal .collection-card h3 { grid-column: 2; align-self: end; text-align: left; }
+#modal .collection-card p:first-of-type { grid-column: 2; align-self: start; text-align: left; }
+.collection-card progress { appearance: none; justify-self: center; border: 1px solid #c5b786; border-radius: calc(6px * var(--d)); overflow: hidden; background: #e9dfbe; }
+.collection-card progress::-webkit-progress-bar { background: #e9dfbe; }
+.collection-card progress::-webkit-progress-value { background: #77a44b; }
+.collection-card progress::-moz-progress-bar { background: #77a44b; }
+#modal .collection-card .tile-btn { justify-self: center; min-height: calc(34px * var(--d)); padding: calc(6px * var(--d)) calc(14px * var(--d)); border: 1px solid #a69a65; border-radius: calc(9px * var(--d)); background: #fbf6df; color: #59442a; font: inherit; font-size: max(12px,calc(13px * var(--d))); cursor: pointer; }
+#modal .collection-card .tile-btn.primary { background: #72a947; border-color: #497e2c; color: white; }
+#modal .collection-card .tile-btn:disabled { opacity: .65; cursor: default; }
+.light-note-mobile-rendering #modal .collection-card .tile-btn { min-height: 44px; }
+.production-detail:hover strong {text-decoration:underline;}
+/* 桌面商品图与名称并排，720px 高的窗口也能看见第二排购买按钮。 */
+
+.bait-option-art { flex: 0 0 auto; width: calc(52px * var(--d)); height: calc(52px * var(--d)); object-fit: contain; }
+.light-note-mobile-rendering .bait-option { gap: 8px; }
+.light-note-mobile-rendering .bait-option-art { width: 38px; height: 38px; }
+
+/* 选种按用途，保持图鉴与钓鱼之间的轻量联动。 */
+.replant-row button:focus-visible { outline: 2px solid #486b33; outline-offset: 2px; }
+.seed-discovery { color: #486b33; font-size: max(11px,calc(11px * var(--d))); line-height: 1.5; }
+.seed-discovery.known { color: #867357; }
+#modal .inventory-dialog .seed-copy .seed-use { color: #71542e; }
+.replant-row { display: flex; align-items: center; gap: calc(12px * var(--d)); padding: calc(10px * var(--d)); margin-bottom: calc(14px * var(--d)); background: #eef1d5; border: 1px solid #b2bf83; border-radius: calc(10px * var(--d)); }
+.replant-art { width: calc(42px * var(--d)); height: calc(42px * var(--d)); flex: none; }
+.replant-art img { width: 100%; height: 100%; object-fit: contain; }
+.replant-row > div { flex: 1; min-width: 0; display: grid; gap: calc(4px * var(--d)); font-size: max(12px,calc(14px * var(--d))); }
+.replant-row small { color: #64704c; font-size: max(11px,calc(12px * var(--d))); }
+#modal .replant-row .tile-btn { margin-top: 0; }
+#modal .inventory-dialog .farm-empty .tile-btn { display: block; margin: calc(12px * var(--d)) auto 0; }
+/* 卖出价格独占一行；收回、更换或放生、入住在下一行并排。 */
+#modal .farm-dialog .resident-actions {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:calc(6px * var(--d));margin-top:auto;padding-top:calc(8px * var(--d));}
+#modal .farm-dialog .resident-actions > .tile-btn {width:100%;min-width:0;min-height:calc(32px * var(--d));height:calc(32px * var(--d));padding:0 calc(6px * var(--d));font-size:calc(12px * var(--d));box-sizing:border-box;}
+#modal .farm-dialog .resident-actions > .sell {grid-column:1/-1;gap:calc(5px * var(--d));background:linear-gradient(#fff6d8,#f2dfad);border-color:#d0b17a;color:#765223;box-shadow:inset 0 1px #fffdf3,0 2px #bda06c;text-shadow:none;}
+#modal .farm-dialog .resident-actions > .tile-btn:only-child,#modal .farm-dialog .resident-actions > .tile-btn:nth-child(2):last-child {grid-column:1/-1;}
+#modal .farm-dialog .resident-actions .resident-coin {flex:none;width:calc(18px * var(--d));height:calc(18px * var(--d));}
+#modal .farm-dialog .resident-actions .sell b {font-variant-numeric:tabular-nums;}
+.light-note-mobile-rendering #modal .farm-dialog .resident-actions > .tile-btn {min-height:calc(44px * var(--d));height:calc(44px * var(--d));}
+.resident-yield { color: #4f713b; font-size: max(11px,calc(11px * var(--d))); line-height: 1.5; }
+.resident-plan { display: flex; align-items: center; flex-wrap: wrap; gap: calc(8px * var(--d)); padding-bottom: calc(12px * var(--d)); border-bottom: 1px solid #d8c596; margin-bottom: calc(12px * var(--d)); }
+.resident-plan > span { flex: 1 1 calc(160px * var(--d)); color: #796448; font-size: max(11px,calc(12px * var(--d))); line-height: 1.5; }
+#modal .resident-plan .tile-btn { min-height: calc(34px * var(--d)); padding: calc(6px * var(--d)) calc(10px * var(--d)); }
+.reveal-card .reveal-detail { padding: calc(8px * var(--d)) calc(12px * var(--d)); margin: calc(10px * var(--d)) 0; background: #eff2da; border-radius: calc(8px * var(--d)); color: #4e6736; font-size: max(12px,calc(13px * var(--d))); line-height: 1.5; }
+.reveal-actions [data-choice="again"] { grid-column: 1 / -1; color: #42692d; background: #f0f3de; border-color: #a8bd7e; }
+.light-note-mobile-rendering .replant-row { flex-wrap: wrap; gap: 8px; padding: 8px; }
+.light-note-mobile-rendering #modal .replant-row .tile-btn { min-height: 36px; padding: 6px 10px; }
+.light-note-mobile-rendering #modal .resident-plan .tile-btn { min-height: 36px; }
+
+.reveal-actions { grid-template-columns: repeat(2,minmax(0,1fr)); }
+.reveal-actions .primary { grid-column: 1 / -1; }
+
+.light-note-mobile-rendering #modal .farm-dialog .dialog-foot { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 8px; }
+.light-note-mobile-rendering #modal .farm-dialog .dialog-foot .foot-info,
+.light-note-mobile-rendering #modal .farm-dialog .dialog-foot .button { min-width: 0; padding: calc(6px * var(--d)); font-size: calc(12px * var(--d)); }
+.light-note-mobile-rendering #modal .farm-dialog .dialog-foot .foot-info {white-space:normal;line-height:1.5;}
+.light-note-mobile-rendering #modal .farm-dialog .dialog-foot .button {min-height:calc(44px * var(--d));white-space:nowrap;}
+
+/* 庄园场景挂牌与拾取物：名字贴近建筑，动作入口保持 44px。 */
+.scene-sign { position: absolute; display: grid; place-items: center; translate: -50% -50%; scale: calc(1 / var(--stage-s,1)); min-width: 44px; min-height: 44px; padding: 0; border: 0; background: transparent; pointer-events: none; z-index: 4; }
+.scene-sign > span { padding: calc(4px * var(--d)) calc(8px * var(--d)); border: 1px solid #b98b50; border-radius: calc(5px * var(--d)); background: linear-gradient(#fff1cf,#edcf98); color: #5b3c20; font-size: max(11px,calc(11px * var(--d))); font-weight: 700; line-height: 1.4; white-space: nowrap; box-shadow: 0 2px 0 #8f683b; }
+.poop-spot > img, .fly-poop > img { display: block; width: 100%; height: 100%; object-fit: contain; }
+.poop-spot { min-width: 44px; min-height: 44px; }
+.poop-spot::before { inset: -12%; }
+
+/* 麻布肥料袋贯穿拾取、背包、工具与撒肥动作；标签说明肥效档位。 */
+.fert-sack { position: relative; display: inline-block; width: 100%; height: 100%; vertical-align: middle; }
+.fert-sack > img { display: block; width: 100%; height: 100%; object-fit: contain; }
+.fert-sack > i { position: absolute; right: 8%; bottom: 10%; width: 20%; height: 20%; background: #75a942; border: 1px solid #fff9df; border-radius: 50%; box-shadow: 0 1px 2px #50351a70; }
+.fert-sack.tier-nourish > i { background: #419aca; }
+.fert-sack.tier-fertile > i { background: #9b69bd; }
+.fert-sack.tier-legend > i { background: #e5b230; }
+.fert-sack.tier-rabbit > i { display: none; }
+.fx-bag > .fert-sack { display: block; }
+.fx-fertilizer-grains i { background: #a5743d; border-color: #664126; }
+.scene-gift > .fert-sack { width: 100%; height: 100%; filter: drop-shadow(0 2px 2px #47381470); }
+.production-row > button > .fert-sack, .collect-chip > .fert-sack { width: calc(26px * var(--d)); height: calc(26px * var(--d)); flex-shrink: 0; }
+.discovery-guide-art > .fert-sack { display: block; }
+
+/* 空背包保持面板高度，与正常列表共用底部规则区。 */
+#modal .inventory-dialog .dialog-body { display: flex; flex-direction: column; }
+.inventory-empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: calc(24px * var(--d)) calc(16px * var(--d)); min-height: calc(240px * var(--d)); }
+.inventory-empty .empty-art { width: calc(90px * var(--d)); height: calc(90px * var(--d)); margin-bottom: calc(12px * var(--d)); }
+.inventory-empty .empty-art > img { width: 100%; height: 100%; object-fit: contain; }
+.inventory-empty h3 { margin: 0 0 calc(8px * var(--d)); color: #684820; font-size: calc(19px * var(--d)); }
+.inventory-empty p { max-width: 28em; margin: 0 0 calc(20px * var(--d)); line-height: 1.7; color: #8c7554; font-size: calc(14px * var(--d)); }
+.inventory-empty > div:last-child { display: flex; justify-content: center; flex-wrap: wrap; gap: calc(10px * var(--d)); }
+.seed-care-strip { margin-top: auto; padding: calc(14px * var(--d)) 0 0; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: calc(8px * var(--d)); color: #82653b; font-size: calc(13px * var(--d)); border-top: 1px solid #e7d5ac; }
+.seed-care-strip > span { display: flex; align-items: center; gap: calc(8px * var(--d)); }
+.seed-care-strip .game-sprite { width: calc(24px * var(--d)); height: calc(24px * var(--d)); }
+.seed-care-strip small { font-size: inherit; color: #807356; }
+#modal .atlas-dialog .atlas-progress { display: flex; align-items: center; gap: calc(12px * var(--d)); color: #80613a; font-size: calc(13px * var(--d)); }
+#modal .atlas-dialog .atlas-progress > span, #modal .atlas-dialog .atlas-progress > small { flex: 0 0 auto; }
+#modal .atlas-dialog .atlas-bar { flex: 1; }
+#modal .atlas-dialog .crop-card-art { display: grid; place-items: center; width: 100%; height: 100%; }
+#modal .atlas-dialog .crop-card-art > img { width: 78%; height: 78%; object-fit: contain; }
+
+/* 浇水后的探索提示可跳过，不阻挡种植、商店、海钓或小动物。 */
+.discovery-guide { position: absolute; top: calc(88px * var(--d)); left: 50%; transform: translateX(-50%); display: flex; gap: calc(10px * var(--d)); width: min(calc(338px * var(--d)),calc(100% - 24px)); box-sizing: border-box; padding: calc(12px * var(--d)); border: 1px solid #c5a269; border-radius: calc(12px * var(--d)); background: #fff6df; box-shadow: 0 3px 0 #a5814a; color: #624821; pointer-events: auto; z-index: 10; }
+.discovery-guide-art { flex: 0 0 calc(40px * var(--d)); width: calc(40px * var(--d)); height: calc(44px * var(--d)); align-self: center; }
+.discovery-guide-art > img { width: 100%; height: 100%; object-fit: contain; }
+.discovery-guide strong { font-size: calc(14px * var(--d)); }
+.discovery-guide p { margin: calc(4px * var(--d)) 0; font-size: calc(12px * var(--d)); line-height: 1.5; }
+.discovery-guide-actions { display: flex; gap: calc(8px * var(--d)); }
+.discovery-guide-actions button { min-height: calc(30px * var(--d)); border: 0; border-radius: calc(6px * var(--d)); padding: calc(5px * var(--d)) calc(8px * var(--d)); background: #dce9ba; color: #405c28; font: inherit; font-size: calc(12px * var(--d)); font-weight: 700; cursor: pointer; }
+.discovery-guide-actions button:last-child { background: transparent; color: #89734d; font-weight: 400; }
+.light-note-mobile-rendering .discovery-guide { top: calc(104px * var(--d)); }
+.light-note-mobile-rendering .discovery-guide-actions button { min-height: 44px; }
+.light-note-mobile-rendering .inventory-empty { min-height: calc(230px * var(--d)); padding: calc(18px * var(--d)) 0; }
+.light-note-mobile-rendering .inventory-empty h3 { font-size: calc(17px * var(--d)); }
+.light-note-mobile-rendering .seed-care-strip { flex-direction: column; align-items: flex-start; font-size: max(12px,calc(12px * var(--d))); }
+/* 取消浏览器与旧场景样式的白框；保留 Tab 导航的实色文字和轻量阴影定位。 */
+html.garden-immersive :is(button,[tabindex]):focus,html.garden-immersive :is(button,[tabindex]):focus-visible,html.garden-immersive .seed-stall:focus-visible .stall-sign { outline: none !important; }
+html.garden-immersive.kbd-nav button:focus-visible { filter: brightness(1.12); }
+html.garden-immersive.kbd-nav :is(.scene-sign,.seed-stall):focus-visible > span { color: #2f5521; box-shadow: 0 2px 0 #496830,0 0 0 2px #fff2c8; }
+
+/* 手机保留一行资源 HUD，次要入口收进庄园小记；触控区域仍不小于 44px。 */
+.hud-more { display: none; }
+.manor-menu { display: grid; gap: calc(10px * var(--d)); }
+.manor-menu > button { display: grid; grid-template-columns: 1fr auto; text-align: left; align-items: center; gap: calc(3px * var(--d)); min-height: calc(64px * var(--d)); padding: calc(12px * var(--d)) calc(16px * var(--d)); color: #664925; border: 1px solid #dfc38e; border-radius: calc(12px * var(--d)); background: #fff9e9; cursor: pointer; }
+.manor-menu strong { font-size: calc(16px * var(--d)); }
+.manor-menu small { grid-row: 2; color: #8b7655; font-size: calc(12px * var(--d)); }
+.manor-menu button > span { grid-column: 2; grid-row: 1 / 3; font-size: calc(24px * var(--d)); }
+html.light-note-mobile-rendering #app .garden-play .seaside-courtyard.farm-staged .game-hud { display: flex; align-items: center; flex-wrap: nowrap; gap: 5px; top: 8px; left: 8px; right: 8px; padding: 0; width: auto; }
+html.light-note-mobile-rendering .seaside-courtyard.farm-staged .hud-back { flex: 0 0 44px; width: 44px; height: 44px; min-height: 44px; margin: 0; border-width: 2px; }
+html.light-note-mobile-rendering .seaside-courtyard.farm-staged .hud-back svg { width: 16px; height: 16px; }
+html.light-note-mobile-rendering .seaside-courtyard.farm-staged .hud-identity { flex: 0 0 80px; width: 80px; padding: 0; min-width: 0; }
+html.light-note-mobile-rendering .seaside-courtyard.farm-staged .hud-stage { position: relative; box-sizing: border-box; display: flex; align-items: center; justify-content: center; min-width: 0; width: 100%; height: 44px; min-height: 44px; padding: 0 10px 4px; border: 2px solid #d7b576; border-radius: 15px; gap: 0; }
+html.light-note-mobile-rendering .seaside-courtyard.farm-staged .hud-stage-name { gap: 4px; font-size: 14px; white-space: nowrap; }
+html.light-note-mobile-rendering .seaside-courtyard.farm-staged :is(.hud-garden-badge,.hud-manor-name,.hud-growth-num,.hud-utils) { display: none; }
+html.light-note-mobile-rendering .seaside-courtyard.farm-staged .hud-growth { position: absolute; left: 8px; right: 8px; bottom: 6px; display: block; width: auto; height: 3px; margin: 0; }
+html.light-note-mobile-rendering .seaside-courtyard.farm-staged .hud-growth-bar { display: block; width: 100%; height: 3px; min-width: 0; border: 0; }
+html.light-note-mobile-rendering .seaside-courtyard.farm-staged .level-hud-pending { font-size: 10px; min-width: 15px; height: 15px; line-height: 15px; padding: 0 2px; }
+html.light-note-mobile-rendering .seaside-courtyard.farm-staged .hud-right { display: block; flex: 1; min-width: 0; padding: 0; }
+html.light-note-mobile-rendering .seaside-courtyard.farm-staged .hud-resources { display: flex; align-items: center; justify-content: space-evenly; box-sizing: border-box; gap: 2px; width: 100%; min-width: 0; height: 44px; padding: 0 5px; border: 2px solid #d7b576; border-radius: 15px; }
+html.light-note-mobile-rendering .seaside-courtyard.farm-staged .res-pill { display: flex; align-items: center; gap: 4px; min-width: 0; height: 40px; min-height: 40px; padding: 0 2px; font-size: 14px; }
+html.light-note-mobile-rendering .seaside-courtyard.farm-staged .res-pill b { font-size: 14px; font-variant-numeric: tabular-nums; }
+html.light-note-mobile-rendering .seaside-courtyard.farm-staged .res-pill :is(.game-sprite,.res-icon) { width: 19px; height: 19px; font-size: 11px; }
+html.light-note-mobile-rendering .seaside-courtyard.farm-staged .res-pill small { display: none; }
+html.light-note-mobile-rendering .seaside-courtyard.farm-staged .hud-more { display: grid; place-items: center; position: relative; flex: 0 0 44px; height: 44px; padding: 0 0 6px; border: 2px solid #d7b576; border-radius: 15px; color: #6e512b; font-size: 26px; line-height: 1; background: linear-gradient(#fffbef,#f4e5c1); box-shadow: 0 3px 0 #ae854d; pointer-events: auto; cursor: pointer; }
+.hud-more i { position: absolute; right: 3px; top: 3px; width: 6px; height: 6px; border-radius: 50%; background: #bd6728; }
+
+/* 选种改为横向短行，操作紧邻种子，不再在卡片底部堆叠大按钮。 */
+.light-note-mobile-rendering #modal .inventory-dialog .seed-choice-grid { display: flex; flex-direction: column; gap: 10px; }
+.light-note-mobile-rendering #modal .inventory-dialog .seed-choice { display: grid; grid-template-columns: 48px minmax(0,1fr) calc(72px * var(--d)); align-items: center; gap: 10px; padding: 12px; text-align: left; border-radius: 12px; box-shadow: 0 2px 0 #c4a06a; }
+.light-note-mobile-rendering #modal .inventory-dialog .seed-choice .seed-pack { width: 48px; height: 58px; margin: 0; }
+.light-note-mobile-rendering #modal .inventory-dialog .seed-choice .seed-copy { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; min-width: 0; }
+.light-note-mobile-rendering #modal .inventory-dialog .seed-choice strong { font-size: 15px; line-height: 1.4; padding-right: 22px; }
+.light-note-mobile-rendering #modal .inventory-dialog .seed-choice small { font-size: 11px; line-height: 1.5; }
+.light-note-mobile-rendering #modal .inventory-dialog .seed-choice :is(.seed-use,.seed-discovery) { display: none; }
+.light-note-mobile-rendering #modal .inventory-dialog .seed-choice .seed-count { position: static; padding: 0; border: 0; background: none; box-shadow: none; font-size: 11px; color: #9b783e; line-height: 1.3; }
+.light-note-mobile-rendering #modal .inventory-dialog .seed-choice > .tile-btn { align-self: center; box-sizing: border-box; min-width: 0; width: calc(72px * var(--d)); height: 44px; min-height: 44px; margin: 0; padding: 0; border-radius: 9px; box-shadow: 0 2px 0 #4c7c36; font-size: 13px; }
+
+/* 帮助按主题逐页阅读；作物参数使用纵向卡片，窄屏不压成单字表格。 */
+#modal .help-dialog { width: min(calc(700px * var(--d)),calc(100vw - 32px)); }
+#modal .help-dialog .dialog-body { display: flex; flex-direction: column; }
+.help-tabs { display: flex; flex: 0 0 auto; gap: calc(6px * var(--d)); margin-bottom: calc(18px * var(--d)); }
+.help-tabs > button { flex: 1; min-height: max(40px,calc(40px * var(--d))); padding: calc(6px * var(--d)); border: 1px solid #d9ba7e; border-radius: calc(10px * var(--d)); background: #fff9eb; color: #85663e; font-weight: 700; font-size: calc(14px * var(--d)); cursor: pointer; }
+.help-tabs > button[aria-pressed="true"] { background: #e4edc7; border: 2px solid #8cae58; color: #42632c; }
+.help-content { display: flex; flex-direction: column; gap: calc(18px * var(--d)); }
+.help-step { display: flex; align-items: flex-start; gap: calc(12px * var(--d)); }
+.help-step > span { display: grid; place-items: center; flex: 0 0 calc(26px * var(--d)); height: calc(26px * var(--d)); border: 1px solid #b3c88b; border-radius: 50%; background: #e8efcf; color: #557838; font-size: calc(13px * var(--d)); font-weight: 700; }
+.help-step h3 { margin: 0 0 calc(5px * var(--d)); font-size: calc(16px * var(--d)); color: #63451f; line-height: 1.6; }
+.help-content p { margin: 0; font-size: calc(14px * var(--d)); line-height: 1.75; color: #7b6a4c; }
+.help-content .help-note { padding: calc(12px * var(--d)); border-radius: calc(10px * var(--d)); background: #eee9d0; font-size: calc(13px * var(--d)); }
+.help-details { border: 1px solid #e1c99b; border-radius: calc(10px * var(--d)); padding: 0 calc(12px * var(--d)); }
+.help-details summary { display: list-item; cursor: pointer; min-height: 44px; padding: calc(12px * var(--d)) 0; font-size: calc(13px * var(--d)); color: #70532d; }
+.help-details > p { margin: 0 0 calc(12px * var(--d)); font-size: calc(13px * var(--d)); }
+.help-crops { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: calc(12px * var(--d)); padding-bottom: calc(12px * var(--d)); }
+.help-crop { display: flex; flex-direction: column; gap: calc(4px * var(--d)); border-top: 1px solid #e8d8b7; padding-top: calc(8px * var(--d)); color: #7b6340; font-size: calc(12px * var(--d)); line-height: 1.6; }
+.help-crop strong { font-size: calc(14px * var(--d)); color: #614a27; }
+.help-crop small { font-size: inherit; }
+.help-demo { margin: auto 0 0; padding-top: calc(20px * var(--d)); color: #9a8a6a; font-size: calc(11px * var(--d)); }
+.light-note-mobile-rendering #modal .help-dialog .dialog-body { padding: 14px; }
+.light-note-mobile-rendering .help-tabs { gap: 5px; }
+.light-note-mobile-rendering .help-tabs > button { min-height: 44px; padding: 4px; font-size: 13px; }
+.light-note-mobile-rendering .help-step { gap: 9px; }
+.light-note-mobile-rendering .help-step h3 { font-size: 15px; }
+.light-note-mobile-rendering .help-step p { font-size: 13px; }
+.light-note-mobile-rendering .help-crops { grid-template-columns: 1fr; }
+
+/* 真实控件上的探索引导；提示不接管点击、不自动代办。 */
+.discovery-guide { display: block; width: min(calc(246px * var(--d)),calc(100% - 24px)); transform: none; pointer-events: none; padding: calc(10px * var(--d)) calc(12px * var(--d)); }
+.discovery-guide[hidden] { display: none; }
+.discovery-guide::after { content: ""; position: absolute; left: var(--tip-x,50%); bottom: -6px; width: 10px; height: 10px; transform: translateX(-50%) rotate(45deg); background: #fff6df; border-right: 1px solid #c5a269; border-bottom: 1px solid #c5a269; }
+.discovery-guide.below::after { top: -6px; bottom: auto; transform: translateX(-50%) rotate(225deg); }
+.guide-dismiss { pointer-events: auto; display: block; margin-left: auto; border: 0; background: none; color: #8a754c; font-size: calc(11px * var(--d)); padding: calc(6px * var(--d)) 0; cursor: pointer; }
+.guide-target > span, .guide-target.tile-btn { outline: 2px solid #f6d579; outline-offset: 3px; box-shadow: 0 0 0 5px #6a8d4480; }
+#dialog .guide-target { outline: 2px solid #73a443; outline-offset: 3px; }
+.reveal-guide-note { color: #4c7138 !important; font-size: calc(13px * var(--d)) !important; font-weight: 700; }
+.reveal-guided { box-shadow: 0 0 0 3px #bddb8f !important; }
+.production-guide { margin: calc(10px * var(--d)); padding-top: calc(10px * var(--d)); border-top: 1px solid #b3dbd5; font-size: calc(12px * var(--d)); }
+.production-guide p { margin: calc(6px * var(--d)) 0; line-height: 1.6; }
+.production-guide button { width: 100%; min-height: 44px; background: #def0d2; color: #3f6030; border: 1px solid #a0c78c; border-radius: calc(8px * var(--d)); font-weight: 700; }
+.light-note-mobile-rendering .guide-dismiss { min-height: 36px; }
+
+/* 木牌随建筑透视，小型掉落物保留触控范围，图像不占满整个点击盒。 */
+.farm-staged .stall-sign { transform: skewY(-9deg); }
+.farm-staged .pier-sign > span { transform: rotate(-12deg) skewX(-8deg); }
+.farm-staged .aquarium-sign > span { transform: rotate(2deg); padding: calc(3px * var(--d)) calc(5px * var(--d)); font-size: max(10px,calc(10px * var(--d))); }
+.light-note-mobile-rendering .farm-staged .stall-sign { transform: skewY(-14deg); bottom: 6%; }
+.light-note-mobile-rendering .farm-staged .pier-sign > span { transform: rotate(9deg) skewX(5deg); }
+.light-note-mobile-rendering .farm-staged .aquarium-sign > span { transform: rotate(-3deg); }
+.poop-spot { display: grid; place-items: center; padding: 0; }
+.poop-spot > img { width: calc(38px * var(--d)); height: calc(38px * var(--d)); position: relative; filter:drop-shadow(0 2px 2px #59412366); }
+.poop-spot::before { inset: 10%; }
+.poop-spot::after { inset: 0; }
+.light-note-mobile-rendering .poop-spot > img { width: 33px; height: 33px; }
+.light-note-mobile-rendering .scene-gift { width: 44px; height: 44px; }
+.light-note-mobile-rendering .scene-gift > :is(img,.fert-sack) { width: 30px; height: 32px; }
+.light-note-mobile-rendering .scene-gift .gift-count { min-width: 15px; font-size: 10px; padding: 2px; right: 0; bottom: 2px; }
+html.light-note-mobile-rendering #app .garden-play .seaside-courtyard .tank-caption .tank-collect { right: 4%; bottom: 0; }
+
+/* 更多菜单按内容收紧；帮助分类在长参数列表中仍然可达。 */
+#modal .manor-menu-dialog, .light-note-mobile-rendering #modal .manor-menu-dialog { width: min(calc(380px * var(--d)),calc(100vw - 32px)); height: auto; min-height: 0; max-height: calc(100% - 64px); }
+#modal .manor-menu-dialog .dialog-body { flex: 0 1 auto; padding-bottom: calc(24px * var(--d)); }
+#modal .help-tabs { position: sticky; top: calc(-14px * var(--d)); z-index: 2; padding: calc(8px * var(--d)) 0; background: #fff8e8; }
+
+/* 场景招牌贴在建筑表面：小铺棚沿、码头侧梁、鱼舱石柱。 */
+.farm-staged .seed-stall .stall-sign { left: 60%; top: 16%; bottom: auto; transform: skewY(-20deg); padding: calc(2px * var(--d)) calc(6px * var(--d)); border-radius: calc(3px * var(--d)); box-shadow: 0 1px 0 #8f683b; }
+.farm-staged .scene-sign > span { padding: calc(2px * var(--d)) calc(6px * var(--d)); border-radius: calc(3px * var(--d)); box-shadow: 0 1px 0 #8f683b; font-size: max(10px,calc(10px * var(--d))); }
+.farm-staged .pier-sign > span { transform: skewY(-14deg); }
+.farm-staged .aquarium-sign > span { transform: skewY(2deg); }
+.light-note-mobile-rendering .farm-staged .seed-stall .stall-sign { left: 60%; top: 16%; bottom: auto; transform: skewY(-20deg); font-size: 10px; }
+.light-note-mobile-rendering .farm-staged .pier-sign > span { transform: skewY(9deg); }
+.light-note-mobile-rendering .farm-staged .aquarium-sign > span { transform: skewY(-3deg); }
+/* 状态和当前选择分别表达：领取打勾、未解锁有锁，选择只用外边框。 */
+.level-stop.claimed { background: #e7edda; border-color: #b0bf94; color: #587044; }
+.level-stop.claimed small { font-weight: 700; }
+.level-stop.claimed .level-stop-art { opacity: .65; }
+.level-stop.locked { background: #eae7df; border-color: #c7c0b2; color: #7e786b; }
+.level-stop.locked .level-stop-art { filter: grayscale(.85); opacity: .52; }
+.level-stop.locked::after { content: ""; position: absolute; right: calc(7px * var(--d)); top: calc(10px * var(--d)); width: calc(8px * var(--d)); height: calc(7px * var(--d)); border: 2px solid #8c8679; border-radius: 2px; }
+.level-stop.locked::before { content: ""; position: absolute; right: calc(9px * var(--d)); top: calc(5px * var(--d)); width: calc(4px * var(--d)); height: calc(7px * var(--d)); border: 2px solid #8c8679; border-radius: 4px 4px 0 0; }
+.level-stop.ready { background: #fff3c6; border: 2px solid #b9913e; color: #765024; }
+.level-stop[aria-pressed="true"] { outline: 2px solid #638b35; outline-offset: 2px; }
+.guide-pointer,.guide-short { display: none; }
+.seed-bait-note { margin: 0 0 calc(12px * var(--d)); padding: calc(10px * var(--d)); border: 1px solid #ded4ab; border-radius: calc(8px * var(--d)); color: #79623c; font-size: calc(12px * var(--d)); line-height: 1.6; background: #f2efd9; }
+
+/* 背包：图画页签负责物品分类，下方细线筛选负责种植用途。 */
+.bag-tabs { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: calc(10px * var(--d)); margin-bottom: calc(20px * var(--d)); border-bottom: 2px solid #d8bd85; padding-bottom: calc(10px * var(--d)); }
+.bag-tabs > button { display: flex; justify-content: center; align-items: center; gap: calc(8px * var(--d)); min-height: calc(62px * var(--d)); padding: calc(6px * var(--d)) calc(10px * var(--d)); border: 1px solid transparent; border-radius: calc(8px * var(--d)); background: #efe1bc; color: #80613b; font: inherit; font-weight: 700; cursor: pointer; box-shadow: inset 0 -3px #d6bc88; }
+.bag-tabs > button.active { background: #e4edc5; border-color: #78994c; color: #3f6129; box-shadow: inset 0 -4px #78994c; }
+.bag-tab-art { width: calc(38px * var(--d)); height: calc(38px * var(--d)); display: grid; place-items: center; }
+.bag-tab-art > img { width: 100%; height: 100%; object-fit: contain; }
+.inventory-dialog .dialog-body { display: flex; flex-direction: column; }
+.inventory-dialog .seed-grid,.inventory-dialog .bag-tabs { flex-shrink: 0; }
+.inventory-empty .empty-art > svg { width: 100%; height: 100%; }
+.fish-empty .empty-art { width: calc(126px * var(--d)); height: calc(102px * var(--d)); border-radius: 50%; border-bottom: 3px solid #b5d1be; background: radial-gradient(ellipse,#c4e6d9,#edf0db 66%,transparent 68%); padding: calc(12px * var(--d)); }
+
+/* 任务簿和积分账本共用庄园的纸张、木色边线与实色状态。 */
+#modal :is(.daily-dialog,.ledger-dialog,.bait-dialog) { max-width: calc(760px * var(--d)); }
+.quest-summary { display: flex; align-items: center; gap: calc(14px * var(--d)); background: #eee4bd; border: 1px solid #cfb87d; border-radius: calc(10px * var(--d)); padding: calc(12px * var(--d)) calc(16px * var(--d)); margin-bottom: calc(14px * var(--d)); color: #73532d; }
+.quest-summary > .game-sprite { width: calc(38px * var(--d)); height: calc(38px * var(--d)); }
+.quest-summary > div { flex: 1; }
+.quest-summary > span:last-child { font-size: calc(12px * var(--d)); white-space: nowrap; }
+.quest-progress { display: block; height: calc(7px * var(--d)); background: #d7c797; border-radius: 8px; margin-top: calc(6px * var(--d)); overflow: hidden; }
+.quest-progress i { display: block; height: 100%; background: #78a54c; }
+.manor-quests { display: grid; gap: calc(9px * var(--d)); }
+.manor-quest { display: flex; align-items: center; gap: calc(12px * var(--d)); border: 1px solid #dfc998; border-radius: calc(10px * var(--d)); padding: calc(12px * var(--d)); background: #fffbec; box-shadow: 0 3px 0 #e5d2a9; }
+.manor-quest > div:nth-child(2) { flex: 1; min-width: 0; }
+.manor-quest h3 { margin: 0 0 calc(4px * var(--d)); font-size: calc(15px * var(--d)); color: #664721; }
+.manor-quest small { font-size: calc(12px * var(--d)); color: #967b51; }
+.manor-quest.done { background: #f0f1dc; border-color: #c0cca0; }
+.manor-quest.done small { color: #67804b; }
+.quest-art { width: calc(40px * var(--d)); height: calc(42px * var(--d)); display: grid; place-items: center; }
+.quest-art > :is(img,.game-sprite) { width: 100%; height: 100%; object-fit: contain; }
+.util-btn.has-reward { position: relative; }
+.util-btn.has-reward::after { content: ""; position: absolute; top: 0; right: 0; width: calc(9px * var(--d)); height: calc(9px * var(--d)); border-radius: 50%; background: #d65e39; border: 2px solid #fff4da; }
+.manor-wallet { display: flex; align-items: center; gap: calc(18px * var(--d)); padding: calc(22px * var(--d)); border: 2px solid #c9a968; border-radius: calc(12px * var(--d)); background: linear-gradient(120deg,#fff4c9,#efddb0); box-shadow: inset 0 0 0 3px #fff8de,0 4px 0 #d5b97e; }
+.manor-wallet > div { flex: 1; }
+.manor-wallet small { display: block; color: #927240; font-size: calc(12px * var(--d)); }
+.manor-wallet strong { display: block; color: #745020; font-size: calc(34px * var(--d)); line-height: 1.3; }
+.wallet-coin .coin { width: calc(48px * var(--d)); height: calc(48px * var(--d)); font-size: calc(24px * var(--d)); }
+.ledger-heading { display: flex; align-items: baseline; justify-content: space-between; margin: calc(26px * var(--d)) 0 calc(10px * var(--d)); }
+.ledger-heading h3 { font-size: calc(16px * var(--d)); margin: 0; color: #71502e; }
+.ledger-heading > span { color: #a38c66; font-size: calc(11px * var(--d)); }
+.manor-ledger { padding: 0; margin: 0; list-style: none; }
+.ledger-entry { display: flex; align-items: center; gap: calc(12px * var(--d)); padding: calc(15px * var(--d)) calc(6px * var(--d)); border-bottom: 1px solid #ddcba5; color: #765632; }
+.ledger-entry > div { flex: 1; min-width: 0; }
+.ledger-entry strong { display: block; font-size: calc(14px * var(--d)); }
+.ledger-entry small { display: block; font-size: calc(11px * var(--d)); color: #a48c68; margin-top: calc(4px * var(--d)); }
+.ledger-entry > b { font-size: calc(18px * var(--d)); white-space: nowrap; }
+.ledger-entry.income > b { color: #4a7a37; }
+.ledger-mark { display: grid; place-items: center; width: calc(30px * var(--d)); height: calc(30px * var(--d)); border-radius: 50%; border: 1px solid #d1b278; background: #f1e1ba; font-weight: 700; }
+.ledger-entry.income .ledger-mark { color: #648344; background: #e7eccf; border-color: #bccd9a; }
+.ledger-empty { padding: calc(38px * var(--d)) calc(16px * var(--d)); text-align: center; color: #927b54; }
+.ledger-empty-mark { font-size: calc(40px * var(--d)); color: #c5a15d; }
+.ledger-empty h3 { color: #806139; font-size: calc(17px * var(--d)); }
+.ledger-empty p { font-size: calc(13px * var(--d)); line-height: 1.7; }
+.bait-choice { display: flex; align-items: center; gap: calc(16px * var(--d)); padding: calc(18px * var(--d)); border: 1px solid #d6bd8a; border-radius: calc(12px * var(--d)); background: #fff9e8; margin-bottom: calc(14px * var(--d)); }
+.bait-choice.selected { background: #edf1d6; border: 2px solid #91a967; }
+.bait-choice > img { width: calc(60px * var(--d)); height: calc(60px * var(--d)); object-fit: contain; }
+.bait-choice > div { flex: 1; min-width: 0; }
+.bait-choice h3 { margin: 0; font-size: calc(17px * var(--d)); color: #6c4f29; }
+.bait-choice h3 small { color: #92774d; font-size: calc(13px * var(--d)); }
+.bait-choice p,.bait-memory-note { font-size: calc(12px * var(--d)); color: #8c7955; line-height: 1.6; }
+.bait-memory-note { text-align: center; margin: calc(22px * var(--d)) 0; }
+/* 透明点击区贴合背景箱子，命中尺寸随场景几何缩放。 */
+.bait-chest { position: absolute; padding: 0; border: 0; background: transparent; pointer-events: auto; cursor: pointer; z-index: 4; }
+.bird-seed-packet {display:block;width:calc(33px * var(--d));height:calc(40px * var(--d));rotate:-14deg;filter:drop-shadow(0 calc(2px * var(--d)) calc(1px * var(--d)) #68442266);}
+.bird-seed-packet img {display:block;width:100%;height:100%;object-fit:contain;}
+.light-note-mobile-rendering .bag-tabs { gap: 6px; margin-bottom: 12px; }
+.light-note-mobile-rendering .bag-tabs > button { flex-direction: column; gap: 1px; padding: 5px; min-height: 65px; font-size: 12px; }
+.light-note-mobile-rendering .bag-tab-art { width: 30px; height: 30px; }
+.light-note-mobile-rendering .manor-quest { gap: 8px; padding: 10px; }
+.light-note-mobile-rendering .manor-quest h3 { font-size: 13px; }
+.light-note-mobile-rendering .manor-quest small { font-size: 10px; }
+.light-note-mobile-rendering .quest-art { width: 28px; height: 34px; }
+.light-note-mobile-rendering .quest-summary { padding: 10px; gap: 8px; }
+.light-note-mobile-rendering .quest-summary > .game-sprite { width: 28px; height: 28px; }
+.light-note-mobile-rendering .quest-summary > span:last-child { font-size: 10px; }
+.light-note-mobile-rendering .manor-wallet { gap: 12px; padding: 16px; }
+.light-note-mobile-rendering .bait-choice { gap: 10px; padding: 12px; }
+.light-note-mobile-rendering .bait-choice > img { width: 40px; height: 40px; }
+.light-note-mobile-rendering .bait-choice h3 { font-size: 14px; }
+.light-note-mobile-rendering .bait-choice p { font-size: 11px; }
+
+#modal :is(.manor-quest,.bait-choice,.manor-wallet) > .tile-btn { flex: 0 0 auto; min-height: calc(40px * var(--d)); height: auto; padding: calc(8px * var(--d)) calc(12px * var(--d)); white-space: nowrap; }
+.light-note-mobile-rendering #modal :is(.manor-quest,.bait-choice,.manor-wallet) > .tile-btn { min-height: 44px; }
+
+#modal .bait-dialog { height: auto; min-height: 0; }
+#modal .bait-dialog > .dialog-body { flex: 0 1 auto; }
+
+.manor-menu .has-reward strong::after { content: ""; display: inline-block; width: 8px; height: 8px; margin-left: 7px; border-radius: 50%; background: #d65e39; border: 1px solid #b34328; vertical-align: middle; }
+
+.light-note-mobile-rendering #modal .bait-dialog { height: auto; max-height: calc(100vh - 54px); max-height: calc(100dvh - 54px); }
+#modal .inventory-dialog .inventory-empty > .tile-btn { margin-top: 0; }
+
+/* 场景交互提示：小标签常驻；首次打开前短暂提亮，不持续闪烁。 */
+/* 标签抵消场景缩放以保持可读，定位仍跟随箱子，放在箱盖上方避开钓鱼区牌。 */
+/* The lid starts at y=230/1254 in the PNG. Anchor to the visible hinge, with a fixed screen gap. */
+.bait-chest-tag { position:absolute;left:46%;bottom:var(--bait-caption-bottom,81.66%);translate:-50% calc(-4px / var(--stage-s,1));scale:calc(1 / var(--stage-s,1));transform-origin:50% 100%;display:flex;align-items:center;gap:calc(3px * var(--d));padding:calc(3px * var(--d)) calc(6px * var(--d));border:1px solid #b28c4e;border-radius:calc(6px * var(--d));background:#fff2cc;color:#614520;font-size:calc(11px * var(--d));font-weight:700;white-space:nowrap;box-shadow:0 2px 0 #8b663b; }
+.bait-chest-tag img {width:calc(16px * var(--d));height:calc(16px * var(--d));object-fit:contain;}
+.bait-chest.unseen .bait-chest-tag {animation:chest-intro 1.8s ease-in-out 3;}
+@keyframes chest-intro {50%{box-shadow:0 0 0 4px #ffeb9d66,0 2px 0 #8b663b;}}
+#modal .inventory-dialog .seed-pack {position:relative;overflow:visible;}
+#modal .inventory-dialog .seed-bait-badge {position:absolute;left:50%;bottom:calc(-6px * var(--d));transform:translateX(-50%);display:flex;align-items:center;gap:calc(3px * var(--d));padding:calc(2px * var(--d)) calc(6px * var(--d));border:1px solid #b49256;border-radius:calc(5px * var(--d));background:#fff4cf;color:#705127;font-size:calc(10px * var(--d));font-weight:700;white-space:nowrap;box-shadow:0 1px 0 #d1b47d;}
+#modal .inventory-dialog .seed-bait-badge img {width:calc(17px * var(--d));height:calc(17px * var(--d));}
+#modal .inventory-dialog .seed-choice .seed-pack {margin-bottom:calc(8px * var(--d));}
+.quest-summary > span:last-child {text-align:right;}
+.quest-summary > span > small {display:block;margin-top:calc(4px * var(--d));color:#94784c;}
+.quest-water {display:flex;align-items:center;gap:calc(3px * var(--d));color:#357a89;white-space:nowrap;}
+.quest-water .game-sprite {width:calc(24px * var(--d));height:calc(24px * var(--d));}
+.quest-water small {color:inherit;}
+.quest-bucket {display:flex;align-items:center;gap:calc(12px * var(--d));margin-top:calc(24px * var(--d));padding:calc(14px * var(--d));border-top:1px dashed #ceb67f;color:#826539;font-size:calc(13px * var(--d));}
+.quest-bucket > .game-sprite {width:calc(32px * var(--d));height:calc(36px * var(--d));}
+.quest-bucket small {display:block;margin-top:calc(5px * var(--d));font-size:calc(11px * var(--d));color:#9a815b;}
+#modal .daily-dialog {height:auto;min-height:0;}
+#gardenGuide > .discovery-area {position:absolute;inset:0;width:100%;height:100%;z-index:8;pointer-events:none;}
+.discovery-area[hidden] {display:none;}
+.discovery-guide {width:calc(255px * var(--d));padding:calc(9px * var(--d)) calc(12px * var(--d));}
+.discovery-guide strong {font-size:max(13px,calc(13px * var(--d)));}
+.discovery-guide p {font-size:max(12px,calc(12px * var(--d)));}
+.light-note-mobile-rendering #modal .daily-dialog {height:auto;max-height:calc(100vh - 54px);max-height:calc(100dvh - 54px);}
+.light-note-mobile-rendering .manor-quest {flex-wrap:wrap;}
+.light-note-mobile-rendering .manor-quest > div:nth-child(2) {flex-basis:calc(100% - 50px);}
+.light-note-mobile-rendering .quest-water {margin-left:36px;flex:1;}
+.light-note-mobile-rendering #modal .inventory-dialog .seed-bait-badge {font-size:10px;padding:1px 4px;bottom:-6px;gap:2px;}
+.light-note-mobile-rendering #modal .inventory-dialog .seed-bait-badge img {width:14px;height:14px;}
+html.light-note-mobile-rendering .seaside-courtyard .discovery-guide:not([hidden]) {display:block;max-width:210px;width:max-content;padding:8px 10px;background:#fff6df;border:1px solid #c5a269;border-radius:10px;box-shadow:0 2px 0 #a5814a;}
+html.light-note-mobile-rendering .discovery-guide > strong {display:block;font-size:13px;color:#624821;text-shadow:none;}
+html.light-note-mobile-rendering .discovery-guide > :is(.guide-pointer,.guide-short,p) {display:none;}
+html.light-note-mobile-rendering .discovery-guide > .guide-dismiss {display:block;font-size:12px;margin-top:4px;}
+@media(prefers-reduced-motion:reduce){.bait-chest.unseen .bait-chest-tag{animation:none;}}
+
+#gardenGuide > .discovery-guide {pointer-events:none;}
+
+.discovery-guide::after {display:block;}
+
+.catch-showing #gardenGuide > :is(.discovery-guide,.discovery-area) {visibility:hidden;}
+
+/* 收获经验先停留再上浮，避免与飞向背包的作物重叠。 */
+.float-text.harvest-xp {color:#f5ffe8;font-size:calc(12px * var(--d));font-weight:600;text-shadow:0 1px 2px #254717,0 0 3px #254717;animation:harvest-xp-up 1.7s ease-out forwards;}
+@keyframes harvest-xp-up {0%{opacity:0;transform:translateY(-4px);}15%,60%{opacity:.95;transform:translateY(-14px);}100%{opacity:0;transform:translateY(-28px);}}
+
+/* 商店 r11：图面、种植节奏、收获价格与购买区分层；沿用游戏密度比例。 */
+#modal .farm-shop-dialog {margin-block:calc(28px * var(--d));max-height:calc(100vh - 72px * var(--d));width:min(calc(960px * max(1,var(--d))),calc(100vw - 28px));border-color:#bd8b46;background:linear-gradient(#fff9e9,#f5e7c6);}
+#modal .farm-shop-dialog .dialog-head {padding:calc(14px * var(--d)) calc(24px * var(--d)) calc(4px * var(--d));}
+#modal .farm-shop-dialog .dialog-body {padding:calc(10px * var(--d)) calc(20px * var(--d));}
+#modal .farm-shop-dialog .dialog-foot {padding:calc(10px * var(--d)) calc(20px * var(--d));}
+.shop-toolbar {display:flex;align-items:center;justify-content:space-between;gap:calc(12px * var(--d));margin-bottom:calc(12px * var(--d));}
+.shop-wallet {padding:calc(5px * var(--d)) calc(12px * var(--d));border:1px solid #ddbb76;border-radius:calc(14px * var(--d));background:#f5e2af;font-size:calc(12px * var(--d));color:#795526;white-space:nowrap;}
+.shop-wallet b {font-size:calc(18px * var(--d));color:#60401d;}
+.market-grid {display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,calc(240px * var(--d))),1fr));gap:calc(12px * var(--d));}
+.market-card {min-width:0;display:flex;flex-direction:column;padding:calc(12px * var(--d));border:1px solid #d4b173;border-radius:calc(12px * var(--d));background:linear-gradient(#fffdf5,#fff3d4);box-shadow:inset 0 0 0 2px #ffffff66,0 3px 0 #c7a06b;}
+.market-card header,.supply-card > header {display:flex;align-items:center;justify-content:space-between;gap:calc(7px * var(--d));}
+.market-card h3,.supply-card h3 {margin:0;color:#583c21;font-size:calc(16px * var(--d));}
+.market-type {padding:calc(2px * var(--d)) calc(8px * var(--d));border-radius:calc(10px * var(--d));background:#f7d79b;color:#8c5529;font-size:calc(10px * var(--d));white-space:nowrap;}
+.market-type.flower {background:#eed2be;color:#8b5c41;}
+.market-display {display:grid;grid-template-columns:58% minmax(0,1fr);align-items:center;gap:calc(5px * var(--d));margin:calc(8px * var(--d)) 0;}
+.market-art {height:calc(115px * var(--d));position:relative;display:grid;place-items:center;background:radial-gradient(ellipse at 50% 85%,#d7aa6044,transparent 65%);}
+.market-art::after {content:"";position:absolute;left:5%;right:5%;bottom:4%;height:8%;border-radius:50%;background:#ad6f2730;z-index:0;}
+.market-art img {position:absolute;inset:0;width:100%;height:100%;object-fit:contain;z-index:1;}
+.market-stats {display:grid;gap:calc(7px * var(--d));color:#7d6540;}
+.market-stats div {display:flex;flex-direction:column;gap:calc(2px * var(--d));}
+.market-stats small {font-size:calc(10px * var(--d));line-height:1.3;}
+.market-stats b {font-size:calc(13px * var(--d));color:#624422;}
+.market-stock {display:flex;justify-content:space-between;gap:calc(4px * var(--d));padding:calc(5px * var(--d)) 0;border-top:1px solid #e6d4ae;color:#8a7351;font-size:calc(10px * var(--d));}
+.market-stock span:last-child {white-space:nowrap;}
+.market-price {display:flex;align-items:baseline;gap:calc(4px * var(--d));margin:calc(6px * var(--d)) 0;color:#8f5825;}
+.market-price strong {font-size:calc(21px * var(--d));line-height:1.2;}
+.market-price small,.market-price span {font-size:calc(11px * var(--d));}
+.market-use {margin-left:auto;color:#618344;}
+.market-actions {display:flex;align-items:center;gap:calc(7px * var(--d));margin-top:auto;}
+#modal .farm-shop-dialog :is(.tile-btn,.button) {min-height:calc(34px * var(--d));border-radius:calc(9px * var(--d));font-size:calc(13px * var(--d));}
+#modal .market-actions .tile-btn {flex:1;min-width:0;padding:calc(6px * var(--d));}
+.market-lock {display:block;width:100%;text-align:center;border:1px solid #c5a66e;border-radius:calc(8px * var(--d));padding:calc(8px * var(--d));color:#7d633e;background:#e9dab8;font-size:calc(12px * var(--d));}
+.market-card.locked {background:#e9e1cf;}
+.market-card.locked .market-art {filter:saturate(.4);opacity:.75;}
+.market-note {text-align:center;margin:calc(14px * var(--d)) 0 0;color:#977b52;font-size:calc(11px * var(--d));}
+.supply-grid {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-items:stretch;gap:calc(14px * var(--d));}
+.supply-card {min-width:0;display:flex;flex-direction:column;gap:calc(8px * var(--d));padding:calc(14px * var(--d));border:1px solid #d0ac6f;border-radius:calc(14px * var(--d));background:linear-gradient(#fffdf4,#fff2d1);box-shadow:0 3px 0 #c7a06b;}
+.supply-art {position:relative;overflow:hidden;height:calc(120px * var(--d));display:grid;place-items:center;background:radial-gradient(ellipse,#ebd2a455,transparent 70%);}
+.supply-art img {position:absolute;inset:0;width:100%;height:100%;object-fit:contain;}
+.supply-copy {min-width:0;display:flex;flex:1;flex-direction:column;}
+.fry-offer {display:flex;flex:1;flex-direction:column;justify-content:flex-end;gap:calc(5px * var(--d));padding:calc(10px * var(--d));border:1px solid #ddbe84;border-radius:calc(9px * var(--d));background:#fff9e9;}
+.fry-offer > small {font-size:calc(11px * var(--d));color:#8a6b42;}
+.fry-offer .market-actions > button {width:100%;}
+.supply-card > header span {font-size:calc(11px * var(--d));color:#8e7249;white-space:nowrap;}
+.supply-copy p {font-size:calc(12px * var(--d));color:#94764e;margin:calc(6px * var(--d)) 0 calc(12px * var(--d));}
+.supply-offers {flex:1;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:calc(10px * var(--d));}
+.supply-offers > div {position:relative;display:flex;flex-direction:column;gap:calc(5px * var(--d));padding:calc(10px * var(--d));border:1px solid #ddbe84;border-radius:calc(9px * var(--d));background:#fff9e9;}
+.supply-offers small {font-size:calc(11px * var(--d));color:#8a6b42;}
+.supply-offers strong {font-size:calc(22px * var(--d));color:#8e5122;}
+#modal .supply-offers .tile-btn {flex:0 0 auto;margin-top:auto;}
+.supply-offers del {font-size:calc(11px * var(--d));margin-left:calc(6px * var(--d));color:#9c927e;}
+.market-discount {position:absolute;right:calc(-4px * var(--d));top:calc(-6px * var(--d));padding:calc(3px * var(--d)) calc(7px * var(--d));border-radius:calc(5px * var(--d));background:#b95337;color:#fff9dc;font-size:calc(11px * var(--d));transform:rotate(5deg);}
+/* ui-density-fixed: 手机商店使用固定触控尺寸，独立于桌面密度。 */
+.light-note-mobile-rendering #modal .farm-shop-dialog .dialog-body {padding:8px 10px;}
+.light-note-mobile-rendering .market-grid {grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;}
+.light-note-mobile-rendering .market-card {padding:9px;}
+.light-note-mobile-rendering .market-display {grid-template-columns:1fr;margin:4px 0;gap:3px;}
+.light-note-mobile-rendering .market-art {height:86px;}
+.light-note-mobile-rendering .market-stats {grid-template-columns:repeat(2,minmax(0,1fr));gap:4px;}
+.light-note-mobile-rendering .market-stats > small {grid-column:1/-1;}
+.light-note-mobile-rendering .market-card h3 {font-size:14px;}
+.light-note-mobile-rendering .market-type {font-size:9px;padding:2px 5px;}
+.light-note-mobile-rendering .market-stats b {font-size:11px;}
+.light-note-mobile-rendering .market-stock {flex-wrap:wrap;font-size:10px;gap:2px;}
+.light-note-mobile-rendering .market-price strong {font-size:18px;}
+.light-note-mobile-rendering .market-price :is(small,span) {font-size:10px;}
+.light-note-mobile-rendering #modal .market-actions .tile-btn {min-height:32px;padding:5px;font-size:12px;}
+.light-note-mobile-rendering .shop-toolbar {flex-wrap:wrap;gap:6px;}
+.light-note-mobile-rendering .supply-grid {grid-template-columns:minmax(0,1fr);}
+.light-note-mobile-rendering .supply-card {display:grid;grid-template-columns:82px minmax(0,1fr);padding:12px;gap:10px;}
+.light-note-mobile-rendering .supply-card > header {grid-column:1/-1;}
+.light-note-mobile-rendering .supply-card .supply-art {height:92px;}
+.light-note-mobile-rendering .supply-card h3 {font-size:15px;}
+.light-note-mobile-rendering .supply-offers > div {padding:8px;}
+.light-note-mobile-rendering #modal .supply-offers .tile-btn {min-height:32px;font-size:12px;padding:5px;}
+.light-note-mobile-rendering .supply-offers del {display:none;}
+@media(prefers-reduced-motion:reduce){.float-text.harvest-xp{animation:none;transform:translateY(-25px);}}
+
+/* 场景挂牌仅命名，动作落在水面与建筑本体。 */
+.light-note-mobile-rendering .bait-chest-tag {display:none;}
+.quest-bucket > span:not(.game-sprite) {min-width:0;flex:1;}
+#modal .quest-bucket > .quest-claim-all {margin-left:auto;flex:0 0 auto;width:auto;min-width:calc(128px * var(--d));min-height:calc(36px * var(--d));font-size:calc(12px * var(--d));}
+.light-note-mobile-rendering .quest-bucket {flex-wrap:wrap;}
+.light-note-mobile-rendering #modal .quest-bucket > .quest-claim-all {width:100%;min-height:36px;}
+.fx-harvest-crop {position:fixed;object-fit:contain;pointer-events:none;animation:harvest-crop-out .6s ease-out forwards;}
+@keyframes harvest-crop-out {0%,15%{opacity:1;transform:translateY(0);}100%{opacity:0;transform:translateY(-18px) scale(.92);}}
+.harvest-settling .plot-badge.empty {opacity:0;animation:plot-sow-in .18s .46s forwards;}
+@keyframes plot-sow-in {to{opacity:1;}}
+#modal .farm-shop-dialog .dialog-head p:empty {display:none;}
+@media(prefers-reduced-motion:reduce){.harvest-settling .plot-badge.empty{animation:none;opacity:1;}}
+/* 交易页复用已确认的大图卡，金额和操作各自对齐。 */
+.trade-card {display:flex;flex-direction:column;gap:calc(8px * var(--d));}
+.trade-art {position:relative;overflow:hidden;height:calc(120px * var(--d));display:grid;place-items:center;}
+.trade-art :is(img,svg) {position:absolute;inset:0;width:100%;height:100%;object-fit:contain;max-height:100%;}
+.trade-card .market-price {margin:0;padding-block:calc(6px * var(--d));}
+.trade-card > .tile-btn {margin-top:auto;}
+#modal .trade-card > .tile-btn :is(img,.game-icon) {position:static;flex:none;width:calc(24px * var(--d));height:calc(24px * var(--d));object-fit:contain;}
+.buyback-empty {display:grid;justify-items:center;gap:calc(10px * var(--d));padding-block:calc(45px * var(--d));color:#8a704c;}
+.buyback-empty > .game-icon {width:calc(58px * var(--d));height:calc(58px * var(--d));opacity:.7;}
+.buyback-empty p {margin:0;font-size:calc(12px * var(--d));}
+.trade-note {font-size:calc(12px * var(--d));line-height:1.7;color:#826b44;}
+.trade-grid > .farm-empty {grid-column:1/-1;}
+.recent-buyback {margin-top:calc(16px * var(--d));padding-top:calc(10px * var(--d));border-top:1px solid #dbc38f;}
+.recent-buyback h3 {margin:0 0 calc(8px * var(--d));font-size:calc(14px * var(--d));}
+.buyback-list {display:grid;gap:calc(10px * var(--d));}
+.buyback-row {display:flex;align-items:center;gap:calc(14px * var(--d));padding:calc(10px * var(--d));border:1px solid #dfc38f;border-radius:calc(12px * var(--d));background:#fffbee;}
+.buyback-art {width:calc(90px * var(--d));height:calc(64px * var(--d));flex-shrink:0;}
+.buyback-art :is(svg,img) {width:100%;height:100%;object-fit:contain;}
+.buyback-row > div:nth-child(2) {flex:1;min-width:0;}
+.buyback-row small {display:block;color:#8b7654;font-size:calc(11px * var(--d));margin-top:calc(4px * var(--d));}
+#modal .buyback-row > .tile-btn {flex:0 0 auto;width:auto;min-width:calc(150px * var(--d));}
+.wildlife-card {position:relative;padding:calc(10px * var(--d)) calc(8px * var(--d)) calc(30px * var(--d));}
+.wildlife-card > img {width:100%;height:100%;object-fit:contain;}
+.wildlife-card > strong {position:absolute;bottom:calc(8px * var(--d));left:0;right:0;text-align:center;font-size:calc(13px * var(--d));}
+.wildlife-detail-art {position:relative;height:calc(210px * var(--d));display:grid;place-items:center;}
+.wildlife-detail-art img {position:absolute;inset:0;width:100%;height:100%;object-fit:contain;}
+.light-note-mobile-rendering .trade-art {position:relative;height:96px;}
+.light-note-mobile-rendering .buyback-row {gap:8px;padding:8px;flex-wrap:wrap;}
+.light-note-mobile-rendering .buyback-art {width:60px;height:48px;}
+.light-note-mobile-rendering .buyback-row .tile-btn {margin-left:auto;}
+.light-note-mobile-rendering .wildlife-detail-art {position:relative;height:180px;}
+
+/* ui-density-fixed: 移动共享基线的触控目标，独立于桌面密度。 */
+html.light-note-mobile-rendering .discovery-guide > .guide-dismiss {min-height:44px;}
+
+/* r14 已确认的背包肥料页：库存和操作共用原来的肥料数据与素材。 */
+.bag-tab-art .fert-sack {width:100%;height:100%;}
+.fert-inventory {display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:calc(12px * var(--d));}
+.fert-item {display:flex;flex-direction:column;align-items:stretch;min-width:0;padding:calc(12px * var(--d));border:1px solid #d4b173;border-radius:calc(10px * var(--d));background:linear-gradient(#fffdf4,#fff3d6);text-align:center;}
+.fert-item-art {position:relative;width:100%;height:calc(112px * var(--d));}
+#modal .fert-item-art > .fert-icon {position:absolute;left:50%;top:50%;translate:-50% -50%;display:block;width:calc(90px * var(--d));height:calc(90px * var(--d));max-width:100%;max-height:100%;margin:0;}
+.fert-item-art .fert-sack {width:100%;height:100%;}
+.fert-item-art img {width:100%;height:100%;object-fit:contain;}
+.fert-item h3 {margin:calc(10px * var(--d)) 0;color:#593d22;font-size:calc(15px * var(--d));line-height:1.5;}
+.fert-item-stock {padding:calc(5px * var(--d));background:#f3e6c8;border-radius:calc(6px * var(--d));color:#7b613d;font-size:calc(12px * var(--d));}
+.fert-item-effect {display:grid;gap:calc(3px * var(--d));padding:calc(12px * var(--d)) 0;}
+.fert-item-effect small {font-size:calc(11px * var(--d));color:#87704e;}
+.fert-item-effect strong {font-size:calc(22px * var(--d));color:#496c30;}
+.fert-item .tile-btn {width:100%;margin-top:auto;}
+.fert-item.empty .fert-item-art {filter:saturate(.3);opacity:.6;}
+#modal .fert-item .tile-btn:disabled {opacity:1;background:#e9e1cd;border-color:#c9bea3;color:#7e745e;box-shadow:none;}
+
+/* 商店顶部：交易分段与分类分层，金币回到页头。 */
+#modal .farm-shop-dialog .dialog-head {display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:calc(12px * var(--d));padding:calc(14px * var(--d)) calc(20px * var(--d));}
+#modal .farm-shop-dialog .dialog-head > div {grid-column:2;justify-self:center;}
+#modal .farm-shop-dialog .shop-wallet {grid-column:3;justify-self:end;}
+.shop-toolbar {margin-bottom:calc(8px * var(--d));}
+.facility-grid {display:grid;grid-template-columns:minmax(0,1fr);}
+.facility-card {display:grid;gap:calc(16px * var(--d));width:100%;max-width:calc(760px * var(--d));box-sizing:border-box;margin-inline:auto;padding:calc(20px * var(--d));border:1px solid #cba76f;border-radius:calc(16px * var(--d));background:linear-gradient(#fffdf4,#f9edcf);box-shadow:inset 0 1px #fff,0 calc(4px * var(--d)) #bd9b64;}
+.facility-overview {display:grid;grid-template-columns:minmax(0,.8fr) minmax(0,1fr);align-items:center;gap:calc(20px * var(--d));}
+.facility-overview header {display:flex;align-items:center;gap:calc(8px * var(--d));flex-wrap:wrap;}
+.facility-overview h3 {margin:0;font-size:calc(20px * var(--d));color:#644226;}
+.facility-overview header > span {padding:calc(3px * var(--d)) calc(8px * var(--d));border-radius:calc(10px * var(--d));background:#ead8a9;color:#785935;font-size:calc(12px * var(--d));}
+.facility-overview p,.facility-note {font-size:calc(12px * var(--d));color:#886c46;line-height:1.7;margin:calc(6px * var(--d)) 0;}
+.facility-overview .tile-btn {margin:calc(8px * var(--d)) calc(6px * var(--d)) 0 0;}
+.facility-card .supply-art {position:relative;width:100%;height:calc(200px * var(--d));}
+#modal .facility-card .supply-art > .purifier-image {position:absolute;inset:0;display:block;width:100%;height:100%;max-height:100%;object-fit:contain;}
+.facility-yield {display:flex;align-items:baseline;gap:calc(7px * var(--d));margin-top:calc(16px * var(--d));color:#537438;}
+.facility-yield small {font-size:calc(13px * var(--d));}
+.facility-yield strong {font-size:calc(32px * var(--d));}
+.facility-yield span {font-size:calc(14px * var(--d));}
+.facility-levels {display:grid;gap:calc(8px * var(--d));}
+.facility-tier {padding:calc(12px * var(--d));border:1px solid #ddc692;border-radius:calc(10px * var(--d));background:#fffaf0;}
+.facility-tier.current {border-color:#8caa63;background:#f0f4da;}
+.facility-tier-heading {display:flex;align-items:center;gap:calc(12px * var(--d));flex-wrap:wrap;color:#795631;font-size:calc(12px * var(--d));}
+.facility-tier-heading > strong {color:#5d4129;font-size:calc(14px * var(--d));}
+.facility-tier-heading > b {margin-left:auto;color:#477397;white-space:nowrap;}
+.facility-materials {display:flex;gap:calc(18px * var(--d));flex-wrap:wrap;margin-top:calc(10px * var(--d));}
+.facility-material {display:flex;align-items:center;gap:calc(8px * var(--d));color:#634a31;font-size:calc(12px * var(--d));}
+.facility-material-art {display:block;width:calc(45px * var(--d));height:calc(45px * var(--d));flex:none;}
+.facility-material-art > svg {display:block;width:100%;height:100%;object-fit:contain;}
+.facility-material b {margin-left:calc(6px * var(--d));}
+.facility-material small {display:block;color:#8d7756;font-size:calc(11px * var(--d));margin-top:calc(3px * var(--d));}
+.facility-max {display:inline-block;color:#5a793c;font-size:calc(14px * var(--d));padding-top:calc(10px * var(--d));}
+.upgrade-preview {display:flex;align-items:center;justify-content:center;gap:calc(16px * var(--d));color:#547a3b;}
+.upgrade-preview > img {width:calc(110px * var(--d));height:calc(110px * var(--d));object-fit:contain;}
+.upgrade-materials {justify-content:center;padding:calc(12px * var(--d));border:1px solid #ddc48d;border-radius:calc(10px * var(--d));background:#fbf0d8;}
+#modal .dialog.purifier-upgrade-dialog,
+html.light-note-mobile-rendering #modal .dialog.purifier-upgrade-dialog {width:min(calc(560px * var(--d)),calc(100vw - 32px));height:auto;min-height:0;max-height:calc(100vh - 56px * var(--d));max-height:calc(100dvh - 56px * var(--d));}
+
+/* 目的地保持四个，农事操作收进作物详情。插画尺寸沿舞台坐标缩放。 */
+.main-tank-scenery {position:absolute;z-index:2;max-width:none;pointer-events:none;object-fit:fill;}
+.area-road-sign {position:absolute;display:flex;align-items:center;justify-content:center;z-index:8;padding:0;border:0;background:transparent;box-shadow:none;pointer-events:auto;cursor:pointer;}
+.area-road-sign > span {color:#fff8da;text-shadow:0 2px 2px #513015;font-weight:800;font-size:calc(var(--sign-font,40px) * var(--d));transform:rotate(var(--sign-angle,0deg));white-space:nowrap;}
+.area-road-sign:focus-visible {outline:4px solid #fff2ba;outline-offset:4px;border-radius:calc(10px * var(--d));}
+.farm-destinations .dock-disc > .farm-packet {display:block;width:90%;height:90%;object-fit:contain;}
+html.light-note-mobile-rendering [data-manor-area="garden"] :is(#tankSpot,#pondSpot,.frog-hit,.aquarium-life) {display:none;}
+html.light-note-mobile-rendering [data-manor-area="bay"] :is(.rabbit-hit,.poop-spot,.bird-seed-spot) {display:none;}
+html.light-note-mobile-rendering [data-manor-area="garden"] [data-dock="garden"] {background:#e6edcf;border:1px solid #7d9d54;border-radius:calc(12px * var(--d));}
+/* ui-density-fixed: 路牌文字、轮廓和舞台插画同单位缩放；手机沿用固定密度、44px 触控基线。 */
+.light-note-mobile-rendering #modal .facility-card {padding:calc(12px * var(--d));gap:calc(12px * var(--d));}
+.light-note-mobile-rendering .facility-overview {gap:calc(8px * var(--d));grid-template-columns:minmax(0,.7fr) minmax(0,1fr);}
+.light-note-mobile-rendering .facility-overview h3 {font-size:calc(16px * var(--d));}
+.light-note-mobile-rendering .facility-overview .tile-btn {min-height:calc(44px * var(--d));}
+.light-note-mobile-rendering .facility-card .supply-art {height:calc(130px * var(--d));}
+.light-note-mobile-rendering .facility-tier {padding:calc(10px * var(--d));}
+.light-note-mobile-rendering .facility-tier-heading {gap:calc(6px * var(--d));}
+.light-note-mobile-rendering .facility-tier-heading > span {font-size:calc(11px * var(--d));}
+.light-note-mobile-rendering .facility-materials {gap:calc(8px * var(--d));}
+.light-note-mobile-rendering .facility-material {font-size:calc(11px * var(--d));}
+.light-note-mobile-rendering .facility-material-art {width:calc(34px * var(--d));height:calc(34px * var(--d));}
+
+/* 设施留在同一场景变换中定位，不重绘整幅背景。尺寸来自场景标定。 */
+.scene-purifier {position:absolute;z-index:9;left:calc(var(--purifier-x) + var(--purifier-w) / 2);top:var(--purifier-y);width:max(44px,var(--purifier-w));height:max(44px,var(--purifier-h));translate:-50% 0;display:block;padding:0;border:0;border-radius:0;background:transparent;box-shadow:none;cursor:pointer;}
+.scene-purifier[hidden] {display:none;}
+.scene-purifier .purifier-art {position:absolute;left:50%;bottom:0;width:var(--purifier-w);height:var(--purifier-h);translate:-50% 0;}
+.purifier-art > .purifier-image {display:block;width:100%;height:100%;object-fit:contain;}
+.purifier-water {position:absolute;left:42%;top:40%;width:34%;height:24%;overflow:hidden;border-radius:12% 12% 24% 24%;pointer-events:none;}
+.purifier-water i {position:absolute;bottom:4%;left:24%;width:6%;height:7%;border:1px solid #d9ffff;border-radius:50%;opacity:0;animation:purifier-bubble 3.6s linear infinite;}
+.purifier-water i:nth-child(2) {left:57%;animation-delay:-1.9s;animation-duration:4.2s;}
+.purifier-water i:nth-child(3) {left:75%;animation-delay:-.8s;animation-duration:3.1s;}
+.purifier-water i:nth-child(4) {left:40%;animation-delay:-2.8s;animation-duration:4.8s;}
+.purifier-water b {position:absolute;inset:-10%;background:linear-gradient(110deg,transparent 25%,#e4ffff88 48%,transparent 60%);animation:purifier-glint 5s ease-in-out infinite;}
+.purifier-state {position:absolute;left:50%;bottom:calc(100% + 2px * var(--d));translate:-50% 0;min-width:max-content;padding:calc(4px * var(--d)) calc(8px * var(--d));border:1px solid #b58b4a;border-radius:calc(8px * var(--d));background:#fff7df;color:#526b33;box-shadow:0 2px 2px #513b2333;font-size:max(11px,calc(12px * var(--d)));font-weight:700;white-space:nowrap;pointer-events:none;}
+.scene-purifier[data-state="full"] .purifier-state {color:#82582b;}
+.scene-purifier[data-state="spent"] .purifier-state {opacity:0;}
+.scene-purifier[data-state="spent"] .purifier-water {opacity:.4;}
+.scene-purifier[data-state="sealed"] .purifier-water {display:none;}
+.scene-purifier[data-state="sealed"] .purifier-state {bottom:calc(-3px * var(--d));color:#735433;background:#f2deb2;border-color:#b18a51;}
+.scene-purifier:is(:hover,:focus-visible) .purifier-state {opacity:1;}
+.scene-purifier.label-side .purifier-state {left:50%;bottom:auto;top:95%;translate:-50% 0;}
+.scene-purifier.hide-caption .purifier-state {visibility:hidden;}
+.scene-purifier:focus-visible {outline:2px solid #fff4bd;outline-offset:calc(4px * var(--d));border-radius:calc(8px * var(--d));}
+.scene-purifier.just-built .purifier-art {animation:purifier-build .8s ease-out;}
+.scene-purifier.is-collecting .purifier-water {filter:brightness(1.2);}
+@keyframes purifier-bubble {0%{opacity:0;transform:translateY(0);}15%,75%{opacity:.8;}100%{opacity:0;transform:translateY(-1400%);}}
+@keyframes purifier-glint {0%,30%{opacity:0;transform:translateX(-100%);}45%,60%{opacity:.7;}85%,100%{opacity:0;transform:translateX(100%);}}
+@keyframes purifier-build {from{opacity:0;transform:translateY(7%);}to{opacity:1;transform:translateY(0);}}
+@media(prefers-reduced-motion:reduce){.purifier-water :is(i,b),.scene-purifier.just-built .purifier-art {animation:none;}}
+
+/* ui-density-fixed: 手机背包固定触控密度，页面使用共享移动渲染基线。 */
+.light-note-mobile-rendering .fert-inventory {grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;}
+/* ui-density-fixed: 手机肥料卡片固定触控密度。 */
+.light-note-mobile-rendering .fert-item {padding:10px;}
+/* ui-density-fixed: 手机插画固定展示高度，独立于桌面档位。 */
+.light-note-mobile-rendering .fert-item-art {height:90px;}
+/* ui-density-fixed: 手机标题保持可读字号。 */
+.light-note-mobile-rendering .fert-item h3 {font-size:14px;}
+/* ui-density-fixed: 手机背包四页签可在 320px 同行显示。 */
+.light-note-mobile-rendering .bag-tabs {gap:5px;}
+/* ui-density-fixed: 手机页签图画占位固定，不跟随桌面密度。 */
+.light-note-mobile-rendering .bag-tab-art {width:26px;height:28px;}
+/* ui-density-fixed: 手机页签保留触控高度并减少竖向留白。 */
+.light-note-mobile-rendering .bag-tabs > button {min-height:55px;font-size:11px;}
+/* ui-density-fixed: 手机商店页头以共享移动密度排布。 */
+.light-note-mobile-rendering #modal .farm-shop-dialog .dialog-head {grid-template-columns:minmax(0,1fr) auto;gap:10px;padding:14px 12px 8px;}
+.light-note-mobile-rendering #modal .farm-shop-dialog .dialog-head > div {grid-column:1;justify-self:start;}
+/* ui-density-fixed: 手机标题牌与钱包同一行，避免顶部空白和圆形导航。 */
+.light-note-mobile-rendering #modal .farm-shop-dialog .shop-wallet {grid-column:2;}
+/* ui-density-fixed: 手机钱包采用固定可读字阶。 */
+.light-note-mobile-rendering .shop-wallet {padding:6px 9px;font-size:11px;}
+/* ui-density-fixed: 手机三段交易按钮等宽并满足触控尺寸。 */
+/* ui-density-fixed: 手机交易导航触控高度。 */
+/* ui-density-fixed: 手机商品分类只保留紧凑文字标签和选中线。 */
+/* ui-density-fixed: 手机分类等宽触控目标。 */
+
+
+/* 背包标题沿用已确认的绿色木牌，物品区保持紧凑。 */
+
+/* r14 已确认的邻居图鉴：自然栖息地插画、每日礼物与随机动作各自成组。 */
+#modal .atlas-dialog {width:min(calc(1100px * var(--d)),calc(100vw - 32px));height:min(calc(760px * var(--d)),calc(100vh - 56px * var(--d)));height:min(calc(760px * var(--d)),calc(100dvh - 56px * var(--d)));}
+#modal .wildlife-grid {grid-template-columns:repeat(3,minmax(0,1fr));gap:calc(12px * var(--d));}
+#modal .wildlife-grid > .wildlife-card {position:relative;aspect-ratio:auto;min-height:0;display:grid;grid-template-columns:38% minmax(0,1fr);align-items:center;gap:calc(6px * var(--d));padding:calc(12px * var(--d));border:1px solid #cba86f;border-radius:calc(12px * var(--d));background:linear-gradient(#fffdf3,#fff2d4);box-shadow:inset 0 1px #fffef9,0 3px #d7bb84;text-align:center;}
+#modal .wildlife-card > strong {grid-column:2;position:static;display:block;min-width:50%;padding:calc(3px * var(--d)) calc(12px * var(--d));border:1px solid #7da452;border-radius:calc(6px * var(--d));background:linear-gradient(#87b562,#5f8b40);color:#fffdf2;font-size:calc(15px * var(--d));line-height:1.5;box-shadow:inset 0 1px #bad598,0 2px #537b39;}
+.wildlife-habitat {grid-column:2;padding:calc(2px * var(--d)) calc(12px * var(--d));border:1px solid #e5c88f;border-radius:calc(20px * var(--d));background:#f7e5bc;color:#876039;font-size:calc(10px * var(--d));}
+.wildlife-card-art {grid-column:1;grid-row:1/4;display:block;width:100%;height:calc(112px * var(--d));}
+.wildlife-card-art img {width:100%;height:100%;object-fit:contain;}
+.wildlife-card-story {grid-column:2;display:block;min-height:3.2em;margin:calc(2px * var(--d)) 0;color:#6f5232;font-size:calc(11px * var(--d));line-height:1.6;text-align:left;}
+.wildlife-card-gift {grid-column:1/-1;align-self:stretch;display:flex;justify-content:center;align-items:center;gap:calc(4px * var(--d));min-height:calc(36px * var(--d));margin-top:auto;padding:calc(4px * var(--d));border:1px solid #d8d6a4;border-radius:calc(7px * var(--d));background:#eef0d3;color:#65733e;font-size:calc(11px * var(--d));}
+.wildlife-card-gift.has-gift {background:#ffeab7;border-color:#dfbf76;color:#795126;}
+.wildlife-card-gift > span {display:block;width:calc(30px * var(--d));height:calc(30px * var(--d));flex-shrink:0;}
+.wildlife-card-gift :is(img,.fert-sack) {width:100%;height:100%;object-fit:contain;}
+.wildlife-card:focus-visible {outline:2px solid #598b3a;outline-offset:2px;}
+#modal .wildlife-detail-dialog.tabbed-dialog {width:min(calc(570px * var(--d)),calc(100vw - 32px));height:auto;max-height:calc(100vh - 56px * var(--d));max-height:calc(100dvh - 56px * var(--d));min-height:0;}
+#modal .wildlife-detail-dialog .dialog-head {padding:calc(16px * var(--d)) calc(24px * var(--d)) calc(4px * var(--d));}
+#modal .wildlife-detail-dialog .dialog-head > div {display:grid;justify-items:center;}
+#modal .wildlife-detail-dialog .dialog-head p {display:inline-block;min-height:0;margin:calc(7px * var(--d)) 0 0;padding:calc(2px * var(--d)) calc(15px * var(--d));border:1px solid #e3c28a;border-radius:calc(18px * var(--d));background:#f5e3bd;font-size:calc(11px * var(--d));}
+#modal .wildlife-detail-dialog .dialog-body {padding:calc(8px * var(--d)) calc(20px * var(--d)) calc(14px * var(--d));}
+#modal .wildlife-detail-dialog .dialog-foot {padding:calc(10px * var(--d)) calc(20px * var(--d));}
+.wildlife-sheet {display:grid;gap:calc(12px * var(--d));}
+.wildlife-sheet .wildlife-detail-art {height:calc(165px * var(--d));}
+.wildlife-story {margin:0;color:#705333;font-size:calc(12px * var(--d));line-height:1.7;}
+.wildlife-gift-panel {position:relative;margin-top:calc(8px * var(--d));padding:calc(18px * var(--d)) calc(12px * var(--d)) 0;border:1px solid #95ae59;border-radius:calc(12px * var(--d));background:linear-gradient(#f6f5dd,#fff0cb);box-shadow:inset 0 0 0 2px #fffaf0;}
+.wildlife-gift-panel h3,.wildlife-actions-panel h3 {margin:0 auto;padding:calc(3px * var(--d)) calc(18px * var(--d));width:max-content;border:1px solid #73954b;border-radius:calc(7px * var(--d));background:linear-gradient(#8dbb68,#5c873f);color:#fffdf1;text-shadow:0 1px #4d7134;font-size:calc(13px * var(--d));line-height:1.5;}
+.wildlife-gift-panel h3 {position:absolute;left:50%;top:0;translate:-50% -50%;}
+.wildlife-gift-content {display:flex;align-items:center;justify-content:center;gap:calc(18px * var(--d));}
+.wildlife-gift-art {display:block;width:calc(72px * var(--d));height:calc(76px * var(--d));flex-shrink:0;}
+.wildlife-gift-art :is(img,.fert-sack) {width:100%;height:100%;object-fit:contain;}
+.wildlife-gift-content strong {font-size:calc(21px * var(--d));color:#684423;}
+.wildlife-gift-content p {margin:calc(4px * var(--d)) 0;color:#73582d;font-size:calc(12px * var(--d));}
+.wildlife-gift-content small {color:#638040;font-size:calc(11px * var(--d));}
+.wildlife-pickup {margin:calc(5px * var(--d)) calc(-12px * var(--d)) 0;padding:calc(7px * var(--d)) calc(12px * var(--d));border-top:1px solid #dccb95;color:#80623b;text-align:center;font-size:calc(12px * var(--d));line-height:1.6;}
+.wildlife-actions-panel h3 {margin-bottom:calc(6px * var(--d));}
+.wildlife-actions-panel ul {display:flex;gap:calc(8px * var(--d));padding:0;margin:0;list-style:none;}
+.wildlife-actions-panel li {display:flex;flex:1;flex-direction:column;align-items:center;justify-content:center;gap:calc(5px * var(--d));min-height:calc(40px * var(--d));padding:calc(6px * var(--d));border:1px solid #dfc28a;border-radius:calc(9px * var(--d));background:#fff5dc;color:#755631;font-size:calc(12px * var(--d));text-align:center;}
+.wildlife-actions-panel li img {width:100%;height:calc(62px * var(--d));object-fit:contain;}
+.wildlife-daily-note,.wildlife-companion-note {margin:0;padding:calc(7px * var(--d)) calc(10px * var(--d));border:1px solid #e4d3ae;border-radius:calc(7px * var(--d));background:#f7ecd4;color:#89704b;font-size:calc(11px * var(--d));line-height:1.6;text-align:center;}
+/* ui-density-fixed: 手机邻居卡保留两列，使用共享移动基线。 */
+.light-note-mobile-rendering #modal .wildlife-grid {grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;}
+/* ui-density-fixed: 手机卡内按固定可读密度排布。 */
+.light-note-mobile-rendering #modal .wildlife-grid > .wildlife-card {display:flex;flex-direction:column;padding:8px;gap:5px;}
+/* ui-density-fixed: 手机小标题按固定可读字阶。 */
+.light-note-mobile-rendering #modal .wildlife-card > strong {font-size:14px;min-width:70%;}
+/* ui-density-fixed: 手机画像可读且保留故事和收益空间。 */
+.light-note-mobile-rendering .wildlife-card-art {height:100px;}
+/* ui-density-fixed: 手机栖息地标签与收益采用固定可读字阶。 */
+.light-note-mobile-rendering :is(.wildlife-habitat,.wildlife-card-gift,.wildlife-card-story) {font-size:11px;}
+/* ui-density-fixed: 手机详情标题上下留白固定。 */
+.light-note-mobile-rendering #modal .wildlife-detail-dialog .dialog-head {padding:16px 14px 4px;}
+/* ui-density-fixed: 手机详情正文保留安全边距。 */
+.light-note-mobile-rendering #modal .wildlife-detail-dialog .dialog-body {padding:8px 12px 12px;}
+/* ui-density-fixed: 手机详情的自然插画固定高度。 */
+.light-note-mobile-rendering .wildlife-sheet .wildlife-detail-art {height:155px;}
+/* ui-density-fixed: 手机奖励物品不会挤压名称。 */
+.light-note-mobile-rendering .wildlife-gift-art {width:58px;height:64px;}
+/* ui-density-fixed: 手机奖励主数字可在 320px 宽显示。 */
+.light-note-mobile-rendering .wildlife-gift-content strong {font-size:19px;}
+/* ui-density-fixed: 手机动作小图保持可辨识轮廓。 */
+.light-note-mobile-rendering .wildlife-actions-panel li img {height:50px;}
+
+/* R16：道具图标只辅助动作，文字、禁用与键盘语义继续留在原按钮上。 */
+#modal :is(.button,.tile-btn).has-action-art {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: calc(6px * var(--d));
+}
+#modal .action-art {
+  flex: 0 0 auto;
+  width: calc(26px * var(--d));
+  height: calc(26px * var(--d));
+  object-fit: contain;
+  pointer-events: none;
+}
+#modal .tile-btn .action-art {
+  width: calc(20px * var(--d));
+  height: calc(20px * var(--d));
+}
+.light-note-mobile-rendering #modal .inventory-dialog .seed-choice > .tile-btn.has-action-art {
+  gap: calc(3px * var(--d));
+}
+.light-note-mobile-rendering #modal .inventory-dialog .seed-choice > .tile-btn .action-art {
+  width: calc(16px * var(--d));
+  height: calc(16px * var(--d));
+}
+/* 两片树叶帷幕在中心会合，只有场景内容被盖住，HUD 与底栏保留原位。 */
+.manor-area-veil {
+  position: absolute;
+  inset: 0;
+  z-index: 12;
+  overflow: hidden;
+  pointer-events: none;
+}
+.area-canopy {
+  position:absolute;top:0;bottom:0;
+  /* ui-density-fixed: 帷幕两片重叠 1px 以遮住拼缝，是舞台几何，不属于控件密度。 */
+  width:calc(50% + 1px);
+  background-image:url("courtyard/area-curtain-r17.webp");background-size:200% 100%;background-repeat:no-repeat;will-change:transform;
+}
+.area-canopy.left {left:0;background-position:left center;transform:translateX(-102%);}
+.area-canopy.right {right:0;background-position:right center;transform:translateX(102%);}
+.area-route-name {position:absolute;left:50%;top:46.8%;translate:-50% -50%;display:flex;align-items:center;justify-content:center;gap:calc(8px * var(--d));color:#68411e;font-size:calc(23px * var(--d));line-height:1.2;white-space:nowrap;text-shadow:0 1px #fff0b7;opacity:0;transition:opacity .1s ease;}
+.area-route-name img {width:calc(30px * var(--d));height:calc(30px * var(--d));object-fit:contain;}
+.manor-area-veil.is-closing .area-route-name {opacity:1;transition-delay:.23s;}
+.area-changing > #gardenGuide { visibility: hidden; }
