@@ -182,23 +182,50 @@ try {
     assert.equal((await inspect()).inCaption, true);
     checked++;
 
-    const clickBoundary = async (index = 0) => {
-      const rectangle = await page.locator('.note-editor-body section.ln-media-text').nth(index).boundingBox();
-      const x = rectangle.x + rectangle.width + 6;
-      const y = rectangle.y + rectangle.height / 2;
-      if (profile.mobile) await page.touchscreen.tap(x, y);
-      else await page.mouse.click(x, y);
+    const insertParagraphAfter = async (index = 0) => {
+      const image = page
+        .locator('.note-editor-body section.ln-media-text')
+        .nth(index)
+        .locator('.ln-media-text__media img')
+        .first();
+      await image.click();
+      const button = page.getByRole('button', { name: '在下方插入段落', exact: true });
+      await button.waitFor({ state: 'visible' });
+      await button.click();
+      await button.waitFor({ state: 'hidden' });
       await page.waitForFunction((index) => {
         const editor = window.tinymce.activeEditor;
         const block = editor.getBody().querySelectorAll('section.ln-media-text')[index];
-        return editor.selection.getNode() === block.nextElementSibling && block.nextElementSibling?.tagName === 'P';
+        return (
+          document.activeElement === editor.getBody() &&
+          editor.selection.getNode() === block.nextElementSibling &&
+          block.nextElementSibling?.tagName === 'P'
+        );
       }, index);
     };
+    for (const suffix of ['', '<p>已有下文</p>', '<p><br></p>', block('<p>下一块图注</p>')]) {
+      const original = await prepare(block('<p>图注保留</p>') + suffix, { first: true });
+      await page.evaluate(() => window.tinymce.activeEditor.setDirty(false));
+      const rect = await page.locator('.note-editor-body section.ln-media-text').first().boundingBox();
+      if (profile.mobile) await page.touchscreen.tap(rect.x + rect.width + 6, rect.y + rect.height / 2);
+      else await page.mouse.click(rect.x + rect.width + 6, rect.y + rect.height / 2);
+      assert.equal((await inspect()).html, original, 'Right-edge clicks never insert or change content');
+      assert.equal(await page.evaluate(() => window.tinymce.activeEditor.isDirty()), false);
+      checked++;
+    }
     const surrounding =
       '<p>前文保留</p>' + block('<p>图注<strong>加粗</strong></p><ul><li>内部列表</li></ul>') + '<p>后文保留</p>';
     const boundaryOriginal = await prepare(surrounding);
+    await page.locator('.note-editor-body .ln-media-text__media img').first().click();
+    await page.getByRole('button', { name: '在下方插入段落', exact: true }).waitFor({ state: 'visible' });
+    await page.waitForFunction(() => {
+      const panel = document.querySelector('.rich-media-text-popover');
+      return panel && Number(getComputedStyle(panel).opacity) === 1;
+    });
+    await page.screenshot({ path: join(output, `paragraph-menu-${id}.png`) });
+    await page.keyboard.press('Escape');
     await page.evaluate(() => window.tinymce.activeEditor.setDirty(false));
-    await clickBoundary();
+    await insertParagraphAfter();
     const clicked = await inspect();
     assert.equal(clicked.tag, 'P');
     assert.equal(clicked.afterBlock, true);
@@ -220,17 +247,17 @@ try {
 
     for (const suffix of ['', '<p>已有后文</p>', '<p><br></p>', block('<p>下一块</p>')]) {
       await prepare(block('<p>原图注</p>') + suffix, { first: true });
-      await clickBoundary();
+      await insertParagraphAfter();
       const state = await inspect();
-      assert.equal(state.afterBlock, true, 'Click places the caret in the next paragraph');
+      assert.equal(state.afterBlock, true, 'The explicit menu action focuses the next paragraph');
       assert.equal(state.inCaption, false);
       assert.equal(await page.locator('.note-editor-body section + p').first().textContent(), '');
       if (suffix.includes('已有后文')) assert.equal(await page.locator('.note-editor-body > p').count(), 2);
       if (suffix === '<p><br></p>') assert.equal(await page.locator('.note-editor-body > p').count(), 1);
       const beforeRepeat = state.html;
       await page.evaluate(() => window.tinymce.activeEditor.setDirty(false));
-      await clickBoundary();
-      assert.equal((await inspect()).html, beforeRepeat, 'Repeated clicks reuse the same empty paragraph');
+      await insertParagraphAfter();
+      assert.equal((await inspect()).html, beforeRepeat, 'Repeated menu actions reuse the same empty paragraph');
       assert.equal(await page.evaluate(() => window.tinymce.activeEditor.isDirty()), false);
       await page.keyboard.type('New paragraph');
       assert.equal(await page.locator('.note-editor-body section + p').first().textContent(), 'New paragraph');
@@ -238,14 +265,14 @@ try {
       checked++;
     }
     await prepare(block('<p>原图注</p>') + '<p>已有后文</p>');
-    await clickBoundary();
+    await insertParagraphAfter();
     await page.keyboard.type('直接输入');
     assert.equal(await page.locator('.note-editor-body section + p').textContent(), '直接输入');
     assert.equal(await page.locator('.note-editor-body > p').last().textContent(), '已有后文');
     checked++;
 
     await prepare(block('<p>原图注</p>'));
-    await clickBoundary();
+    await insertParagraphAfter();
     await page.evaluate(() => window.tinymce.activeEditor.insertContent('<p>粘贴后文</p>'));
     assert.equal(await page.locator('figcaption').textContent(), '原图注');
     assert.equal(await page.locator('.note-editor-body section + p').textContent(), '粘贴后文');
@@ -254,13 +281,13 @@ try {
     await prepare(cases.find((item) => item.name === 'multiple-rows').html + block('<p>下一块保留</p>'), {
       first: true,
     });
-    await clickBoundary();
+    await insertParagraphAfter();
     assert.equal(await page.locator('.note-editor-body section').count(), 2);
     assert.equal(await page.locator('.note-editor-body img').count(), 3);
     assert.equal((await inspect()).afterBlock, true);
     assert(
       (await inspect()).top >= (await inspect()).bottom - 1,
-      'Clicking a multi-row group focuses below its final row',
+      'The menu action inserts below the entire multi-row block',
     );
     await page.keyboard.type('块后文字');
     await page.keyboard.press('Enter');
@@ -289,14 +316,14 @@ try {
       await page.locator('.note-editor-body > ol').evaluateAll((lists) => lists.map((list) => list.start)),
       [5, 8],
     );
-    await clickBoundary(1);
+    await insertParagraphAfter(1);
     assert.equal(await page.locator('.note-editor-body > section').count(), 3);
     assert.equal(await page.locator('.note-editor-body img').count(), 3);
     assert.equal(await page.locator('.note-editor-body > section + p').count(), 1);
     await page.screenshot({ path: join(output, `legacy-boundary-${id}.png`), caret: 'initial' });
     await page.evaluate(() => window.tinymce.activeEditor.undoManager.undo());
     assert.equal((await inspect()).html, repaired, 'Undo removes only the added paragraph from repaired content');
-    await clickBoundary(2);
+    await insertParagraphAfter(2);
     await page.keyboard.type('旧块后续行');
     assert.equal(await page.locator('.note-editor-body > section + p').last().textContent(), '旧块后续行');
     assert.equal(await page.locator('figcaption strong').count(), 2);
@@ -381,8 +408,8 @@ try {
     checked++;
 
     await prepare(block('<p>原图注</p>'));
-    await clickBoundary();
-    await clickBoundary();
+    await insertParagraphAfter();
+    await insertParagraphAfter();
     await page.evaluate(() => window.tinymce.activeEditor.execCommand('Undo'));
     assert.equal(
       await page.locator('.note-editor-body > p').count(),
@@ -427,7 +454,7 @@ try {
     checked++;
 
     await prepare(tableHtml);
-    await clickBoundary();
+    await insertParagraphAfter();
     assert.equal(await page.locator('.note-editor-body section').count(), 1);
     assert.equal(await page.locator('.note-editor-body table').count(), 1);
     assert.equal(await page.locator('.note-editor-body td').count(), 2);
@@ -447,7 +474,7 @@ try {
 
     for (const command of ['Bold', 'Italic', 'ForeColor']) {
       await prepare(block('<p>原图注</p>') + '<p>原后文</p>');
-      await clickBoundary();
+      await insertParagraphAfter();
       await page.evaluate(
         (command) =>
           window.tinymce.activeEditor.execCommand(command, false, command === 'ForeColor' ? '#ff0000' : undefined),
@@ -469,6 +496,58 @@ try {
       checked++;
     }
     console.log(`PASS ${id}`);
+    await page.close();
+  }
+  for (const profile of [
+    { width: 1440, theme: 'day', density: 'small', mobile: false },
+    { width: 390, theme: 'night', density: 'large', mobile: true },
+  ]) {
+    const page = await browser.newPage({
+      viewport: { width: profile.width, height: 900 },
+      hasTouch: profile.mobile,
+      reducedMotion: 'reduce',
+    });
+    page.on('pageerror', (error) => errors.push(error.message));
+    const url = new URL('/e2e/note-image-tools.html', origin);
+    url.searchParams.set('locale', 'en-US');
+    url.searchParams.set('theme', profile.theme);
+    url.searchParams.set('density', profile.density);
+    if (profile.mobile) url.searchParams.set('renderProfile', 'mobile');
+    await page.goto(url.href);
+    await page.waitForFunction(() => window.tinymce?.activeEditor?.initialized);
+    await page.locator('.note-editor-runtime-skeleton').waitFor({ state: 'detached' });
+    await page.locator('.note-editor-warmup').waitFor({ state: 'detached' });
+    await page.evaluate(
+      (html) => {
+        const editor = window.tinymce.activeEditor;
+        editor.setContent(html);
+        editor.focus();
+      },
+      block('<p>Caption stays</p>') + '<p>Following text stays</p>',
+    );
+    await page.locator('.ln-media-text__media img').click();
+    const button = page.getByRole('button', { name: 'Insert paragraph below', exact: true });
+    await button.waitFor({ state: 'visible' });
+    await page.waitForFunction(() => {
+      const panel = document.querySelector('.rich-media-text-popover');
+      return panel && Number(getComputedStyle(panel).opacity) === 1;
+    });
+    const bounds = await button.evaluate((el) => ({
+      left: el.getBoundingClientRect().left,
+      right: el.getBoundingClientRect().right,
+      width: el.clientWidth,
+      scrollWidth: el.scrollWidth,
+    }));
+    assert(bounds.left >= 0 && bounds.right <= profile.width, 'English action remains inside viewport');
+    assert(bounds.scrollWidth <= bounds.width + 1, 'English action label is not clipped');
+    await page.screenshot({ path: join(output, `paragraph-menu-en-${profile.width}-${profile.theme}.png`) });
+    await button.click();
+    await button.waitFor({ state: 'hidden' });
+    await page.keyboard.type('New paragraph');
+    assert.equal(await page.locator('.note-editor-body section + p').textContent(), 'New paragraph');
+    assert.equal(await page.locator('.note-editor-body > p').last().textContent(), 'Following text stays');
+    assert.equal(await page.locator('figcaption').textContent(), 'Caption stays');
+    checked++;
     await page.close();
   }
   const readonlyPage = await browser.newPage();

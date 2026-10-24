@@ -7335,6 +7335,7 @@ export default {
       mediaTextReplaceImage: 'Replace image',
       mediaTextAddGroup: 'Add pair',
       mediaTextDeleteGroup: 'Delete pair',
+      mediaTextParagraphAfter: 'Insert paragraph below',
       mediaTextTextPlaceholder: 'Write the text for this image',
       mediaTextMarkdownPlaceholder: 'Replace this caption in the Markdown source',
       mediaTextTargetChanged: 'This image and text block changed. Select it again and retry.',

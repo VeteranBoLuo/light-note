@@ -252,6 +252,15 @@
               <SvgIcon :src="icon.noteDetail.imageToolbar.delete" size="15" aria-hidden="true" />
               {{ t('noteDetail.editor.mediaTextDeleteGroup') }}
             </BButton>
+            <BButton
+              class="rich-media-text-toolbar__paragraph-after"
+              size="small"
+              :disabled="richMediaTextUploading"
+              @click="insertParagraphAfterRichMediaText"
+            >
+              <SvgIcon :src="icon.noteDetail.imageToolbar.paragraphAfter" size="15" aria-hidden="true" />
+              {{ t('noteDetail.editor.mediaTextParagraphAfter') }}
+            </BButton>
           </div>
         </div>
       </template>
@@ -3180,6 +3189,7 @@
       return;
     }
     richMediaTextToolbarVisible.value = true;
+    editorRef.value?.dispatch?.('contexttoolbar-hide');
   }
 
   function openRichMediaTextInsert() {
@@ -3350,6 +3360,32 @@
     richMediaTextWidth.value = width;
     editorRef.value?.undoManager?.transact(() => target.block.setAttribute('data-ln-media-width', String(width)));
     notifyRichMediaTextMutation();
+  }
+
+  function insertParagraphAfterRichMediaText() {
+    const editor = editorRef.value;
+    const target = getLiveRichMediaTextTarget(richMediaTextBlock.value, richMediaTextItem.value);
+    if (!editor || props.readonly || richMediaTextUploading.value || !target) return;
+    const next = target.block.nextElementSibling as HTMLElement | null;
+    const reusable = next?.matches('p') && editor.dom.isEmpty(next);
+    const paragraph = reusable ? next : (editor.dom.create('p', {}) as HTMLElement);
+    if (!reusable) paragraph.appendChild(editor.dom.create('br', { 'data-mce-bogus': '1' }));
+    closeRichMediaTextToolbar();
+    editor.focus();
+    const focus = () => {
+      editor.selection.setCursorLocation(paragraph, 0);
+      editor.selection.scrollIntoView(paragraph);
+      editor.nodeChanged();
+    };
+    if (reusable) {
+      focus();
+    } else {
+      editor.undoManager.transact(() => {
+        target.block.after(paragraph);
+        focus();
+      });
+      notifyRichMediaTextMutation(editor);
+    }
   }
 
   function deleteRichMediaTextItem() {
@@ -4735,6 +4771,12 @@
       const adjustContextToolbarAwayFromMainToolbar = () => {
         contextToolbarAdjustFrame = null;
         clearContextToolbarAdjustments();
+        // 图文操作菜单优先；同时收起 TinyMCE 在选区变化后异步显示的单元格工具条。
+        if (richMediaTextToolbarVisible.value) {
+          editor.dispatch('contexttoolbar-hide');
+          contextToolbarObserver?.takeRecords();
+          return;
+        }
         const editorElement = editor.getElement?.() as HTMLElement | null;
         const container = editorElement?.closest<HTMLElement>('#editor-container');
         const toolbar = container?.querySelector<HTMLElement>('.note-editor-toolbar');
@@ -4931,10 +4973,6 @@
       bindRichMediaTextEditing(editor, {
         isReadonly: () => props.readonly,
         onMutation: () => notifyRichMediaTextMutation(editor),
-        onParagraphFocus: () => {
-          closeRichMediaTextToolbar();
-          setSelectedMermaidFigure(null);
-        },
       });
 
       const exitTrailingRichMediaText = (event: KeyboardEvent) => {
@@ -7651,8 +7689,8 @@
           overflow: hidden;
           font-size: 12px;
 
-          &:last-child {
-            grid-column: auto;
+          &.rich-media-text-toolbar__paragraph-after {
+            grid-column: 1 / -1;
           }
         }
       }

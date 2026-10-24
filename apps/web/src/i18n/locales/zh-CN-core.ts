@@ -6988,6 +6988,7 @@ export default {
       mediaTextReplaceImage: '换图',
       mediaTextAddGroup: '添加一组',
       mediaTextDeleteGroup: '删除本组',
+      mediaTextParagraphAfter: '在下方插入段落',
       mediaTextTextPlaceholder: '请输入这张图片对应的文字',
       mediaTextMarkdownPlaceholder: '请在 Markdown 源码中替换这段图文说明',
       mediaTextTargetChanged: '图文组合已发生变化，请重新选择后再操作',
