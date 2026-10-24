@@ -1,10 +1,10 @@
 import type { Editor } from 'tinymce';
 import { liftRichMediaTextOutOfLists, restoreRichMediaTextBlockTags } from './richMediaText';
 
-/** 编辑器内的结构约束和块后光标。临时落点只使用 DOM 选区和可清理属性，不进入正文。 */
+/** 图文保持独立块；点击右侧外沿时直接在块下方进入普通段落。 */
 export function bindRichMediaTextEditing(
   editor: Editor,
-  options: { isReadonly: () => boolean; onMutation: () => void; onBoundaryFocus: () => void },
+  options: { isReadonly: () => boolean; onMutation: () => void; onParagraphFocus: () => void },
 ) {
   editor.on('PreInit', () => {
     // 提示和选中标记只属于展示层；原生临时属性机制也会将它们排除出撤销快照比较。
@@ -15,25 +15,7 @@ export function bindRichMediaTextEditing(
       'data-ln-media-after-caret',
     ].forEach((attribute) => editor.serializer.addTempAttr(attribute));
   });
-  let afterBlock: HTMLElement | null = null;
-  let restoringBoundary = false;
   let applyingList = false;
-  const clear = () => {
-    afterBlock?.removeAttribute('data-ln-media-after-caret');
-    afterBlock = null;
-  };
-  const isAtBoundary = () => {
-    if (!afterBlock?.isConnected || !editor.getBody()?.contains(afterBlock)) return false;
-    const range = editor.selection.getRng();
-    return (
-      range.collapsed &&
-      range.startContainer === afterBlock.parentNode &&
-      range.startOffset === Array.prototype.indexOf.call(afterBlock.parentNode!.childNodes, afterBlock) + 1
-    );
-  };
-  const syncBoundary = () => {
-    if (!restoringBoundary && afterBlock && !isAtBoundary()) clear();
-  };
   const createParagraph = () => {
     const paragraph = editor.getDoc().createElement('p');
     paragraph.append(editor.dom.create('br', { 'data-mce-bogus': '1' }));
@@ -44,30 +26,12 @@ export function bindRichMediaTextEditing(
     editor.selection.scrollIntoView(node);
     editor.nodeChanged();
   };
-  const continueAfterBlock = () => {
-    if (options.isReadonly() || !isAtBoundary() || !afterBlock) return false;
-    const block = afterBlock;
-    clear();
-    editor.undoManager.transact(() => {
-      const next = block.nextElementSibling as HTMLElement | null;
-      const reusable = next?.matches('p') && editor.dom.isEmpty(next);
-      const paragraph = reusable ? next : createParagraph();
-      if (!reusable) block.after(paragraph);
-      focus(paragraph);
-    });
-    options.onMutation();
-    return true;
-  };
-
-  const onMouseDown = (event: MouseEvent) => {
+  const onClick = (event: MouseEvent) => {
     if (options.isReadonly() || event.button !== 0 || event.shiftKey || event.ctrlKey || event.metaKey || event.altKey)
       return;
     const body = editor.getBody();
     const target = event.target as Element | null;
-    if (target?.closest?.('section.ln-media-text')) {
-      clear();
-      return;
-    }
+    if (target?.closest?.('section.ln-media-text')) return;
     const edge = body.getBoundingClientRect().right;
     const gutter = Number.parseFloat(editor.dom.getStyle(body, 'padding-right', true)) || 0;
     const scope = target && body.contains(target) ? target : body;
@@ -84,62 +48,22 @@ export function bindRichMediaTextEditing(
         event.clientY <= rectangle.bottom
       );
     });
-    if (!block) {
-      clear();
-      return;
-    }
+    if (!block) return;
     event.preventDefault();
     event.stopImmediatePropagation();
-    clear();
-    options.onBoundaryFocus();
+    options.onParagraphFocus();
     editor.focus();
-    const range = editor.getDoc().createRange();
-    range.setStartAfter(block);
-    range.collapse(true);
-    editor.selection.setRng(range);
-    afterBlock = block;
-    block.setAttribute('data-ln-media-after-caret', 'true');
-    editor.nodeChanged();
-  };
-
-  const handleKeydown = (event: KeyboardEvent) => {
-    if (options.isReadonly() || event.defaultPrevented || event.isComposing || !isAtBoundary() || !afterBlock)
-      return false;
-    if (event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return false;
-    if (event.key === 'Enter') {
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      return continueAfterBlock();
+    const next = block.nextElementSibling as HTMLElement | null;
+    if (next?.matches('p') && editor.dom.isEmpty(next)) {
+      focus(next);
+      return;
     }
-    if (event.key === 'Backspace') {
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      const block = afterBlock;
-      clear();
-      editor.undoManager.transact(() => {
-        const next = block.nextElementSibling as HTMLElement | null;
-        const paragraph = next?.matches('p') ? next : createParagraph();
-        if (paragraph !== next) block.after(paragraph);
-        block.remove();
-        focus(paragraph);
-      });
-      options.onMutation();
-      return true;
-    }
-    if (['ArrowLeft', 'ArrowUp', 'Escape'].includes(event.key)) {
-      const captions = afterBlock.querySelectorAll<HTMLElement>('.ln-media-text__content');
-      const caption = captions[captions.length - 1];
-      clear();
-      if (caption) {
-        event.preventDefault();
-        event.stopImmediatePropagation();
-        editor.selection.select(caption, true);
-        editor.selection.collapse(false);
-        editor.nodeChanged();
-        return true;
-      }
-    }
-    return false;
+    editor.undoManager.transact(() => {
+      const paragraph = createParagraph();
+      block.after(paragraph);
+      focus(paragraph);
+    });
+    options.onMutation();
   };
 
   const normalizeLists = () => {
@@ -171,33 +95,7 @@ export function bindRichMediaTextEditing(
       editor.selection.setRng(restored);
     }
   };
-  const onBeforeInput = (event: InputEvent) => {
-    if (!event.defaultPrevented && event.inputType.startsWith('insert')) continueAfterBlock();
-  };
   const onBeforeCommand = (event: { command: string; ui?: boolean; value?: unknown; preventDefault: () => void }) => {
-    if (event.command.toLowerCase() === 'mcefocus' && !event.value && isAtBoundary() && afterBlock) {
-      // 普通 focus 会把块后选区规范化到图注。保留真实焦点与活动编辑器，只跳过这次选区改写。
-      event.preventDefault();
-      restoringBoundary = true;
-      try {
-        editor.focus(true);
-        editor.getBody().focus({ preventScroll: true });
-        const range = editor.getDoc().createRange();
-        range.setStartAfter(afterBlock);
-        range.collapse(true);
-        editor.selection.setRng(range);
-      } finally {
-        restoringBoundary = false;
-      }
-      return;
-    }
-    if (
-      /^(mceInsertContent|InsertContent|InsertUnorderedList|InsertOrderedList|ToggleNoteTodo|FormatBlock)$/iu.test(
-        event.command,
-      )
-    ) {
-      continueAfterBlock();
-    }
     if (!options.isReadonly() && !applyingList && /^(InsertUnorderedList|InsertOrderedList)$/iu.test(event.command)) {
       const range = editor.selection.getRng();
       const captionFor = (node: Node) =>
@@ -228,17 +126,8 @@ export function bindRichMediaTextEditing(
       options.onMutation();
     }
   };
-  const onCompositionStart = () => {
-    continueAfterBlock();
-  };
-  // TinyMCE 会在 mouseup 时再次校正选区，click 后重新锚定，避免落回下一段文字。
-  editor.on('mousedown click', onMouseDown, true);
-  editor.on('NodeChange SelectionChange', syncBoundary);
-  editor.on('beforeinput', onBeforeInput);
-  editor.on('compositionstart', onCompositionStart);
+  // 在原生 mouseup 选区处理之后落到真实段落，仅处理一次 click，避免重复换行。
+  editor.on('click', onClick, true);
   editor.on('BeforeExecCommand', onBeforeCommand, true);
   editor.on('SetContent ExecCommand', normalizeLists);
-  editor.on('undo redo SetContent SwitchMode', clear);
-  editor.on('remove', clear);
-  return { handleKeydown };
 }
