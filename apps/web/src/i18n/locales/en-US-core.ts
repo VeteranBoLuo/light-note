@@ -7338,7 +7338,7 @@ export default {
       mediaTextParagraphAfter: 'Insert paragraph below',
       mediaTextImageEmpty: 'No image',
       mediaTextImageAdd: 'Add image',
-      mediaTextImagePaste: 'Or paste an image',
+      mediaTextImagePaste: 'Paste image here',
       mediaTextImageUploading: 'Uploading image',
       mediaTextImageRetry: 'Add image again',
       mediaTextImageFailed: 'Upload failed. Try again.',
