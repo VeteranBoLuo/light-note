@@ -1,12 +1,12 @@
 <template>
   <main class="knowledge-manor">
-    <div v-if="loading" class="knowledge-manor__state"><BLoading inline loading :title="t('manor.loading')" /></div>
-    <div v-else-if="failed" class="knowledge-manor__state" role="alert">
+    <div v-if="failed" class="knowledge-manor__state" role="alert">
       <p>{{ t('manor.loadFailed') }}</p>
       <BButton @click="initialise">{{ t('common.retry') }}</BButton>
       <BButton @click="exit">{{ t('manor.returnToApp') }}</BButton>
     </div>
-    <iframe v-else ref="frame" :key="nonce" :src="frameUrl" :title="t('manor.title')" referrerpolicy="same-origin" />
+    <div v-else-if="loading || !frameShown" class="knowledge-manor__state"><BLoading inline loading :title="t('manor.loading')" /></div>
+    <iframe v-if="!loading && !failed" ref="frame" :key="nonce" :src="frameUrl" :title="t('manor.title')" referrerpolicy="same-origin" @error="failed = true" />
   </main>
 </template>
 
@@ -27,7 +27,8 @@
   const user = useUserStore(), bookmark = bookmarkStore(), router = useRouter(), growth = useGrowth();
   const { t } = useI18n();
   const frame = ref<HTMLIFrameElement | null>(null), nonce = ref(crypto.randomUUID());
-  const loading = ref(true), failed = ref(false);
+  const loading = ref(true), failed = ref(false), frameShown = ref(false);
+  let bootTimer: ReturnType<typeof setTimeout> | undefined;
   let snapshot: ManorSnapshot | null = null, pending: ManorCommand | null = null;
   let owner = '', generation = 0, disposed = false, commanding = false, initialProvided = false;
   let overlay: MobileOverlayHistoryHandle | null = null;
@@ -73,12 +74,13 @@
   }
   async function initialise() {
     const g = ++generation;
+    clearTimeout(bootTimer); frameShown.value = false;
     releaseMobileOverlayHistory(overlay); overlay = null;
     owner = user.id; snapshot = null; nonce.value = crypto.randomUUID(); initialProvided = false;
     loading.value = true; failed.value = false;
     pending = owner ? readPendingManorCommand(owner) : null;
     if (!owner || user.role !== 'root' || user.adminContext) { loading.value = false; failed.value = true; return; }
-    try { await refresh(g); }
+    try { await refresh(g); if (current(g)) bootTimer = setTimeout(() => { if (current(g)) failed.value = true; }, 30000); }
     catch { if (g === generation) failed.value = true; }
     finally { if (g === generation) loading.value = false; }
   }
@@ -97,7 +99,8 @@
     const target = event.source as Window, token = nonce.value;
     try {
       let value: unknown = null;
-      if (data.action === 'get') {
+      if (data.action === 'loading') { clearTimeout(bootTimer); frameShown.value = true; return; }
+      else if (data.action === 'get') {
         value = !initialProvided && snapshot && !pending ? decorated(snapshot) : await refresh(g);
         initialProvided = true;
       }
@@ -137,11 +140,11 @@
   });
   watch(() => [user.id, user.role, Boolean(user.adminContext)], () => { void initialise(); });
   onMounted(() => { window.addEventListener('message', message); void initialise(); });
-  onBeforeUnmount(() => { disposed = true; ++generation; window.removeEventListener('message', message); releaseMobileOverlayHistory(overlay); });
+  onBeforeUnmount(() => { disposed = true; ++generation; clearTimeout(bootTimer); window.removeEventListener('message', message); releaseMobileOverlayHistory(overlay); });
 </script>
 
 <style scoped>
-  .knowledge-manor { width: 100%; height: 100%; min-height: 0; overflow: hidden; }
+  .knowledge-manor { position: relative; width: 100%; height: 100%; min-height: 0; overflow: hidden; }
   .knowledge-manor iframe { display: block; width: 100%; height: 100%; border: 0; }
-  .knowledge-manor__state { display: grid; height: 100%; place-content: center; justify-items: center; gap: var(--ui-space-12, 12px); color: var(--text-color); background: var(--background-color); }
+  .knowledge-manor__state { position: absolute; inset: 0; z-index: 1; display: grid; place-content: center; justify-items: center; gap: var(--ui-space-12, 12px); color: var(--text-color); background: var(--background-color); }
 </style>

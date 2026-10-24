@@ -15,12 +15,13 @@ describe('庄园生产入口与经典规则脚本', () => {
     const state = runInNewContext(`${model};GardenModel.create()`, {});
     expect(state).toMatchObject({ adopted: false, water: 0, wallet: 0, fish: [] });
     const entry = assets.get('manor/index.html')!;
-    const links = [...entry.matchAll(/\b(?:src|href|data-ui-script)="([^"?]+)\?v=([a-f0-9]{16})"/g)];
+    const links = [...entry.matchAll(/\b(?:src|href|data-ui-script|data-worker)="([^"?]+)\?v=([a-f0-9]{16})"/g)];
     expect(links.length).toBeGreaterThan(30);
     for (const [, path, version] of links) {
       const content = path === 'garden-model.js' ? model : readFileSync(new URL(`../../public/manor/${path}`, import.meta.url));
       expect(createHash('sha256').update(content).digest('hex').slice(0,16)).toBe(version);
     }
     expect(entry).toMatch(/data-ui-script="knowledge-garden-v19\/garden-ui\.js\?v=[a-f0-9]{16}"/);
+    expect(entry).toMatch(/data-worker="knowledge-garden-v19\/garden-water-worker\.js\?v=[a-f0-9]{16}"/);
   });
 });

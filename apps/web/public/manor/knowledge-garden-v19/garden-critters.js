@@ -189,7 +189,7 @@ const GardenCritters = (() => {
   function frogFrame() {
     if (!frogAtlas && typeof Image !== "undefined") {
       frogAtlas = new Image();
-      frogAtlas.src = "knowledge-garden-v19/courtyard/frog-jump-r5.png";
+      frogAtlas.src = "knowledge-garden-v19/courtyard/frog-jump-r5.webp";
     }
     return frogAtlas;
   }

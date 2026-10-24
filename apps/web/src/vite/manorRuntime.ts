@@ -9,7 +9,7 @@ export default function manorRuntime(): Plugin {
   const publicRoot = new URL('../../public/manor/', import.meta.url);
   const classicSource = () => readFileSync(modelFile, 'utf8').replace(/export default GardenModel;\s*$/, '');
   const documentSource = () => readFileSync(new URL('index.html', publicRoot), 'utf8').replace(
-    /\b(src|href|data-ui-script)="([^"#]+)"/g,
+    /\b(src|href|data-ui-script|data-worker)="([^"#]+)"/g,
     (_match, attribute: string, url: string) => {
       const path = url.split('?')[0];
       const source = path === 'garden-model.js' ? classicSource() : readFileSync(new URL(path, publicRoot));

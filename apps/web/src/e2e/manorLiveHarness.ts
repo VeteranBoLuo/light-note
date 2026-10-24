@@ -1,3 +1,4 @@
+import './manorPerformanceProbe';
 import { createApp, h, ref } from 'vue';
 import { createPinia, setActivePinia } from 'pinia';
 import { createMemoryHistory, createRouter, RouterView } from 'vue-router';
