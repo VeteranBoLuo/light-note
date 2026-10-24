@@ -1498,11 +1498,6 @@ function init() {
   window.addEventListener("resize", () => {applyDensity();requestAnimationFrame(positionDiscoveryGuide);});
   applyDensity();
   render();
-  // 首屏显示后预解码另一片区域；首次点击也会等待同一个有超时的准备任务。
-  if (isMobileView()) {
-    GardenArea.prepare(FARM_CAL.mobileGarden);
-    GardenArea.prepare(FARM_CAL.mobileBay);
-  }
   let tick = Date.now();
   setInterval(() => {
     const now = Date.now(),
@@ -1516,3 +1511,4 @@ function init() {
   }, 1000);
 }
 init();
+if(typeof GardenStartup!=='undefined'){GardenStartup.mounted();GardenStartup.ready();}

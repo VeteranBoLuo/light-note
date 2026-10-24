@@ -38,12 +38,17 @@ const GardenAnimalSkin=(()=>{
   function build(kind,T){
     const root=new T.Group(),model={root,kind,yaw:0,materials:[],geometries:[],ready:false,dead:false};
     if(typeof document==='undefined')return model;
+    let prepared;const preparation=new Promise(resolve=>{prepared=resolve;});model.cancelPreparation=prepared;
+    if(typeof GardenStartup!=='undefined')GardenStartup.track(preparation);
     const texture=new T.TextureLoader().load(`knowledge-garden-v19/courtyard/animal-${kind}-r12.webp`,()=>{
-      if(model.dead){texture.dispose();return;}
+      if(model.dead){texture.dispose();prepared();return;}
+      try {
       const source=document.createElement('canvas');source.width=384;source.height=Math.round(384*texture.image.height/texture.image.width);
       const ctx=source.getContext('2d');ctx.drawImage(texture.image,0,0,source.width,source.height);
       attach(model,T,surface(ctx.getImageData(0,0,source.width,source.height).data,source.width,source.height,kind),texture);
-    },undefined,()=>{model.failed=true;});
+      } catch {model.failed=true;}
+      finally {prepared();}
+    },undefined,()=>{model.failed=true;prepared();});
     texture.colorSpace=T.SRGBColorSpace;texture.generateMipmaps=true;model.texture=texture;
     return model;
   }

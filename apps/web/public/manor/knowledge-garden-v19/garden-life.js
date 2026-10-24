@@ -29,34 +29,29 @@ const GardenLife = (() => {
     for (const el of [canvas, birds]) { el.setAttribute('aria-hidden', 'true'); el.style.pointerEvents = 'none'; }
     tank.prepend(canvas); scene.prepend(birds);
     const ctx = canvas.getContext('2d'), sky = birds.getContext('2d');
-    const waterMask=document.createElement('canvas'),maskCtx=waterMask.getContext('2d');
-    if (!ctx || !sky || !maskCtx) { canvas.remove(); birds.remove(); return; }
+    if (!ctx || !sky) { canvas.remove(); birds.remove(); return; }
     const reduced = matchMedia('(prefers-reduced-motion: reduce)');
     const birdPhases=Array.from({length:3},()=>Math.random());
-    let raf = 0, last = 0, age = 0, w = 0, h = 0, sw = 0, sh = 0, dpr = 1;
+    let raf = 0, last = 0, age = 0, w = 0, h = 0, sw = 0, sh = 0, dpr = 1, waterPoly=[];
     const measure = () => {
       w = tank.clientWidth; h = tank.clientHeight; sw = scene.clientWidth; sh = scene.clientHeight;
       dpr = Math.min(2, devicePixelRatio || 1);
       for (const [el, cw, ch] of [[canvas,w,h],[birds,sw,sh]]) {
         el.width = Math.max(1, Math.round(cw * dpr)); el.height = Math.max(1, Math.round(ch * dpr));
       }
-      const maskScale=Math.min(1,512/Math.max(1,w));
-      waterMask.width=Math.max(1,Math.ceil(w*maskScale));waterMask.height=Math.max(1,Math.ceil(h*maskScale));
-      const poly=GardenHabitat.water(document.documentElement.classList.contains('light-note-mobile-rendering')).map(([x,y])=>[x*w,y*h]);
-      const pixels=maskCtx.createImageData(waterMask.width,waterMask.height);
-      for(let y=0;y<waterMask.height;y++)for(let x=0;x<waterMask.width;x++)pixels.data[(y*waterMask.width+x)*4+3]=Math.round(255*edgeAlpha(x/maskScale,y/maskScale,poly,Math.max(5,w*.018)));
-      maskCtx.putImageData(pixels,0,0);
+      waterPoly=GardenHabitat.water(document.documentElement.classList.contains('light-note-mobile-rendering')).map(([x,y])=>[x*w,y*h]);
     };
     const ro = new ResizeObserver(measure); ro.observe(tank); ro.observe(scene); measure();
     function drawWater(t) {
       ctx.setTransform(dpr,0,0,dpr,0,0); ctx.clearRect(0,0,w,h);
       if (!w || !h) return;
       for (let i=0;i<16;i++) {
-        const b=bubbleAt(i,t,w,h); ctx.strokeStyle=`rgba(223,255,251,${b.alpha})`;ctx.lineWidth=.9;
+        const b=bubbleAt(i,t,w,h),alpha=b.alpha*edgeAlpha(b.x,b.y,waterPoly,Math.max(5,w*.018));
+        if(!alpha)continue;
+        ctx.strokeStyle=`rgba(223,255,251,${alpha})`;ctx.lineWidth=.9;
         ctx.beginPath();ctx.arc(b.x,b.y,b.r,0,Math.PI*2);ctx.stroke();
-        ctx.fillStyle=`rgba(255,255,242,${b.alpha*.65})`;ctx.beginPath();ctx.arc(b.x-b.r*.3,b.y-b.r*.35,b.r*.22,0,Math.PI*2);ctx.fill();
+        ctx.fillStyle=`rgba(255,255,242,${alpha*.65})`;ctx.beginPath();ctx.arc(b.x-b.r*.3,b.y-b.r*.35,b.r*.22,0,Math.PI*2);ctx.fill();
       }
-      ctx.save();ctx.globalCompositeOperation='destination-in';ctx.drawImage(waterMask,0,0,w,h);ctx.restore();
       canvas.dataset.frame = String(Math.round(t*1000));
       canvas.dataset.mode = 'garden';
     }

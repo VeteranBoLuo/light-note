@@ -8,9 +8,9 @@ const FarmFacilities = (() => {
   const config = (key) => M.FACILITIES[key];
   const img = (file, cls = "") => `<img class="${cls}" src="${BASE}${file}" alt="" draggable="false">`;
   function art(key, sealed = false) {
-    const file = (typeof FarmStage !== "undefined" ? FarmStage.cal().facilitySprites?.[key] : null) || (key === "workshop" ? "workshop-states-r22.png" : "hive-states-r18.webp");
-    if (key === "beehive" && file === "hive-states-r33.png") return `<span class="r18-sprite hive-native-art" data-frame="${sealed ? 1 : 0}" aria-hidden="true">${img("hive-built-r33.png", "hive-built-img")}${img(file, "hive-sealed-img")}</span>`;
-    return `<span class="r18-sprite${file === "workshop-states-r33.png" ? " workshop-native-art" : ""}" data-frame="${sealed ? 1 : 0}" aria-hidden="true">${img(file)}</span>`;
+    const file = (typeof FarmStage !== "undefined" ? FarmStage.cal().facilitySprites?.[key] : null) || (key === "workshop" ? "workshop-states-r22.webp" : "hive-states-r18.webp");
+    if (key === "beehive" && file === "hive-states-r33.webp") return `<span class="r18-sprite hive-native-art" data-frame="${sealed ? 1 : 0}" aria-hidden="true">${img("hive-built-r33.webp", "hive-built-img")}${img(file, "hive-sealed-img")}</span>`;
+    return `<span class="r18-sprite${file === "workshop-states-r33.webp" ? " workshop-native-art" : ""}" data-frame="${sealed ? 1 : 0}" aria-hidden="true">${img(file)}</span>`;
   }
   // Scene-only crops preserve the approved mobile viewing angle; dialogs keep their catalog art.
   function nativeSceneArt(key, sealed = false) {
@@ -27,7 +27,7 @@ const FarmFacilities = (() => {
   function purifierArt(level = 0) {
     const bounds = [[.05263, .11164, .87879, .98086], [.05901, .17225, .78469, .95215], [.11643, .07815, .95375, .9075], [.05742, .00319, .91228, .9362]][level];
     const [l, t, r, b] = bounds,s = Math.min(.88 / (r - l), .79 / (b - t));
-    return `<span class="purifier-grade${level ? "" : " purifier-image"}" data-level="${level}" style="--grade-x:${-(level % 2) * 50}%;--grade-y:${-Math.floor(level / 2) * 50}%;--grade-size:${s * 100}%;--grade-left:${(0.5 - (l + r) / 2 * s) * 100}%;--grade-top:${(.89 - b * s) * 100}%"><span class="purifier-cell">${img("purifier-states-r22.png")}</span></span>`;
+    return `<span class="purifier-grade${level ? "" : " purifier-image"}" data-level="${level}" style="--grade-x:${-(level % 2) * 50}%;--grade-y:${-Math.floor(level / 2) * 50}%;--grade-size:${s * 100}%;--grade-left:${(0.5 - (l + r) / 2 * s) * 100}%;--grade-top:${(.89 - b * s) * 100}%"><span class="purifier-cell">${img("purifier-states-r22.webp")}</span></span>`;
   }
   const craftClock = (hours) => {const m = Math.max(1, Math.ceil(hours * 60));return `${Math.floor(m / 60)}小时${m % 60 ? `${m % 60}分` : ""}`;};
   const visible = (key, d = FarmStage.cal()) => !!d.facilities?.[key] && (!d.area || d.area === (key === "beehive" ? "garden" : "bay"));
