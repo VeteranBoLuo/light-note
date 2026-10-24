@@ -111,11 +111,71 @@ function stripTransientAttributes(element: Element) {
       attribute.name.startsWith('data-mce-') ||
       attribute.name === 'contenteditable' ||
       attribute.name === 'data-ln-media-selected' ||
-      attribute.name === 'data-ln-media-item-selected'
+      attribute.name === 'data-ln-media-item-selected' ||
+      attribute.name === 'data-ln-media-after-caret'
     ) {
       element.removeAttribute(attribute.name);
     }
   });
+}
+
+/** 拆开图文外层的列表，移动原节点以保留图注、链接和媒体；图注内部的列表不受影响。 */
+export function liftRichMediaTextOutOfLists(block: HTMLElement, boundary?: HTMLElement) {
+  if (boundary && !boundary.contains(block)) return false;
+  if (block.parentElement?.closest('.ln-media-text__content')) return false;
+  let outerList: HTMLElement | null = null;
+  const ordinals = new WeakMap<Element, number>();
+  for (let ancestor = block.parentElement; ancestor && ancestor !== boundary; ancestor = ancestor.parentElement) {
+    if (!ancestor.matches('ul,ol')) continue;
+    outerList = ancestor;
+    if (ancestor.tagName !== 'OL') continue;
+    const items = Array.from(ancestor.children).filter((child) => child.tagName === 'LI');
+    const step = ancestor.hasAttribute('reversed') ? -1 : 1;
+    let ordinal = Number.parseInt(ancestor.getAttribute('start') || '', 10);
+    if (!Number.isFinite(ordinal)) ordinal = step === -1 ? items.length : 1;
+    for (const item of items) {
+      const explicit = Number.parseInt(item.getAttribute('value') || '', 10);
+      if (Number.isFinite(explicit)) ordinal = explicit;
+      ordinals.set(item, ordinal);
+      ordinal += step;
+    }
+  }
+  const destination = outerList?.parentElement;
+  if (!destination) return false;
+  const hasContent = (element: Element) =>
+    Boolean(
+      element.textContent?.trim() ||
+      (element.matches('ul,ol') && element.children.length) ||
+      element.querySelector(
+        'img,svg,video,audio,iframe,object,embed,table,ul,ol,hr,input,canvas,[data-ln-math],[data-ln-resource-id],a[id],a[name]',
+      ),
+    );
+  while (block.parentElement && block.parentElement !== destination) {
+    const parent = block.parentElement;
+    const before = parent.cloneNode(false) as HTMLElement;
+    const after = parent.cloneNode(false) as HTMLElement;
+    while (parent.firstChild && parent.firstChild !== block) before.append(parent.firstChild);
+    while (block.nextSibling) after.append(block.nextSibling);
+    const ordinal = ordinals.get(parent);
+    if (ordinal !== undefined) {
+      ordinals.set(before, ordinal);
+      ordinals.set(after, ordinal);
+      // 同一列表项的前后文字仍属于原来的编号，后续列表项不因拆块而重新编号。
+      after.setAttribute('value', String(ordinal));
+    }
+    if (parent.tagName === 'OL') {
+      for (const fragment of [before, after]) {
+        const first = Array.from(fragment.children).find((child) => child.tagName === 'LI');
+        const start = first && ordinals.get(first);
+        if (start !== undefined) fragment.setAttribute('start', String(start));
+      }
+    }
+    const keepBefore = hasContent(before);
+    const keepAfter = hasContent(after);
+    if (keepBefore) after.removeAttribute('id');
+    parent.replaceWith(...(keepBefore ? [before] : []), block, ...(keepAfter ? [after] : []));
+  }
+  return true;
 }
 
 /**
@@ -129,6 +189,7 @@ export function normalizeRichMediaTextHtml(html: string) {
   if (!blocks.length) return html;
 
   blocks.forEach((block) => {
+    liftRichMediaTextOutOfLists(block, doc.body);
     block.setAttribute(
       'data-ln-media-position',
       normalizeRichMediaTextPosition(block.getAttribute('data-ln-media-position')),

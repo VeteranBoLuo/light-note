@@ -839,6 +839,7 @@
     type RichMediaTextPosition,
     type RichMediaTextWidth,
   } from '@/utils/richMediaText';
+  import { bindRichMediaTextEditing } from '@/utils/richMediaTextEditing';
   import {
     DEFAULT_TEXT_GRADIENT,
     applyTextGradientConfig,
@@ -4927,6 +4928,15 @@
         editor.nodeChanged?.();
       };
 
+      const mediaTextEditing = bindRichMediaTextEditing(editor, {
+        isReadonly: () => props.readonly,
+        onMutation: () => notifyRichMediaTextMutation(editor),
+        onBoundaryFocus: () => {
+          closeRichMediaTextToolbar();
+          setSelectedMermaidFigure(null);
+        },
+      });
+
       const exitTrailingRichMediaText = (event: KeyboardEvent) => {
         if (
           props.readonly ||
@@ -5404,6 +5414,7 @@
       editor.on(
         'keydown',
         (event: KeyboardEvent) => {
+          if (mediaTextEditing.handleKeydown(event)) return;
           if (handleInlineFormatEditorShortcut(event)) return;
           if (handleHeadingEditorShortcut(event)) return;
           if (handleRepeatLastEditorActionShortcut(event)) return;
@@ -6391,6 +6402,24 @@
 
     &[data-ln-media-position='right'] .ln-media-text__item {
       flex-direction: row-reverse;
+    }
+  }
+
+  #editor-container .note-editor-body:focus .ln-media-text[data-ln-media-after-caret='true'] > .ln-media-text__item:last-child {
+    position: relative;
+
+    &::after {
+      content: '';
+      position: absolute;
+      right: -0.4em;
+      top: 50%;
+      transform: translateY(-50%);
+      /* ui-density-fixed: 文档块后光标的实色描边，跟随正文而非界面密度 */
+      width: 2px;
+      /* ui-density-fixed: 光标高度继承正文字号，不随界面控件密度变化 */
+      height: 1.2em;
+      background: currentColor;
+      pointer-events: none;
     }
   }
 
