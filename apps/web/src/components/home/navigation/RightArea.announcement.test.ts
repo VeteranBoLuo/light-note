@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
 const user = { id: 'user-1', role: 'user', preferences: {}, adminContext: null, visitorWorkspace: null };
 const bookmark = { isMobile: false, isDesktop: true, isFold: false, openAuthModal: vi.fn() };
 const inbox = { openQuickCapture: vi.fn() };
+const growth = ref<{ features: { manor: boolean } } | null>(null);
 
 vi.mock('@/store', () => ({
   bookmarkStore: () => bookmark,
@@ -22,13 +23,13 @@ vi.mock('@/store', () => ({
 }));
 vi.mock('@/router', () => ({ default: { push: mocks.routerPush } }));
 const route = { name: 'home', path: '/home' };
-vi.mock('vue-router', () => ({ useRoute: () => route }));
+vi.mock('vue-router', () => ({ useRoute: () => route, useRouter: () => ({ push: mocks.routerPush }) }));
 vi.mock('@/api/commonApi.ts', () => ({ recordOperation: mocks.recordOperation }));
 vi.mock('@/api/userApi.ts', () => ({
   default: { markFeatureAnnouncementSeen: mocks.markAnnouncementSeen },
 }));
 vi.mock('@/composables/useGrowth.ts', () => ({
-  useGrowth: () => ({ growth: ref(null), load: mocks.loadGrowth }),
+  useGrowth: () => ({ growth, load: mocks.loadGrowth }),
 }));
 vi.mock('@/config/growthFrames', () => ({ frameVariant: () => null }));
 vi.mock('@/utils/preferences.ts', () => ({ isMobileHomeRoute: () => false }));
@@ -82,6 +83,7 @@ beforeEach(() => {
   user.id = 'user-1';
   user.role = 'user';
   user.preferences = {};
+  growth.value = null;
   route.path = '/home';
   bookmark.isMobile = false;
   bookmark.isDesktop = true;
@@ -163,5 +165,26 @@ describe('顶部插件入口', () => {
     const host = await mountRightArea();
     expect(host.querySelector('[data-label="浏览器插件"]')).toBeNull();
     expect(host.querySelector('[data-label="项目地址"]')).not.toBeNull();
+  });
+});
+
+describe('庄园仅 Root 开放', () => {
+  it.each([
+    ['root', true, true],
+    ['root', false, false],
+    ['user', true, false],
+    ['test', true, false],
+    ['visitor', true, false],
+  ])('%s / 开关 %s 时入口可见性为 %s', async (role, enabled, visible) => {
+    user.role = role as string;
+    growth.value = { features: { manor: enabled as boolean } };
+    const host = await mountRightArea();
+    const entry = host.querySelector<HTMLButtonElement>(`button[aria-label="${zhCN.manor.title}"]`);
+    expect(Boolean(entry)).toBe(visible);
+    if (entry) {
+      entry.click();
+      await nextTick();
+      expect(mocks.routerPush).toHaveBeenCalledWith('/knowledge-manor');
+    } else expect(mocks.routerPush).not.toHaveBeenCalled();
   });
 });
