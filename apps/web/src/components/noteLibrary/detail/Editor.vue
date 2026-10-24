@@ -839,6 +839,7 @@
     type RichMediaTextPosition,
     type RichMediaTextWidth,
   } from '@/utils/richMediaText';
+  import { bindRichMediaTextEditing } from '@/utils/richMediaTextEditing';
   import {
     DEFAULT_TEXT_GRADIENT,
     applyTextGradientConfig,
@@ -4927,6 +4928,66 @@
         editor.nodeChanged?.();
       };
 
+      const mediaTextEditing = bindRichMediaTextEditing(editor, {
+        isReadonly: () => props.readonly,
+        onMutation: () => notifyRichMediaTextMutation(editor),
+        onBoundaryFocus: () => {
+          closeRichMediaTextToolbar();
+          setSelectedMermaidFigure(null);
+        },
+      });
+
+      const exitTrailingRichMediaText = (event: KeyboardEvent) => {
+        if (
+          props.readonly ||
+          event.defaultPrevented ||
+          event.isComposing ||
+          event.shiftKey || event.ctrlKey || event.metaKey || event.altKey ||
+          !['ArrowRight', 'ArrowDown'].includes(event.key)
+        ) return false;
+        const range = editor.selection.getRng() as Range;
+        if (!range.collapsed) return false;
+        const body = editor.getBody() as HTMLElement;
+        const container = range.endContainer;
+        const element = container.nodeType === 1 ? (container as Element) : container.parentElement;
+        const caption = element?.closest('.ln-media-text__content');
+        const block = caption?.closest<HTMLElement>('section.ln-media-text');
+        if (!block || !body.contains(block) || !editor.dom.isEditable(caption)) return false;
+
+        // 仅在图注和整篇正文都已到末尾时接管；空段落也是真实内容，保留原生移动。
+        const isEmptyBoundaryNode = (node: Node) =>
+          node.nodeType === 8 ||
+          (node.nodeType === 3 && !node.textContent?.trim()) ||
+          (node.nodeType === 1 && (node as Element).hasAttribute('data-mce-bogus')) ||
+          (node.nodeName === 'BR' && node.parentNode?.childNodes.length === 1);
+        if (container.nodeType === 3 && range.endOffset < (container.textContent || '').length) return false;
+        if (
+          container.nodeType === 1 &&
+          Array.from(container.childNodes).slice(range.endOffset).some((node) => !isEmptyBoundaryNode(node))
+        ) {
+          return false;
+        }
+        let current: Node | null = container;
+        while (current && current !== body) {
+          for (let next = current.nextSibling; next; next = next.nextSibling) {
+            if (!isEmptyBoundaryNode(next)) return false;
+          }
+          current = current.parentNode;
+        }
+        if (current !== body) return false;
+
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        editor.undoManager.transact(() => {
+          const paragraph = createRichImageCaretParagraph();
+          block.after(paragraph);
+          focusRichImageCaret(paragraph);
+        });
+        closeRichMediaTextToolbar();
+        notifyRichMediaTextMutation(editor);
+        return true;
+      };
+
       const insertParagraphAfterSelectedRichImage = () => {
         const image = resolveSelectedRichImage();
         if (!image || props.readonly) return;
@@ -5310,8 +5371,9 @@
           );
         }
       });
-      editor.on('BeforeSetContent', (event: { content?: string }) => {
-        if (typeof event.content === 'string') {
+      editor.on('BeforeSetContent', (event: { content?: string; format?: string }) => {
+        // 原始撤销快照由编辑器自身维护；清理其临时属性会被后续 focus 判成新编辑，截断重做。
+        if (typeof event.content === 'string' && event.format !== 'raw') {
           event.content = normalizeRichMediaTextHtml(
             stripTransientMermaidMarkers(
               stripTransientMentionMarkers(serializeResourceReferenceSnapshots(serializeNoteMath(event.content))),
@@ -5352,6 +5414,7 @@
       editor.on(
         'keydown',
         (event: KeyboardEvent) => {
+          if (mediaTextEditing.handleKeydown(event)) return;
           if (handleInlineFormatEditorShortcut(event)) return;
           if (handleHeadingEditorShortcut(event)) return;
           if (handleRepeatLastEditorActionShortcut(event)) return;
@@ -5390,6 +5453,7 @@
             }
             return;
           }
+          if (!inlineMentionVisible.value && exitTrailingRichMediaText(event)) return;
           if (!inlineMentionVisible.value || event.isComposing) return;
           if (event.key === 'ArrowDown') {
             event.preventDefault();
@@ -6338,6 +6402,24 @@
 
     &[data-ln-media-position='right'] .ln-media-text__item {
       flex-direction: row-reverse;
+    }
+  }
+
+  #editor-container .note-editor-body:focus .ln-media-text[data-ln-media-after-caret='true'] > .ln-media-text__item:last-child {
+    position: relative;
+
+    &::after {
+      content: '';
+      position: absolute;
+      right: -0.4em;
+      top: 50%;
+      transform: translateY(-50%);
+      /* ui-density-fixed: 文档块后光标的实色描边，跟随正文而非界面密度 */
+      width: 2px;
+      /* ui-density-fixed: 光标高度继承正文字号，不随界面控件密度变化 */
+      height: 1.2em;
+      background: currentColor;
+      pointer-events: none;
     }
   }
 

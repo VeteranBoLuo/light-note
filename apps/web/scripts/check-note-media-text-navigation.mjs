@@ -1,0 +1,380 @@
+/** Real TinyMCE keyboard regression; uses the local harness with mocked business writes. */
+import assert from 'node:assert/strict';
+import { mkdir } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { chromium } from 'playwright-core';
+
+const origin = process.env.LIGHTNOTE_WEB_ORIGIN || 'http://localhost:5173';
+assert(['localhost', '127.0.0.1'].includes(new URL(origin).hostname), 'Use the local Web dev server');
+const output = join(tmpdir(), 'light-note-media-text-navigation');
+await mkdir(output, { recursive: true });
+const browser = await chromium.launch({
+  executablePath:
+    process.env.CHROME_PATH ||
+    (process.platform === 'darwin' ? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' : undefined),
+  headless: true,
+});
+const row = (caption) =>
+  `<figure class="ln-media-text__item"><div class="ln-media-text__media"><img src="/brand-scenes/autumn-vista.webp" alt="测试图片"></div><figcaption class="ln-media-text__content">${caption}</figcaption></figure>`;
+const block = (caption, extra = '') =>
+  `<section class="ln-media-text" data-ln-media-position="left" data-ln-media-width="36">${extra}${row(caption)}</section>`;
+const cases = [
+  { name: 'plain', html: block('<p>末尾图注</p>') },
+  { name: 'formatted', html: block('<p>末尾<strong><em>图注</em></strong></p>') },
+  { name: 'empty', html: block('<p><br></p>') },
+  { name: 'multiline', html: block('<p>前一段</p><p>末尾图注</p>') },
+  { name: 'multiple-rows', html: block('<p>末尾图注</p>', row('<p>第一行图注</p>')) },
+  { name: 'nested', html: `<blockquote>${block('<p>末尾图注</p>')}</blockquote>` },
+];
+const profiles = [
+  ...['day', 'night'].flatMap((theme) =>
+    ['small', 'medium', 'large'].map((density) => ({ theme, density, width: 1440, mobile: false })),
+  ),
+  ...[320, 390].flatMap((width) => ['day', 'night'].map((theme) => ({ theme, density: 'large', width, mobile: true }))),
+];
+const errors = [];
+let checked = 0;
+try {
+  for (const profile of profiles) {
+    const page = await browser.newPage({
+      viewport: { width: profile.width, height: 900 },
+      hasTouch: profile.mobile,
+      reducedMotion: 'reduce',
+    });
+    page.on('pageerror', (error) => errors.push(error.message));
+    const url = new URL('/e2e/note-image-tools.html', origin);
+    url.searchParams.set('theme', profile.theme);
+    url.searchParams.set('density', profile.density);
+    if (profile.mobile) url.searchParams.set('renderProfile', 'mobile');
+    await page.goto(url.href);
+    await page.waitForFunction(() => window.tinymce?.activeEditor?.initialized);
+    const id = `${profile.width}-${profile.theme}-${profile.density}`;
+    const prepare = (html, options = {}) =>
+      page.evaluate(
+        async ({ html, options }) => {
+          const editor = window.tinymce.activeEditor;
+          editor.setContent(html);
+          editor.dispatch('input');
+          editor.focus();
+          await new Promise(requestAnimationFrame);
+          const captions = editor.getBody().querySelectorAll('.ln-media-text__content');
+          const caption = captions[options.first ? 0 : captions.length - 1];
+          editor.selection.select(caption, true);
+          editor.selection.collapse(false);
+          if (options.offset !== undefined) {
+            editor.selection.setCursorLocation(caption.querySelector('p').firstChild, options.offset);
+          }
+          if (options.select) editor.selection.select(caption, true);
+          editor.undoManager.clear();
+          editor.undoManager.add();
+          return editor.getContent();
+        },
+        { html, options },
+      );
+    const inspect = () =>
+      page.evaluate(() => {
+        const editor = window.tinymce.activeEditor;
+        const node = editor.selection.getNode();
+        const block = editor.getBody().querySelector('section.ln-media-text');
+        return {
+          html: editor.getContent(),
+          tag: node.tagName,
+          inCaption: !!node.closest('.ln-media-text__content'),
+          afterBlock: node.previousElementSibling === block,
+          childrenAfterBlock:
+            block.parentElement.children.length - Array.from(block.parentElement.children).indexOf(block) - 1,
+          top: node.getBoundingClientRect().top,
+          bottom: block.getBoundingClientRect().bottom,
+          text: node.textContent,
+          temporary: !!node.closest('[data-mce-bogus]'),
+        };
+      });
+    for (const item of cases) {
+      for (const key of ['ArrowRight', 'ArrowDown']) {
+        const original = await prepare(item.html);
+        await page.keyboard.press(key);
+        const state = await inspect();
+        assert.equal(state.tag, 'P', `${id}/${item.name}/${key}: paragraph`);
+        assert.equal(state.inCaption, false, `${id}/${item.name}/${key}: leave the caption`);
+        assert.equal(state.afterBlock, true);
+        assert.equal(state.childrenAfterBlock, 1);
+        assert.equal(state.temporary, false);
+        assert(state.top >= state.bottom - 1, `${id}/${item.name}: caret below the entire block`);
+        await page.keyboard.press(key);
+        assert.equal((await inspect()).html, state.html, 'Repeated arrows must not add blank paragraphs');
+        await page.getByRole('button', { name: '撤销', exact: true }).click();
+        assert.equal((await inspect()).html, original, 'Undo restores the original document');
+        if (profile.mobile) {
+          await page.getByRole('button', { name: '更多格式', exact: true }).click();
+          await page.getByText('重做', { exact: true }).click();
+          await page.getByRole('menu', { name: '更多格式', exact: true }).waitFor({ state: 'hidden' });
+        } else {
+          await page.getByRole('button', { name: '重做', exact: true }).click();
+        }
+        await page.locator('.note-editor-body section.ln-media-text + p').waitFor({ state: 'visible' });
+        assert.equal((await inspect()).afterBlock, true, 'Redo restores the caret');
+        await page.keyboard.type('Continue below');
+        const saved = (await inspect()).html;
+        await page.evaluate((html) => window.tinymce.activeEditor.setContent(html), saved);
+        assert.equal(await page.locator('.note-editor-body section + p').textContent(), 'Continue below');
+        if (item.name === 'plain' && key === 'ArrowRight') {
+          await page.screenshot({ path: join(output, `${id}.png`) });
+        }
+        checked++;
+      }
+    }
+
+    // Existing following content and earlier rows continue using native browser navigation.
+    for (const suffix of ['<p>3、后文</p>', '<p><br></p>']) {
+      for (const key of ['ArrowRight', 'ArrowDown']) {
+        const original = await prepare(block('<p>图注</p>') + suffix);
+        await page.keyboard.press(key);
+        const state = await inspect();
+        assert.equal(state.html, original);
+        assert.equal(state.inCaption, false);
+        assert.equal(state.afterBlock, true);
+        checked++;
+      }
+    }
+    for (const key of ['ArrowRight', 'ArrowDown']) {
+      const original = await prepare(cases.find((item) => item.name === 'multiple-rows').html, { first: true });
+      await page.keyboard.press(key);
+      assert.equal((await inspect()).html, original, 'Earlier rows must not create a trailing paragraph');
+      checked++;
+    }
+    for (const [key, options] of [
+      ['ArrowRight', { offset: 1 }],
+      ['ArrowDown', { offset: 1 }],
+      ['Shift+ArrowRight', {}],
+      ['Shift+ArrowDown', {}],
+      ['Control+ArrowRight', {}],
+      ['Alt+ArrowDown', {}],
+      ['ArrowRight', { select: true }],
+      ['ArrowDown', { select: true }],
+    ]) {
+      const original = await prepare(cases[0].html, options);
+      await page.keyboard.press(key);
+      assert.equal((await inspect()).html, original, `${key}: preserve text movement and selection`);
+      checked++;
+    }
+    const original = await prepare(block('<p>图注</p><p><br></p>'));
+    await page.evaluate(() => {
+      const editor = window.tinymce.activeEditor;
+      editor.selection.setCursorLocation(editor.getBody().querySelector('figcaption p').firstChild, 2);
+    });
+    await page.keyboard.press('ArrowRight');
+    assert.equal(
+      (await inspect()).html,
+      original,
+      'An empty paragraph inside the caption is still a native caret destination',
+    );
+    assert.equal((await inspect()).inCaption, true);
+    checked++;
+
+    const clickBoundary = async (index = 0) => {
+      const rectangle = await page.locator('.note-editor-body section.ln-media-text').nth(index).boundingBox();
+      const x = rectangle.x + rectangle.width + 6;
+      const y = rectangle.y + rectangle.height / 2;
+      if (profile.mobile) await page.touchscreen.tap(x, y);
+      else await page.mouse.click(x, y);
+      await page.waitForFunction(
+        () => !!window.tinymce.activeEditor.getBody().querySelector('[data-ln-media-after-caret]'),
+      );
+    };
+    const surrounding =
+      '<p>前文保留</p>' + block('<p>图注<strong>加粗</strong></p><ul><li>内部列表</li></ul>') + '<p>后文保留</p>';
+    const boundaryOriginal = await prepare(surrounding);
+    await page.evaluate(() => window.tinymce.activeEditor.setDirty(false));
+    await clickBoundary();
+    assert.equal((await inspect()).html, boundaryOriginal, 'Clicking the boundary must not modify saved content');
+    assert.equal(await page.evaluate(() => window.tinymce.activeEditor.isDirty()), false);
+    const caret = await page.locator('.note-editor-body section > figure:last-child').evaluate((item) => {
+      const style = getComputedStyle(item, '::after');
+      return { content: style.content, width: parseFloat(style.width), height: parseFloat(style.height) };
+    });
+    assert.equal(caret.content, '""', 'The block-after caret must be visible');
+    assert(caret.width > 0 && caret.height > 0);
+    await page.screenshot({ path: join(output, `boundary-${id}.png`) });
+    await page.keyboard.press('Backspace');
+    assert.equal(await page.locator('.note-editor-body section').count(), 0, 'Backspace deletes the entire block');
+    assert.equal(await page.locator('.note-editor-body').textContent(), '前文保留后文保留');
+    await page.evaluate(() => window.tinymce.activeEditor.undoManager.undo());
+    assert.equal(
+      (await inspect()).html,
+      boundaryOriginal,
+      'A single undo restores images, formatting and caption lists',
+    );
+    await page.evaluate(() => window.tinymce.activeEditor.undoManager.redo());
+    assert.equal(await page.locator('.note-editor-body section').count(), 0);
+    checked++;
+
+    for (const suffix of ['', '<p>已有后文</p>', '<p><br></p>', block('<p>下一块</p>')]) {
+      await prepare(block('<p>原图注</p>') + suffix, { first: true });
+      await clickBoundary();
+      await page.keyboard.press('Enter');
+      const state = await inspect();
+      assert.equal(state.afterBlock, true, 'Enter places the caret in the next paragraph');
+      assert.equal(state.inCaption, false);
+      assert.equal(await page.locator('.note-editor-body section + p').first().textContent(), '');
+      if (suffix.includes('已有后文')) assert.equal(await page.locator('.note-editor-body > p').count(), 2);
+      if (suffix === '<p><br></p>') assert.equal(await page.locator('.note-editor-body > p').count(), 1);
+      await page.keyboard.type('New paragraph');
+      assert.equal(await page.locator('.note-editor-body section + p').first().textContent(), 'New paragraph');
+      assert.equal(await page.locator('figcaption').first().textContent(), '原图注');
+      checked++;
+    }
+    await prepare(block('<p>原图注</p>') + '<p>已有后文</p>');
+    await clickBoundary();
+    await page.keyboard.type('直接输入');
+    assert.equal(await page.locator('.note-editor-body section + p').textContent(), '直接输入');
+    assert.equal(await page.locator('.note-editor-body > p').last().textContent(), '已有后文');
+    checked++;
+
+    await prepare(block('<p>原图注</p>'));
+    await clickBoundary();
+    await page.evaluate(() => window.tinymce.activeEditor.insertContent('<p>粘贴后文</p>'));
+    assert.equal(await page.locator('figcaption').textContent(), '原图注');
+    assert.equal(await page.locator('.note-editor-body section + p').textContent(), '粘贴后文');
+    checked++;
+
+    await prepare(cases.find((item) => item.name === 'multiple-rows').html + block('<p>下一块保留</p>'), {
+      first: true,
+    });
+    await clickBoundary();
+    await page.keyboard.press('Backspace');
+    assert.equal(await page.locator('.note-editor-body section').count(), 1);
+    assert.equal(
+      await page.locator('.note-editor-body img').count(),
+      1,
+      'Deleting a multi-row block preserves the next block',
+    );
+    assert.equal(await page.locator('figcaption').textContent(), '下一块保留');
+    checked++;
+
+    await prepare(block('<p>原图注</p>'));
+    await clickBoundary();
+    await page.keyboard.press('ArrowLeft');
+    await page.keyboard.press('Backspace');
+    assert.equal(await page.locator('.note-editor-body section').count(), 1);
+    assert.equal(await page.locator('figcaption').textContent(), '原图');
+    checked++;
+
+    const legacy = `<ol start="5"><li>前项</li><li>前半${block('<p>图注</p><ul><li>内部列表</li></ul>')}后半</li><li>后项</li></ol>`;
+    await prepare(legacy);
+    assert.equal(await page.locator('.note-editor-body > section').count(), 1, 'Legacy media loads outside the list');
+    assert.deepEqual(
+      await page.locator('.note-editor-body > ol').evaluateAll((lists) => lists.map((list) => list.start)),
+      [5, 6],
+    );
+    assert.equal(await page.locator('figcaption li').textContent(), '内部列表');
+    assert.equal(await page.locator('.note-editor-body').textContent(), '前项前半图注内部列表后半后项');
+    checked++;
+
+    await page.evaluate(() => {
+      const editor = window.tinymce.activeEditor;
+      editor.setContent(
+        '<ol start="5"><li>前项</li><li>前半<img src="/brand-scenes/autumn-vista.webp" alt="待转换">后半</li><li>后项</li></ol>',
+      );
+      editor.focus();
+      editor.undoManager.clear();
+      editor.undoManager.add();
+    });
+    await page.locator('.note-editor-body img').click({ button: profile.mobile ? 'right' : 'left' });
+    await page.getByRole('button', { name: '转为图文组合', exact: true }).click();
+    assert.equal(
+      await page.locator('.note-editor-body > section').count(),
+      1,
+      'Image conversion splits the outer list',
+    );
+    assert.equal(await page.locator('.note-editor-body > ol').first().textContent(), '前项前半');
+    assert.equal(await page.locator('.note-editor-body > ol').last().textContent(), '后半后项');
+    assert.deepEqual(
+      await page.locator('.note-editor-body > ol').evaluateAll((lists) => lists.map((list) => list.start)),
+      [5, 6],
+    );
+    await page.evaluate(() => window.tinymce.activeEditor.undoManager.undo());
+    assert.equal(await page.locator('.note-editor-body section').count(), 0);
+    assert.equal(await page.locator('.note-editor-body ol li').count(), 3);
+    await page.evaluate(() => window.tinymce.activeEditor.undoManager.redo());
+    assert.equal(await page.locator('.note-editor-body > section').count(), 1);
+    checked++;
+
+    await prepare(block('<p>图注列表</p>'));
+    await page.evaluate(() => window.tinymce.activeEditor.execCommand('InsertUnorderedList'));
+    assert.equal(await page.locator('figcaption ul li').textContent(), '图注列表');
+    assert.equal(await page.locator('.note-editor-body > section').count(), 1);
+    checked++;
+
+    await prepare(surrounding);
+    await page.evaluate(() => {
+      const editor = window.tinymce.activeEditor;
+      editor.selection.select(editor.getBody(), true);
+      editor.execCommand('InsertOrderedList');
+    });
+    assert.equal(await page.locator('.note-editor-body section').count(), 1);
+    assert.equal(await page.locator('.note-editor-body img').count(), 1);
+    assert.equal(
+      await page.locator('.note-editor-body li section').count(),
+      0,
+      'Applying lists across a block keeps its independence',
+    );
+    assert.equal(await page.locator('.note-editor-body').textContent(), '前文保留图注加粗内部列表后文保留');
+    checked++;
+
+    await page.evaluate((html) => {
+      const editor = window.tinymce.activeEditor;
+      editor.setContent('<ul><li>前半后半</li><li>后项</li></ul>');
+      editor.focus();
+      editor.selection.setCursorLocation(editor.getBody().querySelector('li').firstChild, 2);
+      editor.insertContent(html);
+    }, block('<p>粘贴图注</p>'));
+    assert.equal(
+      await page.locator('.note-editor-body > section').count(),
+      1,
+      'Pasting a media block into a list lifts it out',
+    );
+    assert.equal(await page.locator('.note-editor-body').textContent(), '前半粘贴图注后半后项');
+    checked++;
+
+    await prepare(block('<p>原图注</p>'));
+    await clickBoundary();
+    await page.keyboard.press('Enter');
+    await clickBoundary();
+    await page.evaluate(() => window.tinymce.activeEditor.execCommand('Undo'));
+    assert.equal(
+      await page.locator('.note-editor-body > p').count(),
+      0,
+      'Undo from a boundary does not invent an extra paragraph',
+    );
+    assert.equal(await page.locator('.note-editor-body section').count(), 1);
+    checked++;
+    console.log(`PASS ${id}`);
+    await page.close();
+  }
+  const readonlyPage = await browser.newPage();
+  await readonlyPage.goto(new URL('/e2e/note-image-tools.html?readonly', origin).href);
+  await readonlyPage.waitForFunction(() => window.tinymce?.activeEditor?.initialized);
+  const readonlyHtml = await readonlyPage.evaluate((html) => {
+    const editor = window.tinymce.activeEditor;
+    editor.setContent(html);
+    editor.selection.select(editor.getBody().querySelector('figcaption'), true);
+    editor.selection.collapse(false);
+    editor.dispatch('keydown', new KeyboardEvent('keydown', { key: 'ArrowRight', cancelable: true }));
+    editor.dispatch('keydown', new KeyboardEvent('keydown', { key: 'ArrowDown', cancelable: true }));
+    return editor.getContent();
+  }, cases[0].html);
+  assert(!readonlyHtml.includes('</section>\n<p>'), 'Read-only mode must not append content');
+  const readonlyRect = await readonlyPage.locator('.note-editor-body section').boundingBox();
+  await readonlyPage.mouse.click(readonlyRect.x + readonlyRect.width + 6, readonlyRect.y + readonlyRect.height / 2);
+  assert.equal(
+    await readonlyPage.locator('[data-ln-media-after-caret]').count(),
+    0,
+    'Read-only mode has no deletion caret',
+  );
+  await readonlyPage.close();
+  assert.deepEqual(errors, []);
+  console.log(`Passed ${checked} keyboard cases and read-only guard; screenshots: ${output}`);
+} finally {
+  await browser.close();
+}

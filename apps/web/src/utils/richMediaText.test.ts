@@ -4,10 +4,109 @@ import {
   createRichMediaTextBlockHtml,
   createRichMediaTextItemHtml,
   createRichMediaTextFromImage,
+  liftRichMediaTextOutOfLists,
   normalizeRichMediaTextHtml,
 } from './richMediaText';
 
 describe('richMediaText', () => {
+  const mediaBlock =
+    '<section class="ln-media-text"><figure class="ln-media-text__item"><div class="ln-media-text__media"><a href="/original"><img src="/a.png" alt="原图"></a></div><figcaption class="ln-media-text__content"><p>说明<strong>加粗</strong></p><ul><li>图注列表</li></ul></figcaption></figure></section>';
+  const parse = (html: string) => {
+    const holder = document.createElement('div');
+    holder.innerHTML = html;
+    return holder;
+  };
+
+  it('lifts a legacy media block out of a list without losing surrounding text or caption lists', () => {
+    const source = `<ul><li>前一项</li><li><div><p>图前<a href="/link">链接</a></p>${mediaBlock}<p>图后</p></div></li><li>后一项</li></ul>`;
+    const normalized = normalizeRichMediaTextHtml(source);
+    const holder = parse(normalized);
+    expect(Array.from(holder.children).map((node) => node.tagName)).toEqual(['UL', 'SECTION', 'UL']);
+    expect(holder.textContent).toBe(parse(source).textContent);
+    expect(holder.querySelectorAll('img')).toHaveLength(1);
+    expect(holder.querySelector('section')?.closest('li')).toBeNull();
+    expect(holder.querySelector('figcaption ul li')?.textContent).toBe('图注列表');
+    expect(holder.querySelector('a[href="/link"]')?.textContent).toBe('链接');
+    expect(holder.querySelector('section a')?.getAttribute('href')).toBe('/original');
+    expect(normalizeRichMediaTextHtml(normalized)).toBe(normalized);
+  });
+
+  it.each([
+    { attributes: 'start="5"', item: '', expectedBefore: '5', expectedAfter: '7' },
+    { attributes: 'start="5"', item: 'value="12"', expectedBefore: '5', expectedAfter: '13' },
+    { attributes: 'reversed', item: '', expectedBefore: '3', expectedAfter: '1' },
+    { attributes: 'reversed start="9"', item: '', expectedBefore: '9', expectedAfter: '7' },
+  ])('preserves ordered-list numbering when extracting an image-only item: $attributes / $item', (item) => {
+    const holder = parse(
+      normalizeRichMediaTextHtml(
+        `<ol ${item.attributes}><li>之前</li><li ${item.item}>${mediaBlock}</li><li>之后</li></ol>`,
+      ),
+    );
+    const lists = Array.from(holder.children).filter((node) => node.tagName === 'OL');
+    expect(lists.map((list) => list.getAttribute('start'))).toEqual([item.expectedBefore, item.expectedAfter]);
+    expect(holder.querySelectorAll('section')).toHaveLength(1);
+    expect(holder.querySelectorAll(':scope > ol > li')).toHaveLength(2);
+  });
+
+  it('retains the original item number on text split across a media block', () => {
+    const holder = parse(
+      normalizeRichMediaTextHtml(`<ol start="5"><li>前一项</li><li>前半${mediaBlock}后半</li><li>后一项</li></ol>`),
+    );
+    const lists = holder.querySelectorAll(':scope > ol');
+    expect(lists[0].getAttribute('start')).toBe('5');
+    expect(lists[1].getAttribute('start')).toBe('6');
+    expect(lists[1].firstElementChild?.getAttribute('value')).toBe('6');
+    expect(lists[1].textContent).toBe('后半后一项');
+  });
+
+  it('lifts through nested lists while preserving media nodes, task items, empty siblings and container boundaries', () => {
+    const holder = parse(
+      `<blockquote><ol id="original" start="3"><li>父项<ul><li><input type="checkbox" checked>任务</li><li>${mediaBlock}</li><li></li></ul>父项后文</li><li>下项</li></ol></blockquote>`,
+    );
+    const block = holder.querySelector<HTMLElement>('section')!;
+    const image = block.querySelector('img');
+    const text = holder.textContent;
+    expect(liftRichMediaTextOutOfLists(block)).toBe(true);
+    expect(block.parentElement?.tagName).toBe('BLOCKQUOTE');
+    expect(block.querySelector('img')).toBe(image);
+    expect(holder.textContent).toBe(text);
+    expect(holder.querySelectorAll('#original')).toHaveLength(1);
+    expect(holder.querySelector('input')?.checked).toBe(true);
+    expect(holder.querySelector('ul > li:empty')).not.toBeNull();
+    expect(liftRichMediaTextOutOfLists(block)).toBe(false);
+  });
+
+  it('preserves multiple blocks in one list item and drops only the emptied wrappers', () => {
+    const source = `<ul><li><p><br></p>${mediaBlock}${mediaBlock}<p>&nbsp;</p></li></ul>`;
+    const holder = parse(normalizeRichMediaTextHtml(source));
+    expect(Array.from(holder.children).map((node) => node.tagName)).toEqual(['SECTION', 'SECTION']);
+    expect(holder.querySelectorAll('img')).toHaveLength(2);
+    expect(holder.querySelectorAll('figcaption ul')).toHaveLength(2);
+  });
+
+  it('keeps editor content inside its boundary when the host UI also uses a list', () => {
+    const holder = parse(
+      `<ul><li>外层界面<div class="editor-body"><ol start="3"><li>${mediaBlock}</li><li>正文后项</li></ol></div>界面后文</li></ul>`,
+    );
+    const body = holder.querySelector<HTMLElement>('.editor-body')!;
+    const host = body.parentElement;
+    const block = body.querySelector<HTMLElement>('section')!;
+    expect(liftRichMediaTextOutOfLists(block, body)).toBe(true);
+    expect(block.parentElement).toBe(body);
+    expect(body.parentElement).toBe(host);
+    expect(holder.querySelector(':scope > ul > li')).toBe(host);
+    expect(holder.textContent).toBe('外层界面说明加粗图注列表正文后项界面后文');
+  });
+
+  it('removes the temporary block-after caret from serialized content', () => {
+    const holder = parse(
+      normalizeRichMediaTextHtml(
+        mediaBlock.replace('class="ln-media-text"', 'class="ln-media-text" data-ln-media-after-caret="true"'),
+      ),
+    );
+    expect(holder.querySelector('[data-ln-media-after-caret]')).toBeNull();
+  });
+
   it('creates one image paired with one editable caption', () => {
     const html = createRichMediaTextBlockHtml('https://example.com/a.png?x=1&y=2', '窗户 "主卧"');
 
