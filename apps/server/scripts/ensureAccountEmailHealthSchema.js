@@ -2,7 +2,7 @@ import pool from '../db/index.js';
 import {
   migrateAccountEmailHealthSchema,
   accountEmailHealthSchemaReady,
-} from '../util/services/accountEmailHealthService.js';
+} from '../util/services/accountEmailHealthSchema.js';
 try {
   await migrateAccountEmailHealthSchema(pool);
   if (!(await accountEmailHealthSchemaReady(pool)))
