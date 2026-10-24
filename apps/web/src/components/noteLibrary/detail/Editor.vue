@@ -5361,8 +5361,9 @@
           );
         }
       });
-      editor.on('BeforeSetContent', (event: { content?: string }) => {
-        if (typeof event.content === 'string') {
+      editor.on('BeforeSetContent', (event: { content?: string; format?: string }) => {
+        // 原始撤销快照由编辑器自身维护；清理其临时属性会被后续 focus 判成新编辑，截断重做。
+        if (typeof event.content === 'string' && event.format !== 'raw') {
           event.content = normalizeRichMediaTextHtml(
             stripTransientMermaidMarkers(
               stripTransientMentionMarkers(serializeResourceReferenceSnapshots(serializeNoteMath(event.content))),

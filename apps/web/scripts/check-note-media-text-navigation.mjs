@@ -103,9 +103,16 @@ try {
         assert(state.top >= state.bottom - 1, `${id}/${item.name}: caret below the entire block`);
         await page.keyboard.press(key);
         assert.equal((await inspect()).html, state.html, 'Repeated arrows must not add blank paragraphs');
-        await page.evaluate(() => window.tinymce.activeEditor.undoManager.undo());
+        await page.getByRole('button', { name: '撤销', exact: true }).click();
         assert.equal((await inspect()).html, original, 'Undo restores the original document');
-        await page.evaluate(() => window.tinymce.activeEditor.undoManager.redo());
+        if (profile.mobile) {
+          await page.getByRole('button', { name: '更多格式', exact: true }).click();
+          await page.getByText('重做', { exact: true }).click();
+          await page.getByRole('menu', { name: '更多格式', exact: true }).waitFor({ state: 'hidden' });
+        } else {
+          await page.getByRole('button', { name: '重做', exact: true }).click();
+        }
+        await page.locator('.note-editor-body section.ln-media-text + p').waitFor({ state: 'visible' });
         assert.equal((await inspect()).afterBlock, true, 'Redo restores the caret');
         await page.keyboard.type('Continue below');
         const saved = (await inspect()).html;
