@@ -188,47 +188,50 @@ try {
       const y = rectangle.y + rectangle.height / 2;
       if (profile.mobile) await page.touchscreen.tap(x, y);
       else await page.mouse.click(x, y);
-      await page.waitForFunction(
-        () => !!window.tinymce.activeEditor.getBody().querySelector('[data-ln-media-after-caret]'),
-      );
+      await page.waitForFunction((index) => {
+        const editor = window.tinymce.activeEditor;
+        const block = editor.getBody().querySelectorAll('section.ln-media-text')[index];
+        return editor.selection.getNode() === block.nextElementSibling && block.nextElementSibling?.tagName === 'P';
+      }, index);
     };
     const surrounding =
       '<p>前文保留</p>' + block('<p>图注<strong>加粗</strong></p><ul><li>内部列表</li></ul>') + '<p>后文保留</p>';
     const boundaryOriginal = await prepare(surrounding);
     await page.evaluate(() => window.tinymce.activeEditor.setDirty(false));
     await clickBoundary();
-    assert.equal((await inspect()).html, boundaryOriginal, 'Clicking the boundary must not modify saved content');
-    assert.equal(await page.evaluate(() => window.tinymce.activeEditor.isDirty()), false);
-    const caret = await page.locator('.note-editor-body section > figure:last-child').evaluate((item) => {
-      const style = getComputedStyle(item, '::after');
-      return { content: style.content, width: parseFloat(style.width), height: parseFloat(style.height) };
-    });
-    assert.equal(caret.content, '""', 'The block-after caret must be visible');
-    assert(caret.width > 0 && caret.height > 0);
-    await page.screenshot({ path: join(output, `boundary-${id}.png`) });
-    await page.keyboard.press('Backspace');
-    assert.equal(await page.locator('.note-editor-body section').count(), 0, 'Backspace deletes the entire block');
-    assert.equal(await page.locator('.note-editor-body').textContent(), '前文保留后文保留');
+    const clicked = await inspect();
+    assert.equal(clicked.tag, 'P');
+    assert.equal(clicked.afterBlock, true);
+    assert.equal(clicked.inCaption, false);
+    assert(clicked.top >= clicked.bottom - 1, 'The native caret is below the entire media block');
+    assert.equal(await page.locator('.note-editor-body').textContent(), '前文保留图注加粗内部列表后文保留');
+    assert.equal(await page.evaluate(() => window.tinymce.activeEditor.isDirty()), true);
+    assert.equal(await page.locator('[data-ln-media-after-caret]').count(), 0, 'No duplicate side caret');
+    const sideCaret = await page
+      .locator('.note-editor-body section > figure:last-child')
+      .evaluate((item) => getComputedStyle(item, '::after').content);
+    assert(['none', 'normal'].includes(sideCaret), 'The side caret pseudo-element is removed');
+    await page.screenshot({ path: join(output, `boundary-${id}.png`), caret: 'initial' });
     await page.evaluate(() => window.tinymce.activeEditor.undoManager.undo());
-    assert.equal(
-      (await inspect()).html,
-      boundaryOriginal,
-      'A single undo restores images, formatting and caption lists',
-    );
+    assert.equal((await inspect()).html, boundaryOriginal, 'One undo removes only the inserted paragraph');
     await page.evaluate(() => window.tinymce.activeEditor.undoManager.redo());
-    assert.equal(await page.locator('.note-editor-body section').count(), 0);
+    assert.equal((await inspect()).html, clicked.html, 'Redo restores the paragraph without changing media');
     checked++;
 
     for (const suffix of ['', '<p>已有后文</p>', '<p><br></p>', block('<p>下一块</p>')]) {
       await prepare(block('<p>原图注</p>') + suffix, { first: true });
       await clickBoundary();
-      await page.keyboard.press('Enter');
       const state = await inspect();
-      assert.equal(state.afterBlock, true, 'Enter places the caret in the next paragraph');
+      assert.equal(state.afterBlock, true, 'Click places the caret in the next paragraph');
       assert.equal(state.inCaption, false);
       assert.equal(await page.locator('.note-editor-body section + p').first().textContent(), '');
       if (suffix.includes('已有后文')) assert.equal(await page.locator('.note-editor-body > p').count(), 2);
       if (suffix === '<p><br></p>') assert.equal(await page.locator('.note-editor-body > p').count(), 1);
+      const beforeRepeat = state.html;
+      await page.evaluate(() => window.tinymce.activeEditor.setDirty(false));
+      await clickBoundary();
+      assert.equal((await inspect()).html, beforeRepeat, 'Repeated clicks reuse the same empty paragraph');
+      assert.equal(await page.evaluate(() => window.tinymce.activeEditor.isDirty()), false);
       await page.keyboard.type('New paragraph');
       assert.equal(await page.locator('.note-editor-body section + p').first().textContent(), 'New paragraph');
       assert.equal(await page.locator('figcaption').first().textContent(), '原图注');
@@ -252,22 +255,25 @@ try {
       first: true,
     });
     await clickBoundary();
-    await page.keyboard.press('Backspace');
-    assert.equal(await page.locator('.note-editor-body section').count(), 1);
-    assert.equal(
-      await page.locator('.note-editor-body img').count(),
-      1,
-      'Deleting a multi-row block preserves the next block',
+    assert.equal(await page.locator('.note-editor-body section').count(), 2);
+    assert.equal(await page.locator('.note-editor-body img').count(), 3);
+    assert.equal((await inspect()).afterBlock, true);
+    assert(
+      (await inspect()).top >= (await inspect()).bottom - 1,
+      'Clicking a multi-row group focuses below its final row',
     );
-    assert.equal(await page.locator('figcaption').textContent(), '下一块保留');
+    await page.keyboard.type('块后文字');
+    await page.keyboard.press('Enter');
+    await page.keyboard.type('第二行');
+    assert.equal(await page.locator('.note-editor-body > p').count(), 2);
+    assert.equal(await page.locator('figcaption').last().textContent(), '下一块保留');
     checked++;
 
     await prepare(block('<p>原图注</p>'));
-    await clickBoundary();
-    await page.keyboard.press('ArrowLeft');
-    await page.keyboard.press('Backspace');
-    assert.equal(await page.locator('.note-editor-body section').count(), 1);
-    assert.equal(await page.locator('figcaption').textContent(), '原图');
+    const beforeCaptionClick = (await inspect()).html;
+    await page.locator('figcaption p').click();
+    assert.equal((await inspect()).html, beforeCaptionClick, 'Clicks inside the caption keep normal editing');
+    assert.equal((await inspect()).inCaption, true);
     checked++;
 
     // 旧版原生列表命令会将 section 本身改为 li，不能只覆盖 li 内嵌 section。
@@ -284,15 +290,13 @@ try {
       [5, 8],
     );
     await clickBoundary(1);
-    assert.equal((await inspect()).html, repaired, 'Clicking a repaired legacy block does not change content');
-    await page.screenshot({ path: join(output, `legacy-boundary-${id}.png`) });
-    await page.keyboard.press('Backspace');
-    assert.equal(await page.locator('.note-editor-body > section').count(), 2);
-    assert.equal(await page.locator('.note-editor-body img').count(), 2);
+    assert.equal(await page.locator('.note-editor-body > section').count(), 3);
+    assert.equal(await page.locator('.note-editor-body img').count(), 3);
+    assert.equal(await page.locator('.note-editor-body > section + p').count(), 1);
+    await page.screenshot({ path: join(output, `legacy-boundary-${id}.png`), caret: 'initial' });
     await page.evaluate(() => window.tinymce.activeEditor.undoManager.undo());
-    assert.equal((await inspect()).html, repaired, 'Undo restores the repaired block with all its content');
+    assert.equal((await inspect()).html, repaired, 'Undo removes only the added paragraph from repaired content');
     await clickBoundary(2);
-    await page.keyboard.press('Enter');
     await page.keyboard.type('旧块后续行');
     assert.equal(await page.locator('.note-editor-body > section + p').last().textContent(), '旧块后续行');
     assert.equal(await page.locator('figcaption strong').count(), 2);
@@ -378,7 +382,6 @@ try {
 
     await prepare(block('<p>原图注</p>'));
     await clickBoundary();
-    await page.keyboard.press('Enter');
     await clickBoundary();
     await page.evaluate(() => window.tinymce.activeEditor.execCommand('Undo'));
     assert.equal(
@@ -425,14 +428,21 @@ try {
 
     await prepare(tableHtml);
     await clickBoundary();
-    await page.keyboard.press('Backspace');
-    assert.equal(await page.locator('.note-editor-body section').count(), 0);
+    assert.equal(await page.locator('.note-editor-body section').count(), 1);
     assert.equal(await page.locator('.note-editor-body table').count(), 1);
     assert.equal(await page.locator('.note-editor-body td').count(), 2);
     assert.equal(await neighbor.textContent(), '相邻文字');
-    assert.equal(await page.locator('.note-editor-body td:first-child').textContent(), '单元格前单元格后单元格后项');
+    assert.equal(await page.locator('.note-editor-body td:first-child > section + p').count(), 1);
+    assert.equal(
+      await page.locator('.note-editor-body td:first-child').textContent(),
+      '单元格前单元格图注单元格后单元格后项',
+    );
     await page.evaluate(() => window.tinymce.activeEditor.undoManager.undo());
-    assert.equal((await inspect()).html, tableOriginal, 'Undo restores the exact table contents');
+    assert.equal(
+      (await inspect()).html,
+      tableOriginal,
+      'Undo removes only the paragraph and preserves exact table contents',
+    );
     checked++;
 
     for (const command of ['Bold', 'Italic', 'ForeColor']) {
@@ -479,7 +489,12 @@ try {
   assert.equal(
     await readonlyPage.locator('[data-ln-media-after-caret]').count(),
     0,
-    'Read-only mode has no deletion caret',
+    'Read-only mode has no side caret',
+  );
+  assert.equal(
+    await readonlyPage.evaluate(() => window.tinymce.activeEditor.getContent()),
+    readonlyHtml,
+    'Read-only clicks do not append paragraphs',
   );
   await readonlyPage.close();
   assert.deepEqual(errors, []);
