@@ -861,6 +861,7 @@
     createRichMediaTextFromImage,
     createRichMediaTextItemHtml,
     normalizeRichMediaTextHtml,
+    getRichMediaTextClipboardImage,
     normalizeRichMediaTextPosition,
     normalizeRichMediaTextWidth,
     type RichMediaTextPosition,
@@ -3256,9 +3257,12 @@
     const target = getLiveRichMediaTextTarget(block, item);
     if (props.readonly || !target || richMediaTextUploading.value) return;
     const file = getPastedImageFile(event);
-    if (!file) return;
+    const copiedImage = file
+      ? null
+      : getRichMediaTextClipboardImage(event.clipboardData?.getData('text/html') || '', window.location.href);
+    if (!file && !copiedImage) return;
     richMediaTextUploadIntent.value = { kind: 'fill', ...target, editor: editorRef.value, noteId: props.noteId || '' };
-    void onRichMediaTextImagePicked([file]);
+    void applyRichMediaTextImage(file ? { file } : copiedImage!);
   }
 
   function deleteRichMediaTextImage() {
@@ -3335,10 +3339,14 @@
       .trim();
   }
 
-  async function onRichMediaTextImagePicked(files: File[]) {
+  function onRichMediaTextImagePicked(files: File[]) {
     const file = files[0];
+    if (file) void applyRichMediaTextImage({ file });
+  }
+
+  async function applyRichMediaTextImage(source: { file: File } | { url: string; alt: string }) {
     const intent = richMediaTextUploadIntent.value;
-    if (!file || !intent || richMediaTextUploading.value) return;
+    if (!intent || richMediaTextUploading.value) return;
     richMediaTextUploading.value = true;
     richMediaTextUploadProgress.value = 0;
     richMediaTextImageFailedItem.value = null;
@@ -3346,10 +3354,11 @@
       const reportProgress = (percent: number) => {
         richMediaTextUploadProgress.value = percent;
       };
-      const imageUrl =
-        props.imageUploadMode === 'base64'
-          ? await readImageAsDataUrl(file, reportProgress)
-          : await uploadNoteImageFile(file, file.name || 'note-image.png', undefined, reportProgress);
+      const imageUrl = 'url' in source
+        ? source.url
+        : props.imageUploadMode === 'base64'
+          ? await readImageAsDataUrl(source.file, reportProgress)
+          : await uploadNoteImageFile(source.file, source.file.name || 'note-image.png', undefined, reportProgress);
       const editor = editorRef.value;
       const body = editor?.getBody?.() as HTMLElement | null;
       if (
@@ -3359,7 +3368,7 @@
         message.warning(t('noteDetail.editor.mediaTextTargetChanged'));
         return;
       }
-      const imageAlt = richMediaTextImageAlt(file.name);
+      const imageAlt = 'url' in source ? source.alt : richMediaTextImageAlt(source.file.name);
       const active = editor.getDoc().activeElement as Element | null;
       const focusFilledSlot = Boolean(
         active?.closest('[data-ln-media-image-placeholder]') || active === editor.getDoc().body,

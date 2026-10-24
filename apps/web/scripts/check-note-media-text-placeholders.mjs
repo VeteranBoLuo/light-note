@@ -289,6 +289,52 @@ try {
   assert.equal(await captionHtml(native), nativeCaption);
   console.log('PASS native clipboard PNG keyboard paste');
   checked++;
+  const copiedSource = await native.locator('section img').getAttribute('src');
+  await native.evaluate(() => {
+    const editor = window.tinymce.activeEditor;
+    editor.focus();
+    editor.selection.select(editor.getBody().querySelector('section img'));
+  });
+  await native.keyboard.press(process.platform === 'darwin' ? 'Meta+C' : 'Control+C');
+  assert(
+    await native.evaluate(async () =>
+      (await navigator.clipboard.read()).some((item) => item.types.includes('text/html')),
+    ),
+  );
+  await prepare(native);
+  await native.getByRole('button', { name: /点击添加图片/ }).focus();
+  await native.keyboard.press(process.platform === 'darwin' ? 'Meta+V' : 'Control+V');
+  await native.locator('section img').waitFor();
+  assert.equal(await native.locator('section img').getAttribute('src'), copiedSource);
+  assert.equal(await captionHtml(native), nativeCaption);
+  await undo(native, profiles[1]);
+  await native.getByRole('button', { name: /点击添加图片/ }).waitFor();
+  checked++;
+  await native.evaluate(async () =>
+    navigator.clipboard.write([
+      new ClipboardItem({
+        'text/html': new Blob(['<img src="/brand-scenes/autumn-vista.webp" alt="复制的图片"><p>不替换原文</p>'], {
+          type: 'text/html',
+        }),
+      }),
+    ]),
+  );
+  await native.getByRole('button', { name: /点击添加图片/ }).focus();
+  await native.keyboard.press(process.platform === 'darwin' ? 'Meta+V' : 'Control+V');
+  await native.locator('section img').waitFor();
+  assert.equal(await native.locator('section img').getAttribute('alt'), '复制的图片');
+  assert.equal(await captionHtml(native), nativeCaption);
+  assert(!(await native.evaluate(() => window.tinymce.activeEditor.getContent())).includes('不替换原文'));
+  checked++;
+  const unsafeBefore = await prepare(native);
+  await native.getByRole('button', { name: /点击添加图片/ }).evaluate((element) => {
+    const data = new DataTransfer();
+    data.setData('text/html', '<img src="javascript:alert(1)" onerror="alert(2)">');
+    element.dispatchEvent(new ClipboardEvent('paste', { bubbles: true, cancelable: true, clipboardData: data }));
+  });
+  assert.equal(await native.evaluate(() => window.tinymce.activeEditor.getContent()), unsafeBefore);
+  checked++;
+  console.log('PASS copied HTML images and unsupported URL guard');
   await native.close();
 
   const readonly = await open(profiles[0], 'readonly');

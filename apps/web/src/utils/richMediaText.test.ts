@@ -6,9 +6,40 @@ import {
   createRichMediaTextFromImage,
   liftRichMediaTextOutOfLists,
   normalizeRichMediaTextHtml,
+  getRichMediaTextClipboardImage,
 } from './richMediaText';
 
 describe('richMediaText', () => {
+  it('reads a copied HTML image without accepting its HTML attributes or surrounding text', () => {
+    expect(
+      getRichMediaTextClipboardImage(
+        '<p>剪贴板说明</p><a href="/link"><img src=" /image.png " alt="原图" onerror="alert(1)"></a>',
+        'https://example.com/note',
+      ),
+    ).toEqual({ url: '/image.png', alt: '原图' });
+  });
+
+  it('accepts data images copied from an editor', () => {
+    expect(getRichMediaTextClipboardImage('<img src="data:image/png;base64,AAAA">', 'https://example.com')).toEqual({
+      url: 'data:image/png;base64,AAAA',
+      alt: '',
+    });
+  });
+
+  it('ignores non-images, ambiguous images and unsupported clipboard URLs', () => {
+    for (const html of [
+      '',
+      '<p>普通文字</p>',
+      '<img>',
+      '<img src="/a"><img src="/b">',
+      '<img src="javascript:alert(1)">',
+      '<img src="data:text/html,hello">',
+      '<img src="file:///local.png">',
+      '<img src="blob:https://example.com/transient">',
+    ])
+      expect(getRichMediaTextClipboardImage(html, 'https://example.com')).toBeNull();
+  });
+
   const mediaBlock =
     '<section class="ln-media-text"><figure class="ln-media-text__item"><div class="ln-media-text__media"><a href="/original"><img src="/a.png" alt="原图"></a></div><figcaption class="ln-media-text__content"><p>说明<strong>加粗</strong></p><ul><li>图注列表</li></ul></figcaption></figure></section>';
   const parse = (html: string) => {
