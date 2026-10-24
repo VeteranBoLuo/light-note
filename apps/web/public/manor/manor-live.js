@@ -50,7 +50,7 @@
     const script = document.createElement('script');
     script.src = uiScript;
     script.onload = async () => {
-      if(!await GardenStartup.ready())return;
+      if(typeof GardenStartup!=='undefined'&&!await GardenStartup.ready())return;
       ready = true;
       if(FarmStage.profile()==='mobile') {
         const prefetch=()=>GardenArea.prepare(FarmStage.cal().area==='bay'?FARM_CAL.mobileGarden:FARM_CAL.mobileBay);
@@ -65,7 +65,7 @@
       }).observe(modal, { attributes: true, attributeFilter: ['hidden'] });
       resumeCatch().catch(() => {});
     };
-    script.onerror = () => GardenStartup.fail();
+    script.onerror = () => {if(typeof GardenStartup!=='undefined')GardenStartup.fail();else request('load-error');};
     document.body.append(script);
   }
   window.GardenLive = {

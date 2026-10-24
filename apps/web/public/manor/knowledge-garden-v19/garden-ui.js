@@ -1511,3 +1511,4 @@ function init() {
   }, 1000);
 }
 init();
+if(typeof GardenStartup!=='undefined'){GardenStartup.mounted();GardenStartup.ready();}

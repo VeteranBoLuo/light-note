@@ -10,7 +10,7 @@ const GardenStartup=(()=>{
   el.innerHTML='<div class="garden-loader-card"><div class="garden-loader-sprout" aria-hidden="true"></div><p>正在连接庄园</p><div class="garden-loader-bar"><i></i></div><small>等待账号与场景脚本</small></div>';
   document.body.append(el);
   const title=el.querySelector('p'),bar=el.querySelector('i'),label=el.querySelector('small');
-  const work=[],images=new Map();let finished=false,failed=false,completed=0,total=0;
+  const work=[],images=new Map();let finished=false,failed=false,mounted=false,readiness=null,completed=0,total=0;
   let cancel;const cancelled=new Promise(resolve=>{cancel=resolve;});
   // Let the host keep its own loading state until this cover has actually painted.
   requestAnimationFrame(()=>requestAnimationFrame(()=>notify('loading')));
@@ -59,10 +59,13 @@ const GardenStartup=(()=>{
     }
     return [...displayed,...[...urls].filter(url=>url&&!url.startsWith('data:')&&!url.startsWith('blob:')).map(url=>image(url))];
   }
-  async function ready(){
+  function ready(){return readiness||(readiness=prepare());}
+  async function prepare(){
     if(finished)return true;
     if(failed)return false;
     try {
+      if(!mounted||!document.querySelector('.garden-scene'))throw Error('scene initialization');
+      if([...document.querySelectorAll('link[rel="stylesheet"]')].some(link=>!link.sheet))throw Error('scene stylesheet');
       const tasks=[...sources(),...work];total=tasks.length+1;
       title.textContent='正在准备场景';tick();
       const prepared=Promise.all(tasks.map(task=>Promise.resolve(task).then(()=>{completed++;if(!failed)tick();}))).then(()=>true);
@@ -80,6 +83,6 @@ const GardenStartup=(()=>{
       return true;
     } catch {fail();return false;}
   }
-  return {image,track:promise=>{if(!finished&&!failed)work.push(promise);return promise;},ready,fail};
+  return {image,mounted:()=>{mounted=true;},track:promise=>{if(!finished&&!failed)work.push(promise);return promise;},ready,fail};
 })();
 if(typeof module!=='undefined')module.exports=GardenStartup;

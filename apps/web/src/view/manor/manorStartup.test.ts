@@ -11,8 +11,9 @@ function deferred() {
   });
   return { promise, resolve };
 }
-function setup() {
-  document.body.innerHTML = '<div id="app"><span id="paint"></span></div><div id="modal"></div>';
+function setup(mounted = true) {
+  document.body.innerHTML =
+    '<div id="app"><section class="garden-scene"><span id="paint"></span></section></div><div id="modal"></div>';
   vi.spyOn(Element.prototype, 'getClientRects').mockReturnValue([
     { width: 100, height: 100 },
   ] as unknown as DOMRectList);
@@ -32,7 +33,9 @@ function setup() {
   }
   const postMessage = vi.fn(),
     mark = vi.fn(),
-    module = { exports: {} as { ready: () => Promise<boolean>; track: (p: Promise<void>) => void } };
+    module = {
+      exports: {} as { ready: () => Promise<boolean>; mounted: () => void; track: (p: Promise<void>) => void },
+    };
   runInNewContext(source, {
     document,
     window: {},
@@ -51,6 +54,7 @@ function setup() {
       maskImage: 'none',
     }),
   });
+  if (mounted) module.exports.mounted();
   return { ...module.exports, loaded, decoded, postMessage, mark };
 }
 describe('庄园真实启动进度', () => {
@@ -61,6 +65,7 @@ describe('庄园真实启动进度', () => {
     vi.restoreAllMocks();
     document.body.innerHTML = '';
     document.documentElement.classList.remove('garden-booting');
+    document.head.querySelectorAll('[data-manor-test]').forEach((node) => node.remove());
   });
   it('八秒不会放行未下载的场景；下载、解码和准备任务全部完成才可交互', async () => {
     const startup = setup(),
@@ -114,5 +119,35 @@ describe('庄园真实启动进度', () => {
     expect(await startup.ready()).toBe(false);
     expect(startup.loaded).toHaveLength(0);
     expect(startup.mark).not.toHaveBeenCalled();
+  });
+  it('脚本下载完但界面未成功初始化时保留错误界面', async () => {
+    const startup = setup(false);
+    expect(await startup.ready()).toBe(false);
+    expect(startup.loaded).toHaveLength(0);
+    expect(startup.mark).not.toHaveBeenCalled();
+  });
+  it('样式未能加载时不能把未着色的场景报告为可用', async () => {
+    const startup = setup(),
+      link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.dataset.manorTest = 'true';
+    document.head.append(link);
+    expect(await startup.ready()).toBe(false);
+    expect(startup.loaded).toHaveLength(0);
+    expect(startup.mark).not.toHaveBeenCalled();
+  });
+  it('界面与宿主桥接共享同一次准备，不重复推进进度', async () => {
+    const startup = setup(),
+      first = startup.ready(),
+      second = startup.ready();
+    expect(first).toBe(second);
+    expect(startup.loaded).toHaveLength(1);
+    startup.loaded[0].onload();
+    startup.decoded.resolve();
+    await vi.advanceTimersByTimeAsync(10);
+    expect(await first).toBe(true);
+    expect(await second).toBe(true);
+    expect(document.querySelector('.garden-loader')?.getAttribute('aria-valuenow')).toBe('100');
+    expect(startup.mark).toHaveBeenCalledTimes(1);
   });
 });
