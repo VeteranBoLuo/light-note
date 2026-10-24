@@ -7,6 +7,23 @@ export type RichMediaTextWidth = (typeof RICH_MEDIA_TEXT_WIDTHS)[number];
 const DEFAULT_POSITION: RichMediaTextPosition = 'left';
 const DEFAULT_WIDTH: RichMediaTextWidth = 36;
 
+/** 编辑器内复制图片常只有 HTML 片段；只读取图片地址，不插入剪贴板中的其他 HTML。 */
+export function getRichMediaTextClipboardImage(html: string, baseUrl: string) {
+  if (!html || typeof DOMParser === 'undefined') return null;
+  const images = new DOMParser().parseFromString(html, 'text/html').body.querySelectorAll('img');
+  if (images.length !== 1) return null;
+  const image = images[0];
+  const src = image.getAttribute('src')?.trim();
+  if (!src) return null;
+  try {
+    const url = new URL(src, baseUrl);
+    if (!['http:', 'https:'].includes(url.protocol) && !/^data:image\/[a-z0-9.+-]+[;,]/iu.test(src)) return null;
+    return { url: src, alt: image.getAttribute('alt') || '' };
+  } catch {
+    return null;
+  }
+}
+
 function escapeHtmlAttribute(value: string) {
   return String(value || '').replace(
     /[&<>"']/gu,
@@ -103,6 +120,18 @@ function directChildrenByClass(parent: Element, className: string) {
   return Array.from(parent.children).filter(
     (child): child is HTMLElement => child instanceof HTMLElement && child.classList.contains(className),
   );
+}
+
+/** 原生删除图片时可能连空 media 容器一起清理；只补回图片位，不触碰图注。 */
+export function ensureRichMediaTextMedia(item: HTMLElement) {
+  const existing = directChildrenByClass(item, 'ln-media-text__media')[0];
+  if (existing) return existing;
+  const caption = directChildrenByClass(item, 'ln-media-text__content')[0];
+  if (!caption) return null;
+  const media = item.ownerDocument.createElement('div');
+  media.className = 'ln-media-text__media';
+  item.insertBefore(media, caption);
+  return media;
 }
 
 function stripTransientAttributes(element: Element) {
@@ -207,6 +236,7 @@ export function liftRichMediaTextOutOfLists(block: HTMLElement, boundary?: HTMLE
 export function normalizeRichMediaTextHtml(html: string) {
   if (!html || typeof DOMParser === 'undefined') return html || '';
   const doc = new DOMParser().parseFromString(`<body>${html}</body>`, 'text/html');
+  doc.body.querySelectorAll('.ln-media-text__media [data-ln-media-image-placeholder]').forEach((node) => node.remove());
   restoreRichMediaTextBlockTags(doc.body);
   const blocks = Array.from(doc.body.querySelectorAll<HTMLElement>('section.ln-media-text'));
   if (!blocks.length) return html;
@@ -225,7 +255,7 @@ export function normalizeRichMediaTextHtml(html: string) {
 
     directChildrenByClass(block, 'ln-media-text__item').forEach((item) => {
       stripTransientAttributes(item);
-      const media = directChildrenByClass(item, 'ln-media-text__media')[0];
+      const media = ensureRichMediaTextMedia(item);
       const caption = directChildrenByClass(item, 'ln-media-text__content')[0];
       if (media) stripTransientAttributes(media);
       if (caption) stripTransientAttributes(caption);
