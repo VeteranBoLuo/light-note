@@ -78,6 +78,7 @@ if (new URLSearchParams(location.search).has('performance')) {
             cls: c.className,
             width: c.width,
             height: c.height,
+            preparation: c.dataset.preparation,
           })),
         });
       };

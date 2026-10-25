@@ -3,7 +3,8 @@
 const GardenEnvironment = (() => {
   let current=null;
   const script=typeof document==='undefined'?null:document.currentScript;
-  const workerURL=script?.dataset.worker,environmentURL=script?.dataset.environmentScript||script?.src;
+  function sourceURL(path,base){return new URL(path,base).href;}
+  const workerURL=script?.dataset.worker,environmentURL=script?sourceURL(script.dataset.environmentScript||script.src,document.baseURI):undefined;
   // 匹配高分屏，统一限制总像素和 GPU 尺寸，避免大屏糊成低分辨率画布。
   function renderSize(width,height,dpr=1,limit=4096) {
     const w=Math.max(1,width),h=Math.max(1,height);
@@ -239,7 +240,7 @@ const GardenEnvironment = (() => {
       try {
         if(!workerURL||typeof Worker==='undefined'||typeof createImageBitmap==='undefined')throw Error('worker unavailable');
         prepared=await new Promise((resolve,reject)=>{
-          const worker=new Worker(new URL(workerURL,document.baseURI));
+          const worker=new Worker(sourceURL(workerURL,document.baseURI));
           let active=true;
           const timer=setTimeout(()=>{finish();reject(Error('water worker timeout'));},30000);
           const finish=()=>{active=false;clearTimeout(timer);worker.terminate();cancelWorker=()=>{};};
@@ -325,6 +326,6 @@ const GardenEnvironment = (() => {
     const dispose=[...scene.querySelectorAll('.garden-backdrop')].map(img=>layer(img));
     current={scene,destroy:()=>dispose.forEach(fn=>fn())};
   }
-  return {mount,renderSize,textureSize,shorelineMask,surfaceMask,swellField,prepareTextures};
+  return {mount,renderSize,textureSize,shorelineMask,surfaceMask,swellField,prepareTextures,sourceURL};
 })();
 if(typeof module!=="undefined") module.exports=GardenEnvironment;
