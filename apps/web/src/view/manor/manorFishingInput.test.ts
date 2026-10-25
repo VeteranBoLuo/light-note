@@ -1,8 +1,9 @@
 import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { runInNewContext } from 'node:vm';
 import { afterEach, expect, it, vi } from 'vitest';
 
-const source = readFileSync(new URL('../../../public/manor/knowledge-garden-v19/fishing-input.js', import.meta.url), 'utf8');
+const source = readFileSync(resolve(process.cwd(), 'public/manor/knowledge-garden-v19/fishing-input.js'), 'utf8');
 afterEach(() => { document.body.innerHTML = ''; });
 it('钓鱼输入保留收杆点击，同时让游戏返回按钮及其内部图标正常冒泡', () => {
   document.body.innerHTML = '<section><button data-action="exit"><span>返回</span></button><div class="water"></div></section>';
