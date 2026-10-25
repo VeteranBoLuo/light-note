@@ -81,7 +81,7 @@ const GardenEnvironment = (() => {
     const limit=Math.min(4096,gl.getParameter(gl.MAX_RENDERBUFFER_SIZE),...gl.getParameter(gl.MAX_VIEWPORT_DIMS));
     const textureLimit=gl.getParameter(gl.MAX_TEXTURE_SIZE);
     const swellCount=Math.max(1,Math.min(10,gl.getParameter(gl.MAX_FRAGMENT_UNIFORM_VECTORS)-12)),swells=swellField(swellCount);
-    let program,texture,smoothTexture,maskTexture,buffer,fishingWater=false,raf=0,ready=false,dead=false,visible=true,last=0,uploaded='',maskReady=false,maskWidth=1,maskHeight=1;
+    let program,texture,smoothTexture,maskTexture,buffer,fishingWater=false,raf=0,ready=false,dead=false,visible=true,last=0,uploaded='',attempted='',preparing=false,maskReady=false,maskWidth=1,maskHeight=1;
     const reduced=matchMedia('(prefers-reduced-motion: reduce)');
     try {
       program=gl.createProgram();
@@ -119,7 +119,7 @@ const GardenEnvironment = (() => {
       timer=setTimeout(failed,30000);
     });
     async function prepare() {
-      const started=performance.now(),src=img.currentSrc||img.src;
+      const started=performance.now();
       const mask=new Image(),smooth=new Image();
       mask.decoding=smooth.decoding='async';mask.src=img.dataset.water;smooth.src=img.dataset.smooth;
       await Promise.all([img,mask,smooth].map(waitImage));
@@ -143,7 +143,7 @@ const GardenEnvironment = (() => {
         for(const [key,value]of [[gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE],[gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE],[gl.TEXTURE_MIN_FILTER,gl.LINEAR],[gl.TEXTURE_MAG_FILTER,gl.LINEAR]])gl.texParameteri(gl.TEXTURE_2D,key,value);
         if(gl.getError()!==gl.NO_ERROR)throw Error('water texture');
         fishingWater=img.dataset.fishingWater==='true';
-        maskWidth=mw;maskHeight=mh;maskReady=true;ready=true;uploaded=src;
+        maskWidth=mw;maskHeight=mh;maskReady=true;ready=true;uploaded=img.currentSrc||img.src;attempted=uploaded;
         canvas.dataset.swellCount=String(fishingWater?swellCount:0);
         canvas.dataset.textureSize=`${source.naturalWidth||source.width}x${source.naturalHeight||source.height}`;
       } finally {
@@ -151,7 +151,12 @@ const GardenEnvironment = (() => {
         performance.measure('manor-water-preparation',{start:started,end:performance.now()});
       }
     }
-    const preparation=prepare().catch(()=>{canvas.hidden=true;canvas.dataset.preparation='static';});
+    async function refresh(){
+      preparing=true;attempted=img.currentSrc||img.src;
+      try {await prepare();}catch{canvas.hidden=true;canvas.dataset.preparation='static';}
+      finally {preparing=false;}
+    }
+    const preparation=refresh();
     if(typeof GardenStartup!=='undefined')GardenStartup.track(preparation);
     const observer=new IntersectionObserver(([e])=>visible=e.isIntersecting);observer.observe(img);
     function draw(now){
@@ -160,7 +165,11 @@ const GardenEnvironment = (() => {
       const display=img.getBoundingClientRect();
       const {width:w,height:h}=renderSize(display.width,display.height,devicePixelRatio,limit);
       if(reduced.matches){canvas.hidden=true;return;}
-      if(img.currentSrc!==uploaded){canvas.hidden=true;return;}
+      if(img.currentSrc!==uploaded){
+        canvas.hidden=true;
+        if(!preparing&&img.currentSrc&&img.currentSrc!==attempted)void refresh();
+        return;
+      }
       // A calibrated scene must wait for its matching mask, never flash guessed water bands.
       if(!maskReady){canvas.hidden=true;return;}
       canvas.hidden=false;

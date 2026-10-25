@@ -7,6 +7,7 @@ const FarmStage = (() => {
     view = null, area = "garden";
   const profile = () => (document.documentElement.classList.contains("light-note-mobile-rendering") ? "mobile" : "desktop");
   const cal = () => profile()==="mobile" ? (FARM_CAL[area==="bay"?"mobileBay":"mobileGarden"]||FARM_CAL.mobile) : FARM_CAL.desktop;
+  const sourceSet = d => (d.assetSources||[]).map(({asset,width})=>`knowledge-garden-v19/${asset} ${width}w`).join(', ');
   const bbox = (points) => {
     const xs = points.map((p) => p[0]),
       ys = points.map((p) => p[1]);
@@ -210,7 +211,10 @@ const FarmStage = (() => {
     st.setProperty("--bg-h", d.image[1] + "px");
     // 手机分区保留原有出血背景；PC 不使用这层补边。
     // 变量里的相对地址会按样式表位置解析，这里写成绝对地址
-    st.setProperty("--farm-fill", `url("${new URL(`knowledge-garden-v19/${d.asset}`, document.baseURI).href}")`);
+    // Only mobile uses this bleed. A desktop CSS background would fetch the
+    // full plate again even when the responsive <img> selected a smaller one.
+    if(d.area)st.setProperty("--farm-fill", `url("${new URL(`knowledge-garden-v19/${d.asset}`, document.baseURI).href}")`);
+    else st.removeProperty("--farm-fill");
     // 水仓：玻璃与水面合起来的外框；只有玻璃里能点、能看到鱼
     const a = d.aquarium,
       outline = [...a.glassPolygon, ...a.waterSurface],
@@ -291,6 +295,6 @@ const FarmStage = (() => {
   }
   const pier = () => view?.pier || null;
   const scale = () => view?.s || 1;
-  return { birdStops, purifierSite, fixturePose, fixtureBounds, hitClip, pierGeometry, desktopFrame, skyBleedPose, managementPose, positionManagement, mount, layout, habitat, pier, scale, setArea:next=>{area=next==="bay"?"bay":"garden";}, toScene: (x, y) => (view ? toScene(x, y) : [x, y]), cal, profile };
+  return { sourceSet, birdStops, purifierSite, fixturePose, fixtureBounds, hitClip, pierGeometry, desktopFrame, skyBleedPose, managementPose, positionManagement, mount, layout, habitat, pier, scale, setArea:next=>{area=next==="bay"?"bay":"garden";}, toScene: (x, y) => (view ? toScene(x, y) : [x, y]), cal, profile };
 })();
 if (typeof module !== "undefined") module.exports = FarmStage;
