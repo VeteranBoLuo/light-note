@@ -21,7 +21,7 @@ const GardenStartup=(()=>{
   const timer=setTimeout(fail,30000);
   function tick(){
     const percent=Math.floor(completed/total*100);
-    bar.style.width=percent+'%';label.textContent=`${percent}% · 已准备 ${completed} / ${total} 项`;
+    bar.style.width=percent+'%';label.textContent=`${percent}% · ${percent===100?'庄园准备好了，欢迎回来':percent<70?'正在快马加鞭布置庄园，请稍候':'正在收拾最后的小细节，请稍候'}`;
     el.setAttribute('aria-valuenow',String(percent));
   }
   function image(url){
@@ -78,6 +78,7 @@ const GardenStartup=(()=>{
       if(failed)return false;
       completed++;tick();finished=true;clearTimeout(timer);images.clear();work.length=0;
       performance.mark('manor-interactive');
+      notify('ready');
       el.classList.add('leaving');el.style.pointerEvents='none';
       setTimeout(()=>el.remove(),450);
       return true;

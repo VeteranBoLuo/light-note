@@ -805,10 +805,9 @@ describe('mobile personal center experience', () => {
     expect(desktopMyInfoSource).toContain("'/growth?section=' + destination");
   });
 
-  it('shows achievement-frame requirements and uses a wider desktop achievement layout', () => {
+  it('shows achievement-frame requirements alongside achievement conditions and level progress', () => {
     expect(pointsShopSource).toContain("t('growth.frameAchievementConditionWithLevel'");
     expect(pointsShopSource).toContain("t('growth.frameAchievementLevelProgress'");
-    expect(achievementWallSource).toContain('grid-template-columns: repeat(auto-fill, minmax(220px, 1fr))');
     expect(achievementWallSource).toContain('conditionOf(a)');
     expect(achievementWallSource).toContain('class="aw-mini-level"');
   });

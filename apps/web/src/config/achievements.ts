@@ -3,7 +3,7 @@ import icon from '@/config/icon.ts';
 /**
  * 成就展示元信息。
  * 阈值(target)与解锁判定在后端 util/growth.js 的 ACHIEVEMENTS 单一事实源，前端只负责呈现。
- * 文案走 i18n:growth.achName.<key> / growth.achDesc.<key>；分组标题 growth.achGroup.<group>。
+ * 文案走 i18n:growth.achName.<key> / growth.achDesc.<key>；展示家族标题 growth.achievementFamily.<family>。
  *
  * 视觉体系刻意拆成两层：
  * - jewel：表达签到、笔记、文件等成就家族；
@@ -64,22 +64,22 @@ const JEWEL_PALETTES: Record<AchievementFamily, AchievementJewelPalette> = {
     highlight: '#edf2ff',
   },
   note: {
-    accent: '#8b5cf6',
-    secondary: '#c4a7ff',
-    deep: '#43168b',
-    highlight: '#f7efff',
+    accent: '#248e78',
+    secondary: '#85d7ba',
+    deep: '#174f46',
+    highlight: '#eefaf5',
   },
   file: {
-    accent: '#1696d2',
-    secondary: '#70d3ff',
-    deep: '#07547d',
-    highlight: '#e8f9ff',
+    accent: '#ce8731',
+    secondary: '#f4c477',
+    deep: '#83501a',
+    highlight: '#fff7e8',
   },
   todo: {
-    accent: '#18a573',
-    secondary: '#65e1ad',
-    deep: '#07583f',
-    highlight: '#e8fff5',
+    accent: '#4689ce',
+    secondary: '#a0c9f4',
+    deep: '#264d83',
+    highlight: '#edf5ff',
   },
   organize: {
     accent: '#08a8a5',
@@ -88,10 +88,10 @@ const JEWEL_PALETTES: Record<AchievementFamily, AchievementJewelPalette> = {
     highlight: '#e6fffb',
   },
   level: {
-    accent: '#e34f9d',
-    secondary: '#ff9dcc',
-    deep: '#85134f',
-    highlight: '#fff0f8',
+    accent: '#805ac7',
+    secondary: '#c6a9ed',
+    deep: '#492b7e',
+    highlight: '#f6f0ff',
   },
   tenure: {
     accent: '#62a92f',

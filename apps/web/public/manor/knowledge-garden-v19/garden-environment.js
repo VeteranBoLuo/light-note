@@ -1,4 +1,4 @@
-/* 钓鱼区叠加连续的舒缓风浪与碎浪边；其余水面保留原画水纹输送，岸边与物件固定。
+/* 海面与钓鱼区共用连续风浪；鱼舱顶面保持原画静态，岸边与物件固定。
    仅在可见且未开启减少动态时运行；纹理失败或 WebGL 丢失时保留原图。 */
 const GardenEnvironment = (() => {
   let current=null;
@@ -15,12 +15,12 @@ const GardenEnvironment = (() => {
     const scale=Math.min(1,limit/wanted,limit/(wanted*naturalHeight/naturalWidth));
     return {width:Math.max(1,Math.round(wanted*scale)),height:Math.max(1,Math.round(wanted*naturalHeight/naturalWidth*scale))};
   }
-  // Alpha stores distance to dry land for both sea (R) and tank surface (G).
+  // Alpha stores the distance to land. Green tank-top regions never animate.
   function runSteps(steps){let next;do{next=steps.next();}while(!next.done);return next.value;}
   function shorelineMask(rgba,width,height){return runSteps(shorelineSteps(rgba,width,height));}
   function* shorelineSteps(rgba,width,height) {
     const out=new Uint8Array(rgba),distance=new Float32Array(width*height),diagonal=Math.SQRT2;
-    const sea=i=>(rgba[i*4]>128||rgba[i*4+1]>128)&&rgba[i*4+2]<128;
+    const sea=i=>rgba[i*4]>128&&rgba[i*4+1]<128&&rgba[i*4+2]<128;
     for(let i=0;i<distance.length;i++){distance[i]=sea(i)?32:0;out[i*4+3]=0;}
     for(let y=0;y<height;y++){if(y%16===0)yield;for(let x=0;x<width;x++){
       const i=y*width+x;if(!distance[i])continue;
@@ -53,7 +53,7 @@ const GardenEnvironment = (() => {
     }
     for(let y=0;y<height;y++){if(y%16===0)yield;for(let x=0;x<width;x++) {
       const i=y*width+x,p=i*4;
-      if(out[p+1]>128&&out[p]<128&&out[p+2]<128)continue;
+      if(out[p+1]>128&&out[p]<128&&out[p+2]<128){out[p]=out[p+1]=out[p+2]=0;continue;}
       if(out[p]<128||out[p+1]>128||out[p+2]>128)continue;
       let wet=!!blue[i];
       if(!wet&&scene[p]>140&&scene[p+1]>150&&scene[p+2]>105) {
@@ -100,12 +100,6 @@ const GardenEnvironment = (() => {
     const pixels=next.value;
     return {source,smooth,pixels,maskWidth,maskHeight};
   }
-  // Continuous drift preserves the painted wave contrast; no crossfade between shifted copies.
-  function flowOffset(seconds) {
-    const t=(Math.max(0,seconds)%12)/12*Math.PI*2;
-    const x=.42*Math.sin(t)+.08*Math.sin(t*2+.65);
-    return [x,.10*Math.cos(t)+.045*Math.sin(t*3)+x*.18];
-  }
   // Open wave fronts share a gentle prevailing direction. Their different lengths,
   // headings and speeds break up the crests without point sources or a global reversal.
   function swellField(count,random=Math.random) {
@@ -123,14 +117,14 @@ const GardenEnvironment = (() => {
   const fragment=`
     varying vec2 uv;
     uniform sampler2D picture, smoothPicture, masks;
-    uniform vec2 flowOffset;
     uniform vec2 pixels, maskPixels;
     uniform vec4 waves[SWELL_COUNT];
-    vec3 windWaves(vec2 point){
-      vec2 q=point*pixels*vec2(1.,2.6);
+    vec3 windWaves(vec2 point,float distant){
+      vec2 q=point*pixels*vec2(1.,mix(2.6,4.,distant));
       vec2 slope=vec2(0.);
       float foam=0.;
       for(int i=0;i<SWELL_COUNT;i++){
+        if(i>=4&&distant>.5)break;
         vec4 wave=waves[i];
         vec2 across=normalize(vec2(-wave.y,wave.x));
         float along=dot(q,across),seed=float(i)*2.39996;
@@ -148,32 +142,27 @@ const GardenEnvironment = (() => {
     }
     void main(){
       vec4 m=texture2D(masks,uv);
-      float water=clamp(m.r+m.g,0.,1.);
-      if(water<.01){gl_FragColor=vec4(0.);return;}
+      float water=m.r;
+      if(water<.01||m.g>.5){gl_FragColor=vec4(0.);return;}
       float shoreDistance=m.a*32.*pixels.x/maskPixels.x;
-      if(m.r>.5&&m.b>.1&&m.b<.5){
-        float edge=smoothstep(2.,6.,shoreDistance);
-        vec3 surface=windWaves(uv);
-        vec2 slope=surface.xy*edge;
-        vec2 bend=clamp(slope*4.,vec2(-1.1),vec2(1.1))/pixels;
-        // Refract only fine detail: submerged rocks and the broad seabed remain fixed.
-        vec3 color=texture2D(picture,uv+bend).rgb;
-        color+=texture2D(smoothPicture,uv).rgb-texture2D(smoothPicture,uv+bend).rgb;
-        float shade=clamp(dot(slope,vec2(.46,-.88))*.68,-.13,.15);
-        color*=1.+shade;
-        color=mix(color,vec3(.86,.97,.98),min(.52,surface.z)*edge);
-        gl_FragColor=vec4(clamp(color,0.,1.),water*edge);return;
-      }
-      float edge=smoothstep(7.,10.,shoreDistance);
-      // Transport complete ripples on the distant sea and tank surface. Near the
-      // pier, keep the broad seabed fixed and move only its fine water texture.
-      float near=smoothstep(.32,.85,uv.y);
-      float reach=mix(mix(22.,28.,near),12.,m.g);
-      reach=min(reach,max(0.,shoreDistance-7.)*1.5);
-      vec2 flow=flowOffset*reach/pixels;
-      float quietBed=smoothstep(.38,.68,uv.y)*(1.-m.g);
-      vec3 color=texture2D(picture,uv-flow).rgb;
-      if(quietBed>0.)color+=(texture2D(smoothPicture,uv).rgb-texture2D(smoothPicture,uv-flow).rgb)*quietBed;
+      float distant=1.-step(.1,m.b);
+      float nativeFoam=step(.4,m.b);
+      float edge=smoothstep(mix(1.,.3,nativeFoam),mix(4.,1.7,nativeFoam),shoreDistance);
+      // Every sea tile samples one world-space wave field, with no per-patch
+      // translation, opposing motion or reversal of the whole painted plate.
+      vec3 surface=windWaves(uv,distant);
+      vec2 slope=surface.xy*edge;
+      vec2 bend=clamp(slope*mix(4.,2.,distant),vec2(-1.6),vec2(1.6))/pixels;
+      vec3 color=texture2D(picture,uv+bend).rgb;
+      // Keep the broad seabed, rocks and reflected scenery fixed.
+      color+=texture2D(smoothPicture,uv).rgb-texture2D(smoothPicture,uv+bend).rgb;
+      float shade=clamp(dot(slope,vec2(.46,-.88))*mix(.45,.22,distant),-.1,.1);
+      color*=1.+shade;
+      color=mix(color,vec3(.86,.97,.98),min(.4,surface.z)*mix(.55,.15,distant)*edge);
+      // Animate the original foam around pier feet, preserving its painted
+      // shape instead of adding expanding circles over the picture.
+      float white=smoothstep(.68,.91,dot(color,vec3(.2126,.7152,.0722)));
+      color*=1.-white*nativeFoam*clamp(.08-surface.z*.2+dot(slope,vec2(.12,.2)),0.,.14);
       gl_FragColor=vec4(clamp(color,0.,1.),water*edge);
     }`;
   function layer(img) {
@@ -206,7 +195,7 @@ const GardenEnvironment = (() => {
         for(const [key,value] of [[gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE],[gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE],[gl.TEXTURE_MIN_FILTER,gl.LINEAR],[gl.TEXTURE_MAG_FILTER,gl.LINEAR]])gl.texParameteri(gl.TEXTURE_2D,key,value);
       }
     }catch{gl.deleteProgram(program);gl.deleteBuffer(buffer);gl.deleteTexture(texture);gl.deleteTexture(smoothTexture);gl.deleteTexture(maskTexture);return ()=>{};}
-    const uniforms={};for(const n of ['picture','smoothPicture','masks','flowOffset','pixels','maskPixels'])uniforms[n]=gl.getUniformLocation(program,n);
+    const uniforms={};for(const n of ['picture','smoothPicture','masks','pixels','maskPixels'])uniforms[n]=gl.getUniformLocation(program,n);
     uniforms.waves=gl.getUniformLocation(program,'waves[0]');
     gl.uniform1i(uniforms.picture,0);gl.uniform1i(uniforms.masks,1);gl.uniform1i(uniforms.smoothPicture,2);
     canvas.hidden=true;canvas.dataset.pictureDetail='water-detail';
@@ -322,8 +311,8 @@ const GardenEnvironment = (() => {
       if(canvas.width!==w || canvas.height!==h){canvas.width=w;canvas.height=h;gl.viewport(0,0,w,h);}
       gl.uniform2f(uniforms.maskPixels,maskWidth,maskHeight);
       gl.uniform4fv(uniforms.waves,swells.update(now/1000));
-      gl.uniform2f(uniforms.flowOffset,...flowOffset(now/1000));gl.uniform2f(uniforms.pixels,Math.max(1,display.width),Math.max(1,display.height));
-      gl.drawArrays(gl.TRIANGLES,0,6);last=now;canvas.dataset.surface='garden';canvas.dataset.frame=String(Math.round(now));canvas.dataset.precision=precision;canvas.dataset.waterMotion=fishingWater?'gentle-wind-waves':'native-wave-flow';
+      gl.uniform2f(uniforms.pixels,Math.max(1,display.width),Math.max(1,display.height));
+      gl.drawArrays(gl.TRIANGLES,0,6);last=now;canvas.dataset.surface='garden';canvas.dataset.frame=String(Math.round(now));canvas.dataset.precision=precision;canvas.dataset.waterMotion=fishingWater?'gentle-wind-waves':'coherent-wind-waves';
     }
     const lost=e=>{e.preventDefault();ready=false;canvas.hidden=true;};canvas.addEventListener('webglcontextlost',lost);
     raf=requestAnimationFrame(draw);
@@ -336,6 +325,6 @@ const GardenEnvironment = (() => {
     const dispose=[...scene.querySelectorAll('.garden-backdrop')].map(img=>layer(img));
     current={scene,destroy:()=>dispose.forEach(fn=>fn())};
   }
-  return {mount,renderSize,textureSize,shorelineMask,surfaceMask,flowOffset,swellField,prepareTextures};
+  return {mount,renderSize,textureSize,shorelineMask,surfaceMask,swellField,prepareTextures};
 })();
 if(typeof module!=="undefined") module.exports=GardenEnvironment;

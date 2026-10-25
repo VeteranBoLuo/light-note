@@ -28,14 +28,14 @@ describe('庄园水面准备', () => {
     const capped = water.textureSize(1808, 870, 3000, 2, 4096);
     expect(capped.width).toBeLessThanOrEqual(4096);expect(capped.height).toBeLessThanOrEqual(4096);
   });
-  it('蓝水保留、岸上像素排除，舱面分类与岸线羽化保持一致', () => {
+  it('蓝水保留、岸上像素排除，鱼舱顶面完全退出动态遮罩', () => {
     const categories = new Uint8ClampedArray([255, 0, 0, 255, 255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 0, 255]);
     const scene = new Uint8ClampedArray([15, 140, 210, 255, 75, 55, 20, 255, 200, 200, 200, 255, 15, 140, 210, 255]);
     const result = water.surfaceMask(categories, scene, 4, 1);
-    expect([...result.filter((_v, i) => i % 4 !== 3)]).toEqual([255, 0, 0, 0, 0, 0, 0, 255, 0, 0, 0, 0]);
+    expect([...result.filter((_v, i) => i % 4 !== 3)]).toEqual([255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
     expect(result[3]).toBe(8);
     expect(result[7]).toBe(0);
-    expect(result[11]).toBe(8);
+    expect(result[11]).toBe(0);
     expect(result[15]).toBe(0);
   });
   it('没有 OffscreenCanvas 时也分批让出主线程，结果使用相同水域算法', async () => {

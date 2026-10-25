@@ -368,23 +368,19 @@
               <BButton size="small" @click="loadDashboard">{{ t('common.retry') }}</BButton>
             </section>
             <template v-else>
-              <section v-if="growthV2Enabled" class="growth-panel">
-                <AchievementHighlights :achievements="achievements" />
-              </section>
-              <section class="growth-panel">
-                <AchievementWall
-                  :achievements="achievements"
-                  :unlocked-count="dashboard?.unlockedCount || 0"
-                  :total-achievements="dashboard?.totalAchievements || achievements.length"
-                  :claimable-count="dashboard?.claimableCount || 0"
-                  :claiming-key="claimingAch || (claimingRewards ? '__busy__' : null)"
-                  :read-only="isAdminContext"
-                  @claim="onClaimAchievement"
-                />
-              </section>
-              <section v-if="streakMilestones.length" class="growth-panel">
-                <MilestoneLadder :milestones="streakMilestones" :current-streak="currentStreak" />
-              </section>
+              <AchievementCollection
+                :achievements="achievements"
+                :milestones="streakMilestones"
+                :current-streak="currentStreak"
+                :unlocked-count="dashboard?.unlockedCount || 0"
+                :total-achievements="dashboard?.totalAchievements || achievements.length"
+                :claimable-count="dashboard?.claimableCount || 0"
+                :claiming-key="claimingAch || (claimingRewards ? '__busy__' : null)"
+                :read-only="isAdminContext"
+                :animated="preferences?.celebrationEnabled !== false"
+                :show-highlights="growthV2Enabled"
+                @claim="onClaimAchievement"
+              />
               <template v-if="!growthV2Enabled">
                 <section id="growth-recap" class="growth-panel"><GrowthTimeline :items="timeline" /></section>
               </template>
@@ -453,9 +449,8 @@
   import SigninCalendar from '@/components/growth/SigninCalendar.vue';
   import DailyQuests from '@/components/growth/DailyQuests.vue';
   import GrowthStats from '@/components/growth/GrowthStats.vue';
-  import AchievementWall from '@/components/growth/AchievementWall.vue';
+  import AchievementCollection from '@/components/growth/AchievementCollection.vue';
   import GrowthTimeline from '@/components/growth/GrowthTimeline.vue';
-  import MilestoneLadder from '@/components/growth/MilestoneLadder.vue';
   import PointsShop from '@/components/growth/PointsShop.vue';
   import LotteryDraw from '@/components/growth/LotteryDraw.vue';
   import MyInventory from '@/components/growth/MyInventory.vue';
@@ -463,7 +458,6 @@
   import TodayGrowthCard from '@/components/growth/TodayGrowthCard.vue';
   import GrowthPreferencesCard from '@/components/growth/GrowthPreferencesCard.vue';
   import GrowthNextActionCard from '@/components/growth/GrowthNextActionCard.vue';
-  import AchievementHighlights from '@/components/growth/AchievementHighlights.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import BTabs from '@/components/base/BasicComponents/BTabs.vue';

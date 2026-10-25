@@ -353,7 +353,7 @@
         <i></i><i></i><i></i><i></i>
       </span>
     </span>
-    <span v-if="artwork" class="avatar-frame__bezel" aria-hidden="true"></span>
+    <span v-if="artwork && variant !== 'first-light'" class="avatar-frame__bezel" aria-hidden="true"></span>
   </div>
 </template>
 

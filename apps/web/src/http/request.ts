@@ -12,6 +12,7 @@ import {
   getAdminLoginPreviewReturnUrl,
 } from '@/utils/authStorage.ts';
 import { buildQueryRequestData, type QueryData } from '@/http/queryRequest.ts';
+import { beginRequestActivity, endRequestActivity } from '@/http/requestActivity';
 
 // 常量定义
 const TIMEOUT = 120000;
@@ -194,6 +195,7 @@ request.interceptors.request.use(
       // 说明这是一条「陈旧的在途响应」,notifyAuthExpired 会据此忽略其过期信号,避免误弹「登录已过期」
       (config as any).__reqUserId = useUserStore().id || '';
     }
+    beginRequestActivity(config);
     return config;
   },
   (error) => {
@@ -204,6 +206,7 @@ request.interceptors.request.use(
 // 响应拦截
 request.interceptors.response.use(
   (response) => {
+    endRequestActivity(response.config);
     const requestId = String(response.headers?.['x-request-id'] || '');
     if (requestId && response.data && typeof response.data === 'object') {
       response.data.requestId = requestId;
@@ -218,6 +221,7 @@ request.interceptors.response.use(
   },
   (error) => {
     const requestOptions = error.config as RequestOptions | undefined;
+    endRequestActivity(requestOptions);
     const silent = Boolean(requestOptions?.silent);
     // 有HTTP响应（服务器返回了错误状态码）
     if (error.response) {
