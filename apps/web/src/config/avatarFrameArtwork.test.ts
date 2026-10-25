@@ -85,8 +85,8 @@ describe('头像框成品素材目录', () => {
     expect(AVATAR_FRAME_ARTWORK.moonstone.motion).toBe('static');
   });
 
-  it('初光直接使用用户原型静态裁图且保持基础档布局', () => {
-    expect(AVATAR_FRAME_ARTWORK['first-light'].src).toContain('frame_first_light_v3.webp');
+  it('初光更新素材后保留基础档布局与静态属性', () => {
+    expect(AVATAR_FRAME_ARTWORK['first-light'].src).toContain('frame_first_light_v4.webp');
     expect(AVATAR_FRAME_ARTWORK['first-light'].motion).toBe('static');
     expect(AVATAR_FRAME_ARTWORK['first-light'].artSize).toBe(100);
     expect(AVATAR_FRAME_ARTWORK['first-light'].outerSize).toBe(86);
