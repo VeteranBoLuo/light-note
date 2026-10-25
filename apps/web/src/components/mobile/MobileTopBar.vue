@@ -59,7 +59,7 @@
 
     <div v-if="showActions" class="mobile-top-bar__actions">
       <BButton v-if="!isSecondary && growthInfo?.features?.manor && !user.adminContext && user.role === 'root'" class="mobile-top-bar__action" :aria-label="t('manor.title')" @click="router.push('/knowledge-manor')">
-        <SvgIcon :src="icon.manor.entry" size="19" aria-hidden="true" />
+        <SvgIcon :src="icon.manor.entry" size="24" aria-hidden="true" />
       </BButton>
       <!-- AI 等自带标题区的页面不放完整搜索框,只给一个放大镜打开同一个搜索层 -->
       <BButton
