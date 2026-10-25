@@ -19,7 +19,12 @@ import { fetchGitHubApiJson, fetchGitHubTokenSafely, GitHubOAuthError } from '..
 import { createNotification } from '../util/notification.js';
 import { verifyPassword, hashPassword, validatePassword } from '../util/password.js';
 import { hasLoginPassword } from '../util/loginPasswordState.js';
-import { sendTrackedEmail } from '../util/emailDelivery.js';
+import { sendTrackedEmail, maskEmail } from '../util/emailDelivery.js';
+import {
+  githubBindingCandidate,
+  githubBindingSnapshot,
+  confirmGithubAccountBinding,
+} from '../util/services/githubAccountBindingService.js';
 import crypto from 'crypto';
 import {
   clearAuthCookie,
@@ -84,6 +89,10 @@ import {
   githubOAuthCookieOptions,
   GITHUB_OAUTH_NONCE_COOKIE,
   readGitHubOAuthNonce,
+  prepareGitHubBinding,
+  consumeGitHubBinding,
+  finishGitHubBinding,
+  retryUnsentGitHubOAuthChallenge,
 } from '../util/githubOAuthState.js';
 import { consumeExtensionAuthorizationCode, createExtensionAuthorizationCode } from '../util/extensionAuth.js';
 import {
@@ -1386,6 +1395,25 @@ export const exchangeExtensionAuthorization = async (req, res) => {
   }
 };
 
+async function issueGithubLoginSession(req, res, user) {
+  const expected = githubBindingSnapshot(user);
+  return issueLoginSession(req, res, user, true, {
+    validateAccount: (current) => {
+      if (
+        !current ||
+        Number(current.del_flag || 0) !== 0 ||
+        !['user', 'test', 'root'].includes(current.role) ||
+        !current.github_id ||
+        githubBindingSnapshot(current) !== expected
+      )
+        throw new GitHubOAuthError('GITHUB_OAUTH_ACCOUNT_CHANGED', '账号信息已变化，请重新授权', {
+          stage: 'SESSION_ISSUE',
+          status: 409,
+        });
+    },
+  });
+}
+
 export const github = async (req, res) => {
   const { code, state } = req.body || {};
   const requestId = crypto.randomUUID();
@@ -1409,6 +1437,18 @@ export const github = async (req, res) => {
     stage = 'STATE_VALIDATE';
     const consent = await consumeGitHubOAuthChallenge({ state, nonce, code });
     req.body.signupSource = consent.signupSource;
+    if (consent.bindingRequired)
+      return res.send(
+        resultData(
+          {
+            bindingRequired: true,
+            maskedEmail: maskEmail(consent.binding.email),
+            githubLogin: consent.binding.githubLogin,
+            requestId,
+          },
+          409,
+        ),
+      );
 
     let user;
     let githubUser = null;
@@ -1417,7 +1457,12 @@ export const github = async (req, res) => {
       stage = 'ACCOUNT_RECOVER';
       const [users] = await pool.query('SELECT * FROM user WHERE id = ? AND del_flag = 0 LIMIT 1', [consent.userId]);
       user = users[0];
-      if (!user) {
+      if (
+        !user ||
+        !consent.accountSnapshot ||
+        githubBindingSnapshot(user) !== consent.accountSnapshot ||
+        String(user.github_id || '') !== consent.githubId
+      ) {
         throw new GitHubOAuthError('GITHUB_OAUTH_RECOVERY_USER_MISSING', 'GitHub 登录恢复记录已失效', {
           stage,
           status: 400,
@@ -1434,16 +1479,33 @@ export const github = async (req, res) => {
       tokenRoute = tokenData.route;
 
       stage = 'PROFILE_FETCH';
-      const [baseUser, email] = await Promise.all([
+      const [baseUser, emailResult] = await Promise.all([
         getGitHubUser(tokenData.access_token),
-        getGitHubEmail(tokenData.access_token),
+        getGitHubEmail(tokenData.access_token).then(
+          (email) => ({ email }),
+          (error) => ({ error }),
+        ),
       ]);
+      // 已关联用户按 GitHub ID 登录，不依赖邮箱接口可用性；新身份不能把邮箱读取失败当作“无邮箱”。
+      if (emailResult.error) {
+        const [[linked]] = await pool.query('SELECT id FROM user WHERE github_id = ? AND del_flag = 0 LIMIT 1', [
+          String(baseUser.id),
+        ]);
+        if (!linked) throw emailResult.error;
+      }
+      const email = emailResult.email;
       githubUser = { ...baseUser, email, emailMissing: !email };
 
       stage = 'ACCOUNT_BIND';
       user = await handleUserDatabaseOperation(githubUser, req);
       try {
-        challengeCompleted = await completeGitHubOAuthChallenge({ state, code, userId: user.id });
+        challengeCompleted = await completeGitHubOAuthChallenge({
+          state,
+          code,
+          userId: user.id,
+          accountSnapshot: githubBindingSnapshot(user),
+          githubId: String(user.github_id),
+        });
         if (!challengeCompleted) {
           console.warn(
             '[github-oauth] completion cache missed requestId=%s stage=STATE_COMPLETE code=GITHUB_OAUTH_STATE_COMPLETE_MISSED',
@@ -1460,7 +1522,7 @@ export const github = async (req, res) => {
     }
 
     stage = 'SESSION_ISSUE';
-    const sid = await issueLoginSession(req, res, user, true);
+    const sid = await issueGithubLoginSession(req, res, user);
     await rememberRecentGithubAuthentication(sid, user).catch(() =>
       console.warn('[github-oauth] recent authentication proof unavailable'),
     );
@@ -1494,26 +1556,53 @@ export const github = async (req, res) => {
       }),
     );
   } catch (error) {
+    if (error?.code === 'GITHUB_OAUTH_BINDING_REQUIRED' && error.binding) {
+      try {
+        await prepareGitHubBinding({ state, code, nonce: readGitHubOAuthNonce(req), binding: error.binding });
+        return res.send(
+          resultData(
+            {
+              bindingRequired: true,
+              maskedEmail: maskEmail(error.binding.email),
+              githubLogin: error.binding.githubLogin,
+              requestId,
+            },
+            409,
+          ),
+        );
+      } catch (bindingError) {
+        error = bindingError;
+      }
+    }
     const declaredErrorCode = String(error?.code || '');
     const isOAuthDomainError = declaredErrorCode.startsWith('GITHUB_OAUTH_');
     const errorCode = isOAuthDomainError ? declaredErrorCode : `GITHUB_OAUTH_${stage}_FAILED`;
-    if (challengeClaimed && !challengeCompleted) {
+    const unsentRetry =
+      challengeClaimed &&
+      errorCode === 'GITHUB_OAUTH_ROUTE_UNAVAILABLE' &&
+      (await retryUnsentGitHubOAuthChallenge({ state, code }).catch(() => false));
+    if (challengeClaimed && !challengeCompleted && !unsentRetry) {
       await failGitHubOAuthChallenge({ state, code, errorCode }).catch(() => false);
     }
     const retryableLocalCallback =
-      errorCode === 'GITHUB_OAUTH_IN_PROGRESS' || (challengeCompleted && stage === 'SESSION_ISSUE');
+      unsentRetry ||
+      errorCode === 'GITHUB_OAUTH_IN_PROGRESS' ||
+      (challengeCompleted && stage === 'SESSION_ISSUE' && errorCode !== 'GITHUB_OAUTH_ACCOUNT_CHANGED');
     if (!retryableLocalCallback) {
       res.clearCookie(GITHUB_OAUTH_NONCE_COOKIE, githubOAuthCookieOptions(0));
     }
     const status = isOAuthDomainError && Number.isInteger(error?.status) ? error.status : 500;
     const logger = status >= 500 ? console.error : console.warn;
     logger(
-      '[github-oauth] callback failed requestId=%s stage=%s code=%s upstreamStatus=%s providerCode=%s elapsedMs=%d',
+      '[github-oauth] callback failed requestId=%s stage=%s code=%s upstreamStatus=%s providerCode=%s transportPhase=%s elapsedMs=%d',
       requestId,
       String(error?.stage || stage),
       errorCode,
       error?.upstreamStatus ?? '-',
       error?.providerCode || '-',
+      ['CONNECT', 'TLS_READY', 'REQUEST_SENT', 'RESPONSE_HEADERS'].includes(error?.transportPhase)
+        ? error.transportPhase
+        : '-',
       Date.now() - startedAt,
     );
     const upstreamUnavailable = ['TOKEN_CONNECT', 'TOKEN_EXCHANGE', 'PROFILE_FETCH'].includes(
@@ -1533,20 +1622,74 @@ export const github = async (req, res) => {
   }
 };
 
-// Retired anonymous linking endpoint: old pages and tickets cannot attach an identity or issue a session.
 export const bindGithub = async (req, res) => {
-  res.clearCookie(GITHUB_OAUTH_NONCE_COOKIE, githubOAuthCookieOptions(0));
-  return res.send(
-    resultData(
-      { code: 'GITHUB_OAUTH_EMAIL_CONFLICT', retryable: false },
-      409,
-      L(
-        req,
-        '此邮箱已注册过轻笺，请使用邮箱登录或找回密码',
-        'This email is already registered with LightNote. Use email sign-in or reset your password.',
+  const requestId = crypto.randomUUID();
+  const { state, confirm } = req.body || {};
+  let claim;
+  let completed = false;
+  let bindingPersisted = false;
+  try {
+    claim = await consumeGitHubBinding({ state, confirm, nonce: readGitHubOAuthNonce(req) });
+    if (!confirm) {
+      res.clearCookie(GITHUB_OAUTH_NONCE_COOKIE, githubOAuthCookieOptions(0));
+      return res.send(resultData({ cancelled: true }));
+    }
+    let user;
+    if (claim.recovered) {
+      [[user]] = await pool.query('SELECT * FROM user WHERE id = ? AND del_flag = 0 LIMIT 1', [claim.userId]);
+      if (!user || githubBindingSnapshot(user) !== claim.accountSnapshot || String(user.github_id) !== claim.githubId)
+        throw new GitHubOAuthError('GITHUB_OAUTH_ACCOUNT_CHANGED', '账号已变化，请重新授权', {
+          stage: 'ACCOUNT_BIND',
+          status: 409,
+        });
+      completed = true;
+    } else {
+      user = await confirmGithubAccountBinding(claim.binding);
+      bindingPersisted = true;
+      completed = await finishGitHubBinding({
+        state,
+        processingId: claim.processingId,
+        userId: user.id,
+        accountSnapshot: githubBindingSnapshot(user),
+        githubId: String(user.github_id),
+      });
+      if (!completed)
+        throw new GitHubOAuthError('GITHUB_OAUTH_IN_PROGRESS', '绑定已保存，正在恢复登录，请稍后重试', { status: 409 });
+    }
+    const sid = await issueGithubLoginSession(req, res, user);
+    await rememberRecentGithubAuthentication(sid, user).catch(() =>
+      console.warn('[github-oauth] binding authentication proof unavailable'),
+    );
+    await recordServerOperation(req, {
+      module: '账号与隐私',
+      operation: `确认同邮箱 GitHub 登录关联及跨境授权同意【${claim.consentVersion}/${claim.flow}】`,
+      userId: user.id,
+    }).catch(() => console.warn('[github-oauth] binding audit unavailable'));
+    return res.send(resultData({ sid, requestId }));
+  } catch (error) {
+    // 数据库已完成而响应丢失时，重试通过同账号同凭据的幂等核验恢复，不重复写关联。
+    if (claim && !claim.recovered && !completed)
+      await finishGitHubBinding({ state, processingId: claim.processingId, retry: true }).catch(() => {});
+    const domain = String(error?.code || '').startsWith('GITHUB_OAUTH_');
+    const retryable =
+      error?.code === 'GITHUB_OAUTH_IN_PROGRESS' || (!domain && (completed || bindingPersisted || !claim?.recovered));
+    if (!retryable) res.clearCookie(GITHUB_OAUTH_NONCE_COOKIE, githubOAuthCookieOptions(0));
+    return res.send(
+      resultData(
+        { code: domain ? error.code : 'GITHUB_OAUTH_BIND_FAILED', requestId, retryable },
+        domain ? error.status || 409 : 500,
+        domain
+          ? L(
+              req,
+              error.message,
+              retryable
+                ? 'Linking is processing. Please retry shortly.'
+                : 'Linking did not complete. Authorize GitHub again or use email sign-in.',
+            )
+          : L(req, '绑定未完成，请稍后重试', 'Could not finish linking. Please retry.'),
       ),
-    ),
-  );
+    );
+  }
 };
 
 export const logout = async (req, res) => {
@@ -1724,15 +1867,19 @@ const getGitHubUser = async (accessToken) => {
 const getGitHubEmail = async (accessToken) => {
   try {
     const emails = await fetchGitHubApiJson('/user/emails', accessToken, { attempts: 2, timeoutMs: 5000 });
-    if (!Array.isArray(emails)) return null;
-    const primaryEmail = emails.find((email) => email?.primary && email?.verified);
+    if (!Array.isArray(emails))
+      throw new GitHubOAuthError('GITHUB_OAUTH_EMAIL_RESPONSE_INVALID', 'GitHub 邮箱信息暂不可用', {
+        stage: 'PROFILE_FETCH',
+      });
+    const primaryEmail =
+      emails.find((email) => email?.primary && email?.verified) || emails.find((email) => email?.verified);
     return normalizeEmail(primaryEmail?.email) || null;
   } catch (error) {
     console.warn(
       '[github-oauth] email fetch degraded code=%s',
       String(error?.code || 'GITHUB_OAUTH_EMAIL_UNAVAILABLE'),
     );
-    return null;
+    throw error;
   }
 };
 
@@ -1772,16 +1919,13 @@ export const handleUserDatabaseOperation = async (githubUser, req, { duplicateRe
         safeEmail,
       ]);
       if (existingByEmail.length > 0) {
-        // 注册不证明邮箱归属；同邮箱冲突不能合并身份或保留未知来源的密码后登录。
-        throw new GitHubOAuthError(
-          'GITHUB_OAUTH_EMAIL_CONFLICT',
-          L(
-            req,
-            '此邮箱已注册过轻笺，请使用邮箱登录或找回密码',
-            'This email is already registered with LightNote. Use email sign-in or reset your password.',
-          ),
-          { stage: 'ACCOUNT_BIND', status: 409 },
-        );
+        const binding = githubBindingCandidate(existingByEmail[0], githubUser);
+        const error = new GitHubOAuthError('GITHUB_OAUTH_BINDING_REQUIRED', '此邮箱已注册过轻笺，请确认是否绑定', {
+          stage: 'ACCOUNT_BIND',
+          status: 409,
+        });
+        error.binding = binding;
+        throw error;
       } else {
         createdUserId = generateUUID();
         // GitHub 账号没有可用于邮箱登录的初始密码，使用不可预测随机值，用户可在登录后主动设置密码。

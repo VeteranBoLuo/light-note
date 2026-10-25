@@ -12801,6 +12801,11 @@ export default {
     githubCallbackRetry: 'Authorize GitHub again',
     githubCallbackEmailLogin: 'Use email sign-in',
     githubEmailConflict: 'This email is already registered with LightNote. Use email sign-in or reset your password.',
+    githubBindingTitle: 'This email is already registered',
+    githubBindingHint:
+      'The verified email from GitHub matches an existing LightNote account. Link GitHub to that account and sign in? The existing password, profile and benefits will be kept.',
+    githubBindingConfirm: 'Link and sign in',
+    githubBindingCancelled: 'Linking was cancelled. Use email sign-in or authorize GitHub again.',
     githubCallbackRequestId: 'Reference: {requestId}',
     previewMobile: 'Mobile preview',
     noAccount: "Don't have an account? ",

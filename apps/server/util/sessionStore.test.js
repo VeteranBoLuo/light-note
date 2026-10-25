@@ -29,6 +29,52 @@ beforeEach(() => {
 });
 
 describe('登录设备会话归并', () => {
+  it.each(['', 'device-1234567890'])('账号复核与创建会话在同一事务，设备标识=%s', async (deviceId) => {
+    const connection = createConnection();
+    const account = { id: 'user-1', password: 'current' };
+    connection.query.mockImplementation(async (sql) => (sql.includes('FROM user WHERE') ? [[account]] : [[]]));
+    getConnection.mockResolvedValue(connection);
+    const validateAccount = vi.fn((current) => expect(current).toEqual(account));
+    await createSession({ userId: 'user-1', role: 'user', maxAgeMs: 1000, deviceId, validateAccount });
+    expect(connection.query.mock.calls[0][0]).toContain('FOR UPDATE');
+    expect(validateAccount).toHaveBeenCalledOnce();
+    expect(connection.query.mock.calls.at(-1)[0]).toContain('INSERT INTO user_sessions');
+    expect(connection.commit).toHaveBeenCalledOnce();
+    expect(query).not.toHaveBeenCalled();
+  });
+  it('账号复核失败时回滚，不插入会话或回退兼容路径', async () => {
+    const connection = createConnection();
+    connection.query.mockResolvedValue([[{ id: 'user-1', password: 'changed' }]]);
+    getConnection.mockResolvedValue(connection);
+    await expect(
+      createSession({
+        userId: 'user-1',
+        maxAgeMs: 1000,
+        validateAccount: () => {
+          throw Object.assign(new Error(), { code: 'GITHUB_OAUTH_ACCOUNT_CHANGED' });
+        },
+      }),
+    ).rejects.toHaveProperty('code', 'GITHUB_OAUTH_ACCOUNT_CHANGED');
+    expect(connection.query).toHaveBeenCalledOnce();
+    expect(connection.rollback).toHaveBeenCalledOnce();
+    expect(connection.commit).not.toHaveBeenCalled();
+    expect(query).not.toHaveBeenCalled();
+  });
+  it('缺少 device_key 字段的兼容路径也必须锁定并复核账号', async () => {
+    const first = createConnection(),
+      fallback = createConnection();
+    first.query
+      .mockResolvedValueOnce([[{ id: 'user-1' }]])
+      .mockRejectedValueOnce(Object.assign(new Error(), { code: 'ER_BAD_FIELD_ERROR' }));
+    fallback.query.mockResolvedValueOnce([[{ id: 'user-1' }]]).mockResolvedValueOnce([{}]);
+    getConnection.mockResolvedValueOnce(first).mockResolvedValueOnce(fallback);
+    const validateAccount = vi.fn();
+    await createSession({ userId: 'user-1', maxAgeMs: 1000, deviceId: 'device-1234567890', validateAccount });
+    expect(validateAccount).toHaveBeenCalledTimes(2);
+    expect(fallback.query.mock.calls[0][0]).toContain('FOR UPDATE');
+    expect(fallback.query.mock.calls[1][0]).not.toContain('device_key');
+    expect(query).not.toHaveBeenCalled();
+  });
   it('同一稳定设备再次登录时原子替换旧 session，并驱逐旧 Redis 缓存', async () => {
     const connection = createConnection();
     connection.query

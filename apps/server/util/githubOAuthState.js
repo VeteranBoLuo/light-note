@@ -6,6 +6,7 @@ export const GITHUB_OAUTH_NONCE_COOKIE = 'ln_github_oauth_nonce';
 
 const CHALLENGE_TTL_SECONDS = 10 * 60;
 const RESULT_TTL_SECONDS = 5 * 60;
+const BINDING_LEASE_MS = 30 * 1000;
 const CHALLENGE_KEY_PREFIX = 'oauth:github:state:';
 const DEFAULT_REDIRECT_URI = 'https://boluo66.top/auth/callback';
 const VALID_FLOWS = new Set(['login', 'register']);
@@ -73,7 +74,9 @@ function parseChallenge(raw) {
 function validateChallenge(challenge, normalizedNonce) {
   const consentAt = Number(challenge?.consentAt || 0);
   const ageMs = Date.now() - consentAt;
-  const maxAgeSeconds = ['completed', 'failed'].includes(challenge?.status)
+  const maxAgeSeconds = ['completed', 'failed', 'binding', 'binding_processing', 'cancelled'].includes(
+    challenge?.status,
+  )
     ? CHALLENGE_TTL_SECONDS + RESULT_TTL_SECONDS
     : CHALLENGE_TTL_SECONDS;
   const validCommonFields =
@@ -101,10 +104,18 @@ function challengePublicContext(challenge, consentAt) {
 }
 
 async function compareAndSetChallenge(key, expectedRaw, nextChallenge, ttlSeconds) {
-  return redisClient.eval(CAS_SET_SCRIPT, {
-    keys: [key],
-    arguments: [expectedRaw, JSON.stringify(nextChallenge), String(ttlSeconds)],
-  });
+  const nextRaw = JSON.stringify(nextChallenge);
+  try {
+    return await redisClient.eval(CAS_SET_SCRIPT, {
+      keys: [key],
+      arguments: [expectedRaw, nextRaw, String(ttlSeconds)],
+    });
+  } catch (error) {
+    // SETEX 可能已经提交；仅恢复本次完全相同的写入，绝不重发或覆盖其他处理者。
+    const current = await redisClient.get(key).catch(() => null);
+    if (current === nextRaw) return current;
+    throw error;
+  }
 }
 
 function resolveOAuthConfig() {
@@ -204,9 +215,11 @@ export async function createGitHubOAuthChallenge({ consentVersion, flow = 'login
 }
 
 function rejectLegacyEmailBinding(challenge) {
-  if (challenge.binding || ['binding', 'binding_processing'].includes(challenge.status)) {
-    throw githubOAuthError('GITHUB_OAUTH_EMAIL_CONFLICT',
-      '此邮箱已注册过轻笺，请使用邮箱登录或找回密码', 409);
+  if (
+    (challenge.binding || ['binding', 'binding_processing'].includes(challenge.status)) &&
+    challenge.binding?.version !== 2
+  ) {
+    throw githubOAuthError('GITHUB_OAUTH_EMAIL_CONFLICT', '此邮箱已注册过轻笺，请使用邮箱登录或找回密码', 409);
   }
 }
 
@@ -239,9 +252,21 @@ export async function consumeGitHubOAuthChallenge({ state, nonce, code } = {}) {
     if (!challenge.userId) {
       throw githubOAuthError('GITHUB_OAUTH_STATE_INVALID', 'GitHub 登录校验失败，请重新发起授权');
     }
-    return { ...challengePublicContext(challenge, consentAt), recovered: true, userId: challenge.userId };
+    return {
+      ...challengePublicContext(challenge, consentAt),
+      recovered: true,
+      userId: challenge.userId,
+      accountSnapshot: challenge.accountSnapshot,
+      githubId: challenge.githubId,
+    };
   }
-  if (challenge.status === 'processing') {
+  if (
+    challenge.status === 'binding' ||
+    (challenge.status === 'binding_processing' &&
+      Date.now() - Number(challenge.bindingProcessingAt || 0) >= BINDING_LEASE_MS)
+  )
+    return { ...challengePublicContext(challenge, consentAt), bindingRequired: true, binding: challenge.binding };
+  if (['processing', 'binding_processing'].includes(challenge.status)) {
     throw githubOAuthError('GITHUB_OAUTH_IN_PROGRESS', 'GitHub 登录仍在处理中，请稍后重试', 409);
   }
   if (challenge.status === 'failed') {
@@ -267,7 +292,13 @@ export async function consumeGitHubOAuthChallenge({ state, nonce, code } = {}) {
   rejectLegacyEmailBinding(claimed);
   if (claimed.processingId !== processingId) {
     if (claimed.status === 'completed' && claimed.codeDigest === codeDigest && claimed.userId) {
-      return { ...challengePublicContext(claimed, consentAt), recovered: true, userId: claimed.userId };
+      return {
+        ...challengePublicContext(claimed, consentAt),
+        recovered: true,
+        userId: claimed.userId,
+        accountSnapshot: claimed.accountSnapshot,
+        githubId: claimed.githubId,
+      };
     }
     throw githubOAuthError('GITHUB_OAUTH_IN_PROGRESS', 'GitHub 登录仍在处理中，请稍后重试', 409);
   }
@@ -278,7 +309,7 @@ export async function consumeGitHubOAuthChallenge({ state, nonce, code } = {}) {
   };
 }
 
-export async function completeGitHubOAuthChallenge({ state, code, userId } = {}) {
+export async function completeGitHubOAuthChallenge({ state, code, userId, accountSnapshot, githubId } = {}) {
   const normalizedState = String(state || '').trim();
   const normalizedCode = String(code || '').trim();
   const normalizedUserId = String(userId || '').trim();
@@ -300,11 +331,94 @@ export async function completeGitHubOAuthChallenge({ state, code, userId } = {})
     status: 'completed',
     userId: normalizedUserId,
     completedAt: Date.now(),
+    accountSnapshot,
+    githubId,
   };
   delete completed.codeVerifier;
   delete completed.processingId;
   const result = await compareAndSetChallenge(key, raw, completed, RESULT_TTL_SECONDS);
   return Boolean(result && parseChallenge(result).status === 'completed');
+}
+
+export async function prepareGitHubBinding({ state, nonce, code, binding }) {
+  const key = challengeKey(state);
+  const raw = await redisClient.get(key);
+  if (!raw) throw githubOAuthError('GITHUB_OAUTH_STATE_EXPIRED', '绑定请求已过期，请重新授权');
+  const challenge = parseChallenge(raw);
+  validateChallenge(challenge, nonce);
+  if (challenge.status !== 'processing' || challenge.codeDigest !== sha256(code) || binding?.version !== 2)
+    throw githubOAuthError('GITHUB_OAUTH_STATE_INVALID', '绑定请求无效，请重新授权');
+  const next = { ...challenge, status: 'binding', binding, bindingExpiresAt: Date.now() + RESULT_TTL_SECONDS * 1000 };
+  delete next.codeVerifier;
+  delete next.processingId;
+  const result = await compareAndSetChallenge(key, raw, next, RESULT_TTL_SECONDS);
+  if (!result || parseChallenge(result).status !== 'binding')
+    throw githubOAuthError('GITHUB_OAUTH_IN_PROGRESS', '绑定正在处理中，请稍后重试', 409);
+}
+
+export async function consumeGitHubBinding({ state, nonce, confirm }) {
+  if (
+    typeof state !== 'string' ||
+    !TOKEN_PATTERN.test(state) ||
+    typeof nonce !== 'string' ||
+    !TOKEN_PATTERN.test(nonce) ||
+    typeof confirm !== 'boolean'
+  )
+    throw githubOAuthError('GITHUB_OAUTH_STATE_INVALID', '绑定请求无效，请重新授权');
+  const key = challengeKey(state);
+  const raw = await redisClient.get(key);
+  if (!raw) throw githubOAuthError('GITHUB_OAUTH_STATE_EXPIRED', '绑定请求已过期，请重新授权');
+  const challenge = parseChallenge(raw);
+  const consentAt = validateChallenge(challenge, nonce);
+  rejectLegacyEmailBinding(challenge);
+  if (challenge.binding?.version !== 2)
+    throw githubOAuthError('GITHUB_OAUTH_STATE_INVALID', '绑定请求无效，请重新授权');
+  if (confirm && challenge.status === 'completed')
+    return { ...challenge, ...challengePublicContext(challenge, consentAt), recovered: true };
+  if (!Number.isFinite(challenge.bindingExpiresAt) || Date.now() >= challenge.bindingExpiresAt)
+    throw githubOAuthError('GITHUB_OAUTH_STATE_EXPIRED', '绑定请求已过期，请重新授权');
+  const reclaimable =
+    confirm &&
+    challenge.status === 'binding_processing' &&
+    Date.now() - Number(challenge.bindingProcessingAt || 0) >= BINDING_LEASE_MS;
+  if (challenge.status !== 'binding' && !reclaimable)
+    throw githubOAuthError(
+      challenge.status === 'binding_processing' ? 'GITHUB_OAUTH_IN_PROGRESS' : 'GITHUB_OAUTH_STATE_INVALID',
+      '绑定请求已变化，请重试或重新授权',
+      409,
+    );
+  const processingId = crypto.randomUUID();
+  const next = {
+    ...challenge,
+    status: confirm ? 'binding_processing' : 'cancelled',
+    processingId,
+    bindingProcessingAt: Date.now(),
+  };
+  const result = await compareAndSetChallenge(
+    key,
+    raw,
+    next,
+    Math.max(1, Math.ceil((challenge.bindingExpiresAt - Date.now()) / 1000)),
+  );
+  if (!result || parseChallenge(result).processingId !== processingId)
+    throw githubOAuthError('GITHUB_OAUTH_IN_PROGRESS', '绑定正在处理中，请稍后重试', 409);
+  return { ...next, ...challengePublicContext(challenge, consentAt), recovered: false };
+}
+
+export async function finishGitHubBinding({ state, processingId, userId, accountSnapshot, githubId, retry = false }) {
+  const key = challengeKey(state);
+  const raw = await redisClient.get(key);
+  if (!raw) return false;
+  const challenge = parseChallenge(raw);
+  if (challenge.status !== 'binding_processing' || challenge.processingId !== processingId) return false;
+  const next = { ...challenge, status: retry ? 'binding' : 'completed' };
+  if (!retry) Object.assign(next, { userId, accountSnapshot, githubId, completedAt: Date.now() });
+  delete next.processingId;
+  delete next.bindingProcessingAt;
+  const remaining = Math.ceil((challenge.bindingExpiresAt - Date.now()) / 1000);
+  if (retry && remaining <= 0) return false;
+  const result = await compareAndSetChallenge(key, raw, next, retry ? remaining : RESULT_TTL_SECONDS);
+  return Boolean(result && parseChallenge(result).status === next.status);
 }
 
 export async function failGitHubOAuthChallenge({ state, code, errorCode } = {}) {
@@ -327,4 +441,19 @@ export async function failGitHubOAuthChallenge({ state, code, errorCode } = {}) 
   delete failed.processingId;
   const result = await compareAndSetChallenge(key, raw, failed, RESULT_TTL_SECONDS);
   return Boolean(result && parseChallenge(result).status === 'failed');
+}
+
+// 仅调用方已确认未发出换票 POST 时允许释放认领；换票结果未知时禁止走此分支。
+export async function retryUnsentGitHubOAuthChallenge({ state, code }) {
+  const key = challengeKey(state);
+  const raw = await redisClient.get(key);
+  if (!raw) return false;
+  const challenge = parseChallenge(raw);
+  if (challenge.status !== 'processing' || challenge.codeDigest !== sha256(code)) return false;
+  const remaining = Math.floor((challenge.consentAt + CHALLENGE_TTL_SECONDS * 1000 - Date.now()) / 1000);
+  if (remaining <= 0) return false;
+  const next = { ...challenge, status: 'pending' };
+  delete next.processingId;
+  const result = await compareAndSetChallenge(key, raw, next, remaining);
+  return Boolean(result && parseChallenge(result).status === 'pending');
 }

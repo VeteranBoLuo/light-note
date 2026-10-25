@@ -1,6 +1,18 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import https from 'node:https';
+import { EventEmitter } from 'node:events';
 
-import { fetchGitHubApiJson, fetchGitHubTokenSafely, selectGitHubTokenEndpoint } from './githubOAuth.js';
+import {
+  fetchGitHubApiJson,
+  fetchGitHubTokenSafely,
+  selectGitHubTokenEndpoint,
+  httpsRequestViaIp,
+} from './githubOAuth.js';
+
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.useRealTimers();
+});
 
 describe('GitHub OAuth 安全直连', () => {
   it('只在提交授权码前探测线路，并选择首个完整 HTTPS 可达地址', async () => {
@@ -95,5 +107,63 @@ describe('GitHub OAuth 安全直连', () => {
     await expect(fetchGitHubApiJson('/user', 'token', { fetchImpl, waitImpl })).resolves.toEqual({ id: 1 });
     expect(fetchImpl).toHaveBeenCalledTimes(2);
     expect(waitImpl).toHaveBeenCalledWith(1000);
+  });
+});
+
+describe('GitHub 换票传输边界', () => {
+  function transport() {
+    const req = new EventEmitter();
+    req.end = vi.fn();
+    req.destroy = vi.fn((error) => {
+      req.emit('error', error);
+      return req;
+    });
+    const request = vi.spyOn(https, 'request').mockReturnValue(req);
+    return { req, request };
+  }
+  it('固定 GitHub TLS 身份与 Host，单独连接不复用空闲探测 socket', async () => {
+    const { req, request } = transport();
+    const reading = httpsRequestViaIp(
+      '192.0.2.1',
+      { method: 'POST', path: '/login/oauth/access_token', headers: {}, body: 'code=one-time' },
+      1000,
+    );
+    const response = new EventEmitter();
+    response.statusCode = 200;
+    response.headers = {};
+    request.mock.calls[0][1](response);
+    response.emit('data', Buffer.from('{"access_token":"test"}'));
+    response.emit('end');
+    await expect(reading).resolves.toMatchObject({ status: 200 });
+    expect(request.mock.calls[0][0]).toMatchObject({
+      host: '192.0.2.1',
+      servername: 'github.com',
+      agent: false,
+      headers: { Host: 'github.com' },
+    });
+    expect(req.end).toHaveBeenCalledExactlyOnceWith('code=one-time');
+  });
+  it('TCP/TLS 一直未建立也在硬期限内失败，不等待 socket timeout', async () => {
+    vi.useFakeTimers();
+    const { req } = transport();
+    const reading = httpsRequestViaIp('192.0.2.1', { method: 'POST', path: '/token', headers: {} }, 50);
+    const checked = expect(reading).rejects.toMatchObject({ code: 'ETIMEDOUT', transportPhase: 'CONNECT' });
+    await vi.advanceTimersByTimeAsync(50);
+    await checked;
+    expect(req.destroy).toHaveBeenCalledOnce();
+  });
+  it('持续滴流不能延长请求总期限', async () => {
+    vi.useFakeTimers();
+    const { request } = transport();
+    const reading = httpsRequestViaIp('192.0.2.1', { method: 'POST', path: '/token', headers: {} }, 50);
+    const checked = expect(reading).rejects.toHaveProperty('code', 'ETIMEDOUT');
+    const response = new EventEmitter();
+    request.mock.calls[0][1](response);
+    for (let i = 0; i < 4; i++) {
+      response.emit('data', Buffer.from(' '));
+      await vi.advanceTimersByTimeAsync(10);
+    }
+    await vi.advanceTimersByTimeAsync(10);
+    await checked;
   });
 });

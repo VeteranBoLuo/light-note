@@ -42,28 +42,50 @@ async function createLegacySession({ sid, userId, role, maxAgeSeconds, ip, userA
   return { sid };
 }
 
-async function createDeviceBoundSession({ sid, userId, role, maxAgeSeconds, ip, userAgent, deviceKey }) {
+async function createDeviceBoundSession({
+  sid,
+  userId,
+  role,
+  maxAgeSeconds,
+  ip,
+  userAgent,
+  deviceKey,
+  validateAccount,
+}) {
   const connection = await pool.getConnection();
   let previousSids = [];
   try {
     await connection.beginTransaction();
+    if (validateAccount) {
+      const [[account]] = await connection.query('SELECT * FROM user WHERE id = ? LIMIT 1 FOR UPDATE', [userId]);
+      await validateAccount(account);
+    }
     // 索引 idx_user_sessions_user_device_key 让同一账号同一设备的登录串行化。
     // 历史版本可能已经留下多条同设备会话，所以先整体替换而不是只 UPDATE 第一条。
-    const [existingRows] = await connection.query(
-      `SELECT sid FROM user_sessions
+    const [existingRows] = deviceKey
+      ? await connection.query(
+          `SELECT sid FROM user_sessions
        WHERE user_id = ? AND device_key = ?
        FOR UPDATE`,
-      [userId, deviceKey],
-    );
+          [userId, deviceKey],
+        )
+      : [[]];
     previousSids = existingRows.map((row) => row.sid).filter(Boolean);
     if (previousSids.length) {
       await connection.query('DELETE FROM user_sessions WHERE user_id = ? AND device_key = ?', [userId, deviceKey]);
     }
-    await connection.query(
-      `INSERT INTO user_sessions (sid, user_id, role, expires_at, ip, user_agent, device_key)
+    if (deviceKey)
+      await connection.query(
+        `INSERT INTO user_sessions (sid, user_id, role, expires_at, ip, user_agent, device_key)
        VALUES (?, ?, ?, DATE_ADD(NOW(), INTERVAL ? SECOND), ?, ?, ?)`,
-      [sid, userId, role || 'visitor', maxAgeSeconds, ip, userAgent, deviceKey],
-    );
+        [sid, userId, role || 'visitor', maxAgeSeconds, ip, userAgent, deviceKey],
+      );
+    else
+      await connection.query(
+        `INSERT INTO user_sessions (sid, user_id, role, expires_at, ip, user_agent)
+       VALUES (?, ?, ?, DATE_ADD(NOW(), INTERVAL ? SECOND), ?, ?)`,
+        [sid, userId, role || 'visitor', maxAgeSeconds, ip, userAgent],
+      );
     await connection.commit();
   } catch (error) {
     try {
@@ -154,19 +176,47 @@ async function renewSessionInDb(sid, renewSeconds, userId) {
   return true;
 }
 
-export const createSession = async ({ userId, role, maxAgeMs, ip = '', userAgent = '', deviceId = '' }) => {
+export const createSession = async ({
+  userId,
+  role,
+  maxAgeMs,
+  ip = '',
+  userAgent = '',
+  deviceId = '',
+  validateAccount,
+}) => {
   const sid = createSessionId();
   const maxAgeSeconds = Math.max(1, Math.ceil(maxAgeMs / 1000));
   const deviceKey = getSessionDeviceKey(deviceId);
-  if (!deviceKey) {
+  if (!deviceKey && !validateAccount) {
     return createLegacySession({ sid, userId, role, maxAgeSeconds, ip, userAgent });
   }
 
   try {
-    return await createDeviceBoundSession({ sid, userId, role, maxAgeSeconds, ip, userAgent, deviceKey });
+    return await createDeviceBoundSession({
+      sid,
+      userId,
+      role,
+      maxAgeSeconds,
+      ip,
+      userAgent,
+      deviceKey,
+      validateAccount,
+    });
   } catch (error) {
     // 部署滚动期间若迁移尚未执行，登录仍应可用；迁移完成后自动启用设备归并。
     if (isDeviceKeySchemaUnavailable(error)) {
+      if (validateAccount)
+        return createDeviceBoundSession({
+          sid,
+          userId,
+          role,
+          maxAgeSeconds,
+          ip,
+          userAgent,
+          deviceKey: '',
+          validateAccount,
+        });
       return createLegacySession({ sid, userId, role, maxAgeSeconds, ip, userAgent });
     }
     throw error;
