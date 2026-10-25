@@ -16,9 +16,20 @@ const GardenStartup=(()=>{
   requestAnimationFrame(()=>requestAnimationFrame(()=>notify('loading')));
   function fail(){
     if(finished||failed)return;
-    failed=true;clearTimeout(timer);cancel(false);title.textContent='场景未能载入';label.textContent='请重试或返回轻笺';notify('load-error');
+    failed=true;clearTimeout(timer);document.removeEventListener('visibilitychange',arm);cancel(false);title.textContent='场景未能载入';label.textContent='请重试或返回轻笺';notify('load-error');
   }
-  const timer=setTimeout(fail,30000);
+  // Background tabs and a locked screen suspend rendering, not scene progress.
+  let timer;
+  function arm(){clearTimeout(timer);if(!finished&&!failed&&!document.hidden)timer=setTimeout(fail,30000);}
+  document.addEventListener('visibilitychange',arm);arm();
+  // The manifest is embedded in the entry, so painted plates can download in
+  // parallel with scripts and the account read, without a second round trip.
+  (()=>{
+    const manifest=document.getElementById('manor-boot-images');
+    if(!manifest)return;
+    const paths=JSON.parse(manifest.textContent)[new URLSearchParams(location.search).get('renderProfile')==='mobile'?'mobile':'desktop'];
+    for(const path of paths){const link=document.createElement('link');link.rel='preload';link.as='image';link.href=path;document.head.append(link);}
+  })();
   function tick(){
     const percent=Math.floor(completed/total*100);
     bar.style.width=percent+'%';label.textContent=`${percent}% · ${percent===100?'庄园准备好了，欢迎回来':percent<70?'正在快马加鞭布置庄园，请稍候':'正在收拾最后的小细节，请稍候'}`;
@@ -76,7 +87,7 @@ const GardenStartup=(()=>{
       // Layout, decoded art and event handlers must all be ready before exposing the guide.
       await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
       if(failed)return false;
-      completed++;tick();finished=true;clearTimeout(timer);images.clear();work.length=0;
+      completed++;tick();finished=true;clearTimeout(timer);document.removeEventListener('visibilitychange',arm);images.clear();work.length=0;
       performance.mark('manor-interactive');
       notify('ready');
       el.classList.add('leaving');el.style.pointerEvents='none';

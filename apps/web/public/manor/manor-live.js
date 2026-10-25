@@ -109,7 +109,8 @@
     else waiter.resolve(data.value);
   });
   document.addEventListener('click', event => {
-    if (busy && event.target.closest('[data-action]')) {
+    const action = event.target.closest('[data-action]');
+    if (busy && action && action.dataset.action !== 'exit') {
       event.preventDefault(); event.stopImmediatePropagation();
     }
   }, true);

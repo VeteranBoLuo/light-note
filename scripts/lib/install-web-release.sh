@@ -27,6 +27,21 @@ tar xzf "$ARCHIVE_PATH" -C "$STAGE_PATH" --strip-components=1
 [ -f "$STAGE_PATH/index.html" ] || { echo "新 dist 缺少 index.html" >&2; exit 1; }
 [ -f "$STAGE_PATH/.lightnote-release-assets" ] || { echo "新 dist 缺少静态资源清单" >&2; exit 1; }
 
+# Keep validators stable across unrelated Web builds. Revision-named manor art
+# is served immutable: replacing its bytes requires a new filename revision.
+if [ -d "$STAGE_PATH/manor" ] && [ -d dist/manor ]; then
+  while IFS= read -r -d '' staged_file; do
+    relative_path="${staged_file#"$STAGE_PATH/"}"
+    [ -f "dist/$relative_path" ] || continue
+    if cmp -s "$staged_file" "dist/$relative_path"; then
+      touch -r "dist/$relative_path" "$staged_file"
+    elif [[ "$relative_path" =~ -r[0-9]+(-[0-9]+)?\.(webp|png|svg)$ ]]; then
+      echo "庄园不可变素材内容改变，请增加文件名版本: $relative_path" >&2
+      exit 1
+    fi
+  done < <(find "$STAGE_PATH/manor" -type f -print0)
+fi
+
 # 保留“上一版自身”的哈希资源,让发布前已打开的页面仍能完成懒加载。
 # 清单只记录每版自己的 assets,因此线上始终最多是当前版 + 上一版,不会代际累积。
 if [ -d dist/assets ]; then

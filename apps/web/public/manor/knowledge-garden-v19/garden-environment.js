@@ -3,7 +3,7 @@
 const GardenEnvironment = (() => {
   let current=null;
   const script=typeof document==='undefined'?null:document.currentScript;
-  const workerURL=script?.dataset.worker,environmentURL=script?.src;
+  const workerURL=script?.dataset.worker,environmentURL=script?.dataset.environmentScript||script?.src;
   // 匹配高分屏，统一限制总像素和 GPU 尺寸，避免大屏糊成低分辨率画布。
   function renderSize(width,height,dpr=1,limit=4096) {
     const w=Math.max(1,width),h=Math.max(1,height);

@@ -109,6 +109,17 @@ describe('庄园真实启动进度', () => {
     expect(document.querySelector('.garden-loader')?.textContent).toContain('场景未能载入');
     expect(startup.mark).not.toHaveBeenCalled();
   });
+  it('后台或锁屏暂停渲染时不误报失败，回到前台后继续按真实资源就绪', async () => {
+    const hidden = vi.spyOn(document, 'hidden', 'get').mockReturnValue(true);
+    const startup = setup(), ready = startup.ready();
+    await vi.advanceTimersByTimeAsync(60000);
+    expect(startup.postMessage).not.toHaveBeenCalledWith(expect.objectContaining({ action: 'load-error' }), expect.anything());
+    hidden.mockReturnValue(false);
+    document.dispatchEvent(new Event('visibilitychange'));
+    startup.loaded[0].onload(); startup.decoded.resolve();
+    await vi.advanceTimersByTimeAsync(10);
+    expect(await ready).toBe(true);
+  });
   it('场景里的图片加载失败时不能用另一个预加载图片冒充就绪', async () => {
     const startup = setup();
     document.getElementById('paint')?.remove();

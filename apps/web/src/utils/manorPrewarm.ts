@@ -66,7 +66,7 @@ export function scheduleManorPrewarm(mobile: boolean) {
           });
         else void next();
       },
-      Math.max(250, 8_000 - (Date.now() - lastActivity)),
+      Math.max(50, 8_000 - (Date.now() - lastActivity)),
     );
   }
   async function next() {

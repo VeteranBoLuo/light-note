@@ -20,6 +20,8 @@ const FishingInput = (() => {
         if (!token.reeled && canReel()) { token.reeled = true; onReel(); }
       };
       token.click = e => {
+        // The game back button stays usable while the scene catches reel input.
+        if (e.target.closest?.('[data-action="exit"]')) return;
         if (!inside(e.target)) return;
         e.preventDefault();
         e.stopImmediatePropagation();
