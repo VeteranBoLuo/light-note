@@ -18,7 +18,9 @@
         <BButton v-if="!emailConflict" type="primary" :loading="restarting" @click="restartGithubOAuth">
           {{ t('auth.githubCallbackRetry') }}
         </BButton>
-        <BButton :type="emailConflict ? 'primary' : undefined" @click="goEmailLogin">{{ t('auth.githubCallbackEmailLogin') }}</BButton>
+        <BButton :type="emailConflict ? 'primary' : undefined" @click="goEmailLogin">{{
+          t('auth.githubCallbackEmailLogin')
+        }}</BButton>
       </template>
       <BButton v-else class="callback-back" @click="goBack">{{ t('common.back') }}</BButton>
     </div>
@@ -31,6 +33,7 @@
   import { useI18n } from 'vue-i18n';
   import { apiBasePost, apiBaseGet } from '@/http/request';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
+  import Alert from '@/components/base/BasicComponents/BModal/Alert';
   import { markLoggedIn } from '@/utils/authStorage';
   import { getHomePagePreference } from '@/utils/preferences.ts';
   import { getRuntimeApplicationEntryPath, getRuntimePostRegistrationPath } from '@/utils/appEntry.ts';
@@ -59,10 +62,32 @@
   // 用户点「返回」离开本页后:中止换票请求、不再弹提示/跳转,避免邮箱登录成功后又收到迟到的「GitHub 认证失败」。
   const abortController = new AbortController();
   let disposed = false;
+  let closeBindingPrompt;
+  function confirmBinding() {
+    return new Promise((resolve) => {
+      closeBindingPrompt = () => {
+        Alert.destroy();
+        resolve(false);
+      };
+      const finish = (value) => {
+        closeBindingPrompt = undefined;
+        resolve(value);
+      };
+      Alert.alert({
+        title: t('auth.githubBindingTitle'),
+        content: t('auth.githubBindingHint'),
+        okText: t('auth.githubBindingConfirm'),
+        cancelText: t('common.cancel'),
+        onOk: () => finish(true),
+        onCancel: () => finish(false),
+      });
+    });
+  }
 
   onBeforeUnmount(() => {
     disposed = true;
     abortController.abort();
+    closeBindingPrompt?.();
   });
 
   function toHome() {
@@ -113,6 +138,52 @@
     return null;
   }
 
+  async function finishLogin(cRes) {
+    markLoggedIn();
+    try {
+      if (cRes.data?.sid) localStorage.setItem('rememberedSid', cRes.data.sid);
+    } catch {
+      // 隐私模式下仍可使用服务端 HttpOnly 会话，不能误报为 GitHub 网络失败。
+    }
+    persistAndroidAuthSession();
+    // 与邮箱认证一致：成功后先把 /me 返回的偏好落到 localStorage，
+    // 再按登录/注册流程进入应用。GitHub 换票接口不含 preferences，因此需要单独拉 /me。
+    let finalPrefs = {};
+    try {
+      const me = await apiBaseGet('/api/user/me');
+      if (disposed) return;
+      user.setUserInfo(me?.data || {});
+      const authenticatedUserId = String(user.id || '');
+      const tags = await bookmark.loadTagList(authenticatedUserId, { showLoading: false });
+      if (disposed) return;
+      if (tags && String(user.id || '') === authenticatedUserId) {
+        user.tagTotal = tags.length;
+      }
+      let prefs = me?.data?.preferences ?? {};
+      if (typeof prefs === 'string') {
+        try {
+          prefs = JSON.parse(prefs);
+        } catch {
+          prefs = {};
+        }
+      }
+      finalPrefs = { ...prefs, homePage: getHomePagePreference(prefs) };
+      localStorage.setItem('preferences', JSON.stringify(finalPrefs));
+      bookmark.refreshTag();
+    } catch {
+      // OAuth 已成功时，偏好恢复失败也不能把用户送回官网；应用页会再次恢复会话。
+    }
+    if (disposed) return;
+    const extensionReturnPath = resolveExtensionAuthReturnPath();
+    const quickSaveReturnPath = resolveQuickSaveAuthReturnPath();
+    const protectedReturnPath = resolveAuthNavigationIntent();
+    const authReturnPath = extensionReturnPath || quickSaveReturnPath || protectedReturnPath;
+    await router.replace(authReturnPath || getAuthenticatedEntryPath(finalPrefs));
+    if (extensionReturnPath) clearExtensionAuthReturnPath();
+    if (quickSaveReturnPath) clearQuickSaveAuthReturnPath();
+    clearAuthNavigationIntent();
+  }
+
   onMounted(async () => {
     const code = router.currentRoute.value.query.code;
     const state = router.currentRoute.value.query.state;
@@ -123,59 +194,40 @@
     }
     // 页面级一次性锁：刷新 / 浏览器后退 / dev HMR 重挂载时不再开启一条新的回调流程。
     // 当前挂载内的本站请求恢复由 submitGithubRequest 控制，后端 completed 状态保证不会重放 GitHub code。
-    const lockKey = `gh_oauth_handled:${code}`;
-    if (sessionStorage.getItem(lockKey)) {
-      toHome();
-      return;
+    const lockKey = `gh_oauth_handled:${state}`;
+    try {
+      if (sessionStorage.getItem(lockKey)) {
+        toHome();
+        return;
+      }
+      sessionStorage.setItem(lockKey, '1');
+    } catch {
+      // 浏览器存储不可用时，服务端 state/nonce 和原子认领仍提供一次性校验。
     }
-    sessionStorage.setItem(lockKey, '1');
     // 立刻抹掉 URL 上的 code,让刷新 / 后退无 code 可重放(同路由仅去 query,不会重挂载本组件)
     router.replace({ path: '/auth/callback' }).catch(() => {});
     try {
-      const cRes = await submitGithubRequest('/api/user/github', { code, state });
+      let cRes = await submitGithubRequest('/api/user/github', { code, state });
+      if (disposed || !cRes) return;
+      if (cRes.data?.bindingRequired) {
+        const confirm = await confirmBinding();
+        if (disposed) return;
+        cRes = await submitGithubRequest('/api/user/github/bind', { state, confirm });
+        if (disposed || !cRes) return;
+        if (!confirm && cRes.status === 200) {
+          showFailure(t('auth.githubBindingCancelled'));
+          return;
+        }
+      }
       if (disposed || !cRes) return;
       emailConflict.value = cRes.data?.code === 'GITHUB_OAUTH_EMAIL_CONFLICT' || Boolean(cRes.data?.bindingRequired);
       status.value = cRes.status;
       if (cRes.status === 200) {
-        markLoggedIn();
-        if (cRes.data?.sid) localStorage.setItem('rememberedSid', cRes.data.sid);
-        persistAndroidAuthSession();
-        // 与邮箱认证一致：成功后先把 /me 返回的偏好落到 localStorage，
-        // 再按登录/注册流程进入应用。GitHub 换票接口不含 preferences，因此需要单独拉 /me。
-        let finalPrefs = {};
-        try {
-          const me = await apiBaseGet('/api/user/me');
-          user.setUserInfo(me?.data || {});
-          const authenticatedUserId = String(user.id || '');
-          const tags = await bookmark.loadTagList(authenticatedUserId, { showLoading: false });
-          if (tags && String(user.id || '') === authenticatedUserId) {
-            user.tagTotal = tags.length;
-          }
-          let prefs = me?.data?.preferences ?? {};
-          if (typeof prefs === 'string') {
-            try {
-              prefs = JSON.parse(prefs);
-            } catch {
-              prefs = {};
-            }
-          }
-          finalPrefs = { ...prefs, homePage: getHomePagePreference(prefs) };
-          localStorage.setItem('preferences', JSON.stringify(finalPrefs));
-          bookmark.refreshTag();
-        } catch {
-          // OAuth 已成功时，偏好恢复失败也不能把用户送回官网；应用页会再次恢复会话。
-        }
-        if (disposed) return;
-        const extensionReturnPath = resolveExtensionAuthReturnPath();
-        const quickSaveReturnPath = resolveQuickSaveAuthReturnPath();
-        const protectedReturnPath = resolveAuthNavigationIntent();
-        const authReturnPath = extensionReturnPath || quickSaveReturnPath || protectedReturnPath;
-        await router.replace(authReturnPath || getAuthenticatedEntryPath(finalPrefs));
-        if (extensionReturnPath) clearExtensionAuthReturnPath();
-        if (quickSaveReturnPath) clearQuickSaveAuthReturnPath();
-        clearAuthNavigationIntent();
+        await finishLogin(cRes);
       } else {
-        const failureMessage = emailConflict.value ? t('auth.githubEmailConflict') : cRes.msg || t('auth.githubCallbackFailed');
+        const failureMessage = emailConflict.value
+          ? t('auth.githubEmailConflict')
+          : cRes.msg || t('auth.githubCallbackFailed');
         message.error(failureMessage);
         showFailure(failureMessage, String(cRes.data?.requestId || ''));
       }
@@ -215,9 +267,11 @@
   /* 整页垂直+水平居中(回调页独占视口、无导航) */
   .gh-callback {
     min-height: 100vh;
+    box-sizing: border-box;
+    padding-inline: var(--ui-space-20, 20px);
     display: flex;
     flex-direction: column;
-    gap: 30px;
+    gap: var(--ui-space-30, 30px);
     align-items: center;
     justify-content: center;
   }
@@ -228,15 +282,18 @@
   }
 
   .callback-request-id {
-    margin-top: -18px;
+    margin-top: calc(-1 * var(--ui-space-18, 18px));
     color: var(--disabled-text-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
+    overflow-wrap: anywhere;
   }
 
   .callback-actions {
     display: flex;
-    gap: 12px;
+    gap: var(--ui-space-12, 12px);
     align-items: center;
+    flex-wrap: wrap;
+    justify-content: center;
   }
 
   /* From Uiverse.io by andrew-demchenk0 */

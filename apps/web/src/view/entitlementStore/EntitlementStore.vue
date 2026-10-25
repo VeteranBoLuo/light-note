@@ -27,13 +27,20 @@
               <div class="store-section__heading">
                 <div>
                   <h2 id="store-catalog-title">{{ t('entitlementStore.catalogTitle') }}</h2>
-                  <p>{{
-                    t(
-                      activeCategory === 'storage'
-                        ? 'entitlementStore.storageDescription'
-                        : 'entitlementStore.catalogDescription',
-                    )
-                  }}</p>
+                  <div class="store-catalog__descriptions">
+                    <p
+                      :class="{ 'is-inactive': activeCategory === 'storage' }"
+                      :aria-hidden="activeCategory === 'storage'"
+                    >
+                      {{ t('entitlementStore.catalogDescription') }}
+                    </p>
+                    <p
+                      :class="{ 'is-inactive': activeCategory !== 'storage' }"
+                      :aria-hidden="activeCategory !== 'storage'"
+                    >
+                      {{ t('entitlementStore.storageDescription') }}
+                    </p>
+                  </div>
                 </div>
                 <div v-if="catalog?.catalogEnabled"
                   ><BTabs
@@ -61,17 +68,28 @@
                 <span>{{ t('entitlementStore.catalogUnavailable') }}</span>
               </div>
               <template v-else>
-                <div class="package-grid">
-                  <EntitlementPackageCard
-                    v-for="(item, index) in visiblePackages"
-                    :key="item.skuId"
-                    :item="item"
-                    :index="index"
-                    :preview-mode="Boolean(catalog.previewMode)"
-                    :action-label="actionLabel(item)"
-                    :disabled="!canCheckout(item)"
-                    @select="openCheckoutModal"
-                  />
+                <div class="package-panels">
+                  <div
+                    v-for="group in packageGroups"
+                    :key="group.key"
+                    class="package-grid"
+                    :class="{ 'is-inactive': activeCategory !== group.key }"
+                    :aria-hidden="activeCategory !== group.key"
+                    :inert="activeCategory !== group.key || undefined"
+                    role="tabpanel"
+                    :aria-label="group.label"
+                  >
+                    <EntitlementPackageCard
+                      v-for="(item, index) in group.items"
+                      :key="item.skuId"
+                      :item="item"
+                      :index="index"
+                      :preview-mode="Boolean(catalog.previewMode)"
+                      :action-label="actionLabel(item)"
+                      :disabled="!canCheckout(item)"
+                      @select="openCheckoutModal"
+                    />
+                  </div>
                 </div>
                 <p class="store-notice store-notice--bottom">
                   <SvgIcon :src="icon.settings.privacy" size="16" aria-hidden="true" />
@@ -303,10 +321,14 @@
     { key: 'storage', label: t('entitlementStore.tabs.storage') },
     { key: 'combo', label: t('entitlementStore.tabs.combo') },
   ]);
-  const visiblePackages = computed(() =>
-    (catalog.value?.packages || [])
-      .filter((item) => item.category === activeCategory.value)
-      .sort((a, b) => Number(a.amount) - Number(b.amount)),
+  const packageGroups = computed(() =>
+    categoryTabs.value.map(({ key, label }) => ({
+      key,
+      label,
+      items: (catalog.value?.packages || [])
+        .filter((item) => item.category === key)
+        .sort((a, b) => Number(a.amount) - Number(b.amount)),
+    })),
   );
   const campaignPackages = computed(() => catalog.value?.campaigns || []);
   const accountName = computed(() => {
@@ -538,7 +560,11 @@
     await Promise.all([loadCatalog(), loadState(), refreshQuota({ force: true })]);
   }
 
-  useMobileTopBar(['entitlementStore'], { title: () => t('entitlementStore.pageTitle'), onBack: goBack, showNotification: false });
+  useMobileTopBar(['entitlementStore'], {
+    title: () => t('entitlementStore.pageTitle'),
+    onBack: goBack,
+    showNotification: false,
+  });
   const { markLoaded } = useForegroundRefresh({
     refresh: refreshStore,
     staleMs: 0,

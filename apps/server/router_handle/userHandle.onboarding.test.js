@@ -489,7 +489,7 @@ describe('新用户示例数据接入注册流程', () => {
     await expect(handleUserDatabaseOperation(
       { id: 123, login: 'octo', email: 'octo@example.com', avatar_url: '' },
       { headers: { 'x-lang': 'zh-CN' }, user: { id: 'email-user', role: 'user' }, body: {} },
-    )).rejects.toMatchObject({ code: 'GITHUB_OAUTH_EMAIL_CONFLICT', status: 409 });
+    )).rejects.toMatchObject({ code: account.github_id ? 'GITHUB_OAUTH_EMAIL_CONFLICT' : 'GITHUB_OAUTH_BINDING_REQUIRED', status: 409 });
 
     expect(connection.rollback).toHaveBeenCalledOnce();
     expect(seedNewUserWorkspaceData).not.toHaveBeenCalled();

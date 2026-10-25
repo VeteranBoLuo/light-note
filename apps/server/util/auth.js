@@ -117,7 +117,7 @@ const shouldMarkAuthExpired = (req) => {
 
 export const getSessionMaxAge = (rememberMe) => (rememberMe ? REMEMBER_MAX_AGE_MS : LOGIN_MAX_AGE_MS);
 
-export const issueLoginSession = async (req, res, user, rememberMe = false) => {
+export const issueLoginSession = async (req, res, user, rememberMe = false, { validateAccount } = {}) => {
   const maxAgeMs = getSessionMaxAge(rememberMe);
   const { sid } = await createSession({
     userId: user.id,
@@ -128,6 +128,7 @@ export const issueLoginSession = async (req, res, user, rememberMe = false) => {
     // 新客户端显式传 X-Device-Id；旧客户端复用已有的稳定日志设备标识，平滑升级。
     // 该值只供会话归并，不能参与身份、权限或设备信任判断。
     deviceId: req.headers['x-device-id'] || req.headers['x-log-device-id'] || '',
+    ...(validateAccount ? { validateAccount } : {}),
   });
   setAuthCookie(res, sid, maxAgeMs);
   res.removeHeader(AUTH_EXPIRED_HEADER);

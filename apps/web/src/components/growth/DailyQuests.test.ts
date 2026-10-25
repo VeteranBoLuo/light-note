@@ -113,8 +113,12 @@ describe('每日任务阶梯奖励', () => {
     expect(result.randomCount).toBe(0);
     expect(result.experienceGuide).toContain('经验获取来源');
     expect(result.experienceGuide).toContain('每日签到+5~10 经验 / 天');
-    expect(result.experienceGuide).toContain('新增书签 / 笔记 / 文件每类前 3 条，每条：书签 +10 · 文件 +12 · 笔记 +15');
-    expect(result.experienceGuide).toContain('同一类型当天新增超过 3 条后，单条经验逐步降低，最低 +1');
+    expect(result.experienceGuide).toContain(
+      '新增书签 / 笔记 / 文件每类每天前 3 条：书签 +10 · 文件 +12 · 笔记 +15；之后递减，最低 +1 / 条',
+    );
+    expect(result.experienceGuide).toContain(
+      '每类每天独立计数，第 4～8 条、9～15 条分档递减，第 16 条起每条 +1；达到每日经验上限后停止',
+    );
     expect(result.experienceGuide).toContain('每日任务阶梯+5 / +10 经验 / 天');
     expect(result.experienceCap).toContain('每日经验上限今日 86 / 200');
     expect(result.experienceCap).toContain('一次性成长奖励单独计算，不占每日额度');

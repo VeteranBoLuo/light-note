@@ -55,8 +55,20 @@ async function resolveGitHubIpv4() {
   }
 }
 
-function httpsRequestViaIp(ip, { method, path, headers, body }, timeoutMs) {
+export function httpsRequestViaIp(ip, { method, path, headers, body }, timeoutMs) {
   return new Promise((resolve, reject) => {
+    let phase = 'CONNECT';
+    let settled = false;
+    let timer;
+    const finish = (error, value) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      if (error) {
+        error.transportPhase = phase;
+        reject(error);
+      } else resolve(value);
+    };
     const req = https.request(
       {
         host: ip,
@@ -66,46 +78,71 @@ function httpsRequestViaIp(ip, { method, path, headers, body }, timeoutMs) {
         path,
         headers: { Host: GITHUB_HOST, ...headers },
         timeout: timeoutMs,
+        // 一次性授权码请求不复用探测或其他登录遗留的空闲连接。
+        agent: false,
       },
       (res) => {
+        phase = 'RESPONSE_HEADERS';
         const chunks = [];
         let size = 0;
         res.on('data', (chunk) => {
           size += chunk.length;
           if (size <= 64 * 1024) chunks.push(chunk);
+          else req.destroy(Object.assign(new Error('GitHub response is too large'), { code: 'RESPONSE_TOO_LARGE' }));
         });
         res.on('end', () => {
           if (size > 64 * 1024) {
-            reject(new Error('GitHub response is too large'));
+            finish(new Error('GitHub response is too large'));
             return;
           }
-          resolve({
+          finish(null, {
             status: Number(res.statusCode || 0),
             headers: res.headers,
             body: Buffer.concat(chunks).toString('utf8'),
           });
         });
-        res.once('error', reject);
+        res.once('error', (error) => finish(error));
+        res.once('aborted', () => finish(Object.assign(new Error('GitHub response aborted'), { code: 'ECONNRESET' })));
       },
     );
-    req.once('timeout', () => req.destroy(new Error('timeout')));
-    req.once('error', reject);
+    const timedOut = () =>
+      req.destroy(Object.assign(new Error('GitHub request deadline exceeded'), { code: 'ETIMEDOUT' }));
+    // socket timeout 不覆盖等待连接、TLS 和持续滴流，额外设置整次请求的硬期限。
+    timer = setTimeout(timedOut, timeoutMs);
+    req.once('socket', (socket) =>
+      socket.once('secureConnect', () => {
+        phase = 'TLS_READY';
+      }),
+    );
+    req.once('finish', () => {
+      phase = 'REQUEST_SENT';
+    });
+    req.once('timeout', timedOut);
+    req.once('error', (error) => finish(error));
     req.end(body || undefined);
   });
 }
 
 async function probeGitHubIp(ip, timeoutMs = DEFAULT_PROBE_TIMEOUT_MS) {
   const startedAt = Date.now();
+  // 使用无效的公开参数探测同一种 POST；不包含应用密钥、用户 code 或 token。
+  const body = 'client_id=light-note-connectivity-check';
   const response = await httpsRequestViaIp(
     ip,
     {
-      method: 'HEAD',
+      method: 'POST',
       path: TOKEN_PATH,
-      headers: { 'User-Agent': 'light-note-oauth-health' },
+      headers: {
+        'User-Agent': 'light-note-oauth-health',
+        Accept: 'application/json',
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Content-Length': Buffer.byteLength(body),
+      },
+      body,
     },
     timeoutMs,
   );
-  if (!response.status || response.status >= 500) throw new Error('GitHub endpoint is unhealthy');
+  if (![200, 400, 401, 404, 422].includes(response.status)) throw new Error('GitHub endpoint is unhealthy');
   return { ip, latencyMs: Date.now() - startedAt };
 }
 
@@ -156,10 +193,12 @@ export async function fetchGitHubTokenSafely(
       DEFAULT_TOKEN_TIMEOUT_MS,
     );
   } catch (cause) {
-    throw new GitHubOAuthError('GITHUB_OAUTH_TOKEN_RESULT_UNKNOWN', 'GitHub 响应超时，请重新发起授权', {
+    const error = new GitHubOAuthError('GITHUB_OAUTH_TOKEN_RESULT_UNKNOWN', 'GitHub 响应超时，请重新发起授权', {
       stage: 'TOKEN_EXCHANGE',
       cause,
     });
+    error.transportPhase = cause?.transportPhase;
+    throw error;
   }
 
   let data;
