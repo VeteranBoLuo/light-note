@@ -3,11 +3,11 @@
     <div v-if="failed" class="knowledge-manor__state" role="alert">
       <p>{{ t('manor.loadFailed') }}</p>
       <BButton @click="initialise">{{ t('common.retry') }}</BButton>
-      <BButton @click="exit">{{ t('manor.returnToApp') }}</BButton>
+      <BButton v-if="bookmark.isMobile" @click="exit">{{ t('manor.returnToApp') }}</BButton>
     </div>
     <div v-else-if="loading || !frameShown" class="knowledge-manor__state"><BLoading inline loading :title="t('manor.loading')" /></div>
     <iframe v-if="!loading && !failed" ref="frame" :key="nonce" :src="frameUrl" :title="t('manor.title')" referrerpolicy="same-origin" @error="failed = true" />
-    <BButton v-if="!interactive && !failed" class="knowledge-manor__cancel" @click="exit">{{ t('manor.returnToApp') }}</BButton>
+    <BButton v-if="bookmark.isMobile && !interactive && !failed" class="knowledge-manor__cancel" @click="exit">{{ t('manor.returnToApp') }}</BButton>
   </main>
 </template>
 
@@ -27,8 +27,11 @@
 
   const user = useUserStore(), bookmark = bookmarkStore(), router = useRouter(), growth = useGrowth();
   const { t } = useI18n();
+  const emit = defineEmits<{ 'manor-immersive-change': [ready: boolean] }>();
   const frame = ref<HTMLIFrameElement | null>(null), nonce = ref(crypto.randomUUID());
   const loading = ref(true), failed = ref(false), frameShown = ref(false), interactive = ref(false);
+  // Keep the app navigation available until the scene has its own usable back button.
+  watch(() => interactive.value && !failed.value, ready => emit('manor-immersive-change', ready), { immediate: true });
   let readController = new AbortController();
   let bootTimer: ReturnType<typeof setTimeout> | undefined;
   let snapshot: ManorSnapshot | null = null, pending: ManorCommand | null = null;
