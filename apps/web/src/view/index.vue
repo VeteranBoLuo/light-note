@@ -2,7 +2,7 @@
   <div id="tag-container">
     <!-- 导航栏默认显示，少数页面通过配置隐藏 -->
     <Navigation v-if="showNavigation" />
-    <router-view :key="routeViewKey" :style="viewStyle" />
+    <router-view :key="routeViewKey" :style="viewStyle" @manor-immersive-change="manorImmersive = $event" />
   </div>
 </template>
 
@@ -10,7 +10,7 @@
   import Navigation from '@/components/home/navigation/Navigation.vue';
   import { bookmarkStore } from '@/store';
   import { useRoute } from 'vue-router';
-  import { computed } from 'vue';
+  import { computed, ref, watch } from 'vue';
   import { NAVIGATION_HIDDEN_ROUTE_NAMES } from '@/config/navigation.ts';
   import { getMainRouteViewKey } from '@/utils/routeViewKey.ts';
 
@@ -19,10 +19,13 @@
 
   const routeName = computed(() => String(route.name || ''));
   const routeViewKey = computed(() => getMainRouteViewKey(route));
+  const manorImmersive = ref(false);
+  watch(() => route.name, () => { manorImmersive.value = false; }, { flush: 'sync' });
 
   // 导航栏显示逻辑
   const showNavigation = computed(() => {
     if (bookmark.isMobile) return false;
+    if (routeName.value === 'knowledgeManor' && manorImmersive.value) return false;
     return !NAVIGATION_HIDDEN_ROUTE_NAMES.includes(routeName.value);
   });
 

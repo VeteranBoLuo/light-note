@@ -11,6 +11,7 @@ import { setLocale } from '@/i18n';
 import zh from '@/i18n/locales/zh-CN';
 import en from '@/i18n/locales/en-US';
 import KnowledgeManor from '@/view/manor/KnowledgeManor.vue';
+import AppLayout from '@/view/index.vue';
 import '@/assets/css/index.less';
 import { scheduleManorPrewarm } from '@/utils/manorPrewarm';
 import { activeRequestCount } from '@/http/requestActivity';
@@ -107,12 +108,24 @@ request.defaults.adapter = async config => {
 const Entry = params.get('entry') === 'true' ? (mobile
   ? (await import('@/components/mobile/MobileTopBar.vue')).default
   : (await import('@/components/home/navigation/RightArea.vue')).default) : null;
-const router = createRouter({ history: createMemoryHistory(), routes: [
+const fixtureRoutes = [
   { path: '/knowledge-manor', name: 'knowledgeManor', component: KnowledgeManor },
   { path: '/app', component: { render: () => Entry ? h('div', { style: { position:'relative', minHeight:'var(--ui-control-56, 56px)' } }, [h(Entry)]) : h('p', '已返回轻笺 · 隔离夹具') } },
   { path: '/growth', component: { render: () => h('p', '成长中心 · 隔离夹具') } },
   { path: '/bookmarks', component: { render: () => h('p', '书签模块已就绪 · 隔离夹具') } },
-] });
+  { path: '/home', component: { render: () => h('p', '书签模块已就绪 · 隔离夹具') } },
+  { path: '/workbenches', component: { render: () => h('p', '工作台已就绪 · 隔离夹具') } },
+];
+const router = createRouter({ history: createMemoryHistory(), routes: params.get('shell') === 'true'
+  ? [{ path: '/', component: AppLayout, children: fixtureRoutes }]
+  : fixtureRoutes });
+if (params.get('shell') === 'true') {
+  // The desktop navigation imports the application router directly. Keep those
+  // clicks inside this fixture's memory routes, like the injected scene router.
+  const navigationRouter = (await import('@/router')).default;
+  navigationRouter.push = router.push.bind(router);
+  navigationRouter.replace = router.replace.bind(router);
+}
 let stopPrewarm: (() => void) | undefined;
 const navigationProof = ref('');
 async function fixtureNavigate(path: string, event: MouseEvent) {

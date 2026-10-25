@@ -1,0 +1,9 @@
+Tool: built-in image_gen.imagegen; precise-object-edit.
+
+PC target: pc-surface-r50.webp, 2097 x 750.
+Prompt: Preserve exact framing, camera, stone rim, flowers, lamps and front glass. Change only the horizontal aquarium top water: replace dense white wave/caustic networks with calm nearly still turquoise-blue water, smooth depth, soft greenery and pale warm lamp reflections, only a few low-contrast horizontal lines. No foam, droplet rings, energetic ripples, fish, text or new objects. Preserve the front underwater glass and underwater plants. The front water line is a single fine clean line.
+Output: pc-surface-calm-r52.webp; same 2097 x 750 geometry, WebP quality 94.
+
+Mobile target: mobile-bay-r36.webp, 919 x 1712; PC calm plate used as style reference.
+Prompt: Preserve the original mobile scene and every object. Change only the aquarium top at y=850..1018 to calm blue water with faint soft stone/greenery reflections and very few low-contrast ripples. No foam or white top-surface caustic network. Keep the fishing sea around the pier and front underwater glass unchanged. Preserve portrait framing and sharpness.
+Output: mobile-tank-calm-r52.webp; encoded crop [0,824,919,232] of the generated edit, WebP quality 94. Only this local top region is composited over the existing scene using its calibrated clip; the full generated mobile scene is not used.
