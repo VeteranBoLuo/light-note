@@ -49,7 +49,6 @@ vi.mock('@/composables/useGrowth.ts', async () => {
 });
 vi.mock('@/composables/useForegroundRefresh', () => ({ useForegroundRefresh: vi.fn() }));
 vi.mock('@/composables/useMobileTopBar', () => ({ useMobileTopBar: vi.fn() }));
-vi.mock('@/composables/useMobileNavigationState', () => ({ resetMobileScrollElement: vi.fn() }));
 vi.mock('@/api/commonApi.ts', () => ({ recordOperation: vi.fn() }));
 vi.mock('@/components/base/SvgIcon/src/SvgIcon.vue', () => ({ default: { render: () => null } }));
 vi.mock('@/components/growth/GrowthCard.vue', () => ({ default: { render: () => null } }));
@@ -191,6 +190,26 @@ describe('成长中心路由导航', () => {
     router.back();
     await settle();
     expect(router.currentRoute.value.path).toBe('/source');
+  });
+  it.each([false, true])('切换与再次点击当前分区只重置正文滚动位置：移动端 %s', async (mobile) => {
+    Object.assign(mocks.bookmark, { isDesktop: !mobile, isMobile: mobile, isCompactLayout: mobile });
+    const { host, router, click } = await mount();
+    const page = host.querySelector<HTMLElement>('.growth-page')!;
+    const main = host.querySelector<HTMLElement>('.growth-main')!;
+    const content = mobile ? page : main;
+    const other = mobile ? main : page;
+    content.scrollTop = 240;
+    other.scrollTop = 180;
+    click('任务', mobile ? 'tab' : 'button');
+    await settle();
+    expect(router.currentRoute.value.query.section).toBe('tasks');
+    expect(content.scrollTop).toBe(0);
+    expect(other.scrollTop).toBe(180);
+    content.scrollTop = 320;
+    click('任务', mobile ? 'tab' : 'button');
+    await settle();
+    expect(content.scrollTop).toBe(0);
+    expect(other.scrollTop).toBe(180);
   });
   it('任务锚点入口仍能切换对应分区，手动进入抽奖会移除旧锚点', async () => {
     const { router, click } = await mount('/growth#growth-tasks');
