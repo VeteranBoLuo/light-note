@@ -22,6 +22,7 @@ const mobile = params.get('renderProfile') === 'mobile' || window.innerWidth < 1
 applyUiDensity(params.get('density'), mobile);
 document.documentElement.dataset.theme = params.get('theme') === 'night' ? 'night' : 'day';
 document.documentElement.classList.toggle('light-note-mobile-rendering', mobile);
+document.documentElement.classList.toggle('disable-animations', params.get('motion') === 'reduce');
 document.body.style.display = 'block';
 Object.assign(document.getElementById('app')!.style, { width: '100%', height: '100%', overflow: 'auto' });
 const freePool = [
@@ -84,6 +85,8 @@ let receipts =
         results: i % 2 ? tenResults : [freePool[3]],
       }));
 let legacyQty = scenario === 'legacy' ? 2 : 0;
+const drawReceipts = new Map<string, Record<string, unknown>>();
+let drawAttempts = 0;
 const acquisitionExamples = [
   { source: 'admin', kind: 'card', amount: 2 },
   { source: 'campaign', kind: 'ai_pack', amount: 100000 },
@@ -114,6 +117,7 @@ request.defaults.adapter = async (config) => {
   if (scenario === 'loading') await new Promise(() => {});
   if (scenario === 'slow') await new Promise((resolve) => setTimeout(resolve, 1200));
   let data: unknown = {};
+  let responseStatus = 200;
   if (url.pathname.endsWith('/points/log')) {
     const filter = query.get('filter') || 'all';
     const filtered =
@@ -167,29 +171,45 @@ request.defaults.adapter = async (config) => {
     data = { rows, hasMore: start + limit < filtered.length, nextCursor: rows.at(-1)?.id || null };
   } else if (url.pathname.endsWith('/lottery/draw')) {
     const body = typeof config.data === 'string' ? JSON.parse(config.data) : config.data;
+    drawAttempts++;
+    if (scenario === 'draw_slow') await new Promise((resolve) => setTimeout(resolve, 3400));
     const free = body.mode === 'free';
     const results = body.times === 10 ? tenResults : [free ? freePool[3] : paidPool[4]];
     const cost = free ? 0 : body.times === 10 ? 1600 : 170;
-    assets.points -= cost;
-    assets.aiBonusTokens += results.reduce((sum, row) => sum + (row.kind === 'ai_pack' ? row.amount : 0), 0);
-    lottery.points = assets.points;
-    if (free) lottery.free.remaining--;
-    results.forEach((prize, i) =>
-      acquisitions.unshift({
-        id: `draw-${Date.now()}-${i}`,
-        source: free ? 'lottery_free' : 'lottery_paid',
+    const cached = drawReceipts.get(body.clientRequestId);
+    if (scenario === 'draw_failure') {
+      responseStatus = 409;
+      data = { refresh: true };
+    } else if (cached) data = { ...cached, idempotent: true };
+    else {
+      assets.points -= cost;
+      assets.points += results.reduce((sum, row) => sum + (row.kind === 'points' ? row.amount : 0), 0);
+      assets.storageBonusMb += results.reduce((sum, row) => sum + (row.kind === 'storage' ? row.amount : 0), 0);
+      assets.aiBonusTokens += results.reduce((sum, row) => sum + (row.kind === 'ai_pack' ? row.amount : 0), 0);
+      lottery.points = assets.points;
+      if (free) lottery.free.remaining--;
+      results.forEach((prize, i) =>
+        acquisitions.unshift({
+          id: `draw-${Date.now()}-${i}`,
+          source: free ? 'lottery_free' : 'lottery_paid',
+          createdAt: new Date().toISOString(),
+          results: [prize],
+        }),
+      );
+      receipts.unshift({
+        id: String(101 + receipts.length),
         createdAt: new Date().toISOString(),
-        results: [prize],
-      }),
-    );
-    receipts.unshift({
-      id: String(101 + receipts.length),
-      createdAt: new Date().toISOString(),
-      mode: free ? 'free' : 'paid',
-      cost,
-      results,
-    });
-    data = { ok: true, results, cost, pityTriggered: body.times === 10 };
+        mode: free ? 'free' : 'paid',
+        cost,
+        results,
+      });
+      data = { ok: true, results, cost, pityTriggered: body.times === 10 };
+      drawReceipts.set(body.clientRequestId, data as Record<string, unknown>);
+      if (scenario === 'draw_uncertain' && drawAttempts === 1) {
+        responseStatus = 409;
+        data = { code: 'IDEMPOTENCY_RESULT_PENDING' };
+      } else if (scenario === 'draw_empty') data = { ok: true, results: [], cost };
+    }
   } else if (url.pathname.endsWith('/lottery')) data = lottery;
   else if (url.pathname.endsWith('/inventory'))
     data = {
@@ -251,7 +271,7 @@ request.defaults.adapter = async (config) => {
         (scenario === 'summary_error' && url.pathname.endsWith('/points/summary')) ||
         (scenario === 'inventory_error' && url.pathname.endsWith('/inventory'))
           ? 500
-          : 200,
+          : responseStatus,
       data: JSON.parse(JSON.stringify(data)),
     },
   };
@@ -285,7 +305,7 @@ const app = createApp({
           {
             style: {
               padding: 'var(--ui-space-24, 24px)',
-              background: 'var(--workspace-canvas)',
+              background: 'var(--workspace-open-canvas)',
               color: 'var(--text-color)',
               minHeight: '100%',
               boxSizing: 'border-box',
