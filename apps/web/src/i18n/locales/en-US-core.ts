@@ -9684,8 +9684,9 @@ export default {
     earnTitle: 'How to earn EXP',
     earnCheckin: 'Daily check-in (more in a streak)',
     earnCheckinValue: '+5 base, up to +10',
-    earnCreate: 'Create bookmark / note / file',
-    earnCreateValue: 'Bookmark +10 · file +12 · note +15 (first 3/type)',
+    earnCreate: 'New content',
+    earnCreateValue:
+      'First 3 per type each day: bookmark +10 · file +12 · note +15; later items earn less, down to +1 each',
     earnDailyQuest: 'Daily task milestones',
     earnDailyQuestValue: '+5 / +10',
     earnFirst: 'First note / bookmark / to-do',
@@ -10259,8 +10260,10 @@ export default {
     questExperienceCheckin: 'Daily check-in',
     questExperienceCheckinValue: '+5–10 EXP / day',
     questExperienceCreate: 'Create bookmark / note / file',
-    questExperienceCreateValue: 'First 3 of each type, per item: bookmark +10 · file +12 · note +15',
-    questExperienceCreateHint: 'After 3 items of the same type in one day, EXP per item gradually drops to +1.',
+    questExperienceCreateValue:
+      'First 3 per type each day: bookmark +10 · file +12 · note +15; later items earn less, down to +1 each',
+    questExperienceCreateHint:
+      'Each type is counted separately each day. EXP drops in tiers for items 4–8 and 9–15; item 16 onward still earns +1 each, until the daily EXP limit is reached.',
     questExperienceStage: 'Daily task milestones',
     questExperienceStageValue: '{values} EXP / day',
     questExperienceDailyCap: 'Daily EXP limit',
