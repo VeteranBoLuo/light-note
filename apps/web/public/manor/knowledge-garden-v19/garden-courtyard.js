@@ -96,6 +96,8 @@ const GardenCourtyard = (() => {
     const source = `knowledge-garden-v19/${cal.asset}`;
     if (img.getAttribute("src") !== source) img.src = source;
     img.dataset.water = `knowledge-garden-v19/${cal.water}`;
+    img.dataset.smooth = `knowledge-garden-v19/${cal.smooth}`;
+    img.dataset.fishingWater = String(cal.area!=="garden");
     FarmStage.mount(scene);
     const nextProfile = mobile() ? "mobile" : "desktop";
     if (pond.dataset.profile !== nextProfile && FarmStage.pier()) {

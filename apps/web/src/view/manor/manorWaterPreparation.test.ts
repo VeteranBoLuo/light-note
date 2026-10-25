@@ -1,86 +1,48 @@
 // @vitest-environment node
 import { readFileSync } from 'node:fs';
+import { inflateSync } from 'node:zlib';
 import { runInNewContext } from 'node:vm';
-import { describe, expect, it, vi } from 'vitest';
-
-const module = {
-  exports: {} as {
-    sourceURL: (path: string, base: string) => string;
-    textureSize: (w: number, h: number, display: number, dpr?: number, limit?: number) => { width: number; height: number };
-    shorelineMask: (p: Uint8ClampedArray, w: number, h: number) => Uint8Array;
-    surfaceMask: (p: Uint8ClampedArray, s: Uint8ClampedArray, w: number, h: number, r?: number) => Uint8Array;
-    prepareTextures: (
-      data: unknown,
-      canvas: Function,
-      pause: Function,
-    ) => Promise<{ pixels: Uint8Array; maskWidth: number; maskHeight: number }>;
-  },
-};
-runInNewContext(
-  readFileSync(new URL('../../../public/manor/knowledge-garden-v19/garden-environment.js', import.meta.url), 'utf8'),
-  { module, URL },
-);
-const water = module.exports;
-describe('庄园水面准备', () => {
-  it('合并脚本的 Worker 模块地址解析为绝对 URL，并保留版本而不携带宿主桥接参数', () => {
-    const base = 'https://boluo66.top/manor/index.html?bridge=private-fixture';
-    expect(water.sourceURL('knowledge-garden-v19/garden-environment.js?v=abc123', base))
-      .toBe('https://boluo66.top/manor/knowledge-garden-v19/garden-environment.js?v=abc123');
-    expect(water.sourceURL('https://boluo66.top/manor/environment.js?v=xyz', base))
-      .toBe('https://boluo66.top/manor/environment.js?v=xyz');
+import { describe, expect, it } from 'vitest';
+const root = new URL('../../../public/manor/knowledge-garden-v19/', import.meta.url);
+const cal = runInNewContext(`${readFileSync(new URL('farm-calibration.js', root), 'utf8')};FARM_CAL`);
+// Read the delivered RGBA PNG, including all PNG row filters. No browser or optional image codec is needed.
+function rgbaPNG(path: string) {
+  const file=readFileSync(new URL(path,root)); const width=file.readUInt32BE(16),height=file.readUInt32BE(20);
+  expect(file[24]).toBe(8);expect(file[25]).toBe(6);expect(file[28]).toBe(0);
+  const chunks: Buffer[]=[];
+  for(let offset=8;offset<file.length;){const n=file.readUInt32BE(offset);if(file.toString('ascii',offset+4,offset+8)==='IDAT')chunks.push(file.subarray(offset+8,offset+8+n));offset+=n+12;}
+  const raw=inflateSync(Buffer.concat(chunks)),pixels=new Uint8Array(width*height*4),stride=width*4;
+  for(let y=0;y<height;y++)for(let x=0;x<stride;x++){
+    const i=y*stride+x,a=x>=4?pixels[i-4]:0,b=y?pixels[i-stride]:0,c=y&&x>=4?pixels[i-stride-4]:0;
+    const p=a+b-c,pa=Math.abs(p-a),pb=Math.abs(p-b),pc=Math.abs(p-c);
+    const filter=raw[y*(stride+1)];const predictors=[0,a,b,Math.floor((a+b)/2),pa<=pb&&pa<=pc?a:pb<=pc?b:c];
+    pixels[i]=(raw[y*(stride+1)+x+1]+predictors[filter])&255;
+  }
+  return {width,height,pixel:(x:number,y:number)=>[...pixels.slice((Math.floor(y)*width+Math.floor(x))*4,(Math.floor(y)*width+Math.floor(x))*4+4)]};
+}
+describe('预生成庄园水面',()=>{
+  it('三个端型发布完整固定场景和对应水场，运行时不再组合高清贴片',()=>{
+    for(const key of ['desktop','mobileGarden','mobileBay']){
+      const scene=cal[key];expect(scene.detailTiles||[]).toEqual([]);
+      for(const path of [scene.asset,scene.water,scene.smooth])expect(readFileSync(new URL(path,root)).length).toBeGreaterThan(1000);
+      const mask=rgbaPNG(scene.water);expect(mask.width).toBeLessThanOrEqual(1536);
+      expect(mask.width/mask.height).toBeCloseTo(scene.image[0]/scene.image[1],2);
+    }
   });
-  it('保留原图与高分屏所需分辨率，按 GPU 上限约束尺寸而不扩充到二次幂', () => {
-    expect(water.textureSize(1808, 870, 1470, 1)).toEqual({ width: 1808, height: 870 });
-    expect(water.textureSize(1808, 870, 1470, 2)).toEqual({ width: 2940, height: 1415 });
-    expect(water.textureSize(919, 1712, 393, 2)).toEqual({ width: 919, height: 1712 });
-    const capped = water.textureSize(1808, 870, 3000, 2, 4096);
-    expect(capped.width).toBeLessThanOrEqual(4096);expect(capped.height).toBeLessThanOrEqual(4096);
+  it('海面与钓鱼水域可动，鱼舱顶部和石板广场严格排除',()=>{
+    const scene=cal.desktop,mask=rgbaPNG(scene.water);
+    const point=(x:number,y:number)=>mask.pixel(x*mask.width/scene.image[0],y*mask.height/scene.image[1]);
+    expect(point(1300,300)[0]).toBe(255);
+    expect(point(400,1600)[0]).toBe(255);
+    expect(point(2800,700)[0]).toBe(0);
+    expect(point(1500,1300)[0]).toBe(0);
   });
-  it('蓝水保留、岸上像素排除，鱼舱顶面完全退出动态遮罩', () => {
-    const categories = new Uint8ClampedArray([255, 0, 0, 255, 255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 0, 255]);
-    const scene = new Uint8ClampedArray([15, 140, 210, 255, 75, 55, 20, 255, 200, 200, 200, 255, 15, 140, 210, 255]);
-    const result = water.surfaceMask(categories, scene, 4, 1);
-    expect([...result.filter((_v, i) => i % 4 !== 3)]).toEqual([255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
-    expect(result[3]).toBe(8);
-    expect(result[7]).toBe(0);
-    expect(result[11]).toBe(0);
-    expect(result[15]).toBe(0);
-  });
-  it('没有 OffscreenCanvas 时也分批让出主线程，结果使用相同水域算法', async () => {
-    let maskReads = 0;
-    const canvas = (width: number, height: number) => ({
-      width,
-      height,
-      getContext: () => ({
-        drawImage: vi.fn(),
-        clearRect: vi.fn(),
-        filter: '',
-        imageSmoothingQuality: '',
-        getImageData: () => {
-          const pixels = new Uint8ClampedArray(width * height * 4),
-            mask = maskReads++ === 0;
-          for (let p = 0; p < pixels.length; p += 4) pixels.set(mask ? [255, 0, 0, 255] : [15, 140, 210, 255], p);
-          return { data: pixels };
-        },
-      }),
-    });
-    const pause = vi.fn(async () => {});
-    const result = await water.prepareTextures(
-      {
-        width: 64,
-        height: 48,
-        displayWidth: 64,
-        image: { width: 64, height: 48 },
-        details: [],
-        mask: { width: 64, height: 48 },
-      },
-      canvas,
-      pause,
-    );
-    expect(pause.mock.calls.length).toBeGreaterThan(5);
-    expect(result.maskWidth).toBe(64);
-    expect(result.maskHeight).toBe(48);
-    expect(result.pixels.length).toBe(64 * 48 * 4);
-    expect([...result.pixels.slice(0, 4)]).toEqual([255, 0, 0, 255]);
+  it('高分屏按真实显示尺寸渲染，波场连续推进而不是整体反向移动或扩散圆环',()=>{
+    const module={exports:{} as {renderSize:(w:number,h:number,dpr:number)=>{width:number;height:number};swellField:(n:number,rng:()=>number)=>{update:(t:number)=>Float32Array}}};
+    runInNewContext(readFileSync(new URL('garden-environment-r53.js',root),'utf8'),{module});
+    const water=module.exports;
+    expect(water.renderSize(1470,700,2)).toEqual({width:2940,height:1400});
+    const waves=water.swellField(10,()=>.5),a=[...waves.update(0)],b=[...waves.update(.1)],c=[...waves.update(.2)];
+    for(let i=0;i<10;i++){expect(b[i*4+3]).toBeGreaterThan(a[i*4+3]);expect(c[i*4+3]-b[i*4+3]).toBeCloseTo(b[i*4+3]-a[i*4+3],5);}
   });
 });

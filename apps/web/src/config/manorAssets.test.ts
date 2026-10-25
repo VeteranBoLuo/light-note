@@ -23,6 +23,11 @@ describe('庄园正式构建素材与水族契约', () => {
     expect(files.length).toBeGreaterThan(100);
     expect(files.filter(file => !existsSync(fileURLToPath(new URL(file, root))))).toEqual([]);
   });
+  it('动物纹理和昆虫图层实际随包发布，冷启动不依赖原型目录中的缓存', () => {
+    for (const path of ['animal-rabbit-r12.webp', 'wildlife-butterflyopen.webp', 'wildlife-butterflyperch.webp', 'wildlife-ladybird.webp']) {
+      expect(readFileSync(new URL(`knowledge-garden-v19/courtyard/${path}`, root)).subarray(0,4).toString()).toBe('RIFF');
+    }
+  });
   it('正式入口不依赖被 Git 忽略的原型目录，CSS 与经典脚本文件齐全', () => {
     const files = [...source('index.html').matchAll(/(?:src|href)="([^"?]+)(?:\?[^"]*)?"/g)].map(match => match[1]);
     expect(files.filter(file => file !== 'garden-model.js' && !existsSync(fileURLToPath(new URL(file, root))))).toEqual([]);

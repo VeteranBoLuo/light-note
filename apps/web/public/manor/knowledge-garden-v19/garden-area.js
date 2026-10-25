@@ -28,7 +28,7 @@ const GardenArea = (() => {
     return promise;
   }
   async function prepare(cal) {
-    return (await Promise.all([cal.asset, cal.water, curtain].filter(Boolean).map(imageReady))).every(Boolean);
+    return (await Promise.all([cal.asset, cal.water, cal.smooth, curtain].filter(Boolean).map(imageReady))).every(Boolean);
   }
   function unlock(trip) {
     trip.cover?.remove();
