@@ -1,4 +1,7 @@
 /* Confirmed manor renderer. Account mutations go through manor-live.js and the authenticated host. */
+// An already-open page may request this UI after a release, with the previous
+// classic runtime still in memory. Keep that page's artwork adapter compatible.
+if(!FarmArt.html)FarmArt.html=markup=>typeof GardenStartup!=="undefined"&&GardenStartup.html?GardenStartup.html(markup):markup;
 const M = GardenModel,
   R = M.RULES;
 const $ = (s) => document.querySelector(s);
@@ -303,7 +306,7 @@ function syncGuide() {
   const box = $("#gardenGuide");
   const step = g || (!state.casting ? `${state.discoveryGuide || ""}:${state.fish.length}:${FarmStage.cal().area || "all"}` : "casting");
   if (box && box.dataset.step !== step) {
-    box.innerHTML = guideHTML();
+    box.innerHTML = FarmArt.html(guideHTML());
     box.dataset.step = step;
     box.querySelector(".guide-cta")?.focus({ preventScroll: true });
   }
@@ -330,19 +333,26 @@ function render({ keepAreaTravel = false } = {}) {
   closeTankManagement(false);
   syncShell();
   applyDensity(false);
-  $("#app").innerHTML =
+  $("#app").innerHTML = FarmArt.html(
   view === "tree" ?
   treePage() :
   view === "workbench" ?
   workbenchPage() :
-  `<main class="content">${pageHead("庄园玩法", "种一片菜地，养一舱好鱼。")}${rulesContent()}</main>`;
+  `<main class="content">${pageHead("庄园玩法", "种一片菜地，养一舱好鱼。")}${rulesContent()}</main>`);
   update();
   FishMotion.mount();
   if (view === "tree") {
     GardenFX.mountAmbient($(".garden-scene"));
-    GardenAnimals3D.mount($(".garden-scene"));
-    GardenCritters.mount($(".garden-scene"), { needsSeed: FarmUI.needsBirdSeed, giftPoint: FarmUI.birdGiftScenePoint, deliverSeed: FarmUI.deliverBirdSeed });
-    GardenCompanions.mount($(".garden-scene"));
+    const sceneElement=$(".garden-scene");
+    const wildlife=()=>{
+      if(!sceneElement?.isConnected||sceneElement!==$(".garden-scene"))return;
+      GardenAnimals3D.mount(sceneElement);
+      GardenCritters.mount(sceneElement, { needsSeed: FarmUI.needsBirdSeed, giftPoint: FarmUI.birdGiftScenePoint, deliverSeed: FarmUI.deliverBirdSeed });
+      GardenCompanions.mount(sceneElement);
+    };
+    // Core art, controls and guide load first. Wildlife never competes with
+    // those downloads or starts for a scene that the player has already left.
+    if(typeof GardenStartup!=="undefined"&&typeof GardenStartup.afterReady==="function")GardenStartup.afterReady(wildlife);else wildlife();
   } else {
     GardenFX.unmountAmbient();
     GardenCritters.unmount();
@@ -354,10 +364,10 @@ function render({ keepAreaTravel = false } = {}) {
 function update({ keepWallet = false } = {}) {
   if (view !== "tree") return;
   const walletShown = $("#wallet")?.textContent;
-  $("#gameHud").innerHTML = hudHTML();
+  $("#gameHud").innerHTML = FarmArt.html(hudHTML());
   // 积分飞入期间保留旧数字，到达后再滚动
   if (keepWallet && walletShown !== undefined) $("#wallet").textContent = walletShown;
-  $("#gameTools").innerHTML = dockHTML();
+  $("#gameTools").innerHTML = FarmArt.html(dockHTML());
   FarmUI.sync();
   FarmFacilities.sync();
   syncGuide();
@@ -481,6 +491,7 @@ function animateNumber(el, from, to, ms) {
   requestAnimationFrame(tick);
 }
 function showDialog(title, intro, body, foot = "", wide = false, family = "") {
+  body=FarmArt.html(body);foot=FarmArt.html(foot);
   FarmUI.rememberPanel();
   const focused = $("#tankProduction")?.contains(document.activeElement) ? $('[data-dock="farm"]') : document.activeElement;
   closeTankManagement(false);
@@ -934,7 +945,7 @@ function wildlifeDetail(kind) {
   showDialog(item.name, item.habitat, `<div class="wildlife-sheet"><div class="wildlife-detail-art">${wildlifeArt(kind)}</div><p class="wildlife-story">${item.text}</p>${giftHTML}<section class="wildlife-actions-panel"><h3>轻触时的动作</h3><ul>${actions}</ul></section>${gift ? '<p class="wildlife-daily-note">每天最多 1 份，未拾取不累积；互动不会增加产量。</p>' : ""}</div>`, '<button class="button" data-action="atlas" data-dialog-back="atlas">返回图鉴</button><button class="button primary" data-action="close">回到庄园</button>', false, "wildlife-detail-dialog");
 }
 async function readAtlasEntry(type, key) {
-  if (await M.readAtlasEntry(state, type, key)) $("#gameTools").innerHTML = dockHTML();
+  if (await M.readAtlasEntry(state, type, key)) $("#gameTools").innerHTML = FarmArt.html(dockHTML());
 }
 function atlasDialog() {
   const restoreFocus = !$("#modal").hidden && $("#dialog").dataset.family !== "atlas-dialog";

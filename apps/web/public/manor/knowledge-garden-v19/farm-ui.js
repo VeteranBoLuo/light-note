@@ -113,7 +113,7 @@ const FarmUI = (() => {
     const layers = [];
     // 木/石框内沿独立于作物锚点；素材只取内部连续土面，透明边不参与贴合。
     const opening = p.soilOpening || p.soil;
-    const overlay = (kind) => `<span class="plot-soil" style="width:${sw}px;height:${sh}px;clip-path:polygon(${opening.map(([x, y]) => `${x}px ${y}px`).join(',')})"><img class="plot-overlay" src="${FarmArt.BASE}bed-${kind}.webp" alt="" draggable="false" style="transform:${quadMatrix(FARM_CAL.overlaySoil[kind], opening)}"></span>`;
+    const overlay = (kind) => `<span class="plot-soil" style="width:${sw}px;height:${sh}px;clip-path:polygon(${opening.map(([x, y]) => `${x}px ${y}px`).join(',')})"><img class="plot-overlay" src="${FarmArt.BASE}bed-${kind}-r55.webp" alt="" draggable="false" style="transform:${quadMatrix(FARM_CAL.overlaySoil[kind], opening)}"></span>`;
     if (st === "locked") {
       // 不透明织布映射到实测木框内沿，覆盖后沿土堆；不沿用作物的旧土面坐标。
       const core = [[0, 0], [512, 0], [512, 512], [0, 512]];
@@ -160,6 +160,8 @@ const FarmUI = (() => {
   }
   function purifierArt() {const level = M.purifierStatus(state).level;return (level < 2 ? FarmFacilities.nativeSceneArt("purifier", !level) : "") || FarmFacilities.purifierArt(level);}
   function purifierHTML() {
+    // The mobile garden has no purifier hit area; its art belongs to the bay.
+    if(cal().area==="garden")return "";
     return `<button id="purifierSpot" class="scene-purifier${cal().nativePieces?.purifier ? " native-purifier" : ""}" data-action="purifier-collect" type="button" hidden><img class="purifier-plinth" src="knowledge-garden-v19/farm/purifier-plinth-r53.webp" alt="" draggable="false"><span class="purifier-art" aria-hidden="true">${purifierArt()}<span class="purifier-water"><i></i><i></i><i></i><i></i><b></b></span></span><span class="purifier-state"></span></button>`;
   }
   function syncPurifier() {
@@ -171,7 +173,7 @@ const FarmUI = (() => {
     if (fixture.dataset.artLevel !== String(p.level)) {
       fixture.dataset.artLevel = String(p.level);
       const art = fixture.querySelector(".purifier-art");
-      art.innerHTML = purifierArt() + `<span class="purifier-water"><i></i><i></i><i></i><i></i><b></b></span>`;
+      art.innerHTML = FarmArt.html(purifierArt() + `<span class="purifier-water"><i></i><i></i><i></i><i></i><b></b></span>`);
     }
     if (p.owned) {
       const full = state.water >= R.waterCap;
@@ -274,7 +276,7 @@ const FarmUI = (() => {
       const i = +el.dataset.plot,
         key = plotKey(i);
       if (el.dataset.key !== key) {
-        el.innerHTML = plotInner(i);
+        el.innerHTML = FarmArt.html(plotInner(i));
         el.dataset.key = key;
         el.dataset.state = M.plotState(state, i);
       }

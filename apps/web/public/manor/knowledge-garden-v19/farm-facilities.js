@@ -57,7 +57,7 @@ const FarmFacilities = (() => {
       const artwork = el.querySelector(".fixture-art");
       const signature = `${d.asset}:${owned}`;
       if (artwork.dataset.signature !== signature) {
-        artwork.innerHTML = sceneArt(key, !owned);artwork.dataset.signature = signature;
+        artwork.innerHTML = FarmArt.html(sceneArt(key, !owned));artwork.dataset.signature = signature;
       }
       const bees = el.querySelector(".facility-bees");
       if (key === "beehive" && owned && !bees.children.length) bees.innerHTML = Array.from({length:2},()=>beeArt()).join("");

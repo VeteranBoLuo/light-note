@@ -2,8 +2,9 @@
    作物格 512 × 512：第 1–5 格为播种、发芽、幼苗、开花/青果、成熟，默认根部锚点 (256, 400)，播种组可按土面居中；第 6 格是收获物图标。 */
 const FarmArt = (() => {
   const BASE = "knowledge-garden-v19/farm/";
-  const cropSrc = (key, stage) => `${BASE}crop-${key}-${stage}.webp`;
-  const img = (src, cls) => `<img class="${cls}" src="${src}" alt="" draggable="false" decoding="async">`;
+  const html = markup => typeof GardenStartup!=="undefined"&&GardenStartup.html?GardenStartup.html(markup):markup;
+  const cropSrc = (key, stage) => `${BASE}crop-${key}-${stage}-r55.webp`;
+  const img = (src, cls) => html(`<img class="${cls}" src="${src}" alt="" draggable="false" decoding="async">`);
   // 模型的生长阶段（0 播种 … 4 成熟）对应第 1–5 格
   const spriteStage = (growthStage) => Math.max(1, Math.min(5, growthStage + 1));
   const packet = (key) => img(`${BASE}seed-${key}.webp`, "farm-packet");
@@ -81,7 +82,7 @@ const FarmArt = (() => {
   // 弹框里的作物展示：一块土 + 这一阶段的作物（播种未浇水时是干土，未开垦时盖帆布）
   function cropCard(key, growthStage, { dry = false, locked = false } = {}) {
     const layers = [];
-    if (dry) layers.push(img(`${BASE}bed-dry.webp`, "card-soil-overlay"));
+    if (dry) layers.push(img(`${BASE}bed-dry-r55.webp`, "card-soil-overlay"));
     if (locked) layers.push(img(`${BASE}bed-tarp.webp`, "card-soil-overlay"));
     if (key && growthStage >= 0) layers.push(img(cropSrc(key, spriteStage(growthStage)), "card-crop"));
     return `<span class="crop-card${locked ? " locked" : ""}" aria-hidden="true"><span class="card-soil"></span>${layers.join("")}</span>`;
@@ -119,6 +120,6 @@ const FarmArt = (() => {
       button.classList.add("has-action-art");
     });
   }
-  return { BASE, ui, UI_CROPS, sceneDetails, cropSrc, spriteStage, packet, giftPack, icon, fryBag, cropCard, cropPreview, cropPlacement, fertilizerSrc, fertilizer, decorateActions };
+  return { BASE, html, ui, UI_CROPS, sceneDetails, cropSrc, spriteStage, packet, giftPack, icon, fryBag, cropCard, cropPreview, cropPlacement, fertilizerSrc, fertilizer, decorateActions };
 })();
 if (typeof module !== "undefined") module.exports = FarmArt;

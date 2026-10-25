@@ -7,7 +7,8 @@ const FarmStage = (() => {
     view = null, area = "garden";
   const profile = () => (document.documentElement.classList.contains("light-note-mobile-rendering") ? "mobile" : "desktop");
   const cal = () => profile()==="mobile" ? (FARM_CAL[area==="bay"?"mobileBay":"mobileGarden"]||FARM_CAL.mobile) : FARM_CAL.desktop;
-  const sourceSet = d => (d.assetSources||[]).map(({asset,width})=>`knowledge-garden-v19/${asset} ${width}w`).join(', ');
+  const assetUrl = path => typeof GardenStartup!=="undefined"&&GardenStartup.url?GardenStartup.url(path):path;
+  const sourceSet = d => (d.assetSources||[]).map(({asset,width})=>`${assetUrl(`knowledge-garden-v19/${asset}`)} ${width}w`).join(', ');
   const bbox = (points) => {
     const xs = points.map((p) => p[0]),
       ys = points.map((p) => p[1]);
@@ -213,7 +214,7 @@ const FarmStage = (() => {
     // 变量里的相对地址会按样式表位置解析，这里写成绝对地址
     // Only mobile uses this bleed. A desktop CSS background would fetch the
     // full plate again even when the responsive <img> selected a smaller one.
-    if(d.area)st.setProperty("--farm-fill", `url("${new URL(`knowledge-garden-v19/${d.asset}`, document.baseURI).href}")`);
+    if(d.area)st.setProperty("--farm-fill", `url("${new URL(assetUrl(`knowledge-garden-v19/${d.asset}`), document.baseURI).href}")`);
     else st.removeProperty("--farm-fill");
     // 水仓：玻璃与水面合起来的外框；只有玻璃里能点、能看到鱼
     const a = d.aquarium,

@@ -22,9 +22,10 @@ describe('庄园生产入口与经典规则脚本', () => {
         /\b(?:src|href|data-ui-script)="([^"?]+)\?v=([a-f0-9]{16})"/g,
       ),
     ];
-    expect(links).toHaveLength(4);
+    expect(links).toHaveLength(5);
     const bundle = assets.get('manor/knowledge-garden-v19/runtime.js')!;
     expect(() => new Script(bundle)).not.toThrow();
+    expect(() => new Script(readFileSync(new URL('../../public/manor/knowledge-garden-v19/garden-ui.js', import.meta.url), 'utf8'))).not.toThrow();
     // The deterministic rules and all classic modules retain their global order.
     const original = readFileSync(new URL('../../public/manor/index.html', import.meta.url), 'utf8');
     let offset = -1;
@@ -54,6 +55,11 @@ describe('庄园生产入口与经典规则脚本', () => {
     });
     expect(boot.desktop[0].srcset).toContain('pc-scene-2048-r54.webp 2048w');
     expect(boot.desktop[0].srcset).toContain('pc-scene-r53.webp 3630w');
+    expect(boot.desktop.map(({src}: {src: string}) => src)).toContain('knowledge-garden-v19/farm/bed-dry-r55.webp');
+    expect(boot.mobile.map(({src}: {src: string}) => src)).not.toContain('knowledge-garden-v19/farm/workshop-states-r53.webp');
+    const controls=boot.desktop.find(({src}: {src: string})=>src.endsWith('/farm/game-ui-r53.webp'));
+    expect(assets.get('manor/knowledge-garden-v19/runtime.css')).toContain(`var(${controls.variable},url("farm/game-ui-r53.webp"))`);
+    expect(new Set(boot.desktop.map(({src}: {src: string})=>src)).size).toBe(boot.desktop.length);
     expect(preload.desktopScene.map(({ width }: { width: number }) => width)).toEqual([2048, 2940, 3630]);
     for (const url of [...preload.desktop, ...preload.mobile, ...preload.desktopScene.map(({ url }: { url: string }) => url)]) {
       expect(url.startsWith('/manor/')).toBe(true);
