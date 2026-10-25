@@ -220,11 +220,24 @@ request.defaults.adapter = async (config) => {
       points: assets.points,
       exp: 10000,
       level: 15,
+      name: 'Lv.15',
+      spaceMb: 5120,
+      aiTokenDaily: 100000,
+      streak: 0,
+      checkedInToday: false,
+      levelStartExp: 10000,
+      nextLevelExp: 12000,
+      expToNext: 2000,
+      progress: 0,
+      isMax: false,
       makeupDays: ['20261022'],
       features: { growthCenterV2: true, pointsCenter: scenario !== 'summary_disabled' },
     };
   else if (url.pathname.endsWith('/preferences')) data = { lowPressureMode: true };
-  else if (url.pathname.endsWith('/dashboard')) data = { stats: {}, achievements: [], quests: [], timeline: [] };
+  else if (url.pathname.endsWith('/dashboard'))
+    data = { stats: { joinDays: 30 }, achievements: [], quests: [], timeline: [] };
+  else if (url.pathname.endsWith('/heatmap'))
+    data = { year: 2026, availableYears: [2026], days: [], summary: { activeDays: 0, longestStreak: 0, weekCount: 0 } };
   else if (url.pathname.endsWith('/claimable')) data = { totalCount: 0 };
   return {
     config,
@@ -266,7 +279,7 @@ Object.assign(window, { backpackFixture: { requests } });
 const app = createApp({
   render: () =>
     params.get('panel') === 'workspace'
-      ? h(RouterView, { style: { height: '100%' } })
+      ? h(RouterView, { style: { height: '100%' }, 'data-fixture-route': router.currentRoute.value.fullPath })
       : h(
           'main',
           {

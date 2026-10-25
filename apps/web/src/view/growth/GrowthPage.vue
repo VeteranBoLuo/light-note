@@ -507,16 +507,23 @@
   const router = useRouter();
   const user = useUserStore();
   const bookmark = bookmarkStore();
-  const routeSection = String(route.query.section || '');
-  const hasRewardDeepLink = ['shop', 'lottery', 'inventory', 'ledger', 'center'].includes(
-    String(route.query.reward || ''),
-  );
-  const activeSection = ref<GrowthSection>(
-    ['overview', 'tasks', 'achievements', 'rewards'].includes(routeSection)
-      ? (routeSection as GrowthSection)
-      : 'overview',
-  );
-  const activeRewardSection = ref<RewardSection>(rewardSectionFromQuery(route.query));
+  const activeSection = computed<GrowthSection>({
+    get: () => {
+      const section = String(route.query.section || '');
+      return ['overview', 'tasks', 'achievements', 'rewards'].includes(section)
+        ? (section as GrowthSection)
+        : 'overview';
+    },
+    set: (section) => {
+      void navigateGrowth(section);
+    },
+  });
+  const activeRewardSection = computed<RewardSection>({
+    get: () => rewardSectionFromQuery(route.query, growthV2Enabled.value ? 'inventory' : 'shop'),
+    set: (reward) => {
+      void navigateGrowth('rewards', reward);
+    },
+  });
   const inventoryTab = computed<InventoryTab>({
     get: () => inventoryTabFromQuery(route.query),
     set: (tab) => {
@@ -662,21 +669,22 @@
     return null;
   }
 
-  function scrollToHash() {
+  async function scrollToHash() {
+    const hash = route.hash;
     const targetId = route.hash.replace(/^#/, '');
     if (!targetId) return;
     const targetSection = sectionForHash(route.hash);
     if (targetSection && activeSection.value !== targetSection) {
       // 带 hash 的入口由程序切换分区，不会触发用户点击 Tab 的回顶逻辑。
-      activeSection.value = targetSection;
+      await navigateGrowth(targetSection);
     }
+    if (route.hash !== hash) return;
     if (route.hash === '#growth-weekly') taskView.value = 'weekly';
     if (route.hash === '#growth-tasks') taskView.value = 'onboarding';
-    void nextTick(() => {
-      document
-        .getElementById(targetId)
-        ?.scrollIntoView({ behavior: 'smooth', block: route.hash === '#growth-weekly' ? 'end' : 'start' });
-    });
+    await nextTick();
+    document
+      .getElementById(targetId)
+      ?.scrollIntoView({ behavior: 'smooth', block: route.hash === '#growth-weekly' ? 'end' : 'start' });
   }
 
   function handleWeeklyLoaded() {
@@ -749,6 +757,23 @@
     handleSectionTabSelect(section);
   }
 
+  // 分区与奖励目标一次性提交，页签只从路由读取，避免两个监听分别反写而丢失 reward。
+  function navigateGrowth(section: GrowthSection, reward = activeRewardSection.value) {
+    return router.replace({
+      query: {
+        ...route.query,
+        section,
+        ...(section === 'rewards'
+          ? {
+              reward,
+              inventoryTab: reward === 'inventory' && inventoryTab.value === 'points' ? 'points' : undefined,
+            }
+          : {}),
+      },
+      hash: sectionForHash(route.hash) === section ? route.hash : '',
+    });
+  }
+
   function isDesktopNavigationActive(option: DesktopGrowthNavOption) {
     return (
       activeSection.value === option.section &&
@@ -757,8 +782,8 @@
   }
 
   function selectDesktopNavigation(option: DesktopGrowthNavOption) {
-    if (option.section === 'rewards' && option.reward) activeRewardSection.value = option.reward;
-    selectSection(option.section);
+    void navigateGrowth(option.section, option.reward);
+    handleSectionTabSelect(option.section);
   }
 
   function handleTaskViewSelect(view: string) {
@@ -943,59 +968,17 @@
   );
 
   watch(
-    () => route.query.section,
-    (section) => {
-      // 个人资料头像框选择器等入口会在成长页已经挂载时改 query；此时路由组件不会重建，
-      // 必须把外部导航反向同步回 Tab，不能只让地址栏变成 tasks/achievements。
-      const requested = String(section || '');
-      const nextSection = ['overview', 'tasks', 'achievements', 'rewards'].includes(requested)
-        ? (requested as GrowthSection)
-        : 'overview';
-      if (activeSection.value !== nextSection) activeSection.value = nextSection;
-    },
-  );
-
-  watch(
-    () => [route.query.reward, route.query.inventoryTab],
-    () => {
-      const nextReward = rewardSectionFromQuery(route.query, growthV2Enabled.value ? 'inventory' : 'shop');
-      if (activeRewardSection.value !== nextReward) activeRewardSection.value = nextReward;
-      if (isLegacyPointsReward(route.query.reward)) void router.replace(inventoryPointsRoute(route.query));
+    () => route.query.reward,
+    (reward) => {
+      if (isLegacyPointsReward(reward)) void router.replace(inventoryPointsRoute(route.query));
     },
     { immediate: true },
   );
 
   watch(activeSection, (section) => {
-    // 路由已切到目标分区时无需反写；重复 replace 会清掉建议入口携带的任务锚点。
-    if (route.query.section !== section) {
-      void router.replace({
-        query: { ...route.query, section },
-        hash: sectionForHash(route.hash) === section ? route.hash : '',
-      });
-    }
     if (section === 'tasks') void Promise.all([loadGrowthTasks(), loadWeekly()]);
     if (section === 'rewards' || (section === 'overview' && useWideDesktopLayout.value)) void loadLottery();
   });
-
-  watch(activeRewardSection, (reward) => {
-    if (activeSection.value === 'rewards')
-      void router.replace({
-        query: {
-          ...route.query,
-          section: 'rewards',
-          reward,
-          inventoryTab: reward === 'inventory' && inventoryTab.value === 'points' ? 'points' : undefined,
-        },
-      });
-  });
-
-  watch(
-    growthV2Enabled,
-    (enabled) => {
-      if (!hasRewardDeepLink) activeRewardSection.value = enabled ? 'inventory' : 'shop';
-    },
-    { immediate: true },
-  );
 
   const claimingAch = ref<string | null>(null);
   async function onClaimAchievement(key: string) {
