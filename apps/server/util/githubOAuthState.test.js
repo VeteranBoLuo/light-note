@@ -25,6 +25,9 @@ const {
   createGitHubOAuthChallenge,
   failGitHubOAuthChallenge,
   readGitHubOAuthNonce,
+  prepareGitHubBinding,
+  consumeGitHubBinding,
+  finishGitHubBinding,
 } = await import('./githubOAuthState.js');
 
 beforeEach(() => {
@@ -47,7 +50,10 @@ describe('旧同邮箱绑定票据拒绝恢复', () => {
     await consumeGitHubOAuthChallenge(request);
     const [key, raw] = [...redisValues.entries()][0];
     redisValues.set(key, JSON.stringify({ ...JSON.parse(raw), status, userId: 'owner', binding: { userId: 'owner' } }));
-    await expect(consumeGitHubOAuthChallenge(request)).rejects.toMatchObject({ code: 'GITHUB_OAUTH_EMAIL_CONFLICT', status: 409 });
+    await expect(consumeGitHubOAuthChallenge(request)).rejects.toMatchObject({
+      code: 'GITHUB_OAUTH_EMAIL_CONFLICT',
+      status: 409,
+    });
   });
 });
 
@@ -176,5 +182,77 @@ describe('GitHub OAuth 单独同意与 state 校验', () => {
         headers: { cookie: 'sid=session; ln_github_oauth_nonce=nonce-value; theme=day' },
       }),
     ).toBe('nonce-value');
+  });
+});
+
+describe('同邮箱确认绑定票据', () => {
+  const binding = { version: 2, userId: 'owner', githubId: '123', email: 'owner@example.com', snapshot: 'snapshot' };
+  async function prepared() {
+    const auth = await createGitHubOAuthChallenge({ consentVersion: GITHUB_OAUTH_CONSENT_VERSION });
+    const request = {
+      state: new URL(auth.authorizationUrl).searchParams.get('state'),
+      nonce: auth.nonce,
+      code: 'valid-provider-code',
+    };
+    await consumeGitHubOAuthChallenge(request);
+    await prepareGitHubBinding({ ...request, binding });
+    return request;
+  }
+  it('只有已换票的本次 OAuth 能生成待确认票据，回调重试仍提示确认', async () => {
+    const request = await prepared();
+    expect(await consumeGitHubOAuthChallenge(request)).toMatchObject({ bindingRequired: true, binding });
+    expect(JSON.parse([...redisValues.values()][0])).not.toHaveProperty('codeVerifier');
+  });
+  it('并发确认只有一个认领者；其他请求只能等待', async () => {
+    const request = await prepared();
+    const results = await Promise.allSettled([
+      consumeGitHubBinding({ ...request, confirm: true }),
+      consumeGitHubBinding({ ...request, confirm: true }),
+    ]);
+    expect(results.filter((x) => x.status === 'fulfilled')).toHaveLength(1);
+  });
+  it('取消后不能确认或恢复回调', async () => {
+    const request = await prepared();
+    await consumeGitHubBinding({ ...request, confirm: false });
+    await expect(consumeGitHubBinding({ ...request, confirm: true })).rejects.toHaveProperty(
+      'code',
+      'GITHUB_OAUTH_STATE_INVALID',
+    );
+    await expect(consumeGitHubOAuthChallenge(request)).rejects.toHaveProperty('code', 'GITHUB_OAUTH_STATE_INVALID');
+  });
+  it('票据过期后不能确认，即使 Redis 记录因重试仍存在', async () => {
+    const request = await prepared();
+    const [key, raw] = [...redisValues.entries()][0];
+    redisValues.set(key, JSON.stringify({ ...JSON.parse(raw), bindingExpiresAt: Date.now() - 1 }));
+    await expect(consumeGitHubBinding({ ...request, confirm: true })).rejects.toHaveProperty(
+      'code',
+      'GITHUB_OAUTH_STATE_EXPIRED',
+    );
+  });
+  it('提交失败可以重新认领，但不延长原绑定期限；成功后恢复同一结果', async () => {
+    const request = await prepared();
+    const first = await consumeGitHubBinding({ ...request, confirm: true });
+    await finishGitHubBinding({ state: request.state, processingId: first.processingId, retry: true });
+    const again = await consumeGitHubBinding({ ...request, confirm: true });
+    expect(again.bindingExpiresAt).toBe(first.bindingExpiresAt);
+    await finishGitHubBinding({
+      state: request.state,
+      processingId: again.processingId,
+      userId: 'owner',
+      githubId: '123',
+      accountSnapshot: 'after',
+    });
+    expect(await consumeGitHubBinding({ ...request, confirm: true })).toMatchObject({
+      recovered: true,
+      userId: 'owner',
+      accountSnapshot: 'after',
+      githubId: '123',
+    });
+    expect(await consumeGitHubOAuthChallenge(request)).toMatchObject({
+      recovered: true,
+      userId: 'owner',
+      accountSnapshot: 'after',
+      githubId: '123',
+    });
   });
 });

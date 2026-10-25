@@ -12261,6 +12261,11 @@ export default {
     githubCallbackRetry: '重新授权 GitHub',
     githubCallbackEmailLogin: '使用邮箱登录',
     githubEmailConflict: '此邮箱已注册过轻笺，请使用邮箱登录或找回密码',
+    githubBindingTitle: '此邮箱已注册过轻笺',
+    githubBindingHint:
+      'GitHub 提供的已验证邮箱与已有轻笺账号相同。是否绑定到该账号并使用 GitHub 登录？绑定后保留原账号的密码、资料和权益。',
+    githubBindingConfirm: '确认绑定并登录',
+    githubBindingCancelled: '已取消绑定，你可以使用邮箱登录或重新授权 GitHub。',
     githubCallbackRequestId: '问题编号：{requestId}',
     previewMobile: '移动端预览',
     noAccount: '还没有账号？',

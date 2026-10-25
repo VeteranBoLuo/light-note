@@ -4,7 +4,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 vi.mock('../db/index.js', () => ({ default: {} }));
 import dbProxy from '../db/index.js';
 import redis from './redisClient.js';
-import { getSession } from './sessionStore.js';
+import { createSession, getSession } from './sessionStore.js';
 
 const socketPath = process.env.LIGHTNOTE_TEST_MYSQL_SOCKET;
 const schema = `session_authority_${randomUUID().replaceAll('-', '')}`;
@@ -21,16 +21,19 @@ describe.skipIf(!socketPath)('会话撤销与续期（隔离 MySQL）', () => {
     created = true;
     db = mysql.createPool({ socketPath, user: 'root', database: schema, multipleStatements: true, connectionLimit: 4 });
     dbProxy.query = (...args) => db.query(...args);
-    await db.query(`CREATE TABLE user (id VARCHAR(64) PRIMARY KEY, last_active_time DATETIME);
+    dbProxy.getConnection = () => db.getConnection();
+    await db.query(`CREATE TABLE user (id VARCHAR(64) PRIMARY KEY, last_active_time DATETIME, password VARCHAR(255));
       CREATE TABLE user_sessions (
         sid VARCHAR(64) PRIMARY KEY, user_id VARCHAR(64), role VARCHAR(20),
-        expires_at DATETIME, create_time DATETIME, last_active_time DATETIME
+        expires_at DATETIME, create_time DATETIME DEFAULT CURRENT_TIMESTAMP, last_active_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+        ip VARCHAR(255), user_agent TEXT, device_key VARCHAR(64), INDEX(user_id,device_key)
       ) ENGINE=InnoDB;
-      INSERT INTO user VALUES ('owner',NULL)`);
+      INSERT INTO user VALUES ('owner',NULL,'original')`);
   });
   beforeEach(async () => {
     await db.query(`DELETE FROM user_sessions;
-      INSERT INTO user_sessions VALUES ('sid','owner','user',DATE_ADD(NOW(), INTERVAL 1 HOUR),NOW(),NOW())`);
+      UPDATE user SET password='original';
+      INSERT INTO user_sessions(sid,user_id,role,expires_at,create_time,last_active_time) VALUES ('sid','owner','user',DATE_ADD(NOW(), INTERVAL 1 HOUR),NOW(),NOW())`);
     const [[session]] = await db.query('SELECT * FROM user_sessions WHERE sid=?', ['sid']);
     redis.get.mockResolvedValue(JSON.stringify(session));
     redis.setEx.mockReset().mockResolvedValue('OK');
@@ -74,6 +77,63 @@ describe.skipIf(!socketPath)('会话撤销与续期（隔离 MySQL）', () => {
       expect(await reading).toBeNull();
       expect(redis.setEx).not.toHaveBeenCalled();
     } finally {
+      await connection.rollback();
+      connection.release();
+    }
+  });
+  it('改密事务先获得账号锁时，旧凭据不能在其提交后新建会话', async () => {
+    const connection = await db.getConnection();
+    try {
+      await connection.beginTransaction();
+      await connection.query("UPDATE user SET password='changed' WHERE id='owner'");
+      const creating = createSession({
+        userId: 'owner',
+        role: 'user',
+        maxAgeMs: 1000,
+        validateAccount: (account) => {
+          if (account.password !== 'original') throw new Error('credentials changed');
+        },
+      });
+      const rejection = expect(creating).rejects.toThrow('credentials changed');
+      await connection.commit();
+      await rejection;
+      expect((await db.query('SELECT sid FROM user_sessions'))[0]).toEqual([{ sid: 'sid' }]);
+    } finally {
+      await connection.rollback();
+      connection.release();
+    }
+  });
+  it('签发先获得账号锁时，后续改密撤销能够覆盖刚创建的会话', async () => {
+    let releaseValidation, locked;
+    const gate = new Promise((resolve) => {
+      releaseValidation = resolve;
+    });
+    const held = new Promise((resolve) => {
+      locked = resolve;
+    });
+    const creating = createSession({
+      userId: 'owner',
+      role: 'user',
+      maxAgeMs: 1000,
+      validateAccount: async (account) => {
+        expect(account.password).toBe('original');
+        locked();
+        await gate;
+      },
+    });
+    await held;
+    const connection = await db.getConnection();
+    try {
+      await connection.beginTransaction();
+      const changing = connection.query("UPDATE user SET password='changed' WHERE id='owner'");
+      releaseValidation();
+      await creating;
+      await changing;
+      await connection.query("DELETE FROM user_sessions WHERE user_id='owner'");
+      await connection.commit();
+      expect((await db.query('SELECT sid FROM user_sessions'))[0]).toHaveLength(0);
+    } finally {
+      releaseValidation();
       await connection.rollback();
       connection.release();
     }
