@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { chromium } from 'playwright-core';
+import { chromium, devices } from 'playwright-core';
 
 const origin = process.env.LIGHTNOTE_WEB_ORIGIN || 'http://localhost:5173';
 assert(['localhost', '127.0.0.1'].includes(new URL(origin).hostname));
@@ -38,11 +38,13 @@ const names = (profile) =>
     : { add: /添加图片/, remove: '删除图片', undo: '撤销', retry: /重新添加/ };
 async function open(profile, extra = '') {
   const page = await browser.newPage({
+    ...(profile.mobile ? devices[profile.theme === 'day' ? 'Pixel 7' : 'iPhone 13'] : {}),
     viewport: { width: profile.width, height: 900 },
     hasTouch: profile.mobile,
     reducedMotion: 'reduce',
     permissions: ['clipboard-read', 'clipboard-write'],
   });
+  page.mobile = profile.mobile;
   page.on('pageerror', (error) => errors.push(error.message));
   page.pickerCount = 0;
   page.on('filechooser', () => page.pickerCount++);
@@ -82,13 +84,18 @@ async function prepare(page, html = fixture, expectEmpty = true) {
 async function choose(page, button, activation = 'click') {
   const before = await page.evaluate(() => window.tinymce.activeEditor.getContent());
   const pending = page.waitForEvent('filechooser');
-  if (activation === 'click') await button.click();
+  if (page.mobile) await button.tap();
+  else if (activation === 'click') await button.click();
   else {
     await button.focus();
     await button.press(activation);
   }
   assert.equal(await page.evaluate(() => window.tinymce.activeEditor.getContent()), before);
   await (await pending).setFiles(imageFile());
+}
+async function focusPaste(page, target) {
+  if (page.mobile) await target.tap();
+  else await target.click();
 }
 async function paste(page, target) {
   await target.evaluate((element, png) => {
@@ -131,7 +138,7 @@ try {
     assert.equal(await page.evaluate(() => window.tinymce.activeEditor.isDirty()), false);
     const bounds = await add.boundingBox();
     assert(bounds.width > 0 && bounds.x >= 0 && bounds.x + bounds.width <= profile.width);
-    await pasteArea.click();
+    await focusPaste(page, pasteArea);
     assert.equal(page.pickerCount, 0, 'Clicking the paste area must not open a file picker');
     assert(await pasteArea.evaluate((element) => document.activeElement === element && element.isContentEditable));
     await pasteArea.click({ button: 'right' });
@@ -153,6 +160,23 @@ try {
     }
     await page.screenshot({ path: join(output, `empty-${id}.png`), caret: 'initial' });
     checked++;
+
+    if (profile.mobile) {
+      // Actual touch activation used to select the cE=false widget and cancel the native click.
+      // Canceling a picker must leave both the serialized content and its undo history untouched.
+      const pickers = page.pickerCount;
+      const pending = page.waitForEvent('filechooser');
+      await add.tap();
+      await (await pending).setFiles([]);
+      assert.equal(page.pickerCount, pickers + 1);
+      assert.equal(await page.locator('[data-ln-media-image-placeholder][data-mce-selected]').count(), 0);
+      assert.equal(await page.evaluate(() => window.tinymce.activeEditor.getContent()), before);
+      assert.equal(await page.evaluate(() => window.tinymce.activeEditor.isDirty()), false);
+      assert.equal(await page.evaluate(() => window.tinymce.activeEditor.undoManager.hasUndo()), false);
+      await pasteArea.tap();
+      assert(await pasteArea.evaluate((element) => document.activeElement === element));
+      checked++;
+    }
 
     await choose(page, add, profile.density === 'small' ? 'Enter' : 'Space');
     await page.locator('section img').waitFor();
@@ -177,7 +201,7 @@ try {
     await add.waitFor();
     checked++;
 
-    await pasteArea.click();
+    await focusPaste(page, pasteArea);
     await paste(page, pasteArea);
     await page.locator('section img').waitFor();
     assert.equal(await captionHtml(page), originalCaption);
@@ -252,7 +276,7 @@ try {
       page,
       '<table><tbody><tr><td>' + fixture + '</td><td><p>相邻单元格保留</p></td></tr></tbody></table>',
     );
-    await pasteArea.click();
+    await focusPaste(page, pasteArea);
     await paste(page, pasteArea);
     await page.locator('section img').waitFor();
     assert.equal(await page.locator('table').count(), 1);
@@ -260,6 +284,34 @@ try {
     assert.equal(await page.locator('td:last-child').textContent(), '相邻单元格保留');
     assert.equal(await captionHtml(page), originalCaption);
     checked++;
+
+    if (profile.mobile) {
+      // The small harness has an auto-height editor; use the real page's constrained flex host for scrolling.
+      await page.locator('main').evaluate((element) => {
+        element.style.display = 'flex';
+        element.style.flexDirection = 'column';
+      });
+      const longContent = await prepare(page, fixture + '<p>滑动时保留正文</p>'.repeat(40));
+      await page.locator('.note-editor-scroll').evaluate((element) => (element.scrollTop = 0));
+      const rect = await add.boundingBox();
+      const session = await page.context().newCDPSession(page);
+      const point = { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
+      const pickers = page.pickerCount;
+      await session.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [point] });
+      for (let step = 1; step <= 8; step++) {
+        await session.send('Input.dispatchTouchEvent', {
+          type: 'touchMove',
+          touchPoints: [{ ...point, y: point.y - step * 10 }],
+        });
+        await page.evaluate(() => new Promise(requestAnimationFrame));
+      }
+      await session.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+      await page.waitForFunction(() => document.querySelector('.note-editor-scroll').scrollTop > 0);
+      assert.equal(page.pickerCount, pickers, 'Swiping over Add image must scroll without opening a picker');
+      assert.equal(await page.evaluate(() => window.tinymce.activeEditor.getContent()), longContent);
+      await session.detach();
+      checked++;
+    }
 
     await page.close();
     console.log(`PASS ${id}`);
@@ -306,67 +358,69 @@ try {
     await page.close();
   }
 
-  const native = await open(profiles[1]);
-  await prepare(native);
-  const nativeCaption = await captionHtml(native);
-  // Headless browser context clipboard: exercise the real keyboard paste event, not just a synthetic event.
-  await native.evaluate(async (png) => {
-    const bytes = Uint8Array.from(atob(png), (ch) => ch.charCodeAt(0));
-    await navigator.clipboard.write([new ClipboardItem({ 'image/png': new Blob([bytes], { type: 'image/png' }) })]);
-  }, png);
-  await native.getByRole('textbox', { name: '在此粘贴图片' }).click();
-  await native.keyboard.press(process.platform === 'darwin' ? 'Meta+V' : 'Control+V');
-  await native.locator('section img').waitFor();
-  assert.equal(await captionHtml(native), nativeCaption);
-  console.log('PASS native clipboard PNG keyboard paste');
-  checked++;
-  const copiedSource = await native.locator('section img').getAttribute('src');
-  await native.evaluate(() => {
-    const editor = window.tinymce.activeEditor;
-    editor.focus();
-    editor.selection.select(editor.getBody().querySelector('section img'));
-  });
-  await native.keyboard.press(process.platform === 'darwin' ? 'Meta+C' : 'Control+C');
-  assert(
+  for (const profile of [profiles[1], profiles[9]]) {
+    const native = await open(profile);
+    await prepare(native);
+    const nativeCaption = await captionHtml(native);
+    // Headless browser context clipboard: exercise the real keyboard paste event, not just a synthetic event.
+    await native.evaluate(async (png) => {
+      const bytes = Uint8Array.from(atob(png), (ch) => ch.charCodeAt(0));
+      await navigator.clipboard.write([new ClipboardItem({ 'image/png': new Blob([bytes], { type: 'image/png' }) })]);
+    }, png);
+    await focusPaste(native, native.getByRole('textbox', { name: '在此粘贴图片' }));
+    await native.keyboard.press(process.platform === 'darwin' ? 'Meta+V' : 'Control+V');
+    await native.locator('section img').waitFor();
+    assert.equal(await captionHtml(native), nativeCaption);
+    console.log('PASS native clipboard PNG keyboard paste');
+    checked++;
+    const copiedSource = await native.locator('section img').getAttribute('src');
+    await native.evaluate(() => {
+      const editor = window.tinymce.activeEditor;
+      editor.focus();
+      editor.selection.select(editor.getBody().querySelector('section img'));
+    });
+    await native.keyboard.press(process.platform === 'darwin' ? 'Meta+C' : 'Control+C');
+    assert(
+      await native.evaluate(async () =>
+        (await navigator.clipboard.read()).some((item) => item.types.includes('text/html')),
+      ),
+    );
+    await prepare(native);
+    await focusPaste(native, native.getByRole('textbox', { name: '在此粘贴图片' }));
+    await native.keyboard.press(process.platform === 'darwin' ? 'Meta+V' : 'Control+V');
+    await native.locator('section img').waitFor();
+    assert.equal(await native.locator('section img').getAttribute('src'), copiedSource);
+    assert.equal(await captionHtml(native), nativeCaption);
+    await undo(native, profiles[1]);
+    await native.getByRole('button', { name: /添加图片/ }).waitFor();
+    checked++;
     await native.evaluate(async () =>
-      (await navigator.clipboard.read()).some((item) => item.types.includes('text/html')),
-    ),
-  );
-  await prepare(native);
-  await native.getByRole('textbox', { name: '在此粘贴图片' }).click();
-  await native.keyboard.press(process.platform === 'darwin' ? 'Meta+V' : 'Control+V');
-  await native.locator('section img').waitFor();
-  assert.equal(await native.locator('section img').getAttribute('src'), copiedSource);
-  assert.equal(await captionHtml(native), nativeCaption);
-  await undo(native, profiles[1]);
-  await native.getByRole('button', { name: /添加图片/ }).waitFor();
-  checked++;
-  await native.evaluate(async () =>
-    navigator.clipboard.write([
-      new ClipboardItem({
-        'text/html': new Blob(['<img src="/brand-scenes/autumn-vista.webp" alt="复制的图片"><p>不替换原文</p>'], {
-          type: 'text/html',
+      navigator.clipboard.write([
+        new ClipboardItem({
+          'text/html': new Blob(['<img src="/brand-scenes/autumn-vista.webp" alt="复制的图片"><p>不替换原文</p>'], {
+            type: 'text/html',
+          }),
         }),
-      }),
-    ]),
-  );
-  await native.getByRole('textbox', { name: '在此粘贴图片' }).click();
-  await native.keyboard.press(process.platform === 'darwin' ? 'Meta+V' : 'Control+V');
-  await native.locator('section img').waitFor();
-  assert.equal(await native.locator('section img').getAttribute('alt'), '复制的图片');
-  assert.equal(await captionHtml(native), nativeCaption);
-  assert(!(await native.evaluate(() => window.tinymce.activeEditor.getContent())).includes('不替换原文'));
-  checked++;
-  const unsafeBefore = await prepare(native);
-  await native.getByRole('textbox', { name: '在此粘贴图片' }).evaluate((element) => {
-    const data = new DataTransfer();
-    data.setData('text/html', '<img src="javascript:alert(1)" onerror="alert(2)">');
-    element.dispatchEvent(new ClipboardEvent('paste', { bubbles: true, cancelable: true, clipboardData: data }));
-  });
-  assert.equal(await native.evaluate(() => window.tinymce.activeEditor.getContent()), unsafeBefore);
-  checked++;
-  console.log('PASS copied HTML images and unsupported URL guard');
-  await native.close();
+      ]),
+    );
+    await focusPaste(native, native.getByRole('textbox', { name: '在此粘贴图片' }));
+    await native.keyboard.press(process.platform === 'darwin' ? 'Meta+V' : 'Control+V');
+    await native.locator('section img').waitFor();
+    assert.equal(await native.locator('section img').getAttribute('alt'), '复制的图片');
+    assert.equal(await captionHtml(native), nativeCaption);
+    assert(!(await native.evaluate(() => window.tinymce.activeEditor.getContent())).includes('不替换原文'));
+    checked++;
+    const unsafeBefore = await prepare(native);
+    await native.getByRole('textbox', { name: '在此粘贴图片' }).evaluate((element) => {
+      const data = new DataTransfer();
+      data.setData('text/html', '<img src="javascript:alert(1)" onerror="alert(2)">');
+      element.dispatchEvent(new ClipboardEvent('paste', { bubbles: true, cancelable: true, clipboardData: data }));
+    });
+    assert.equal(await native.evaluate(() => window.tinymce.activeEditor.getContent()), unsafeBefore);
+    checked++;
+    console.log('PASS copied HTML images and unsupported URL guard');
+    await native.close();
+  }
 
   const readonly = await open(profiles[0], 'readonly');
   await prepare(readonly);
