@@ -3,7 +3,7 @@
    Time, random outcomes and mutations are authorised by the server command boundary. */
 const GardenModel = (() => {
   const RULES = Object.freeze({
-    // 三项任务每天共 15 滴；净化器随等级另产 6 / 8 / 10 滴。每块地浇水 5 滴。
+    // 三项任务每天共 15 滴；海水过滤器随等级另产 6 / 8 / 10 滴。每块地浇水 5 滴。
     dailyWater: 5,
     waterCap: 60,
     purifierCost: 240,
@@ -182,7 +182,7 @@ const GardenModel = (() => {
   function unlocksAt(lv) {
     const prev = lv > 1 ? plotsOpen(lv - 1) : 0;
     const facilities=Object.values(FACILITIES).filter(f=>f.gardenLevel===lv).map(f=>f.name);
-    RULES.purifierLevels.filter(t=>t.gardenLevel===lv).forEach(t=>facilities.push(t.level===1?"海水净化器":`净化器 Lv.${t.level} 升级`));
+    RULES.purifierLevels.filter(t=>t.gardenLevel===lv).forEach(t=>facilities.push(t.level===1?"海水过滤器":`海水过滤器 Lv.${t.level} 升级`));
     return { plots: plotsOpen(lv) - prev, crops: Object.keys(CROPS).filter((k) => CROPS[k].price !== null && CROPS[k].unlock === lv), facilities };
   }
   const emptyPlot = (lastCrop = null) => ({ crop: null, planted: null, watered: null, accel: 0, done: 0, next: null, lastCrop,
@@ -479,9 +479,9 @@ const GardenModel = (() => {
   function buyPurifier(s) {
     if (!s.adopted || s.casting || s.purifier || level(s)<RULES.purifierLevels[0].gardenLevel ||
       ![s.wallet,s.weekSpent+RULES.purifierCost].every(Number.isSafeInteger) || s.wallet<RULES.purifierCost) return false;
-    spend(s,RULES.purifierCost,"建造海水净化器");
+    spend(s,RULES.purifierCost,"建造海水过滤器");
     s.purifier={level:1,purchasedAt:s.now,claimDay:null,claimedWater:0};
-    diary(s,"海水净化器建好了，24 小时后可收第一批清水");
+    diary(s,"海水过滤器建好了，24 小时后可收第一批清水");
     return true;
   }
   function claimPurifier(s) {
@@ -575,9 +575,9 @@ const GardenModel = (() => {
     if(chosen.some(f=>!f||placed(s,f.id)||f.id===s.firstCompanionPending||!purifierMaterial(f.kind,tier,catalog))||chosen.length!==tier.material.count)return false;
     // 所有前提均通过后，一次性扣积分和材料。图鉴、已领取水量均保持不变。
     const used=new Set(plan.ids);
-    spend(s,tier.cost,`净化器升级 Lv.${tier.level}`);
+    spend(s,tier.cost,`海水过滤器升级 Lv.${tier.level}`);
     s.fish=s.fish.filter(f=>!used.has(f.id));s.purifier.level=tier.level;
-    diary(s,`净化器升至 Lv.${tier.level}，每日可收 ${tier.water} 滴清水`);
+    diary(s,`海水过滤器升至 Lv.${tier.level}，每日可收 ${tier.water} 滴清水`);
     return true;
   }
 

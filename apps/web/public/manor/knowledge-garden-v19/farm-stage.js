@@ -12,7 +12,7 @@ const FarmStage = (() => {
       ys = points.map((p) => p[1]);
     return [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)];
   };
-  // 净化器置于独立干燥石台，储水与鱼舱没有出口连接。
+  // 海水过滤器置于独立干燥石台，储水与鱼舱没有出口连接。
   const purifierSite = d => d.purifierSite || (d.safe[2]<d.safe[3] ? [110,535,210,275] : [2665,332,170,175]);
   // Match measured wooden foot soles to the INNER paving edge, not the stone cap.
   // The same ground line is used for both sprite states; atlas padding never positions the feet.

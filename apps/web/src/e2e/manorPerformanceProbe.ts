@@ -57,6 +57,8 @@ if (new URLSearchParams(location.search).has('performance')) {
           missing,
           images: images.length,
           bytes: resources.reduce((n, e) => n + e.encodedBodySize, 0),
+          transferBytes: resources.reduce((n, e) => n + e.transferSize, 0),
+          networkRequests: resources.filter(e => e.transferSize > 0).length,
           requests: resources.length,
           longTasks: tasks,
           totalBlocking: Math.round(tasks.reduce((n, e) => n + Math.max(0, e.duration - 50), 0)),

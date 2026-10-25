@@ -1,8 +1,8 @@
 import type { ManorCommand, ManorSnapshot } from '@lightnote/shared/manor';
 import { apiBaseGet, apiBasePost } from '@/http/request';
 
-export async function getManor(): Promise<ManorSnapshot> {
-  const response = await apiBaseGet('/api/growth/manor', undefined, { silent: true });
+export async function getManor(signal?: AbortSignal): Promise<ManorSnapshot> {
+  const response = await apiBaseGet('/api/growth/manor', undefined, { silent: true, signal });
   if (response.status !== 200 || !response.data) throw { code: response.data?.code, status: response.status };
   return response.data as ManorSnapshot;
 }
