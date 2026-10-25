@@ -147,6 +147,8 @@ C5–C9 激活都要求既有 `points-economy-c4-paid-pity-v1` 和 `points-econo
 
 抽奖页按每次成功请求的收据展示时间、花费和实际奖励，十连在同一条抽奖记录内展开全部结果及保底命中。历史数量以收据为准，不从当前奖池反推；未保留完整收据的旧积分流水仍可在积分明细查看，不拼接成虚构的抽奖结果。背包统一展示各渠道的[获得记录](./points-earning.md#背包获得记录)；AI 奖励自动合并永久余额。
 
+抽奖动效只揭晓服务端已确认的收据；跳过、减少动态效果和离开页面都不参与扣费或发放。慢请求及结果待确认时不得伪造中奖结果。
+
 新 reason：`lottery_paid_cost`、`lottery_paid_win`、`lottery_paid_asset`、`lottery_paid_compensation`、`lottery_free`、`lottery_free_win`、`lottery_free_asset`；历史 `lottery_cost`、`lottery_win`、`lottery_storage`、`lottery_compensation` 必须继续可查。
 
 上线前可运行 `node apps/server/scripts/auditPointsEconomy.js` 做只读基线审计。上线后按日观察：
