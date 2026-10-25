@@ -114,7 +114,7 @@
     const target = event.source as Window, token = nonce.value;
     try {
       let value: unknown = null;
-      if (data.action === 'loading') { clearTimeout(bootTimer); frameShown.value = true; return; }
+      if (data.action === 'loading') { clearTimeout(bootTimer); frameShown.value = true; interactive.value = false; return; }
       else if (data.action === 'ready') { clearTimeout(bootTimer); frameShown.value = true; interactive.value = true; return; }
       else if (data.action === 'get') {
         value = !initialProvided && snapshot && !pending ? decorated(snapshot) : await refresh(g);

@@ -65,6 +65,23 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 describe('庄园加载与主站导航', () => {
+  it('场景因响应式布局重新加载时，恢复加载退出入口', async () => {
+    await mount();
+    const frame = document.querySelector('iframe')!,
+      nonce = new URL(frame.src).searchParams.get('bridge');
+    const notify = async (action: string) => {
+      window.dispatchEvent(new MessageEvent('message', {
+        source: frame.contentWindow,
+        origin: location.origin,
+        data: { type: 'lightnote-manor', nonce, id: 0, action },
+      }));
+      await flush();
+    };
+    await notify('ready');
+    expect(document.body.textContent).not.toContain('manor.returnToApp');
+    await notify('loading');
+    expect(document.body.textContent).toContain('manor.returnToApp');
+  });
   it('初始存档仍在读取时，导航立即退出并取消读取', async () => {
     mocks.read.mockImplementationOnce(() => new Promise(() => {}));
     const router = await mount(),
