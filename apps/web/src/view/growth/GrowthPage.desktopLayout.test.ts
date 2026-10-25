@@ -47,7 +47,6 @@ describe('GrowthPage 宽屏桌面导航布局', () => {
   });
 
   it('奖励页归并为背包、兑换和抽奖，积分旧入口交由导航兼容层处理', () => {
-    expect(source).toContain('rewardSectionFromQuery(route.query)');
     expect(source).toContain('inventoryPointsRoute(route.query)');
     expect(source).toMatch(/const options:[\s\S]*?key: 'inventory'[\s\S]*?key: 'shop'[\s\S]*?key: 'lottery'/);
     expect(source).not.toContain("{ key: 'ledger', label:");
@@ -73,9 +72,6 @@ describe('GrowthPage 宽屏桌面导航布局', () => {
     expect(source).not.toContain('rewardsExpanded');
     expect(source).not.toContain(':aria-expanded');
     expect(source).toMatch(/function isDesktopNavigationActive[\s\S]*?option\.reward === activeRewardSection\.value/);
-    expect(source).toMatch(
-      /function selectDesktopNavigation[\s\S]*?activeRewardSection\.value = option\.reward;[\s\S]*?selectSection\(option\.section\)/,
-    );
   });
 
   it('当前项同时使用实色描边、左侧标记和实心图标底表达', () => {

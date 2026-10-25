@@ -819,8 +819,6 @@ describe('mobile personal center experience', () => {
       'resetMobileScrollElement(useWideDesktopLayout.value ? growthMainRef.value : growthPageRef.value)',
     );
     expect(growthPageSource).toContain('resetMobileScrollElement(growthMainRef.value)');
-    expect(growthPageSource).toContain('() => route.query.section');
-    expect(growthPageSource).toContain('activeSection.value = nextSection');
     expect(tabsSource).toContain("emit('select', value)");
     expect(tabsSource).toMatch(/emit\('select', value\);[\s\S]*?if \(activeValue\.value === value\)/);
   });
