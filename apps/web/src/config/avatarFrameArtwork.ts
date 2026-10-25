@@ -15,7 +15,7 @@ import frameFileConstellation from '@/assets/avatar-frames/frame_file_constellat
 import frameFileIntro from '@/assets/avatar-frames/frame_file_intro_v2.webp';
 import frameFileSeed from '@/assets/avatar-frames/frame_file_seed_v4.webp';
 import frameFileVault from '@/assets/avatar-frames/frame_file_vault_v2.webp';
-import frameFirstLight from '@/assets/avatar-frames/frame_first_light_v3.webp';
+import frameFirstLight from '@/assets/avatar-frames/frame_first_light_v4.webp';
 import frameFlameEffect from '@/assets/avatar-frames/frame_flame_effect_v4.webp';
 import frameFlameEmbers from '@/assets/avatar-frames/frame_flame_embers_v3.webp';
 import frameFlameParticleCurl from '@/assets/avatar-frames/frame_flame_particle_curl_v3.webp';
@@ -112,7 +112,7 @@ export const AVATAR_FRAME_ARTWORK = {
   },
   'first-light': {
     src: frameFirstLight,
-    // 直接裁取初光原型；100px 时中央开孔与 64px 头像严丝合缝，日轮不再被二次补片。
+    // 孔心校准到画布中心；晨光珐琅内缘轻搭头像外缘，不再叠加通用细环。
     artSize: 100,
     innerArtSize: 100,
     outerSize: 86,
