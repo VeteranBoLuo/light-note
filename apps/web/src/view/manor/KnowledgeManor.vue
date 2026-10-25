@@ -7,6 +7,7 @@
     </div>
     <div v-else-if="loading || !frameShown" class="knowledge-manor__state"><BLoading inline loading :title="t('manor.loading')" /></div>
     <iframe v-if="!loading && !failed" ref="frame" :key="nonce" :src="frameUrl" :title="t('manor.title')" referrerpolicy="same-origin" @error="failed = true" />
+    <BButton v-if="!interactive && !failed" class="knowledge-manor__cancel" @click="exit">{{ t('manor.returnToApp') }}</BButton>
   </main>
 </template>
 
@@ -27,7 +28,8 @@
   const user = useUserStore(), bookmark = bookmarkStore(), router = useRouter(), growth = useGrowth();
   const { t } = useI18n();
   const frame = ref<HTMLIFrameElement | null>(null), nonce = ref(crypto.randomUUID());
-  const loading = ref(true), failed = ref(false), frameShown = ref(false);
+  const loading = ref(true), failed = ref(false), frameShown = ref(false), interactive = ref(false);
+  let readController = new AbortController();
   let bootTimer: ReturnType<typeof setTimeout> | undefined;
   let snapshot: ManorSnapshot | null = null, pending: ManorCommand | null = null;
   let owner = '', generation = 0, disposed = false, commanding = false, initialProvided = false;
@@ -41,17 +43,29 @@
   };
   const current = (g: number) => !disposed && g === generation && owner === user.id && user.role === 'root' && !user.adminContext;
   const control = (action: string) => frame.value?.contentWindow?.postMessage({ type: 'lightnote-manor-control', nonce: nonce.value, action }, location.origin);
+  let balanceRefresh: Promise<unknown> | null = null;
+  function refreshSharedBalance(afterPending = false) {
+    const account = user.id, previous = afterPending ? balanceRefresh : null;
+    balanceRefresh = Promise.resolve(previous).then(() => {
+      if (user.id === account && user.role === 'root' && !user.adminContext) return Promise.all([growth.load(true), growth.loadInventory()]);
+    }).catch(() => {});
+  }
 
   function decorated(value: ManorSnapshot): ManorSnapshot {
     return { ...value, quests: value.quests.map(q => ({ ...q, label: t(questKeys[q.key] || 'growth.questUnknown') })) };
   }
   async function settlePending(g: number) {
     if (!pending) return;
-    const request = pending;
+    const request = pending, requestOwner = owner;
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
         const result = await runManorCommand(request);
-        if (!current(g)) throw new Error('stale');
+        if (!current(g)) {
+          // Leaving must not wait for a purchase. Once its receipt arrives,
+          // refresh the same account's shared balance without touching a new scene.
+          if (user.id === requestOwner && user.role === 'root' && !user.adminContext) refreshSharedBalance(true);
+          throw new Error('stale');
+        }
         snapshot = result;
         pending = null; savePendingManorCommand(owner, null);
         return;
@@ -67,14 +81,15 @@
   }
   async function refresh(g: number) {
     await settlePending(g);
-    const result = await getManor();
+    const result = await getManor(readController.signal);
     if (!current(g)) throw new Error('stale');
     snapshot = result;
     return decorated(result);
   }
   async function initialise() {
     const g = ++generation;
-    clearTimeout(bootTimer); frameShown.value = false;
+    readController.abort(); readController = new AbortController();
+    clearTimeout(bootTimer); frameShown.value = false; interactive.value = false;
     releaseMobileOverlayHistory(overlay); overlay = null;
     owner = user.id; snapshot = null; nonce.value = crypto.randomUUID(); initialProvided = false;
     loading.value = true; failed.value = false;
@@ -99,7 +114,8 @@
     const target = event.source as Window, token = nonce.value;
     try {
       let value: unknown = null;
-      if (data.action === 'loading') { clearTimeout(bootTimer); frameShown.value = true; return; }
+      if (data.action === 'loading') { clearTimeout(bootTimer); frameShown.value = true; interactive.value = false; return; }
+      else if (data.action === 'ready') { clearTimeout(bootTimer); frameShown.value = true; interactive.value = true; return; }
       else if (data.action === 'get') {
         value = !initialProvided && snapshot && !pending ? decorated(snapshot) : await refresh(g);
         initialProvided = true;
@@ -133,18 +149,20 @@
       if (current(g)) target.postMessage({ type: 'lightnote-manor-reply', nonce: token, id: data.id, error: t('manor.actionFailed') }, location.origin);
     }
   }
-  useMobileTopBar(['knowledgeManor'], { title: () => t('manor.title'), ownTopBar: true, onBack: () => control('back') });
-  onBeforeRouteLeave(async () => {
+  useMobileTopBar(['knowledgeManor'], { title: () => t('manor.title'), ownTopBar: true, onBack: () => interactive.value ? control('back') : exit() });
+  onBeforeRouteLeave(() => {
     // All exits, including browser back and links to tasks/ledger, refresh the shared balance.
-    if (current(generation)) await Promise.all([growth.load(true), growth.loadInventory()]);
+    // These reads must never hold navigation behind a slow or disconnected API.
+    if (current(generation)) refreshSharedBalance();
   });
   watch(() => [user.id, user.role, Boolean(user.adminContext)], () => { void initialise(); });
   onMounted(() => { window.addEventListener('message', message); void initialise(); });
-  onBeforeUnmount(() => { disposed = true; ++generation; clearTimeout(bootTimer); window.removeEventListener('message', message); releaseMobileOverlayHistory(overlay); });
+  onBeforeUnmount(() => { disposed = true; ++generation; readController.abort(); clearTimeout(bootTimer); window.removeEventListener('message', message); releaseMobileOverlayHistory(overlay); });
 </script>
 
 <style scoped>
   .knowledge-manor { position: relative; width: 100%; height: 100%; min-height: 0; overflow: hidden; }
   .knowledge-manor iframe { display: block; width: 100%; height: 100%; border: 0; }
   .knowledge-manor__state { position: absolute; inset: 0; z-index: 1; display: grid; place-content: center; justify-items: center; gap: var(--ui-space-12, 12px); color: var(--text-color); background: var(--background-color); }
+  .knowledge-manor__cancel { position: absolute; z-index: 2; bottom: var(--ui-space-24, 24px); left: 50%; transform: translateX(-50%); }
 </style>

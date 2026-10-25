@@ -145,7 +145,7 @@ function hudHTML() {
   const rewardReady = M.pendingDailyWater(state).length;
   const pending = M.pendingLevelRewards(state).length;
   const pct = info.next ? (state.xp - info.at) / (info.next - info.at) * 100 : 100;
-  return `<button class="hud-back" data-action="exit" aria-label="返回轻笺"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></button><div class="hud-identity"><button class="hud-stage" data-action="level" title="${pending ? pending + " 级奖励待领取" : "查看成长奖励"}" aria-label="庄园 Lv.${info.lv}，查看等级"><span class="hud-stage-name"><span class="hud-garden-badge" aria-hidden="true">${FarmArt.ui("crest")}</span><span id="phaseLabel"><span class="hud-manor-name">庄园 </span>Lv.${info.lv}</span>${pending ? `<span class="level-hud-pending" aria-label="${pending} 级奖励待领取">${pending}</span>` : ""}</span><span class="hud-growth"><span class="hud-growth-bar"><i id="hudGrowthBar" style="width:${pct}%"></i></span><span class="hud-growth-num">${info.next ? `<b id="hudGrowthNum">${state.xp - info.at}</b> / ${info.next - info.at}` : "已满级"}</span></span></button></div>${!isMobileView() ? `<nav class="game-dock" aria-label="庄园操作" id="gameTools">${dockHTML()}</nav>` : ""}<div class="hud-right"><div class="hud-resources" role="group" aria-label="资源"><button class="res-pill water" data-action="daily" aria-label="水滴 ${state.water} / ${R.waterCap}，通过每日任务和净化器补水">${toolSprite("water")}<b id="waterCount">${state.water}</b><small>/ ${R.waterCap}</small></button><button class="res-pill" data-action="ledger" data-res="points" aria-label="积分 ${state.wallet}">${FarmArt.ui("coin", "res-icon")}<b id="wallet">${state.wallet}</b><small>积分</small></button></div><div class="hud-utils"><button class="util-btn ${rewardReady ? "has-reward" : ""}" data-action="daily" aria-label="每日任务 ${done}/3${rewardReady ? "，有奖励可领取" : ""}">${toolSprite("daily")}<span>任务</span><b>${done}/3</b></button><button class="util-btn plain" data-action="memories" aria-label="庄园日记，相伴 ${M.day(state)} 天"><span class="util-days"><b id="companionDays">${M.day(state)}</b> 天</span><span>相伴</span></button><button class="util-btn round" data-action="rules" aria-label="庄园玩法说明">?</button></div></div><button class="hud-more" data-action="manor-menu" aria-label="更多：任务、日记和帮助">···${rewardReady ? '<i aria-hidden="true"></i>' : ""}</button>`;
+  return `<button class="hud-back" data-action="exit" aria-label="返回轻笺"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></button><div class="hud-identity"><button class="hud-stage" data-action="level" title="${pending ? pending + " 级奖励待领取" : "查看成长奖励"}" aria-label="庄园 Lv.${info.lv}，查看等级"><span class="hud-stage-name"><span class="hud-garden-badge" aria-hidden="true">${FarmArt.ui("crest")}</span><span id="phaseLabel"><span class="hud-manor-name">庄园 </span>Lv.${info.lv}</span>${pending ? `<span class="level-hud-pending" aria-label="${pending} 级奖励待领取">${pending}</span>` : ""}</span><span class="hud-growth"><span class="hud-growth-bar"><i id="hudGrowthBar" style="width:${pct}%"></i></span><span class="hud-growth-num">${info.next ? `<b id="hudGrowthNum">${state.xp - info.at}</b> / ${info.next - info.at}` : "已满级"}</span></span></button></div>${!isMobileView() ? `<nav class="game-dock" aria-label="庄园操作" id="gameTools">${dockHTML()}</nav>` : ""}<div class="hud-right"><div class="hud-resources" role="group" aria-label="资源"><button class="res-pill water" data-action="daily" aria-label="水滴 ${state.water} / ${R.waterCap}，通过每日任务和海水过滤器补水">${toolSprite("water")}<b id="waterCount">${state.water}</b><small>/ ${R.waterCap}</small></button><button class="res-pill" data-action="ledger" data-res="points" aria-label="积分 ${state.wallet}">${FarmArt.ui("coin", "res-icon")}<b id="wallet">${state.wallet}</b><small>积分</small></button></div><div class="hud-utils"><button class="util-btn ${rewardReady ? "has-reward" : ""}" data-action="daily" aria-label="每日任务 ${done}/3${rewardReady ? "，有奖励可领取" : ""}">${toolSprite("daily")}<span>任务</span><b>${done}/3</b></button><button class="util-btn plain" data-action="memories" aria-label="庄园日记，相伴 ${M.day(state)} 天"><span class="util-days"><b id="companionDays">${M.day(state)}</b> 天</span><span>相伴</span></button><button class="util-btn round" data-action="rules" aria-label="庄园玩法说明">?</button></div></div><button class="hud-more" data-action="manor-menu" aria-label="更多：任务、日记和帮助">···${rewardReady ? '<i aria-hidden="true"></i>' : ""}</button>`;
 }
 // 底栏：图标 + 名称两层；养鱼舱入住数写在图标右下角的小牌子上（背包不写数字：种子和仓库两种数会被误读），
 // 完整说明在按钮的读屏标签里
@@ -182,10 +182,11 @@ function guideHTML() {
     const step = discoveryStep();
     if (step === "place") return "";
     const copy = {
+      bay: ["点击路牌，前往海湾", "钓鱼和养鱼舱在海湾，作物会继续生长。"],
       fish: ["点击亮起的水面，抛出第一竿", "作物会继续生长，无需等待。"],
       observe: ["点击亮起的鱼舱，看看新伙伴", "展开管理面板，可以看到产肥倒计时。"]
     }[step];
-    return `<canvas class="discovery-area" aria-hidden="true"></canvas><aside class="discovery-guide" role="note"><span class="guide-pointer" aria-hidden="true">↓</span><span class="guide-short">${{ fish: "点水面钓鱼", observe: "点鱼舱看看" }[step]}</span><strong>${copy[0]}</strong><p>${copy[1]}</p><button class="guide-dismiss" data-action="guide-skip">稍后探索</button></aside>`;
+    return `<canvas class="discovery-area" aria-hidden="true"></canvas><aside class="discovery-guide" role="note"><span class="guide-pointer" aria-hidden="true">↓</span><span class="guide-short">${{ bay: "点路牌去海湾", fish: "点水面钓鱼", observe: "点鱼舱看看" }[step]}</span><strong>${copy[0]}</strong><p>${copy[1]}</p><button class="guide-dismiss" data-action="guide-skip">稍后探索</button></aside>`;
   }
   return "";
 }
@@ -212,15 +213,16 @@ function rulesContent() {
     plant: card("1", "选种子", "点空地选种子；也可以从背包选好，再连续点空地。") + card("2", "浇一次水，安心等成长", `每块地用 ${R.plantWater} 滴水开始生长。此后可以钓鱼、养鱼或离开，作物不会枯萎。`) + card("3", "成熟后点一下收获", "收获放进背包，可留作工坊和蜂箱材料，也可前往商店出售。复收作物会继续生长；花朵采过后仍可观赏。") + `<p class="help-note">开局 4 块田 · Lv.${Object.keys(R.plotsAt).slice(1).join(" / ")} 各开垦 1 块。</p><details class="help-details"><summary>查看作物时长与价格</summary><div class="help-crops">${cropCards}</div></details>`,
     fish: card("1", "到钓鱼区抛竿", `每天 ${R.dailyFree} 次免费，之后每竿用 1 份鱼饵。普通鱼饵 ${R.baitCost} 积分，也能用玉米换。`) + card("2", "咬钩后收竿", "点钓点收竿，也可以等自动收竿；反应快慢不改变结果。首次固定获得一尾会产肥的珊瑚小丑鱼。") + card("3", "决定新伙伴的去向", "首钓伙伴先放进养鱼舱；之后可以入住、收进背包或卖出。淡水与海水伙伴都能通过垂钓遇见，鱼苗袋还可必得一位淡水伙伴。") + `<details class="help-details"><summary>鱼饵与鱼苗袋</summary><p>普通鱼饵每竿消耗 1 份；彩虹鱼饵可保证上钩。</p><p>淡水鱼苗袋 ${R.fryPrice} 积分，每天最多 ${R.fryDaily} 袋，必得一位淡水生物。</p></details>`,
     tank: card("1", "安排入住", `6 个产肥位住鱼，3 个观赏位住其他水族。产肥鱼每 ${R.productionHours} 小时产 1 份，最多储存 ${R.storageLimit} 份，存满暂停。`) + card("2", "打开养鱼管理", "点菜单或场景中的养鱼舱展开管理面板，查看产肥进度并领取；再点一次即可收起。") + card("3", "把肥料撒在正在长的作物上", "常见 / 稀有 / 珍稀 / 传说鱼分别产 1 / 2 / 3 / 4 小时催熟肥。每轮最多缩短一半生长时间；换鱼会重置该位进度。") + `<p class="help-note">兔子每天留一份有机肥，可催熟 30 分钟；麻雀每天带一颗小萝卜种子。点小路上的礼物拾取，未领取的天数不累积。</p>`,
-    points: card("1", "日常任务补水", `轻笺每日任务每完成 1 项可领取 ${R.dailyWater} 滴水，最多存 ${R.waterCap} 滴。三项都完成，再送 2 颗基础种子。商店可建造一台海水净化器，随等级每天另收 ${R.purifierWater}–${R.purifierLevels[2].water} 滴水，未领的旧水不跨天累积。`) + card("2", "种子花积分，收获赚积分", "商店出售基础和进阶种子。稀有种子来自等级、连签、挑战、收藏等奖励；收获后的作物和多余水族可卖积分。") + card("3", "按自己的节奏经营", "没有每日、每周积分上限。收益受土地、水滴、生长与产肥时间约束；多照看可以多收一些。玉米也能留着换鱼饵。") + `<p class="help-note">当前 ${state.wallet} 积分 · 具体收支可点顶部积分查看。</p>`,
-    facilities: card("1", "诱饵工坊 · Lv.6", "180 积分建造。每份普通鱼饵加一份小番茄或生菜，分别制作果香引鱼饵或草木觅贝饵，偏向鱼类或底栖水族。每批 1–3 份，用时 2 小时，完成后留在工坊等你收好。") + card("2", "花园蜂箱 · Lv.6", "160 积分建造。薰衣草一束补 2 份花粉，向日葵一束补 6 份，最多存 6 份。每天可选一株浇过水、正在生长的普通复收作物，消耗 1 份花粉，让下一次收获多 1 份；每株仅一次，不额外增加经验。") + card("3", "海水净化器 · Lv.8", "240 积分建造，每天收 6 滴水。Lv.12 可花 180 积分并消耗 4 只常见海水底栖水族，升为每天 8 滴；Lv.18 再花 360 积分并消耗 2 只稀有海水底栖水族，升为每天 10 滴。材料从待养区手动选择，可混种，图鉴保留。") + '<p class="help-note">每种设施限建一台，未建时封存。制作鱼饵和补充花粉会消耗材料；每天先用免费垂钓次数，之后才消耗选定的鱼饵。</p>',
+    points: card("1", "日常任务补水", `轻笺每日任务每完成 1 项可领取 ${R.dailyWater} 滴水，最多存 ${R.waterCap} 滴。三项都完成，再送 2 颗基础种子。商店可建造一台海水过滤器，随等级每天另收 ${R.purifierWater}–${R.purifierLevels[2].water} 滴水，未领的旧水不跨天累积。`) + card("2", "种子花积分，收获赚积分", "商店出售基础和进阶种子。稀有种子来自等级、连签、挑战、收藏等奖励；收获后的作物和多余水族可卖积分。") + card("3", "按自己的节奏经营", "没有每日、每周积分上限。收益受土地、水滴、生长与产肥时间约束；多照看可以多收一些。玉米也能留着换鱼饵。") + `<p class="help-note">当前 ${state.wallet} 积分 · 具体收支可点顶部积分查看。</p>`,
+    facilities: card("1", "诱饵工坊 · Lv.6", "180 积分建造。每份普通鱼饵加一份小番茄或生菜，分别制作果香引鱼饵或草木觅贝饵，偏向鱼类或底栖水族。每批 1–3 份，用时 2 小时，完成后留在工坊等你收好。") + card("2", "花园蜂箱 · Lv.6", "160 积分建造。薰衣草一束补 2 份花粉，向日葵一束补 6 份，最多存 6 份。每天可选一株浇过水、正在生长的普通复收作物，消耗 1 份花粉，让下一次收获多 1 份；每株仅一次，不额外增加经验。") + card("3", "海水过滤器 · Lv.8", "240 积分建造，每天收 6 滴水。Lv.12 可花 180 积分并消耗 4 只常见海水底栖水族，升为每天 8 滴；Lv.18 再花 360 积分并消耗 2 只稀有海水底栖水族，升为每天 10 滴。材料从待养区手动选择，可混种，图鉴保留。") + '<p class="help-note">每种设施限建一台，未建时封存。制作鱼饵和补充花粉会消耗材料；每天先用免费垂钓次数，之后才消耗选定的鱼饵。</p>',
     collection: card("1", "认识作物和水族", "首次收获作物、发现水族会点亮图鉴，也会增加庄园经验。买种子、浇水和铲除不增加经验。") + card("2", "每升一级都有礼物", "每级一份成长补给，每 5 级一份丰盛礼包。点顶部等级看奖励用途，再去背包使用。") + card("3", "留意庄园的小伙伴", "轻触兔子会回应，点附近草地可以引它跳过去；码头的青蛙也能互动。图鉴的庄园成就还有种子与称号奖励。")
   };
   return `<nav class="help-tabs" aria-label="玩法分类">${tabs.map(([key, label]) => `<button data-action="help-tab" data-tab="${key}" aria-pressed="${helpTab === key}">${label}</button>`).join("")}</nav><div class="help-content">${pages[helpTab]}</div><p class="help-demo">原型体验 · 不扣减真实积分，重置后恢复示例数据。</p>`;
 }
 function discoveryStep() {
-  if (state.discoveryGuide === "observe" && state.fishSlots.some((slot) => farmFish(slot))) return "observe";
-  return state.fish.some((f) => !M.placed(state, f.id) && FISH[f.kind]?.fertilizer) ? "place" : "fish";
+  const step = state.discoveryGuide === "observe" && state.fishSlots.some((slot) => farmFish(slot)) ? "observe" :
+    state.fish.some((f) => !M.placed(state, f.id) && FISH[f.kind]?.fertilizer) ? "place" : "fish";
+  return step !== "place" && FarmStage.cal().area === "garden" ? "bay" : step;
 }
 function positionDiscoveryGuide() {
   document.querySelectorAll(".guide-target").forEach((el) => el.classList.remove("guide-target"));
@@ -254,7 +256,12 @@ function positionDiscoveryGuide() {
   }
   const width = tip.offsetWidth,height = tip.offsetHeight;
   let anchorX = r.left - s.left + r.width / 2;
-  let anchorY = step === "observe" ? r.top + r.height * .32 : r.top;
+  let anchorY = viaSign ? r.top + r.height / 2 : r.top;
+  if (!viaSign && step === "observe") {
+    const polygon=FarmStage.cal().aquarium.swimPolygon;
+    const point=polygon.reduce((sum,p)=>[sum[0]+p[0]/polygon.length,sum[1]+p[1]/polygon.length],[0,0]);
+    const [x,y]=FarmStage.toScene(...point);anchorX=x;anchorY=s.top+y;
+  }
   // 抛竿区采用不规则裁切，外接矩形的中心可能是天空；指向实际落水点。
   if (!viaSign && step === "fish" && typeof FarmStage !== "undefined") {
     const g = FarmStage.pier(),unit = g?.box ? (g.box[2] - g.box[0]) / 1000 : 0;
@@ -294,7 +301,7 @@ function syncGuide() {
   scene.classList.toggle("onboarding", !state.adopted || !!g);
   scene.dataset.guide = g || "";
   const box = $("#gardenGuide");
-  const step = g || (!state.casting ? `${state.discoveryGuide || ""}:${state.fish.length}` : "casting");
+  const step = g || (!state.casting ? `${state.discoveryGuide || ""}:${state.fish.length}:${FarmStage.cal().area || "all"}` : "casting");
   if (box && box.dataset.step !== step) {
     box.innerHTML = guideHTML();
     box.dataset.step = step;
@@ -408,13 +415,13 @@ function closeTankManagement(restore = true) {
   if (restore) (productionOpener?.isConnected ? productionOpener : $('[data-dock="farm"]') || $(".aquarium-hit"))?.focus({ preventScroll: true });
   productionOpener = null;
 }
-function toggleTankManagement(opener) {
+async function toggleTankManagement(opener) {
   if (opener.closest(".garden-scene") && $("#tankProduction") && !$("#tankProduction").hidden) {
     productionOpener = opener;
     closeTankManagement();
-  } else openTankManagement(opener);
+  } else await openTankManagement(opener);
 }
-function openTankManagement(opener = document.activeElement) {
+async function openTankManagement(opener = document.activeElement) {
   closeDialog(false);
   setManorArea("bay");
   if (view !== "tree") {view = "tree";$("#viewSelect").value = "tree";render();}
@@ -422,10 +429,10 @@ function openTankManagement(opener = document.activeElement) {
   if (!panel) return;
   productionOpener = opener?.isConnected && opener.closest(".garden-scene") ? opener : $('[data-dock="farm"]') || $(".aquarium-hit");
   panel.hidden = false;
-  if (state.discoveryGuide === "observe") {state.discoveryGuide = null;update();}
   renderProduction();
   FarmStage.positionManagement();
   $("#productionTitle").focus({ preventScroll: true });
+  if (state.discoveryGuide === "observe") {await GardenLive.dismissGuide(state);update();}
 }
 function renderProduction() {
   syncTankManagement();
@@ -1027,6 +1034,16 @@ function levelRewardItems(lv) {
   if (r.rainbowBait) items.push({ art: '<img src="knowledge-garden-v19/incoming/farm-r2/sprites/icon-bait-rainbow.webp" alt="">', name: "彩虹鱼饵", count: r.rainbowBait, use: "免费次数用完后手动选用，保证上钩" });
   return items;
 }
+function levelFacilityUnlocks(lv) {
+  const items=Object.entries(M.FACILITIES).filter(([,f])=>f.gardenLevel===lv).map(([key,f])=>({
+    art:FarmFacilities.art(key),name:f.name,use:`达到 Lv.${lv} 后，可在场景中查看建造条件。`
+  }));
+  for(const tier of R.purifierLevels.filter(t=>t.gardenLevel===lv)) items.push({
+    art:FarmFacilities.purifierArt(tier.level),name:`海水过滤器${tier.level>1?` Lv.${tier.level}`:""}`,
+    use:tier.level===1?"解锁海水过滤器的建造资格，每日可收清水。":"解锁设备升级资格，可前往海水过滤器查看材料。"
+  });
+  return items;
+}
 function levelDialog(selected) {
   const info = M.levelInfo(state.xp);
   const lv = Number.isInteger(selected) ? Math.max(1, Math.min(R.levels.length, selected)) : info.lv;
@@ -1035,18 +1052,18 @@ function levelDialog(selected) {
   const pending = M.pendingLevelRewards(state);
   const available = lv <= info.lv && !claimed(lv);
   const special = lv % 5 === 0;
-  const items = levelRewardItems(lv),unlocks = M.unlocksAt(lv);
-  const unlockText = [unlocks.plots ? `新增 ${unlocks.plots} 块田，可多种些喜欢的作物` : "", unlocks.crops.length ? `商店上新：${unlocks.crops.map((k) => M.CROPS[k].name).join("、")}` : "", unlocks.facilities.length ? `设施解锁：${unlocks.facilities.join("、")}` : ""].filter(Boolean).join(" · ");
+  const items = levelRewardItems(lv),unlocks = M.unlocksAt(lv),devices=levelFacilityUnlocks(lv);
+  const unlockText = [unlocks.plots ? `新增 ${unlocks.plots} 块田，可多种些喜欢的作物` : "", unlocks.crops.length ? `商店上新：${unlocks.crops.map((k) => M.CROPS[k].name).join("、")}` : ""].filter(Boolean).join(" · ");
   const route = Array.from({ length: 5 }, (_, i) => {
-    const n = start + i,ready = n <= info.lv && !claimed(n);
+    const n = start + i,ready = n <= info.lv && !claimed(n),device=levelFacilityUnlocks(n)[0];
     const label = claimed(n) ? "已领取" : ready ? "待领取" : "未解锁";
-    return `<button class="level-stop ${claimed(n) ? "claimed" : ready ? "unclaimed" : "locked"} ${n % 5 === 0 ? "milestone" : ""} ${ready ? "ready" : ""}" data-action="level-select" data-level="${n}" aria-pressed="${n === lv}" aria-label="Lv.${n}${n % 5 === 0 ? ' 里程碑' : ''}，${label}"><strong>Lv.${n}</strong><span class="level-stop-art" aria-hidden="true">${levelRewardItems(n)[0].art}</span><small>${claimed(n) ? "✓ 已领取" : ready ? "待领取" : "未解锁"}</small>${ready ? '<i aria-hidden="true"></i>' : ""}</button>`;
+    return `<button class="level-stop ${device ? "facility-unlock" : ""} ${claimed(n) ? "claimed" : ready ? "unclaimed" : "locked"} ${n % 5 === 0 ? "milestone" : ""} ${ready ? "ready" : ""}" data-action="level-select" data-level="${n}" aria-pressed="${n === lv}" aria-label="Lv.${n}${device ? `，设备解锁：${device.name}` : n % 5 === 0 ? ' 里程碑' : ''}，${label}"><strong>Lv.${n}${device ? '<span class="level-device-label">设备</span>' : ""}</strong><span class="level-stop-art" aria-hidden="true">${device?.art || levelRewardItems(n)[0].art}</span><small>${claimed(n) ? "✓ 已领取" : ready ? "待领取" : "未解锁"}</small>${ready ? '<i aria-hidden="true"></i>' : ""}</button>`;
   }).join("");
   const pct = info.next ? Math.min(100, (state.xp - info.at) / (info.next - info.at) * 100) : 100;
   const hero = `<div class="level-hero"><div class="level-medal"><small>Lv.</small><b>${info.lv}</b></div><div class="level-journey"><strong>${info.next ? `下一站 · Lv.${info.lv + 1}` : "庄园满级啦"}</strong><div class="level-xp" role="progressbar" aria-label="本级经验" aria-valuemin="0" aria-valuemax="${info.next ? info.next - info.at : 1}" aria-valuenow="${info.next ? state.xp - info.at : 1}"><i style="width:${pct}%"></i></div><span>${info.next ? `${state.xp - info.at} / ${info.next - info.at} 经验` : "每一次照料，都值得收藏"}</span></div>${pending.length ? `<button class="level-pending" data-action="level-select" data-level="${pending[0]}">待领 ${pending.length} 级<span>去看看 ›</span></button>` : '<span class="level-all-claimed">奖励已收好</span>'}</div>`;
   const status = available ? `<button class="button primary" data-action="level-claim" data-level="${lv}">领取 Lv.${lv} ${special ? "礼包" : "奖励"}</button>` : `<span class="level-claim-state">${claimed(lv) ? "✓ 奖励已领取" : `还差 ${R.levels[lv - 1] - state.xp} 经验解锁`}</span>`;
   showDialog("庄园成长", "每级一份心意，每 5 级一份丰盛礼包。",
-  `<div class="level-route-heading"><button data-action="level-select" data-level="${start - 1}" aria-label="前 5 级" ${start === 1 ? "disabled" : ""}><span aria-hidden="true">‹</span></button><strong>Lv.${start} — Lv.${start + 4}</strong><button data-action="level-select" data-level="${start + 5}" aria-label="后 5 级" ${start + 4 === R.levels.length ? "disabled" : ""}><span aria-hidden="true">›</span></button></div><nav class="level-route" aria-label="等级奖励路线">${route}</nav><section class="level-gift ${special ? "milestone" : ""}" aria-label="Lv.${lv} 奖励详情"><div class="level-gift-heading"><h3>Lv.${lv} · ${lv === 1 ? "初见庄园" : special ? "里程碑礼包" : "成长补给"}</h3><span>${special ? "额外加赠" : available ? "可以领取啦" : claimed(lv) ? "已领取" : "升级即得"}</span></div><div class="level-gift-items">${items.map((item) => `<div class="level-gift-item"><span class="level-gift-art" aria-hidden="true">${item.art}</span><div><strong>${item.name}<b>× ${item.count}</b></strong><p>${item.use}</p></div></div>`).join("")}</div>${unlockText ? `<p class="level-unlocks">${unlockText}</p>` : ""}${M.LEVEL_REWARDS[lv].fertilizers ? '<p class="level-gift-note">每轮施肥最多缩短一半生长时间。</p>' : ""}</section>`,
+  `<div class="level-route-heading"><button data-action="level-select" data-level="${start - 1}" aria-label="前 5 级" ${start === 1 ? "disabled" : ""}><span aria-hidden="true">‹</span></button><strong>Lv.${start} — Lv.${start + 4}</strong><button data-action="level-select" data-level="${start + 5}" aria-label="后 5 级" ${start + 4 === R.levels.length ? "disabled" : ""}><span aria-hidden="true">›</span></button></div><nav class="level-route" aria-label="等级奖励路线">${route}</nav><section class="level-gift ${special ? "milestone" : ""}" aria-label="Lv.${lv} 奖励详情"><div class="level-gift-heading"><h3>Lv.${lv} · ${lv === 1 ? "初见庄园" : devices.length ? "设备解锁" : special ? "里程碑礼包" : "成长补给"}</h3><span>${special ? "额外加赠" : available ? "可以领取啦" : claimed(lv) ? "已领取" : "升级即得"}</span></div><div class="level-gift-items">${devices.map(device=>`<div class="level-gift-item level-facility-unlock"><span class="level-gift-art" aria-hidden="true">${device.art}</span><div><strong>${device.name}<b>Lv.${lv} 解锁</b></strong><p>${device.use}</p></div></div>`).join("")}${items.map((item) => `<div class="level-gift-item"><span class="level-gift-art" aria-hidden="true">${item.art}</span><div><strong>${item.name}<b>× ${item.count}</b></strong><p>${item.use}</p></div></div>`).join("")}</div>${unlockText ? `<p class="level-unlocks">${unlockText}</p>` : ""}${M.LEVEL_REWARDS[lv].fertilizers ? '<p class="level-gift-note">每轮施肥最多缩短一半生长时间。</p>' : ""}</section>`,
   `<button class="button level-achievements" data-action="collections">庄园成就</button><div class="level-reward-actions">${pending.length > 1 ? `<button class="button" data-action="level-claim-all">领取全部 ${pending.length} 级</button>` : ""}${status}${claimed(lv) ? `<button class="button primary" data-action="${M.LEVEL_REWARDS[lv].seeds ? "bag" : M.LEVEL_REWARDS[lv].fertilizers ? "fert" : "fishing"}">去${M.LEVEL_REWARDS[lv].seeds ? "播种" : M.LEVEL_REWARDS[lv].fertilizers ? "施肥" : "钓鱼"}</button>` : ""}</div>`, false, "level-dialog");
   // 进度独立于内容滚动，切换等级不重播弹框入场，也不让标题盖住进度。
   const head = $("#dialog .dialog-head > div");
@@ -1265,7 +1282,7 @@ function init() {
         await cast(e);
         break;
       case "tank-manage":
-        toggleTankManagement(b);
+        await toggleTankManagement(b);
         break;
       case "production-tab":
         productionTab = b.dataset.tab === "show" ? "show" : "farm";renderProduction();break;

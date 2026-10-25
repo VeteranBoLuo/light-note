@@ -115,6 +115,7 @@
   import { usePwaInstall } from '@/composables/usePwaInstall';
   import { prefetchResolvedRoute } from '@/utils/routePrefetch';
   import { scheduleNoteEditorStartupPreload } from '@/utils/noteEditorStartupPreload';
+  import { scheduleManorPrewarm } from '@/utils/manorPrewarm';
   import { resolveRouteAuthDecision } from '@/utils/authNavigationIntent.ts';
   import { loadUserAuthModal } from '@/utils/userAuthModalLoader.ts';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
@@ -879,6 +880,7 @@
   }
 
   const noteEditorPreloadExcludedRoutes = new Set([
+    'knowledgeManor',
     'landing',
     'help',
     'updateLogs',
@@ -921,6 +923,22 @@
     () => syncNoteEditorStartupPreload(),
     { immediate: true },
   );
+
+  const manorGrowth = useGrowth();
+  let disposeManorPrewarm: (() => void) | null = null;
+  function stopManorPrewarm() { disposeManorPrewarm?.(); disposeManorPrewarm = null; }
+  function syncManorPrewarm() {
+    stopManorPrewarm();
+    const name = String(router.currentRoute.value.name || '');
+    if (!appStartupReady.value || !user.id || user.role !== 'root' || user.adminContext || !manorGrowth.growth.value?.features?.manor
+      || !name || noteEditorPreloadExcludedRoutes.has(name) || publicStandaloneRoute.value) return;
+    disposeManorPrewarm = scheduleManorPrewarm(bookmark.isMobile);
+  }
+  // Stop at navigation intent, before an async guard or the next route starts loading.
+  const removeManorPrewarmBefore = router.beforeEach(stopManorPrewarm);
+  const removeManorPrewarmAfter = router.afterEach(syncManorPrewarm);
+  watch(() => [appStartupReady.value, user.id, user.role, user.adminContext, manorGrowth.growth.value?.features?.manor, bookmark.isMobile], syncManorPrewarm, { immediate: true });
+  onBeforeUnmount(() => { stopManorPrewarm(); removeManorPrewarmBefore(); removeManorPrewarmAfter(); });
 
   const skipRouter = identityOptionalRoutes;
   const mobileAdminRoute = ['/apiLog', '/operationLog', '/userMg', '/userOpinion', '/imageMg', '/resourceGovernance'];

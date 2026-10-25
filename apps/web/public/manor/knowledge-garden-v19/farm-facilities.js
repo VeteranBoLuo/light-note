@@ -9,7 +9,7 @@ const FarmFacilities = (() => {
   const img = (file, cls = "") => `<img class="${cls}" src="${BASE}${file}" alt="" draggable="false">`;
   function art(key, sealed = false) {
     const file = (typeof FarmStage !== "undefined" ? FarmStage.cal().facilitySprites?.[key] : null) || (key === "workshop" ? "workshop-states-r22.webp" : "hive-states-r18.webp");
-    if (key === "beehive" && file === "hive-states-r33.webp") return `<span class="r18-sprite hive-native-art" data-frame="${sealed ? 1 : 0}" aria-hidden="true">${img("hive-built-r33.webp", "hive-built-img")}${img(file, "hive-sealed-img")}</span>`;
+    if (key === "beehive" && file === "hive-states-r33.webp") return `<span class="r18-sprite hive-native-art" data-frame="${sealed ? 1 : 0}" aria-hidden="true">${sealed ? img(file, "hive-sealed-img") : img("hive-built-r33.webp", "hive-built-img")}</span>`;
     return `<span class="r18-sprite${file === "workshop-states-r33.webp" ? " workshop-native-art" : ""}" data-frame="${sealed ? 1 : 0}" aria-hidden="true">${img(file)}</span>`;
   }
   // Scene-only crops preserve the approved mobile viewing angle; dialogs keep their catalog art.
@@ -17,9 +17,9 @@ const FarmFacilities = (() => {
     const piece = FarmStage.cal().nativePieces?.[key];if (!piece) return "";
     const frame = (kind, i) => {
       const [l, t, r, b] = piece[kind],w = r - l,h = b - t,sourceH = kind === "built" ? 1712 : 1711;
-      return `<span class="native-prop-frame" data-native-frame="${i}"><img src="${BASE}mobile-machines-${kind}-r48.png" alt="" draggable="false" style="left:${-l / w * 100}%;top:${-t / h * 100}%;width:${919 / w * 100}%;height:${sourceH / h * 100}%"></span>`;
+      return `<span class="native-prop-frame" data-native-frame="${i}"><img src="${BASE}mobile-machines-${kind}-r48.webp" alt="" draggable="false" style="left:${-l / w * 100}%;top:${-t / h * 100}%;width:${919 / w * 100}%;height:${sourceH / h * 100}%"></span>`;
     };
-    return `<span class="r18-sprite scene-native-prop" data-frame="${sealed ? 1 : 0}" aria-hidden="true">${frame("built", 0)}${frame("sealed", 1)}</span>`;
+    return `<span class="r18-sprite scene-native-prop" data-frame="${sealed ? 1 : 0}" aria-hidden="true">${sealed ? frame("sealed", 1) : frame("built", 0)}</span>`;
   }
   const sceneArt = (key, sealed = false) => nativeSceneArt(key, sealed) || art(key, sealed);
   const baitArt = (key) => `<span class="r18-sprite bait-jar" data-frame="${key === "herb" ? 1 : 0}" aria-hidden="true">${img("crafted-baits-r18.webp")}</span>`;
@@ -32,7 +32,7 @@ const FarmFacilities = (() => {
   const craftClock = (hours) => {const m = Math.max(1, Math.ceil(hours * 60));return `${Math.floor(m / 60)}小时${m % 60 ? `${m % 60}分` : ""}`;};
   const visible = (key, d = FarmStage.cal()) => !!d.facilities?.[key] && (!d.area || d.area === (key === "beehive" ? "garden" : "bay"));
   function sceneHTML() {
-    return keys.map((key) => `<button id="${key}Spot" class="scene-facility ${key}-fixture" data-action="facility-open" data-facility="${key}" type="button" hidden><span class="fixture-art">${sceneArt(key, !state[key])}</span><span class="fixture-hit" aria-hidden="true"></span><span class="facility-bees" aria-hidden="true">${key === "beehive" ? Array.from({ length: 2 }, () => beeArt()).join("") : ""}</span><span class="fixture-state"></span></button>`).join("");
+    return keys.map((key) => `<button id="${key}Spot" class="scene-facility ${key}-fixture" data-action="facility-open" data-facility="${key}" type="button" hidden><span class="fixture-art"></span><span class="fixture-hit" aria-hidden="true"></span><span class="facility-bees" aria-hidden="true"></span><span class="fixture-state"></span></button>`).join("");
   }
   function sync() {
     const d = FarmStage.cal();
@@ -55,6 +55,12 @@ const FarmFacilities = (() => {
       el.classList.toggle("precise-hit", !!hit);
       if (hit) el.style.setProperty("--fixture-hit", FarmStage.hitClip(hit));
       const artwork = el.querySelector(".fixture-art");
+      const signature = `${d.asset}:${owned}`;
+      if (artwork.dataset.signature !== signature) {
+        artwork.innerHTML = sceneArt(key, !owned);artwork.dataset.signature = signature;
+      }
+      const bees = el.querySelector(".facility-bees");
+      if (key === "beehive" && owned && !bees.children.length) bees.innerHTML = Array.from({length:2},()=>beeArt()).join("");
       artwork.style.left = (pose.rect[0] - site[0]) * scale + "px";artwork.style.top = (pose.rect[1] - site[1]) * scale + "px";
       artwork.style.width = pose.rect[2] * scale + "px";artwork.style.height = pose.rect[3] * scale + "px";
       const target = el.querySelector('.fixture-hit');
@@ -77,6 +83,11 @@ const FarmFacilities = (() => {
   }
   function open(key, origin = "scene") {
     if (![...keys, "purifier"].includes(key)) return;
+    // Warm only the mobile built frame the user is about to construct.
+    // Its catalog preview has a different angle; the rest of the scene stays idle.
+    if (!state[key] && FarmStage.cal().nativePieces?.[key]) {
+      const preview = new Image();preview.decoding = "async";preview.src = `${BASE}mobile-machines-built-r48.webp`;
+    }
     if (key === "workshop") {workshopOrigin = origin;workshopPane = M.workshopStatus(state).phase === "idle" || !state.workshop ? "manual" : "targeted";}
     if (!state[key] || key === "purifier") return detailDialog(key, origin);
     if (key === "workshop") workshopDialog();else beehiveDialog();
@@ -85,10 +96,10 @@ const FarmFacilities = (() => {
     if (![...keys, "purifier"].includes(key)) return;
     detailOrigin = origin;
     const water = key === "purifier",p = water ? M.purifierStatus(state) : null,owned = water ? p.owned : !!state[key];
-    const def = water ? { name: "海水净化器", cost: R.purifierCost, gardenLevel: 8 } : config(key);
+    const def = water ? { name: "海水过滤器", cost: R.purifierCost, gardenLevel: 8 } : config(key);
     const rows = key === "workshop" ? [["clock", "制作时间", "2 小时 / 批"], ["crate", "每批产出", "1–3 份"], ["coin", "建造价格", `${def.cost} 积分`], ["build", "建造限制", "限建 1 台"]] : key === "beehive" ? [["pollen", "每日授粉", "1 次 / 天"], ["crate", "花粉容量", "最多 6 份"], ["coin", "建造价格", `${def.cost} 积分`], ["sprout", "收获加成", "下一轮 +1 份"]] : [["water", "每日产水", `${p.daily || 6} 滴`], ["coin", "建造价格", `${def.cost} 积分`], ["build", "建造限制", "限建 1 台"]];
     const full = water && owned && p.ready > 0 && state.water >= R.waterCap;
-    const explanation = key === "workshop" ? "作物 + 普通鱼饵，研制定向鱼饵。" : key === "beehive" ? "花束补充花粉，让下一轮多收一份。" : full ? "水桶已满，先浇水腾出空间。当日余量会留在净化器中。" : "每日多一份清水，点击收进水桶。";
+    const explanation = key === "workshop" ? "作物 + 普通鱼饵，研制定向鱼饵。" : key === "beehive" ? "花束补充花粉，让下一轮多收一份。" : full ? "水桶已满，先浇水腾出空间。当日余量会留在海水过滤器中。" : "每日多一份清水，点击收进水桶。";
     const recipes = key === "workshop" ? `<section class="facility-recipe-panel"><h4>可研制的定向鱼饵</h4>${["fruit", "herb"].map((k) => `<div class="detail-recipe"><span>${FarmArt.icon(M.BAIT_RECIPES[k].crop)}<small>${M.CROPS[M.BAIT_RECIPES[k].crop].name}</small></span><b>＋</b><span>${FarmArt.ui("bait")}<small>普通鱼饵</small></span><b>→</b><span>${baitArt(k)}<small>${M.BAIT_RECIPES[k].name}</small></span></div>`).join("")}</section>` : key === "beehive" ? `<section class="facility-recipe-panel"><h4>花束变花粉</h4><div class="detail-recipe">${FarmArt.icon("lavender")}<b>→</b>${FarmArt.ui("pollen")}<span>花粉仓 ${owned ? M.beehiveStatus(state).pollen : 0}/6</span></div>${pollenTray(owned ? M.beehiveStatus(state).pollen : 0)}</section>` : `<section class="facility-recipe-panel"><h4>升级后，每日更多清水</h4><div class="purifier-tier-row">${R.purifierLevels.map((tier, i) => `<div class="${p.level === i + 1 ? "current" : ""}">${purifierArt(i + 1)}<b>Lv.${i + 1}</b><span>${FarmArt.ui("water")}${tier.water} 滴 / 日</span></div>`).join("")}</div></section>`;
     let primary = owned ? water && (!p.ready || full) ? "" : `<button class="button primary" data-action="${water ? "purifier-focus" : "facility-open"}" data-origin="${origin}" data-facility="${key}">${water ? "去收水" : "使用设施"}</button>` : origin === "scene" ? '<button class="button primary" data-action="facility-shop">前往商店</button>' : `<button class="button primary" data-action="${water ? "buy-purifier" : "facility-build"}" data-facility="${key}" ${M.level(state) < def.gardenLevel || state.wallet < def.cost ? "disabled" : ""}>建造 · ${def.cost} 积分</button>`;
     if (water && owned && R.purifierLevels[p.level]) primary += '<button class="button" data-action="purifier-upgrade">查看升级</button>';
@@ -112,7 +123,7 @@ const FarmFacilities = (() => {
       return `<article class="game-facility-card" data-facility-card="${key}"><header><h3>${def.name}</h3><span>${owned ? "已建成" : "限建 1 台"}</span></header><div class="facility-card-art">${art(key, !owned)}</div><div class="facility-card-metric">${metric}</div><p>${key === "workshop" ? "作物＋普通鱼饵，制作定向鱼饵" : "花束补粉 · 下一轮多收 1 份"}</p><span class="facility-card-status">${FarmArt.ui(owned ? "house" : "lock")}${stateText}${key === "beehive" && owned ? `<span class="card-pollen-track"><i style="width:${status.pollen / 6 * 100}%"></i></span>` : ""}</span><div class="market-price">${owned ? '<small>永久拥有</small>' : `${FarmArt.ui("coin")}<strong>${def.cost}</strong><span>积分</span>`}</div><div class="facility-card-actions">${owned ? `<button class="tile-btn primary" data-action="facility-open" data-origin="shop" data-facility="${key}">${key === "workshop" ? "使用工坊" : "使用蜂箱"}</button>` : ""}${detail(key)}</div></article>`;
     };
     const p = M.purifierStatus(state),next = R.purifierLevels[p.level];
-    return keys.map(card).join("") + `<article class="game-facility-card" data-facility-card="purifier"><header><h3>海水净化器</h3><span>${p.owned ? `Lv.${p.level}` : "限建 1 台"}</span></header><div class="facility-card-art">${purifierArt(p.level)}</div><div class="facility-card-metric"><b>${FarmArt.ui("water")}每日 ${p.daily || R.purifierWater} 滴</b><span>清水收进水桶</span></div><p>清水封闭储存，点击收进水桶</p><span class="facility-card-status">${p.owned ? p.remaining ? `还需 ${craftClock(p.remaining)}` : next ? `可升级为每日 ${next.water} 滴` : "已升满级" : lv < 8 ? "Lv.8 解锁" : "待建造"}</span><div class="market-price">${p.owned ? '<small>永久拥有</small>' : `${FarmArt.ui("coin")}<strong>${R.purifierCost}</strong><span>积分</span>`}</div><div class="facility-card-actions">${p.owned ? '<button class="tile-btn primary" data-action="purifier-focus">去收水</button>' : ""}${detail("purifier")}</div></article>`;
+    return keys.map(card).join("") + `<article class="game-facility-card" data-facility-card="purifier"><header><h3>海水过滤器</h3><span>${p.owned ? `Lv.${p.level}` : "限建 1 台"}</span></header><div class="facility-card-art">${purifierArt(p.level)}</div><div class="facility-card-metric"><b>${FarmArt.ui("water")}每日 ${p.daily || R.purifierWater} 滴</b><span>清水收进水桶</span></div><p>清水封闭储存，点击收进水桶</p><span class="facility-card-status">${p.owned ? p.remaining ? `还需 ${craftClock(p.remaining)}` : next ? `可升级为每日 ${next.water} 滴` : "已升满级" : lv < 8 ? "Lv.8 解锁" : "待建造"}</span><div class="market-price">${p.owned ? '<small>永久拥有</small>' : `${FarmArt.ui("coin")}<strong>${R.purifierCost}</strong><span>积分</span>`}</div><div class="facility-card-actions">${p.owned ? '<button class="tile-btn primary" data-action="purifier-focus">去收水</button>' : ""}${detail("purifier")}</div></article>`;
   }
   function buildDialog(key) {
     const def = config(key);if (!def || state[key]) return;
@@ -194,7 +205,7 @@ const FarmFacilities = (() => {
     const options = eligible.map((f) => {ordinal[f.kind] = (ordinal[f.kind] || 0) + 1;const checked = selectedMaterials.includes(f.id);
       return `<button class="upgrade-creature ${checked ? "selected" : ""}" role="checkbox" aria-checked="${checked}" data-action="upgrade-material" data-fish="${f.id}" ${!checked && selectedMaterials.length >= plan.required ? "disabled" : ""}><span>${fishArt(f.kind)}</span><strong>${FISH[f.kind].name}</strong><small>${checked ? "✓ 已选" : "第 " + ordinal[f.kind] + " 只"}${counts[f.kind] > 1 ? " · 重复伙伴" : ""}</small></button>`;
     }).join("");
-    showDialog(`净化器升级 Lv.${plan.level}`, `选择待养区中的${plan.quality}海水底栖水族，可混种。`,
+    showDialog(`海水过滤器升级 Lv.${plan.level}`, `选择待养区中的${plan.quality}海水底栖水族，可混种。`,
     `<div class="upgrade-preview">${purifierArt(plan.level)}<strong>每日 ${tier.water} 滴清水</strong></div><div class="upgrade-selection-count">已选 <b>${selectedMaterials.length} / ${plan.required}</b><span>可用 ${plan.available} 只</span></div>${options ? `<div class="upgrade-creatures">${options}</div>` : '<div class="facility-empty">还没有符合条件的待养水族，可以先去海钓收集。</div>'}<div class="facility-build-conditions"><span class="${M.level(state) < tier.gardenLevel ? "unmet" : "met"}">庄园 Lv.${tier.gardenLevel} · 当前 Lv.${M.level(state)}</span><span class="${state.wallet < tier.cost ? "unmet" : "met"}">${tier.cost} 积分 · 当前 ${state.wallet}</span></div><p class="facility-hint">确认后实际消耗所选个体，图鉴保留；已入住的伙伴不参与。</p>`,
     `<button class="button" data-action="facility-shop">返回商店</button><button class="button primary" data-action="upgrade-confirm" ${plan.ready ? "" : "disabled"}>确认消耗并升级 · ${tier.cost} 积分</button>`, false, "purifier-upgrade-dialog");
   }
@@ -290,7 +301,7 @@ const FarmFacilities = (() => {
           const pending = pendingUpgrade;pendingUpgrade = null;
           if (!pending || pending.session !== state || $("#dialog").dataset.family !== "purifier-upgrade-dialog") break;
           button.disabled = true;const ok = await M.upgradePurifier(state, pending.plan, FISH);update();FarmUI.shopDialog("facilities");
-          toast(ok ? `净化器升至 Lv.${M.purifierStatus(state).level}` : "未升级，所选个体、积分或设备状态已变化");break;
+          toast(ok ? `海水过滤器升至 Lv.${M.purifierStatus(state).level}` : "未升级，所选个体、积分或设备状态已变化");break;
         }
       default:return false;
     }

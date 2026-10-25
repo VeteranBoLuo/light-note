@@ -23,5 +23,14 @@ describe('庄园生产入口与经典规则脚本', () => {
     }
     expect(entry).toMatch(/data-ui-script="knowledge-garden-v19\/garden-ui\.js\?v=[a-f0-9]{16}"/);
     expect(entry).toMatch(/data-worker="knowledge-garden-v19\/garden-water-worker\.js\?v=[a-f0-9]{16}"/);
+    const preload = JSON.parse(assets.get('manor/preload.json')!);
+    expect(preload.desktop).toContain('/manor/knowledge-garden-v19/courtyard/pc-terrain-r36.webp');
+    expect(preload.mobile).toContain('/manor/knowledge-garden-v19/courtyard/mobile-garden-r18.webp');
+    expect(preload.mobile).not.toContain('/manor/knowledge-garden-v19/courtyard/pc-terrain-r36.webp');
+    for (const url of [...preload.desktop, ...preload.mobile]) {
+      expect(url.startsWith('/manor/')).toBe(true);
+      const file=url.replace('/manor/', '').split('?')[0];
+      expect(file === 'garden-model.js' || readFileSync(new URL(`../../public/manor/${file}`, import.meta.url)).length > 0).toBe(true);
+    }
   });
 });

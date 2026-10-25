@@ -1069,6 +1069,9 @@ html.kbd-nav .scene-gift:focus-visible::after { opacity: 1; }
 .level-stop[aria-pressed="true"] { outline: 2px solid #6b973d; outline-offset: 1px; background: #edf4d7; color: #43652c; }
 .level-stop.ready i { position: absolute; right: calc(6px * var(--d)); top: calc(6px * var(--d)); width: calc(7px * var(--d)); height: calc(7px * var(--d)); border-radius: 50%; background: #699b3c; border: 1px solid #fff8df; }
 .level-stop-art { display: block; width: calc(42px * var(--d)); height: calc(42px * var(--d)); }
+.level-device-label { display: inline-block; margin-left: calc(3px * var(--d)); color: #895c20; font-size: max(10px,calc(10px * var(--d))); }
+.level-gift-item.level-facility-unlock { border-color: #d0ac65; background: #fff4cf; }
+.level-stop-art > .r18-sprite,.level-gift-art > .r18-sprite,.level-stop-art > .purifier-grade,.level-gift-art > .purifier-grade { display: block; position: relative; width: 100%; height: 100%; }
 .level-stop-art img,.level-gift-art img { display: block; width: 100%; height: 100%; object-fit: contain; }
 .level-gift { margin-top: calc(14px * var(--d)); padding: calc(14px * var(--d)); border: 1px solid #c7c891; border-radius: calc(14px * var(--d)); background: linear-gradient(#fffdf4,#f3efd9); box-shadow: 0 calc(3px * var(--d)) #d6c493; }
 .level-gift.milestone { border-color: #d1a859; background: linear-gradient(115deg,#fff9de,#f7e7bd); }

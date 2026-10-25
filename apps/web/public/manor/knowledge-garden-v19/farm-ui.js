@@ -178,12 +178,12 @@ const FarmUI = (() => {
       fixture.dataset.state = p.remaining ? "working" : p.ready ? full ? "full" : "ready" : "spent";
       fixture.dataset.level = p.level;
       fixture.querySelector(".purifier-state").textContent = p.remaining ? plotTime(p.remaining) : p.ready ? `${p.ready} 滴待领` : "今日已领";
-      fixture.setAttribute("aria-label", `海水净化器，${p.remaining ? `第一批清水还需 ${plotTime(p.remaining)}` : p.ready ? `${p.ready} 滴清水${full ? "待领取，水桶已满" : "可领取"}` : "今日已领完，明天再来"}`);
+      fixture.setAttribute("aria-label", `海水过滤器，${p.remaining ? `第一批清水还需 ${plotTime(p.remaining)}` : p.ready ? `${p.ready} 滴清水${full ? "待领取，水桶已满" : "可领取"}` : "今日已领完，明天再来"}`);
     } else {
       const required = R.purifierLevels[0].gardenLevel,unlocked = M.level(state) >= required;
       fixture.dataset.state = "sealed";fixture.dataset.level = "0";
-      fixture.querySelector(".purifier-state").textContent = unlocked ? cal().nativePieces?.purifier ? "净水器" : "待建造" : `Lv.${required} 解锁`;
-      fixture.setAttribute("aria-label", `封存的海水净化器，${unlocked ? `待建造，需要 ${R.purifierCost} 积分` : `庄园 Lv.${required} 解锁`}，点击查看建造条件`);
+      fixture.querySelector(".purifier-state").textContent = unlocked ? cal().nativePieces?.purifier ? "海水过滤器" : "待建造" : `Lv.${required} 解锁`;
+      fixture.setAttribute("aria-label", `封存的海水过滤器，${unlocked ? `待建造，需要 ${R.purifierCost} 积分` : `庄园 Lv.${required} 解锁`}，点击查看建造条件`);
     }
     if (wasHidden !== fixture.hidden && typeof FarmStage !== "undefined") FarmStage.layout();
   }
@@ -800,7 +800,7 @@ const FarmUI = (() => {
     if (type === "seed" && (!crop || crop.price === null || !Number.isInteger(count) || count < 1 || count > 10 || M.level(state) < crop.unlock) ||
     type === "bait" && (!Number.isInteger(count) || count < 1 || count > R.baitBundleCount) || type === "fry" && (count !== 1 || !M.fryLeft(state)) ||
     type === "purifier" && (count !== 1 || state.purifier || M.level(state) < R.purifierLevels[0].gardenLevel) || !["seed", "bait", "fry", "purifier"].includes(type)) return;
-    const name = type === "seed" ? crop.name + "种子" : type === "bait" ? "普通鱼饵" : type === "purifier" ? "海水净化器" : "淡水鱼苗袋";
+    const name = type === "seed" ? crop.name + "种子" : type === "bait" ? "普通鱼饵" : type === "purifier" ? "海水过滤器" : "淡水鱼苗袋";
     const total = type === "bait" ? M.baitPrice(count) : count * (type === "seed" ? crop.price : type === "purifier" ? R.purifierCost : R.fryPrice);
     const art = type === "seed" ? FarmArt.packet(seed) : type === "purifier" ? purifierArt() : type === "fry" ? FarmArt.fryBag() : `<img src="${R2_ART}icon-bait.webp" alt="">`;
     const fixed = type === "fry" || type === "purifier";
@@ -854,7 +854,7 @@ const FarmUI = (() => {
       closeDialog(false);if (typeof setManorArea === "function") setManorArea("bay");update();
       const fixture = $("#purifierSpot");fixture?.classList.add("just-built");
       const session = state;setTimeout(() => {if (state === session) fixture?.classList.remove("just-built");}, 900);
-      toast("净化器已建成 · 24 小时后可收第一批清水");
+      toast("海水过滤器已建成 · 24 小时后可收第一批清水");
       fixture?.focus({ preventScroll: true });return;
     }
     const ok = p.type === "seed" ? await M.buySeed(state, p.seed, p.count) : await M.buyBait(state, p.count);
