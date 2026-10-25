@@ -209,7 +209,7 @@ describe('独立资源商店', () => {
     const host = await mountStore();
     await vi.waitFor(() => expect(host.textContent).toContain('当前环境关闭支付'));
     expect(host.textContent).not.toContain('套餐预览');
-    const cards = host.querySelectorAll<HTMLElement>('.package-card:not(.is-campaign)');
+    const cards = host.querySelectorAll<HTMLElement>('[role="tabpanel"][aria-hidden="false"] .package-card');
     expect(cards).toHaveLength(4);
     expect(host.querySelector('.package-card__choice')).toBeNull();
     expect([...cards].map((card) => card.textContent)).toEqual([
@@ -270,7 +270,7 @@ describe('独立资源商店', () => {
     });
     const host = await mountStore();
     await vi.waitFor(() => expect(host.textContent).toContain(category === 'ai' ? '购买 ¥6' : '购买 ¥10'));
-    const cards = [...host.querySelectorAll<HTMLElement>('.package-card')];
+    const cards = [...host.querySelectorAll<HTMLElement>('[role="tabpanel"][aria-hidden="false"] .package-card')];
     expect(cards).toHaveLength(4);
     const quotaLabels = ['30万', '90万', '250万', '500万'];
     const prices = category === 'ai' ? [6, 18, 50, 100] : [10, 30, 88, 168];
@@ -300,6 +300,42 @@ describe('独立资源商店', () => {
         undefined,
       ),
     );
+  });
+
+  it('分类切换保留原卡片，仅开放当前分类的浏览与购买', async () => {
+    mocks.getCatalog.mockResolvedValueOnce({
+      catalogVersion: SUPPORT_PACKAGE_CATALOG_VERSION,
+      catalogEnabled: true,
+      checkoutEnabled: true,
+      grantEnabled: true,
+      campaignsEnabled: false,
+      packages: SUPPORT_PACKAGE_CATALOG.map((item) => ({ ...item, firstPurchaseStatus: 'not_applicable' })),
+      campaigns: [],
+    });
+    const host = await mountStore();
+    await vi.waitFor(() => expect(host.querySelectorAll('.package-card')).toHaveLength(12));
+    const originalCards = [...host.querySelectorAll('.package-card')];
+    const tabs = [...host.querySelectorAll<HTMLElement>('[role="tab"]')];
+    for (const [index, label] of ['AI 额度', '云空间', '组合套餐'].entries()) {
+      tabs[index]?.click();
+      await nextTick();
+      const panels = [...host.querySelectorAll('[role="tabpanel"]')];
+      expect(panels.filter((panel) => panel.getAttribute('aria-hidden') === 'false')).toHaveLength(1);
+      const activePanel = panels[index]!;
+      expect(activePanel.getAttribute('aria-label')).toBe(label);
+      expect(activePanel.hasAttribute('inert')).toBe(false);
+      expect(activePanel.querySelectorAll('.package-card')).toHaveLength(4);
+      for (const panel of panels.filter((panel) => panel !== activePanel))
+        expect(panel.hasAttribute('inert')).toBe(true);
+      expect([...host.querySelectorAll('.package-card')]).toEqual(originalCards);
+    }
+    host.querySelector<HTMLButtonElement>('[role="tabpanel"][aria-hidden="false"] .package-card__action')?.click();
+    await nextTick();
+    expect(document.body.querySelector('.checkout-modal')?.textContent).toContain(
+      '本次预计到账30万 AI 额度 + 256 MB 云空间',
+    );
+    expect(mocks.getCatalog).toHaveBeenCalledTimes(1);
+    expect(mocks.createIntent).not.toHaveBeenCalled();
   });
 
   it('未登录时仍可浏览目录，但不能创建购买订单', async () => {

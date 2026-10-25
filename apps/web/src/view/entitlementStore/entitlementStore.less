@@ -64,6 +64,27 @@
   background: var(--primary-color);
   color: white;
 }
+.store-tabs :deep(.tab),
+.store-tabs :deep(.tab.is-active) {
+  font-weight: 600;
+}
+.store-catalog__descriptions,
+.package-panels {
+  display: grid;
+  min-width: 0;
+}
+// 同层网格保留各分类的自然高度，避免文案或卡片换行使切换后的页面重排。
+.store-catalog__descriptions > p,
+.package-panels > .package-grid {
+  grid-area: 1 / 1;
+}
+.package-panels > .package-grid {
+  grid-auto-rows: 1fr;
+}
+.store-catalog .is-inactive {
+  visibility: hidden;
+  pointer-events: none;
+}
 .package-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
