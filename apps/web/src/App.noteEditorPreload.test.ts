@@ -1,12 +1,15 @@
 import { describe, expect, it } from 'vitest';
+import ts from 'typescript';
 import appSource from './App.vue?raw';
+
+const script = appSource.match(/<script setup[^>]*>([\s\S]*?)<\/script>/)?.[1] || '';
+const parsed = ts.createSourceFile('App.ts', script, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+const preloadBlock = parsed.statements.find(
+  node => ts.isFunctionDeclaration(node) && node.name?.text === 'syncNoteEditorStartupPreload',
+)?.getText(parsed) || '';
 
 describe('笔记编辑器启动预热接入', () => {
   it('只在桌面端空闲期调度，移动端不后台解析两套大型编辑器', () => {
-    const preloadBlock = appSource.slice(
-      appSource.indexOf('function syncNoteEditorStartupPreload'),
-      appSource.indexOf('const skipRouter'),
-    );
     expect(appSource).toContain('scheduleNoteEditorStartupPreload');
     expect(preloadBlock).toContain('const supportedPlatform = bookmark.isDesktop');
     expect(preloadBlock).not.toContain('isAndroidApp || bookmark.isDesktop');
