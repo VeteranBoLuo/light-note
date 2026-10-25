@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 const module = {
   exports: {} as {
+    sourceURL: (path: string, base: string) => string;
     textureSize: (w: number, h: number, display: number, dpr?: number, limit?: number) => { width: number; height: number };
     shorelineMask: (p: Uint8ClampedArray, w: number, h: number) => Uint8Array;
     surfaceMask: (p: Uint8ClampedArray, s: Uint8ClampedArray, w: number, h: number, r?: number) => Uint8Array;
@@ -17,10 +18,17 @@ const module = {
 };
 runInNewContext(
   readFileSync(new URL('../../../public/manor/knowledge-garden-v19/garden-environment.js', import.meta.url), 'utf8'),
-  { module },
+  { module, URL },
 );
 const water = module.exports;
 describe('庄园水面准备', () => {
+  it('合并脚本的 Worker 模块地址解析为绝对 URL，并保留版本而不携带宿主桥接参数', () => {
+    const base = 'https://boluo66.top/manor/index.html?bridge=private-fixture';
+    expect(water.sourceURL('knowledge-garden-v19/garden-environment.js?v=abc123', base))
+      .toBe('https://boluo66.top/manor/knowledge-garden-v19/garden-environment.js?v=abc123');
+    expect(water.sourceURL('https://boluo66.top/manor/environment.js?v=xyz', base))
+      .toBe('https://boluo66.top/manor/environment.js?v=xyz');
+  });
   it('保留原图与高分屏所需分辨率，按 GPU 上限约束尺寸而不扩充到二次幂', () => {
     expect(water.textureSize(1808, 870, 1470, 1)).toEqual({ width: 1808, height: 870 });
     expect(water.textureSize(1808, 870, 1470, 2)).toEqual({ width: 2940, height: 1415 });
