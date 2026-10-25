@@ -555,6 +555,7 @@
   }
   .lt-draw-button--free {
     width: 70%;
+    margin-inline: auto;
   }
   .lt-paid-actions {
     display: grid;

@@ -44,6 +44,12 @@ const response = (rows: any[], hasMore = false) => ({
   status: 200,
   data: { rows, hasMore, nextCursor: hasMore ? 'next' : null },
 });
+function setListSize(list: HTMLElement, height: number, contentHeight: number) {
+  Object.defineProperties(list, {
+    clientHeight: { configurable: true, value: height },
+    scrollHeight: { configurable: true, value: contentHeight },
+  });
+}
 async function mount(inventory = false) {
   const host = document.createElement('div');
   document.body.append(host);
@@ -65,7 +71,11 @@ beforeEach(() => {
   mocks.getAcquisitions.mockReset();
   mocks.getAcquisitions.mockResolvedValue(response([]));
 });
-afterEach(() => cleanup?.());
+afterEach(() => {
+  cleanup?.();
+  cleanup = undefined;
+  vi.unstubAllGlobals();
+});
 
 describe('抽奖记录读取与展开', () => {
   it('背包读取全部渠道，来源与资产去向清楚，按资产筛选不调用抽奖接口', async () => {
@@ -154,6 +164,7 @@ describe('抽奖记录读取与展开', () => {
     await flush();
     mocks.getHistory.mockRejectedValueOnce(new Error('offline'));
     const list = host.querySelector<HTMLElement>('.lr-list')!;
+    setListSize(list, 500, 600);
     list.dispatchEvent(new Event('scroll'));
     await flush();
     expect(list.querySelectorAll('.lr-receipt')).toHaveLength(1);
@@ -167,6 +178,117 @@ describe('抽奖记录读取与展开', () => {
     await flush();
     expect(list.querySelectorAll('.lr-receipt')).toHaveLength(2);
     expect(mocks.getHistory).toHaveBeenLastCalledWith({ limit: 20, mode: 'all', cursor: 'next' });
+  });
+  it('每页只取 20 条，接近末尾才续页，滚动并发不会重复请求或重复展示', async () => {
+    const { host, component } = await mount();
+    mocks.getHistory.mockResolvedValueOnce(
+      response(
+        Array.from({ length: 20 }, (_, i) => record(String(i))),
+        true,
+      ),
+    );
+    component.open();
+    await flush();
+    expect(mocks.getHistory).toHaveBeenLastCalledWith({ limit: 20, mode: 'all', cursor: null });
+    expect(host.querySelectorAll('.lr-list .lr-receipt')).toHaveLength(20);
+    const list = host.querySelector<HTMLElement>('.lr-list')!;
+    setListSize(list, 500, 2000);
+    const calls = mocks.getHistory.mock.calls.length;
+    list.dispatchEvent(new Event('scroll'));
+    await flush();
+    expect(mocks.getHistory).toHaveBeenCalledTimes(calls);
+    let resolveNext!: (value: unknown) => void;
+    mocks.getHistory.mockImplementationOnce(() => new Promise((resolve) => (resolveNext = resolve)));
+    list.scrollTop = 1400;
+    list.dispatchEvent(new Event('scroll'));
+    list.dispatchEvent(new Event('scroll'));
+    await nextTick();
+    expect(mocks.getHistory).toHaveBeenCalledTimes(calls + 1);
+    expect(mocks.getHistory).toHaveBeenLastCalledWith({ limit: 20, mode: 'all', cursor: 'next' });
+    resolveNext(response([record('19'), record('20')]));
+    await flush();
+    expect(list.querySelectorAll('.lr-receipt')).toHaveLength(21);
+    expect(list.textContent).toContain('已显示全部抽奖记录');
+    list.dispatchEvent(new Event('scroll'));
+    await flush();
+    expect(mocks.getHistory).toHaveBeenCalledTimes(calls + 1);
+  });
+  it('首屏不足以滚动时自动补下一页，不要求用户先产生滚动事件', async () => {
+    const { host, component } = await mount();
+    let resolveFirst!: (value: unknown) => void;
+    mocks.getHistory
+      .mockImplementationOnce(() => new Promise((resolve) => (resolveFirst = resolve)))
+      .mockResolvedValueOnce(response([record('second')]));
+    component.open();
+    await nextTick();
+    const list = host.querySelector<HTMLElement>('.lr-list')!;
+    setListSize(list, 800, 300);
+    resolveFirst(response([record('first')], true));
+    await flush();
+    expect(mocks.getHistory).toHaveBeenLastCalledWith({ limit: 20, mode: 'all', cursor: 'next' });
+    expect(list.querySelectorAll('.lr-receipt')).toHaveLength(2);
+  });
+  it('列表视口扩大后继续补页，卸载时清理尺寸监听', async () => {
+    let resized!: () => void;
+    const disconnect = vi.fn();
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        constructor(callback: () => void) {
+          resized = callback;
+        }
+        observe() {}
+        disconnect = disconnect;
+      },
+    );
+    const { host, component } = await mount();
+    mocks.getHistory.mockResolvedValueOnce(response([record('first')], true));
+    component.open();
+    await flush();
+    const list = host.querySelector<HTMLElement>('.lr-list')!;
+    setListSize(list, 400, 1500);
+    resized();
+    const calls = mocks.getHistory.mock.calls.length;
+    setListSize(list, 1600, 1500);
+    mocks.getHistory.mockResolvedValueOnce(response([record('second')]));
+    resized();
+    await flush();
+    expect(mocks.getHistory).toHaveBeenCalledTimes(calls + 1);
+    expect(list.querySelectorAll('.lr-receipt')).toHaveLength(2);
+    cleanup?.();
+    cleanup = undefined;
+    expect(disconnect).toHaveBeenCalled();
+  });
+  it.each([null, 'next'])('续页游标缺失或没有前进时保留旧记录并停止自动请求：%s', async (nextCursor) => {
+    const { host, component } = await mount();
+    mocks.getHistory.mockResolvedValueOnce(response([record('first')], true));
+    component.open();
+    await flush();
+    const list = host.querySelector<HTMLElement>('.lr-list')!;
+    setListSize(list, 500, 600);
+    mocks.getHistory.mockResolvedValueOnce({ status: 200, data: { rows: [record('bad')], hasMore: true, nextCursor } });
+    list.dispatchEvent(new Event('scroll'));
+    await flush();
+    expect(list.querySelectorAll('.lr-receipt')).toHaveLength(1);
+    expect(list.textContent).toContain('抽奖记录加载失败');
+    const calls = mocks.getHistory.mock.calls.length;
+    list.dispatchEvent(new Event('scroll'));
+    await flush();
+    expect(mocks.getHistory).toHaveBeenCalledTimes(calls);
+  });
+  it('切换筛选从列表顶部重新读取，不带入上一筛选的游标和滚动位置', async () => {
+    const { host, component } = await mount();
+    mocks.getHistory.mockResolvedValueOnce(response([record('first')], true));
+    component.open();
+    await flush();
+    const list = host.querySelector<HTMLElement>('.lr-list')!;
+    list.scrollTop = 1400;
+    mocks.getHistory.mockResolvedValueOnce(response([record('paid')]));
+    host.querySelectorAll<HTMLButtonElement>('[role="tab"]')[2].click();
+    await flush();
+    expect(mocks.getHistory).toHaveBeenLastCalledWith({ limit: 20, mode: 'paid', cursor: null });
+    expect(list.scrollTop).toBe(0);
+    expect(list.querySelectorAll('.lr-receipt')).toHaveLength(1);
   });
   it('切号清除旧记录，写前读取的迟到结果不覆盖新账号', async () => {
     let resolveOld!: (value: unknown) => void;
