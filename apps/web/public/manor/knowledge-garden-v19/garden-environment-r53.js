@@ -121,7 +121,8 @@ const GardenEnvironment = (() => {
     async function prepare() {
       const started=performance.now();
       const mask=new Image(),smooth=new Image();
-      mask.decoding=smooth.decoding='async';mask.src=img.dataset.water;smooth.src=img.dataset.smooth;
+      const assetUrl=path=>typeof GardenStartup!=="undefined"&&GardenStartup.url?GardenStartup.url(path):path;
+      mask.decoding=smooth.decoding='async';mask.src=assetUrl(img.dataset.water);smooth.src=assetUrl(img.dataset.smooth);
       await Promise.all([img,mask,smooth].map(waitImage));
       const fit=image=>{
         const w=image.naturalWidth,h=image.naturalHeight;

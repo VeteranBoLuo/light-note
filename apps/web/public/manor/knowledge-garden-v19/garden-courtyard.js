@@ -93,7 +93,8 @@ const GardenCourtyard = (() => {
     const img = scene.querySelector(".garden-backdrop");
     // 种田底图（含出血）与水域遮罩；舞台负责缩放居中与各区域定位
     const cal = FarmStage.cal();
-    const source = `knowledge-garden-v19/${cal.asset}`;
+    const path = `knowledge-garden-v19/${cal.asset}`;
+    const source = typeof GardenStartup!=="undefined"&&GardenStartup.url?GardenStartup.url(path):path;
     const srcset=FarmStage.sourceSet(cal);
     if(srcset){if(img.srcset!==srcset)img.srcset=srcset;img.sizes="100vw";}
     else {img.removeAttribute("srcset");img.removeAttribute("sizes");}
