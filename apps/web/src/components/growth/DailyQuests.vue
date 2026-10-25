@@ -2,7 +2,7 @@
   <div class="dq" :class="{ 'dq--compact': compact }">
     <div class="dq-head">
       <span class="dq-title-wrap"
-        ><span class="dq-title">{{ t('growth.dashTasks') }}</span
+        ><span class="dq-title"><GrowthTaskIcon task-key="daily" compact />{{ t('growth.dashTasks') }}</span
         ><small>{{ t('growth.dailyResetTime') }}</small></span
       >
       <span class="dq-count" :class="{ allDone }">{{ doneCount }}/{{ quests.length }}</span>
@@ -18,9 +18,7 @@
     </div>
     <div class="dq-list">
       <div v-for="q in quests" :key="q.key" class="dq-item" :class="{ done: q.done }">
-        <span class="dq-check">
-          <SvgIcon v-if="q.done" :src="icon.filterPanel.check" size="13" />
-        </span>
+        <GrowthTaskIcon :task-key="q.key" :completed="q.done" :compact="compact" />
         <span class="dq-label">
           {{ questLabel(q) }}
           <small v-if="q.countedEvent" class="dq-counted">
@@ -48,9 +46,7 @@
         class="dq-stage"
         :class="{ claimable: stage.claimable, claimed: stage.claimed }"
       >
-        <span class="dq-stage-dot"
-          ><SvgIcon :src="stage.claimed ? icon.filterPanel.check : icon.growth.reward" size="14"
-        /></span>
+        <GrowthTaskIcon task-key="reward" :completed="stage.claimed" compact />
         <span class="dq-stage-main">
           <b>{{ t('growth.questStageTitle', { n: stage.required, total: quests.length || 3 }) }}</b>
           <small>{{ stageReward(stage) }}</small>
@@ -148,6 +144,7 @@
   import BProgress from '@/components/base/BasicComponents/BProgress.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon.ts';
+  import GrowthTaskIcon from './GrowthTaskIcon.vue';
 
   const props = withDefaults(
     defineProps<{
@@ -251,6 +248,9 @@
     justify-content: space-between;
   }
   .dq-title {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--ui-space-8, 8px);
     font-size: var(--ui-font-14, 14px);
     font-weight: 700;
   }
@@ -322,24 +322,9 @@
       background 0.2s,
       border-color 0.2s;
   }
-  .dq-check {
-    flex: 0 0 auto;
-    width: var(--ui-layout-18, 18px);
-    height: var(--ui-layout-18, 18px);
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border: 1.5px solid var(--surface-border-color);
-    color: var(--desc-color);
-    background: var(--card-background);
-  }
-  .dq-item.done .dq-check {
-    border-color: var(--success-color);
-    color: var(--success-color);
-  }
   .dq-label {
     flex: 1 1 auto;
+    min-width: 0;
     font-size: var(--ui-font-13, 13px);
     color: var(--text-color);
   }
@@ -375,22 +360,9 @@
     border-radius: 10px;
     background: var(--card-background);
   }
-  .dq-stage-dot {
-    display: grid;
-    place-items: center;
-    width: var(--ui-layout-24, 24px);
-    height: var(--ui-layout-24, 24px);
-    flex: 0 0 var(--ui-layout-24, 24px);
-    border: 1px solid currentColor;
-    border-radius: 50%;
-    color: var(--desc-color);
-    background: var(--card-background);
-  }
-  .dq-stage.claimable .dq-stage-dot,
   .dq-stage.claimable .dq-stage-state {
     color: var(--warning-color);
   }
-  .dq-stage.claimed .dq-stage-dot,
   .dq-stage.claimed .dq-stage-state {
     color: var(--success-color);
   }
@@ -578,10 +550,6 @@
     padding: var(--ui-space-5, 5px) var(--ui-space-8, 8px);
     border-radius: 8px;
   }
-  .dq--compact .dq-check {
-    width: var(--ui-layout-16, 16px);
-    height: var(--ui-layout-16, 16px);
-  }
   .dq--compact .dq-label {
     font-size: var(--ui-font-11_5, 11.5px);
   }
@@ -605,11 +573,6 @@
     gap: var(--ui-space-6, 6px);
     padding: var(--ui-space-5, 5px) var(--ui-space-7, 7px);
     border-radius: 8px;
-  }
-  .dq--compact .dq-stage-dot {
-    width: var(--ui-layout-20, 20px);
-    height: var(--ui-layout-20, 20px);
-    flex-basis: var(--ui-layout-20, 20px);
   }
   .dq--compact .dq-stage-main {
     gap: 0;
