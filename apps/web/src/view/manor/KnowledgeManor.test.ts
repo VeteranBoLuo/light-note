@@ -2,8 +2,10 @@ import { createApp, h, nextTick, type App } from 'vue';
 import { createMemoryHistory, createRouter, RouterView } from 'vue-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import KnowledgeManor from './KnowledgeManor.vue';
+import AppLayout from '../index.vue';
 
 const mocks = vi.hoisted(() => ({
+  bookmark: { isMobile: false },
   user: { id: 'root-fixture', role: 'root', adminContext: null },
   read: vi.fn(async (_signal?: AbortSignal) => ({ quests: [], state: {}, revision: 0, version: 'fixture' })),
   command: vi.fn(),
@@ -12,12 +14,13 @@ const mocks = vi.hoisted(() => ({
   growth: vi.fn(async (_force?: boolean) => {}),
   inventory: vi.fn(async () => {}),
 }));
-vi.mock('@/store', () => ({ useUserStore: () => mocks.user, bookmarkStore: () => ({ isMobile: false }) }));
+vi.mock('@/store', () => ({ useUserStore: () => mocks.user, bookmarkStore: () => mocks.bookmark }));
 vi.mock('@/api/manorApi', () => ({ getManor: mocks.read, runManorCommand: mocks.command }));
 vi.mock('@/composables/useGrowth', () => ({
   useGrowth: () => ({ load: mocks.growth, loadInventory: mocks.inventory }),
 }));
 vi.mock('@/composables/useMobileTopBar', () => ({ useMobileTopBar: () => {} }));
+vi.mock('@/components/home/navigation/Navigation.vue', () => ({ default: { render: () => h('nav', { 'aria-label': '轻笺导航' }, '轻笺导航') } }));
 vi.mock('vue-i18n', () => ({ useI18n: () => ({ t: (key: string) => key }) }));
 vi.mock('@/utils/manorPending', () => ({
   readPendingManorCommand: mocks.pending,
@@ -37,8 +40,11 @@ async function mount() {
   const router = createRouter({
     history: createMemoryHistory(),
     routes: [
-      { path: '/knowledge-manor', component: KnowledgeManor },
-      { path: '/bookmarks', component: { render: () => h('p', 'bookmarks-ready') } },
+      { path: '/', component: AppLayout, children: [
+        { path: 'knowledge-manor', name: 'knowledgeManor', component: KnowledgeManor },
+        { path: 'bookmarks', name: 'bookmarks', component: { render: () => h('p', 'bookmarks-ready') } },
+        { path: 'app', component: { render: () => h('p', 'app-ready') } },
+      ] },
     ],
   });
   await router.push('/knowledge-manor');
@@ -53,6 +59,7 @@ async function mount() {
 }
 beforeEach(() => {
   vi.useFakeTimers();
+  mocks.bookmark.isMobile = false;
   mocks.pending.mockReturnValue(null);
   mocks.read.mockResolvedValue({ quests: [], state: {}, revision: 0, version: 'fixture' });
 });
@@ -65,8 +72,41 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 describe('庄园加载与主站导航', () => {
-  it('场景因响应式布局重新加载时，恢复加载退出入口', async () => {
+  it('游戏内返回能退出独立场景，并恢复主站导航', async () => {
+    const router = await mount();
+    const frame = document.querySelector('iframe')!, nonce = new URL(frame.src).searchParams.get('bridge');
+    const notify = async (action: string) => {
+      window.dispatchEvent(new MessageEvent('message', { source: frame.contentWindow, origin: location.origin,
+        data: { type: 'lightnote-manor', nonce, id: 1, action } }));
+      await flush();
+    };
+    await notify('ready');
+    expect(document.querySelector('nav')).toBeNull();
+    const exited = new Promise<void>(resolve => {
+      const stop = router.afterEach(to => { if (to.path === '/app') { stop(); resolve(); } });
+    });
+    await notify('exit');
+    await exited;
+    await flush();
+    expect(router.currentRoute.value.path).toBe('/app');
+    expect(document.querySelector('nav')).not.toBeNull();
+    expect(document.querySelector('iframe')).toBeNull();
+  });
+  it('移动端加载时没有主站导航，保留退出按钮直到游戏就绪', async () => {
+    mocks.bookmark.isMobile = true;
     await mount();
+    expect(document.querySelector('nav')).toBeNull();
+    expect(document.body.textContent).toContain('manor.returnToApp');
+    const frame = document.querySelector('iframe')!, nonce = new URL(frame.src).searchParams.get('bridge');
+    window.dispatchEvent(new MessageEvent('message', { source: frame.contentWindow, origin: location.origin,
+      data: { type: 'lightnote-manor', nonce, id: 1, action: 'ready' } }));
+    await flush();
+    expect(document.body.textContent).not.toContain('manor.returnToApp');
+  });
+  it('准备时保留主站导航，就绪后铺满页面；重新准备时恢复导航且不重建 iframe', async () => {
+    await mount();
+    expect(document.querySelector('nav')).not.toBeNull();
+    expect(document.body.textContent).not.toContain('manor.returnToApp');
     const frame = document.querySelector('iframe')!,
       nonce = new URL(frame.src).searchParams.get('bridge');
     const notify = async (action: string) => {
@@ -78,15 +118,24 @@ describe('庄园加载与主站导航', () => {
       await flush();
     };
     await notify('ready');
+    expect(document.querySelector('nav')).toBeNull();
+    expect(document.querySelector('iframe')).toBe(frame);
     expect(document.body.textContent).not.toContain('manor.returnToApp');
     await notify('loading');
-    expect(document.body.textContent).toContain('manor.returnToApp');
+    expect(document.querySelector('nav')).not.toBeNull();
+    expect(document.querySelector('iframe')).toBe(frame);
+    expect(document.body.textContent).not.toContain('manor.returnToApp');
+    await notify('ready');
+    await notify('load-error');
+    expect(document.querySelector('nav')).not.toBeNull();
+    expect(document.querySelector('[role="alert"]')).not.toBeNull();
   });
   it('初始存档仍在读取时，导航立即退出并取消读取', async () => {
     mocks.read.mockImplementationOnce(() => new Promise(() => {}));
     const router = await mount(),
       signal = mocks.read.mock.calls[0][0]!;
-    expect(document.body.textContent).toContain('manor.returnToApp');
+    expect(document.querySelector('nav')).not.toBeNull();
+    expect(document.body.textContent).not.toContain('manor.returnToApp');
     await router.push('/bookmarks');
     await flush();
     expect(document.body.textContent).toContain('bookmarks-ready');
