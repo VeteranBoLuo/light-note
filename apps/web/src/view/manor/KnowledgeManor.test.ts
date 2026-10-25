@@ -2,6 +2,7 @@ import { createApp, h, nextTick, type App } from 'vue';
 import { createMemoryHistory, createRouter, RouterView } from 'vue-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import KnowledgeManor from './KnowledgeManor.vue';
+import { createManor, MANOR_VERSION } from '@lightnote/shared/manor';
 import AppLayout from '../index.vue';
 
 const mocks = vi.hoisted(() => ({
@@ -74,6 +75,28 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 describe('庄园加载与主站导航', () => {
+  it('重置测试使用独立存档，命令不写正式 API，恢复后重新读取正式存档', async () => {
+    const state=createManor({now:new Date('2026-10-25T10:00:00Z'),points:320,calendar:{dayKey:'20261025',weekKey:'202643',utcOffsetMinutes:480}});
+    mocks.read.mockResolvedValue({quests:[],state,revision:8,version:MANOR_VERSION});
+    await mount();
+    const send=async(action:string,payload:object={})=>{
+      const frame=document.querySelector('iframe')!,nonce=new URL(frame.src).searchParams.get('bridge');
+      window.dispatchEvent(new MessageEvent('message',{source:frame.contentWindow,origin:location.origin,data:{type:'lightnote-manor',nonce,id:10,action,payload}}));
+      await flush();
+    };
+    await send('reset-test');
+    const frame=document.querySelector('iframe')!,reply=vi.spyOn(frame.contentWindow!,'postMessage');
+    await send('get');
+    expect(reply).toHaveBeenLastCalledWith(expect.objectContaining({value:expect.objectContaining({testing:true,state:expect.objectContaining({adopted:false})})}),location.origin);
+    await send('command',{action:'adopt',args:[]});
+    expect(mocks.command).not.toHaveBeenCalled();
+    expect(mocks.save).not.toHaveBeenCalled();
+    expect(mocks.read).toHaveBeenCalledTimes(1);
+    await send('restore-formal');
+    await send('get');
+    expect(mocks.read).toHaveBeenCalledTimes(2);
+  });
+
   it('存档读取与 iframe 静态资源并行，桥接复用同一次初始读取', async () => {
     let resolve!: (value: unknown) => void;
     mocks.read.mockImplementationOnce(() => new Promise(r => { resolve = r; }) as ReturnType<typeof mocks.read>);

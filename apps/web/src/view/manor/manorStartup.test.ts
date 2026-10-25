@@ -47,7 +47,7 @@ function setup(mounted = true) {
     module,
     setTimeout,
     clearTimeout,
-    performance: { mark },
+    performance: { mark, now: () => 123 },
     requestAnimationFrame: (fn: () => void) => setTimeout(fn, 0),
     getComputedStyle: (node: Element) => ({
       backgroundImage: node.id === 'paint' ? 'url("http://localhost/paint.webp")' : 'none',

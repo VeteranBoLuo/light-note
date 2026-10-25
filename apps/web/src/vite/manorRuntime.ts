@@ -3,7 +3,8 @@ import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { runInNewContext } from 'node:vm';
 import type { Plugin } from 'vite';
-type PreloadScene = { asset: string; water: string; skyBleed?: { asset: string }; detailTiles?: { asset: string }[] };
+import icon from '../config/icon';
+type PreloadScene = { asset: string; water: string; smooth?: string; skyBleed?: { asset: string }; detailTiles?: { asset: string }[] };
 
 // Classic scene scripts and the server use one copy of the confirmed deterministic rules.
 export default function manorRuntime(): Plugin {
@@ -16,8 +17,8 @@ export default function manorRuntime(): Plugin {
     const scripts = [...entry.matchAll(/<script defer src="([^"?]+)[^"]*"[^>]*><\/script>/g)];
     const styles = [...entry.matchAll(/<link rel="stylesheet" href="([^"?]+)[^"]*" \/>/g)];
     // Preserve classic global scope, script order and the CSS cascade. The UI
-    // still mounts only after its authenticated snapshot; the worker imports
-    // its own environment module rather than executing this browser bundle.
+    // still mounts only after its authenticated snapshot. Fixed scene and water
+    // inputs are compiled ahead of time, rather than recomposited on entry.
     files.set(
       'knowledge-garden-v19/runtime.js',
       scripts
@@ -35,11 +36,11 @@ export default function manorRuntime(): Plugin {
     for (const [tag] of styles.slice(1)) html = html.replace(tag, '');
     html = html.replace(
       scripts[0][0],
-      '<script defer src="knowledge-garden-v19/runtime.js" data-worker="knowledge-garden-v19/garden-water-worker.js" data-environment-script="knowledge-garden-v19/garden-environment.js" data-ui-script="knowledge-garden-v19/garden-ui.js"></script>',
+      '<script defer src="knowledge-garden-v19/runtime.js" data-ui-script="knowledge-garden-v19/garden-ui.js"></script>',
     );
     for (const [tag] of scripts.slice(1)) html = html.replace(tag, '');
     html = html.replace(
-      /\b(src|href|data-ui-script|data-worker|data-environment-script)="([^"#]+)"/g,
+      /\b(src|href|data-ui-script)="([^"#]+)"/g,
       (_match, attribute: string, url: string) => {
         const path = url.split('?')[0];
         const source = files.get(path) ?? readFileSync(new URL(path, publicRoot));
@@ -52,12 +53,13 @@ export default function manorRuntime(): Plugin {
       {},
     ) as Record<string, PreloadScene>;
     const bootImages = (scene: PreloadScene) =>
-      [scene.asset, scene.skyBleed?.asset, ...(scene.detailTiles || []).map((tile) => tile.asset)]
+      [scene.asset, scene.water, scene.smooth, scene.skyBleed?.asset, ...(scene.detailTiles || []).map((tile) => tile.asset)]
         .filter(Boolean)
         .map((file) => `knowledge-garden-v19/${file}`);
+    const resetIcon = 'data:image/svg+xml,' + encodeURIComponent(icon.infrastructure.restart.replace('<svg ', '<svg style="color:#76572c" '));
     html = html.replace(
       '</head>',
-      `<script type="application/json" id="manor-boot-images">${JSON.stringify({ desktop: bootImages(calibration.desktop), mobile: bootImages(calibration.mobileGarden) })}</script></head>`,
+      `<script type="application/json" id="manor-icon-assets">${JSON.stringify({reset:resetIcon})}</script><script type="application/json" id="manor-boot-images">${JSON.stringify({ desktop: bootImages(calibration.desktop), mobile: bootImages(calibration.mobileGarden) })}</script></head>`,
     );
     return { html, files };
   };
@@ -69,19 +71,19 @@ export default function manorRuntime(): Plugin {
       {},
     ) as Record<'desktop' | 'mobileGarden' | 'mobileBay', PreloadScene>;
     const code = [
-      ...documentSource().matchAll(/\b(?:src|href|data-ui-script|data-worker|data-environment-script)="([^"]+)"/g),
+      ...documentSource().matchAll(/\b(?:src|href|data-ui-script)="([^"]+)"/g),
     ].map((match) => `/manor/${match[1]}`);
     const art = (scene: PreloadScene): string[] =>
-      [scene.asset, scene.water, scene.skyBleed?.asset, ...(scene.detailTiles || []).map((tile) => tile.asset)]
+      [scene.asset, scene.water, scene.smooth, scene.skyBleed?.asset, ...(scene.detailTiles || []).map((tile) => tile.asset)]
         .filter(Boolean)
         .map((file) => `/manor/knowledge-garden-v19/${file}`);
     const common = [
-      'farm/game-ui-r20.webp',
-      'garden-tools.webp',
-      'farm/plot-canvas-r23.webp',
-      'farm/purifier-states-r22.webp',
+      'farm/game-ui-r53.webp',
+      'garden-tools-r53.webp',
+      'farm/plot-canvas-r53.webp',
+      'farm/purifier-states-r53.webp',
       'farm/bed-dry.webp',
-      'farm/purifier-plinth-r36.webp',
+      'farm/purifier-plinth-r53.webp',
       ...['backpack', 'shop', 'aquarium', 'atlas'].map((key) => `incoming/dock-r3/${key}.webp`),
     ].map((file) => `/manor/knowledge-garden-v19/${file}`);
     return JSON.stringify({

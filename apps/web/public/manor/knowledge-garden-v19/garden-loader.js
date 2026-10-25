@@ -79,7 +79,7 @@ const GardenStartup=(()=>{
       if([...document.querySelectorAll('link[rel="stylesheet"]')].some(link=>!link.sheet))throw Error('scene stylesheet');
       const tasks=[...sources(),...work];total=tasks.length+1;
       title.textContent='正在准备场景';tick();
-      const prepared=Promise.all(tasks.map(task=>Promise.resolve(task).then(()=>{completed++;if(!failed)tick();}))).then(()=>true);
+      const prepared=Promise.all(tasks.map(task=>Promise.resolve(task).then(()=>{completed++;if(!failed){tick();arm();}}))).then(()=>true);
       if(!await Promise.race([prepared,cancelled]))return false;
       if(failed)return false;
       title.textContent='场景已就绪';
@@ -89,6 +89,7 @@ const GardenStartup=(()=>{
       if(failed)return false;
       completed++;tick();finished=true;clearTimeout(timer);document.removeEventListener('visibilitychange',arm);images.clear();work.length=0;
       performance.mark('manor-interactive');
+      document.documentElement.dataset.startupMs=String(Math.round(performance.now()));
       notify('ready');
       el.classList.add('leaving');el.style.pointerEvents='none';
       setTimeout(()=>el.remove(),450);

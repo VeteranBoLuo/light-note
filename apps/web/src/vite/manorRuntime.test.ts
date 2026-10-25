@@ -19,10 +19,10 @@ describe('庄园生产入口与经典规则脚本', () => {
     const entry = assets.get('manor/index.html')!;
     const links = [
       ...entry.matchAll(
-        /\b(?:src|href|data-ui-script|data-worker|data-environment-script)="([^"?]+)\?v=([a-f0-9]{16})"/g,
+        /\b(?:src|href|data-ui-script)="([^"?]+)\?v=([a-f0-9]{16})"/g,
       ),
     ];
-    expect(links).toHaveLength(6);
+    expect(links).toHaveLength(4);
     const bundle = assets.get('manor/knowledge-garden-v19/runtime.js')!;
     expect(() => new Script(bundle)).not.toThrow();
     // The deterministic rules and all classic modules retain their global order.
@@ -43,11 +43,11 @@ describe('庄园生产入口与经典规则脚本', () => {
       expect(createHash('sha256').update(content).digest('hex').slice(0, 16)).toBe(version);
     }
     expect(entry).toMatch(/data-ui-script="knowledge-garden-v19\/garden-ui\.js\?v=[a-f0-9]{16}"/);
-    expect(entry).toMatch(/data-worker="knowledge-garden-v19\/garden-water-worker\.js\?v=[a-f0-9]{16}"/);
+    expect(entry).not.toContain('garden-water-worker');
     const preload = JSON.parse(assets.get('manor/preload.json')!);
-    expect(preload.desktop).toContain('/manor/knowledge-garden-v19/courtyard/pc-terrain-r36.webp');
-    expect(preload.mobile).toContain('/manor/knowledge-garden-v19/courtyard/mobile-garden-r18.webp');
-    expect(preload.mobile).not.toContain('/manor/knowledge-garden-v19/courtyard/pc-terrain-r36.webp');
+    expect(preload.desktop).toContain('/manor/knowledge-garden-v19/courtyard/pc-scene-r53.webp');
+    expect(preload.mobile).toContain('/manor/knowledge-garden-v19/courtyard/mobile-garden-scene-r53.webp');
+    expect(preload.mobile).not.toContain('/manor/knowledge-garden-v19/courtyard/pc-scene-r53.webp');
     for (const url of [...preload.desktop, ...preload.mobile]) {
       expect(url.startsWith('/manor/')).toBe(true);
       const file = url.replace('/manor/', '').split('?')[0];

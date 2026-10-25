@@ -16,6 +16,7 @@
   import { onBeforeRouteLeave, useRouter } from 'vue-router';
   import { useI18n } from 'vue-i18n';
   import type { ManorCommand, ManorSnapshot } from '@lightnote/shared/manor';
+  import { createManorTestSession } from '@/utils/manorTestSession';
   import { MANOR_COMMANDS } from '@lightnote/shared/manor';
   import { useUserStore, bookmarkStore } from '@/store';
   import { useGrowth } from '@/composables/useGrowth';
@@ -36,6 +37,7 @@
   let bootTimer: ReturnType<typeof setTimeout> | undefined;
   let snapshot: ManorSnapshot | null = null, pending: ManorCommand | null = null;
   let owner = '', generation = 0, disposed = false, commanding = false, initialProvided = false;
+  let testSession: ReturnType<typeof createManorTestSession> | null = null;
   let overlay: MobileOverlayHistoryHandle | null = null;
   // Capture the parent route before iframe navigations add joint history entries.
   const previous = router.options.history.state.back;
@@ -59,8 +61,8 @@
     }).catch(() => {});
   }
 
-  function decorated(value: ManorSnapshot): ManorSnapshot {
-    return { ...value, quests: value.quests.map(q => ({ ...q, label: t(questKeys[q.key] || 'growth.questUnknown') })) };
+  function decorated(value: ManorSnapshot): ManorSnapshot & {testing: boolean} {
+    return { ...value, testing: Boolean(testSession), quests: value.quests.map(q => ({ ...q, label: t(questKeys[q.key] || 'growth.questUnknown') })) };
   }
   async function settlePending(g: number) {
     if (!pending) return;
@@ -105,7 +107,7 @@
     readController.abort(); readController = new AbortController();
     clearTimeout(bootTimer); frameShown.value = false; interactive.value = false;
     releaseMobileOverlayHistory(overlay); overlay = null;
-    owner = user.id; snapshot = null; nonce.value = crypto.randomUUID(); initialProvided = false;
+    owner = user.id; testSession = null; snapshot = null; nonce.value = crypto.randomUUID(); initialProvided = false;
     loading.value = true; failed.value = false;
     pending = owner ? readPendingManorCommand(owner) : null;
     if (!owner || user.role !== 'root' || user.adminContext) { loading.value = false; failed.value = true; return; }
@@ -138,13 +140,23 @@
       else if (data.action === 'get') {
         if (initialRead) await initialRead;
         if (!current(g)) return;
-        value = !initialProvided && snapshot && !pending ? decorated(snapshot) : await refresh(g);
+        value = testSession ? decorated(testSession.snapshot()) : !initialProvided && snapshot && !pending ? decorated(snapshot) : await refresh(g);
         initialProvided = true;
+      }
+      else if (data.action === 'reset-test' || data.action === 'restore-formal') {
+        if (commanding || pending || !snapshot) throw new Error('command');
+        testSession = data.action === 'reset-test' ? createManorTestSession(snapshot) : null;
+        releaseMobileOverlayHistory(overlay); overlay = null;
+        interactive.value = false; frameShown.value = false; initialProvided = true;
+        nonce.value = crypto.randomUUID();
+        return;
       }
       else if (data.action === 'command') {
         if (commanding || !snapshot || !MANOR_COMMANDS.includes(data.payload?.action) || !Array.isArray(data.payload?.args)) throw new Error('command');
         commanding = true;
         try {
+          if (testSession) { value = decorated(testSession.execute(data.payload.action, data.payload.args)); }
+          else {
           if (pending) {
             const prior = pending;
             await settlePending(g);
@@ -155,6 +167,7 @@
             await settlePending(g);
           }
           value = decorated(snapshot);
+          }
         } finally { commanding = false; }
       } else if (data.action === 'exit') { await exit(); return; }
       else if (data.action === 'tasks') { await router.push('/growth#growth-daily'); return; }
