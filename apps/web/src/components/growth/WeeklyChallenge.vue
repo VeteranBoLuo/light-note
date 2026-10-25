@@ -2,7 +2,7 @@
   <div class="wc">
     <div class="wc-head">
       <div class="wc-title-row">
-        <div class="wc-title"><SvgIcon :src="icon.common.calendar" size="17" />{{ t('growth.weeklyTitle') }}</div>
+        <div class="wc-title"><GrowthTaskIcon task-key="weekly" compact />{{ t('growth.weeklyTitle') }}</div>
         <strong class="wc-total">{{
           t('growth.weeklyPointsProgress', { current: weekly?.earnedPoints || 0, total: weekly?.totalPoints || 0 })
         }}</strong>
@@ -17,7 +17,7 @@
     </div>
     <div v-else-if="challenges.length" class="wc-list">
       <div v-for="c in challenges" :key="c.key" class="wc-item" :class="{ done: c.done }">
-        <span class="wc-icon"><SvgIcon :src="ICONS[c.key] || icon.growth.action" size="21" /></span>
+        <GrowthTaskIcon :task-key="c.key" :completed="c.done" />
         <div class="wc-main">
           <div class="wc-name">
             {{ nameOf(c.key) }}
@@ -69,6 +69,7 @@
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon.ts';
+  import GrowthTaskIcon from './GrowthTaskIcon.vue';
   import { bookmarkStore } from '@/store';
   import { resolveWeeklyChallengeRoute } from '@/utils/growthNavigation';
   import { useRouter } from 'vue-router';
@@ -82,18 +83,6 @@
   const loading = ref(true);
   const loadError = ref(false);
 
-  const ICONS: Record<string, string> = {
-    wk_community: icon.growth.achievement.community_post_1,
-    wk_bookmark: icon.resource.bookmark,
-    wk_note: icon.resource.note,
-    wk_checkin: icon.growth.checkin,
-    wk_todo: icon.growth.action,
-    wk_organize: icon.growth.organize,
-    wk_collect: icon.resource.bookmark,
-    wk_progress: icon.growth.action,
-    wk_active_days: icon.common.calendar,
-    wk_variety: icon.growth.organize,
-  };
   const challenges = computed(() => weekly.value?.challenges || []);
   const todayActive = computed(() => Boolean(weekly.value?.todayActive));
 
@@ -204,11 +193,6 @@
   }
   .wc-item.done {
     border-color: color-mix(in srgb, #f59e0b 45%, transparent);
-  }
-  .wc-icon {
-    display: grid;
-    place-items: center;
-    flex: 0 0 auto;
   }
   .wc-main {
     flex: 1 1 auto;
