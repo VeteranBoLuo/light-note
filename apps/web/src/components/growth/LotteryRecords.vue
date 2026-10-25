@@ -52,7 +52,7 @@
       <div class="lr-drawer" :class="{ 'is-inventory': inventory }">
         <BTabs v-model:active-tab="mode" :options="modeOptions" variant="pill" />
         <p class="lr-note">{{ historyText('Hint') }}</p>
-        <div class="lr-list" v-auto-scrollbar @scroll.passive="onScroll">
+        <div ref="listRef" class="lr-list" v-auto-scrollbar @scroll.passive="loadNearEnd">
           <div v-if="listLoading && !rows.length" class="lr-state"><BLoading inline loading /></div>
           <p v-else-if="!listError && !rows.length" class="lr-state">{{ historyText('Empty') }}</p>
           <article v-for="row in rows" :key="row.id" class="lr-receipt">
@@ -114,7 +114,7 @@
 </template>
 
 <script setup lang="ts">
-  import { computed, onBeforeUnmount, ref, watch } from 'vue';
+  import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { bookmarkStore, useUserStore } from '@/store';
   import { getLotteryHistory, getInventoryAcquisitions } from '@/api/growthApi';
@@ -141,6 +141,7 @@
   const recentError = ref(false);
   const listLoading = ref(false);
   const listError = ref(false);
+  const listRef = ref<HTMLElement | null>(null);
   const opened = ref(false);
   const mode = ref<AcquisitionKind | 'free' | 'paid'>('all');
   const cursor = ref<string | null>(null);
@@ -231,15 +232,22 @@
       if (generation !== listGeneration) return;
       if (response?.status !== 200 || !Array.isArray(response.data?.rows)) throw new Error('HISTORY_FAILED');
       const data = response.data as { rows: HistoryRecord[]; hasMore: boolean; nextCursor: string | null };
+      if (data.hasMore && (!data.rows.length || !data.nextCursor || data.nextCursor === paging.cursor))
+        throw new Error('HISTORY_CURSOR_INVALID');
       rows.value = [
         ...new Map((reset ? data.rows : [...rows.value, ...data.rows]).map((row) => [row.id, row])).values(),
       ];
       hasMore.value = data.hasMore;
       cursor.value = data.nextCursor;
+      if (reset && listRef.value) listRef.value.scrollTop = 0;
     } catch {
       if (generation === listGeneration) listError.value = true;
     } finally {
-      if (generation === listGeneration) listLoading.value = false;
+      if (generation === listGeneration) {
+        listLoading.value = false;
+        await nextTick();
+        if (generation === listGeneration) loadNearEnd();
+      }
     }
   }
   function openRecords(id?: string) {
@@ -254,11 +262,25 @@
     else next.add(id);
     expanded.value = next;
   }
-  function onScroll(event: Event) {
-    const el = event.target as HTMLElement;
-    if (opened.value && hasMore.value && !listError.value && el.scrollHeight - el.scrollTop - el.clientHeight < 120)
+  function loadNearEnd() {
+    const el = listRef.value;
+    if (
+      opened.value &&
+      el &&
+      el.clientHeight > 0 &&
+      hasMore.value &&
+      !listLoading.value &&
+      !listError.value &&
+      el.scrollHeight - el.scrollTop - el.clientHeight < 120
+    )
       void loadPage();
   }
+  watch(listRef, (el, _old, onCleanup) => {
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(loadNearEnd);
+    observer.observe(el);
+    onCleanup(() => observer.disconnect());
+  });
   watch(
     mode,
     () => {
