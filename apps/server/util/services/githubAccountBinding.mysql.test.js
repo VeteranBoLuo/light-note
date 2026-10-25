@@ -108,10 +108,50 @@ describe.skipIf(!socketPath)('GitHub 确认绑定（隔离 MySQL）', () => {
     await confirmGithubAccountBinding(await candidate(), { db });
     expect(await row()).toMatchObject({ password: 'original-hash', login_password_set: 0, login_type: 'github' });
   });
+  it('COMMIT 与复核同时断线时标记结果不确定，后续只能恢复现存关联', async () => {
+    const binding = await candidate();
+    const uncertain = {
+      query: async () => {
+        throw Object.assign(new Error(), { code: 'ECONNRESET' });
+      },
+      getConnection: async () => {
+        const c = await db.getConnection();
+        return {
+          query: (...a) => c.query(...a),
+          beginTransaction: () => c.beginTransaction(),
+          rollback: () => c.rollback(),
+          release: () => c.release(),
+          commit: async () => {
+            await c.commit();
+            throw Object.assign(new Error(), { code: 'ECONNRESET' });
+          },
+        };
+      },
+    };
+    await expect(confirmGithubAccountBinding(binding, { db: uncertain })).rejects.toMatchObject({
+      bindingMayHaveCommitted: true,
+    });
+    expect(await confirmGithubAccountBinding(binding, { db, resumeOnly: true })).toMatchObject({ github_id: '123' });
+  });
   it('兼容历史空字符串关联，仍只修改 GitHub ID', async () => {
     await db.query("UPDATE user SET github_id='' WHERE id='owner'");
     const before = await row();
     await confirmGithubAccountBinding(await candidate(), { db });
     expect(await row()).toEqual({ ...before, github_id: '123' });
+  });
+  it('过期处理租约仅恢复仍存在的同一关联，不能借旧票据重新建立已解除的关联', async () => {
+    const binding = await candidate();
+    await expect(confirmGithubAccountBinding(binding, { db, resumeOnly: true })).rejects.toHaveProperty(
+      'code',
+      'GITHUB_OAUTH_ACCOUNT_CHANGED',
+    );
+    await confirmGithubAccountBinding(binding, { db });
+    expect(await confirmGithubAccountBinding(binding, { db, resumeOnly: true })).toMatchObject({ github_id: '123' });
+    await db.query("UPDATE user SET github_id=NULL WHERE id='owner'");
+    await expect(confirmGithubAccountBinding(binding, { db, resumeOnly: true })).rejects.toHaveProperty(
+      'code',
+      'GITHUB_OAUTH_ACCOUNT_CHANGED',
+    );
+    expect((await row()).github_id).toBeNull();
   });
 });

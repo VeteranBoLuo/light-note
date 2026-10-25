@@ -402,17 +402,32 @@ export async function consumeGitHubBinding({ state, nonce, confirm }) {
   );
   if (!result || parseChallenge(result).processingId !== processingId)
     throw githubOAuthError('GITHUB_OAUTH_IN_PROGRESS', '绑定正在处理中，请稍后重试', 409);
-  return { ...next, ...challengePublicContext(challenge, consentAt), recovered: false };
+  return {
+    ...next,
+    ...challengePublicContext(challenge, consentAt),
+    recovered: false,
+    resumeOnly: Boolean(challenge.resumeOnly || reclaimable),
+  };
 }
 
-export async function finishGitHubBinding({ state, processingId, userId, accountSnapshot, githubId, retry = false }) {
+export async function finishGitHubBinding({
+  state,
+  processingId,
+  userId,
+  accountSnapshot,
+  githubId,
+  retry = false,
+  failed = false,
+  resumeOnly = false,
+}) {
   const key = challengeKey(state);
   const raw = await redisClient.get(key);
   if (!raw) return false;
   const challenge = parseChallenge(raw);
   if (challenge.status !== 'binding_processing' || challenge.processingId !== processingId) return false;
-  const next = { ...challenge, status: retry ? 'binding' : 'completed' };
-  if (!retry) Object.assign(next, { userId, accountSnapshot, githubId, completedAt: Date.now() });
+  const next = { ...challenge, status: failed ? 'failed' : retry ? 'binding' : 'completed' };
+  next.resumeOnly = Boolean(challenge.resumeOnly || resumeOnly);
+  if (!retry && !failed) Object.assign(next, { userId, accountSnapshot, githubId, completedAt: Date.now() });
   delete next.processingId;
   delete next.bindingProcessingAt;
   const remaining = Math.ceil((challenge.bindingExpiresAt - Date.now()) / 1000);

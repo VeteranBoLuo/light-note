@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   audit: vi.fn(),
   loseCompletionReply: false,
   failNextRead: false,
+  failCompletionWrite: false,
 }));
 vi.mock('../db/index.js', () => ({ default: { query: mocks.query, getConnection: mocks.getConnection } }));
 vi.mock('../util/redisClient.js', () => ({
@@ -27,6 +28,10 @@ vi.mock('../util/redisClient.js', () => ({
     eval: vi.fn(async (_script, { keys, arguments: args }) => {
       const current = mocks.values.get(keys[0]);
       if (!current || current !== args[0]) return current || null;
+      if (mocks.failCompletionWrite && JSON.parse(args[1]).status === 'completed') {
+        mocks.failCompletionWrite = false;
+        throw new Error('Redis completion write unavailable');
+      }
       mocks.values.set(keys[0], args[1]);
       if (mocks.loseCompletionReply && JSON.parse(args[1]).status === 'completed') {
         mocks.loseCompletionReply = false;
@@ -61,6 +66,7 @@ describe('GitHub 同邮箱提醒后确认绑定', () => {
     mocks.values.clear();
     mocks.loseCompletionReply = false;
     mocks.failNextRead = false;
+    mocks.failCompletionWrite = false;
     vi.stubEnv('GITHUB_CLIENT_ID', 'test-id');
     vi.stubEnv('GITHUB_CLIENT_SECRET', 'test-secret');
     user = {
@@ -193,6 +199,18 @@ describe('GitHub 同邮箱提醒后确认绑定', () => {
     await bindGithub(req, res());
     expect(mocks.issue).toHaveBeenCalledTimes(2);
   });
+  it('账号变化导致确认失败后票据永久作废，即使账号字段后来恢复也不能继续旧绑定', async () => {
+    const ticket = await callback();
+    const request = { ...ticket.req, body: { state: ticket.req.body.state, confirm: true } };
+    user.password = 'changed';
+    await bindGithub(request, res());
+    user.password = 'original-hash';
+    const retried = res();
+    await bindGithub(request, retried);
+    expect(retried.send.mock.calls[0][0]).toMatchObject({ data: { code: 'GITHUB_OAUTH_STATE_INVALID' } });
+    expect(user.github_id).toBeNull();
+    expect(mocks.issue).not.toHaveBeenCalled();
+  });
   it('读取 GitHub 邮箱超时不降级为占位账号注册', async () => {
     mocks.api.mockImplementation(async (path) => {
       if (path === '/user/emails')
@@ -267,6 +285,29 @@ describe('GitHub 同邮箱提醒后确认绑定', () => {
     await github(ticket.req, response);
     expect(response.send.mock.calls[0][0].data.bindingRequired).toBe(true);
     expect(mocks.token).toHaveBeenCalledTimes(2);
+  });
+  it.each([false, true])('数据库成功但恢复票据保存失败后只恢复现存关联，期间解除=%s', async (unlink) => {
+    const ticket = await callback();
+    mocks.failCompletionWrite = true;
+    const request = { ...ticket.req, body: { state: ticket.req.body.state, confirm: true } };
+    const first = res();
+    await bindGithub(request, first);
+    expect(first.send.mock.calls[0][0].data.retryable).toBe(true);
+    expect(user.github_id).toBe('123');
+    if (unlink) user.github_id = null;
+    const second = res();
+    await bindGithub(request, second);
+    if (unlink) {
+      expect(second.send.mock.calls[0][0]).toMatchObject({
+        status: 409,
+        data: { code: 'GITHUB_OAUTH_ACCOUNT_CHANGED', retryable: false },
+      });
+      expect(user.github_id).toBeNull();
+      expect(mocks.issue).not.toHaveBeenCalled();
+    } else {
+      expect(second.send.mock.calls[0][0]).toMatchObject({ status: 200, data: { sid: 'existing-sid' } });
+      expect(mocks.issue).toHaveBeenCalledOnce();
+    }
   });
   it('换票响应未知时不能重放授权码', async () => {
     mocks.token.mockRejectedValueOnce(

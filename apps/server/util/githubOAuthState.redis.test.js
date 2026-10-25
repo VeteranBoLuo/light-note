@@ -92,6 +92,7 @@ describe.skipIf(!socket)('GitHub 确认绑定原子认领（隔离 Redis）', ()
       'GITHUB_OAUTH_IN_PROGRESS',
     );
     const next = await consumeGitHubBinding({ ...request, confirm: true });
+    expect(next.resumeOnly).toBe(true);
     expect(next.processingId).not.toBe(first.processingId);
     expect(next.bindingExpiresAt).toBe(first.bindingExpiresAt);
     expect(await finishGitHubBinding({ state: request.state, processingId: first.processingId, retry: true })).toBe(

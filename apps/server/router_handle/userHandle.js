@@ -1644,7 +1644,7 @@ export const bindGithub = async (req, res) => {
         });
       completed = true;
     } else {
-      user = await confirmGithubAccountBinding(claim.binding);
+      user = await confirmGithubAccountBinding(claim.binding, { resumeOnly: Boolean(claim.resumeOnly) });
       bindingPersisted = true;
       completed = await finishGitHubBinding({
         state,
@@ -1667,10 +1667,17 @@ export const bindGithub = async (req, res) => {
     }).catch(() => console.warn('[github-oauth] binding audit unavailable'));
     return res.send(resultData({ sid, requestId }));
   } catch (error) {
+    const domain = String(error?.code || '').startsWith('GITHUB_OAUTH_');
+    const terminal = domain && error.code !== 'GITHUB_OAUTH_IN_PROGRESS';
     // 数据库已完成而响应丢失时，重试通过同账号同凭据的幂等核验恢复，不重复写关联。
     if (claim && !claim.recovered && !completed)
-      await finishGitHubBinding({ state, processingId: claim.processingId, retry: true }).catch(() => {});
-    const domain = String(error?.code || '').startsWith('GITHUB_OAUTH_');
+      await finishGitHubBinding({
+        state,
+        processingId: claim.processingId,
+        retry: !terminal,
+        failed: terminal,
+        resumeOnly: bindingPersisted || Boolean(claim.resumeOnly) || Boolean(error?.bindingMayHaveCommitted),
+      }).catch(() => {});
     const retryable =
       error?.code === 'GITHUB_OAUTH_IN_PROGRESS' || (!domain && (completed || bindingPersisted || !claim?.recovered));
     if (!retryable) res.clearCookie(GITHUB_OAUTH_NONCE_COOKIE, githubOAuthCookieOptions(0));
