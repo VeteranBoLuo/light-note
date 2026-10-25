@@ -48,7 +48,14 @@ describe('庄园生产入口与经典规则脚本', () => {
     expect(preload.desktop).toContain('/manor/knowledge-garden-v19/courtyard/pc-scene-r53.webp');
     expect(preload.mobile).toContain('/manor/knowledge-garden-v19/courtyard/mobile-garden-scene-r53.webp');
     expect(preload.mobile).not.toContain('/manor/knowledge-garden-v19/courtyard/pc-scene-r53.webp');
-    for (const url of [...preload.desktop, ...preload.mobile]) {
+    const boot = JSON.parse(entry.match(/id="manor-boot-images">([^<]+)/)![1]);
+    expect(boot.desktop[0]).toMatchObject({
+      priority: 'high', sizes: '100vw', src: 'knowledge-garden-v19/courtyard/pc-scene-r53.webp',
+    });
+    expect(boot.desktop[0].srcset).toContain('pc-scene-2048-r54.webp 2048w');
+    expect(boot.desktop[0].srcset).toContain('pc-scene-r53.webp 3630w');
+    expect(preload.desktopScene.map(({ width }: { width: number }) => width)).toEqual([2048, 2940, 3630]);
+    for (const url of [...preload.desktop, ...preload.mobile, ...preload.desktopScene.map(({ url }: { url: string }) => url)]) {
       expect(url.startsWith('/manor/')).toBe(true);
       const file = url.replace('/manor/', '').split('?')[0];
       expect(

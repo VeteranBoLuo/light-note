@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { runInNewContext } from 'node:vm';
 import type { Plugin } from 'vite';
 import icon from '../config/icon';
-type PreloadScene = { asset: string; water: string; smooth?: string; skyBleed?: { asset: string }; detailTiles?: { asset: string }[] };
+type PreloadScene = { asset: string; assetSources?: { asset: string; width: number }[]; water: string; smooth?: string; skyBleed?: { asset: string }; detailTiles?: { asset: string }[] };
 
 // Classic scene scripts and the server use one copy of the confirmed deterministic rules.
 export default function manorRuntime(): Plugin {
@@ -52,10 +52,17 @@ export default function manorRuntime(): Plugin {
       `${readFileSync(new URL('knowledge-garden-v19/farm-calibration.js', publicRoot), 'utf8')};FARM_CAL`,
       {},
     ) as Record<string, PreloadScene>;
-    const bootImages = (scene: PreloadScene) =>
-      [scene.asset, scene.water, scene.smooth, scene.skyBleed?.asset, ...(scene.detailTiles || []).map((tile) => tile.asset)]
+    const bootImages = (scene: PreloadScene) => [
+      {
+        src: `knowledge-garden-v19/${scene.asset}`,
+        srcset: scene.assetSources?.map(({ asset, width }) => `knowledge-garden-v19/${asset} ${width}w`).join(', '),
+        sizes: scene.assetSources ? '100vw' : undefined,
+        priority: 'high',
+      },
+      ...[scene.water, scene.smooth, scene.skyBleed?.asset, ...(scene.detailTiles || []).map((tile) => tile.asset)]
         .filter(Boolean)
-        .map((file) => `knowledge-garden-v19/${file}`);
+        .map((file) => ({ src: `knowledge-garden-v19/${file}` })),
+    ];
     const resetIcon = 'data:image/svg+xml,' + encodeURIComponent(icon.infrastructure.restart.replace('<svg ', '<svg style="color:#76572c" '));
     html = html.replace(
       '</head>',
@@ -89,6 +96,9 @@ export default function manorRuntime(): Plugin {
     return JSON.stringify({
       desktop: [...new Set([...art(calibration.desktop), ...common, ...code])],
       mobile: [...new Set([...art(calibration.mobileGarden), ...common, ...art(calibration.mobileBay), ...code])],
+      desktopScene: calibration.desktop.assetSources?.map(({ asset, width }) => ({
+        url: `/manor/knowledge-garden-v19/${asset}`, width,
+      })),
     });
   };
   return {

@@ -94,6 +94,9 @@ const GardenCourtyard = (() => {
     // 种田底图（含出血）与水域遮罩；舞台负责缩放居中与各区域定位
     const cal = FarmStage.cal();
     const source = `knowledge-garden-v19/${cal.asset}`;
+    const srcset=FarmStage.sourceSet(cal);
+    if(srcset){if(img.srcset!==srcset)img.srcset=srcset;img.sizes="100vw";}
+    else {img.removeAttribute("srcset");img.removeAttribute("sizes");}
     if (img.getAttribute("src") !== source) img.src = source;
     img.dataset.water = `knowledge-garden-v19/${cal.water}`;
     img.dataset.smooth = `knowledge-garden-v19/${cal.smooth}`;

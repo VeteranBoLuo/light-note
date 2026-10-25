@@ -28,7 +28,12 @@ const GardenStartup=(()=>{
     const manifest=document.getElementById('manor-boot-images');
     if(!manifest)return;
     const paths=JSON.parse(manifest.textContent)[new URLSearchParams(location.search).get('renderProfile')==='mobile'?'mobile':'desktop'];
-    for(const path of paths){const link=document.createElement('link');link.rel='preload';link.as='image';link.href=path;document.head.append(link);}
+    for(const entry of paths){
+      const image=typeof entry==='string'?{src:entry}:entry;
+      const link=document.createElement('link');link.rel='preload';link.as='image';
+      if(image.srcset){link.imageSrcset=image.srcset;link.imageSizes=image.sizes;}
+      link.fetchPriority=image.priority||'auto';link.href=image.src;document.head.append(link);
+    }
   })();
   function tick(){
     const percent=Math.floor(completed/total*100);

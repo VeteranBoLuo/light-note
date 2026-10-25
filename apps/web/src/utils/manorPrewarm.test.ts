@@ -35,6 +35,25 @@ afterEach(async () => {
 });
 
 describe('庄园空闲素材预取', () => {
+  it('只预取符合实际视口与像素密度的场景，不重复下载完整大图', async () => {
+    vi.spyOn(window, 'innerWidth', 'get').mockReturnValue(1003);
+    vi.spyOn(window, 'devicePixelRatio', 'get').mockReturnValue(2);
+    fetcher.mockImplementation(async input => new Response(String(input).endsWith('preload.json')
+      ? JSON.stringify({ desktop: ['/manor/full.webp'], mobile: ['/manor/mobile.webp'], desktopScene: [
+        { url: '/manor/2048.webp', width: 2048 }, { url: '/manor/full.webp', width: 3630 },
+      ] }) : new Uint8Array(128)));
+    stop = (await import('./manorPrewarm')).scheduleManorPrewarm(false);
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(fetcher.mock.calls.map(([url]) => url)).toEqual(['/manor/preload.json', '/manor/2048.webp']);
+  });
+  it('响应式图片也必须经过同源静态目录校验', async () => {
+    fetcher.mockResolvedValue(new Response(JSON.stringify({ desktop: ['/manor/full.webp'], mobile: [], desktopScene: [
+      { url: '/api/growth/manor', width: 2048 }, { url: '/manor/full.webp', width: 3630 },
+    ] })));
+    stop = (await import('./manorPrewarm')).scheduleManorPrewarm(false);
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(fetcher.mock.calls.map(([url]) => url)).toEqual(['/manor/preload.json']);
+  });
   it('可见懒加载图片尚未完成时继续让出网络', async () => {
     const image = document.createElement('img');
     image.loading = 'lazy';
