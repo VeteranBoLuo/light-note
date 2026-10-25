@@ -1,8 +1,8 @@
 <template>
-  <div class="growth-tasks" :class="{ 'growth-tasks--compact': compact }">
+  <div class="growth-tasks" :class="{ 'growth-tasks--compact': compact, 'growth-tasks--mobile': bookmark.isMobile }">
     <header class="growth-tasks__header">
       <div>
-        <h2>{{ t('growth.tasksTitle') }}</h2>
+        <h2><GrowthTaskIcon task-key="onboarding" compact />{{ t('growth.tasksTitle') }}</h2>
         <p v-if="!compact">{{ t('growth.tasksSubtitle') }}</p>
       </div>
       <span class="growth-tasks__progress">{{ t('growth.tasksProgress', progressLabel) }}</span>
@@ -26,9 +26,7 @@
           'growth-task--claimed': task.claimed,
         }"
       >
-        <span class="growth-task__marker" aria-hidden="true">
-          <SvgIcon :src="task.completed ? icon.message.success : icon.growth.create" size="18" />
-        </span>
+        <GrowthTaskIcon :task-key="task.taskKey" :completed="task.completed" :compact="compact" />
         <div class="growth-task__body">
           <strong>{{ t(task.titleKey) }}</strong>
           <span>{{ t(task.descriptionKey) }}</span>
@@ -81,7 +79,7 @@
 
     <div v-if="completedExpanded && completedTasks.length" class="growth-tasks__list growth-tasks__list--completed">
       <article v-for="task in completedTasks" :key="task.taskKey" class="growth-task growth-task--claimed">
-        <span class="growth-task__marker" aria-hidden="true"><SvgIcon :src="icon.message.success" size="18" /></span>
+        <GrowthTaskIcon :task-key="task.taskKey" completed :compact="compact" />
         <div class="growth-task__body">
           <strong>{{ t(task.titleKey) }}</strong>
           <span>{{ t(task.descriptionKey) }}</span>
@@ -108,6 +106,7 @@
   import { recordOperation } from '@/api/commonApi.ts';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon.ts';
+  import GrowthTaskIcon from './GrowthTaskIcon.vue';
   import { resolvePendingResourcesRoute } from '@/utils/resourceNavigation';
 
   const props = withDefaults(
@@ -258,6 +257,9 @@
   }
 
   h2 {
+    display: flex;
+    align-items: center;
+    gap: var(--ui-space-8, 8px);
     margin: 0;
     color: var(--text-color);
     font-size: var(--ui-font-16, 16px);
@@ -323,27 +325,6 @@
   .growth-task--claimed {
     border-color: color-mix(in srgb, #34d399 30%, var(--card-border-color));
     background: color-mix(in srgb, #34d399 6%, var(--background-color));
-  }
-
-  .growth-task__marker {
-    width: var(--ui-layout-22, 22px);
-    text-align: center;
-    flex: 0 0 auto;
-    color: var(--primary-color);
-    display: grid;
-    place-items: center;
-  }
-
-  .growth-task--completed .growth-task__marker {
-    color: var(--primary-color);
-    font-size: var(--ui-font-16, 16px);
-    font-weight: 700;
-  }
-
-  .growth-task--claimed .growth-task__marker {
-    color: #10b981;
-    font-size: var(--ui-font-16, 16px);
-    font-weight: 700;
   }
 
   .growth-task__body {
@@ -451,5 +432,39 @@
 
   .growth-tasks--compact .growth-task {
     padding: var(--ui-space-9, 9px) var(--ui-space-10, 10px);
+  }
+
+  .growth-tasks--mobile {
+    .growth-task {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr) auto;
+      column-gap: var(--ui-space-10, 10px);
+      row-gap: var(--ui-space-4, 4px);
+    }
+
+    .growth-task > .growth-task-icon,
+    .growth-task__body {
+      grid-row: 1 / span 2;
+    }
+
+    .growth-task__body strong {
+      white-space: normal;
+      overflow-wrap: anywhere;
+    }
+
+    .growth-task__reward {
+      grid-column: 3;
+      grid-row: 1;
+      text-align: right;
+    }
+
+    .growth-task__go,
+    .growth-task__claim,
+    .growth-task__completed,
+    .growth-task__readonly {
+      grid-column: 3;
+      grid-row: 2;
+      justify-self: end;
+    }
   }
 </style>

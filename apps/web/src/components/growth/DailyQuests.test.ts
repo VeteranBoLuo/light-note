@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createApp, h } from 'vue';
 import { createI18n } from 'vue-i18n';
 import enUS from '@/i18n/locales/en-US';
@@ -8,10 +8,7 @@ import zhCN from '@/i18n/locales/zh-CN';
 import DailyQuests from './DailyQuests.vue';
 
 const dailyQuestsSource = readFileSync(resolve(process.cwd(), 'src/components/growth/DailyQuests.vue'), 'utf8');
-const mobileRenderingSource = readFileSync(
-  resolve(process.cwd(), 'src/assets/css/mobile-rendering-baseline.less'),
-  'utf8',
-);
+vi.mock('@/components/base/SvgIcon/src/SvgIcon.vue', () => ({ default: { template: '<span />' } }));
 
 let cleanup: (() => void) | undefined;
 
@@ -59,7 +56,7 @@ function mountBonus(
         showClaimAction: options.showClaimAction ?? true,
       }),
   });
-  app.component('OriginalIcon', { render: () => h('span') });
+  app.directive('click-log', {});
   app.use(
     createI18n({
       legacy: false,
@@ -82,6 +79,7 @@ function mountBonus(
     claimAction: host.querySelector('.dq-bonus'),
     completedMessage: host.querySelector('.dq-completed')?.textContent,
     completedRows: host.querySelectorAll('.dq-item.done').length,
+    completedTaskIcons: host.querySelectorAll('.dq-item .growth-task-icon__check').length,
   };
 }
 
@@ -204,9 +202,8 @@ describe('每日任务视觉状态契约', () => {
       /\.dq-item\s*\{[\s\S]*?border:\s*1px solid color-mix\([\s\S]*?var\(--surface-border-color\)[\s\S]*?background:\s*color-mix\([\s\S]*?var\(--card-background\)/,
     );
     expect(dailyQuestsSource).not.toMatch(/\.dq-item\.done\s*\{[\s\S]*?(?:background|border-color):/);
-    expect(dailyQuestsSource).toMatch(
-      /\.dq-item\.done \.dq-check\s*\{[\s\S]*?border-color:\s*var\(--success-color\);[\s\S]*?color:\s*var\(--success-color\)/,
-    );
+    const result = mountBonus({ exp: 15, points: 30, claimed: false, claimable: false });
+    expect(result.completedTaskIcons).toBe(result.completedRows);
     expect(dailyQuestsSource).toMatch(
       /\.dq-stage\s*\{[\s\S]*?border:\s*1px solid var\(--surface-border-color\);[\s\S]*?background:\s*var\(--card-background\)/,
     );
@@ -219,9 +216,6 @@ describe('每日任务视觉状态契约', () => {
     );
     expect(dailyQuestsSource).toMatch(
       /\.dq-bonus\s*\{[\s\S]*?border:\s*1px solid var\(--surface-border-color\);[\s\S]*?background:\s*var\(--card-background\)/,
-    );
-    expect(mobileRenderingSource).toMatch(
-      /\.growth-page \.dq-item\.done \.dq-check\s*\{[\s\S]*?border-color:\s*var\(--success-color\) !important/,
     );
   });
 });
