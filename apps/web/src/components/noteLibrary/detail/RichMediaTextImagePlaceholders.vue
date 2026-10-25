@@ -6,6 +6,9 @@
       data-ln-media-image-placeholder="true"
       data-mce-bogus="all"
       contenteditable="false"
+      @touchstart.stop
+      @touchend.stop
+      @touchcancel.stop
       @mousedown.stop="focusPlaceholder"
       @click.stop="focusPasteArea"
       @contextmenu.stop="focusPasteArea"
@@ -91,6 +94,8 @@
     paste: [event: ClipboardEvent, block: HTMLElement, item: HTMLElement];
   }>();
   const { t } = useI18n();
+  // 占位框阻止 touch 冒泡，避免 TinyMCE 的 tap 将其选中并取消原生 click；
+  // 不 preventDefault，保留按钮点击、长按粘贴与滚动。
   type Slot = { key: number; block: HTMLElement; item: HTMLElement; media: HTMLElement };
   const slots = shallowRef<Slot[]>([]);
   const keys = new WeakMap<HTMLElement, number>();
