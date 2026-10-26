@@ -83,13 +83,14 @@ const result = () => ({
 });
 const ok = (data: unknown) => ({ status: 200, data });
 let app: App | undefined, host: HTMLElement;
+let wakeClock: { mockRestore: () => void } | undefined;
 async function settle() {
   for (let i = 0; i < 20; i++) await Promise.resolve();
   await nextTick();
 }
-// 回到前台补读只接受过期快照；推进时钟而不触发后台轮询。
 async function wakeWorkspace() {
-  vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 1001);
+  // A newly loaded snapshot is fresh for 1s; simulate returning after it is stale.
+  wakeClock = vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 1001);
   document.dispatchEvent(new Event('visibilitychange'));
   await settle();
 }
@@ -135,8 +136,6 @@ async function toScope() {
 beforeEach(() => {
   navigation.currentRoute = reactive({ value: { query: {} as Record<string, string> } });
   vi.clearAllMocks();
-  for (const mock of Object.values(api)) mock.mockReset();
-  api.replace.mockResolvedValue(undefined);
   api.alert.mockImplementation((options: any) => options.onOk());
   navigation.currentRoute.value.query = {};
   clearOrganizeHandoff();
@@ -161,8 +160,9 @@ beforeEach(() => {
 });
 afterEach(async () => {
   app?.unmount();
-  vi.restoreAllMocks();
   vi.unstubAllGlobals();
+  wakeClock?.mockRestore();
+  wakeClock = undefined;
   // Message state is global and outlives the workspace; clear it before jsdom teardown.
   message.destroy();
   await nextTick();
@@ -514,8 +514,7 @@ it('后台运行时按实际 aiStatus 自动刷新，完成后停止轮询', asy
     await settle();
     expect(api.getRun.mock.calls.length).toBe(calls + 1);
     expect([...host.querySelectorAll('button')].some((el) => el.textContent?.trim() === '刷新')).toBe(false);
-    document.dispatchEvent(new Event('visibilitychange'));
-    await settle();
+    await wakeWorkspace();
     expect(api.getRun.mock.calls.length).toBe(calls + 2);
   } finally {
     vi.useRealTimers();
@@ -2522,8 +2521,7 @@ it('跨页批量遵守检查筛选，刷新后保留取消勾选且不会顺带�
   ).toEqual(entries.slice(0, 31).map((item) => `title-${item.id}`));
   // The other pending check keeps each object in the priority group.
   expect(document.querySelector('.group-priority .group-count')?.textContent).toBe('32');
-  // 32 项双建议经历跨页补读、静默刷新和两批提交，单独留足 DOM 更新预算。
-}, 20_000);
+});
 
 it('刷新补页失败不提交半份摘要或列表，重试后再一起更新', async () => {
   const intersect = pageObserver();
