@@ -453,7 +453,7 @@ export function useExtractionWorkbench() {
     refresh: async () => {
       try { await refresh(); } catch (cause) { error.value = explain(cause); schedule(); }
     },
-    staleMs: 1000,
+    trailingWake: true, staleMs: 1000,
     canRefresh: () => Boolean(active.value || table.value?.inFlight),
   });
   function visibility() {

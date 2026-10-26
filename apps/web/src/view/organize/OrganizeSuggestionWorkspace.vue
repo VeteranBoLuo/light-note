@@ -1784,7 +1784,7 @@
     bookmark.refreshTag();
     emit('refresh-summary');
   }
-  useForegroundRefresh({ refresh: () => refresh(true), staleMs: 1000, canRefresh: () => Boolean(active && run.value) });
+  useForegroundRefresh({ refresh: () => refresh(true), trailingWake: true, staleMs: 1000, canRefresh: () => Boolean(active && run.value) });
   function visibility() {
     if (document.hidden) clearTimeout(timer);
   }
