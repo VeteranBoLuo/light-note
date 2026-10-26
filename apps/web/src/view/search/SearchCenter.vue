@@ -35,7 +35,7 @@
         <BButton
           v-if="publicScope.eligible && publicScope.caps.enabled"
           class="publications-entry"
-          @click="router.push('/search/publications')"
+          @click="openPublications"
         >
           <SvgIcon class="publications-entry__icon" :src="icon.cloudSpace.preview.globe" size="16" aria-hidden="true" />
           <span>{{ t('publicResources.title') }}</span>
@@ -277,7 +277,7 @@
                 <BButton
                   v-if="publicScope.eligible && publicScope.caps.enabled"
                   class="mobile-toolbar-btn"
-                  @click="router.push('/search/publications')"
+                  @click="openPublications"
                 >
                   <SvgIcon class="publications-entry__icon" :src="icon.cloudSpace.preview.globe" size="16" aria-hidden="true" />
                   {{ t('publicResources.title') }}
@@ -1802,6 +1802,11 @@
     reconcileImplicitSortForKeyword();
     viewState.loading = true;
     syncTimer.value = window.setTimeout(syncQueryNow, 250);
+  }
+
+  function openPublications() {
+    recordOperation({ module: '公开管理', operation: '进入公开管理【资源中心】' });
+    void router.push('/search/publications');
   }
 
   function applyQueryState(operation: string) {

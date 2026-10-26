@@ -371,6 +371,7 @@
     }
   }
   function openPublications() {
+    recordOperation({ module: '公开管理', operation: '进入公开管理【桌面快捷搜索】' });
     close({ restoreFocus: false });
     void router.push('/search/publications');
   }

@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   push: vi.fn(),
 }));
 vi.mock('@/store', () => ({ bookmarkStore: () => ({ isMobile: false }) }));
+vi.mock('@/api/commonApi', () => ({ recordOperation: vi.fn().mockResolvedValue(undefined) }));
 vi.mock('@/store/publicResourceScope', () => ({ usePublicResourceScope: () => mocks.scope }));
 vi.mock('vue-router', async (load) => ({
   ...(await load<any>()),

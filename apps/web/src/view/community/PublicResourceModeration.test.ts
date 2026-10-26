@@ -14,6 +14,7 @@ vi.mock('@/store', () => ({
   useUserStore: () => mocks.user,
   bookmarkStore: () => ({ isMobile: false, isDesktop: true }),
 }));
+vi.mock('@/api/commonApi', () => ({ recordOperation: vi.fn().mockResolvedValue(undefined) }));
 vi.mock('@/store/publicResourceScope', () => ({ usePublicResourceScope: () => mocks.scope }));
 vi.mock('@/api/publicResources', () => ({
   publicGet: (...args: any[]) => mocks.get(...args),

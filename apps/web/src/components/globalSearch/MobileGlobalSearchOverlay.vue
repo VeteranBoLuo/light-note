@@ -191,6 +191,7 @@
   }
 
   function openPublications() {
+    recordOperation({ module: '公开管理', operation: '进入公开管理【移动端快捷搜索】' });
     closeSearch(() => {
       void router.push('/search/publications');
     });

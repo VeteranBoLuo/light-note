@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp, reactive } from 'vue';
-const mocks = vi.hoisted(() => ({ scope: {} as any, send: vi.fn(), lookup: vi.fn(), factory: vi.fn() }));
+const mocks = vi.hoisted(() => ({ scope: {} as any, send: vi.fn(), lookup: vi.fn(), factory: vi.fn(), log: vi.fn() }));
+vi.mock('@/api/commonApi', () => ({ recordOperation: mocks.log }));
 vi.mock('@/store/publicResourceScope', () => ({ usePublicResourceScope: () => mocks.scope }));
 vi.mock('@/api/publicResources', () => ({
   sendPublicResourceBatch: (...args: any[]) => mocks.send(...args),
@@ -36,6 +37,7 @@ const success = (input: any[]) => ({
 });
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.log.mockReset().mockResolvedValue(undefined);
   mocks.scope = reactive({ identity: 'one', eligible: true });
   mocks.send.mockImplementation(async (input) => success(input));
   mocks.lookup.mockResolvedValue({ found: false });
@@ -45,6 +47,18 @@ beforeEach(() => {
 });
 afterEach(() => app?.unmount());
 describe('公开资源批量请求', () => {
+  it.each([
+    ['own/p/withdraw', {}, '取消公开'],
+    ['moderation/p/decide', { action: 'approve' }, '审核通过'],
+    ['moderation/p/decide', { action: 'reject' }, '审核拒绝'],
+  ] as const)('批量 %s 按用户意图汇总，不逐条记录', async (path, body, label) => {
+    const batch = setup();
+    await batch.start(entries(3).map((entry) => ({ ...entry, path, body })));
+    expect(mocks.log).toHaveBeenCalledExactlyOnceWith({
+      module: '公开管理',
+      operation: `批量${label}【共3项，成功3项，无须重复操作0项，失败0项】`,
+    });
+  });
   it('100项只发一个请求，保留全部独立请求ID和材料', async () => {
     const batch = setup();
     await batch.start(entries(100));
@@ -54,6 +68,10 @@ describe('公开资源批量请求', () => {
     expect(new Set(input.map((item: any) => item.requestId)).size).toBe(100);
     expect(input[99].body.sourceId).toBe('99');
     expect(batch.rows.value.every((row) => row.state === 'success')).toBe(true);
+    expect(mocks.log).toHaveBeenCalledExactlyOnceWith({
+      module: '公开管理',
+      operation: '批量提交审核【共100项，成功100项，无须重复操作0项，失败0项】',
+    });
   });
   it('逐项呈现成功、复用、冲突和未知；缺失结果不能当成功', async () => {
     mocks.send.mockImplementation(async (input) => ({
@@ -66,6 +84,14 @@ describe('公开资源批量请求', () => {
     const batch = setup();
     await batch.start(entries(4));
     expect(batch.rows.value.map((row) => row.state)).toEqual(['success', 'reused', 'failed', 'unknown']);
+    expect(mocks.log).not.toHaveBeenCalled();
+    mocks.lookup.mockResolvedValue({ found: true, result: { publicId: 'd', version: 1 } });
+    await batch.reconcile();
+    await batch.reconcile();
+    expect(mocks.log).toHaveBeenCalledExactlyOnceWith({
+      module: '公开管理',
+      operation: '批量提交审核【共4项，成功2项，无须重复操作1项，失败1项】',
+    });
   });
   it('超时仅查回执，显式重试只发送查无回执项并保留原ID', async () => {
     mocks.send.mockRejectedValueOnce({ status: 0 });
@@ -83,6 +109,9 @@ describe('公开资源批量请求', () => {
     expect(mocks.send.mock.calls[1][0]).toHaveLength(1);
     expect(mocks.send.mock.calls[1][0][0].requestId).toBe(mocks.send.mock.calls[0][0][1].requestId);
     expect(batch.rows.value.every((row) => row.state === 'success')).toBe(true);
+    await batch.reconcile();
+    await batch.retryUnconfirmed();
+    expect(mocks.log).toHaveBeenCalledTimes(1);
   });
   it('整批HTTP失败可能已经部分提交，不能把全部资源直接当作失败', async () => {
     mocks.send.mockRejectedValueOnce({ status: 403, code: 'PUBLIC_RESOURCE_ACCOUNT_UNAVAILABLE' });
@@ -90,6 +119,7 @@ describe('公开资源批量请求', () => {
     await batch.start(entries());
     expect(batch.rows.value.every((row) => row.state === 'unknown')).toBe(true);
     expect(mocks.send).toHaveBeenCalledTimes(1);
+    expect(mocks.log).not.toHaveBeenCalled();
   });
   it('切号或卸载会清空收据草稿并忽略迟到响应', async () => {
     let finish!: (value: any) => void;
@@ -107,6 +137,19 @@ describe('公开资源批量请求', () => {
     await pending;
     expect(batch.rows.value).toEqual([]);
     expect(mocks.send).toHaveBeenCalledTimes(1);
+    expect(mocks.log).not.toHaveBeenCalled();
+  });
+  it('全部失败不记成功，日志故障不能改变已提交的批量结果', async () => {
+    mocks.send.mockImplementationOnce(async (input) => ({
+      items: input.map((entry: any) => ({ requestId: entry.requestId, state: 'failed', code: 'CONFLICT' })),
+    }));
+    const batch = setup();
+    await batch.start(entries());
+    expect(mocks.log).not.toHaveBeenCalled();
+    mocks.log.mockRejectedValueOnce(new Error('telemetry unavailable'));
+    await batch.start(entries());
+    expect(batch.rows.value.every((row) => row.state === 'success')).toBe(true);
+    expect(batch.busy.value).toBe(false);
   });
   it('拒绝重复键和超过100项，禁止静默截断', async () => {
     const batch = setup();
