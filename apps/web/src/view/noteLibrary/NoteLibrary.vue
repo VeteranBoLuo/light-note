@@ -466,28 +466,17 @@
 
     <!-- 新建笔记类型选择 -->
     <NewNotePickerModal
-      v-if="bookmark.isMobile && showTypePicker"
+      v-if="showTypePicker"
       :visible="showTypePicker"
       @update:visible="updateNoteCreatePickerVisible"
       :builtin-templates="orderedBuiltinTemplates"
       :my-templates="orderedMyTemplates"
       :my-templates-state="myTemplatesState"
-      :template-icons="TEMPLATE_ICONS"
       @select-blank="handleMobileBlankSelection"
       @select-builtin="handleMobileBuiltinSelection"
       @select-mine="handleMobileTemplateSelection"
       @manage="openTemplateManager"
       @retry="loadMyTemplates"
-    />
-    <ActionCardModal
-      v-if="!bookmark.isMobile && showTypePicker"
-      :visible="showTypePicker"
-      @update:visible="updateNoteCreatePickerVisible"
-      :mask-closable="false"
-      :title="$t('note.pickEditor')"
-      width="min(var(--ui-layout-760, 760px), 80vw)"
-      :sections="typePickerSections"
-      :note="$t('note.pickEditorTip')"
     />
     <NoteBatchExportDialog
       v-if="batchExportModalVisible"
@@ -743,7 +732,7 @@
     invalidateNoteDetailPrefetch,
     prefetchNoteDetail,
   } from '@/api/noteDetailPrefetch';
-  import { BUILTIN_NOTE_TEMPLATES, pickTemplateLocale, sortBuiltinNoteTemplates } from '@/config/noteTemplates.ts';
+  import { BUILTIN_NOTE_TEMPLATES, sortBuiltinNoteTemplates } from '@/config/noteTemplates.ts';
   import { blockGuestWrite } from '@/composables/useGuestGuard';
   import RightMenu from '@/components/base/RightMenu.vue';
   import ResourcePageShell from '@/components/base/ResourcePageShell.vue';
@@ -822,16 +811,6 @@
     () => import('@/components/noteLibrary/library/NoteReadonlyPreview.vue'),
   );
   const NoteTagConfig = defineAsyncComponent(() => import('@/components/noteLibrary/detail/NoteTagConfig.vue'));
-  const TEMPLATE_ICONS: Record<string, string> = {
-    daily: icon.noteTemplate.daily,
-    weekly: icon.noteTemplate.weekly,
-    meeting: icon.noteTemplate.meeting,
-    reading: icon.noteTemplate.reading,
-    project: icon.noteTemplate.project,
-    review: icon.noteTemplate.review,
-    knowledge: icon.noteTemplate.knowledge,
-    mindmap: icon.noteTemplate.mindmap,
-  };
 
   const { t, locale } = useI18n();
   const router = useRouter();
@@ -1223,95 +1202,6 @@
       (a, b) => Number(templateUsage.value[`mine:${b.id}`] || 0) - Number(templateUsage.value[`mine:${a.id}`] || 0),
     ),
   );
-  const templateTypeTag = (type: string) => (type === 'markdown' ? t('note.tplTypeMd') : t('note.tplTypeHtml'));
-  const manageTemplateHeaderAction = computed(() => ({
-    label: t('note.templateManager.title'),
-    icon: icon.noteDetail.template,
-    onClick: openTemplateManager,
-  }));
-  // "我的模板"区按状态渲染:加载/空态给提示行(hint),失败给可点重试卡,成功给模板卡
-  const myTemplateSection = computed(() => {
-    if (myTemplatesState.value === 'error') {
-      return {
-        key: 'mine',
-        title: t('note.tplMineSection'),
-        headerAction: manageTemplateHeaderAction.value,
-        actions: [
-          {
-            key: 'retry',
-            label: t('note.tplRetryLabel'),
-            description: t('note.tplRetryDesc'),
-            onClick: () => loadMyTemplates(),
-          },
-        ],
-      };
-    }
-    if (myTemplatesState.value === 'success' && myTemplates.value.length) {
-      return {
-        key: 'mine',
-        title: t('note.tplMineSection'),
-        headerAction: manageTemplateHeaderAction.value,
-        actions: orderedMyTemplates.value.map((tpl) => ({
-          key: tpl.id,
-          label: tpl.name,
-          description: tpl.description || '',
-          tag: templateTypeTag(tpl.type),
-          onClick: () => gotoNewNote({ type: tpl.type, templateId: tpl.id }),
-        })),
-      };
-    }
-    return {
-      key: 'mine',
-      title: t('note.tplMineSection'),
-      headerAction: manageTemplateHeaderAction.value,
-      actions: [],
-      hint: myTemplatesState.value === 'loading' ? t('note.tplLoading') : t('note.tplEmptyMine'),
-    };
-  });
-  const typePickerSections = computed(() => {
-    const templateLocale = pickTemplateLocale(locale.value);
-    return [
-      {
-        key: 'type',
-        title: t('note.pickMode'),
-        actions: [
-          {
-            key: 'html',
-            label: t('note.htmlLabel'),
-            description: t('note.htmlDesc'),
-            onClick: () => gotoNewNote({ type: 'html' }),
-          },
-          {
-            key: 'markdown',
-            label: t('note.mdLabel'),
-            description: t('note.mdDesc'),
-            onClick: () => gotoNewNote({ type: 'markdown' }),
-          },
-          {
-            key: 'drawing',
-            label: t('note.drawingLabel'),
-            description: t('note.drawingDesc'),
-            onClick: () => gotoNewNote({ type: 'drawing' }),
-          },
-        ],
-      },
-      {
-        key: 'builtin',
-        title: t('note.tplBuiltinSection'),
-        actions: orderedBuiltinTemplates.value.map((tpl) => ({
-          key: tpl.key,
-          label: t(tpl.nameKey),
-          description: t(tpl.descKey),
-          tag: templateTypeTag(tpl.type),
-          icon: TEMPLATE_ICONS[tpl.key] ?? icon.resource.note,
-          preview: tpl.preview[templateLocale],
-          onClick: () => gotoNewNote({ type: tpl.type, builtin: tpl.key }),
-        })),
-      },
-      myTemplateSection.value,
-    ];
-  });
-
   function showNewNotePicker() {
     growthNoteCreateReturnPath.value = '';
     createParentOverride.value = noteTreeWriteEnabled.value ? currentParentId.value : null;

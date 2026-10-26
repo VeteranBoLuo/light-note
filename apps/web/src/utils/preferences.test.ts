@@ -30,12 +30,12 @@ describe('默认首页解析', () => {
     expect(getAppHomePath({ homePage }, false)).toBe(path);
   });
 
-  it('缺失偏好和历史官网偏好按端迁移：桌面回书签、移动回今日', () => {
-    expect(getHomePagePreference()).toBe('bookmark');
-    expect(getHomePagePreference({ homePage: 'landing' })).toBe('bookmark');
-    expect(getDesktopHomePath({ homePage: 'landing' })).toBe('/home');
-    expect(getAppHomePath({ homePage: 'landing' }, false)).toBe('/home');
-    // 移动端历史 landing 值回退到移动默认首页「今日」，桌面端仍回退书签
+  it('缺失偏好和历史官网偏好统一回工作台', () => {
+    expect(getHomePagePreference()).toBe('workbench');
+    expect(getHomePagePreference({ homePage: 'landing' })).toBe('workbench');
+    expect(getDesktopHomePath({ homePage: 'landing' })).toBe('/workbenches');
+    expect(getAppHomePath({ homePage: 'landing' }, false)).toBe('/workbenches');
+    // 移动端历史 landing 值回退到移动默认首页「今日」，桌面端也回退工作台
     expect(getAppHomePath({ homePage: 'landing' }, true)).toBe('/workbenches');
   });
 
@@ -75,7 +75,8 @@ describe('默认首页解析', () => {
 
   it('按手机、平板和桌面视口解析统一应用入口', () => {
     expect(getApplicationEntryPath(undefined, 390)).toBe('/workbenches');
-    expect(getApplicationEntryPath({ homePage: 'landing' }, 1440)).toBe('/home');
+    expect(getApplicationEntryPath(undefined, 820)).toBe('/workbenches');
+    expect(getApplicationEntryPath({ homePage: 'landing' }, 1440)).toBe('/workbenches');
     expect(getApplicationEntryPath({ homePage: 'noteLibrary' }, 390)).toBe('/noteLibrary');
     expect(getApplicationEntryPath({ homePage: 'noteLibrary' }, 820)).toBe('/home');
     expect(getApplicationEntryPath({ homePage: 'noteLibrary' }, 1440)).toBe('/noteLibrary');
@@ -125,9 +126,7 @@ describe('笔记默认打开方式', () => {
     const settings = readFileSync(resolve(here, '../view/settings/components/SettingsGeneralSection.vue'), 'utf8');
     const noteLibrary = readFileSync(resolve(here, '../view/noteLibrary/NoteLibrary.vue'), 'utf8');
 
-    expect(settings).toMatch(
-      /pref-key="noteDirectEdit"[\s\S]*?v-if="!bookmark\.isMobile"/u,
-    );
+    expect(settings).toMatch(/pref-key="noteDirectEdit"[\s\S]*?v-if="!bookmark\.isMobile"/u);
     const field = readFileSync(resolve(here, '../view/settings/components/SettingsPreferenceField.vue'), 'utf8');
     expect(field).toContain('await updatePreference({ [props.prefKey]: next })');
     expect(settings).toMatch(/pref-key="noteDirectEdit"[\s\S]*?:default-value="false"/u);

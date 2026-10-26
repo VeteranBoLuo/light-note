@@ -18,13 +18,26 @@
             <span class="float-el el-3">☁️</span>
             <span class="float-el el-4">🏷️</span>
           </div>
+          <div v-if="bookmark.isMobile" class="mobile-cover-brand">
+            <img src="/favicon.svg" alt="" aria-hidden="true" width="30" height="30" />
+            <span>{{ t('landing.brandShort') }}<small>LIGHT NOTE</small></span>
+          </div>
           <div class="cover-layout">
             <div class="cover-text">
-              <div class="logo-badge" ref="badgeRef">LIGHT NOTE</div>
+              <div v-if="!bookmark.isMobile" class="logo-badge" ref="badgeRef">LIGHT NOTE</div>
+              <p v-if="bookmark.isMobile" class="mobile-cover-eyebrow">{{ t('landing.heroTagline') }}</p>
               <h1 class="hero-title" ref="titleRef">
-                <span class="hero-brand">{{ t('landing.heroBrand') }}</span>
-                <span class="hero-tagline">{{ t('landing.heroTagline') }}</span>
+                <template v-if="bookmark.isMobile">
+                  {{ t('landing.mobileHeroLead') }}<br /><span class="mobile-hero-accent">{{ t('landing.mobileHeroAccent') }}</span>
+                </template>
+                <template v-else>
+                  <span class="hero-brand">{{ t('landing.heroBrand') }}</span>
+                  <span class="hero-tagline">{{ t('landing.heroTagline') }}</span>
+                </template>
               </h1>
+              <p v-if="bookmark.isMobile" class="mobile-cover-description">
+                {{ t('landing.mobileDescriptionLead') }}<br />{{ t('landing.mobileDescriptionSupport') }}
+              </p>
               <div class="hero-actions">
                 <BButton
                   type="primary"
@@ -57,7 +70,8 @@
                   <span>{{ t('landing.ctaAccount') }}</span>
                 </BButton>
               </div>
-              <div v-if="!isAndroidApp" class="pwa-install-strip">
+              <p v-if="bookmark.isMobile && !isLoggedIn" class="mobile-cover-hint">{{ t('landing.mobileExperienceHint') }}</p>
+              <div v-if="!isAndroidApp && !bookmark.isMobile" class="pwa-install-strip">
                 <span class="pwa-install-strip__icon">
                   <SvgIcon :src="icon.pwa.device" size="22" aria-hidden="true" />
                 </span>
@@ -152,6 +166,13 @@
                 </div>
               </div>
             </div>
+          </div>
+          <div v-if="bookmark.isMobile && !isAndroidApp" class="mobile-install-row">
+            <div><strong>{{ t('landing.mobileInstallTitle') }}</strong><span>{{ t('landing.mobileInstallDesc') }}</span></div>
+            <BButton type="text" :disabled="isStandalone" @click="openGuide('landing')">
+              {{ isStandalone ? t('pwa.installed') : t('pwa.install') }}
+              <SvgIcon :src="icon.arrow_right" size="14" aria-hidden="true" />
+            </BButton>
           </div>
         </div>
       </section>
@@ -2472,10 +2493,97 @@
       height: 34px;
     }
     .s-cover {
-      min-height: 100vh;
-      min-height: 100svh;
-      padding-top: max(26px, calc(env(safe-area-inset-top) + 18px));
-      padding-bottom: 54px;
+      min-height: 0;
+      padding-top: max(var(--ui-space-16, 16px), env(safe-area-inset-top));
+      padding-inline: var(--ui-space-22, 22px);
+      padding-bottom: var(--ui-space-32, 32px);
+      background: radial-gradient(ellipse at 90% 31%, rgba(55, 48, 95, 0.3), transparent 50%), #0e0e1b;
+    }
+    .s-cover .grid-overlay,
+    .s-cover .float-elements,
+    .s-cover .slide-bg {
+      display: none;
+    }
+    .mobile-cover-brand {
+      display: flex;
+      align-items: center;
+      gap: var(--ui-space-9, 9px);
+      padding-bottom: var(--ui-space-16, 16px);
+      margin-bottom: var(--ui-space-26, 26px);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      text-align: left;
+    }
+    .mobile-cover-brand img {
+      width: var(--ui-layout-30, 30px);
+      height: var(--ui-layout-30, 30px);
+    }
+    .mobile-cover-brand > span {
+      color: #f4f3ff;
+      font-size: var(--ui-font-19, 19px);
+      font-weight: 650;
+      line-height: 1.25;
+    }
+    .mobile-cover-brand small {
+      display: block;
+      margin-top: var(--ui-space-3, 3px);
+      color: #a6a0ce;
+      font-size: var(--ui-font-10, 10px);
+      letter-spacing: 0.18em;
+    }
+    .mobile-cover-eyebrow {
+      margin: 0 0 var(--ui-space-14, 14px);
+      color: #a6a0ce;
+      font-size: var(--ui-font-11, 11px);
+      line-height: 1.5;
+      letter-spacing: 0.08em;
+    }
+    .mobile-hero-accent {
+      color: #bbb2ff;
+    }
+    .mobile-cover-description {
+      margin: var(--ui-space-16, 16px) 0 var(--ui-space-21, 21px);
+      color: #aaa7c1;
+      font-size: var(--ui-font-13, 13px);
+      line-height: 1.85;
+    }
+    .mobile-cover-hint {
+      margin: var(--ui-space-11, 11px) 0 0;
+      color: #a6a0b9;
+      font-size: var(--ui-font-11, 11px);
+      line-height: 1.6;
+      text-align: left;
+    }
+    .mobile-install-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--ui-space-10, 10px);
+      margin: var(--ui-space-17, 17px) var(--ui-space-2, 2px) 0;
+      text-align: left;
+    }
+    .mobile-install-row > div {
+      min-width: 0;
+      display: grid;
+      gap: var(--ui-space-2, 2px);
+    }
+    .mobile-install-row strong {
+      color: #d2cde4;
+      font-size: var(--ui-font-12, 12px);
+      font-weight: 500;
+    }
+    .mobile-install-row span {
+      color: #aba7c0;
+      font-size: var(--ui-font-11, 11px);
+      line-height: 1.65;
+    }
+    .mobile-install-row .b_btn {
+      flex: 0 0 auto;
+      min-height: var(--ui-control-32, 32px);
+      padding: 0;
+      gap: var(--ui-space-4, 4px);
+      color: #b5a8ff;
+      font-size: var(--ui-font-12, 12px);
+      background: transparent;
     }
     .s-cta {
       padding-bottom: max(42px, calc(env(safe-area-inset-bottom) + 28px));
@@ -2487,66 +2595,54 @@
     .cover-layout {
       width: 100%;
       max-width: 100%;
-      gap: 18px;
+      gap: var(--ui-space-21, 21px);
     }
     .cover-text {
       width: 100%;
-      text-align: center;
-    }
-    .cover-text .hero-actions {
-      justify-content: center;
-    }
-    .logo-badge {
-      margin-bottom: 10px;
-      padding: 4px 14px;
-      font-size: 9px;
-      letter-spacing: 2.4px;
-      color: #aaa6ff;
-      background: rgba(99, 92, 237, 0.1);
-      border-color: rgba(145, 140, 255, 0.22);
+      text-align: left;
     }
     .hero-title {
-      margin: 0 0 15px;
-    }
-    .hero-brand {
-      padding: 2px 0 7px;
-      font-size: clamp(52px, 15vw, 64px);
-      letter-spacing: clamp(6px, 2.4vw, 9px);
-      line-height: 1.08;
-    }
-    .hero-tagline {
       margin: 0;
-      font-size: clamp(14px, 3.9vw, 16px);
-      line-height: 1.55;
-      letter-spacing: clamp(2px, 1.15vw, 4px);
-      color: #9a99a5;
+      color: #f4f3ff;
+      font-size: var(--ui-font-34, 34px);
+      font-weight: 720;
+      line-height: 1.36;
+      letter-spacing: -0.025em;
     }
-    .hero-actions {
+    .cover-text .hero-actions {
+      display: grid;
+      grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr);
       width: 100%;
-      flex-direction: column;
-      align-items: center;
-      gap: 3px;
+      gap: var(--ui-space-10, 10px);
+      align-items: stretch;
+    }
+    .hero-actions .btn-primary.b_btn,
+    .hero-actions .btn-ghost.b_btn {
+      min-width: 0;
+      width: 100%;
+      min-height: var(--ui-control-46, 46px);
+      height: auto;
+      padding: var(--ui-space-12, 12px);
+      border-radius: 13px;
+      font-size: var(--ui-font-13, 13px);
+      line-height: 1.35;
+      white-space: normal;
+      justify-content: center;
     }
     .hero-actions .btn-primary.b_btn {
-      width: min(82vw, 286px);
-      min-height: 46px;
-      padding: 11px 20px;
-      font-size: 14px;
-      box-shadow: 0 12px 28px -18px rgba(116, 108, 255, 0.92);
+      background: linear-gradient(100deg, #6458f3, #7b6bff);
+      gap: var(--ui-space-8, 8px);
+      box-shadow: 0 8px 24px rgba(97, 92, 237, 0.13);
     }
     .hero-actions .btn-ghost.b_btn {
-      width: auto;
-      min-height: 36px;
-      padding: 5px 14px;
-      border-color: transparent;
-      color: #9695a2;
-      background: transparent;
-      font-size: 13px;
+      border: 1px solid #6b638a;
+      background: rgba(255, 255, 255, 0.025);
+      color: #e6e0f6;
     }
     .hero-actions .btn-ghost__loading-indicator {
-      left: 0;
-      width: 14px;
-      height: 14px;
+      left: var(--ui-space-2, 2px);
+      width: var(--ui-layout-14, 14px);
+      height: var(--ui-layout-14, 14px);
     }
     .cta-actions {
       width: 100%;
@@ -2565,49 +2661,6 @@
     .btn-primary:hover,
     .btn-ghost.b_btn:hover {
       transform: none;
-    }
-    .pwa-install-strip {
-      display: grid;
-      grid-template-columns: 30px minmax(0, 1fr) auto;
-      width: min(100%, 336px);
-      margin: 10px auto 0;
-      padding: 7px 8px;
-      align-items: center;
-      gap: 8px;
-      border-radius: 12px;
-      text-align: left;
-      flex-wrap: nowrap;
-      background: rgba(99, 92, 237, 0.06);
-    }
-    .pwa-install-strip__icon {
-      width: 30px;
-      height: 30px;
-      flex-basis: 30px;
-      border-radius: 8px;
-    }
-    .pwa-install-strip__copy {
-      padding-top: 0;
-      gap: 1px;
-    }
-    .pwa-install-strip__copy strong {
-      font-size: 11.5px;
-      line-height: 1.35;
-    }
-    .pwa-install-strip__copy span {
-      font-size: 9.5px;
-      line-height: 1.35;
-    }
-    .pwa-install-strip__actions {
-      width: auto;
-      padding-left: 0;
-    }
-    .pwa-install-strip__actions :deep(.b_btn) {
-      width: auto;
-      min-height: 30px;
-      height: 30px;
-      padding: 0 10px;
-      border-radius: 8px;
-      font-size: 10.5px;
     }
     .cover-mockup {
       width: min(100%, 430px);
@@ -2673,7 +2726,7 @@
     .carousel-dot.b_btn.active {
       border: 0;
       color: #cbc8ff;
-      background: rgba(99, 92, 237, 0.13);
+      background: transparent;
       box-shadow: none;
     }
     .carousel-dot.b_btn.active::after {
@@ -2947,28 +3000,9 @@
       padding-left: 15px;
     }
     .s-cover {
-      padding-top: max(20px, calc(env(safe-area-inset-top) + 14px));
-      padding-bottom: 46px;
-    }
-    .hero-brand {
-      font-size: 50px;
-      letter-spacing: 5px;
-    }
-    .pwa-install-strip {
-      grid-template-columns: 28px minmax(0, 1fr) auto;
-      gap: 6px;
-      padding: 7px;
-    }
-    .pwa-install-strip__icon {
-      width: 28px;
-      height: 28px;
-      flex-basis: 28px;
-    }
-    .pwa-install-strip__copy span {
-      display: none;
-    }
-    .pwa-install-strip__actions :deep(.b_btn) {
-      padding: 0 9px;
+      padding-inline: var(--ui-space-20, 20px);
+      padding-top: max(var(--ui-space-16, 16px), env(safe-area-inset-top));
+      padding-bottom: var(--ui-space-32, 32px);
     }
     .carousel-dots {
       gap: 1px;

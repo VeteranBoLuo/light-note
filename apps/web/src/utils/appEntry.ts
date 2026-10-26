@@ -1,6 +1,12 @@
 import { isMobileViewport } from '@/config/responsive.ts';
 import { MOBILE_TODAY_PATH } from '@/config/mobileNavigation.ts';
-import { getAppHomePath, getDesktopHomePath, type AppHomePath, type UserPreferences } from '@/utils/preferences.ts';
+import {
+  getAppHomePath,
+  getDesktopHomePath,
+  getHomePagePreference,
+  type AppHomePath,
+  type UserPreferences,
+} from '@/utils/preferences.ts';
 import { resolveLightNoteRuntime, type LightNoteRuntime } from '@/utils/appRuntime.ts';
 
 export interface RuntimeApplicationEntryOptions {
@@ -41,7 +47,7 @@ export function getRuntimePostRegistrationPath(
 }
 
 /**
- * `/app` 的运行时分发。移动布局与 APK 统一进入「今日」，平板保留书签首屏，
+ * `/app` 的运行时分发。移动布局与 APK 统一进入「今日」，平板无偏好时进入工作台，
  * 普通桌面浏览器与桌面 PWA 按偏好进入；APK 不受视口宽度影响。
  */
 export function getRuntimeApplicationEntryPath(
@@ -53,8 +59,8 @@ export function getRuntimeApplicationEntryPath(
   if (runtime === 'android-app' || isMobileViewport(viewportWidth)) {
     return MOBILE_TODAY_PATH;
   }
-  // 平板沿用书签首屏，桌面按账号偏好
-  if (viewportWidth < 1024) return '/home';
+  // 平板的显式资料偏好沿用书签入口；无偏好（包括游客）统一进入工作台。
+  if (viewportWidth < 1024) return getHomePagePreference(preferences) === 'workbench' ? '/workbenches' : '/home';
   return getDesktopHomePath(preferences);
 }
 

@@ -241,3 +241,443 @@
     }
   }
 }
+
+/* Document geometry is independent of interface density. Legacy saved templates retain their styles above. */
+.note-template-page.ln-note-layout {
+  /* ui-density-fixed: 笔记正文排版随文档字号缩放，不随界面密度变化。 */
+  max-width: 56.7em;
+  /* ui-density-fixed: 笔记正文排版随文档字号缩放，不随界面密度变化。 */
+  padding: 0 0 2em;
+  line-height: 1.8;
+  overflow-wrap: anywhere;
+  color: var(--text-color);
+
+  p {
+    /* ui-density-fixed: 笔记正文排版随文档字号缩放，不随界面密度变化。 */
+    margin: 0 0 0.85em;
+  }
+  h1,
+  h2,
+  h2 {
+    /* ui-density-fixed: 笔记正文标题随文档字号缩放。 */
+    font-size: 1.2em;
+    /* ui-density-fixed: 笔记正文段间距随文档字号缩放。 */
+    margin: 1.6em 0 0.8em;
+    line-height: 1.5;
+  }
+  .ln-note-block > h2,
+  .ln-note-reading-section > h2,
+  .ln-note-proof h2 {
+    /* ui-density-fixed: 笔记正文小标题随文档字号缩放。 */
+    font-size: 1.06em;
+    /* ui-density-fixed: 笔记正文段间距随文档字号缩放。 */
+    margin: 0 0 0.8em;
+  }
+  h3 {
+    color: var(--text-color);
+  }
+  h3 {
+    /* ui-density-fixed: 笔记正文排版随文档字号缩放，不随界面密度变化。 */
+    margin: 0 0 0.45em;
+    /* ui-density-fixed: 笔记正文排版随文档字号缩放，不随界面密度变化。 */
+    font-size: 0.94em;
+    font-weight: 600;
+  }
+  .ln-note-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    /* ui-density-fixed: 笔记正文排版随文档字号缩放，不随界面密度变化。 */
+    gap: 1.2em;
+    /* ui-density-fixed: 笔记正文排版随文档字号缩放，不随界面密度变化。 */
+    padding-bottom: 1.4em;
+    /* ui-density-fixed: 笔记正文排版随文档字号缩放，不随界面密度变化。 */
+    margin-bottom: 1.5em;
+    border-bottom: 1px solid var(--surface-border-color);
+    h1 {
+      margin: 0;
+      /* ui-density-fixed: 笔记正文排版随文档字号缩放，不随界面密度变化。 */
+      font-size: 1.65em;
+      line-height: 1.4;
+      font-weight: 650;
+    }
+    > div > p {
+      color: var(--desc-color);
+      /* ui-density-fixed: 笔记正文排版随文档字号缩放，不随界面密度变化。 */
+      font-size: 0.86em;
+      /* ui-density-fixed: 笔记正文排版随文档字号缩放，不随界面密度变化。 */
+      margin: 0.45em 0 0;
+    }
+  }
+  .ln-note-date {
+    margin: 0;
+    color: var(--desc-color);
+    /* ui-density-fixed: 笔记正文排版随文档字号缩放，不随界面密度变化。 */
+    font-size: 0.8em;
+    white-space: nowrap;
+  }
+  .ln-note-block {
+    min-width: 0;
+    border: 1px solid var(--surface-border-color);
+    border-radius: 9px;
+    /* ui-density-fixed: 笔记正文排版随文档字号缩放，不随界面密度变化。 */
+    padding: 1.2em 1.35em;
+    /* ui-density-fixed: 笔记正文排版随文档字号缩放，不随界面密度变化。 */
+    margin-bottom: 1.2em;
+  }
+  .ln-note-section-title {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    /* ui-density-fixed: 笔记正文排版随文档字号缩放，不随界面密度变化。 */
+    gap: 0.7em;
+    /* ui-density-fixed: 笔记正文排版随文档字号缩放，不随界面密度变化。 */
+    margin-bottom: 0.8em;
+    h2 {
+      margin: 0;
+      /* ui-density-fixed: 笔记正文排版随文档字号缩放，不随界面密度变化。 */
+      font-size: 1.06em;
+      line-height: 1.5;
+      font-weight: 650;
+    }
+    > span {
+      color: var(--desc-color);
+      /* ui-density-fixed: 笔记正文排版随文档字号缩放，不随界面密度变化。 */
+      font-size: 0.8em;
+    }
+  }
+  .ln-note-block p:last-child {
+    margin-bottom: 0;
+  }
+  .ln-note-focus {
+    background: var(--note-layout-focus-bg);
+    border-color: var(--note-layout-focus-border);
+  }
+  .ln-note-focus h2 {
+    color: var(--workspace-note-text);
+  }
+  .ln-note-side-note {
+    background: var(--workspace-canvas);
+  }
+  .ln-note-tasks {
+    display: grid;
+    /* ui-density-fixed: 笔记正文排版随文档字号缩放，不随界面密度变化。 */
+    gap: 0.55em;
+    p {
+      margin: 0;
+    }
+    input {
+      vertical-align: baseline;
+      /* ui-density-fixed: 笔记正文排版随文档字号缩放，不随界面密度变化。 */
+      margin-right: 0.45em;
+    }
+  }
+  .ln-note-daily-columns {
+    display: grid;
+    grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+    /* ui-density-fixed: 笔记正文排版随文档字号缩放，不随界面密度变化。 */
+    gap: 1.2em;
+    align-items: start;
+  }
+  .ln-note-equal-columns {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    /* ui-density-fixed: 笔记正文排版随文档字号缩放，不随界面密度变化。 */
+    gap: 1.75em;
+  }
+  .ln-note-entry + .ln-note-entry {
+    border-top: 1px solid var(--surface-border-color);
+    /* ui-density-fixed: 笔记正文排版随文档字号缩放，不随界面密度变化。 */
+    margin-top: 1em;
+    /* ui-density-fixed: 笔记正文排版随文档字号缩放，不随界面密度变化。 */
+    padding-top: 1em;
+  }
+  .ln-note-hint {
+    color: var(--desc-color);
+  }
+  .ln-note-next {
+    border: 0;
+    border-top: 1px solid var(--surface-border-color);
+    border-radius: 0;
+    /* ui-density-fixed: 笔记正文排版随文档字号缩放，不随界面密度变化。 */
+    padding: 1.2em 0 0.15em;
+  }
+  .ln-note-closing {
+    border-top: 1px solid var(--surface-border-color);
+    /* ui-density-fixed: 笔记正文排版随文档字号缩放，不随界面密度变化。 */
+    margin: 1.1em 0 0;
+    /* ui-density-fixed: 笔记正文排版随文档字号缩放，不随界面密度变化。 */
+    padding-top: 1em;
+    /* ui-density-fixed: 笔记正文排版随文档字号缩放，不随界面密度变化。 */
+    font-size: 0.86em;
+    color: var(--desc-color);
+  }
+  .ln-note-closing strong {
+    color: var(--text-color);
+    font-weight: 550;
+  }
+  .ln-note-summary {
+    border-left: 3px solid var(--primary-color);
+    /* ui-density-fixed: 笔记正文排版随文档字号缩放，不随界面密度变化。 */
+    padding: 0 0 0 1.1em;
+    /* ui-density-fixed: 笔记正文排版随文档字号缩放，不随界面密度变化。 */
+    margin: 0 0 1.7em;
+  }
+  .ln-note-summary > span {
+    /* ui-density-fixed: 笔记正文排版随文档字号缩放，不随界面密度变化。 */
+    font-size: 0.8em;
+    color: var(--desc-color);
+  }
+  .ln-note-summary p {
+    /* ui-density-fixed: 笔记正文排版随文档字号缩放，不随界面密度变化。 */
+    font-size: 1.14em;
+    font-weight: 550;
+    /* ui-density-fixed: 笔记正文排版随文档字号缩放，不随界面密度变化。 */
+    margin: 0.35em 0 0;
+  }
+  .ln-note-open {
+    border: 0;
+    padding: 0;
+    border-radius: 0;
+    /* ui-density-fixed: 笔记正文排版随文档字号缩放，不随界面密度变化。 */
+    margin: 1.7em 0;
+  }
+  .ln-note-quiet {
+    padding: 0;
+    border: 0;
+    /* ui-density-fixed: 笔记正文排版随文档字号缩放，不随界面密度变化。 */
+    margin: 0.85em 0;
+  }
+  .ln-note-table-scroll {
+    max-width: 100%;
+    overflow-x: auto;
+  }
+  table {
+    display: table;
+    width: 100%;
+    border-collapse: collapse;
+    /* ui-density-fixed: 笔记正文排版随文档字号缩放，不随界面密度变化。 */
+    font-size: 0.94em;
+    line-height: 1.7;
+    table-layout: fixed;
+  }
+  th,
+  td {
+    /* ui-density-fixed: 笔记正文排版随文档字号缩放，不随界面密度变化。 */
+    padding: 0.7em 0.85em;
+    border: 1px solid var(--surface-border-color);
+    text-align: left;
+    vertical-align: top;
+    overflow-wrap: anywhere;
+  }
+  th {
+    color: var(--desc-color);
+    background: var(--workspace-canvas);
+    /* ui-density-fixed: 笔记正文排版随文档字号缩放，不随界面密度变化。 */
+    font-size: 0.94em;
+    font-weight: 550;
+  }
+  ol {
+    margin: 0;
+    /* ui-density-fixed: 笔记正文排版随文档字号缩放，不随界面密度变化。 */
+    padding-left: 1.5em;
+  }
+  li {
+    /* ui-density-fixed: 笔记正文排版随文档字号缩放，不随界面密度变化。 */
+    margin: 0.45em 0;
+    /* ui-density-fixed: 笔记正文排版随文档字号缩放，不随界面密度变化。 */
+    padding-left: 0.2em;
+  }
+  .ln-note-meeting-meta {
+    color: var(--desc-color);
+    /* ui-density-fixed: 笔记正文排版随文档字号缩放，不随界面密度变化。 */
+    font-size: 0.86em;
+    /* ui-density-fixed: 笔记正文排版随文档字号缩放，不随界面密度变化。 */
+    margin: -0.4em 0 1.7em;
+  }
+  .ln-note-decision {
+    border: 0;
+    border-left: 3px solid var(--resource-file-color);
+    border-radius: 0;
+    background: var(--workspace-canvas);
+    /* ui-density-fixed: 笔记正文排版随文档字号缩放，不随界面密度变化。 */
+    padding: 1.1em 1.4em;
+  }
+  .ln-note-reading-intro {
+    /* ui-density-fixed: 笔记正文排版随文档字号缩放，不随界面密度变化。 */
+    font-size: 1.06em;
+    line-height: 1.9;
+    /* ui-density-fixed: 笔记正文排版随文档字号缩放，不随界面密度变化。 */
+    margin-bottom: 1.8em;
+  }
+  .ln-note-reading-section {
+    /* ui-density-fixed: 笔记正文排版随文档字号缩放，不随界面密度变化。 */
+    margin-bottom: 1.8em;
+  }
+  blockquote {
+    margin: 0;
+    /* ui-density-fixed: 笔记正文排版随文档字号缩放，不随界面密度变化。 */
+    padding: 1.1em 1.4em;
+    background: var(--workspace-canvas);
+    border-left: 3px solid var(--primary-color);
+  }
+  blockquote p {
+    /* ui-density-fixed: 笔记正文排版随文档字号缩放，不随界面密度变化。 */
+    font-size: 1.14em;
+    /* ui-density-fixed: 笔记正文排版随文档字号缩放，不随界面密度变化。 */
+    margin: 0 0 0.5em;
+  }
+  blockquote .ln-note-citation {
+    /* ui-density-fixed: 笔记正文排版随文档字号缩放，不随界面密度变化。 */
+    font-size: 0.8em;
+    color: var(--desc-color);
+    margin: 0;
+  }
+  .ln-note-scope {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    /* ui-density-fixed: 笔记正文排版随文档字号缩放，不随界面密度变化。 */
+    gap: 1.55em;
+    /* ui-density-fixed: 笔记正文排版随文档字号缩放，不随界面密度变化。 */
+    padding-bottom: 0.35em;
+  }
+  .ln-note-scope > div + div {
+    border-left: 1px solid var(--surface-border-color);
+    /* ui-density-fixed: 笔记正文排版随文档字号缩放，不随界面密度变化。 */
+    padding-left: 1.55em;
+  }
+  .ln-note-review-facts {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    border: 1px solid var(--surface-border-color);
+    border-radius: 9px;
+    overflow: hidden;
+    /* ui-density-fixed: 笔记正文排版随文档字号缩放，不随界面密度变化。 */
+    margin-bottom: 1.55em;
+  }
+  .ln-note-review-facts > div {
+    min-width: 0;
+    /* ui-density-fixed: 笔记正文排版随文档字号缩放，不随界面密度变化。 */
+    padding: 1.15em 1.3em;
+  }
+  .ln-note-review-facts > div + div {
+    border-left: 1px solid var(--surface-border-color);
+    background: var(--workspace-canvas);
+  }
+  .ln-note-review-facts h2 {
+    /* ui-density-fixed: 笔记正文排版随文档字号缩放，不随界面密度变化。 */
+    margin: 0 0 0.6em;
+    /* ui-density-fixed: 笔记正文排版随文档字号缩放，不随界面密度变化。 */
+    font-size: 1em;
+  }
+  .ln-note-review-facts p {
+    margin: 0;
+  }
+  .ln-note-retro-columns {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    /* ui-density-fixed: 笔记正文排版随文档字号缩放，不随界面密度变化。 */
+    gap: 1em;
+  }
+  .ln-note-retro {
+    border: 0;
+    border-radius: 0;
+    border-top: 2px solid var(--surface-border-color);
+    /* ui-density-fixed: 笔记正文排版随文档字号缩放，不随界面密度变化。 */
+    padding: 0.85em 0;
+  }
+  .ln-note-keep {
+    border-top-color: var(--resource-note-color);
+  }
+  .ln-note-stop {
+    border-top-color: var(--desc-color);
+  }
+  .ln-note-try {
+    border-top-color: var(--primary-color);
+  }
+  .ln-note-retro h2 {
+    /* ui-density-fixed: 笔记正文排版随文档字号缩放，不随界面密度变化。 */
+    font-size: 0.94em;
+  }
+  .ln-note-proof {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    border-block: 1px solid var(--surface-border-color);
+  }
+  .ln-note-proof > div {
+    min-width: 0;
+    /* ui-density-fixed: 笔记正文排版随文档字号缩放，不随界面密度变化。 */
+    padding: 1.2em;
+    background: var(--workspace-canvas);
+  }
+  .ln-note-proof > div + div {
+    background: var(--note-layout-focus-bg);
+    border-left: 1px solid var(--surface-border-color);
+  }
+}
+
+@media (max-width: 767px) {
+  .note-template-page.ln-note-layout {
+    .ln-note-head {
+      display: block;
+      /* ui-density-fixed: 笔记正文排版随文档字号缩放，不随界面密度变化。 */
+      padding-bottom: 1.2em;
+      /* ui-density-fixed: 笔记正文排版随文档字号缩放，不随界面密度变化。 */
+      margin-bottom: 1.3em;
+    }
+    .ln-note-head h1 {
+      /* ui-density-fixed: 笔记正文排版随文档字号缩放，不随界面密度变化。 */
+      font-size: 1.5em;
+    }
+    .ln-note-date {
+      white-space: normal;
+      /* ui-density-fixed: 笔记正文排版随文档字号缩放，不随界面密度变化。 */
+      margin-top: 0.55em;
+    }
+    .ln-note-daily-columns,
+    .ln-note-equal-columns,
+    .ln-note-retro-columns,
+    .ln-note-proof {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 0;
+    }
+    .ln-note-block {
+      /* ui-density-fixed: 笔记正文排版随文档字号缩放，不随界面密度变化。 */
+      padding: 1em 1.1em;
+      /* ui-density-fixed: 笔记正文排版随文档字号缩放，不随界面密度变化。 */
+      margin-bottom: 1em;
+    }
+    .ln-note-next {
+      /* ui-density-fixed: 笔记正文排版随文档字号缩放，不随界面密度变化。 */
+      padding: 1.2em 0 0;
+    }
+    .ln-note-open {
+      padding: 0;
+      /* ui-density-fixed: 笔记正文排版随文档字号缩放，不随界面密度变化。 */
+      margin: 1.6em 0;
+    }
+    .ln-note-quiet {
+      /* ui-density-fixed: 笔记正文排版随文档字号缩放，不随界面密度变化。 */
+      padding: 0.85em 0;
+      /* ui-density-fixed: 笔记正文排版随文档字号缩放，不随界面密度变化。 */
+      margin: 0.35em 0;
+    }
+    .ln-note-retro {
+      /* ui-density-fixed: 笔记正文排版随文档字号缩放，不随界面密度变化。 */
+      padding: 0.85em 0;
+    }
+    .ln-note-review-facts {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .ln-note-review-facts > div + div,
+    .ln-note-proof > div + div {
+      border-left: 0;
+      border-top: 1px solid var(--surface-border-color);
+    }
+    th,
+    td {
+      /* ui-density-fixed: 笔记正文排版随文档字号缩放，不随界面密度变化。 */
+      padding: 0.6em;
+    }
+  }
+}

@@ -4,7 +4,6 @@
     :builtin-templates="orderedBuiltinTemplates"
     :my-templates="orderedMyTemplates"
     :my-templates-state="myTemplatesState"
-    :template-icons="templateIcons"
     @select-blank="selectBlank"
     @select-builtin="selectBuiltin"
     @select-mine="selectMine"
@@ -19,7 +18,6 @@
   import NewNotePickerModal from '@/components/noteLibrary/library/NewNotePickerModal.vue';
   import { apiBasePost } from '@/http/request';
   import { blockGuestWrite } from '@/composables/useGuestGuard';
-  import icon from '@/config/icon';
   import { BUILTIN_NOTE_TEMPLATES, sortBuiltinNoteTemplates } from '@/config/noteTemplates';
   import { closeCurrentMobileOverlayThen } from '@/utils/mobileOverlayHistory';
 
@@ -40,16 +38,6 @@
   const templateUsage = ref<Record<string, number>>(readTemplateUsage());
   let templatesRequestSequence = 0;
 
-  const templateIcons: Record<string, string> = {
-    daily: icon.noteTemplate.daily,
-    weekly: icon.noteTemplate.weekly,
-    meeting: icon.noteTemplate.meeting,
-    reading: icon.noteTemplate.reading,
-    project: icon.noteTemplate.project,
-    review: icon.noteTemplate.review,
-    knowledge: icon.noteTemplate.knowledge,
-    mindmap: icon.noteTemplate.mindmap,
-  };
   const orderedBuiltinTemplates = computed(() => sortBuiltinNoteTemplates(BUILTIN_NOTE_TEMPLATES, templateUsage.value));
   const orderedMyTemplates = computed(() =>
     [...myTemplates.value].sort(

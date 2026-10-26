@@ -99,6 +99,7 @@
           @click="handlePreviewContentActivation"
           @keydown="handlePreviewImageActivation"
           v-html="previewHtml"
+          v-mermaid
         ></div>
         <p v-else class="note-readonly-preview__empty">{{ t('common.none') }}</p>
       </article>
