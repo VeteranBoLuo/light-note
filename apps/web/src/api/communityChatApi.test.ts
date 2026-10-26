@@ -62,6 +62,16 @@ describe('communityChatApi', () => {
     vi.resetAllMocks();
   });
 
+  it('房间已读请求透传取消信号并保持静默写入', async () => {
+    const controller = new AbortController();
+    await markCommunityChatRoomRead('general', 'message-1', { signal: controller.signal });
+    expect(mocks.apiBasePut).toHaveBeenCalledWith(
+      '/api/community-chat/rooms/general/read',
+      { lastMessagePublicId: 'message-1' },
+      { silent: true, signal: controller.signal },
+    );
+  });
+
   it('读取访问状态和房间目录时使用独立 community-chat REST 域', () => {
     getCommunityChatAccess();
     getCommunityChatRooms();

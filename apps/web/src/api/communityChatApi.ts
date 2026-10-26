@@ -593,8 +593,16 @@ export const discardCommunityChatFile = (filePublicId: string) =>
 export const getCommunityChatFileDownload = (filePublicId: string) =>
   apiBasePost(`/api/community-chat/files/${encodeURIComponent(filePublicId)}/download`, {}, { silent: true });
 
-export const markCommunityChatRoomRead = (roomSlug: string, lastMessagePublicId?: string | null) =>
-  apiBasePut(`${roomPath(roomSlug)}/read`, { lastMessagePublicId: lastMessagePublicId || null }, { silent: true });
+export const markCommunityChatRoomRead = (
+  roomSlug: string,
+  lastMessagePublicId?: string | null,
+  options: { signal?: AbortSignal } = {},
+) =>
+  apiBasePut(
+    `${roomPath(roomSlug)}/read`,
+    { lastMessagePublicId: lastMessagePublicId || null },
+    { silent: true, ...options },
+  );
 
 export const recordCommunityChatReadReceipts = (roomSlug: string, messagePublicIds: string[]) =>
   apiBasePost(`${roomPath(roomSlug)}/read-receipts`, { messagePublicIds }, { silent: true });
