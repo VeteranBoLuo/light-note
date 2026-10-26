@@ -64,6 +64,13 @@ const get = () => {
       if (params.get('scenario') === 'cast-pending') state = executeManorCommand(state, { action: 'beginCast', args: ['bait'] }, ctx(320)).state;
       if (params.get('scenario') === 'guide-fish') { state.guide = null; state.discoveryGuide = 'fish'; state.fish = []; state.fishSlots = Array.from({length:M.RULES.farmSlots},()=>null); }
       if (params.get('scenario') === 'guide-observe') { state.discoveryGuide = 'observe'; state.firstCastDone = true; }
+      if (params.get('scenario') === 'art') {
+        for (const kind of Object.keys(MANOR_SPECIES)) {
+          const fish = M.addFish(state, kind);
+          if (kind === 'sanddollar') state.firstCompanionPending = fish.id;
+        }
+        state.firstCastDone = true;state.discoveryGuide = null;
+      }
     }
     saves.set(user.id, { state, revision: 0, receipts: new Map() });
     persist();

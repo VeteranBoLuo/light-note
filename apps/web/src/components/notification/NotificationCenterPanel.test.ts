@@ -54,6 +54,7 @@ function mountPanel(
   };
   const onMore = vi.fn();
   const onDelete = vi.fn();
+  const onToggleRead = vi.fn();
   const host = document.createElement('div');
   document.body.append(host);
   const app = createApp({
@@ -83,6 +84,7 @@ function mountPanel(
         todoActionState: () => todoState,
         onMore,
         onDelete,
+        onToggleRead,
       }),
   });
   app.directive('click-log', { mounted: () => undefined });
@@ -91,7 +93,7 @@ function mountPanel(
     app.unmount();
     host.remove();
   };
-  return { host, onMore, onDelete, first };
+  return { host, onMore, onDelete, onToggleRead, first };
 }
 
 afterEach(() => {
@@ -117,10 +119,13 @@ describe('NotificationCenterPanel', () => {
   });
 
   it('桌面端继续直接触发删除操作', async () => {
-    const { host, onMore, onDelete, first } = mountPanel(false);
+    const { host, onMore, onDelete, onToggleRead, first } = mountPanel(false);
     await nextTick();
 
-    (host.querySelector('.nt-item-action') as HTMLButtonElement).click();
+    (host.querySelector('.nt-read-state') as HTMLButtonElement).click();
+    expect(onToggleRead).toHaveBeenCalledWith(first);
+    expect(onDelete).not.toHaveBeenCalled();
+    (host.querySelector('[aria-label="notification.delete"]') as HTMLButtonElement).click();
     expect(onDelete).toHaveBeenCalledWith(first);
     expect(onMore).not.toHaveBeenCalled();
   });
@@ -137,7 +142,7 @@ describe('NotificationCenterPanel', () => {
     expect(host.querySelector('.nt-item.unread .nt-type-icon')).not.toBeNull();
     expect(host.querySelector('.nt-tabs')?.getAttribute('role')).toBe('tablist');
     expect(host.querySelector('.nt-tab.active')?.getAttribute('aria-selected')).toBe('true');
-    (host.querySelector('.nt-item-action') as HTMLButtonElement).click();
+    (host.querySelector('[aria-label="notification.delete"]') as HTMLButtonElement).click();
     expect(onDelete).toHaveBeenCalledWith(first);
   });
 
@@ -167,10 +172,6 @@ describe('NotificationCenterPanel', () => {
     expect(source).toContain('v-if="loading && !items.length"');
     expect(source).toContain('v-else-if="!items.length"');
     expect(source).toContain('v-for="group in groups"');
-  });
-
-  it('卡片操作按钮贴近标题首行，避免落到摘要内容区域', () => {
-    expect(source).toMatch(/\.nt-item-action\s*\{[\s\S]*?position:\s*absolute;[\s\S]*?top:\s*0;/);
   });
 
   it('延续已完成待办状态，只显示状态胶囊', async () => {

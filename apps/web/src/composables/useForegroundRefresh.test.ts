@@ -47,6 +47,59 @@ afterEach(() => {
 });
 
 describe('回到前台时的静默刷新', () => {
+  it('短间隔页面把新鲜度窗口内的唤醒合并为一次延后刷新', async () => {
+    const refresh = vi.fn().mockResolvedValue(undefined);
+    const { unmount } = mountComposable({ refresh, staleMs: 1000, trailingWake: true });
+    wake();
+    window.dispatchEvent(new Event('focus'));
+    expect(refresh).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1100);
+    expect(refresh).toHaveBeenCalledTimes(1);
+    setVisibility('hidden');
+    wake();
+    await vi.advanceTimersByTimeAsync(100);
+    setVisibility('visible');
+    wake();
+    expect(refresh).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1100);
+    expect(refresh).toHaveBeenCalledTimes(2);
+    unmount();
+  });
+
+  it('在途请求中的唤醒保留到完成后，隐藏或卸载则取消延后读取', async () => {
+    let finish!: () => void;
+    const refresh = vi
+      .fn()
+      .mockImplementationOnce(
+        () =>
+          new Promise<void>((resolve) => {
+            finish = resolve;
+          }),
+      )
+      .mockResolvedValue(undefined);
+    const { unmount } = mountComposable({ refresh, staleMs: 1000, trailingWake: true });
+    await vi.advanceTimersByTimeAsync(1100);
+    wake();
+    await vi.advanceTimersByTimeAsync(100);
+    wake();
+    finish();
+    await vi.advanceTimersByTimeAsync(1100);
+    expect(refresh).toHaveBeenCalledTimes(2);
+    wake();
+    setVisibility('hidden');
+    wake();
+    await vi.advanceTimersByTimeAsync(1100);
+    expect(refresh).toHaveBeenCalledTimes(2);
+    setVisibility('visible');
+    wake();
+    await vi.advanceTimersByTimeAsync(0);
+    const calls = refresh.mock.calls.length;
+    wake();
+    unmount();
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(refresh).toHaveBeenCalledTimes(calls);
+  });
+
   it('数据还新鲜时不发请求', async () => {
     const refresh = vi.fn().mockResolvedValue(undefined);
     const { unmount } = mountComposable({ refresh, staleMs: 5 * 60 * 1000 });

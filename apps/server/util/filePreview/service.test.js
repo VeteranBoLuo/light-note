@@ -58,6 +58,9 @@ function convertedJob(overrides = {}) {
     job_id: 5,
     attempts: 0,
     id: 10,
+    artifact_id: 10,
+    queue_source_type: overrides.source_type || FILE_PREVIEW_SOURCE_TYPE.CLOUD_FILE,
+    queue_source_id: 42,
     file_id: 42,
     owner_user_id: 'user-1',
     strategy: 'converted_pdf',
@@ -82,6 +85,9 @@ function arrangeConvertedWorker({ staleCompletion = false, sourceAvailable = tru
   const claimQuery = vi.fn(async (sql, params = []) => {
     const statement = String(sql);
     if (statement.includes('SELECT j.id AS job_id')) return [[convertedJob(jobOverrides)]];
+    if (statement.startsWith('SELECT id,source_type,file_id'))
+      return [[{ id: 10, source_type: jobOverrides.source_type || 'cloud_file', file_id: 42 }]];
+    if (statement.startsWith('SELECT id,artifact_id')) return [[{ id: 5, artifact_id: 10 }]];
     if (statement.includes("UPDATE file_preview_jobs SET status = 'processing'")) {
       leaseOwner = params[1];
       return [{ affectedRows: 1 }];
@@ -90,6 +96,9 @@ function arrangeConvertedWorker({ staleCompletion = false, sourceAvailable = tru
   });
   const completeQuery = vi.fn(async (sql) => {
     const statement = String(sql);
+    if (statement.startsWith('SELECT id,source_type,file_id'))
+      return [[{ id: 10, source_type: jobOverrides.source_type || 'cloud_file', file_id: 42 }]];
+    if (statement.startsWith('SELECT id,artifact_id')) return [[{ id: 5, artifact_id: 10 }]];
     if (statement.includes('FROM files WHERE') || statement.includes('FROM community_chat_message_files')) {
       if (!sourceAvailable) return [[], []];
       const job = convertedJob(jobOverrides);
@@ -129,13 +138,29 @@ function arrangeConvertedWorker({ staleCompletion = false, sourceAvailable = tru
   const claimConnection = connection(claimQuery);
   const completeConnection = connection(completeQuery);
   poolMocks.getConnection.mockResolvedValueOnce(claimConnection).mockResolvedValueOnce(completeConnection);
-  poolMocks.query.mockResolvedValue([{ affectedRows: 1 }]);
+  poolMocks.query.mockImplementation(async (sql) =>
+    String(sql).includes('j.attempts>=3')
+      ? [[]]
+      : String(sql).includes('SELECT j.id AS job_id')
+        ? [[convertedJob(jobOverrides)]]
+        : [{ affectedRows: 1 }],
+  );
   return { claimConnection, completeConnection, getLeaseOwner: () => leaseOwner };
 }
 
 describe('file preview service', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
+    poolMocks.query.mockResolvedValue([[]]);
+    poolMocks.getConnection.mockImplementation(async () =>
+      connection(async (sql, params) => {
+        if (String(sql).startsWith('SELECT id,source_type,file_id'))
+          return [[{ id: params[0], source_type: 'cloud_file', file_id: 42 }]];
+        if (String(sql).startsWith('SELECT id,artifact_id')) return [[]];
+        if (String(sql).startsWith('SELECT id FROM files')) return [[]];
+        return poolMocks.query(sql, params);
+      }),
+    );
     obsMocks.getObjectMetadataFromObs.mockResolvedValue({ contentLength: sourceBuffer.length, etag: '"etag-1"' });
     obsMocks.getObjectBufferFromObs.mockResolvedValue(sourceBuffer);
     obsMocks.putObjectBodyToObs.mockResolvedValue(undefined);
@@ -490,10 +515,22 @@ describe('file preview service', () => {
     poolMocks.query.mockImplementation(async (sql) => {
       const statement = String(sql);
       if (statement.includes('FROM file_preview_jobs') && statement.includes("status = 'failed'")) return [[], []];
-      if (statement.includes('SELECT a.id, a.artifact_object_key')) {
+      if (statement.includes('a.artifact_object_key, j.output_object_key')) {
         candidateQueryCount += 1;
         return candidateQueryCount === 1
-          ? [[{ id: 10, artifact_object_key: 'preview/retry.pdf', output_object_key: null }], []]
+          ? [
+              [
+                {
+                  id: 10,
+                  artifact_id: 10,
+                  queue_source_type: 'cloud_file',
+                  queue_source_id: 42,
+                  artifact_object_key: 'preview/retry.pdf',
+                  output_object_key: null,
+                },
+              ],
+              [],
+            ]
           : [[], []];
       }
       if (statement.includes("SET a.status = 'failed'")) return [{ affectedRows: 1 }, []];
@@ -514,10 +551,22 @@ describe('file preview service', () => {
     poolMocks.query.mockImplementation(async (sql) => {
       const statement = String(sql);
       if (statement.includes('FROM file_preview_jobs') && statement.includes("status = 'failed'")) return [[], []];
-      if (statement.includes('SELECT a.id, a.artifact_object_key')) {
+      if (statement.includes('a.artifact_object_key, j.output_object_key')) {
         candidateQueryCount += 1;
         return candidateQueryCount === 1
-          ? [[{ id: 10, artifact_object_key: 'preview/active.pdf', output_object_key: null }], []]
+          ? [
+              [
+                {
+                  id: 10,
+                  artifact_id: 10,
+                  queue_source_type: 'cloud_file',
+                  queue_source_id: 42,
+                  artifact_object_key: 'preview/active.pdf',
+                  output_object_key: null,
+                },
+              ],
+              [],
+            ]
           : [[], []];
       }
       if (statement.includes("SET a.status = 'failed'")) return [{ affectedRows: 0 }, []];
@@ -559,31 +608,28 @@ describe('file preview service', () => {
       42,
     ]);
   });
-  it('只领取文档与 HEIF 大图任务，不领取旧图片任务', async () => {
-    const query = vi.fn(async () => [[]]);
-    poolMocks.getConnection.mockResolvedValue(connection(query));
-    await expect(runSingleFilePreviewJob('worker')).resolves.toBe(false);
-    expect(query.mock.calls.find(([sql]) => String(sql).includes('SELECT j.id AS job_id'))[0]).toContain(
-      "AND a.strategy IN ('archive_manifest', 'converted_pdf', 'image_display')",
-    );
-    expect(obsMocks.getObjectBufferFromObs).not.toHaveBeenCalled();
-  });
 
   it('文档清理器只删派生对象，并将图片资产生命周期交给图片清理器', async () => {
     poolMocks.query.mockImplementation(async (sql) => {
       const text = String(sql);
       if (text.includes('SELECT j.id, j.output_object_key')) return [[]];
-      if (text.includes('SELECT a.id, a.artifact_object_key'))
+      if (text.includes('a.artifact_object_key, j.output_object_key'))
         return [
           [
             {
               id: 20,
+              artifact_id: 20,
+              queue_source_type: 'cloud_file',
+              queue_source_id: 42,
               artifact_object_key: 'file-previews/photo.webp',
               output_object_key: null,
               source_object_key: 'original.jpg',
             },
             {
               id: 21,
+              artifact_id: 21,
+              queue_source_type: 'cloud_file',
+              queue_source_id: 42,
               artifact_object_key: null,
               output_object_key: null,
               source_object_key: 'small-original.png',

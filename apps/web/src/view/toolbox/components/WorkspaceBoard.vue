@@ -235,7 +235,7 @@
   onMounted(() => {
     window.addEventListener('scroll', refreshHover, true);
   });
-  useForegroundRefresh({ refresh: refreshLinkedState, staleMs: 1000 });
+  useForegroundRefresh({ refresh: refreshLinkedState, trailingWake: true, staleMs: 1000 });
   let refreshing = false;
   async function refreshLinkedState() {
     if (!alive || busy.value || refreshing || document.visibilityState === 'hidden') return;

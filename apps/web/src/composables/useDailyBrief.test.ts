@@ -78,6 +78,23 @@ afterEach(() => {
 });
 
 describe('今日简报前台调度', () => {
+  it('快速再次切回前台时，即使读取被去重也恢复生成进度轮询', async () => {
+    get.mockResolvedValue(ok({ ...initial(), status: 'generating' }));
+    mount();
+    await settle();
+    await vi.advanceTimersByTimeAsync(1100);
+    visibility('visible');
+    await settle();
+    const before = get.mock.calls.length;
+    visibility('hidden');
+    await vi.advanceTimersByTimeAsync(100);
+    visibility('visible');
+    await settle();
+    expect(get).toHaveBeenCalledTimes(before);
+    await vi.advanceTimersByTimeAsync(2500);
+    expect(get).toHaveBeenCalledTimes(before + 1);
+  });
+
   it('密集前台信号共享恢复节流，失败不会每个信号重复检查', async () => {
     mount();
     await settle();

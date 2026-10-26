@@ -21,6 +21,17 @@ beforeEach(() => {
   mocks.write.mockResolvedValue({ status: 200 });
 });
 describe('shared preference queue', () => {
+  it('an unrelated failed preference cannot roll back an independently confirmed cloud scope', async () => {
+    const first = deferred();
+    mocks.write.mockReturnValueOnce(first.promise);
+    const { updatePreference, applyPreferenceLocally } = await import('./savePreference');
+    const pending = updatePreference({ theme: 'night' }).catch((error) => error);
+    await vi.waitFor(() => expect(mocks.write).toHaveBeenCalledOnce());
+    applyPreferenceLocally({ cloudIncludeDescendants: true });
+    first.reject(new Error('offline'));
+    await pending;
+    expect(mocks.user.preferences).toMatchObject({ theme: 'day', cloudIncludeDescendants: true });
+  });
   it('serializes different entrances and sends only the active patch', async () => {
     const first = deferred();
     mocks.write.mockReturnValueOnce(first.promise);

@@ -623,26 +623,25 @@ const FISH_SPRITES = {
   }
 };
 
+function fishCutoutFilter(id, silhouette) {
+  // Match the swimming renderer's alpha floor. Almost-transparent matte pixels
+  // around the source artwork must not become a rectangular haze in large cards.
+  return `<filter id="${id}cutout" color-interpolation-filters="sRGB"><feComponentTransfer><feFuncA type="linear" slope="1.06383" intercept="-.06383"/></feComponentTransfer>${silhouette ? '<feColorMatrix type="matrix" values="0 0 0 0 .53 0 0 0 0 .63 0 0 0 0 .60 0 0 0 .65 0"/>' : ''}</filter>`;
+}
 function fishIllustration(kind, silhouette = false) {
   // 水族使用独立透明贴图，图鉴和舱内立体网格复用同一份原画。
   if (FISH[kind]?.group === "creature") {
     const id = "fish" + ++svgSerial;
-    const filter = silhouette
-      ? `<defs><filter id="${id}shade" color-interpolation-filters="sRGB"><feColorMatrix type="matrix" values="0 0 0 0 .53 0 0 0 0 .63 0 0 0 0 .60 0 0 0 .65 0"/></filter></defs>`
-      : "";
-    return `<svg class="fish-render" x="0" y="0" width="100" height="60" viewBox="0 0 100 60" overflow="hidden">${filter}<image href="knowledge-garden-v19/creature-${kind}.webp" width="100" height="60"${silhouette ? ` filter="url(#${id}shade)"` : ""}/></svg>`;
+    return `<svg class="fish-render" x="0" y="0" width="100" height="60" viewBox="0 0 100 60" overflow="hidden"><defs>${fishCutoutFilter(id, silhouette)}</defs><image href="knowledge-garden-v19/creature-${kind}.webp" width="100" height="60" filter="url(#${id}cutout)"/></svg>`;
   }
   const sprite = FISH_SPRITES[kind];
   if (!sprite) return "";
   const id = "fish" + ++svgSerial;
-  const silhouetteFilter = silhouette
-    ? `<filter id="${id}shade" color-interpolation-filters="sRGB"><feColorMatrix type="matrix" values="0 0 0 0 .53 0 0 0 0 .63 0 0 0 0 .60 0 0 0 .65 0"/></filter>`
-    : "";
-  return `<svg class="fish-render" x="0" y="0" width="100" height="60" viewBox="${sprite.box.join(" ")}" preserveAspectRatio="xMidYMid meet" overflow="hidden"><defs><clipPath id="${id}crop"><path d="${sprite.clip}"/></clipPath>${silhouetteFilter}</defs><g clip-path="url(#${id}crop)"${silhouette ? ` filter="url(#${id}shade)"` : ""}><image href="knowledge-garden-v19/${sprite.file}" width="1536" height="1024"/></g></svg>`;
+  return `<svg class="fish-render" x="0" y="0" width="100" height="60" viewBox="${sprite.box.join(" ")}" preserveAspectRatio="xMidYMid meet" overflow="hidden"><defs><clipPath id="${id}crop"><path d="${sprite.clip}"/></clipPath>${fishCutoutFilter(id, silhouette)}</defs><g clip-path="url(#${id}crop)" filter="url(#${id}cutout)"><image href="knowledge-garden-v19/${sprite.file}" width="1536" height="1024"/></g></svg>`;
 }
 
 function fishArt(kind, silhouette = false) {
-  // 其他水族多半半透明，衬一层浅浅的水色才看得清
+  // 透明原画共用一份抠图规则；水色由详情、背包或钓获卡的容器提供。
   const creature = FISH[kind]?.group === "creature";
   return `<svg class="fish-art${creature ? " is-creature" : ""}" data-fish-art="${kind}" viewBox="0 0 100 60" aria-hidden="true">${fishIllustration(kind, silhouette)}</svg>`;
 }

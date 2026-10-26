@@ -147,6 +147,7 @@ export async function updateCommunityChatNotificationSettings({ user, enabled, l
         [user.id],
       );
     }
+    queueNotificationChange(connection, [user.id]);
     await connection.commit();
     return toPublicSettings(
       { enabled: enabled ? 1 : 0, level: normalizedLevel, rootAllMessages: nextRootAllMessages ? 1 : 0 },

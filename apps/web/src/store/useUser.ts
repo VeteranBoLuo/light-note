@@ -59,6 +59,7 @@ interface UserInfo {
     todoSubitemsExpanded?: boolean; // 默认展开子事项
     todoView?: 'list' | 'agenda' | 'calendar' | 'matrix'; // 待办默认视图
     cloudView?: 'card' | 'table'; // 云空间视图:卡片/表格
+    cloudIncludeDescendants?: boolean; // 云空间文件显示范围，账号持久化，默认仅当前文件夹
     tagView?: 'card' | 'graph'; // 标签详情视图
     openBookmarkIn?: 'newTab' | 'current'; // 书签打开方式:新标签页/当前标签页
     hideEmptyTags?: boolean; // 首页标签列表是否隐藏空标签(默认 false=不隐藏)

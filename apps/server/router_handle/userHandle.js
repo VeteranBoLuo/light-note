@@ -101,6 +101,7 @@ import {
   preserveFeatureAnnouncementReads,
 } from '../util/services/featureAnnouncementService.js';
 import { preserveCommunityPreference } from '../util/communityPreferences.js';
+import { preserveCloudSpacePreference } from '../util/cloudSpacePreferences.js';
 import { preserveDailyBriefPreference } from '../util/dailyBriefFeature.js';
 import redisClient from '../util/redisClient.js';
 import { rememberRecentGithubAuthentication } from '../util/services/accountEmailChangeService.js';
@@ -1214,6 +1215,7 @@ export const saveUserInfo = async (req, res) => {
         finalBody.preferences = preserveWorkshopPreference(finalBody.preferences, persistedUser.preferences);
         finalBody.preferences = preserveDailyBriefPreference(finalBody.preferences, persistedUser.preferences);
         finalBody.preferences = preserveCommunityPreference(finalBody.preferences, persistedUser.preferences);
+        finalBody.preferences = preserveCloudSpacePreference(finalBody.preferences, persistedUser.preferences);
         [result] = await connection.query('update user set ? where id=?', [finalBody, id]);
         await connection.commit();
       } catch (error) {

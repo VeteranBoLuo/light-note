@@ -16,7 +16,7 @@
   import { onBeforeRouteLeave, useRouter } from 'vue-router';
   import { useI18n } from 'vue-i18n';
   import type { ManorCommand, ManorSnapshot } from '@lightnote/shared/manor';
-  import { createManorTestSession } from '@/utils/manorTestSession';
+  import { createManorTestSession, readManorTestSession, saveManorTestSession } from '@/utils/manorTestSession';
   import { MANOR_COMMANDS } from '@lightnote/shared/manor';
   import { useUserStore, bookmarkStore } from '@/store';
   import { useGrowth } from '@/composables/useGrowth';
@@ -24,7 +24,6 @@
   import { getManor, runManorCommand } from '@/api/manorApi';
   import { isUncertainManorResult, readPendingManorCommand, savePendingManorCommand } from '@/utils/manorPending';
   import { closeCurrentMobileOverlayThen, registerMobileOverlayHistory, releaseMobileOverlayHistory, type MobileOverlayHistoryHandle } from '@/utils/mobileOverlayHistory';
-  import { inventoryPointsRoute } from '@/utils/inventoryNavigation';
 
   const user = useUserStore(), bookmark = bookmarkStore(), router = useRouter(), growth = useGrowth();
   const { t } = useI18n();
@@ -111,6 +110,7 @@
     loading.value = true; failed.value = false;
     pending = owner ? readPendingManorCommand(owner) : null;
     if (!owner || user.role !== 'root' || user.adminContext) { loading.value = false; failed.value = true; return; }
+    testSession = readManorTestSession(owner);
     // Start static downloads while the authenticated snapshot is in flight.
     loading.value = false;
     const read = refresh(g); initialRead = read;
@@ -146,6 +146,7 @@
       else if (data.action === 'reset-test' || data.action === 'restore-formal') {
         if (commanding || pending || !snapshot) throw new Error('command');
         testSession = data.action === 'reset-test' ? createManorTestSession(snapshot) : null;
+        saveManorTestSession(owner, testSession);
         releaseMobileOverlayHistory(overlay); overlay = null;
         interactive.value = false; frameShown.value = false; initialProvided = true;
         nonce.value = crypto.randomUUID();
@@ -155,7 +156,10 @@
         if (commanding || !snapshot || !MANOR_COMMANDS.includes(data.payload?.action) || !Array.isArray(data.payload?.args)) throw new Error('command');
         commanding = true;
         try {
-          if (testSession) { value = decorated(testSession.execute(data.payload.action, data.payload.args)); }
+          if (testSession) {
+            value = decorated(testSession.execute(data.payload.action, data.payload.args));
+            saveManorTestSession(owner, testSession);
+          }
           else {
           if (pending) {
             const prior = pending;
@@ -171,7 +175,9 @@
         } finally { commanding = false; }
       } else if (data.action === 'exit') { await exit(); return; }
       else if (data.action === 'tasks') { await router.push('/growth#growth-daily'); return; }
-      else if (data.action === 'ledger') { await router.push(inventoryPointsRoute()); return; }
+      // Older cached renderers may still ask the host. Keep them inside the
+      // manor too; the current renderer opens its existing local ledger.
+      else if (data.action === 'ledger') { control('open-ledger'); }
       else if (data.action === 'dialog') {
         if (bookmark.isMobile && data.payload?.open && !overlay) overlay = registerMobileOverlayHistory(() => { overlay = null; control('close-dialog'); });
         else if (!data.payload?.open && overlay) { releaseMobileOverlayHistory(overlay); overlay = null; }

@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import { describe, expect, it, vi } from 'vitest';
+import { notificationRealtimeEvents } from '../notificationRealtimeEvents.js';
 import {
   createTodoPlan,
   deleteTodoPlan,
@@ -727,6 +728,22 @@ describe('todoSeriesService v2', () => {
       expect.arrayContaining(['2026-08-09 09:00:00', '2026-08-09 10:00:00', 'next-todo', 'user-1']),
     );
     expect(db.query.mock.calls.some(([sql]) => sql.includes("cancel_reason = 'completion_undone'"))).toBe(true);
+  });
+
+  it('跳过实例提交后同步已有提醒，不额外扫描接收人', async () => {
+    const publish = vi.spyOn(notificationRealtimeEvents, 'publishSource').mockImplementation(() => {});
+    const db = {
+      query: vi.fn().mockResolvedValueOnce([[{ id: 'todo-1', seriesId: 'series-1', status: 'pending', instanceState: 'normal' }]])
+        .mockResolvedValue([{ affectedRows: 1 }]),
+      commit: vi.fn().mockResolvedValue(undefined),
+    };
+    try {
+      await skipTodoInstance(db, 'user-1', 'todo-1');
+      expect(publish).not.toHaveBeenCalled();
+      expect(db.query).toHaveBeenCalledTimes(3);
+      await db.commit();
+      expect(publish).toHaveBeenCalledExactlyOnceWith({ kind: 'todo', ids: ['todo-1'], userIds: ['user-1'] });
+    } finally { publish.mockRestore(); }
   });
 
   it('跳过实例只允许待处理项，重复跳过保持幂等', async () => {

@@ -294,7 +294,7 @@
     a.click();
     a.remove();
   }
-  useForegroundRefresh({ refresh, staleMs: 1000, canRefresh: () => Boolean(props.owner) && !busy.value });
+  useForegroundRefresh({ refresh, trailingWake: true, staleMs: 1000, canRefresh: () => Boolean(props.owner) && !busy.value });
   function visibility() {
     if (document.hidden) clearTimeout(timer);
   }

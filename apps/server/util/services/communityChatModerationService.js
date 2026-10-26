@@ -1,5 +1,6 @@
 import { clearBlockedRelations } from '../communityFeed/profiles.js';
 import pool from '../../db/index.js';
+import { queueNotificationChange, queueNotificationSourceChange } from '../notificationRealtimeEvents.js';
 import { generateUUID } from '../agent/data.js';
 import { getCommunityChatFeatureState } from '../communityChatFeature.js';
 import { publishCommunityChatRealtimeEvent } from '../communityChat/realtimeBroker.js';
@@ -367,6 +368,7 @@ export async function unblockCommunityChatUser({ user, blockId, env = process.en
   const normalizedBlockId = normalizePublicId(blockId, '屏蔽记录');
   assertMessagingEnabled(env);
   await assertCommunityChatMessagingAccess({ user, env, db });
+  const previous = await queryFirst(db, 'SELECT blocked_user_id AS blockedUserId FROM community_chat_blocks WHERE id=? AND user_id=? LIMIT 1', [normalizedBlockId, user.id]);
   const [result] = await db.query(`DELETE FROM community_chat_blocks WHERE id = ? AND user_id = ?`, [
     normalizedBlockId,
     user.id,
@@ -374,6 +376,7 @@ export async function unblockCommunityChatUser({ user, blockId, env = process.en
   if (!result.affectedRows) {
     throw chatError('BLOCK_NOT_FOUND', 404, '未找到该屏蔽记录', 'Block record not found');
   }
+  queueNotificationChange(db, [user.id, previous?.blockedUserId].filter(Boolean));
   return { id: normalizedBlockId, unblocked: true };
 }
 
@@ -479,6 +482,7 @@ export async function reviewCommunityChatReport({ user, reportId, action, note, 
           WHERE pinned_message_id = ?`,
         [report.messageId],
       );
+      queueNotificationSourceChange(connection, { kind: 'chat', ids: [report.messagePublicId] });
     }
 
     if (normalizedAction === 'mute_author') {
@@ -498,6 +502,8 @@ export async function reviewCommunityChatReport({ user, reportId, action, note, 
     }
 
     if (normalizedAction === 'ban_author') {
+      queueNotificationChange(connection, [report.targetUserId]);
+      queueNotificationSourceChange(connection, { kind: 'actor', ids: [report.targetUserId] });
       await connection.query(
         `UPDATE community_chat_members
             SET status = 'banned', rules_version = NULL, rules_accepted_at = NULL, revoked_at = NOW()

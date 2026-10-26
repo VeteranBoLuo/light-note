@@ -66,6 +66,25 @@ try {
           }),
           0,
         );
+        // Source deletion disables todo actions, and withdrawal removes a currently located notification.
+        await page.evaluate(() => window.__notificationRealtimeFixture.invalidateTodo());
+        await page.waitForFunction(() => document.querySelectorAll('.nt-todo-state').length === 4);
+        assert.equal(await page.locator('.nt-todo-action').count(), 0);
+        await page.evaluate(async () => {
+          const { openNotificationPanel } = await import('/src/utils/notificationEntry.ts');
+          openNotificationPanel('fixture-0');
+        });
+        await page.locator('[data-notification-id="fixture-0"].is-target').waitFor();
+        await page.evaluate(() => window.__notificationRealtimeFixture.removeAll());
+        await page.getByText('这条通知已不可用', { exact: true }).waitFor();
+        assert.equal(await page.locator('.nt-item').count(), 0);
+        // An admin recall also closes an already opened notification body after source validation.
+        const systemId = await page.evaluate(() => window.__notificationRealtimeFixture.notify('system'));
+        await page.locator(`[data-notification-id="${systemId}"]`).waitFor();
+        await page.locator(`[data-notification-id="${systemId}"]`).click();
+        await page.locator('.nt-detail-content').waitFor();
+        await page.evaluate(() => window.__notificationRealtimeFixture.removeAll());
+        await page.locator('.nt-detail-content').waitFor({ state: 'hidden' });
         await page.evaluate(async () => {
           const { useUserStore } = await import('/src/store/index.ts');
           useUserStore().$patch({ id: 'other-fixture', role: 'user' });

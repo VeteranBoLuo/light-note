@@ -2,6 +2,7 @@ import { purgePublicResourceData } from './publicResources/lifecycle.js';
 import { purgeCommunityFeedData } from './communityFeed/lifecycle.js';
 import { deferCloudImageDeletion, deleteUnmanagedObject } from './imagePreview/cleanup.js';
 import crypto from 'node:crypto';
+import { queueNotificationChange, queueNotificationSourceChange } from './notificationRealtimeEvents.js';
 import { deriveScrypt } from './asyncScrypt.js';
 import { acquireAccountAiLifecycleConnection } from './accountAiLifecycleLock.js';
 import pool from '../db/index.js';
@@ -470,6 +471,8 @@ export async function requestAccountDeletion({ userId, code, confirmation }) {
       throw accountDeletionError('ACCOUNT_DELETION_UPDATE_FAILED', '账号注销状态更新失败，请稍后重试', 409);
     }
 
+    queueNotificationChange(connection, [userId]);
+    queueNotificationSourceChange(connection, { kind: 'actor', ids: [userId] });
     await connection.commit();
     invalidateAfdianLeaderboardCache();
   } catch (error) {

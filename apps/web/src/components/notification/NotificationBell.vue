@@ -13,7 +13,7 @@
         <SvgIcon :src="icon.arrow_left" size="20" aria-hidden="true" />
       </BButton>
       <h1>{{ t('notification.title') }}</h1>
-      <BButton class="nt-page__markall" :disabled="unreadTotal <= 0" @click="onMarkAll">
+      <BButton class="nt-page__markall" :disabled="unreadTotal <= 0 || notificationWrites > 0" @click="onMarkAll">
         {{ t('notification.markAllRead') }}
       </BButton>
     </header>
@@ -37,7 +37,7 @@
           <SvgIcon :src="icon.userCenter.settingsGear" size="16" aria-hidden="true" />
           {{ t('notification.preferences') }}
         </BButton>
-        <BButton type="primary" :disabled="unreadTotal <= 0" @click="onMarkAll">
+        <BButton type="primary" :disabled="unreadTotal <= 0 || notificationWrites > 0" @click="onMarkAll">
           <SvgIcon :src="icon.settings.notificationReadAll" size="16" aria-hidden="true" />
           {{ t('notification.markAllRead') }}
         </BButton>
@@ -59,6 +59,8 @@
       :total="total"
       :loading="loading"
       :completing-todo-id="completingTodoId"
+      :read-state-pending-id="readStatePendingId"
+      :read-state-disabled="notificationWrites > 0"
       :tab-unread="tabUnread"
       :render-title="renderTitle"
       :render-content="renderContent"
@@ -69,6 +71,7 @@
       @switch-tab="switchTab"
       @item-click="onItemClick"
       @complete-todo="completeReminderTodo"
+      @toggle-read="onToggleRead"
       @more="openNotificationActions"
       @delete="onDelete"
       @load-more="loadMore"
@@ -109,6 +112,8 @@
           :total="total"
           :loading="loading"
           :completing-todo-id="completingTodoId"
+          :read-state-pending-id="readStatePendingId"
+          :read-state-disabled="notificationWrites > 0"
           :tab-unread="tabUnread"
           :render-title="renderTitle"
           :render-content="renderContent"
@@ -119,6 +124,7 @@
           @switch-tab="switchTab"
           @item-click="onItemClick"
           @complete-todo="completeReminderTodo"
+          @toggle-read="onToggleRead"
           @delete="onDelete"
           @load-more="loadMore"
           ><template #browser-push-prompt><BrowserPushPrompt /><NativeNotificationStatus /></template
@@ -204,9 +210,19 @@
   const bookmark = bookmarkStore();
   const inbox = inboxStore();
   const isMobileLayout = useMobileLayout();
-  const { unreadTotal, unreadByType, refreshUnread, fetchList, markRead, markAllRead, deleteNotifications } =
-    useNotification();
+  const {
+    unreadTotal,
+    unreadByType,
+    refreshUnread,
+    fetchList,
+    markRead,
+    setReadState,
+    markAllRead,
+    deleteNotifications,
+  } = useNotification();
 
+  const readStatePendingId = ref('');
+  let notificationDisposed = false;
   const open = ref(false);
   const targetId = ref('');
   const locateState = ref<'idle' | 'loading' | 'found' | 'unavailable' | 'error'>('idle');
@@ -455,7 +471,44 @@
     void router.push({ path: '/settings', query: { section: 'notification' } });
   }
 
+  async function onToggleRead(n: NotificationItem) {
+    if (notificationWrites.value || loading.value) return;
+    const id = n.id;
+    const isRead = !n.isRead;
+    const owner = user.id;
+    const generation = listGeneration;
+    const focused =
+      document.activeElement instanceof HTMLButtonElement && document.activeElement.classList.contains('nt-read-state')
+        ? document.activeElement
+        : null;
+    readStatePendingId.value = id;
+    await withNotificationWrite(async () => {
+      try {
+        if (await setReadState(id, isRead)) {
+          const current = items.value.find((item) => item.id === id);
+          if (!notificationDisposed && owner === user.id && current) current.isRead = isRead ? 1 : 0;
+          recordOperation({ module: '通知中心', operation: isRead ? '通知标记已读成功' : '通知标记未读成功' });
+        } else if (!notificationDisposed && owner === user.id) {
+          message.error(t('notification.readStateFailed'));
+        }
+      } finally {
+        readStatePendingId.value = '';
+        if (!notificationDisposed && owner === user.id && generation !== listGeneration) visibleRefreshQueued = true;
+      }
+    });
+    await nextTick();
+    if (
+      !notificationDisposed &&
+      owner === user.id &&
+      focused?.isConnected &&
+      document.activeElement === document.body
+    ) {
+      focused.focus({ preventScroll: true });
+    }
+  }
+
   async function onMarkAll() {
+    if (notificationWrites.value) return;
     await withNotificationWrite(async () => {
       const visibleIds = new Set(items.value.map((item) => item.id));
       const succeeded = await markAllRead(activeTab.value);
@@ -468,6 +521,7 @@
     });
   }
   async function onItemClick(n: NotificationItem) {
+    if (readStatePendingId.value === n.id) return;
     await markNotificationRead(n);
     if (n.type === 'todo_reminder' && todoActionState(n) === 'unavailable') {
       message.warning(t('notification.todoUnavailable'));
@@ -500,6 +554,7 @@
     }
   }
   async function completeReminderTodo(n: NotificationItem) {
+    if (readStatePendingId.value === n.id) return;
     const todoId = getTodoId(n);
     if (!todoId || completingTodoId.value) return;
     completingTodoId.value = todoId;
@@ -561,6 +616,14 @@
 
   const notificationActions = computed<MobilePageActionItem[]>(() => [
     {
+      key: 'toggle-read',
+      label: t(activeNotification.value?.isRead ? 'notification.markUnread' : 'notification.markRead'),
+      icon: activeNotification.value?.isRead
+        ? icon.settings.notificationMarkUnread
+        : icon.settings.notificationMarkRead,
+      disabled: notificationWrites.value > 0 || loading.value,
+    },
+    {
       key: 'delete',
       label: t('notification.delete'),
       icon: icon.noteDetail.delete,
@@ -575,10 +638,12 @@
   }
 
   function handleNotificationAction(action: MobilePageActionItem) {
+    if (action.key === 'toggle-read' && activeNotification.value) void onToggleRead(activeNotification.value);
     if (action.key === 'delete' && activeNotification.value) void onDelete(activeNotification.value);
   }
 
   useNotificationRealtime(() => {
+    if (detailVisible.value && detailItem.value) void refreshNotificationDetail();
     if (props.page || open.value) {
       visibleRefreshQueued = true;
       void refreshVisibleNotifications();
@@ -587,15 +652,44 @@
 
   let refreshingVisible = false;
   let visibleRefreshQueued = false;
-  let notificationWrites = 0;
+  const notificationWrites = ref(0);
   let notificationMutationVersion = 0;
+  let detailRefreshGeneration = 0;
+  watch(detailVisible, () => {
+    detailRefreshGeneration++;
+  });
+  async function refreshNotificationDetail() {
+    const id = detailItem.value?.id;
+    if (!id) return;
+    const generation = ++detailRefreshGeneration;
+    const owner = user.id;
+    try {
+      const page = await fetchList({ notificationId: id, pageSize: 1 }, { throwOnError: true, syncUnread: false });
+      if (
+        generation !== detailRefreshGeneration ||
+        owner !== user.id ||
+        !detailVisible.value ||
+        detailItem.value?.id !== id
+      )
+        return;
+      const current = page.targetFound ? page.items.find((item) => item.id === id) : null;
+      if (current) detailItem.value = current;
+      else {
+        detailVisible.value = false;
+        detailItem.value = null;
+        message.warning(t('browserPush.unavailable'));
+      }
+    } catch {
+      /* Keep the current modal on transient transport failure. */
+    }
+  }
   async function withNotificationWrite(action: () => Promise<void>) {
-    notificationWrites++;
+    notificationWrites.value++;
     notificationMutationVersion++;
     try {
       await action();
     } finally {
-      notificationWrites--;
+      notificationWrites.value--;
       if (visibleRefreshQueued) void refreshVisibleNotifications();
     }
   }
@@ -603,7 +697,7 @@
     if (visibleRefreshQueued) void refreshVisibleNotifications();
   });
   async function refreshVisibleNotifications() {
-    if (refreshingVisible || notificationWrites || loading.value || locateState.value === 'loading') return;
+    if (refreshingVisible || notificationWrites.value || loading.value || locateState.value === 'loading') return;
     if (!props.page && !open.value) {
       visibleRefreshQueued = false;
       return;
@@ -616,13 +710,22 @@
     const pages = currentPage.value;
     const firstPage = Math.floor(skippedItems / pageSize) + 1;
     const skipped = skippedItems;
+    const focusedId = targetId.value;
     const tab = activeTab.value;
     const nextItems: NotificationItem[] = [];
     let nextTotal = total.value;
+    let nextSkipped = skipped;
+    let nextLastPage = pages;
+    let lastLoadedPage = firstPage;
+    let nextLocateState = locateState.value;
+    let targetLocated = false;
     try {
-      for (let pageNumber = firstPage; pageNumber <= pages; pageNumber++) {
+      for (let pageNumber = firstPage; pageNumber <= nextLastPage; pageNumber++) {
+        const locateTarget = focusedId && !targetLocated;
         const page = await fetchList(
-          { currentPage: pageNumber, pageSize, type: tab },
+          locateTarget
+            ? { notificationId: focusedId, pageSize, type: tab }
+            : { currentPage: pageNumber, pageSize, type: tab },
           { throwOnError: true, syncUnread: false },
         );
         if (
@@ -632,11 +735,27 @@
           tab !== activeTab.value
         )
           return;
+        if (locateTarget) {
+          targetLocated = true;
+          // Re-locate the target directly, even if other removals have shifted thousands of earlier rows.
+          pageNumber = page.currentPage;
+          nextSkipped = (pageNumber - 1) * pageSize;
+          nextLastPage = pageNumber + (pages - firstPage);
+          nextLocateState =
+            page.targetFound && page.items.some((item) => item.id === focusedId) ? 'found' : 'unavailable';
+        }
         nextItems.push(...page.items);
         nextTotal = page.total;
+        lastLoadedPage = pageNumber;
+        if (nextSkipped + nextItems.length >= nextTotal) break;
       }
       items.value = nextItems;
-      total.value = Math.max(0, nextTotal - skipped);
+      total.value = Math.max(0, nextTotal - nextSkipped);
+      skippedItems = nextSkipped;
+      currentPage.value = lastLoadedPage;
+      if (focusedId) locateState.value = nextLocateState;
+      if (activeNotification.value && !nextItems.some((item) => item.id === activeNotification.value?.id))
+        notificationActionsOpen.value = false;
     } catch {
       /* Retain the current list on transient refresh failures. */
     } finally {
@@ -650,7 +769,9 @@
     window.addEventListener(NOTIFICATION_PANEL_OPEN_EVENT, handleExternalOpen);
   });
   onUnmounted(() => {
+    notificationDisposed = true;
     listGeneration++;
+    detailRefreshGeneration++;
     visibleRefreshQueued = false;
     window.removeEventListener(NOTIFICATION_PANEL_OPEN_EVENT, handleExternalOpen);
   });
@@ -658,6 +779,13 @@
     () => user.id,
     () => {
       listGeneration++;
+      detailRefreshGeneration++;
+      detailVisible.value = false;
+      detailItem.value = null;
+      wrVisible.value = false;
+      wrData.value = null;
+      notificationActionsOpen.value = false;
+      activeNotification.value = null;
       items.value = [];
       targetId.value = '';
       locateState.value = 'idle';
@@ -1122,7 +1250,6 @@
     font-size: var(--ui-font-13, 13px);
     font-weight: 600;
     color: var(--text-color);
-    padding-right: var(--ui-space-22, 22px); /* 预留删除按钮位,悬停出现时不遮挡标题 */
   }
   .notification-popover .nt-item.unread .nt-item-title {
     font-weight: 700;

@@ -33,6 +33,8 @@ export interface UseForegroundRefreshOptions {
   refresh: () => Promise<unknown>;
   /** 数据被认为过期的时长，默认 5 分钟。 */
   staleMs?: number;
+  /** 短间隔任务页保留被合并的唤醒，到间隔后补读，避免隐藏时停掉的轮询无法恢复。 */
+  trailingWake?: boolean;
   /**
    * 页面级即时判断（批量选择中、编辑器打开、上传中……）。
    * 返回 false 时跳过本次刷新，并且不更新时间戳 —— 下次回到前台还会再试。
@@ -43,6 +45,8 @@ export interface UseForegroundRefreshOptions {
 }
 
 export interface UseForegroundRefreshResult {
+  /** BFCache 等额外恢复信号复用同一去重与尾部补读逻辑。 */
+  refreshOnWake: () => void;
   /** 是否正在静默刷新。只供调用方防并发或诊断，不用于控制全局视觉反馈。 */
   refreshing: Readonly<Ref<boolean>>;
   /** 页面自己完成一次加载后调用，重置陈旧计时。 */
@@ -58,7 +62,43 @@ export function useForegroundRefresh(options: UseForegroundRefreshOptions): UseF
    * 若初值为 0 会被判成「已过期」，切回前台立刻多打一次请求。
    */
   let lastLoadedAt = Date.now();
-  let lastWakeAt = 0;
+  let lastWakeAt = -Infinity;
+  let wakePending = false;
+  let wakeTimer: ReturnType<typeof setTimeout> | undefined;
+  let disposed = false;
+
+  function cancelPendingWake() {
+    clearTimeout(wakeTimer);
+    wakeTimer = undefined;
+    wakePending = false;
+  }
+
+  function flushPendingWake() {
+    if (!wakePending || wakeTimer !== undefined || refreshing.value || disposed) return;
+    if (
+      document.visibilityState !== 'visible' ||
+      !FOREGROUND_REFRESH_ENABLED ||
+      (options.enabled !== undefined && !toValue(options.enabled))
+    ) {
+      cancelPendingWake();
+      return;
+    }
+    const now = Date.now();
+    const delay = Math.max(
+      (options.staleMs ?? DEFAULT_STALE_MS) - (now - lastLoadedAt),
+      WAKE_DEDUPE_MS - (now - lastWakeAt),
+    );
+    if (delay > 0) {
+      wakeTimer = setTimeout(() => {
+        wakeTimer = undefined;
+        flushPendingWake();
+      }, delay);
+      return;
+    }
+    wakePending = false;
+    lastWakeAt = now;
+    void refreshIfStale();
+  }
 
   function markLoaded() {
     lastLoadedAt = Date.now();
@@ -81,11 +121,20 @@ export function useForegroundRefresh(options: UseForegroundRefreshOptions): UseF
       // 这样下次回到前台还会重试。
     } finally {
       refreshing.value = false;
+      flushPendingWake();
     }
   }
 
   function handleWake() {
-    if (document.visibilityState !== 'visible') return;
+    if (document.visibilityState !== 'visible') {
+      cancelPendingWake();
+      return;
+    }
+    if (options.trailingWake) {
+      wakePending = true;
+      flushPendingWake();
+      return;
+    }
     const now = Date.now();
     if (now - lastWakeAt < WAKE_DEDUPE_MS) return;
     lastWakeAt = now;
@@ -99,9 +148,11 @@ export function useForegroundRefresh(options: UseForegroundRefreshOptions): UseF
   });
 
   onBeforeUnmount(() => {
+    disposed = true;
+    cancelPendingWake();
     document.removeEventListener('visibilitychange', handleWake);
     window.removeEventListener('focus', handleWake);
   });
 
-  return { refreshing, markLoaded, refreshIfStale };
+  return { refreshing, markLoaded, refreshIfStale, refreshOnWake: handleWake };
 }
