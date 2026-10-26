@@ -206,11 +206,31 @@ it('uses OBS source ETag preconditions and does not retry a changed source uncon
       Bucket: 'test-bucket',
       Key: 'destination',
       CopySource: 'test-bucket/source',
-      CopySourceIfMatch: '"observed-version"',
+      CopySourceIfMatch: 'observed-version',
     },
     expect.any(Function),
   );
   sdk.copyObject.mockImplementationOnce((_params, callback) => callback(null, { CommonMsg: { Status: 200 } }));
   await copyObjectInObs('source', 'destination');
   expect(sdk.copyObject.mock.lastCall[0]).not.toHaveProperty('CopySourceIfMatch');
+});
+
+it('keeps HEAD ETag conditions intact through the real OBS SDK header encoder', async () => {
+  const { default: RealObsClient } = await vi.importActual('esdk-obs-nodejs');
+  const client = new RealObsClient({
+    access_key_id: 'test-ak',
+    secret_access_key: 'test-sk',
+    server: 'https://obs.test',
+  });
+  try {
+    for (const tag of ['0123456789abcdef0123456789abcdef', '0123456789abcdef0123456789abcdef-3']) {
+      sdk.copyObject.mockImplementationOnce((_params, callback) => callback(null, { CommonMsg: { Status: 200 } }));
+      await copyObjectInObs('source', 'destination', { sourceEtag: `"${tag}"` });
+      const request = client.util.makeParam('CopyObject', sdk.copyObject.mock.lastCall[0]);
+      const condition = Object.entries(request.headers).find(([key]) => key.endsWith('copy-source-if-match'))?.[1];
+      expect(condition).toBe(tag);
+    }
+  } finally {
+    client.close();
+  }
 });
