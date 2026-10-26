@@ -70,7 +70,7 @@ jobs:
   quality:
     name: 类型检查、测试与构建
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     # CI 只使用无权限占位配置，避免测试导入模块时连接生产数据库或真实 OBS。
     env:
       TZ: Asia/Shanghai

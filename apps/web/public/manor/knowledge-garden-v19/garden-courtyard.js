@@ -68,7 +68,7 @@ const GardenCourtyard = (() => {
     const length=Math.hypot((control[0]-ox)*sx,(control[1]-oy)*sy)||1;
     const grip=[ox+(control[0]-ox)*22/length,oy+(control[1]-oy)*22/length];
     pond.querySelector(".rod-grip").setAttribute("d",`M${ox} ${oy}L${grip[0]} ${grip[1]}`);
-    pond.querySelector(".rod-mount").setAttribute("transform",`translate(${ox} ${oy}) scale(${(g.mountScale||1)/sx} ${(g.mountScale||1)/sy})`);
+    pond.querySelector(".rod-mount").setAttribute("transform",`translate(${ox} ${oy}) scale(${g.mountScale||1/sx} ${g.mountScale||1/sy})`);
     pond.querySelector(".rod-reel").setAttribute("transform",`translate(${ox+(grip[0]-ox)*.7+4/sx} ${oy+(grip[1]-oy)*.7}) scale(${1/sx} ${1/sy})`);
     pond.querySelector(".fishing-line").setAttribute("d", `M${tip[0]} ${tip[1]}Q${x} ${(tip[1] + y) / 2} ${x} ${y - 16 / sy}`);
     pond.querySelector(".sea-float").setAttribute("transform", `translate(${x} ${y})`);

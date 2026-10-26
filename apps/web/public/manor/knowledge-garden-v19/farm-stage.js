@@ -104,7 +104,8 @@ const FarmStage = (() => {
     };
     g.tip = p.rodTip ? [nx(p.rodTip[0]),ny(p.rodTip[1])] : [g.origin[0] + (g.center[0] - g.origin[0]) * 0.55, Math.max(40, Math.min(g.origin[1], g.center[1]) - 200)];
     if(p.rodControl)g.rodControl=[nx(p.rodControl[0]),ny(p.rodControl[1])];
-    g.mountScale=p.mountScale||1;
+    // 底座与桥面共用场景单位；固定屏幕尺寸会在窄窗口跨出木板边缘。
+    g.mountScale=(p.mountWidth||70)*u/35;
     return g;
   }
 
