@@ -172,8 +172,9 @@
             <CloudFileCardIdentity
               :file-name="item.fileName"
               :folder="fileFolder(item)"
+              :folder-path="fileFolderPath(item)"
               :disabled="batchMode || cloud.loading || selection.busy.value"
-              @open-folder="filterCardFolder"
+              @open-folder="filterFileFolder"
             />
             <div class="file-card-meta">
               <span class="meta-label">{{ $t('cloudSpace.uploadTime') }}</span>
@@ -444,7 +445,16 @@
             </div>
           </div>
           <div class="default-area" v-if="!bookmark.isMobile">
-            <div :title="fileFolder(item)?.fullPath">{{ fileFolder(item)?.fullPath || item.folderName }}</div>
+            <div :title="fileFolder(item)?.fullPath">
+              <CloudFolderBreadcrumb
+                v-if="fileFolder(item) && !batchMode"
+                class="file-table-folder"
+                :folders="fileFolderPath(item)"
+                :disabled="cloud.loading || selection.busy.value"
+                @open-folder="filterFileFolder"
+              />
+              <span v-else>{{ fileFolder(item)?.fullPath || item.folderName }}</span>
+            </div>
             <div class="file-tags-cell">
               <span v-if="!item.tags?.length" class="file-tags-empty">-</span>
               <div v-else class="file-tags-list">
@@ -919,6 +929,7 @@
   import BVirtualList from '@/components/base/BasicComponents/BVirtualList.vue';
   import CloudVirtualGrid from '@/components/cloudSpace/CloudVirtualGrid.vue';
   import CloudFileCardIdentity from '@/components/cloudSpace/CloudFileCardIdentity.vue';
+  import CloudFolderBreadcrumb from '@/components/cloudSpace/CloudFolderBreadcrumb.vue';
   import type { CloudFolderNode } from '@/types/cloudFolder';
   import { resolveFileAiSummaryPresentation } from '@/utils/fileAiSummary';
   import CloudTextCardPreview from '@/components/cloudSpace/CloudTextCardPreview.vue';
@@ -1008,6 +1019,21 @@
 
   const batchMode = computed(() => props.batchMode ?? false);
   const foldersById = computed(() => new Map(cloud.folderList.map((folder) => [folder.id, folder])));
+  const folderPathsById = computed(() => {
+    const paths = new Map<string, CloudFolderNode[]>();
+    for (const folder of cloud.folderList) {
+      const path: CloudFolderNode[] = [];
+      const seen = new Set<string>();
+      let current: CloudFolderNode | undefined = folder;
+      while (current && !seen.has(current.id)) {
+        path.unshift(current);
+        seen.add(current.id);
+        current = current.parentId ? foldersById.value.get(current.parentId) : undefined;
+      }
+      paths.set(folder.id, path);
+    }
+    return paths;
+  });
   function fileFolder(file: { folderId?: string; folderName?: string }) {
     const id = String(file.folderId || '');
     return (
@@ -1015,9 +1041,13 @@
       (id && file.folderName ? { id, name: file.folderName, fullPath: file.folderName } : null)
     );
   }
+  function fileFolderPath(file: { folderId?: string; folderName?: string }) {
+    const folder = fileFolder(file);
+    return folder ? (folderPathsById.value.get(folder.id) ?? [folder]) : [];
+  }
 
-  function filterCardFolder(folder: Pick<CloudFolderNode, 'id' | 'name' | 'fullPath'>) {
-    if (batchMode.value || cloud.loading || selection.busy.value) return;
+  function filterFileFolder(folder: Pick<CloudFolderNode, 'id' | 'name' | 'fullPath'> | null) {
+    if (!folder || batchMode.value || cloud.loading || selection.busy.value) return;
     cloud.folder = { id: folder.id, name: folder.name };
     cloud.expandFolderAncestors(folder.id);
     void cloud.queryFieldList();

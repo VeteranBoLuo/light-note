@@ -111,9 +111,9 @@ request.defaults.adapter = async (config) => {
           body.filters.folderId === 'all' ||
           item.folderId === body.filters.folderId ||
           (scopeFixture &&
-            body.filters.folderId === '1' &&
             body.filters.includeDescendants === true &&
-            ['2', '3'].includes(item.folderId || ''))) &&
+            ((body.filters.folderId === '1' && ['2', '3'].includes(item.folderId || '')) ||
+              (body.filters.folderId === '2' && item.folderId === '3')))) &&
         (!scopeFixture || !body.filters?.fileName || item.fileName.includes(body.filters.fileName)) &&
         (!scopeFixture || !body.filters?.category || body.filters.category.includes('compress')),
     );
@@ -155,10 +155,10 @@ request.defaults.adapter = async (config) => {
     data = {
       items: scopeFixture
         ? [
-            { id: '1', parentId: null, name: '旅游' },
-            { id: '2', parentId: '1', name: '2026 旅行' },
-            { id: '3', parentId: '2', name: '原片' },
-            { id: '4', parentId: null, name: '其他资料' },
+            { id: '1', parentId: null, name: '旅游', path: ['旅游'], childCount: 1 },
+            { id: '2', parentId: '1', name: '2026 旅行', path: ['旅游', '2026 旅行'], childCount: 1 },
+            { id: '3', parentId: '2', name: '原片', path: ['旅游', '2026 旅行', '原片'] },
+            { id: '4', parentId: null, name: '其他资料', path: ['其他资料'] },
           ].map((folder) => ({
             ...folder,
             directFileCount: items.filter((item) => item.folderId === folder.id).length,
