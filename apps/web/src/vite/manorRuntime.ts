@@ -123,6 +123,12 @@ export default function manorRuntime(): Plugin {
   };
   return {
     name: 'lightnote-manor-runtime',
+    transformIndexHtml() {
+      const css = readFileSync(new URL('../view/manor/manorLoading.css', import.meta.url), 'utf8');
+      const loadingIcon = 'data:image/svg+xml,' + encodeURIComponent(icon.manor.entry);
+      return [{ tag: 'style', attrs: { 'data-manor-entry-loading': 'true' }, injectTo: 'head' as const,
+        children: `html.light-note-manor-entry{--manor-loading-icon:url("${loadingIcon}")}\n${css}` }];
+    },
     configureServer(server) {
       for (const file of ['runtime.js', 'runtime.css'])
         server.middlewares.use(`/manor/knowledge-garden-v19/${file}`, (_req, res) => {

@@ -46,24 +46,24 @@ describe('庄园生产入口与经典规则脚本', () => {
     expect(entry).toMatch(/data-ui-script="knowledge-garden-v19\/garden-ui\.js\?v=[a-f0-9]{16}"/);
     expect(entry).not.toContain('garden-water-worker');
     const preload = JSON.parse(assets.get('manor/preload.json')!);
-    expect(preload.desktop).toContain('/manor/knowledge-garden-v19/courtyard/pc-scene-r56.webp');
-    expect(preload.desktopCritical).toEqual(expect.arrayContaining(['/manor/knowledge-garden-v19/courtyard/pc-scene-r56.webp']));
+    expect(preload.desktop).toContain('/manor/knowledge-garden-v19/courtyard/pc-scene-r58.webp');
+    expect(preload.desktopCritical).toEqual(expect.arrayContaining(['/manor/knowledge-garden-v19/courtyard/pc-scene-r58.webp']));
     const runtimeIndex = preload.desktopCritical.findIndex((url: string) => /runtime\.js\?v=/.test(url));
     expect(runtimeIndex).toBeGreaterThanOrEqual(0);
-    expect(runtimeIndex).toBeLessThan(preload.desktopCritical.indexOf('/manor/knowledge-garden-v19/courtyard/pc-scene-r56.webp'));
+    expect(runtimeIndex).toBeLessThan(preload.desktopCritical.indexOf('/manor/knowledge-garden-v19/courtyard/pc-scene-r58.webp'));
     expect(preload.mobile).toContain('/manor/knowledge-garden-v19/courtyard/mobile-garden-scene-r56.webp');
-    expect(preload.mobile).not.toContain('/manor/knowledge-garden-v19/courtyard/pc-scene-r56.webp');
+    expect(preload.mobile).not.toContain('/manor/knowledge-garden-v19/courtyard/pc-scene-r58.webp');
     const boot = JSON.parse(entry.match(/id="manor-boot-images">([^<]+)/)![1]);
     for (const profile of ['desktop', 'mobile']) {
       const critical = profile === 'desktop' ? preload.desktopCritical : preload.mobileCritical;
       expect(boot[profile].every(({ src }: { src: string }) => critical.includes('/manor/' + src))).toBe(true);
     }
-    expect(preload.mobileCritical).not.toContain('/manor/knowledge-garden-v19/courtyard/pc-scene-r56.webp');
+    expect(preload.mobileCritical).not.toContain('/manor/knowledge-garden-v19/courtyard/pc-scene-r58.webp');
     expect(boot.desktop[0]).toMatchObject({
-      priority: 'high', sizes: '100vw', src: 'knowledge-garden-v19/courtyard/pc-scene-r56.webp',
+      priority: 'high', sizes: '100vw', src: 'knowledge-garden-v19/courtyard/pc-scene-r58.webp',
     });
-    expect(boot.desktop[0].srcset).toContain('pc-scene-2048-r56.webp 2048w');
-    expect(boot.desktop[0].srcset).toContain('pc-scene-r56.webp 3630w');
+    expect(boot.desktop[0].srcset).toContain('pc-scene-2048-r58.webp 2048w');
+    expect(boot.desktop[0].srcset).toContain('pc-scene-r58.webp 3630w');
     expect(boot.desktop.map(({src}: {src: string}) => src)).toContain('knowledge-garden-v19/farm/bed-dry-r55.webp');
     expect(boot.mobile.map(({src}: {src: string}) => src)).not.toContain('knowledge-garden-v19/farm/workshop-states-r53.webp');
     const controls=boot.desktop.find(({src}: {src: string})=>src.endsWith('/farm/game-ui-r53.webp'));

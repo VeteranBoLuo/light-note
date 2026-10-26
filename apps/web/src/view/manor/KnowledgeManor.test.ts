@@ -46,6 +46,9 @@ async function mount(previous?: string) {
         { path: 'knowledge-manor', name: 'knowledgeManor', component: KnowledgeManor },
         { path: 'bookmarks', name: 'bookmarks', component: { render: () => h('p', 'bookmarks-ready') } },
         { path: 'app', component: { render: () => h('p', 'app-ready') } },
+        ...['noteLibrary', 'home', 'cloudSpace', 'inbox', 'organize', 'growth'].map(path => ({
+          path, component: { render: () => h('p', `${path}-ready`) },
+        })),
       ] },
     ],
   });
@@ -54,6 +57,7 @@ async function mount(previous?: string) {
   app = createApp(RouterView).use(router);
   app.component('BButton', { setup: (_, context) => () => h('button', context.attrs, context.slots.default?.()) });
   app.component('BLoading', { render: () => h('span', 'loading') });
+  app.component('svg-icon', { render: () => h('span', { 'aria-hidden': 'true' }) });
   const host = document.createElement('div');
   document.body.append(host);
   app.mount(host);
@@ -76,6 +80,33 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 describe('庄园加载与主站导航', () => {
+  it.each([
+    ['daily_note', '/noteLibrary'], ['daily_bookmark', '/home'], ['daily_file', '/cloudSpace'],
+    ['daily_todo_create', '/inbox?tab=todo'], ['daily_todo', '/inbox?tab=todo'],
+    ['daily_organize', '/organize?issue=pending'], ['checkin', '/growth?section=overview'],
+  ])('任务 %s 的去完成复用每日任务目的地 %s', async (key, destination) => {
+    mocks.read.mockResolvedValue({ quests: [{ key, done: false }], state: {}, revision: 0, version: 'fixture' } as never);
+    const router = await mount(), frame = document.querySelector('iframe')!;
+    const arrived = new Promise<void>(resolve => {
+      const stop = router.afterEach(to => { if (to.fullPath === destination) { stop(); resolve(); } });
+    });
+    window.dispatchEvent(new MessageEvent('message', { source: frame.contentWindow, origin: location.origin,
+      data: { type: 'lightnote-manor', nonce: new URL(frame.src).searchParams.get('bridge'), id: 11, action: 'tasks', payload: { index: 0 } } }));
+    await arrived;
+    expect(router.currentRoute.value.fullPath).toBe(destination);
+    expect(mocks.command).not.toHaveBeenCalled();
+  });
+
+  it.each([-1, 1, '0', 0.5])('拒绝无效任务序号 %s，不允许场景任意导航', async index => {
+    mocks.read.mockResolvedValue({ quests: [{ key: 'daily_note', done: false }], state: {}, revision: 0, version: 'fixture' } as never);
+    const router = await mount(), frame = document.querySelector('iframe')!, reply = vi.spyOn(frame.contentWindow!, 'postMessage');
+    window.dispatchEvent(new MessageEvent('message', { source: frame.contentWindow, origin: location.origin,
+      data: { type: 'lightnote-manor', nonce: new URL(frame.src).searchParams.get('bridge'), id: 11, action: 'tasks', payload: { index, url: '/home' } } }));
+    await flush();
+    expect(router.currentRoute.value.path).toBe('/knowledge-manor');
+    expect(reply).toHaveBeenCalledWith(expect.objectContaining({ id: 11, error: 'manor.actionFailed' }), location.origin);
+  });
+
   it('重置测试使用独立存档，命令不写正式 API，恢复后重新读取正式存档', async () => {
     const state=createManor({now:new Date('2026-10-25T10:00:00Z'),points:320,calendar:{dayKey:'20261025',weekKey:'202643',utcOffsetMinutes:480}});
     mocks.read.mockResolvedValue({quests:[],state,revision:8,version:MANOR_VERSION});

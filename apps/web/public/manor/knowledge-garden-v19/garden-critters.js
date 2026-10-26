@@ -381,12 +381,16 @@ const GardenCritters = (() => {
     };
     const depth = (y) => clamp(0.62 + (0.55 * (y / H - 0.4)) / 0.5, 0.55, 1.2);
     const unit = () => Math.min(W, H * 1.6) * (courtyard ? (compactGarden() ? .10 : .045) : .068);
+    const pickupClear = (p,w,h) => GardenHabitat.pickupClear(p,typeof FarmStage!=="undefined" ? FarmStage.habitat()?.pickups||[] : [],w,h);
     function freeSpot(near, radius, tries = 40) {
       for (let i = 0; i < tries; i++) {
         const { cx, cy, rx, ry } = lawn();
-        const x = near ? near.x + (Math.random() - 0.5) * radius * 2 : courtyard ? cx + (Math.random() - .5) * rx * 2 : W * (0.05 + Math.random() * 0.9),
-          y = near ? near.y + (Math.random() - 0.5) * radius : courtyard ? cy + (Math.random() - .5) * ry * 2 : H * (0.45 + Math.random() * 0.45);
-        if (!blocked(x, y, unit() * 0.8)) return { x, y };
+        const nearby = near && Math.random()<.65;
+        const x = nearby ? near.x + (Math.random() - 0.5) * radius * 2 : courtyard ? cx + (Math.random() - .5) * rx * 2 : W * (0.05 + Math.random() * 0.9),
+          y = nearby ? near.y + (Math.random() - 0.5) * radius : courtyard ? cy + (Math.random() - .5) * ry * 2 : H * (0.45 + Math.random() * 0.45);
+        if (!blocked(x, y, unit() * 0.8) && pickupClear({x,y},unit()*1.7,unit()*1.9)
+          && (!near || Math.hypot(x-near.x,y-near.y)>unit()*.65)
+          && (!animalsReady || sparrows.every(b=>b.state!=="ground"||Math.hypot(x-b.x,y-b.y)>unit()*1.3))) return { x, y };
       }
       return null;
     }
@@ -446,7 +450,9 @@ const GardenCritters = (() => {
       const safe = GardenHabitat.onLawn(target, lawn());
       const dx = safe.x - rabbit.x, dy = safe.y - rabbit.y;
       const ratio = Math.min(1, unit() * .95 / Math.max(1, Math.hypot(dx, dy)));
-      rabbit.target = { x: rabbit.x + dx * ratio, y: rabbit.y + dy * ratio };
+      const next = { x: rabbit.x + dx * ratio, y: rabbit.y + dy * ratio };
+      if (Array.from({length:7},(_,i)=>i/6).some(t=>!pickupClear({x:rabbit.x+(next.x-rabbit.x)*t,y:rabbit.y+(next.y-rabbit.y)*t},unit()*1.7,unit()*1.9))) {rabbit.timer=.8;return;}
+      rabbit.target = next;
       rabbit.from = { x: rabbit.x, y: rabbit.y };
       rabbit.state = "hop"; rabbit.hop = 0;
       rabbit.face = dx >= 0 ? 1 : -1;
@@ -489,10 +495,10 @@ const GardenCritters = (() => {
       GardenAnimalPose.advance(r.skin,GardenAnimalPose.targets('rabbit',r.state,r.age,r.hop),dt);
     }
     function freeBirdSpot(near, hop = false) {
-      const clear = p => p.x > 12 && p.x < W - 12 && p.y > H * .24 && p.y < H - 12 && !birdBlocks.some(b => p.x > b.l && p.x < b.r && p.y > b.t && p.y < b.b);
+      const clear = p => p.x > 12 && p.x < W - 12 && p.y > H * .24 && p.y < H - 12 && pickupClear(p,unit()*.8,unit()*.8) && !birdBlocks.some(b => p.x > b.l && p.x < b.r && p.y > b.t && p.y < b.b);
       const stops = GardenHabitat.birdRoute(compactGarden(), W, H,near?.id||0,sparrows.length).filter(clear);
       if (!stops.length) return null;
-      const free=p=>sparrows.every(other=>other===near||!other.x||(Math.hypot(other.x-p.x,other.y-p.y)>unit()*1.1&&(!other.fly||other.state==="ground"||Math.hypot(other.fly.tx-p.x,other.fly.ty-p.y)>unit()*1.1)));
+      const free=p=>Math.hypot(rabbit.x-p.x,rabbit.y-p.y)>unit()*1.4&&sparrows.every(other=>other===near||!other.x||(Math.hypot(other.x-p.x,other.y-p.y)>unit()*1.1&&(!other.fly||other.state==="ground"||Math.hypot(other.fly.tx-p.x,other.fly.ty-p.y)>unit()*1.1)));
       if (near && hop) {
         const home = stops.reduce((a, p) => Math.hypot(p.x - near.x, p.y - near.y) < Math.hypot(a.x - near.x, a.y - near.y) ? p : a);
         const next={ x: home.x + (Math.random() - .5) * unit() * .28, y: home.y + (Math.random() - .5) * unit() * .06 };
@@ -541,6 +547,7 @@ const GardenCritters = (() => {
         }
       } else {
         b.timer -= dt;
+        if (Math.hypot(b.x-rabbit.x,b.y-rabbit.y)<unit()*1.1) { flee(b); return; }
         peck = b.timer < 2 ? Math.max(0, Math.sin(t * 5)) : 0;
         if (b.timer <= 0) {
           if (Math.random() < .45) flee(b);
@@ -590,7 +597,7 @@ const GardenCritters = (() => {
         frame = p < .18 ? 2 : p < .34 ? 3 : p < .85 ? 4 : 5;
         f.x = j.fx + (j.tx - j.fx) * travel;
         f.y = j.fy + (j.ty - j.fy) * travel;
-        lift = Math.sin(Math.PI * travel) * 1.4;
+        lift = Math.sin(Math.PI * travel) * 1.0;
         if (p >= 1) {
           f.state = "under";
           f.hidden = 3 + Math.random() * 3;
@@ -723,7 +730,7 @@ const GardenCritters = (() => {
       if(fly.playLeft>0)fly.lure=point;
       const c = pick(point.x, point.y);
       if (c) interact(c);
-      else if (gardenAnimals() && !scene.classList.contains("farm-tool-selected") && GardenHabitat.inLawn(point, lawn())) {
+      else if (gardenAnimals() && !scene.classList.contains("farm-tool-selected") && GardenHabitat.inLawn(point, lawn()) && pickupClear(point,unit()*1.7,unit()*1.9)) {
         calledSpot = point;
         // 先落地再继续下一跳，连续点草地也不会瞬移。
         if (rabbit.state !== "hop") startHops(calledSpot);
@@ -754,6 +761,7 @@ const GardenCritters = (() => {
       if(gardenAnimals())updateRabbit(dt, t);
       rabbitHit.style.left = `${rabbit.x}px`;
       rabbitHit.style.top = `${rabbit.y - unit() * depth(rabbit.y) * .45 * .72}px`;
+      rabbitHit.style.pointerEvents = pickupClear(rabbit,unit()*1.7,unit()*1.9) ? "auto" : "none";
       if(gardenAnimals())sparrows.forEach((b) => updateSparrow(b, dt, t));
       if(waterAnimals())updateFrog(dt, t);else syncFrogHit();
       if(waterAnimals())updateFly(dt, t);

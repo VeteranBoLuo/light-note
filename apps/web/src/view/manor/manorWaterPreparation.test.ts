@@ -34,6 +34,8 @@ describe('预生成庄园水面',()=>{
     const point=(x:number,y:number)=>mask.pixel(x*mask.width/scene.image[0],y*mask.height/scene.image[1]);
     expect(point(1300,300)[0]).toBe(255);
     expect(point(400,1600)[0]).toBe(255);
+    const [fx,fy]=scene.pier.frogSplash;
+    expect(point(fx,fy)[0]).toBe(255);
     expect(point(2800,700)[0]).toBe(0);
     expect(point(1500,1300)[0]).toBe(0);
   });
