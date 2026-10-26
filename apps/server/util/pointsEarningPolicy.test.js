@@ -1,3 +1,4 @@
+import { PUBLIC_RESOURCE_ACHIEVEMENTS } from './publicResources/achievements.js';
 import { describe, expect, it, vi } from 'vitest';
 import {
   POINTS_EARNING_C7_POLICY_VERSION,
@@ -24,6 +25,14 @@ import {
 import { resolvePointsEarningPeriodVersion } from './pointsEarningPolicyState.js';
 
 describe('pointsEarningPolicy', () => {
+  it('keeps the approved public contribution budget across earning policies', () => {
+    for (const version of ['legacy', POINTS_EARNING_POLICY_VERSION, POINTS_EARNING_C7_POLICY_VERSION, POINTS_EARNING_C8_POLICY_VERSION]) {
+      const items = PUBLIC_RESOURCE_ACHIEVEMENTS.map((item) => applyAchievementEarningPolicy(item, version));
+      expect(items.map((item) => item.reward)).toEqual([10, 30, 80, 150, 300]);
+      expect(items.reduce((sum, item) => sum + item.reward, 0)).toBe(570);
+      expect(items.at(-1)).toMatchObject({ target: 500, minLevel: 8 });
+    }
+  });
   const c8Runtime = () =>
     getPointsEarningRuntime({
       POINTS_EARNING_C5_ENABLED: 'true',

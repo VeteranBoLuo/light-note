@@ -1,3 +1,4 @@
+import { PUBLIC_RESOURCE_FRAMES } from './publicResources/achievements.js';
 import { isProfileBackgroundId } from '@lightnote/shared/profile-backgrounds';
 import { randomUUID } from 'node:crypto';
 import pool from '../db/index.js';
@@ -240,6 +241,7 @@ const activeEconomyCatalog = () => getActiveEconomyCatalog();
 const { utilityItems: SHOP_UTILITY_ITEMS, frameItems: SHOP_FRAME_ITEMS } = activeEconomyCatalog();
 
 const ACHIEVEMENT_FRAME_ITEMS = [
+  ...PUBLIC_RESOURCE_FRAMES,
   {
     id: 'frame_first_light',
     type: 'cosmetic',

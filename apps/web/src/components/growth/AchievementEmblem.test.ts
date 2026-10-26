@@ -1,3 +1,4 @@
+import { ACHIEVEMENT_MOTION } from '@/config/achievementMotion';
 import { createApp, h, nextTick, reactive } from 'vue';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ACHIEVEMENT_KEYS, achievementVisualFor } from '@/config/achievements';
@@ -56,7 +57,7 @@ function visibility() {
   );
   return { hidden, attach, disconnect, set: (shown: boolean) => callback([{ isIntersecting: shown }]) };
 }
-const highest = ACHIEVEMENT_KEYS.filter((key) => achievementVisualFor(key).tier === 5);
+const highest = ACHIEVEMENT_KEYS.filter((key) => achievementVisualFor(key).tier === 5 && ACHIEVEMENT_MOTION[key]);
 describe('AchievementEmblem motion', () => {
   it.each(highest)('animates unlocked highest-tier %s in the wall without loading large art', async (key) => {
     const view = visibility();

@@ -60,10 +60,11 @@ export async function softDeleteResources(db, { userId, items: rawItems }) {
       if (type === 'bookmark') {
         const [rows] = await db.query(
           `SELECT id, icon_url AS iconUrl FROM bookmark
-            WHERE user_id = ? AND del_flag = 0 AND id IN (${placeholders})`,
+            WHERE user_id = ? AND del_flag = 0 AND id IN (${placeholders}) FOR UPDATE`,
           [userId, ...validIds],
         );
         bookmarkIcons.push(...rows);
+        await withdrawDeletedSources(db, { userId, kind: type, ids: validIds });
         [result] = await db.query(
           `UPDATE bookmark SET del_flag = 1, deleted_at = NOW(), icon_url = NULL
             WHERE user_id = ? AND del_flag = 0 AND id IN (${placeholders})`,
@@ -102,7 +103,6 @@ export async function softDeleteResources(db, { userId, items: rawItems }) {
           [userId, ...validIds],
         );
       }
-      if (type !== 'note') await withdrawDeletedSources(db, { userId, kind: type, ids: validIds });
       if (type !== 'tag' && type !== 'note') {
         await removeInboxRelations(db, {
           userId,
