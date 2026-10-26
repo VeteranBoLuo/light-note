@@ -242,6 +242,29 @@ try {
   });
   await waitScope(page, true, 60);
   assert.equal(await page.evaluate(() => window.__cloudBatchFixture.selection.count), 0);
+  // The all-files view explains that the preference applies to individual folders, without reflowing the table.
+  for (const theme of ['day', 'night']) {
+    const allPage = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+    await allPage.goto(`${origin}/e2e/cloud-scroll.html?scope&view=table&count=125&theme=${theme}`);
+    await waitScope(allPage, false, 1);
+    await allPage.evaluate(async () => {
+      const cloud = window.__cloudBatchFixture.cloud;
+      cloud.folder = { id: 'all', name: '全部文件' };
+      await cloud.queryFieldList();
+    });
+    await waitScope(allPage, false, 125);
+    const contentTop = await allPage.locator('.content-area').evaluate((el) => el.getBoundingClientRect().top);
+    await openScope(allPage, false);
+    await allPage.getByText('“全部文件”始终显示所有文件，此设置用于具体文件夹。', { exact: true }).waitFor();
+    const trigger = await allPage.locator('.cloud-scope-trigger').boundingBox();
+    const panel = await allPage.locator('.cloud-scope-popover').boundingBox();
+    assert(trigger && panel && Math.abs(trigger.x - panel.x) <= 1, 'menu follows the left edge of its trigger');
+    assert(panel.x >= 0 && panel.x + panel.width <= 1440, 'menu stays within the viewport');
+    assert.equal(await allPage.locator('.content-area').evaluate((el) => el.getBoundingClientRect().top), contentTop);
+    await allPage.screenshot({ path: `${output}/all-files-table-${theme}.png` });
+    results.push({ width: 1440, theme, view: 'table', scope: 'all', passed: true });
+    await allPage.close();
+  }
   await writeFile(`${output}/results.json`, JSON.stringify(results, null, 2));
   console.log(JSON.stringify({ passed: results.length, output }));
 } finally {
