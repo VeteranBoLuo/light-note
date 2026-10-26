@@ -149,12 +149,11 @@ export function useDailyBrief(options: {
   }
   function handleVisibility() {
     if (!visible()) clearTimer();
-    else void foreground.refreshIfStale();
   }
   // focus 是未发 visibilitychange 的 WebView 兜底。与显隐和手动请求合并在途读取。
-  const foreground = useForegroundRefresh({
+  useForegroundRefresh({
     refresh: () => refresh(),
-    staleMs: 1000,
+    trailingWake: true, staleMs: 1000,
     canRefresh: () => eligible() && Date.now() - lastCheckAt >= 1000,
   });
   document.addEventListener('visibilitychange', handleVisibility);

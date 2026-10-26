@@ -28,14 +28,16 @@ const unreadTotal = ref(0);
 const unreadByType = ref<Record<string, number>>({}); // 分类型未读数(各 tab 角标)
 let ownerId: string | null = null;
 let generation = 0;
-const unreadRequests = new Map<string, Promise<void>>();
-const queuedUnreadRefreshes = new Set<string>();
+interface UnreadRequest {
+  promise: Promise<void>;
+  next?: Promise<void>;
+}
+const unreadRequests = new Map<string, UnreadRequest>();
 
 /** 登出/切号时作废未读缓存 */
 export function resetNotification() {
   generation++;
   unreadRequests.clear();
-  queuedUnreadRefreshes.clear();
   unreadTotal.value = 0;
   unreadByType.value = {};
   ownerId = null;
@@ -62,9 +64,14 @@ export function useNotification(options: { excludeCommunityChat?: MaybeRef<boole
     const requestGeneration = generation;
     const scope = notificationScope();
     const key = `${uid}:${scope.excludeCommunityChat}:${requestGeneration}`;
-    if (unreadRequests.has(key)) {
-      if (options.afterCurrent) queuedUnreadRefreshes.add(key);
-      return unreadRequests.get(key);
+    const active = unreadRequests.get(key);
+    if (active) {
+      if (!options.afterCurrent) return active.promise;
+      // 每个调用只等待它需要的下一次快照，后来的事件另排下一轮，不能无限延长写操作等待。
+      active.next ||= active.promise.then(async () => {
+        if (generation === requestGeneration && useUserStore().id === uid && !isGuest()) await refreshUnread();
+      });
+      return active.next;
     }
     if (ownerId !== uid) {
       unreadTotal.value = 0;
@@ -72,26 +79,23 @@ export function useNotification(options: { excludeCommunityChat?: MaybeRef<boole
       ownerId = uid;
     }
     const pending = (async () => {
-      do {
-        try {
-          queuedUnreadRefreshes.delete(key);
-          const res = await notificationApi.getUnreadCount(scope);
-          if (generation !== requestGeneration || useUserStore().id !== uid || isGuest()) return;
-          if (res?.status === 200 && res.data) {
-            unreadTotal.value = Number(res.data.unreadTotal) || 0;
-            unreadByType.value = res.data.byType || {};
-          }
-        } catch {
-          /* 忽略,下次轮询再试 */
+      try {
+        const res = await notificationApi.getUnreadCount(scope);
+        if (generation !== requestGeneration || useUserStore().id !== uid || isGuest()) return;
+        if (res?.status === 200 && res.data) {
+          unreadTotal.value = Number(res.data.unreadTotal) || 0;
+          unreadByType.value = res.data.byType || {};
         }
-      } while (generation === requestGeneration && useUserStore().id === uid && queuedUnreadRefreshes.has(key));
+      } catch {
+        /* 忽略,下次轮询再试 */
+      }
     })();
-    unreadRequests.set(key, pending);
+    const task = { promise: pending };
+    unreadRequests.set(key, task);
     try {
       await pending;
     } finally {
-      if (unreadRequests.get(key) === pending) unreadRequests.delete(key);
-      queuedUnreadRefreshes.delete(key);
+      if (unreadRequests.get(key) === task) unreadRequests.delete(key);
     }
   }
 
@@ -145,6 +149,20 @@ export function useNotification(options: { excludeCommunityChat?: MaybeRef<boole
     }
   }
 
+  async function setReadState(id: string, isRead: boolean) {
+    if (!id || isGuest()) return false;
+    const uid = useUserStore().id;
+    try {
+      const response = await notificationApi.setNotificationReadState(id, isRead);
+      if (useUserStore().id !== uid || isGuest()) return false;
+      await refreshUnread({ afterCurrent: true });
+      return useUserStore().id === uid && !isGuest() && response?.status === 200 && response.data?.isRead === isRead;
+    } catch {
+      if (useUserStore().id === uid) await refreshUnread({ afterCurrent: true });
+      return false;
+    }
+  }
+
   // 全部已读
   async function markAllRead(type = 'all') {
     if (isGuest()) return false;
@@ -173,5 +191,14 @@ export function useNotification(options: { excludeCommunityChat?: MaybeRef<boole
     }
   }
 
-  return { unreadTotal, unreadByType, refreshUnread, fetchList, markRead, markAllRead, deleteNotifications };
+  return {
+    unreadTotal,
+    unreadByType,
+    refreshUnread,
+    fetchList,
+    markRead,
+    setReadState,
+    markAllRead,
+    deleteNotifications,
+  };
 }

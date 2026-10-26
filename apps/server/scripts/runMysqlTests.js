@@ -30,6 +30,7 @@ const suites = {
   'util/extraction/service.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
   'util/services/visitorExampleScheduleService.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
   'util/services/rootChatSubscription.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
+  'util/notificationSourceScope.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
   'util/nativeNotificationSync.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
   'util/huaweiPushDelivery.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
   'util/communityChatPushPresentation.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',

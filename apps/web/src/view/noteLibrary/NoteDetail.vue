@@ -824,7 +824,7 @@
 
   const resourceRefsForeground = useForegroundRefresh({
     refresh: async () => { await resolveEditorResourceRefs(currentEditorResourceRefs, true); },
-    staleMs: 1000,
+    trailingWake: true, staleMs: 1000,
     canRefresh: () => currentEditorResourceRefs.length > 0,
   });
 
@@ -2465,7 +2465,7 @@
 
   onMounted(() => {
     document.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('pageshow', resourceRefsForeground.refreshIfStale);
+    window.addEventListener('pageshow', resourceRefsForeground.refreshOnWake);
     window.addEventListener('offline', handleNetworkOffline);
     window.addEventListener('online', handleNetworkOnline);
   });
@@ -2476,7 +2476,7 @@
     detailTreeMotionCleanupTimers.forEach((timer) => window.clearTimeout(timer));
     detailTreeMotionCleanupTimers.clear();
     document.removeEventListener('keydown', handleKeyDown);
-    window.removeEventListener('pageshow', resourceRefsForeground.refreshIfStale);
+    window.removeEventListener('pageshow', resourceRefsForeground.refreshOnWake);
     window.removeEventListener('offline', handleNetworkOffline);
     window.removeEventListener('online', handleNetworkOnline);
     readonlyToolbarObserver?.disconnect();

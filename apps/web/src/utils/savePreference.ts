@@ -142,7 +142,10 @@ function createCoordinator(user: User) {
             continue;
           }
           // Replace, rather than merge: a failed newly introduced field must disappear too.
+          // Cloud scope is confirmed by its own field API and may have changed during this request.
+          const cloudScope = user.preferences.cloudIncludeDescendants;
           user.preferences = previous;
+          if (cloudScope !== undefined) user.preferences.cloudIncludeDescendants = cloudScope;
           persist(user);
           if (job.patch.lang) {
             try {

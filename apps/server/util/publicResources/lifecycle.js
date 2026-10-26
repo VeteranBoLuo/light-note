@@ -3,6 +3,7 @@ import { audit } from './core.js';
 import { publicResourceSchemaReady, PUBLIC_RESOURCE_SCHEMA } from './schema.js';
 import { communityFeedSchemaReady } from '../communityFeed/schema.js';
 import { cancelPending } from './publications.js';
+import { queueNotificationSourceChange } from '../notificationRealtimeEvents.js';
 
 // Called only with the caller's deletion transaction. A missing additive schema must not break old deletes.
 export async function withdrawDeletedSources(db, { userId, kind, ids }) {
@@ -24,6 +25,7 @@ export async function withdrawDeletedSources(db, { userId, kind, ids }) {
   if (complete && rows.some((p) => p.published_revision_id))
     await persistPublicResourceAchievements(userId, { db, env: { PUBLIC_RESOURCES_ENABLED: 'true' } });
   for (const p of rows) {
+    queueNotificationSourceChange(db, { kind: 'publication', ids: [p.public_id] });
     if (complete) await cancelPending(db, p);
     else if (p.pending_revision_id) {
       if (revisions)

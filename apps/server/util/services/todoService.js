@@ -6,6 +6,7 @@ import {
 } from './todoOrganizationService.js';
 import { insertData } from '../agent/data.js';
 import crypto from 'crypto';
+import { queueNotificationSourceChange } from '../notificationRealtimeEvents.js';
 import { invalidatePersonalKnowledgeCache } from '../personalKnowledgeSearch.js';
 import { decodeOffsetCursor, encodeOffsetCursor, normalizePageLimit } from '../pageCursor.js';
 import {
@@ -618,6 +619,7 @@ export async function setTodoStatus(connection, userId, id, status, { undoComple
   );
   const current = currentRows[0];
   if (!current || current.status === status) return 0;
+  queueNotificationSourceChange(connection, { kind: 'todo', ids: [id], userIds: [userId] });
   if (Number(current.plan_version || 1) === 2) {
     return setV2TodoStatus(connection, userId, current, status, { undoCompletion });
   }
@@ -990,6 +992,7 @@ export async function deleteTodo(connection, userId, id, { invalidateSearch = tr
     [id, userId],
   );
   if (result.affectedRows) {
+    queueNotificationSourceChange(connection, { kind: 'todo', ids: [id], userIds: [userId] });
     await connection.query(
       `UPDATE todo_reminders SET status = 'paused_delete'
        WHERE todo_id = ? AND user_id = ? AND status IN ('pending','processing')`,
@@ -1013,6 +1016,7 @@ export async function restoreTodo(connection, userId, id, { invalidateSearch = t
     [id, userId],
   );
   if (result.affectedRows) {
+    queueNotificationSourceChange(connection, { kind: 'todo', ids: [id], userIds: [userId] });
     await connection.query(
       `UPDATE todo_reminders SET status = 'pending'
        WHERE todo_id = ? AND user_id = ? AND status = 'paused_delete'`,

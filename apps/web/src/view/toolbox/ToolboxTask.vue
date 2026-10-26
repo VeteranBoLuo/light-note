@@ -914,7 +914,7 @@
   }
 
   useForegroundRefresh({
-    refresh: () => loadJob(true), staleMs: 1000,
+    refresh: () => loadJob(true), trailingWake: true, staleMs: 1000,
     canRefresh: () => Boolean(job.value) && !isTerminal.value,
   });
   function handleVisibilityChange() {

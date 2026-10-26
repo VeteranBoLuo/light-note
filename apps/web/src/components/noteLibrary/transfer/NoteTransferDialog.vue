@@ -1132,7 +1132,7 @@
       clearTimeout(timer);
     }
   });
-  useForegroundRefresh({ refresh: async () => { await handleVisibility(); }, staleMs: 1000 });
+  useForegroundRefresh({ refresh: async () => { await handleVisibility(); }, trailingWake: true, staleMs: 1000 });
   async function handleVisibility() {
     if (document.hidden || !visible.value || busy.value) return;
     clearTimeout(timer);

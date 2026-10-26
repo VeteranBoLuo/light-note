@@ -57,6 +57,13 @@ async function mount(paused = false) {
   return props;
 }
 describe('public contribution frame motion lifecycle', () => {
+  it('keeps a square raster when the desired width equals the default canvas width', async () => {
+    vi.stubGlobal('devicePixelRatio', 2);
+    vi.spyOn(HTMLCanvasElement.prototype, 'getBoundingClientRect').mockReturnValue({ width: 150 } as DOMRect);
+    await mount(true);
+    const canvas = host.querySelector('canvas')!;
+    expect([canvas.width, canvas.height]).toEqual([300, 300]);
+  });
   it('renders a complete still composition when disabled, resumes without resetting, and releases the shared clock', async () => {
     const props = await mount(true);
     expect(mocks.paint).toHaveBeenCalled();

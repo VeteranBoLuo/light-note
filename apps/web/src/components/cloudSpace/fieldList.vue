@@ -444,7 +444,7 @@
             </div>
           </div>
           <div class="default-area" v-if="!bookmark.isMobile">
-            <div>{{ item.folderName }}</div>
+            <div :title="fileFolder(item)?.fullPath">{{ fileFolder(item)?.fullPath || item.folderName }}</div>
             <div class="file-tags-cell">
               <span v-if="!item.tags?.length" class="file-tags-empty">-</span>
               <div v-else class="file-tags-list">
@@ -479,13 +479,38 @@
       <span class="file-empty-icon">
         <SvgIcon :src="icon.file_upload" size="28" />
       </span>
-      <strong>{{ $t(cloud.pendingOnly ? 'inbox.pendingFilterEmpty' : 'cloudSpace.emptyTitle') }}</strong>
-      <p v-if="!cloud.pendingOnly">{{ $t('cloudSpace.emptyHint') }}</p>
-      <BButton v-if="cloud.pendingOnly" class="file-empty-action" @click="clearFileFilters">
+      <strong>{{
+        $t(
+          cloud.fileError
+            ? 'cloudSpace.fileLoadFailed'
+            : showDescendantEmpty
+              ? 'cloudSpace.scopeDescendantEmptyTitle'
+              : hasFileFilters
+                ? cloud.pendingOnly
+                  ? 'inbox.pendingFilterEmpty'
+                  : 'cloudSpace.filterEmpty'
+                : 'cloudSpace.emptyTitle',
+        )
+      }}</strong>
+      <p v-if="showDescendantEmpty">{{ $t('cloudSpace.scopeDescendantEmptyHint', { count: descendantFileCount }) }}</p>
+      <p v-else-if="!cloud.fileError && !hasFileFilters">{{ $t('cloudSpace.emptyHint') }}</p>
+      <BButton v-if="cloud.fileError" type="text" class="file-empty-action" @click="cloud.queryFieldList()">{{
+        $t('common.retry')
+      }}</BButton>
+      <BButton
+        v-else-if="showDescendantEmpty"
+        type="text"
+        :disabled="scopeDisabled"
+        class="file-empty-action"
+        @click="emit('showDescendants')"
+      >
+        {{ $t('cloudSpace.scopeShowDescendants', { count: descendantFileCount }) }}
+      </BButton>
+      <BButton v-else-if="hasFileFilters" class="file-empty-action" @click="clearFileFilters">
         {{ $t('note.clearFilter') }}
       </BButton>
       <BButton
-        v-if="!cloud.pendingOnly && !bookmark.isMobile"
+        v-if="!cloud.fileError && !hasFileFilters && !bookmark.isMobile"
         type="primary"
         class="file-empty-action"
         @click="triggerUpload"
@@ -911,7 +936,14 @@
   const FileTagConfig = defineAsyncComponent(() => import('@/components/cloudSpace/FileTagConfig.vue'));
 
   const { t } = useI18n();
-  const emit = defineEmits(['previewFile', 'moveField', 'exitBatch', 'requestUpload', 'filesDeleted']);
+  const emit = defineEmits([
+    'previewFile',
+    'moveField',
+    'exitBatch',
+    'requestUpload',
+    'filesDeleted',
+    'showDescendants',
+  ]);
 
   // 首屏空状态引导复用页面统一上传选择器，确保容量校验、重名处理和上传进度一致。
   function triggerUpload() {
@@ -955,7 +987,23 @@
     if (scrollElement) scrollElement.scrollTop = 0;
   }
   const { addResourcesToInbox, removeResourcesFromInbox } = useInboxEnqueue();
-  const props = defineProps<{ clearKey?: number; batchMode: boolean; viewMode?: 'card' | 'table' }>();
+  const props = defineProps<{
+    clearKey?: number;
+    batchMode: boolean;
+    viewMode?: 'card' | 'table';
+    descendantFileCount?: number;
+    scopeDisabled?: boolean;
+  }>();
+  const hasFileFilters = computed(
+    () =>
+      cloud.pendingOnly ||
+      Boolean(cloud.searchFileName.trim()) ||
+      cloud.typeCheckValue.length !== CLOUD_FILE_CATEGORY_ORDER.length,
+  );
+  const showDescendantEmpty = computed(
+    () =>
+      !cloud.fileError && !cloud.includeDescendants && !hasFileFilters.value && (props.descendantFileCount || 0) > 0,
+  );
   const viewMode = computed(() => props.viewMode ?? 'table');
 
   const batchMode = computed(() => props.batchMode ?? false);
@@ -1154,6 +1202,7 @@
     scope: () =>
       JSON.stringify([
         cloud.folder?.id,
+        cloud.includeDescendants,
         cloud.searchFileName,
         cloud.typeCheckValue,
         cloud.pendingOnly,

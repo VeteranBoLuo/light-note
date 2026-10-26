@@ -161,4 +161,32 @@ describe('useCommunityChatUnread', () => {
 
     expect(unread.totalUnread.value).toBe(0);
   });
+
+  it('连续事件不让已经完成所需补读的调用一直等待更新的事件', async () => {
+    const resolve: Array<(value: unknown) => void> = [];
+    mocks.getRooms.mockImplementation(
+      () =>
+        new Promise((done) => {
+          resolve.push(done);
+        }),
+    );
+    const unread = useCommunityChatUnread();
+    const first = unread.refresh();
+    let settled = false;
+    const next = unread.refresh({ afterCurrent: true }).then(() => {
+      settled = true;
+    });
+    const result = { data: { messagingEnabled: true, items: [] } };
+    resolve[0](result);
+    await vi.waitFor(() => expect(resolve).toHaveLength(2));
+    const later = unread.refresh({ afterCurrent: true });
+    resolve[1](result);
+    await vi.waitFor(() => expect(resolve).toHaveLength(3));
+    try {
+      expect(settled).toBe(true);
+    } finally {
+      resolve[2](result);
+      await Promise.all([first, next, later]);
+    }
+  });
 });

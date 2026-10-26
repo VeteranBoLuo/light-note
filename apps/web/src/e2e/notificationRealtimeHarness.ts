@@ -10,6 +10,10 @@ const items: Record<string, unknown>[] = [];
 let unread = 0;
 let delayNextList = false;
 let releaseList = () => {};
+let sequence = 0;
+const signalChange = () => {
+  for (const controller of streams) controller.enqueue(encoder.encode('event: changed\ndata: {}\n\n'));
+};
 const fixtureFetch: typeof fetch = async (_input, init) => {
   stats.connections++;
   const stream = new ReadableStream<Uint8Array>({
@@ -48,12 +52,14 @@ request.defaults.adapter = async (config) => {
     data = { unreadTotal: unread, byType: { todo_reminder: unread } };
   } else if (path.endsWith('/list')) {
     stats.lists++;
+    const input = typeof config.data === 'string' ? JSON.parse(config.data) : config.data || {};
     data = {
       items: items.map((item) => ({ ...item })),
       total: items.length,
       unreadTotal: unread,
       currentPage: 1,
       pageSize: 20,
+      ...(input.notificationId ? { targetFound: items.some((item) => item.id === input.notificationId) } : {}),
     };
     if (delayNextList) {
       delayNextList = false;
@@ -66,6 +72,10 @@ request.defaults.adapter = async (config) => {
     items.forEach((item) => {
       item.isRead = 1;
     });
+  } else if (path.endsWith('/markRead')) {
+    const input = typeof config.data === 'string' ? JSON.parse(config.data) : config.data || {};
+    for (const item of items) if (input.ids?.includes(item.id)) item.isRead = 1;
+    unread = items.filter((item) => !item.isRead).length;
   }
   return { config, status: 200, statusText: 'OK', headers: {}, data: { status: 200, data } };
 };
@@ -77,12 +87,12 @@ request.defaults.adapter = async (config) => {
   releaseList() {
     releaseList();
   },
-  notify() {
-    const id = `fixture-${items.length}`;
+  notify(type = 'todo_reminder') {
+    const id = `fixture-${sequence++}`;
     items.unshift({
       id,
-      type: 'todo_reminder',
-      title: '待办提醒',
+      type,
+      title: type === 'system' ? '系统通知' : '待办提醒',
       content: `实时提醒 ${items.length + 1}`,
       isRead: 0,
       createTime: new Date().toISOString(),
@@ -90,7 +100,17 @@ request.defaults.adapter = async (config) => {
       todoState: 'pending',
     });
     unread++;
-    for (const controller of streams) controller.enqueue(encoder.encode('event: changed\ndata: {}\n\n'));
+    signalChange();
+    return id;
+  },
+  removeAll() {
+    items.length = 0;
+    unread = 0;
+    signalChange();
+  },
+  invalidateTodo() {
+    for (const item of items) if (item.type === 'todo_reminder') item.todoState = 'unavailable';
+    signalChange();
   },
   disconnect() {
     for (const controller of streams) controller.close();

@@ -134,7 +134,7 @@
   }
   useForegroundRefresh({
     refresh: async () => { attempts = 0; await refresh(); },
-    staleMs: 1000,
+    trailingWake: true, staleMs: 1000,
     canRefresh: () => visible.value && Boolean(intentId.value) && !creating.value,
   });
   function foreground() {

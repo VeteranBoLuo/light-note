@@ -1,4 +1,5 @@
 import { publicResourcesZh } from './publicResources';
+import { cloudFileScopeZh } from './cloudFileScope';
 import { profileBackgroundsZh, profileBackgroundItemsZh } from './profileBackgrounds';
 import { profileAppearanceZh } from './profileAppearance';
 import { MAKEUP_WINDOW_DAYS } from '@lightnote/shared';
@@ -7177,6 +7178,7 @@ export default {
     },
   },
   cloudSpace: {
+    ...cloudFileScopeZh,
     batchPreview: '预览',
     previewFile: '预览 {name}',
     pinFailed: '置顶状态更新失败，请稍后重试',
@@ -10063,6 +10065,9 @@ export default {
     unreadCount: '{count} 条未读',
     preferences: '通知偏好',
     markAllRead: '全部已读',
+    markRead: '标记为已读',
+    markUnread: '标记为未读',
+    readStateFailed: '通知状态切换失败，请稍后重试',
     empty: '暂无通知',
     noContent: '(无更多内容)',
     invalidLink: '这条通知的跳转链接无效',

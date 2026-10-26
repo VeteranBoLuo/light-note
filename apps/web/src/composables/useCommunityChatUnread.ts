@@ -4,8 +4,11 @@ import { getCommunityChatRooms, type CommunityChatRoom, type CommunityChatRoomDi
 const rooms = ref<CommunityChatRoom[]>([]);
 const loading = ref(false);
 const realtimeAvailable = ref(false);
-let refreshPromise: Promise<CommunityChatRoomDirectory | null> | null = null;
-let refreshQueuedAfterCurrent = false;
+interface DirectoryRequest {
+  promise: Promise<CommunityChatRoomDirectory | null>;
+  next?: Promise<CommunityChatRoomDirectory | null>;
+}
+let refreshRequest: DirectoryRequest | null = null;
 let generation = 0;
 let localReadVersion = 0;
 const roomReadVersions = new Map<string, number>();
@@ -54,39 +57,38 @@ function reset() {
   rooms.value = [];
   loading.value = false;
   realtimeAvailable.value = false;
-  refreshPromise = null;
-  refreshQueuedAfterCurrent = false;
+  refreshRequest = null;
   localReadVersion = 0;
   roomReadVersions.clear();
 }
 
-async function refresh(options: { afterCurrent?: boolean } = {}) {
-  if (refreshPromise) {
-    if (options.afterCurrent) refreshQueuedAfterCurrent = true;
-    return refreshPromise;
-  }
+async function refresh(options: { afterCurrent?: boolean } = {}): Promise<CommunityChatRoomDirectory | null> {
   const requestGeneration = generation;
+  const active = refreshRequest;
+  if (active) {
+    if (!options.afterCurrent) return active.promise;
+    active.next ||= active.promise.then(() => (requestGeneration === generation ? refresh() : null));
+    return active.next;
+  }
   loading.value = true;
-  const currentPromise = (async () => {
-    let directory: CommunityChatRoomDirectory | null = null;
-    do {
-      refreshQueuedAfterCurrent = false;
-      const requestToken = captureDirectorySyncToken();
-      directory = await getCommunityChatRooms()
-        .then((response) => {
-          const nextDirectory = response.data as CommunityChatRoomDirectory;
-          if (requestGeneration === generation) syncDirectory(nextDirectory, requestToken);
-          return nextDirectory;
-        })
-        .catch(() => null);
-    } while (requestGeneration === generation && refreshQueuedAfterCurrent);
-    return directory;
+  const task: DirectoryRequest = { promise: Promise.resolve(null) };
+  task.promise = (async () => {
+    const requestToken = captureDirectorySyncToken();
+    return await getCommunityChatRooms()
+      .then((response) => {
+        const nextDirectory = response.data as CommunityChatRoomDirectory;
+        if (requestGeneration === generation) syncDirectory(nextDirectory, requestToken);
+        return nextDirectory;
+      })
+      .catch(() => null);
   })().finally(() => {
-    if (requestGeneration === generation) loading.value = false;
-    if (refreshPromise === currentPromise) refreshPromise = null;
+    if (refreshRequest === task) {
+      if (!task.next) loading.value = false;
+      refreshRequest = null;
+    }
   });
-  refreshPromise = currentPromise;
-  return currentPromise;
+  refreshRequest = task;
+  return task.promise;
 }
 
 export function useCommunityChatUnread() {

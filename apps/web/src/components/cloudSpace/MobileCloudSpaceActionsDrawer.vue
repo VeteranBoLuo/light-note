@@ -64,6 +64,25 @@
           <small>{{ currentSortLabel }}</small>
         </span>
       </BButton>
+      <div class="mobile-cloud-scope">
+        <div class="mobile-cloud-scope__heading">
+          <strong>{{ t('cloudSpace.scopeTreeTitle') }}</strong>
+          <BSwitch
+            :checked="includeDescendants"
+            controlled
+            :disabled="scopeDisabled"
+            :aria-label="t('cloudSpace.scopeTreeTitle')"
+            @change="emit('scope-change', $event)"
+          />
+        </div>
+        <p>{{ t('cloudSpace.scopeTreeHint') }}</p>
+        <p>{{ t('cloudSpace.scopeExample') }}</p>
+        <p v-if="currentFolderId === 'all'">{{ t('cloudSpace.scopeAllHint') }}</p>
+        <div v-if="scopeError" class="mobile-cloud-scope__error" role="alert">
+          <span>{{ t(scopeError === 'load' ? 'cloudSpace.scopeLoadFailed' : 'cloudSpace.scopeSaveFailed') }}</span>
+          <BButton type="text" @click="emit('scope-retry')">{{ t('cloudSpace.scopeRetry') }}</BButton>
+        </div>
+      </div>
       <BButton class="mobile-page-actions__item" role="menuitem" @click="selectBatchAction">
         <span class="mobile-page-actions__icon" aria-hidden="true">
           <SvgIcon :src="icon.filterPanel.check" size="20" />
@@ -183,6 +202,7 @@
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BDrawer from '@/components/base/BasicComponents/BDrawer.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
+  import BSwitch from '@/components/base/BasicComponents/BSwitch.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon';
   import type { CloudFolderNode } from '@/types/cloudFolder';
@@ -215,6 +235,9 @@
       beforeManageFolders?: () => boolean;
       sortValue?: string;
       sortOptions?: SortOption[];
+      includeDescendants?: boolean;
+      scopeDisabled?: boolean;
+      scopeError?: string;
     }>(),
     {
       batchMode: false,
@@ -233,6 +256,8 @@
     'update:open': [open: boolean];
     batch: [];
     sort: [value: string];
+    'scope-change': [value: boolean];
+    'scope-retry': [];
     'create-folder': [name: string, parentId: string | null];
     'rename-folder': [folder: CloudFolderNode, done: FolderMutationDone];
     'move-folder': [folder: CloudFolderNode];
@@ -449,6 +474,39 @@
 
 <style lang="less" scoped>
   @import '../mobile/mobilePageActions.less';
+  .mobile-cloud-scope {
+    padding: var(--ui-space-14, 14px) var(--ui-space-8, 8px);
+    border-top: 1px solid var(--card-border-color);
+    border-bottom: 1px solid var(--card-border-color);
+  }
+  .mobile-cloud-scope__heading {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--ui-space-16, 16px);
+    color: var(--text-color);
+    font-size: var(--ui-font-14, 14px);
+  }
+  .mobile-cloud-scope__heading strong {
+    min-width: 0;
+  }
+  .mobile-cloud-scope__heading :deep(.b-switch) {
+    flex-shrink: 0;
+    --primary-color: var(--resource-file-color);
+  }
+  .mobile-cloud-scope p {
+    margin: var(--ui-space-6, 6px) 0 0;
+    color: var(--desc-color);
+    font-size: var(--ui-font-12, 12px);
+    line-height: 1.5;
+  }
+  .mobile-cloud-scope__error {
+    display: flex;
+    align-items: center;
+    gap: var(--ui-space-8, 8px);
+    color: var(--danger-color, var(--text-color));
+    font-size: var(--ui-font-12, 12px);
+  }
   .mobile-page-actions {
     padding: 10px 16px max(18px, env(safe-area-inset-bottom));
   }
