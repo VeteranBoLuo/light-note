@@ -7,6 +7,7 @@ import { putObjectBodyToObs, deleteObjectFromObs } from '../obsClient.js';
 import { compressCardImage, imageError } from './compress.js';
 import { readSource, storageAdapters, hash } from './sources.js';
 import { generationEnabled } from './references.js';
+import { expirePreviewLeases, withNextPreviewJob, withPreviewJobLock } from '../previewJobQueue.js';
 
 // A scan cursor only provides fairness; output ownership remains in the durable ledger.
 const outputCleanupCursors = new WeakMap();
@@ -29,28 +30,27 @@ export async function runSingleImagePreviewJob(
   let stage = 'processing';
   const lease = `${String(workerId).slice(0, 40)}:${randomUUID()}`;
   try {
-    await connection.beginTransaction();
-    const [rows] =
-      await connection.query(`SELECT j.id AS job_id,j.attempts,j.output_object_key,a.id AS artifact_id,a.file_id,a.format_id AS preview_format,
+    const query = `SELECT j.id AS job_id,j.attempts,j.output_object_key,a.id AS artifact_id,
+      a.source_type AS queue_source_type,a.file_id AS queue_source_id,a.file_id,a.format_id AS preview_format,
       i.* FROM file_preview_jobs j JOIN file_preview_artifacts a ON a.id=j.artifact_id
       JOIN image_assets i ON i.id=a.file_id AND a.source_type='image_asset'
       WHERE a.strategy='image_thumbnail' AND a.format_id${video ? '=' : '<>'}'video-card' AND a.strategy_version=${CARD_IMAGE_PROFILE.version} AND a.source_revision=i.source_version AND i.status<>'deleting' AND j.attempts<3 AND
       ((j.status='queued' AND j.available_at<=NOW()) OR
        (j.status='processing' AND j.locked_at<DATE_SUB(NOW(),INTERVAL 2 MINUTE)))
-      ORDER BY j.available_at,j.id LIMIT 1 FOR UPDATE`);
-    job = rows[0];
+      `;
+    job = await withNextPreviewJob(connection, query, [], async (c, current) => {
+      await c.query("UPDATE file_preview_artifacts SET status='processing',error_code=NULL WHERE id=?", [
+        current.artifact_id,
+      ]);
+      await c.query(
+        "UPDATE file_preview_jobs SET status='processing',attempts=attempts+1,locked_at=NOW(),locked_by=? WHERE id=?",
+        [lease, current.job_id],
+      );
+      return current;
+    });
     if (!job) {
-      await connection.commit();
       return false;
     }
-    await connection.query(
-      "UPDATE file_preview_jobs SET status='processing',attempts=attempts+1,locked_at=NOW(),locked_by=? WHERE id=?",
-      [lease, job.job_id],
-    );
-    await connection.query("UPDATE file_preview_artifacts SET status='processing',error_code=NULL WHERE id=?", [
-      job.artifact_id,
-    ]);
-    await connection.commit();
     // Retain the previous key until its removal succeeds, including after a crash.
     if (job.output_object_key) await remove(job.output_object_key);
     stage = 'source';
@@ -83,54 +83,57 @@ export async function runSingleImagePreviewJob(
     stage = 'source';
     const currentMeta = await metadata(job);
     if (currentMeta.version !== source.version) throw imageError('IMAGE_SOURCE_CHANGED');
-    await connection.beginTransaction();
-    const [[current]] = await connection.query('SELECT status,source_version FROM image_assets WHERE id=? FOR UPDATE', [
-      job.id,
-    ]);
-    const [[claim]] = await connection.query('SELECT locked_by,status FROM file_preview_jobs WHERE id=? FOR UPDATE', [
-      job.job_id,
-    ]);
-    if (
-      !current ||
-      current.status === 'deleting' ||
-      current.source_version !== job.source_version ||
-      claim?.locked_by !== lease ||
-      claim.status !== 'processing'
-    ) {
-      throw imageError('IMAGE_LEASE_LOST');
-    }
-    await connection.query('UPDATE image_assets SET source_version=?,source_size=? WHERE id=?', [
-      version,
-      sourceSize,
-      job.id,
-    ]);
-    await connection.query(
-      `UPDATE file_preview_artifacts SET status='ready',artifact_object_key=?,artifact_size=?,
-      image_width=?,image_height=?,preview_metadata_json=?,source_revision=?,source_etag=?,source_size=?,error_code=NULL WHERE id=?`,
-      [
-        key,
-        output?.body.length || 0,
-        output?.width || 0,
-        output?.height || 0,
-        JSON.stringify(
-          source.noCover
-            ? { cover: 'absent' }
-            : {
-                presentation: output.presentation || 'full',
-                ...(video ? { durationSeconds: source.durationSeconds ?? null } : {}),
-              },
-        ),
-        version,
+    const published = await withPreviewJobLock(connection, job, async () => {
+      const [[current]] = await connection.query(
+        'SELECT status,source_version FROM image_assets WHERE id=? FOR UPDATE',
+        [job.id],
+      );
+      const [[claim]] = await connection.query('SELECT locked_by,status FROM file_preview_jobs WHERE id=? FOR UPDATE', [
+        job.job_id,
+      ]);
+      if (
+        !current ||
+        current.status === 'deleting' ||
+        current.source_version !== job.source_version ||
+        claim?.locked_by !== lease ||
+        claim.status !== 'processing'
+      ) {
+        throw imageError('IMAGE_LEASE_LOST');
+      }
+      await connection.query('UPDATE image_assets SET source_version=?,source_size=? WHERE id=?', [
         version,
         sourceSize,
-        job.artifact_id,
-      ],
-    );
-    await connection.query(
-      "UPDATE file_preview_jobs SET status='completed',locked_at=NULL,locked_by=NULL,output_object_key=NULL,error_code=NULL WHERE id=? AND locked_by=?",
-      [job.job_id, lease],
-    );
-    await connection.commit();
+        job.id,
+      ]);
+      await connection.query(
+        `UPDATE file_preview_artifacts SET status='ready',artifact_object_key=?,artifact_size=?,
+      image_width=?,image_height=?,preview_metadata_json=?,source_revision=?,source_etag=?,source_size=?,error_code=NULL WHERE id=?`,
+        [
+          key,
+          output?.body.length || 0,
+          output?.width || 0,
+          output?.height || 0,
+          JSON.stringify(
+            source.noCover
+              ? { cover: 'absent' }
+              : {
+                  presentation: output.presentation || 'full',
+                  ...(video ? { durationSeconds: source.durationSeconds ?? null } : {}),
+                },
+          ),
+          version,
+          version,
+          sourceSize,
+          job.artifact_id,
+        ],
+      );
+      await connection.query(
+        "UPDATE file_preview_jobs SET status='completed',locked_at=NULL,locked_by=NULL,output_object_key=NULL,error_code=NULL WHERE id=? AND locked_by=?",
+        [job.job_id, lease],
+      );
+      return true;
+    });
+    if (!published) throw imageError('IMAGE_LEASE_LOST');
     console.info(
       '[image-preview] ready source=%s inputBytes=%d outputBytes=%d',
       job.source_type,
@@ -143,16 +146,21 @@ export async function runSingleImagePreviewJob(
     if (!job) throw error;
     const code = classifyImageError(error, stage);
     const stop = !imageFailure(code).retryable || Number(job.attempts) + 1 >= 3;
-    await connection.query(
-      `UPDATE file_preview_artifacts a JOIN file_preview_jobs j ON j.artifact_id=a.id
-      SET a.status=?,a.error_code=? WHERE j.id=? AND j.locked_by=?`,
-      [stop ? 'failed' : 'queued', code, job.job_id, lease],
-    );
-    await connection.query(
-      `UPDATE file_preview_jobs SET status=?,error_code=?,locked_at=NULL,locked_by=NULL,
+    await withPreviewJobLock(connection, job, async (c) => {
+      const [[claim]] = await c.query('SELECT status,locked_by FROM file_preview_jobs WHERE id=?', [job.job_id]);
+      if (claim?.locked_by !== lease || claim.status !== 'processing') return false;
+      await c.query('UPDATE file_preview_artifacts SET status=?,error_code=? WHERE id=?', [
+        stop ? 'failed' : 'queued',
+        code,
+        job.artifact_id,
+      ]);
+      await c.query(
+        `UPDATE file_preview_jobs SET status=?,error_code=?,locked_at=NULL,locked_by=NULL,
       available_at=DATE_ADD(NOW(),INTERVAL ? SECOND) WHERE id=? AND locked_by=?`,
-      [stop ? 'failed' : 'queued', code, Number(job.attempts) === 0 ? 60 : 300, job.job_id, lease],
-    );
+        [stop ? 'failed' : 'queued', code, Number(job.attempts) === 0 ? 60 : 300, job.job_id, lease],
+      );
+      return true;
+    });
     console.warn('[image-preview] processing failed code=%s', code);
     return true;
   } finally {
@@ -171,10 +179,7 @@ export async function cleanupImageAssets({
 } = {}) {
   if (!imagePreviewWorkerEnabled()) return;
   // Failed final attempts must not remain processing forever after a process crash.
-  await db.query(`UPDATE file_preview_jobs j JOIN file_preview_artifacts a ON a.id=j.artifact_id
-    SET j.status='failed',a.status='failed',j.error_code='IMAGE_WORKER_INTERRUPTED',a.error_code='IMAGE_WORKER_INTERRUPTED'
-    WHERE a.source_type='image_asset' AND j.status='processing' AND j.attempts>=3
-      AND j.locked_at<DATE_SUB(NOW(),INTERVAL 2 MINUTE)`);
+  await expirePreviewLeases(db, { sourceTypes: ['image_asset'], seconds: 120, code: 'IMAGE_WORKER_INTERRUPTED' });
   const [outputs] = await db.query(`SELECT j.id,j.output_object_key FROM file_preview_jobs j
     JOIN file_preview_artifacts a ON a.id=j.artifact_id WHERE a.source_type='image_asset'
     AND j.status='failed' AND j.output_object_key IS NOT NULL LIMIT 50`);
@@ -270,6 +275,7 @@ export async function cleanupImageAssets({
       // Retain the object ledger for 24h after deletion starts, covering a late response from an expired upload lease.
       if (!asset.delete_started_at || Date.now() - new Date(asset.delete_started_at).getTime() < 86400000) continue;
       await c.beginTransaction();
+      await c.query('SELECT id FROM image_assets WHERE id=? FOR UPDATE', [asset.id]);
       await c.query("DELETE FROM file_preview_artifacts WHERE source_type='image_asset' AND file_id=?", [asset.id]);
       await c.query("DELETE FROM image_assets WHERE id=? AND status='deleting'", [asset.id]);
       await c.commit();

@@ -232,23 +232,29 @@ describe('撤销会话的数据库事实优先于缓存', () => {
     expect(query.mock.calls.filter(([sql]) => sql.startsWith('UPDATE user_sessions'))).toHaveLength(2);
   });
   it('缓存命中也要等数据库验证完成才返回身份', async () => {
-    let finish;
-    query.mockImplementationOnce(() => new Promise((resolve) => (finish = resolve)));
-    query.mockResolvedValue([{ affectedRows: 1 }]);
-    let returned = false;
-    const reading = getSession('active').then((value) => {
-      returned = true;
-      return value;
-    });
-    await Promise.resolve();
-    expect(returned).toBe(false);
-    finish([{ affectedRows: 1 }]);
-    expect(await reading).toMatchObject({ user_id: 'cached-owner', expires_in_seconds: 86_400 });
-    expect(query.mock.calls[0]).toEqual([
-      expect.stringContaining('AND user_id = ? AND expires_at > NOW()'),
-      [86_400, 'active', 'cached-owner'],
-    ]);
-    expect(redisSet).toHaveBeenCalledWith('session:active', 900, expect.any(String));
+    // 续期与返回值共用同一时刻，避免跨毫秒向下取整使一天变成 86,399 秒。
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(Date.now());
+    try {
+      let finish;
+      query.mockImplementationOnce(() => new Promise((resolve) => (finish = resolve)));
+      query.mockResolvedValue([{ affectedRows: 1 }]);
+      let returned = false;
+      const reading = getSession('active').then((value) => {
+        returned = true;
+        return value;
+      });
+      await Promise.resolve();
+      expect(returned).toBe(false);
+      finish([{ affectedRows: 1 }]);
+      expect(await reading).toMatchObject({ user_id: 'cached-owner', expires_in_seconds: 86_400 });
+      expect(query.mock.calls[0]).toEqual([
+        expect.stringContaining('AND user_id = ? AND expires_at > NOW()'),
+        [86_400, 'active', 'cached-owner'],
+      ]);
+      expect(redisSet).toHaveBeenCalledWith('session:active', 900, expect.any(String));
+    } finally {
+      clock.mockRestore();
+    }
   });
   it('数据库不可用时不凭缓存放行', async () => {
     query.mockRejectedValue(new Error('database unavailable'));

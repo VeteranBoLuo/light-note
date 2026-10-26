@@ -15,6 +15,7 @@ import {
   putObjectBodyToObs,
 } from '../obsClient.js';
 import { stableAgentErrorCode } from '../agent/logSafety.js';
+import { expirePreviewLeases, withNextPreviewJob, withPreviewJobLock } from '../previewJobQueue.js';
 import { buildArchiveDirectoryPage, createArchiveManifest } from './archive.js';
 import { convertOfficeToPdf } from './office.js';
 import { getFilePreviewRuntimeConfig, inspectFilePreviewRuntime } from './runtime.js';
@@ -430,22 +431,13 @@ export async function listArchivePreview({
 }
 
 async function claimNextJob(workerId) {
-  const connection = await pool.getConnection();
-  try {
-    await connection.beginTransaction();
-    await connection.query(
-      `UPDATE file_preview_jobs j
-       INNER JOIN file_preview_artifacts a ON a.id = j.artifact_id
-       SET j.status = 'failed', j.locked_at = NULL, j.locked_by = NULL,
-           j.error_code = 'FILE_PREVIEW_WORKER_INTERRUPTED',
-           a.status = 'failed', a.error_code = 'FILE_PREVIEW_WORKER_INTERRUPTED'
-       WHERE j.status = 'processing' AND j.attempts >= ?
-         AND j.locked_at < DATE_SUB(NOW(), INTERVAL 10 MINUTE)`,
-      [MAX_JOB_ATTEMPTS],
-    );
-    const [rows] = await connection.query(
-      `SELECT j.id AS job_id, j.attempts, j.output_object_key AS previous_output_object_key,
-              a.*,
+  await expirePreviewLeases(pool, {
+    sourceTypes: ['cloud_file', 'community_chat_file'],
+    seconds: 600,
+    code: 'FILE_PREVIEW_WORKER_INTERRUPTED',
+  });
+  const query = `SELECT j.id AS job_id, j.attempts, j.output_object_key AS previous_output_object_key,
+              a.*, a.id AS artifact_id, a.source_type AS queue_source_type, a.file_id AS queue_source_id,
               CASE WHEN a.source_type = 'cloud_file' THEN cloud_file.file_name ELSE chat_file.file_name END AS file_name,
               CASE WHEN a.source_type = 'cloud_file' THEN cloud_file.file_type ELSE chat_file.content_type END AS file_type,
               CASE WHEN a.source_type = 'cloud_file' THEN cloud_file.file_size ELSE chat_file.file_size END AS file_size,
@@ -473,37 +465,32 @@ async function claimNextJob(workerId) {
          (j.status = 'queued' AND j.available_at <= NOW()) OR
          (j.status = 'processing' AND j.locked_at < DATE_SUB(NOW(), INTERVAL 10 MINUTE))
        )
-       ORDER BY j.available_at ASC, j.id ASC LIMIT 1 FOR UPDATE`,
-      [Number(generationEnabled()), MAX_JOB_ATTEMPTS],
-    );
-    const job = rows[0];
-    if (!job) {
-      await connection.commit();
-      return null;
-    }
-    const attempts = Number(job.attempts || 0) + 1;
-    const leaseOwner = `${String(workerId || 'worker').slice(0, 48)}:${crypto.randomUUID()}`;
-    await connection.query(
-      `UPDATE file_preview_jobs SET status = 'processing', attempts = ?, locked_at = NOW(),
-         locked_by = ?, error_code = NULL, output_object_key = NULL WHERE id = ?`,
-      [attempts, leaseOwner, job.job_id],
-    );
-    await connection.query(`UPDATE file_preview_artifacts SET status = 'processing', error_code = NULL WHERE id = ?`, [
-      job.id,
-    ]);
-    await connection.commit();
-    if (job.previous_output_object_key) {
-      deleteObjectFromObs(job.previous_output_object_key).catch((error) =>
-        console.warn('[file-preview] reclaimed artifact cleanup failed code=%s', stableAgentErrorCode(error)),
+`;
+  const job = await withNextPreviewJob(
+    pool,
+    query,
+    [Number(generationEnabled()), MAX_JOB_ATTEMPTS],
+    async (connection, current) => {
+      const attempts = Number(current.attempts || 0) + 1;
+      const leaseOwner = `${String(workerId || 'worker').slice(0, 48)}:${crypto.randomUUID()}`;
+      await connection.query(
+        "UPDATE file_preview_artifacts SET status = 'processing', error_code = NULL WHERE id = ?",
+        [current.id],
       );
-    }
-    return { ...job, attempts, worker_id: leaseOwner };
-  } catch (error) {
-    await connection.rollback();
-    throw error;
-  } finally {
-    connection.release();
+      await connection.query(
+        `UPDATE file_preview_jobs SET status = 'processing', attempts = ?, locked_at = NOW(),
+         locked_by = ?, error_code = NULL, output_object_key = NULL WHERE id = ?`,
+        [attempts, leaseOwner, current.job_id],
+      );
+      return { ...current, attempts, worker_id: leaseOwner };
+    },
+  );
+  if (job?.previous_output_object_key) {
+    deleteObjectFromObs(job.previous_output_object_key).catch((error) =>
+      console.warn('[file-preview] reclaimed artifact cleanup failed code=%s', stableAgentErrorCode(error)),
+    );
   }
+  return job;
 }
 
 function artifactObjectKey(job) {
@@ -533,10 +520,8 @@ async function recordPendingObjectKey(job, objectKey) {
 }
 
 async function completeJob(job, result) {
-  const connection = await pool.getConnection();
   let current = false;
-  try {
-    await connection.beginTransaction();
+  await withPreviewJobLock(pool, job, async (connection) => {
     // 与预览准备保持“源文件 → 派生产物”的加锁顺序，并在提交前重新核验聊天附件仍未过期。
     const currentSource = await selectOwnedFile(connection, job.owner_user_id, job.file_id, true, job.source_type);
     const [rows] = await connection.query(
@@ -581,13 +566,7 @@ async function completeJob(job, result) {
         [job.job_id],
       );
     }
-    await connection.commit();
-  } catch (error) {
-    await connection.rollback();
-    throw error;
-  } finally {
-    connection.release();
-  }
+  });
   if (!current && result.objectKey) await deleteObjectFromObs(result.objectKey).catch(() => undefined);
   return current;
 }
@@ -600,9 +579,7 @@ async function failJob(job, error, clearPendingObject = true) {
     NON_RETRYABLE_ERRORS.has(code) ||
     (code.startsWith('IMAGE_') && !imageFailure(code).retryable) ||
     job.attempts >= MAX_JOB_ATTEMPTS;
-  const connection = await pool.getConnection();
-  try {
-    await connection.beginTransaction();
+  await withPreviewJobLock(pool, job, async (connection) => {
     const [rows] = await connection.query(
       `SELECT a.source_etag, a.source_size, j.status AS job_status, j.attempts AS job_attempts,
               j.locked_by AS job_locked_by
@@ -632,13 +609,7 @@ async function failJob(job, error, clearPendingObject = true) {
         job.id,
       ]);
     }
-    await connection.commit();
-  } catch (dbError) {
-    await connection.rollback();
-    throw dbError;
-  } finally {
-    connection.release();
-  }
+  });
 }
 
 export async function runSingleFilePreviewJob(workerId) {
@@ -744,7 +715,8 @@ export async function cleanupStaleFilePreviewArtifacts() {
   }
   for (let batch = 0; batch < 10; batch += 1) {
     const [rows] = await pool.query(
-      `SELECT a.id, a.artifact_object_key, j.output_object_key
+      `SELECT a.id, a.id AS artifact_id, a.source_type AS queue_source_type, a.file_id AS queue_source_id,
+              a.artifact_object_key, j.output_object_key
        FROM file_preview_artifacts a
        LEFT JOIN file_preview_jobs j ON j.artifact_id = a.id
        LEFT JOIN files cloud_file
@@ -769,8 +741,9 @@ export async function cleanupStaleFilePreviewArtifacts() {
     for (const row of rows) {
       // 先用与候选查询相同的条件原子领取。领取后 ready 会立即失效，
       // 避免并发访问已刷新 last_access_at 时，清理器删掉仍在被使用的 OBS 对象。
-      const [claimed] = await pool.query(
-        `UPDATE file_preview_artifacts a
+      const claimed = await withPreviewJobLock(pool, row, async (connection) => {
+        const [result] = await connection.query(
+          `UPDATE file_preview_artifacts a
          LEFT JOIN files cloud_file
                 ON a.source_type = 'cloud_file'
                AND cloud_file.id = a.file_id AND cloud_file.create_by = a.owner_user_id AND cloud_file.del_flag = 0
@@ -789,8 +762,10 @@ export async function cleanupStaleFilePreviewArtifacts() {
              AND a.status IN ('ready', 'failed')
            )
          )`,
-        [PREVIEW_CLEANUP_PENDING_ERROR, row.id, PREVIEW_CLEANUP_PENDING_ERROR],
-      );
+          [PREVIEW_CLEANUP_PENDING_ERROR, row.id, PREVIEW_CLEANUP_PENDING_ERROR],
+        );
+        return result;
+      });
       if (!Number(claimed?.affectedRows || 0)) continue;
       const objectKeys = [...new Set([row.artifact_object_key, row.output_object_key].filter(Boolean))];
       let objectsDeleted = true;
