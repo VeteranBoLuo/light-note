@@ -98,6 +98,7 @@ public final class MainActivity extends Activity {
             + "})();";
 
     private WebView webView;
+    private PrewarmNetworkSupport prewarmNetworkSupport;
     private LinearLayout errorView;
     private TextView errorTitleView;
     private TextView errorMessageView;
@@ -1029,7 +1030,13 @@ public final class MainActivity extends Activity {
         try {
             JSONObject payload = new JSONObject(message.getData());
             String messageType = payload.optString("type");
-            if ("nativeNotifications".equals(messageType)) {
+            if ("network.prewarm.subscribe".equals(messageType) || "network.prewarm.unsubscribe".equals(messageType)) {
+                runOnUiThread(() -> {
+                    if (prewarmNetworkSupport != null) prewarmNetworkSupport.close();
+                    prewarmNetworkSupport = "network.prewarm.subscribe".equals(messageType)
+                        ? new PrewarmNetworkSupport(this, sourceView) : null;
+                });
+            } else if ("nativeNotifications".equals(messageType)) {
                 runOnUiThread(() -> {
                     JSONObject reply;
                     try {
@@ -1560,6 +1567,7 @@ public final class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        if (prewarmNetworkSupport != null) prewarmNetworkSupport.close();
         IncomingShareStore.removeProgressListener(shareProgressListener);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && backInvokedCallback != null) {
             getOnBackInvokedDispatcher().unregisterOnBackInvokedCallback(backInvokedCallback);

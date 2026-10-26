@@ -389,10 +389,10 @@
     };
   });
 
-  watch(() => [props.open, equipped.value.frame, equipped.value.background, shop.value, bookmark.isDesktop] as const,
+  watch(() => [props.open, equipped.value.frame, equipped.value.background, shop.value] as const,
     ([open], _old, cleanup) => {
       if (!open) return;
-      cleanup(scheduleAppearancePrewarm({ desktop: bookmark.isDesktop, profileContext: true,
+      cleanup(scheduleAppearancePrewarm({ profileContext: true,
         frame: equipped.value.frame, background: equipped.value.background,
         ownedFrames: shop.value?.frames?.filter(item => item.owned).map(item => item.id),
       }));

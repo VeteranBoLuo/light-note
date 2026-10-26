@@ -113,12 +113,12 @@
   import { useCommunityChatUnreadRuntime } from '@/composables/useCommunityChatUnreadRuntime';
   import { nudgeVisible } from '@/composables/guestNudge';
   import { usePwaInstall } from '@/composables/usePwaInstall';
-  import { disposeStaticPrewarm, setStaticPrewarmMobile, scheduleStaticPrewarm } from '@/utils/staticPrewarm';
+  import { disposeStaticPrewarm, scheduleStaticPrewarm } from '@/utils/staticPrewarm';
   import { scheduleAppearancePrewarm } from '@/utils/appearancePrewarm';
-  import { publicArtworkUrls, publicArtworkUrl } from '@/utils/publicArtwork';
-  import { COMMUNITY_CHAT_OFFICIAL_STICKERS } from '@lightnote/shared/community-chat-stickers';
+  import { publicArtworkUrls } from '@/utils/publicArtwork';
+  import { chatArtworkPrewarmSelections } from '@/utils/chatArtworkPrewarm';
   import { stopRouteArtworkPrewarm, trackNavigationActivity } from '@/utils/routePrefetch';
-  import { scheduleNoteEditorStartupPreload } from '@/utils/noteEditorStartupPreload';
+  import { scheduleAppStartupPrewarm } from '@/utils/appStartupPrewarm';
   import { scheduleManorPrewarm } from '@/utils/manorPrewarm';
   import { resolveRouteAuthDecision } from '@/utils/authNavigationIntent.ts';
   import { loadUserAuthModal } from '@/utils/userAuthModalLoader.ts';
@@ -344,7 +344,7 @@
   let noticeRequest: Promise<void> | null = null;
   let userInfoRequest: Promise<boolean> | null = null;
   let userInfoLoaded = false;
-  let disposeNoteEditorStartupPreload: (() => void) | null = null;
+  let disposeAppStartupPrewarm: (() => void) | null = null;
   const appStartupReady = ref(false);
   const identityOptionalRoutes = [
     'help',
@@ -883,7 +883,7 @@
     }, NOTICE_POLLING_INTERVAL);
   }
 
-  const noteEditorPreloadExcludedRoutes = new Set([
+  const startupPrewarmExcludedRoutes = new Set([
     'knowledgeManor',
     'landing',
     'help',
@@ -899,20 +899,19 @@
     'noteShare',
   ]);
 
-  function syncNoteEditorStartupPreload() {
-    disposeNoteEditorStartupPreload?.();
-    disposeNoteEditorStartupPreload = null;
+  function syncAppStartupPrewarm() {
+    disposeAppStartupPrewarm?.();
+    disposeAppStartupPrewarm = null;
     const currentRouteName = String(router.currentRoute.value.name || '');
-    const applicationRoute = Boolean(currentRouteName && !noteEditorPreloadExcludedRoutes.has(currentRouteName));
-    // 桌面只缓存构建文件，不执行编辑器；移动端保留流量给当前页面和用户明确点击。
-    const supportedPlatform = bookmark.isDesktop;
-    if (!appStartupReady.value || !supportedPlatform || !applicationRoute) return;
-    disposeNoteEditorStartupPreload = scheduleNoteEditorStartupPreload();
+    const applicationRoute = Boolean(currentRouteName && !startupPrewarmExcludedRoutes.has(currentRouteName));
+    // 只下载构建文件；扩展资源是否允许预热由统一网络策略决定。
+    if (!appStartupReady.value || !applicationRoute) return;
+    disposeAppStartupPrewarm = scheduleAppStartupPrewarm();
   }
 
   watch(
-    () => [appStartupReady.value, bookmark.isDesktop, router.currentRoute.value.name] as const,
-    () => syncNoteEditorStartupPreload(),
+    () => [appStartupReady.value, router.currentRoute.value.name] as const,
+    () => syncAppStartupPrewarm(),
     { immediate: true },
   );
 
@@ -923,8 +922,8 @@
     stopManorPrewarm();
     const name = String(router.currentRoute.value.name || '');
     if (!appStartupReady.value || !user.id || user.role !== 'root' || user.adminContext || !manorGrowth.growth.value?.features?.manor
-      || !name || noteEditorPreloadExcludedRoutes.has(name) || publicStandaloneRoute.value) return;
-    disposeManorPrewarm = scheduleManorPrewarm(!bookmark.isDesktop);
+      || !name || startupPrewarmExcludedRoutes.has(name) || publicStandaloneRoute.value) return;
+    disposeManorPrewarm = scheduleManorPrewarm(bookmark.isMobile);
   }
   // Stop at navigation intent, before an async guard or the next route starts loading.
   const removeNavigationActivity = trackNavigationActivity(router);
@@ -933,29 +932,24 @@
     stopManorPrewarm();
   });
   const removeManorPrewarmAfter = router.afterEach(syncManorPrewarm);
-  watch(() => [appStartupReady.value, user.id, user.role, user.adminContext, manorGrowth.growth.value?.features?.manor, bookmark.isDesktop], syncManorPrewarm, { immediate: true });
+  watch(() => [appStartupReady.value, user.id, user.role, user.adminContext, manorGrowth.growth.value?.features?.manor, bookmark.isMobile], syncManorPrewarm, { immediate: true });
   onBeforeUnmount(() => { stopManorPrewarm(); removeNavigationActivity(); stopRouteArtworkPrewarm(); removeManorPrewarmBefore(); removeManorPrewarmAfter(); disposeStaticPrewarm(); });
 
   let stopArtworkPrewarm: (() => void) | undefined;
-  watch(() => [appStartupReady.value, bookmark.isDesktop, router.currentRoute.value.name, user.id, user.adminContext,
+  watch(() => [appStartupReady.value, router.currentRoute.value.name, user.id, user.adminContext,
     manorGrowth.growth.value?.equippedFrame, manorGrowth.growth.value?.equippedBackground, manorGrowth.shop.value,
     communityChatWorkspaceActive.value] as const, () => {
     stopArtworkPrewarm?.();
-    setStaticPrewarmMobile(!bookmark.isDesktop);
     const name = String(router.currentRoute.value.name || '');
-    if (!appStartupReady.value || !name || publicStandaloneRoute.value || noteEditorPreloadExcludedRoutes.has(name)) return;
+    if (!appStartupReady.value || !name || publicStandaloneRoute.value || startupPrewarmExcludedRoutes.has(name)) return;
     const stops: Array<() => void> = [scheduleAppearancePrewarm({
-      desktop: bookmark.isDesktop,
       frame: manorGrowth.growth.value?.equippedFrame,
       background: manorGrowth.growth.value?.equippedBackground,
       profileContext: ['personCenter', 'myInfo', 'settings', 'growth', 'communityOwnProfile'].includes(name),
       ownedFrames: manorGrowth.shop.value?.frames?.filter(item => item.owned).map(item => item.id),
     })];
     if (name === 'growth') stops.push(scheduleStaticPrewarm({ priority: 1, urls: publicArtworkUrls('/achievements/', true) }));
-    if (communityChatWorkspaceActive.value) stops.push(scheduleStaticPrewarm({ priority: 1, urls: [
-      ...publicArtworkUrls('/community-chat/inline-emojis/'),
-      ...COMMUNITY_CHAT_OFFICIAL_STICKERS.slice(0, bookmark.isDesktop ? undefined : 8).map(item => publicArtworkUrl(item.assetPath)),
-    ] }));
+    stops.push(...chatArtworkPrewarmSelections(communityChatWorkspaceActive.value).map(scheduleStaticPrewarm));
     stopArtworkPrewarm = () => stops.forEach(stop => stop());
   }, { immediate: true });
   onBeforeUnmount(() => stopArtworkPrewarm?.());
@@ -1122,8 +1116,8 @@
   // 解绑媒体查询监听，防止内存泄漏
   onBeforeUnmount(() => {
     appStartupReady.value = false;
-    disposeNoteEditorStartupPreload?.();
-    disposeNoteEditorStartupPreload = null;
+    disposeAppStartupPrewarm?.();
+    disposeAppStartupPrewarm = null;
     stopOpinionNoticePolling();
     document.documentElement.classList.remove('has-mobile-bottom-nav');
     window.removeEventListener('resize', handleResize);

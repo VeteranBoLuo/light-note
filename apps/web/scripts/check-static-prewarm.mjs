@@ -38,7 +38,7 @@ const server = createServer(async (req, res) => {
   res.on('close', () => {
     record.closed = true;
   });
-  res.setHeader('Cache-Control', url.pathname.startsWith('/assets/') ? 'max-age=31536000' : 'no-store');
+  res.setHeader('Cache-Control', /^\/(assets|manor)\//.test(url.pathname) ? 'max-age=31536000' : 'no-store');
   if (url.pathname === '/static-prewarm.json') {
     res.setHeader('Content-Type', 'application/json');
     res.end(JSON.stringify(manifest));
@@ -62,8 +62,13 @@ const server = createServer(async (req, res) => {
     return;
   }
   try {
-    const file = path.join(dist, decodeURIComponent(url.pathname));
-    if (!file.startsWith(dist + path.sep) || !(await stat(file)).isFile()) throw Error('not found');
+    let file = path.join(dist, decodeURIComponent(url.pathname));
+    if (!file.startsWith(dist + path.sep)) throw Error('not found');
+    if (url.pathname.startsWith('/manor/') && !(await stat(file).catch(() => null))?.isFile()) {
+      file = path.join(root, 'public', decodeURIComponent(url.pathname));
+      if (!file.startsWith(path.join(root, 'public/manor') + path.sep)) throw Error('not found');
+    }
+    if (!(await stat(file)).isFile()) throw Error('not found');
     res.setHeader(
       'Content-Type',
       {
@@ -83,7 +88,7 @@ const server = createServer(async (req, res) => {
 await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
 const origin = `http://127.0.0.1:${server.address().port}`;
 const browser = await chromium.launch({ channel: 'chrome', headless: true });
-const results = { comparisons: [], visual: [], cache: false };
+const results = { comparisons: [], visual: [], cache: false, manorCache: false, paperCache: false };
 const images = path.join(output, 'screenshots');
 await mkdir(images);
 async function pageFor(query = '', mobile = false) {
@@ -92,6 +97,7 @@ async function pageFor(query = '', mobile = false) {
   });
   const page = await context.newPage();
   await page.addInitScript(() => {
+    performance.setResourceTimingBufferSize(3000);
     const connection = new EventTarget();
     connection.effectiveType = '4g';
     connection.saveData = false;
@@ -132,6 +138,88 @@ try {
   assert.equal(requests.filter((item) => item.path === '/assets/prewarm-payload.js').length, count);
   results.cache = true;
   await context.close();
+
+  // The same selection used by App must warm paper-spirit images before chat opens.
+  {
+    const { page, context } = await pageFor();
+    const urls = await page.evaluate(() => window.__staticPrewarmHarness.warmChatFirstScreen());
+    assert.equal(urls.length, 8);
+    await page.waitForFunction(
+      (urls) =>
+        urls.every((url) =>
+          performance.getEntriesByName(new URL(url, location.origin).href).some((entry) => entry.decodedBodySize > 0),
+        ),
+      urls,
+    );
+    const target = urls[2];
+    assert(
+      await page.evaluate(
+        (url) =>
+          performance
+            .getEntriesByName(new URL(url, location.origin).href)
+            .some((entry) => entry.initiatorType === 'fetch'),
+        target,
+      ),
+    );
+    const before = requests.filter((item) => item.path === target).length;
+    assert.equal(before, 1, 'paper-spirit first screen must be prefetched');
+    await page.evaluate(async (url) => {
+      const image = new Image();
+      image.src = url;
+      await image.decode();
+    }, target);
+    assert.equal(
+      requests.filter((item) => item.path === target).length,
+      before,
+      'paper-spirit display must reuse HTTP cache',
+    );
+    results.paperCache = true;
+    await context.close();
+  }
+
+  // Generated manor boot code and the actual display-sized scene must both reuse native cache.
+  {
+    const { page, context } = await pageFor();
+    await page.evaluate(() => window.__staticPrewarmHarness.warmManor());
+    await page.waitForFunction(() => window.__staticPrewarmHarness.snapshot().reason === 'complete', null, {
+      timeout: 60000,
+    });
+    const scene = manifest.manorScene.find((item) => item.width >= 1280).url;
+    const runtime = manifest.groups['manor.critical'].find((url) => /runtime\.js\?/.test(url));
+    for (const target of [scene, runtime]) {
+      assert(
+        await page.evaluate(
+          (url) =>
+            performance
+              .getEntriesByName(new URL(url, location.origin).href)
+              .some((entry) => entry.initiatorType === 'fetch' && entry.decodedBodySize > 0),
+          target,
+        ),
+      );
+      const requestPath = new URL(target, origin).pathname;
+      const count = requests.filter((item) => item.path === requestPath).length;
+      await page.evaluate(async (url) => {
+        if (url.includes('.js?')) await (await fetch(url)).arrayBuffer();
+        else {
+          const image = new Image();
+          image.src = url;
+          await image.decode();
+        }
+      }, target);
+      assert.equal(
+        requests.filter((item) => item.path === requestPath).length,
+        count,
+        'manor display must reuse cache',
+      );
+    }
+    assert.equal(
+      await page.evaluate(() => typeof window.FARM_CAL),
+      'undefined',
+      'prewarming must not execute the manor',
+    );
+    results.manorCache = true;
+    await context.close();
+  }
 
   for (const mobile of [false, true]) {
     const baseline = [],
@@ -196,7 +284,9 @@ try {
             (image) => image.complete && image.naturalWidth > 0,
           ),
         );
-        await page.screenshot({ path: path.join(images, `${mobile ? 'mobile' : 'desktop'}-${theme}-${density}-last.png`) });
+        await page.screenshot({
+          path: path.join(images, `${mobile ? 'mobile' : 'desktop'}-${theme}-${density}-last.png`),
+        });
         assert.deepEqual(errors, []);
         results.visual.push({ mobile, theme, density, initialCanvases: initial });
         await context.close();
@@ -207,6 +297,8 @@ try {
     JSON.stringify({
       output,
       cache: results.cache,
+      paperCache: results.paperCache,
+      manorCache: results.manorCache,
       visualCases: results.visual.length,
       comparisons: results.comparisons.map((item) => ({
         mobile: item.mobile,

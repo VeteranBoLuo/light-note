@@ -1,11 +1,12 @@
 import { expect, it, vi } from 'vitest';
 import { scheduleStaticPrewarm } from './staticPrewarm';
-import { scheduleNoteEditorStartupPreload } from './noteEditorStartupPreload';
+import { scheduleAppStartupPrewarm } from './appStartupPrewarm';
 vi.mock('./staticPrewarm', () => ({ scheduleStaticPrewarm: vi.fn(() => () => {}) }));
 it('submits only static groups to the shared scheduler', () => {
-  scheduleNoteEditorStartupPreload();
+  scheduleAppStartupPrewarm();
   expect(scheduleStaticPrewarm).toHaveBeenCalledWith({
-    groups: ['route.noteDetail', 'editor.html', 'editor.markdown'],
+    groups: expect.arrayContaining(['route.noteDetail', 'editor.html', 'editor.markdown', 'route.cloudSpace']),
+    optional: true,
     priority: 2,
   });
 });

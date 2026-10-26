@@ -46,7 +46,7 @@ pnpm preview
 - 站点 Nginx 的 `/assets/` 必须覆盖图片、字体、JS、CSS 和 WASM 的长期 HTTP 缓存，配置入口为 [`scripts/nginx/static-assets-cache.conf`](../scripts/nginx/static-assets-cache.conf)。与既有同路径 `location` 合并或替换，不能重复声明；保留安全响应头继承。该目录只放内容哈希产物，禁止同地址覆盖不同内容。
 - `/static-prewarm.json` 重新验证且缺失时返回 404，不回退 SPA HTML。它随构建生成并绑定当前入口；旧页面遇到新清单只停止预热，不触发刷新。公共图片的哈希副本和普通构建资源一起纳入现有当前版／上一版资源保留机制。
 - 缓存配置修改属于部署操作，须有上线授权并通过 `nginx -t` 后生效。发布验收抽查图片与代码响应头、重复访问缓存命中、新版本 URL，以及已有页面的懒加载；仅本地代码检查不能证明生产缓存已生效。
-- 预热逻辑改动运行 `pnpm --filter web exec node scripts/check-static-prewarm.mjs`，使用独立生产构建夹具检查中断、原生 HTTP 缓存复用和前台延迟。构建输出 `.lightnote-prewarm-report.tsv` 供核对候选分组体积，实际请求仍受端型、场景和会话预算限制。
+- 预热逻辑改动运行 `pnpm --filter web exec node scripts/check-static-prewarm.mjs`，使用独立生产构建夹具检查中断、原生 HTTP 缓存复用和前台延迟。构建输出 `.lightnote-prewarm-report.tsv` 供核对候选分组体积，实际请求由权限、端型素材、网络与场景选择有限清单，正常空闲期间连续下载；实测须取消 DevTools 的“停用缓存”，区分资源候选、预热完成与实际缓存命中。
 
 ## 变更级验证
 

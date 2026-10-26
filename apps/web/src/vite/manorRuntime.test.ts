@@ -47,9 +47,18 @@ describe('庄园生产入口与经典规则脚本', () => {
     expect(entry).not.toContain('garden-water-worker');
     const preload = JSON.parse(assets.get('manor/preload.json')!);
     expect(preload.desktop).toContain('/manor/knowledge-garden-v19/courtyard/pc-scene-r56.webp');
+    expect(preload.desktopCritical).toEqual(expect.arrayContaining(['/manor/knowledge-garden-v19/courtyard/pc-scene-r56.webp']));
+    const runtimeIndex = preload.desktopCritical.findIndex((url: string) => /runtime\.js\?v=/.test(url));
+    expect(runtimeIndex).toBeGreaterThanOrEqual(0);
+    expect(runtimeIndex).toBeLessThan(preload.desktopCritical.indexOf('/manor/knowledge-garden-v19/courtyard/pc-scene-r56.webp'));
     expect(preload.mobile).toContain('/manor/knowledge-garden-v19/courtyard/mobile-garden-scene-r56.webp');
     expect(preload.mobile).not.toContain('/manor/knowledge-garden-v19/courtyard/pc-scene-r56.webp');
     const boot = JSON.parse(entry.match(/id="manor-boot-images">([^<]+)/)![1]);
+    for (const profile of ['desktop', 'mobile']) {
+      const critical = profile === 'desktop' ? preload.desktopCritical : preload.mobileCritical;
+      expect(boot[profile].every(({ src }: { src: string }) => critical.includes('/manor/' + src))).toBe(true);
+    }
+    expect(preload.mobileCritical).not.toContain('/manor/knowledge-garden-v19/courtyard/pc-scene-r56.webp');
     expect(boot.desktop[0]).toMatchObject({
       priority: 'high', sizes: '100vw', src: 'knowledge-garden-v19/courtyard/pc-scene-r56.webp',
     });

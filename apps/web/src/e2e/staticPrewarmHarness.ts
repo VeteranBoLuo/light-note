@@ -1,6 +1,8 @@
 import { createApp, h, ref } from 'vue';
 import { createPinia } from 'pinia';
 import { createI18n } from 'vue-i18n';
+import { chatArtworkPrewarmSelections } from '@/utils/chatArtworkPrewarm';
+import { manorPrewarmSelections } from '@/utils/manorPrewarm';
 import { createStaticPrewarmScheduler } from '@/utils/staticPrewarm';
 import { withForegroundActivity } from '@/http/requestActivity';
 import { applyUiDensity } from '@/composables/useUiDensity';
@@ -28,6 +30,14 @@ const harness = {
   start() {
     stop?.();
     stop = scheduler.submit({ urls: ['/assets/prewarm-payload.js'], priority: 1 });
+  },
+  warmManor() {
+    manorPrewarmSelections(false).forEach((selection) => scheduler.submit(selection));
+  },
+  warmChatFirstScreen() {
+    const selection = chatArtworkPrewarmSelections(false)[0];
+    scheduler.submit(selection);
+    return selection.urls;
   },
   stop() {
     stop?.();

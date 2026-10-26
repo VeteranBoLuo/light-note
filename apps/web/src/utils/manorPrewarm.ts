@@ -1,6 +1,13 @@
-import { scheduleStaticPrewarm } from './staticPrewarm';
+import { scheduleStaticPrewarm, type PrewarmSelection } from './staticPrewarm';
 
-/** Access checks stay at the caller; mobile budgets are reserved for common artwork. */
+/** Access checks stay at the caller; the scheduler controls network eligibility. */
+export function manorPrewarmSelections(mobile: boolean): PrewarmSelection[] {
+  return [
+    { groups: [mobile ? 'manor.mobileCritical' : 'manor.critical'], priority: 1, optional: true },
+    { groups: [mobile ? 'manor.mobile' : 'manor.desktop'], priority: 4, optional: true },
+  ];
+}
 export function scheduleManorPrewarm(mobile: boolean) {
-  return mobile ? () => {} : scheduleStaticPrewarm({ groups: ['manor.desktop'], priority: 4 });
+  const stops = manorPrewarmSelections(mobile).map((selection) => scheduleStaticPrewarm(selection));
+  return () => stops.forEach((stop) => stop());
 }

@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  subscribeAndroidPrewarmNetwork,
   enqueueAndroidDownloadWithReceipt,
   getLightNoteAndroidVersion,
   hasAndroidBridge,
@@ -14,6 +15,7 @@ import {
 
 afterEach(() => {
   delete window.LightNoteAndroid;
+  delete window.__lightNoteAndroidPrewarmNetwork;
   delete window.__lightNoteAndroidDownloadEnqueueResult;
   vi.useRealTimers();
   vi.restoreAllMocks();
@@ -118,4 +120,21 @@ describe('androidBridge', () => {
     await expect(receipt).resolves.toEqual({ ok: true, confirmed: false });
     expect(postMessage).toHaveBeenCalledTimes(1);
   });
+});
+
+it('原生预热网络资格订阅支持旧壳、网络变化与退订，不把未知值视作非计费', () => {
+  const listener = vi.fn();
+  subscribeAndroidPrewarmNetwork(listener)();
+  expect(listener).not.toHaveBeenCalled();
+  const postMessage = vi.fn();
+  window.LightNoteAndroid = { postMessage };
+  const stop = subscribeAndroidPrewarmNetwork(listener);
+  expect(postMessage).toHaveBeenCalledWith(JSON.stringify({ type: 'network.prewarm.subscribe' }));
+  window.__lightNoteAndroidPrewarmNetwork?.(true);
+  window.__lightNoteAndroidPrewarmNetwork?.(false);
+  window.__lightNoteAndroidPrewarmNetwork?.('true');
+  expect(listener.mock.calls).toEqual([[true], [false], [undefined]]);
+  stop();
+  expect(window.__lightNoteAndroidPrewarmNetwork).toBeUndefined();
+  expect(postMessage).toHaveBeenLastCalledWith(JSON.stringify({ type: 'network.prewarm.unsubscribe' }));
 });

@@ -26,7 +26,6 @@ export function frameAssetUrls(id?: string | null): string[] {
 }
 
 export function scheduleAppearancePrewarm(options: {
-  desktop: boolean;
   frame?: string | null;
   background?: string | null;
   profileContext?: boolean;
@@ -50,12 +49,12 @@ export function scheduleAppearancePrewarm(options: {
         urls: [...builtinAvatarAssetUrls(), ...(options.ownedFrames || []).flatMap(frameAssetUrls)],
       }),
     );
-  if (options.desktop)
-    stops.push(
-      scheduleStaticPrewarm({
-        priority: 3,
-        urls: [...profileBackgroundAssetUrls(), ...FRAME_IDS.flatMap(frameAssetUrls)],
-      }),
-    );
+  stops.push(
+    scheduleStaticPrewarm({
+      priority: 5,
+      optional: true,
+      urls: [...profileBackgroundAssetUrls(), ...FRAME_IDS.flatMap(frameAssetUrls)],
+    }),
+  );
   return () => stops.forEach((stop) => stop());
 }

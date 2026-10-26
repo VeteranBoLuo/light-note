@@ -94,6 +94,7 @@ export function buildPrewarmManifest(bundle: OutputBundle) {
     const manor = JSON.parse(String(manorAsset.source));
     const paths = [
       ...manor.desktop,
+      ...(manor.mobile || []),
       ...(manor.desktopScene || []).map((item: { url: string }) => item.url),
     ] as string[];
     for (const url of paths) {
@@ -105,6 +106,10 @@ export function buildPrewarmManifest(bundle: OutputBundle) {
     }
     groups['manor.desktop'] = manor.desktop.filter((url: string) => assets[url]);
     manorScene = manor.desktopScene;
+    // Generated beside the actual boot manifest, not inferred from image list positions.
+    groups['manor.mobile'] = (manor.mobile || []).filter((url: string) => assets[url]);
+    groups['manor.mobileCritical'] = (manor.mobileCritical || []).filter((url: string) => assets[url]);
+    groups['manor.critical'] = (manor.desktopCritical || []).filter((url: string) => assets[url]);
   }
   const selectedCode = new Set(Object.values(groups).flat());
   for (const url of Object.keys(assets)) {

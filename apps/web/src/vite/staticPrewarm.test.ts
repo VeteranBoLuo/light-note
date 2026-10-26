@@ -41,3 +41,17 @@ describe('构建预热清单', () => {
     expect(paths.every((url) => /\.(png|webp)$/.test(url))).toBe(true);
   });
 });
+
+it('庄园启动代码优先于场景和设施素材', () => {
+  const urls = [
+    '/manor/scene.webp',
+    '/manor/decor.webp',
+    '/manor/runtime.js?v=1234567890abcdef',
+    '/manor/runtime.css?v=1234567890abcdef',
+  ];
+  const bundle = Object.fromEntries(urls.map((url) => [url.split('?')[0].slice(1), { type: 'asset', source: 'abc' }]));
+  bundle['manor/preload.json'] = { type: 'asset', source: JSON.stringify({ desktop: urls, desktopCritical: [...urls.slice(2), urls[0]] }) };
+  const m = buildPrewarmManifest(bundle as unknown as OutputBundle);
+  expect(m.groups['manor.critical'].slice(0, 2)).toEqual(urls.slice(2));
+  expect(m.groups['manor.critical']).toContain(urls[0]);
+});

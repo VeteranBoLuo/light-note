@@ -113,6 +113,8 @@ export default function manorRuntime(): Plugin {
     const common = (scene: PreloadScene) => firstScreenArt(scene).map(file => `/manor/knowledge-garden-v19/${file}`);
     return JSON.stringify({
       desktop: [...new Set([...art(calibration.desktop), ...common(calibration.desktop), ...code])],
+      desktopCritical: [...new Set([...code, ...art(calibration.desktop), ...common(calibration.desktop)])],
+      mobileCritical: [...new Set([...code, ...art(calibration.mobileGarden), ...common(calibration.mobileGarden)])],
       mobile: [...new Set([...art(calibration.mobileGarden), ...common(calibration.mobileGarden), ...art(calibration.mobileBay), ...common(calibration.mobileBay), `/manor/${curtainAsset}`, ...code])],
       desktopScene: calibration.desktop.assetSources?.map(({ asset, width }) => ({
         url: `/manor/knowledge-garden-v19/${asset}`, width,

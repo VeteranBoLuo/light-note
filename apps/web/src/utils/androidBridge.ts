@@ -44,6 +44,8 @@ export interface AndroidDownloadEnqueueResult {
 
 declare global {
   interface Window {
+    /** Only network eligibility, never identifiers such as SSID or IP. */
+    __lightNoteAndroidPrewarmNetwork?: (raw: unknown) => void;
     LightNoteAndroid?: LightNoteAndroidBridge;
     /** 原生 → 网页的下载进度回调，由 onAndroidDownloadProgress 装上 */
     __lightNoteAndroidDownloadProgress?: (raw: unknown) => void;
@@ -414,4 +416,15 @@ export function persistAndroidAuthSession(): boolean {
 
 export function postAndroidOpenLegalDocument(document: AndroidLegalDocument): boolean {
   return postAndroidMessage({ type: 'legal.open', document });
+}
+
+/** Old shells do not reply and remain on the conservative core-resource policy. */
+export function subscribeAndroidPrewarmNetwork(listener: (unmetered: boolean | undefined) => void) {
+  if (!hasAndroidBridge()) return () => {};
+  window.__lightNoteAndroidPrewarmNetwork = (raw) => listener(typeof raw === 'boolean' ? raw : undefined);
+  postAndroidMessage({ type: 'network.prewarm.subscribe' });
+  return () => {
+    delete window.__lightNoteAndroidPrewarmNetwork;
+    postAndroidMessage({ type: 'network.prewarm.unsubscribe' });
+  };
 }
