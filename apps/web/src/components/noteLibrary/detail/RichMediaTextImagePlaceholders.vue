@@ -79,7 +79,7 @@
   import BProgress from '@/components/base/BasicComponents/BProgress.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon';
-  import { ensureRichMediaTextMedia } from '@/utils/richMediaText';
+  import { ensureRichMediaTextMedia, updateRichMediaTextImageLoading } from '@/utils/richMediaText';
 
   const props = defineProps<{
     editor: Editor | null;
@@ -148,12 +148,17 @@
         if (!body || editor.removed) return;
         if (observedBody !== body) {
           observer.disconnect();
+          observedBody?.removeEventListener('load', schedule, true);
+          observedBody?.removeEventListener('error', schedule, true);
           observer.observe(body, { childList: true, subtree: true, attributes: true, attributeFilter: ['src'] });
+          body.addEventListener('load', schedule, true);
+          body.addEventListener('error', schedule, true);
           observedBody = body;
         }
         const next: Slot[] = [];
         // 界面由 Vue/B 组件渲染在临时根节点内，整个根节点不进入正文和撤销快照。
         editor.undoManager.ignore(() => {
+          updateRichMediaTextImageLoading(body);
           body.querySelectorAll<HTMLElement>('section.ln-media-text > .ln-media-text__item').forEach((item) => {
             const hadMedia = Array.from(item.children).some((child) =>
               child.classList.contains('ln-media-text__media'),
@@ -195,13 +200,17 @@
         )
           schedule();
       });
-      editor.on('init SetContent undo redo input', schedule);
+      editor.on('init', sync);
+      editor.on('SetContent undo redo input', schedule);
       editor.on('remove', schedule);
       if (editor.initialized) sync();
       dispose = () => {
-        editor.off('init SetContent undo redo input', schedule);
+        editor.off('init', sync);
+        editor.off('SetContent undo redo input', schedule);
         editor.off('remove', schedule);
         observer.disconnect();
+        observedBody?.removeEventListener('load', schedule, true);
+        observedBody?.removeEventListener('error', schedule, true);
         if (frame !== null) cancelAnimationFrame(frame);
       };
     },

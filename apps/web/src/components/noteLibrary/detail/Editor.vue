@@ -34,22 +34,19 @@
         @replace-all="replaceAllRichFindMatches"
         @close="closeRichFind"
       />
-      <div v-auto-scrollbar class="note-editor-scroll" @scroll="closeRichMediaTextToolbar">
-        <Transition name="note-editor-warmup">
-          <NoteDetailLoadingState
-            v-if="editorWarmupPhase === 'skeleton'"
-            key="rich-editor-skeleton"
-            class="note-editor-runtime-skeleton"
-            variant="editor"
-          />
-          <NoteEditorWarmupPreview
-            v-else-if="editorWarmupPhase === 'preview' && Boolean(content)"
-            key="rich-editor-preview"
-            :content="content"
-            note-type="html"
-            :resource-refs="resourceRefs"
-          />
-        </Transition>
+      <div ref="richScrollRef" v-auto-scrollbar class="note-editor-scroll" @scroll="closeRichMediaTextToolbar">
+        <NoteDetailLoadingState
+          v-if="editorWarmupPhase === 'skeleton'"
+          class="note-editor-runtime-skeleton"
+          variant="editor"
+        />
+        <NoteEditorWarmupPreview
+          v-else-if="editorWarmupPhase === 'preview' && Boolean(content)"
+          in-flow
+          :content="content"
+          note-type="html"
+          :resource-refs="resourceRefs"
+        />
         <TinyMceEditor
           v-if="editorReady"
           :key="editorKey"
@@ -57,6 +54,8 @@
           @update:model-value="handleRichContentUpdate"
           tag-name="div"
           class="note-editor-body note-editor-rich-content"
+          :class="{ 'is-preparing': !richEditorRuntimeReady }"
+          :aria-hidden="!richEditorRuntimeReady || undefined"
           :init="editorInit"
           license-key="gpl"
         />
@@ -991,6 +990,7 @@
   const editorRef = shallowRef<any>(null);
   const editorReady = ref(false);
   const richEditorRuntimeReady = ref(false);
+  const richScrollRef = ref<HTMLElement | null>(null);
   const markdownRuntimeReady = ref(false);
   const editorKey = ref(0);
   const richFindVisible = ref(false);
@@ -1184,6 +1184,32 @@
     runtimeReady: activeEditorRuntimeReady,
     hasContent: hasActiveEditorContent,
     identity: editorWarmupIdentity,
+  });
+  watch(richEditorRuntimeReady, async (ready, _, onCleanup) => {
+    if (!ready) return;
+    const viewport = richScrollRef.value;
+    const preview = viewport?.querySelector('.note-editor-warmup__html');
+    if (!viewport || !preview || viewport.scrollTop <= 0) return;
+    const top = viewport.getBoundingClientRect().top;
+    const children = Array.from(preview.children);
+    const index = children.findIndex((child) => child.getBoundingClientRect().bottom > top);
+    const anchor = children[index]?.getBoundingClientRect();
+    if (!anchor) return;
+    const offset = anchor.top - top;
+    const progress = offset < 0 && anchor.height > 0 ? -offset / anchor.height : 0;
+    let cancelled = false;
+    onCleanup(() => {
+      cancelled = true;
+    });
+    await nextTick();
+    if (cancelled || richScrollRef.value !== viewport || !viewport.isConnected) return;
+    const destination = editorRef.value?.getBody?.()?.children[index] as HTMLElement | undefined;
+    if (destination) {
+      // Preview and editor use different DOM nodes. Keep the visible content
+      // anchor when native scroll anchoring cannot follow that replacement.
+      const targetOffset = progress ? -destination.getBoundingClientRect().height * progress : offset;
+      scrollIntoContainer(viewport, destination, targetOffset, 'auto');
+    }
   });
   const markdownImageUploading = ref(false);
   const markdownImageInputRef = ref<{ open: () => void } | null>(null);
@@ -6398,6 +6424,17 @@
   .note-editor-body {
     outline: none;
     overflow: visible;
+
+    // The preview owns the same scroll container until init. Preparing the real
+    // inline editor must not add a second copy of the document to its height.
+    &.is-preparing {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      visibility: hidden;
+      pointer-events: none;
+    }
   }
   .note-editor-rich-content {
     box-sizing: border-box;

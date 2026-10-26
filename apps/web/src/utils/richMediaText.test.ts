@@ -7,6 +7,8 @@ import {
   liftRichMediaTextOutOfLists,
   normalizeRichMediaTextHtml,
   getRichMediaTextClipboardImage,
+  RICH_MEDIA_TEXT_IMAGE_LOADING_ATTRIBUTE,
+  updateRichMediaTextImageLoading,
 } from './richMediaText';
 
 describe('richMediaText', () => {
@@ -47,6 +49,46 @@ describe('richMediaText', () => {
     holder.innerHTML = html;
     return holder;
   };
+
+  it('图片未完成时保留图文占位，完成或失败后解除，不更改图片和图注', () => {
+    const holder = parse(mediaBlock);
+    const image = holder.querySelector('img')!;
+    const media = holder.querySelector('.ln-media-text__media')!;
+    const originalImage = image.outerHTML;
+    const originalCaption = holder.querySelector('figcaption')!.innerHTML;
+    Object.defineProperty(image, 'complete', { configurable: true, value: false });
+    updateRichMediaTextImageLoading(holder);
+    expect(media.hasAttribute(RICH_MEDIA_TEXT_IMAGE_LOADING_ATTRIBUTE)).toBe(true);
+    expect(image.outerHTML).toBe(originalImage);
+    expect(holder.querySelector('figcaption')!.innerHTML).toBe(originalCaption);
+    // complete is also true for failed requests; a broken image must not stay loading.
+    Object.defineProperty(image, 'complete', { configurable: true, value: true });
+    updateRichMediaTextImageLoading(holder);
+    expect(media.hasAttribute(RICH_MEDIA_TEXT_IMAGE_LOADING_ATTRIBUTE)).toBe(false);
+  });
+
+  it('仅装饰有地址的图文图片，重新替换图片后可以再次进入加载态', () => {
+    const holder = parse(mediaBlock + '<p><img src="/ordinary.png"></p>');
+    const image = holder.querySelector('img')!;
+    const media = holder.querySelector('.ln-media-text__media')!;
+    Object.defineProperty(image, 'complete', { configurable: true, value: false });
+    image.removeAttribute('src');
+    updateRichMediaTextImageLoading(holder);
+    expect(holder.querySelector(`[${RICH_MEDIA_TEXT_IMAGE_LOADING_ATTRIBUTE}]`)).toBeNull();
+    image.src = '/replacement.png';
+    updateRichMediaTextImageLoading(holder);
+    expect(media.hasAttribute(RICH_MEDIA_TEXT_IMAGE_LOADING_ATTRIBUTE)).toBe(true);
+    expect(holder.querySelector('p > img')!.attributes).toHaveLength(1);
+  });
+
+  it('规范化剔除加载占位标记，重复刷新不改变保存内容', () => {
+    const holder = parse(mediaBlock);
+    const expected = normalizeRichMediaTextHtml(holder.innerHTML);
+    updateRichMediaTextImageLoading(holder);
+    updateRichMediaTextImageLoading(holder);
+    expect(normalizeRichMediaTextHtml(holder.innerHTML)).toBe(expected);
+    expect(normalizeRichMediaTextHtml(holder.innerHTML)).not.toContain(RICH_MEDIA_TEXT_IMAGE_LOADING_ATTRIBUTE);
+  });
 
   it('lifts a legacy media block out of a list without losing surrounding text or caption lists', () => {
     const source = `<ul><li>前一项</li><li><div><p>图前<a href="/link">链接</a></p>${mediaBlock}<p>图后</p></div></li><li>后一项</li></ul>`;
