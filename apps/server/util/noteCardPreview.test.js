@@ -56,6 +56,32 @@ describe('笔记卡片首图提取', () => {
     ).toBe('');
   });
 
+  it('图文布局的包装、空段落不挤掉开头图片，仍保留前后文顺序', () => {
+    const preview = buildNoteCardPreview(
+      '<section><div><h1>慢一点，看看身边的颜色</h1><p><em>生活图文示例</em></p>' +
+        '<p><br></p><section><div><figure><p><img src="/uploads/note-weekend.webp"></p></figure>' +
+        '<div><p>树影落在石板上</p></div></div></section></div></section>',
+      'html',
+    );
+    expect(preview).toMatchObject({
+      imageUrl: 'https://boluo66.top/uploads/note-weekend.webp',
+      imageLocated: true,
+      beforeImage: '慢一点，看看身边的颜色\n生活图文示例',
+      afterImage: '树影落在石板上',
+    });
+  });
+
+  it('按实际正文段落限制首图距离，不受嵌套层级影响', () => {
+    const paragraphs = '<div><p>第一段</p><p>第二段</p><p>第三段</p></div>';
+    expect(
+      extractNoteCardPreviewImage(`${paragraphs}<figure><img src="/uploads/note-near.png"></figure>`, 'html'),
+    ).toBe('https://boluo66.top/uploads/note-near.png');
+    expect(extractNoteCardPreviewImage(`${paragraphs}<p>第四段</p><img src="/uploads/note-far.png">`, 'html')).toBe('');
+    expect(extractNoteCardPreviewImage(`${paragraphs}<p>第四段<img src="/uploads/note-inline.png"></p>`, 'html')).toBe(
+      '',
+    );
+  });
+
   it('忽略代码中的伪图片，并支持 Markdown 图片与 raw HTML 图片', () => {
     const markdown = [
       '# 标题',

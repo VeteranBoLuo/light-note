@@ -85,7 +85,7 @@ describe('NewNotePickerModal', () => {
     await tick();
     m.visible.value = true;
     await tick();
-    expect(m.host.querySelector('.rendered-preview')?.innerHTML).toContain('写下今天最想推进');
+    expect(m.host.querySelector('.rendered-preview')?.innerHTML).toContain('事项一：填写具体任务');
   });
   it('keeps the three blank shortcuts and management entry independent of the selected template', async () => {
     const m = mount();
@@ -133,7 +133,7 @@ describe('NewNotePickerModal', () => {
     m.visible.value = true;
     await tick();
     expect(m.host.textContent).not.toContain('b 正文');
-    expect(m.host.querySelector('.rendered-preview')?.innerHTML).toContain('写下今天最想推进');
+    expect(m.host.querySelector('.rendered-preview')?.innerHTML).toContain('事项一：填写具体任务');
   });
   it('does not offer a use action when the personal collection is empty', async () => {
     const m = mount([]);

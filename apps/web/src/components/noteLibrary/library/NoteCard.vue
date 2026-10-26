@@ -364,7 +364,27 @@
     height: 100%;
   }
 
+  .note-preview-body.has-image {
+    display: flex;
+    flex-direction: column;
+
+    .note-content--segment {
+      display: -webkit-box;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 2;
+      overflow: hidden;
+      flex: 0 0 auto;
+    }
+
+    // 有图前摘要时优先保留图片空间；首图开篇时仍显示图后的摘要。
+    .note-content + .note-preview-media + .note-content {
+      display: none;
+    }
+  }
+
   .note-preview-media {
+    flex: 1 1 auto;
+    min-height: 0;
     width: 100%;
     height: var(--ui-layout-112, 112px);
     overflow: hidden;

@@ -257,7 +257,6 @@
     margin: 0 0 0.85em;
   }
   h1,
-  h2,
   h2 {
     /* ui-density-fixed: 笔记正文标题随文档字号缩放。 */
     font-size: 1.2em;
@@ -391,6 +390,11 @@
     margin-top: 1em;
     /* ui-density-fixed: 笔记正文排版随文档字号缩放，不随界面密度变化。 */
     padding-top: 1em;
+  }
+  .ln-note-entry .ln-note-task-detail {
+    color: var(--desc-color);
+    /* ui-density-fixed: 任务说明按正文字号对齐勾选框后的文字。 */
+    margin: 0.45em 0 0 1.65em;
   }
   .ln-note-hint {
     color: var(--desc-color);
@@ -616,6 +620,50 @@
   }
 }
 
+.note-template-page.ln-note-layout {
+  > h1 {
+    /* ui-density-fixed: 独立文档标题随正文缩放，与模板页眉保持层级。 */
+    font-size: 1.65em;
+    /* ui-density-fixed: 文档开篇标题不额外堆叠顶部留白。 */
+    margin: 0 0 0.55em;
+    line-height: 1.4;
+  }
+  .ln-note-milestone {
+    border-left: 2px solid var(--primary-color);
+    /* ui-density-fixed: 文档阶段按正文字号留白。 */
+    padding: 0.2em 0 1.2em 1.2em;
+  }
+  .ln-note-cause,
+  .ln-note-margin {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 2.8fr);
+    border-bottom: 1px solid var(--surface-border-color);
+    /* ui-density-fixed: 文档旁注与因果记录按正文字号留白。 */
+    gap: 1.5em;
+    /* ui-density-fixed: 文档行间距独立于界面密度。 */
+    padding: 1.3em 0;
+    > * {
+      min-width: 0;
+    }
+    h2 {
+      margin: 0;
+    }
+  }
+  .ln-note-margin {
+    grid-template-columns: minmax(0, 2.8fr) minmax(0, 1fr);
+    /* ui-density-fixed: 文档段间距独立于界面密度。 */
+    margin-bottom: 1.5em;
+  }
+  .ln-note-annotation {
+    color: var(--desc-color);
+    border-left: 2px solid var(--surface-border-color);
+    /* ui-density-fixed: 旁注字号与内距随正文缩放。 */
+    font-size: 0.86em;
+    /* ui-density-fixed: 旁注内距随正文缩放。 */
+    padding-left: 1em;
+  }
+}
+
 @media (max-width: 767px) {
   .note-template-page.ln-note-layout {
     .ln-note-head {
@@ -634,6 +682,8 @@
       /* ui-density-fixed: 笔记正文排版随文档字号缩放，不随界面密度变化。 */
       margin-top: 0.55em;
     }
+    .ln-note-cause,
+    .ln-note-margin,
     .ln-note-daily-columns,
     .ln-note-equal-columns,
     .ln-note-retro-columns,
