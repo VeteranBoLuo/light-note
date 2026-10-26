@@ -52,14 +52,14 @@ const success = (ids: string[], unavailable: string[] = []) => ({
     unavailableItems: unavailable.map((id) => ({ id, type: 'note' })),
   },
 });
-async function harness() {
+async function harness(renderTable = true) {
   const visible = ref([item('a'), item('b')]);
   const loading = ref(false);
   let selection!: ReturnType<typeof useResourceSelection>;
   const page = defineComponent({
     setup() {
       selection = useResourceSelection('notes', visible, 'note', loading);
-      return () =>
+      return () => renderTable ?
         h(BTable, {
           data: visible.value,
           columns: [{ key: 'title', title: 'Name' }],
@@ -69,7 +69,7 @@ async function harness() {
           onSelectionChange: (ids) => {
             selection.ids.value = ids;
           },
-        });
+        }) : null;
     },
   });
   const router = createRouter({
@@ -156,7 +156,9 @@ describe('显式范围写回', () => {
   });
 
   it('超过选择上限时整次拒绝，不截断区间或丢弃原选择', async () => {
-    const x = await harness();
+    // This case checks the selection limit, not rendering thousands of rows.
+    // The component interaction cases below continue to use the real BTable.
+    const x = await harness(false);
     x.selection.toggle(item('outside'));
     x.visible.value = Array.from({ length: MAX_EXPLICIT_RESOURCE_SELECTION }, (_, i) => item(String(i)));
     expect(x.selection.selectKeys(x.visible.value.map((item) => String(item.id)))).toBe(false);
