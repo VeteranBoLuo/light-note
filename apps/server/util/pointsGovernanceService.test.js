@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   getPointsGovernanceAnomalies,
   getPointsGovernanceDailyDetails,
@@ -8,6 +8,12 @@ import {
   resolveGovernanceRange,
   simulatePointsPolicy,
 } from './pointsGovernanceService.js';
+
+beforeEach(() => {
+  vi.stubEnv('POINTS_ECONOMY_C9_ENABLED', 'true');
+  vi.stubEnv('POINTS_ECONOMY_C10_ENABLED', 'false');
+});
+afterEach(() => vi.unstubAllEnvs());
 
 describe('C5 积分治理时间窗与只读模拟器', () => {
   it('默认 28 天并拒绝超出 365 天的自定义范围', () => {
@@ -87,6 +93,22 @@ describe('C5 积分治理时间窗与只读模拟器', () => {
     const query = vi.fn();
     simulatePointsPolicy({ activeUsers: 10 });
     expect(query).not.toHaveBeenCalled();
+  });
+
+  it('免费惊喜期望跟随当前奖池，并允许小数模拟而不放宽其他整数金额', () => {
+    vi.stubEnv('POINTS_ECONOMY_C10_ENABLED', 'true');
+    const result = simulatePointsPolicy();
+    expect(result).toMatchObject({ economyVersion: 'points-economy-c10', input: { freeDrawExpected: 3.5 } });
+    expect(result.tiers.map((row) => row.randomWeek)).toEqual([0, 24.5, 49, 73.5]);
+    expect(simulatePointsPolicy({ freeDrawExpected: 2.5 }).input.freeDrawExpected).toBe(2.5);
+    for (const freeDrawExpected of [-1, 1001, Infinity, 'invalid']) {
+      expect(() => simulatePointsPolicy({ freeDrawExpected })).toThrowError(
+        expect.objectContaining({ code: 'INVALID_SIMULATOR_INPUT' }),
+      );
+    }
+    expect(() => simulatePointsPolicy({ dailyQuestDaily: 3.5 })).toThrowError(
+      expect.objectContaining({ code: 'INVALID_SIMULATOR_INPUT' }),
+    );
   });
 
   it('用户流水分类只使用固定白名单 SQL，不接受任意 reason 片段', () => {

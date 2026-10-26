@@ -122,6 +122,19 @@ describe('背包内容整合与操作边界', () => {
     expect(mocks.detailsMounts).toBe(1);
     expect(host.querySelectorAll('.inv-assets .asset')).toHaveLength(3);
   });
+  it.each([0, 2])('持有 %i 张补签卡时均可定位到兑换商品', async (qty) => {
+    mocks.state.inventory.value.items[0].qty = qty;
+    const { host, router, click } = await mount();
+    await click('去兑换', '.inv-item button');
+    await vi.waitFor(() => {
+      expect(router.currentRoute.value.query).toEqual({ section: 'rewards', reward: 'shop', focus: 'makeup_card' });
+    });
+    const makeup = [...host.querySelectorAll<HTMLButtonElement>('.inv-item button')].find(
+      (button) => button.textContent?.trim() === '补签',
+    )!;
+    expect(makeup.disabled).toBe(qty === 0);
+    expect(mocks.state.useProtectCard).not.toHaveBeenCalled();
+  });
   it('直达积分页签时延迟挂载获得记录，页头仍能打开同一个记录视图', async () => {
     const { host, click } = await mount('points');
     expect(host.querySelector('.records-test')).toBeNull();

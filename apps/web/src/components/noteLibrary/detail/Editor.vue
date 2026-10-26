@@ -1,5 +1,13 @@
 <template>
-  <div id="editor-container" class="note-editor" :class="{ 'is-readonly': readonly, 'is-mobile': isMobile }">
+  <div
+    id="editor-container"
+    class="note-editor"
+    :class="{
+      'is-readonly': readonly,
+      'is-mobile': isMobile,
+      'is-media-text-settings-open': richMediaTextToolbarVisible,
+    }"
+  >
     <!-- HTML 模式：TinyMCE -->
     <template v-if="currentType === 'html'">
       <div id="editor-toolbar" class="note-editor-toolbar" v-show="!readonly">
@@ -26,22 +34,19 @@
         @replace-all="replaceAllRichFindMatches"
         @close="closeRichFind"
       />
-      <div v-auto-scrollbar class="note-editor-scroll" @scroll="closeRichMediaTextToolbar">
-        <Transition name="note-editor-warmup">
-          <NoteDetailLoadingState
-            v-if="editorWarmupPhase === 'skeleton'"
-            key="rich-editor-skeleton"
-            class="note-editor-runtime-skeleton"
-            variant="editor"
-          />
-          <NoteEditorWarmupPreview
-            v-else-if="editorWarmupPhase === 'preview' && Boolean(content)"
-            key="rich-editor-preview"
-            :content="content"
-            note-type="html"
-            :resource-refs="resourceRefs"
-          />
-        </Transition>
+      <div ref="richScrollRef" v-auto-scrollbar class="note-editor-scroll" @scroll="closeRichMediaTextToolbar">
+        <NoteDetailLoadingState
+          v-if="editorWarmupPhase === 'skeleton'"
+          class="note-editor-runtime-skeleton"
+          variant="editor"
+        />
+        <NoteEditorWarmupPreview
+          v-else-if="editorWarmupPhase === 'preview' && Boolean(content)"
+          in-flow
+          :content="content"
+          note-type="html"
+          :resource-refs="resourceRefs"
+        />
         <TinyMceEditor
           v-if="editorReady"
           :key="editorKey"
@@ -49,6 +54,8 @@
           @update:model-value="handleRichContentUpdate"
           tag-name="div"
           class="note-editor-body note-editor-rich-content"
+          :class="{ 'is-preparing': !richEditorRuntimeReady }"
+          :aria-hidden="!richEditorRuntimeReady || undefined"
           :init="editorInit"
           license-key="gpl"
         />
@@ -230,24 +237,26 @@
             <SvgIcon :src="icon.noteDetail.toolbar.mediaText" size="18" aria-hidden="true" />
             <strong>{{ t('noteDetail.editor.mediaText') }}</strong>
           </div>
-          <label class="rich-media-text-toolbar__field">
-            <span>{{ t('noteDetail.editor.mediaTextPosition') }}</span>
-            <BSelect
-              v-model:value="richMediaTextPosition"
-              :options="richMediaTextPositionOptions"
-              :aria-label="t('noteDetail.editor.mediaTextPosition')"
-              @change="applyRichMediaTextPosition"
-            />
-          </label>
-          <label class="rich-media-text-toolbar__field">
-            <span>{{ t('noteDetail.editor.mediaTextImageWidth') }}</span>
-            <BSelect
-              v-model:value="richMediaTextWidth"
-              :options="richMediaTextWidthOptions"
-              :aria-label="t('noteDetail.editor.mediaTextImageWidth')"
-              @change="applyRichMediaTextWidth"
-            />
-          </label>
+          <div class="rich-media-text-toolbar__settings">
+            <label class="rich-media-text-toolbar__field">
+              <span>{{ t('noteDetail.editor.mediaTextPosition') }}</span>
+              <BSelect
+                v-model:value="richMediaTextPosition"
+                :options="richMediaTextPositionOptions"
+                :aria-label="t('noteDetail.editor.mediaTextPosition')"
+                @change="applyRichMediaTextPosition"
+              />
+            </label>
+            <label class="rich-media-text-toolbar__field">
+              <span>{{ t('noteDetail.editor.mediaTextImageWidth') }}</span>
+              <BSelect
+                v-model:value="richMediaTextWidth"
+                :options="richMediaTextWidthOptions"
+                :aria-label="t('noteDetail.editor.mediaTextImageWidth')"
+                @change="applyRichMediaTextWidth"
+              />
+            </label>
+          </div>
           <div class="rich-media-text-toolbar__actions">
             <BButton size="small" @click="previewSelectedRichMediaTextImage">
               <SvgIcon :src="icon.noteDetail.diagramTools.zoom" size="15" aria-hidden="true" />
@@ -261,22 +270,23 @@
               <SvgIcon :src="icon.noteDetail.toolbar.insert" size="15" aria-hidden="true" />
               {{ t('noteDetail.editor.mediaTextAddGroup') }}
             </BButton>
-            <BButton size="small" :disabled="richMediaTextUploading" @click="deleteRichMediaTextImage">
-              <SvgIcon :src="icon.noteDetail.imageToolbar.delete" size="15" aria-hidden="true" />
-              {{ t('noteDetail.editor.imageDelete') }}
-            </BButton>
-            <BButton size="small" type="danger" @click="deleteRichMediaTextItem">
-              <SvgIcon :src="icon.noteDetail.imageToolbar.delete" size="15" aria-hidden="true" />
-              {{ t('noteDetail.editor.mediaTextDeleteGroup') }}
-            </BButton>
             <BButton
-              class="rich-media-text-toolbar__paragraph-after"
               size="small"
               :disabled="richMediaTextUploading"
               @click="insertParagraphAfterRichMediaText"
             >
               <SvgIcon :src="icon.noteDetail.imageToolbar.paragraphAfter" size="15" aria-hidden="true" />
               {{ t('noteDetail.editor.mediaTextParagraphAfter') }}
+            </BButton>
+          </div>
+          <div class="rich-media-text-toolbar__danger">
+            <BButton size="small" type="text" :disabled="richMediaTextUploading" @click="deleteRichMediaTextImage">
+              <SvgIcon :src="icon.noteDetail.imageToolbar.delete" size="15" aria-hidden="true" />
+              {{ t('noteDetail.editor.imageDelete') }}
+            </BButton>
+            <BButton size="small" type="text" @click="deleteRichMediaTextItem">
+              <SvgIcon :src="icon.noteDetail.imageToolbar.delete" size="15" aria-hidden="true" />
+              {{ t('noteDetail.editor.mediaTextDeleteGroup') }}
             </BButton>
           </div>
         </div>
@@ -980,6 +990,7 @@
   const editorRef = shallowRef<any>(null);
   const editorReady = ref(false);
   const richEditorRuntimeReady = ref(false);
+  const richScrollRef = ref<HTMLElement | null>(null);
   const markdownRuntimeReady = ref(false);
   const editorKey = ref(0);
   const richFindVisible = ref(false);
@@ -1173,6 +1184,32 @@
     runtimeReady: activeEditorRuntimeReady,
     hasContent: hasActiveEditorContent,
     identity: editorWarmupIdentity,
+  });
+  watch(richEditorRuntimeReady, async (ready, _, onCleanup) => {
+    if (!ready) return;
+    const viewport = richScrollRef.value;
+    const preview = viewport?.querySelector('.note-editor-warmup__html');
+    if (!viewport || !preview || viewport.scrollTop <= 0) return;
+    const top = viewport.getBoundingClientRect().top;
+    const children = Array.from(preview.children);
+    const index = children.findIndex((child) => child.getBoundingClientRect().bottom > top);
+    const anchor = children[index]?.getBoundingClientRect();
+    if (!anchor) return;
+    const offset = anchor.top - top;
+    const progress = offset < 0 && anchor.height > 0 ? -offset / anchor.height : 0;
+    let cancelled = false;
+    onCleanup(() => {
+      cancelled = true;
+    });
+    await nextTick();
+    if (cancelled || richScrollRef.value !== viewport || !viewport.isConnected) return;
+    const destination = editorRef.value?.getBody?.()?.children[index] as HTMLElement | undefined;
+    if (destination) {
+      // Preview and editor use different DOM nodes. Keep the visible content
+      // anchor when native scroll anchoring cannot follow that replacement.
+      const targetOffset = progress ? -destination.getBoundingClientRect().height * progress : offset;
+      scrollIntoContainer(viewport, destination, targetOffset, 'auto');
+    }
   });
   const markdownImageUploading = ref(false);
   const markdownImageInputRef = ref<{ open: () => void } | null>(null);
@@ -6387,6 +6424,17 @@
   .note-editor-body {
     outline: none;
     overflow: visible;
+
+    // The preview owns the same scroll container until init. Preparing the real
+    // inline editor must not add a second copy of the document to its height.
+    &.is-preparing {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      visibility: hidden;
+      pointer-events: none;
+    }
   }
   .note-editor-rich-content {
     box-sizing: border-box;
@@ -6646,50 +6694,84 @@
     position: fixed;
   }
 
+  // TinyMCE 的缩放手柄层级高于浮层，图文菜单打开时不能穿到控件文字上。
+  .note-editor.is-media-text-settings-open .mce-resizehandle {
+    visibility: hidden;
+  }
+
   .rich-media-text-popover {
+    box-sizing: border-box;
     /* ui-density-fixed: Keep the viewport edge clearance in physical CSS pixels. */
-    width: min(var(--ui-layout-620, 620px), calc(100vw - 16px));
-    padding: var(--ui-space-10, 10px);
+    width: min(var(--ui-layout-400, 400px), calc(100vw - 20px));
+    /* ui-density-fixed: Keep the viewport edge clearance in physical CSS pixels. */
+    max-height: calc(100vh - 16px);
+    overflow: auto;
+    padding: var(--ui-space-12, 12px);
   }
 
   .rich-media-text-toolbar {
-    display: flex;
-    align-items: flex-end;
-    gap: var(--ui-space-10, 10px);
+    display: grid;
+    gap: var(--ui-space-12, 12px);
 
     &__heading {
       display: flex;
       align-items: center;
-      align-self: center;
       gap: var(--ui-space-6, 6px);
       color: var(--text-color);
-      white-space: nowrap;
+      font-size: var(--ui-font-14, 14px);
+    }
+
+    &__settings,
+    &__actions,
+    &__danger {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: var(--ui-space-8, 8px);
+      min-width: 0;
     }
 
     &__field {
       display: grid;
-      flex: 0 0 var(--ui-layout-116, 116px);
-      gap: var(--ui-space-4, 4px);
+      min-width: 0;
+      gap: var(--ui-space-6, 6px);
 
       > span {
-        color: var(--desc-color, #737782);
+        color: var(--desc-color);
         font-size: var(--ui-font-12, 12px);
         line-height: 1.2;
       }
 
       .b-select {
         width: 100%;
+        min-width: 0;
       }
     }
 
-    &__actions {
-      display: flex;
-      flex-wrap: wrap;
-      gap: var(--ui-space-6, 6px);
-      margin-left: auto;
+    &__actions,
+    &__danger {
+      .b_btn {
+        width: 100%;
+        min-width: 0;
+        height: auto;
+        min-height: var(--ui-control-32, 32px);
+        justify-content: flex-start;
+        gap: var(--ui-space-6, 6px);
+        padding: var(--ui-space-6, 6px) var(--ui-space-10, 10px);
+        white-space: normal;
+        line-height: 1.4;
+
+        .icon-base64 {
+          flex-shrink: 0;
+        }
+      }
+    }
+
+    &__danger {
+      padding-top: var(--ui-space-8, 8px);
+      border-top: 1px solid var(--surface-border-color);
 
       .b_btn {
-        gap: var(--ui-space-5, 5px);
+        color: var(--danger-color);
       }
     }
   }
@@ -7746,63 +7828,30 @@
     }
 
     .rich-media-text-popover {
-      width: min(360px, calc(100vw - 20px));
-      max-height: calc(100vh - 16px);
-      overflow: auto;
-      padding: 6px;
+      padding: var(--ui-space-10, 10px);
     }
 
     .rich-media-text-toolbar {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      align-items: center;
-      gap: 6px;
-
-      &__heading {
-        display: none;
-      }
+      gap: var(--ui-space-10, 10px);
 
       &__field {
-        display: block;
-        flex-basis: auto;
-        min-width: 0;
-
-        > span {
-          display: none;
-        }
-
         .select-trigger {
-          height: 36px;
-          padding-right: 26px;
-          padding-left: 9px;
+          height: var(--ui-control-36, 36px);
+          padding-right: var(--ui-space-26, 26px);
+          padding-left: var(--ui-space-9, 9px);
         }
 
         .select-text {
-          font-size: 13px;
+          font-size: var(--ui-font-13, 13px);
         }
       }
 
-      &__actions {
-        grid-column: 1 / -1;
-        display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 6px;
-        margin-left: 0;
+      &__actions .b_btn {
+        min-height: var(--ui-control-36, 36px);
+      }
 
-        .b_btn {
-          width: 100%;
-          min-width: 0;
-          min-height: 40px;
-          height: 40px;
-          gap: 4px;
-          padding: 0 6px;
-          overflow: hidden;
-          font-size: 12px;
-
-          &.rich-media-text-toolbar__paragraph-after {
-            grid-column: 1 / -1;
-          }
-        }
+      &__danger .b_btn {
+        min-height: var(--ui-control-44, 44px);
       }
     }
 

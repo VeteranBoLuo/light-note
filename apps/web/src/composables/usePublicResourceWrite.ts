@@ -1,22 +1,21 @@
-import { ref, watch } from 'vue';
+import { onBeforeUnmount, ref, watch } from 'vue';
 import { useUserStore } from '@/store';
 import { publicOperation } from '@/api/publicResources';
+import { logPublicResourceWrite } from '@/utils/publicResourceOperationLog';
 export function usePublicResourceWrite() {
   const user = useUserStore(),
     busy = ref(false);
   let operation: (() => Promise<any>) | null = null,
     key = '',
     generation = 0;
-  watch(
-    () => [user.id, user.role, user.adminContext?.id, user.adminPreview],
-    () => {
-      generation++;
-      operation = null;
-      key = '';
-      busy.value = false;
-    },
-    { flush: 'sync' },
-  );
+  function reset() {
+    generation++;
+    operation = null;
+    key = '';
+    busy.value = false;
+  }
+  watch(() => [user.id, user.role, user.adminContext?.id, user.adminPreview], reset, { flush: 'sync' });
+  onBeforeUnmount(reset);
   async function execute<T = any>(path: string, body: Record<string, unknown>): Promise<T> {
     if (busy.value) throw new Error('PUBLIC_RESOURCE_BUSY');
     const next = JSON.stringify([path, body]);
@@ -31,6 +30,7 @@ export function usePublicResourceWrite() {
       if (current !== generation) throw new Error('PUBLIC_RESOURCE_IDENTITY_CHANGED');
       operation = null;
       key = '';
+      logPublicResourceWrite(path, body, result);
       return result;
     } finally {
       if (current === generation) busy.value = false;

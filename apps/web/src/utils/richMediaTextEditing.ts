@@ -1,5 +1,9 @@
 import type { Editor } from 'tinymce';
-import { liftRichMediaTextOutOfLists, restoreRichMediaTextBlockTags } from './richMediaText';
+import {
+  liftRichMediaTextOutOfLists,
+  restoreRichMediaTextBlockTags,
+  RICH_MEDIA_TEXT_IMAGE_LOADING_ATTRIBUTE,
+} from './richMediaText';
 
 /** 图文保持独立块；文字区的列表继续使用原生编辑行为。 */
 export function bindRichMediaTextEditing(
@@ -13,6 +17,7 @@ export function bindRichMediaTextEditing(
       'data-ln-media-selected',
       'data-ln-media-item-selected',
       'data-ln-media-after-caret',
+      RICH_MEDIA_TEXT_IMAGE_LOADING_ATTRIBUTE,
     ].forEach((attribute) => editor.serializer.addTempAttr(attribute));
   });
   let applyingList = false;

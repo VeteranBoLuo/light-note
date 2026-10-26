@@ -2,6 +2,7 @@ import { defineStore } from 'pinia';
 import { computed, ref, watch } from 'vue';
 import useUserStore from './useUser';
 import { publicGet, type PublicResourceCapabilities } from '@/api/publicResources';
+import { logPublicResourceOperation } from '@/utils/publicResourceOperationLog';
 
 const empty = (): PublicResourceCapabilities => ({
   enabled: false,
@@ -75,6 +76,7 @@ export const usePublicResourceScope = defineStore('publicResourceScope', () => {
   }
   function setIncluded(value: boolean, { remember = false } = {}) {
     if (!eligible.value) return;
+    const changed = choice.value !== value;
     choice.value = value;
     if (remember) {
       try {
@@ -82,6 +84,7 @@ export const usePublicResourceScope = defineStore('publicResourceScope', () => {
       } catch {
         /* Do not fail the current search when local persistence is blocked. */
       }
+      if (changed) logPublicResourceOperation(`${value ? '开启' : '关闭'}包含全站公开资源`);
     }
   }
   return { included, caps, loaded, identity, eligible, ensure, setIncluded, restoreIncluded };

@@ -862,6 +862,17 @@ h1 {
   }
 }
 
+// This marker is temporary UI state, excluded from saved content and undo snapshots.
+.note-rich-content .ln-media-text__media[data-mce-ln-image-loading],
+.note-editor-body .ln-media-text__media[data-mce-ln-image-loading] {
+  /* ui-density-fixed: Unknown image content needs a stable placeholder, independent of interface density. */
+  min-height: 96px;
+  aspect-ratio: 16 / 9;
+  max-height: var(--ln-media-max-height);
+  border-radius: 8px;
+  background: var(--workspace-canvas);
+}
+
 @keyframes ln-rich-breathe {
   0%,
   100% {

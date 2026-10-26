@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   resolve: vi.fn(),
   complete: vi.fn(),
 }));
+vi.mock('@/api/commonApi', () => ({ recordOperation: vi.fn().mockResolvedValue(undefined) }));
 vi.mock('@/store/publicResourceScope', () => ({ usePublicResourceScope: () => mocks.scope }));
 vi.mock('@/api/publicResources', () => ({
   preparePublications: (...args: any[]) => mocks.prepare(...args),

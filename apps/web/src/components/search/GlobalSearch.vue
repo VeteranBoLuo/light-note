@@ -51,7 +51,7 @@
                 >
               </BInput>
             </div>
-            <PublicSearchScopeControl class="global-search-scope" />
+            <PublicSearchScopeControl class="global-search-scope" publication-entry @publish="openPublications" />
           </header>
 
           <p v-if="publicFailed" class="global-search-public-error" role="status">{{
@@ -369,6 +369,11 @@
       event.preventDefault();
       first.focus();
     }
+  }
+  function openPublications() {
+    recordOperation({ module: '公开管理', operation: '进入公开管理【桌面快捷搜索】' });
+    close({ restoreFocus: false });
+    void router.push('/search/publications');
   }
   function goSearch() {
     const query = String(keyword.value || '').trim();

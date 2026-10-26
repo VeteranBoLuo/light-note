@@ -39,7 +39,9 @@ vi.mock('./LotteryRecords.vue', () => ({
 }));
 vi.mock('@/components/base/SvgIcon/src/SvgIcon.vue', () => ({ default: { render: () => h('span') } }));
 import LotteryDraw from './LotteryDraw.vue';
-import { LOTTERY_CHARGE_MS, LOTTERY_CARD_MS } from './useLotteryReveal';
+import { LOTTERY_TIMINGS, LOTTERY_CARD_MS } from './useLotteryReveal';
+
+const FREE_REVEAL_MS = LOTTERY_TIMINGS.free.charge + LOTTERY_TIMINGS.free.opening + LOTTERY_CARD_MS + 80;
 
 let cleanup: (() => void) | undefined;
 async function mount(readOnly = false) {
@@ -50,8 +52,8 @@ async function mount(readOnly = false) {
     routes: [{ path: '/growth', component: { render: () => null } }],
   });
   await router.push('/growth');
-  const onFocusHeader = vi.fn();
-  const app = createApp({ render: () => h(LotteryDraw, { readOnly, onFocusHeader }) });
+  const onFocusDraw = vi.fn();
+  const app = createApp({ render: () => h(LotteryDraw, { readOnly, onFocusDraw }) });
   app.use(router).use(createI18n({ legacy: false, locale: 'zh-CN', messages: { 'zh-CN': zh } }));
   app.mount(host);
   cleanup = () => {
@@ -59,7 +61,7 @@ async function mount(readOnly = false) {
     host.remove();
   };
   await nextTick();
-  return { host, onFocusHeader };
+  return { host, onFocusDraw };
 }
 const flush = async () => {
   await vi.advanceTimersByTimeAsync(0);
@@ -68,6 +70,7 @@ const flush = async () => {
 beforeEach(() => {
   vi.useFakeTimers();
   vi.spyOn(document, 'hidden', 'get').mockReturnValue(false);
+  vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null);
   mocks.user.id = 'user-1';
   mocks.draw.mockReset();
   mocks.record.mockClear();
@@ -81,8 +84,8 @@ beforeEach(() => {
       remaining: 2,
       countsPaidPity: false,
       pool: [
-        { id: 'ai100', kind: 'ai_pack', amount: 100000, rate: 8 },
-        { id: 'ai200', kind: 'ai_pack', amount: 200000, rate: 2 },
+        { id: 'ai20', kind: 'ai_pack', amount: 20000, rate: 8 },
+        { id: 'ai50', kind: 'ai_pack', amount: 50000, rate: 2 },
       ],
     },
     paid: {
@@ -106,13 +109,13 @@ afterEach(() => {
 describe('方案 A 抽取模式与到账反馈', () => {
   it('默认每日惊喜展示两档 AI 数量，隐藏积分操作与保底', async () => {
     const { host } = await mount();
-    expect(host.textContent).toContain('AI 额度 +10 万 tokens');
-    expect(host.textContent).toContain('AI 额度 +20 万 tokens');
+    expect(host.textContent).toContain('AI 额度 +2 万 tokens');
+    expect(host.textContent).toContain('AI 额度 +5 万 tokens');
     expect(host.querySelector('.lt-draw-button--paid')).toBeNull();
     expect(host.querySelector('.lt-pity-panel')).toBeNull();
   });
   it('切换积分抽奖时奖池、价格、操作和保底一起切换', async () => {
-    const { host, onFocusHeader } = await mount();
+    const { host, onFocusDraw } = await mount();
     host.querySelectorAll<HTMLButtonElement>('[role="tab"]')[1].click();
     await nextTick();
     expect(host.textContent).toContain('AI 额度 +60 万 tokens');
@@ -123,21 +126,24 @@ describe('方案 A 抽取模式与到账反馈', () => {
     host.querySelector<HTMLButtonElement>('.lt-draw-button--paid')!.click();
     await nextTick();
     expect(mocks.draw).toHaveBeenCalledWith(1, false);
-    expect(onFocusHeader).toHaveBeenCalledOnce();
+    expect(onFocusDraw).toHaveBeenCalledOnce();
     expect(host.querySelector<HTMLButtonElement>('.lt-draw-button--ten')!.disabled).toBe(true);
   });
   it('AI 中奖后明确永久余额去向，并保留查看背包入口', async () => {
     mocks.draw.mockResolvedValue({
       status: 200,
-      data: { ok: true, cost: 0, results: [{ id: 'ai100', kind: 'ai_pack', amount: 100000 }] },
+      data: { ok: true, cost: 0, results: [{ id: 'ai20', kind: 'ai_pack', amount: 20000 }] },
     });
     const { host } = await mount();
     host.querySelector<HTMLButtonElement>('.lt-draw-button--free')!.click();
     await flush();
     expect(mocks.draw).toHaveBeenCalledWith(1, true);
     expect(host.querySelector('[role="listitem"]')).toBeNull();
-    await vi.advanceTimersByTimeAsync(LOTTERY_CHARGE_MS + LOTTERY_CARD_MS + 80);
-    expect(host.querySelector('[role="listitem"]')?.getAttribute('aria-label')).toBe('AI 额度 +10 万 tokens');
+    await vi.advanceTimersByTimeAsync(LOTTERY_TIMINGS.free.charge);
+    expect(host.querySelector('.lt-stage')!.textContent).toContain('礼盒开启，惊喜将至');
+    expect(host.querySelector('[role="listitem"]')).toBeNull();
+    await vi.advanceTimersByTimeAsync(LOTTERY_TIMINGS.free.opening + LOTTERY_CARD_MS + 80);
+    expect(host.querySelector('[role="listitem"]')?.getAttribute('aria-label')).toBe('AI 额度 +2 万 tokens');
     expect(host.querySelector('.lt-stage')!.textContent).toContain('已计入永久余额，无需领取');
     expect(host.querySelector('.lt-stage')!.textContent).toContain('查看背包');
   });
@@ -166,18 +172,32 @@ describe('方案 A 抽取模式与到账反馈', () => {
     expect(mocks.draw).toHaveBeenCalledTimes(1);
     expect(mocks.record).toHaveBeenCalledTimes(1);
   });
-  it('十连揭晓中可跳过并保留全部奖励和真实保底标识', async () => {
+  it('账本先到账，页头余额等揭晓完成再更新，避免提前透露积分奖励', async () => {
+    mocks.draw.mockImplementation(async () => {
+      mocks.state.value.points += 3;
+      return { status: 200, data: { ok: true, cost: 0, results: [{ id: 'p3', kind: 'points', amount: 3 }] } };
+    });
+    const { host } = await mount();
+    host.querySelector<HTMLButtonElement>('.lt-draw-button--free')!.click();
+    await flush();
+    expect(mocks.state.value.points).toBe(3820);
+    expect(host.querySelector('.lt-wallet strong')?.textContent).toBe('3,817');
+    await vi.advanceTimersByTimeAsync(FREE_REVEAL_MS);
+    expect(host.querySelector('.lt-wallet strong')?.textContent).toBe('3,820');
+  });
+  it.each([true, false])('十连展示保底在最后，保留其他奖励顺序且可跳过：保底=%s', async (hasGuarantee) => {
+    const receipt = Array.from({ length: 10 }, (_, i) => ({
+      id: String(i),
+      kind: 'points',
+      amount: 20 + i,
+      guaranteed: hasGuarantee && i === 1,
+    }));
     mocks.draw.mockResolvedValue({
       status: 200,
       data: {
         ok: true,
         cost: 1600,
-        results: Array.from({ length: 10 }, (_, i) => ({
-          id: String(i),
-          kind: 'points',
-          amount: 20,
-          guaranteed: i === 9,
-        })),
+        results: receipt,
       },
     });
     const { host } = await mount();
@@ -185,13 +205,22 @@ describe('方案 A 抽取模式与到账反馈', () => {
     await nextTick();
     host.querySelector<HTMLButtonElement>('.lt-draw-button--ten')!.click();
     await flush();
-    await vi.advanceTimersByTimeAsync(LOTTERY_CHARGE_MS + 100);
+    await vi.advanceTimersByTimeAsync(LOTTERY_TIMINGS.paid.charge + LOTTERY_TIMINGS.paid.opening + 100);
     expect(host.querySelectorAll('[role="listitem"]')).toHaveLength(10);
     expect(host.querySelector('.lt-stage')!.textContent).toContain('正在揭晓 10 份奖励');
+    const expectedOrder = hasGuarantee
+      ? [20, 22, 23, 24, 25, 26, 27, 28, 29, 21]
+      : [20, 21, 22, 23, 24, 25, 26, 27, 28, 29];
+    expect([...host.querySelectorAll('[role="listitem"]')].map((item) => item.getAttribute('aria-label'))).toEqual(
+      expectedOrder.map((amount) => `+${amount} 积分`),
+    );
+    expect(receipt.map((prize) => prize.id)).toEqual(['0', '1', '2', '3', '4', '5', '6', '7', '8', '9']);
     host.querySelector<HTMLButtonElement>('.lt-skip')!.click();
     await nextTick();
     expect(host.querySelectorAll('[role="listitem"]')).toHaveLength(10);
-    expect(host.querySelector('.lt-stage')!.textContent).toContain('保底命中');
+    const lastPrize = [...host.querySelectorAll('[role="listitem"]')].at(-1)!;
+    expect(lastPrize.textContent?.includes('保底命中')).toBe(hasGuarantee);
+    expect(host.querySelectorAll('.is-guaranteed')).toHaveLength(hasGuarantee ? 1 : 0);
     expect(host.querySelector('.lt-stage')!.textContent).toContain('本次获得 10 份奖励');
     expect(mocks.draw).toHaveBeenCalledTimes(1);
   });
@@ -216,7 +245,7 @@ describe('方案 A 抽取模式与到账反馈', () => {
     expect(retry.disabled).toBe(false);
     retry.click();
     await flush();
-    await vi.advanceTimersByTimeAsync(LOTTERY_CHARGE_MS + LOTTERY_CARD_MS + 80);
+    await vi.advanceTimersByTimeAsync(FREE_REVEAL_MS);
     expect(mocks.draw.mock.calls).toEqual([
       [1, true],
       [1, true],
@@ -274,7 +303,7 @@ describe('方案 A 抽取模式与到账反馈', () => {
     mocks.state.value.free.daily = 0;
     await nextTick();
     expect(host.querySelector('.lt-draw-button--free')?.textContent).toContain('免费抽一次');
-    await vi.advanceTimersByTimeAsync(LOTTERY_CHARGE_MS + LOTTERY_CARD_MS + 80);
+    await vi.advanceTimersByTimeAsync(FREE_REVEAL_MS);
     expect(host.querySelector('[role="tab"][aria-selected="true"]')?.textContent).toContain('每日惊喜');
     expect(host.querySelector('[role="listitem"]')?.getAttribute('aria-label')).toBe('AI 额度 +10 万 tokens');
   });

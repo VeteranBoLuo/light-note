@@ -1,10 +1,12 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   reserveToolboxPoints,
   resolveToolboxActualPoints,
   settleReservedToolboxBilling,
   toolboxBillingInternals,
 } from './billing.js';
+
+afterEach(() => vi.unstubAllEnvs());
 
 describe('toolbox billing', () => {
   it('settles success fully, partial deliverables proportionally and failures at zero', () => {
@@ -39,6 +41,8 @@ describe('toolbox billing', () => {
   });
 
   it('reserves points, writes one economy receipt and one traceable points log in the same transaction', async () => {
+    vi.stubEnv('POINTS_ECONOMY_C9_ENABLED', 'true');
+    vi.stubEnv('POINTS_ECONOMY_C10_ENABLED', 'false');
     const connection = {
       query: vi
         .fn()
@@ -61,6 +65,7 @@ describe('toolbox billing', () => {
     ).resolves.toEqual({ operationId: 77, reservedPoints: 20, replay: false });
 
     expect(connection.query.mock.calls[2][0]).toContain('points_economy_operations');
+    expect(connection.query.mock.calls[2][1][2]).toBe('points-economy-c9');
     expect(connection.query.mock.calls[3]).toEqual([
       'UPDATE user_growth SET points = points - ? WHERE user_id = ? AND points >= ?',
       [20, 'user-1', 20],

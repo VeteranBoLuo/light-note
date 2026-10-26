@@ -94,6 +94,22 @@ describe('积分消费幂等收据', () => {
     ).rejects.toMatchObject({ code: 'IDEMPOTENCY_KEY_REUSED', status: 409 });
   });
 
+  it('C10 先回放 C9 已到账的免费 AI 收据，不按新奖池缩减历史数量', async () => {
+    const original = { ok: true, economyVersion: 'points-economy-c9', results: [{ kind: 'ai_pack', amount: 100000 }] };
+    const payload = { mode: 'free', times: 1 };
+    const hash = operationHash({ operationType: 'lottery_free', economyVersion: 'points-economy-c9', expectedCost: 0, payload });
+    const conn = { query: vi.fn()
+      .mockResolvedValueOnce([[{ id: 12, operation_type: 'lottery_free', operation_hash: hash, status: 'succeeded', result_json: original }]])
+      .mockResolvedValueOnce([{ affectedRows: 1 }]) };
+    const result = await beginPointsEconomyOperation(conn, {
+      userId: 'u1', operationType: 'lottery_free', payload,
+      clientRequestId: 'c9-free-original-receipt', economyVersion: 'points-economy-c9', expectedCost: 0, actualCost: 0,
+      runtime: { economyVersion: 'points-economy-c10', requireWriteVersion: true },
+    });
+    expect(result.replay).toEqual({ ...original, idempotent: true });
+    expect(conn.query).toHaveBeenCalledTimes(2);
+  });
+
   it('缺少版本协议与预期价格时拒绝执行', async () => {
     const conn = { query: vi.fn() };
     await expect(
@@ -206,6 +222,11 @@ describe('积分消费幂等收据', () => {
 });
 
 describe('积分经济激活门禁', () => {
+  it.each(['points-economy-c9', 'points-economy-c10'])('%s 继续使用既有两项迁移基线', async (economyVersion) => {
+    const db = { query: vi.fn().mockResolvedValue([[{ ready: 1 }]]) };
+    await expect(assertPointsEconomyActivationReady({ db, runtime: { economyVersion } })).resolves.toBe(true);
+    expect(db.query).toHaveBeenCalledTimes(2);
+  });
   it('C4 只要求既有保底迁移，C5 还必须完成空间限兑回填', async () => {
     const c4Db = { query: vi.fn().mockResolvedValueOnce([[{ ready: 1 }]]) };
     await expect(

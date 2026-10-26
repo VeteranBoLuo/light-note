@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { effectScope, type EffectScope } from 'vue';
 import type { LotteryPrize } from '@/composables/useGrowth';
-import { LOTTERY_CARD_MS, LOTTERY_CHARGE_MS, LOTTERY_STAGGER_MS, useLotteryReveal } from './useLotteryReveal';
+import { LOTTERY_CARD_MS, LOTTERY_TIMINGS, LOTTERY_STAGGER_MS, useLotteryReveal } from './useLotteryReveal';
 
 let scope: EffectScope;
 let hidden = false;
@@ -32,13 +32,16 @@ afterEach(() => {
 });
 
 describe('抽奖收据与揭晓节奏', () => {
-  it('快速收据先完成礼盒前奏，再揭晓并解锁操作', async () => {
+  it.each(['free', 'paid'] as const)('快速收据先完成前奏与开启，再揭晓并解锁操作：%s', async (mode) => {
     const reveal = setup();
-    reveal.begin();
+    reveal.begin(mode);
     reveal.accept(prizes());
     expect(reveal.phase.value).toBe('charging');
     expect(reveal.busy.value).toBe(true);
-    await vi.advanceTimersByTimeAsync(LOTTERY_CHARGE_MS);
+    await vi.advanceTimersByTimeAsync(LOTTERY_TIMINGS[mode].charge);
+    expect(reveal.phase.value).toBe('opening');
+    expect(reveal.busy.value).toBe(true);
+    await vi.advanceTimersByTimeAsync(LOTTERY_TIMINGS[mode].opening);
     expect(reveal.phase.value).toBe('revealing');
     await vi.advanceTimersByTimeAsync(LOTTERY_CARD_MS + 80);
     expect(reveal.phase.value).toBe('result');
@@ -51,6 +54,8 @@ describe('抽奖收据与揭晓节奏', () => {
     expect(reveal.phase.value).toBe('waiting');
     expect(reveal.results.value).toEqual([]);
     reveal.accept(prizes());
+    expect(reveal.phase.value).toBe('opening');
+    await vi.advanceTimersByTimeAsync(LOTTERY_TIMINGS.free.opening);
     expect(reveal.phase.value).toBe('revealing');
   });
   it('跳过动画仍保持请求锁，不能在收据到达前展示奖励', async () => {
@@ -68,23 +73,37 @@ describe('抽奖收据与揭晓节奏', () => {
   it('十连按收据顺序保留全部奖励，逐张揭晓期间保持锁定', async () => {
     const reveal = setup();
     const receipt = prizes(10);
-    reveal.begin();
+    reveal.begin('paid');
     reveal.accept(receipt);
-    await vi.advanceTimersByTimeAsync(LOTTERY_CHARGE_MS + LOTTERY_CARD_MS);
+    await vi.advanceTimersByTimeAsync(LOTTERY_TIMINGS.paid.charge + LOTTERY_TIMINGS.paid.opening + LOTTERY_CARD_MS);
     expect(reveal.phase.value).toBe('revealing');
     expect(reveal.results.value.map((prize) => prize.id)).toEqual(receipt.map((prize) => prize.id));
     await vi.advanceTimersByTimeAsync(9 * LOTTERY_STAGGER_MS + 80);
     expect(reveal.phase.value).toBe('result');
   });
-  it('十连中途跳过立即展示全部收据，不留下延迟回调', async () => {
+  it.each(['opening', 'revealing'])('十连在 %s 跳过立即展示全部收据，不留下延迟回调', async (phase) => {
     const reveal = setup();
-    reveal.begin();
+    reveal.begin('paid');
     reveal.accept(prizes(10));
-    await vi.advanceTimersByTimeAsync(LOTTERY_CHARGE_MS + 300);
+    await vi.advanceTimersByTimeAsync(
+      LOTTERY_TIMINGS.paid.charge + (phase === 'revealing' ? LOTTERY_TIMINGS.paid.opening + 100 : 100),
+    );
+    expect(reveal.phase.value).toBe(phase);
     reveal.skip();
     expect(reveal.phase.value).toBe('result');
     expect(reveal.results.value).toHaveLength(10);
     expect(vi.getTimerCount()).toBe(0);
+  });
+  it('开启期间重复回执不能替换已经确认的奖励或重启动画', async () => {
+    const reveal = setup();
+    reveal.begin('paid');
+    const receipt = prizes(10);
+    reveal.accept(receipt);
+    await vi.advanceTimersByTimeAsync(LOTTERY_TIMINGS.paid.charge);
+    reveal.accept([{ id: 'other', kind: 'points', amount: 999 }]);
+    expect(reveal.results.value).toEqual(receipt);
+    await vi.advanceTimersByTimeAsync(LOTTERY_TIMINGS.paid.opening);
+    expect(reveal.phase.value).toBe('revealing');
   });
   it('系统减少动画时只等待真实收据', () => {
     media.matches = true;

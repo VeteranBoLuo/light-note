@@ -7,6 +7,19 @@ export type RichMediaTextWidth = (typeof RICH_MEDIA_TEXT_WIDTHS)[number];
 const DEFAULT_POSITION: RichMediaTextPosition = 'left';
 const DEFAULT_WIDTH: RichMediaTextWidth = 36;
 
+export const RICH_MEDIA_TEXT_IMAGE_LOADING_ATTRIBUTE = 'data-mce-ln-image-loading';
+
+/** View-only space while an image's intrinsic size is not known yet. */
+export function updateRichMediaTextImageLoading(root: ParentNode) {
+  root.querySelectorAll<HTMLElement>('.ln-media-text__media').forEach((media) => {
+    const loading = Array.from(media.querySelectorAll('img')).some(
+      (image) => Boolean(image.getAttribute('src')?.trim()) && !image.complete,
+    );
+    if (media.hasAttribute(RICH_MEDIA_TEXT_IMAGE_LOADING_ATTRIBUTE) !== loading)
+      media.toggleAttribute(RICH_MEDIA_TEXT_IMAGE_LOADING_ATTRIBUTE, loading);
+  });
+}
+
 /** 编辑器内复制图片常只有 HTML 片段；只读取图片地址，不插入剪贴板中的其他 HTML。 */
 export function getRichMediaTextClipboardImage(html: string, baseUrl: string) {
   if (!html || typeof DOMParser === 'undefined') return null;

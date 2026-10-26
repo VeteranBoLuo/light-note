@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createPinia, setActivePinia } from 'pinia';
 import { nextTick, reactive } from 'vue';
-const mocks = vi.hoisted(() => ({ get: vi.fn(), user: {} as any }));
+const mocks = vi.hoisted(() => ({ get: vi.fn(), log: vi.fn(), user: {} as any }));
+vi.mock('@/api/commonApi', () => ({ recordOperation: mocks.log }));
 vi.mock('./useUser', () => ({ default: () => mocks.user }));
 vi.mock('@/api/publicResources', () => ({ publicGet: mocks.get }));
 import { usePublicResourceScope } from './publicResourceScope';
@@ -9,9 +10,25 @@ beforeEach(() => {
   setActivePinia(createPinia());
   mocks.user = reactive({ id: 'one', role: 'user', adminContext: null, adminPreview: false });
   mocks.get.mockReset();
+  mocks.log.mockReset().mockResolvedValue(undefined);
   localStorage.clear();
 });
 describe('全站搜索会话范围', () => {
+  it('只记录手动且实际变化的范围，不为恢复、切号、URL 或代管记日志', () => {
+    const scope = usePublicResourceScope();
+    scope.setIncluded(true, { remember: true });
+    scope.setIncluded(true, { remember: true });
+    scope.restoreIncluded();
+    scope.setIncluded(false);
+    mocks.user.id = 'two';
+    mocks.user.adminContext = { id: 'context' };
+    scope.setIncluded(true, { remember: true });
+    expect(mocks.log.mock.calls).toEqual([[{ module: '公开管理', operation: '开启包含全站公开资源' }]]);
+    mocks.user.adminContext = null;
+    scope.setIncluded(true, { remember: true });
+    scope.setIncluded(false, { remember: true });
+    expect(mocks.log).toHaveBeenLastCalledWith({ module: '公开管理', operation: '关闭包含全站公开资源' });
+  });
   const key = (id: string) => `light-note:public-search:included:v1:${encodeURIComponent(id)}`;
   it('仅手动切换写入，重新创建会话分别恢复开启和关闭', () => {
     let scope = usePublicResourceScope();

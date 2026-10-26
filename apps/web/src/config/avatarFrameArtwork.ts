@@ -392,7 +392,7 @@ export const AVATAR_FRAME_ARTWORK = {
     foregroundShell: true,
     // 三只不对称翼从 v5 原画同画布分层:motionSrc=左上春翼、effectSrc=右上秋翼、trailSrc=右下冬翼。
     // 翼根按多边形切割边做 16px 距离场交叉渐隐,底图保留翼根兜底;樱枝、枫叶、金藤等披挂留底,
-    // 三翼以各自翼根为锚点错相轻扬(季节波浪),环体、星冠与底冠钻石像素零位移。
+    // 三翼以各自翼根为锚点短间隔跟随开合,环体、星冠与底冠钻石像素零位移。
     motionSrc: frameStreakEternalWingSpring,
     effectSrc: frameStreakEternalWingAutumn,
     trailSrc: frameStreakEternalWingWinter,

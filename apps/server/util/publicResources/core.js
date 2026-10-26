@@ -174,6 +174,7 @@ export async function audit(
     action,
     reason = '',
     notify = false,
+    notificationBatchId = null,
     resultVersion = Number(publication.version) + 1,
   },
 ) {
@@ -184,7 +185,7 @@ export async function audit(
   );
   if (notify)
     await event(db, {
-      key: `result:${result.insertId}`,
+      key: notificationBatchId ? `result:${notificationBatchId}:${result.insertId}` : `result:${result.insertId}`,
       publication: publication.id,
       revision,
       action: result.insertId,

@@ -158,7 +158,7 @@ const milestones = [7, 30, 100, 365].map((days, index) => ({
   days,
   points: [50, 300, 600, 2000][index],
   storageMb: [0, 512, 1024, 2048][index],
-  cards: 1,
+  cards: [1, 2, 3, 5][index],
   reached: days <= 30,
 }));
 const router = createRouter({

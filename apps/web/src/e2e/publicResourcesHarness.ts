@@ -172,6 +172,7 @@ const unsupportedSources = new Set(params.get('unsupported') === 'on' ? ['source
 let delayedReceipt = '';
 let reportTransition = '';
 const requests: string[] = [];
+const operationLogs: { module: string; operation: string }[] = [];
 request.defaults.adapter = async (config) => {
   const path = String(config.url).replace(/^.*\/api\//, '');
   requests.push(path);
@@ -193,7 +194,10 @@ request.defaults.adapter = async (config) => {
     return finish();
   }
   if (params.get('state') === 'loading') await new Promise((resolve) => setTimeout(resolve, 1500));
-  if (path === 'public-resources/capabilities')
+  if (path === 'common/recordOperationLogs') {
+    operationLogs.push({ module: input.module, operation: input.operation });
+    document.documentElement.dataset.fixtureOperationLogs = JSON.stringify(operationLogs);
+  } else if (path === 'public-resources/capabilities')
     data = {
       enabled: params.get('state') !== 'off',
       submissionsEnabled: params.get('state') !== 'off',

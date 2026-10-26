@@ -142,16 +142,23 @@ describe('mobile personal center experience', () => {
     expect(avatarFrameSource).toMatch(/\.avatar-frame--layout-slot\s*\{[\s\S]*?width:\s*100%;[\s\S]*?height:\s*100%;/);
     const backCanvasStart = avatarFrameSource.indexOf('<span class="avatar-frame__canvas">');
     const frontCanvasStart = avatarFrameSource.indexOf('class="avatar-frame__canvas avatar-frame__canvas--front"');
-    const frontCanvasEnd = avatarFrameSource.indexOf('</span>\n    <span v-if="artwork"', frontCanvasStart);
+    const frontCanvasEnd = avatarFrameSource.indexOf(
+      '</span>\n    <span v-if="!subjectReady && artwork',
+      frontCanvasStart,
+    );
+    expect(frontCanvasEnd).toBeGreaterThan(frontCanvasStart);
     const backCanvasSource = avatarFrameSource.slice(backCanvasStart, frontCanvasStart);
     const frontCanvasSource = avatarFrameSource.slice(frontCanvasStart, frontCanvasEnd);
-    expect(backCanvasSource).toContain('v-if="artwork && !usesFrontStructuralShell"');
+    // 主体分层就绪前保留原图兜底，就绪后移除重复框壳；头像与前后景的层级保持不变。
+    expect(backCanvasSource).toContain('v-if="!subjectReady && artwork && !usesFrontStructuralShell"');
     expect(backCanvasSource).toContain('class="avatar-frame__art"');
     expect(backCanvasSource).toContain('class="avatar-frame__art-detail"');
     expect(backCanvasSource).toContain('class="avatar-frame__inner-ring"');
     expect(backCanvasSource).toContain('class="avatar-frame__art-inner"');
-    expect(backCanvasSource).toContain('v-if="artwork && !usesDedicatedInnerRing && !usesFrontStructuralShell"');
-    expect(frontCanvasSource).toContain('v-if="artwork && usesFrontStructuralShell"');
+    expect(backCanvasSource).toContain(
+      'v-if="!subjectReady && artwork && !usesDedicatedInnerRing && !usesFrontStructuralShell"',
+    );
+    expect(frontCanvasSource).toContain('v-if="!subjectReady && artwork && usesFrontStructuralShell"');
     expect(frontCanvasSource).toContain('class="avatar-frame__art avatar-frame__art--front-shell"');
     expect(frontCanvasSource).toContain('class="avatar-frame__art-focus"');
     expect(frontCanvasSource).toContain('avatar-frame__art-focus--sakura-top');

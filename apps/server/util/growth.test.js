@@ -95,12 +95,12 @@ describe('growth 段位表', () => {
     }
   });
 
-  it('7/30/100/365 天连签里程碑各赠 1 张补签卡', () => {
+  it('7/30/100/365 天连签里程碑递增赠送 1/2/3/5 张补签卡', () => {
     expect(STREAK_MILESTONES.filter((milestone) => milestone.cards).map(({ days, cards }) => [days, cards])).toEqual([
       [7, 1],
-      [30, 1],
-      [100, 1],
-      [365, 1],
+      [30, 2],
+      [100, 3],
+      [365, 5],
     ]);
   });
 });
@@ -238,10 +238,14 @@ describe('C8 成就展示与旧承诺', () => {
   });
 });
 
-describe('长连签里程碑补签卡发放', () => {
-  it.each([100, 365].flatMap((days) => [true, false].map((firstHit) => ({ days, firstHit }))))(
+describe('连签里程碑补签卡发放', () => {
+  it.each(
+    [[7, 1], [30, 2], [100, 3], [365, 5]].flatMap(([days, cards]) =>
+      [true, false].map((firstHit) => ({ days, cards, firstHit })),
+    ),
+  )(
     '$days 天里程碑首次命中=$firstHit，补签卡与里程碑收据共用事务',
-    async ({ days, firstHit }) => {
+    async ({ days, cards, firstHit }) => {
       vi.clearAllMocks();
       const row = { exp: 0, level: 1, streak: days - 1, last_checkin_date: '20261025', points: 0 };
       const conn = {
@@ -265,10 +269,11 @@ describe('长连签里程碑补签卡发放', () => {
       const result = await checkin('user-1', { userRole: 'user', calendar: accountCalendar('20261026') });
       expect(result.ok).toBe(true);
       if (firstHit) {
-        expect(grantItem).toHaveBeenCalledExactlyOnceWith(conn, 'user-1', 'makeup_card', 1, {
-          sourceType: 'streak_milestone', sourceRef: String(days),
+        expect(grantItem).toHaveBeenCalledExactlyOnceWith(conn, 'user-1', 'makeup_card', cards, {
+          sourceType: 'streak_milestone',
+          sourceRef: String(days),
         });
-        expect(result.milestone).toMatchObject({ days, cards: 1 });
+        expect(result.milestone).toMatchObject({ days, cards });
       } else {
         expect(grantItem).not.toHaveBeenCalled();
         expect(result.milestone).toBeNull();

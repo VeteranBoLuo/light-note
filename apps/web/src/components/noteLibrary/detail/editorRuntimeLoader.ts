@@ -18,7 +18,10 @@ function preloadPublicAsset(href: string, as: 'style' | 'script') {
 function preloadTinyMcePublicAssets() {
   if (typeof document === 'undefined') return;
   const theme = document.documentElement.getAttribute('data-theme') === 'night' ? 'oxide-dark' : 'oxide';
-  preloadPublicAsset(`/tinymce/skins/ui/${theme}/skin.min.css`, 'style');
+  // Bundled TinyMCE has no .min suffix. Warm the exact URLs its inline editor loads,
+  // including the content stylesheet that must finish before init can complete.
+  preloadPublicAsset(`/tinymce/skins/ui/${theme}/skin.css`, 'style');
+  preloadPublicAsset(`/tinymce/skins/ui/${theme}/content.inline.css`, 'style');
   if (!String(document.documentElement.lang || 'zh-CN').toLowerCase().startsWith('en')) {
     preloadPublicAsset('/tinymce/langs/zh_CN.js', 'script');
   }
@@ -40,6 +43,7 @@ function retryableImport(
 }
 
 export function loadTinyMceRuntime() {
+  preloadTinyMcePublicAssets();
   return retryableImport(
     () => import('./TinyMceEditorRuntime.vue').then((module) => module.default),
     () => tinyMceRuntimePromise,
@@ -65,6 +69,5 @@ export function preloadNoteEditorRuntime(type: NoteEditorType) {
   // 在用户打开手绘笔记时仍下载 TinyMCE 的大运行时。
   if (normalizedType === 'drawing') return Promise.resolve(null);
   if (normalizedType === 'markdown') return loadMarkdownRuntime();
-  preloadTinyMcePublicAssets();
   return loadTinyMceRuntime();
 }

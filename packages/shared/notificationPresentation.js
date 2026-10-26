@@ -28,6 +28,14 @@ export const notificationMessages = {
     collectionSubmissionContent: "你的表单收到一份新回答，点击查看提交记录。",
     publicResourceReviewTitle: "有公开资源待审核",
     publicResourceResultTitle: "公开资源审核结果",
+    publicResourceBatchTitle: "公开资源批量审核结果",
+    publicResourceActions: {
+      approve: "审核通过",
+      reject: "审核未通过",
+      remove: "已下架",
+      unlock: "已解除下架",
+    },
+    publicResourceCount: "{action} {count} 项",
     communityReplyTitle: "社区有新的回复或提及",
     communityResultTitle: "社区处理结果",
     communityTitles: {
@@ -68,6 +76,14 @@ export const notificationMessages = {
       "Your form received a new response. Open it to view submissions.",
     publicResourceReviewTitle: "Public resource awaiting review",
     publicResourceResultTitle: "Public resource review result",
+    publicResourceBatchTitle: "Public resource batch review result",
+    publicResourceActions: {
+      approve: "Approved",
+      reject: "Not approved",
+      remove: "Removed",
+      unlock: "Removal lifted",
+    },
+    publicResourceCount: "{action}: {count}",
     communityReplyTitle: "New community reply or mention",
     communityResultTitle: "Community review result",
     communityTitles: {
@@ -135,7 +151,42 @@ export function notificationPresentation(item, locale = "zh-CN") {
     title = messages.emailHealthTitle;
     content = messages.emailHealthContent.replace("{email}", () => String(meta.maskedEmail || ""));
   }
-  if (item.type === "public_resource") title = meta.kind === "review" ? messages.publicResourceReviewTitle : messages.publicResourceResultTitle;
+  if (item.type === "public_resource") {
+    title =
+      meta.kind === "review"
+        ? messages.publicResourceReviewTitle
+        : messages.publicResourceResultTitle;
+    if (
+      meta.kind === "result" &&
+      meta.counts &&
+      typeof meta.counts === "object"
+    ) {
+      title = messages.publicResourceBatchTitle;
+      content = Object.entries(messages.publicResourceActions)
+        .filter(
+          ([action]) =>
+            Number.isSafeInteger(meta.counts[action]) &&
+            meta.counts[action] > 0,
+        )
+        .map(([action, label]) =>
+          messages.publicResourceCount
+            .replace("{action}", label)
+            .replace("{count}", String(meta.counts[action])),
+        )
+        .join(" · ");
+    } else if (
+      meta.kind === "result" &&
+      Object.hasOwn(messages.publicResourceActions, meta.action)
+    ) {
+      content = [
+        meta.resourceTitle,
+        messages.publicResourceActions[meta.action],
+        meta.reason,
+      ]
+        .filter(Boolean)
+        .join(" · ");
+    }
+  }
   if (item.type === "community_feed")
     title =
       meta.kind === "result"

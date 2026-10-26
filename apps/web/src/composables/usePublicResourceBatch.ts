@@ -2,6 +2,7 @@ import { onBeforeUnmount, ref, watch } from 'vue';
 import { PUBLIC_RESOURCE_LIMITS, type PublicResourceKind } from '@lightnote/shared/public-resources';
 import { publicOperation, sendPublicResourceBatch, type PublicOperation } from '@/api/publicResources';
 import { usePublicResourceScope } from '@/store/publicResourceScope';
+import { logPublicResourceOperation, publicResourceWriteLabel } from '@/utils/publicResourceOperationLog';
 
 export interface PublicBatchEntry {
   key: string;
@@ -33,11 +34,13 @@ export function usePublicResourceBatch() {
     busy = ref(false);
   const operations = new Map<string, PublicOperation<PublicBatchResult>>();
   const inputs = new Map<string, PublicBatchEntry & { requestId: string }>();
-  let generation = 0;
+  let generation = 0,
+    logged = false;
   function reset() {
     generation++;
     operations.clear();
     inputs.clear();
+    logged = false;
     rows.value = [];
     busy.value = false;
   }
@@ -46,6 +49,20 @@ export function usePublicResourceBatch() {
     row.state = result.reused ? 'reused' : 'success';
     row.code = '';
     row.checkedNotFound = false;
+  }
+  function logCompleted() {
+    if (logged || !rows.value.length || rows.value.some((row) => !['success', 'reused', 'failed'].includes(row.state)))
+      return;
+    logged = true;
+    const succeeded = rows.value.filter((row) => row.state === 'success').length;
+    const reused = rows.value.filter((row) => row.state === 'reused').length;
+    if (!succeeded && !reused) return;
+    const entry = inputs.get(rows.value[0].key)!;
+    const label = publicResourceWriteLabel(entry.path, entry.body);
+    if (label)
+      logPublicResourceOperation(
+        `批量${label}【共${rows.value.length}项，成功${succeeded}项，无须重复操作${reused}项，失败${rows.value.length - succeeded - reused}项】`,
+      );
   }
   async function perform(targets: PublicBatchRow[]) {
     if (busy.value || !scope.eligible || !targets.length) return;
@@ -75,7 +92,10 @@ export function usePublicResourceBatch() {
         row.code = (error as { code?: string }).code || 'PUBLIC_RESOURCE_UNAVAILABLE';
       }
     } finally {
-      if (current === generation) busy.value = false;
+      if (current === generation) {
+        busy.value = false;
+        logCompleted();
+      }
     }
   }
   async function start(entries: PublicBatchEntry[]) {
@@ -126,7 +146,10 @@ export function usePublicResourceBatch() {
         );
       }
     } finally {
-      if (current === generation) busy.value = false;
+      if (current === generation) {
+        busy.value = false;
+        logCompleted();
+      }
     }
   }
   async function retryUnconfirmed() {

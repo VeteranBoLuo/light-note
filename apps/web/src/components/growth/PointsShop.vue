@@ -284,7 +284,9 @@
   }
 
   function isFocused(it: ShopItem) {
-    return ['ai', 'storage'].includes(props.focus) && itemAsset(it) === props.focus;
+    return props.focus === 'makeup_card'
+      ? it.id === 'makeup_card'
+      : ['ai', 'storage'].includes(props.focus) && itemAsset(it) === props.focus;
   }
 
   function hasPurchaseLimit(it: ShopItem) {
@@ -316,7 +318,7 @@
   }
 
   async function focusRequestedAsset() {
-    if (!['ai', 'storage'].includes(props.focus)) return;
+    if (!['ai', 'storage', 'makeup_card'].includes(props.focus)) return;
     await nextTick();
     shopRoot.value?.querySelector<HTMLElement>('.ps-item.is-focused')?.scrollIntoView({
       behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',

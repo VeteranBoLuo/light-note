@@ -427,7 +427,7 @@
                 :focus="String(route.query.focus || '')"
                 :show-goal="pointsCenterEnabled"
               />
-              <LotteryDraw v-else :read-only="isAdminContext" @focus-header="scrollLotteryToPreferredPosition" />
+              <LotteryDraw v-else :read-only="isAdminContext" @focus-draw="scrollLotteryToPreferredPosition(true)" />
             </section>
           </template>
         </main>
@@ -472,6 +472,7 @@
   import { bookmarkStore, useUserStore } from '@/store';
   import { resetMobileScrollElement } from '@/composables/useMobileNavigationState';
   import { useForegroundRefresh } from '@/composables/useForegroundRefresh';
+  import { useUiDensity } from '@/composables/useUiDensity';
   import { resolveDailyQuestClaimFeedback } from '@/utils/dailyQuestClaim';
   import { resolveDailyQuestRoute, resolveGrowthActionRoute } from '@/utils/growthNavigation';
   import { scrollIntoContainer } from '@/utils/scrolling';
@@ -501,6 +502,7 @@
   const router = useRouter();
   const user = useUserStore();
   const bookmark = bookmarkStore();
+  const { dimension } = useUiDensity();
   const activeSection = computed<GrowthSection>({
     get: () => {
       const section = String(route.query.section || '');
@@ -714,21 +716,50 @@
     }
   }
 
-  async function scrollLotteryToPreferredPosition() {
-    if (!bookmark.isMobile) return;
+  async function scrollLotteryToPreferredPosition(focusDraw = false) {
+    const desktopDraw = focusDraw && bookmark.isDesktop;
+    if (!bookmark.isMobile && !useWideDesktopLayout.value && !desktopDraw) return;
     await nextTick();
-    // BTabs 先 emit select、再更新 v-model；同时 LotteryDraw 还需要一次挂载布局。
-    // 等两个绘制帧后再读取标题坐标，避免拿旧奖励页高度计算后被新面板顶偏。
-    await new Promise<void>((resolve) => {
-      requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
-    });
-    const container = growthPageRef.value;
+    // 分区切换等待挂载与 Tab 更新；抽取时组件已挂载，nextTick 后直接读取新状态。
+    if (!desktopDraw) {
+      await new Promise<void>((resolve) => {
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+      });
+    }
+    if (activeSection.value !== 'rewards' || activeRewardSection.value !== 'lottery') return;
+    const container = useWideDesktopLayout.value ? growthMainRef.value : growthPageRef.value;
+    if (!container) return;
+    const reduceMotion =
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches ||
+      document.documentElement.classList.contains('disable-animations');
+    // 连续抽取一次到位，避免按钮恢复可点击后仍有滚动动画。
+    const behavior = reduceMotion || desktopDraw ? 'auto' : 'smooth';
+    if (desktopDraw) {
+      const machine = container.querySelector<HTMLElement>('.lt-machine');
+      const actions = machine?.querySelector<HTMLElement>('.lt-draw-options');
+      if (!machine || !actions) return;
+      const viewport = container.getBoundingClientRect();
+      const scene = machine.getBoundingClientRect();
+      const gap = dimension(12);
+      const tabs = !useWideDesktopLayout.value ? container.querySelector<HTMLElement>('.growth-section-tabs') : null;
+      const topInset = tabs
+        ? tabs.getBoundingClientRect().height + (parseFloat(getComputedStyle(container).paddingTop) || 0) + gap
+        : gap;
+      // 矮窗口优先保住抽取操作，完整卡片放得下时也保留底部说明。
+      const bottom =
+        scene.height <= container.clientHeight - topInset - gap ? scene.bottom : actions.getBoundingClientRect().bottom;
+      if (scene.top >= viewport.top + topInset && bottom <= viewport.bottom - gap) return;
+      const offset = Math.min(topInset, container.clientHeight - gap - (bottom - scene.top));
+      scrollIntoContainer(container, machine, offset, behavior);
+      return;
+    }
     const lotteryTitle = document.getElementById('lottery-title');
-    if (!container || !lotteryTitle) return;
-    // 直接以“积分抽奖”标题为准，在标题上方保留主 Tab、间距和卡片内边距。
-    // 不再依赖旧面板的锚点位置，保证标题始终完整出现在首屏而不是被滚到顶部之外。
-    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    scrollIntoContainer(container, lotteryTitle, 112, reduceMotion ? 'auto' : 'smooth');
+    if (!lotteryTitle) return;
+    if (useWideDesktopLayout.value) {
+      scrollIntoContainer(container, lotteryTitle, 0, behavior);
+    } else {
+      scrollIntoContainer(container, lotteryTitle, 112, behavior);
+    }
   }
 
   function handleSectionTabSelect(section: string) {

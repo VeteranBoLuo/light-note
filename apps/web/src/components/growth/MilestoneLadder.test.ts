@@ -18,11 +18,11 @@ function mount(streak: number, animated = true) {
   const app = createApp(MilestoneLadder, {
     currentStreak: streak,
     animated,
-    milestones: [7, 30, 100, 365].map((days) => ({
+    milestones: [7, 30, 100, 365].map((days, index) => ({
       days,
-      points: 50,
-      cards: 1,
-      storageMb: 0,
+      points: [50, 300, 600, 2000][index],
+      cards: [1, 2, 3, 5][index],
+      storageMb: [0, 512, 1024, 2048][index],
       reached: streak >= days,
     })),
   });
@@ -47,6 +47,15 @@ describe('current streak milestones', () => {
     const host = mount(days);
     expect(parseFloat((host.querySelector('.ml-line span') as HTMLElement).style.width)).toBeCloseTo(pct);
     expect(host.querySelectorAll('.ml-node.reached')).toHaveLength([7, 30, 100, 365].filter((n) => n <= days).length);
+  });
+  it('displays the supplied reward quantities', () => {
+    const host = mount(30);
+    const rewards = [...host.querySelectorAll('.ml-rewards')].map((el) => el.textContent);
+    expect(rewards[0]).toContain('50');
+    expect(rewards[1]).toContain('512 MB');
+    expect(rewards[2]).toContain('1 GB');
+    expect(rewards[3]).toContain('2000');
+    [1, 2, 3, 5].forEach((cards, index) => expect(rewards[index]).toContain(`补签卡 ×${cards}`));
   });
   it('shows the next threshold and keeps reached distinct from paid rewards', () => {
     const host = mount(83);

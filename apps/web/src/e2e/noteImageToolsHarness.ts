@@ -2,6 +2,8 @@ import { createApp, h, ref } from 'vue';
 import { createPinia } from 'pinia';
 import { createMemoryHistory, createRouter } from 'vue-router';
 import Editor from '@/components/noteLibrary/detail/Editor.vue';
+import BButton from '@/components/base/BasicComponents/BButton.vue';
+import { createRichMediaTextBlockHtml } from '@/utils/richMediaText';
 import i18n, { setLocale } from '@/i18n';
 import { bookmarkStore, useUserStore } from '@/store';
 import globalDirect from '@/config/globalDirect';
@@ -12,6 +14,7 @@ import '@/assets/css/index.less';
 const params = new URLSearchParams(location.search);
 const textSelection = params.has('textSelection');
 const largeImage = params.has('largeImage');
+const coldStartup = params.has('coldStartup');
 const theme = params.get('theme') === 'night' ? 'night' : 'day';
 const locale = params.get('locale') === 'en-US' ? 'en-US' : 'zh-CN';
 await setLocale(locale);
@@ -57,7 +60,14 @@ const app = createApp({
         )
       : '/brand-scenes/autumn-vista.webp';
     const content = ref(
-      textSelection
+      coldStartup
+        ? '<h2>编辑器冷启动验收</h2>' + Array.from({ length: 8 }, (_, index) =>
+            createRichMediaTextBlockHtml(
+              `${params.get('imageOrigin') || ''}${index === 7 ? '/startup-image-missing.png' : `${src}?startupImage=${index}`}`,
+              `测试图片 ${index + 1}`,
+            ).replace('<p><br></p></figcaption>', `<p>第 ${index + 1} 组图文：图片等待期间也可以滚动正文。</p></figcaption>`),
+          ).join('')
+        : textSelection
         ? '<h2>选区菜单验收</h2>' +
             Array.from(
               { length: 45 },
@@ -65,18 +75,38 @@ const app = createApp({
             ).join('')
         : `<h2>图片与文字</h2><p>图片之前的内容</p><p><img src="${src}" alt="窗边阅读" title="阅读角落" width="${largeImage ? 1200 : 320}"></p><p>图片之后的内容</p>`,
     );
+    const ready = ref(false);
+    const updates = ref(0);
+    const saves = ref(0);
+    const savedContent = ref('');
     return () =>
       h(
         'main',
         {
-          style: `height:100vh;max-width:100%;overflow:hidden;${textSelection || largeImage ? 'display:flex;flex-direction:column;padding:120px 80px 24px;box-sizing:border-box' : ''}`,
+          style: `height:100vh;max-width:100%;overflow:hidden;${coldStartup ? 'display:flex;flex-direction:column' : textSelection || largeImage ? 'display:flex;flex-direction:column;padding:120px 80px 24px;box-sizing:border-box' : ''}`,
         },
         [
+          ...(coldStartup ? [
+            h('output', { id: 'editor-startup-proof', style: 'overflow-wrap:anywhere;max-width:100%;flex-shrink:0' }, JSON.stringify({
+              ready: ready.value,
+              updates: updates.value,
+              saves: saves.value,
+              savedHasViewMarkers: /data-mce-|data-ln-media-image-placeholder/.test(savedContent.value),
+              savedHasEdit: savedContent.value.includes('冷启动编辑验证'),
+            })),
+            h(BButton, {
+              id: 'startup-save',
+              onClick: () => { savedContent.value = content.value; saves.value++; },
+            }, () => '保存测试副本'),
+          ] : []),
           h(Editor, {
+            ...(coldStartup ? { style: 'flex:1;min-height:0;height:auto' } : {}),
             content: content.value,
             'onUpdate:content': (value: string) => {
               content.value = value;
+              updates.value++;
             },
+            onReady: () => { ready.value = true; },
             readonly: params.has('readonly'),
             imageUploadMode: params.has('serverImages') ? 'api' : 'base64',
             context: 'template',

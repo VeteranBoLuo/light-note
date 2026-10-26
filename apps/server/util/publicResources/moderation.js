@@ -209,6 +209,7 @@ export async function decide({ user, id, input, db = pool, env = process.env, ba
         action: input.action,
         reason,
         notify: true,
+        notificationBatchId: batchId,
       });
       return { publicId: p.public_id, version: Number(p.version) + 1 };
     },
