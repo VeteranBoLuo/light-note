@@ -69,15 +69,30 @@
   }
   // Fixed backing and foreground; only isolated alpha-cut subject parts move.
   .enamel-motion--pages {
+    // The active leaf must cross above the resting leaf in either direction.
+    // Keep this discrete track on the same clock as the turn, including pauses.
+    .enamel-motion__layer--left,
+    .enamel-motion__layer--right {
+      animation-duration: 5.6s;
+      animation-timing-function: ease-in-out, step-end;
+    }
     .enamel-motion__layer--left {
       transform-origin: 50% 64%;
-      animation-name: enamel-page-left;
-      animation-duration: 5.6s;
+      animation-name: enamel-page-left, enamel-page-order;
     }
     .enamel-motion__layer--right {
       transform-origin: 50% 64%;
-      animation-name: enamel-page-right;
-      animation-duration: 5.6s;
+      animation-name: enamel-page-right, enamel-page-order;
+      animation-direction: normal, reverse;
+    }
+  }
+  @keyframes enamel-page-order {
+    0% {
+      z-index: 2;
+    }
+    50%,
+    100% {
+      z-index: 1;
     }
   }
   @keyframes enamel-page-left {
