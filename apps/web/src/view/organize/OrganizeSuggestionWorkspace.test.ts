@@ -87,6 +87,12 @@ async function settle() {
   for (let i = 0; i < 20; i++) await Promise.resolve();
   await nextTick();
 }
+// 回到前台补读只接受过期快照；推进时钟而不触发后台轮询。
+async function wakeWorkspace() {
+  vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 1001);
+  document.dispatchEvent(new Event('visibilitychange'));
+  await settle();
+}
 const button = (text: string) =>
   [...document.querySelectorAll<HTMLButtonElement>('button')].find(
     (e) => e.getAttribute('aria-label') === text || e.textContent?.replace('✓', '').trim() === text,
@@ -129,6 +135,8 @@ async function toScope() {
 beforeEach(() => {
   navigation.currentRoute = reactive({ value: { query: {} as Record<string, string> } });
   vi.clearAllMocks();
+  for (const mock of Object.values(api)) mock.mockReset();
+  api.replace.mockResolvedValue(undefined);
   api.alert.mockImplementation((options: any) => options.onOk());
   navigation.currentRoute.value.query = {};
   clearOrganizeHandoff();
@@ -153,6 +161,7 @@ beforeEach(() => {
 });
 afterEach(async () => {
   app?.unmount();
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
   // Message state is global and outlives the workspace; clear it before jsdom teardown.
   message.destroy();
@@ -630,8 +639,7 @@ it('所有待处理及手动补充资源默认展开，返回页面同步后保�
   expect(document.querySelectorAll('.resource-detail-toggle[aria-expanded="true"]')).toHaveLength(3);
   document.querySelector<HTMLButtonElement>('.resource-detail-toggle')!.click();
   await settle();
-  document.dispatchEvent(new Event('visibilitychange'));
-  await settle();
+  await wakeWorkspace();
   expect(document.querySelectorAll('.resource-detail-toggle[aria-expanded="true"]')).toHaveLength(2);
 });
 
@@ -1000,13 +1008,11 @@ it('分析中的资源产生建议后自动展开，主动收起后轮询不重�
     ],
   };
   api.getRun.mockResolvedValue(ok(finished));
-  document.dispatchEvent(new Event('visibilitychange'));
-  await settle();
+  await wakeWorkspace();
   expect(document.querySelector('.resource-detail-toggle')?.getAttribute('aria-expanded')).toBe('true');
   document.querySelector<HTMLButtonElement>('.resource-detail-toggle')!.click();
   await settle();
-  document.dispatchEvent(new Event('visibilitychange'));
-  await settle();
+  await wakeWorkspace();
   expect(document.querySelector('.resource-detail-toggle')?.getAttribute('aria-expanded')).toBe('false');
 });
 it('消费交接后替换当前历史地址，移除一次性参数', async () => {
@@ -2115,8 +2121,7 @@ it.each([false, true])('写入回执立即移出待审核，旧读取与刷新�
     write = deferredResponse(),
     freshRead = deferredResponse();
   api.getRun.mockReturnValueOnce(oldRead.promise).mockReturnValueOnce(freshRead.promise);
-  document.dispatchEvent(new Event('visibilitychange'));
-  await settle();
+  await wakeWorkspace();
   api.actOnRunSuggestion.mockReturnValueOnce(write.promise);
   button('应用建议').click();
   await settle();
@@ -2384,8 +2389,7 @@ it('多页静默刷新保留已加载范围、折叠选择和滚动位置，只�
   api.getRun.mockImplementation(async (_id, params) =>
     ok(params.group ? { items: rest, nextCursor: null } : structuredClone(initial)),
   );
-  document.dispatchEvent(new Event('visibilitychange'));
-  await settle();
+  await wakeWorkspace();
   expect(api.getRun).toHaveBeenCalledTimes(2);
   expect(api.getRun.mock.calls.filter(([, params]) => !params.group)).toHaveLength(1);
   expect(document.querySelectorAll('.workspace-resource')).toHaveLength(60);
@@ -2471,8 +2475,7 @@ it('刷新前页新增对象后仍保留已读到的末项，不按旧条数截�
           },
     ),
   );
-  document.dispatchEvent(new Event('visibilitychange'));
-  await settle();
+  await wakeWorkspace();
   expect(document.querySelector('.group-clear')?.textContent).toContain('资料 b59');
   expect(document.querySelectorAll('.group-clear .workspace-resource')).toHaveLength(90);
   expect(api.getRun).toHaveBeenCalledTimes(3);
@@ -2501,8 +2504,7 @@ it('跨页批量遵守检查筛选，刷新后保留取消勾选且不会顺带�
     [...document.querySelectorAll<HTMLElement>('.workspace-resource > header .b-checkbox')].at(-1)!;
   lastCheckbox().click();
   await settle();
-  document.dispatchEvent(new Event('visibilitychange'));
-  await settle();
+  await wakeWorkspace();
   expect(button('应用所选 31 项')).toBeTruthy();
   expect(lastCheckbox().getAttribute('aria-checked')).toBe('false');
   expect(api.getRun.mock.calls.every(([, query]) => query.kind === 'title' && query.resourceType === 'bookmark')).toBe(
@@ -2520,7 +2522,8 @@ it('跨页批量遵守检查筛选，刷新后保留取消勾选且不会顺带�
   ).toEqual(entries.slice(0, 31).map((item) => `title-${item.id}`));
   // The other pending check keeps each object in the priority group.
   expect(document.querySelector('.group-priority .group-count')?.textContent).toBe('32');
-});
+  // 32 项双建议经历跨页补读、静默刷新和两批提交，单独留足 DOM 更新预算。
+}, 20_000);
 
 it('刷新补页失败不提交半份摘要或列表，重试后再一起更新', async () => {
   const intersect = pageObserver();
@@ -2534,8 +2537,7 @@ it('刷新补页失败不提交半份摘要或列表，重试后再一起更新'
   const refreshed = { ...structuredClone(initial), groupTotals: { clear: 61 } };
   refreshed.pages.clear.items[0].resource.title = '刷新后的标题';
   api.getRun.mockResolvedValueOnce(ok(structuredClone(refreshed))).mockRejectedValueOnce(new Error('第二页超时'));
-  document.dispatchEvent(new Event('visibilitychange'));
-  await settle();
+  await wakeWorkspace();
   expect(document.querySelectorAll('.group-clear .workspace-resource')).toHaveLength(60);
   expect(document.querySelector('.group-clear .group-count')?.textContent).toBe('60');
   expect(document.body.textContent).not.toContain('刷新后的标题');
