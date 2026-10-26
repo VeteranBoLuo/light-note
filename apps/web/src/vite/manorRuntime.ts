@@ -19,7 +19,7 @@ const firstScreenArt = (scene: PreloadScene) => [
     'farm/purifier-states-r53.webp', 'farm/purifier-plinth-r53.webp',
     'farm/workshop-states-r53.webp', 'incoming/dock-r3/aquarium.webp',
     'incoming/farm-r2/sprites/icon-bait.webp',
-    ...(scene.area ? [] : ['farm/bait-box-r36.webp']),
+    ...(scene.area ? [] : ['farm/bait-box-r57.webp']),
   ]),
 ];
 const imageVariable = (path: string) => `--manor-art-${createHash('sha256').update(path).digest('hex').slice(0, 12)}`;

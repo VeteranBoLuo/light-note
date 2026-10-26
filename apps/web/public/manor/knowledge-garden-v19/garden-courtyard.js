@@ -58,9 +58,11 @@ const GardenCourtyard = (() => {
     pond.querySelector(".ripples-size").setAttribute("transform", `scale(${1 / sx} ${1 / sy})`);
     const [x, y] = landing(...point, g), [ox, oy] = g.origin;
     const tug = phase === "bite" ? 55 : 0;
-    const tip = [g.tip[0] + (x - g.center[0]) * .2, g.tip[1] + tug];
+    const dx = x - g.center[0], dy = y - g.center[1];
+    const tip = [g.tip[0] + dx * (mobile() ? .4 : .2), g.tip[1] + tug + (mobile() ? dy * .16 : 0)];
     pond.dataset.landing = `${x.toFixed(1)},${y.toFixed(1)}`;
-    const control=g.rodControl||[(ox+tip[0])/2,tip[1]-90],curve=`M${ox} ${oy}Q${control[0]} ${control[1]} ${tip[0]} ${tip[1]}`;
+    const control = g.rodControl ? [g.rodControl[0] + (mobile() ? dx * .16 : 0), g.rodControl[1] + (mobile() ? dy * .08 : 0)] : [(ox+tip[0])/2,tip[1]-90];
+    const curve=`M${ox} ${oy}Q${control[0]} ${control[1]} ${tip[0]} ${tip[1]}`;
     pond.querySelector(".sea-rod").setAttribute("d",curve);
     pond.querySelector(".sea-rod-highlight").setAttribute("d",curve);
     const length=Math.hypot((control[0]-ox)*sx,(control[1]-oy)*sy)||1;
@@ -85,6 +87,30 @@ const GardenCourtyard = (() => {
     point.x = event.clientX; point.y = event.clientY;
     const local = point.matrixTransform(matrix.inverse());
     paintAim(pond, [local.x, local.y]);
+  }
+  function bindAim(hit, canAim, move) {
+    let touch = null;
+    const down = e => {
+      if (!canAim() || e.isPrimary === false) return;
+      if (e.pointerType === "touch" || e.pointerType === "pen") {
+        touch = e.pointerId;
+        hit.setPointerCapture?.(touch);
+      }
+      move(e);
+    };
+    const drag = e => {
+      if (!canAim() || ((e.pointerType === "touch" || e.pointerType === "pen") && e.pointerId !== touch)) return;
+      move(e);
+    };
+    const release = e => {
+      if (e.pointerId !== touch) return;
+      if (e.type === "pointerup" && canAim()) move(e);
+      touch = null;
+      if (hit.hasPointerCapture?.(e.pointerId)) hit.releasePointerCapture(e.pointerId);
+    };
+    const listeners = [["pointerdown",down],["pointermove",drag],["pointerup",release],["pointercancel",release],["lostpointercapture",release]];
+    listeners.forEach(([name, listener]) => hit.addEventListener(name,listener));
+    return () => {touch = null;listeners.forEach(([name, listener]) => hit.removeEventListener(name,listener));};
   }
   function mount() {
     const scene = document.querySelector(".garden-scene");
@@ -124,14 +150,8 @@ const GardenCourtyard = (() => {
       cursor = `url("${c.toDataURL()}") 31 28, crosshair`;
     }
     const hit = pond.querySelector(".pond-hit"); hit.style.cursor = cursor;
-    hit.addEventListener("pointermove", (e) => {
-      if (pond.classList.contains("casting") || e.pointerType === "touch") return;
-      aimAtPointer(e);
-    });
-    // 触屏没有悬停：按下时就把落点定在手指处，随后的点击从这里抛竿
-    hit.addEventListener("pointerdown", (e) => {
-      aimAtPointer(e);
-    });
+    // Hold and drag to aim; the normal release click casts at the final point.
+    bindAim(hit, () => !pond.classList.contains("casting"), aimAtPointer);
     hit.addEventListener("focus", () => {
       // 指针按下后浏览器才派发 focus；不能在这里覆盖刚选好的落点。
       if (document.documentElement.classList.contains("kbd-nav") && !pond.classList.contains("casting")) paintAim(pond, fishingGeometry(mobile()).center);
@@ -148,6 +168,6 @@ const GardenCourtyard = (() => {
     // 水面的反馈由浮漂下沉、涟漪和竿梢表达；文字由主热区和 live 播报提供。
     paintAim(pond, pond.dataset.landing?.split(",").map(Number) || fishingGeometry(mobile()).center, phase);
   }
-  return { refreshAim, mount, updateFishing, fishingGeometry, landing, aimAtPointer };
+  return { refreshAim, mount, updateFishing, fishingGeometry, landing, aimAtPointer, bindAim };
 })();
 if (typeof module !== "undefined") module.exports = GardenCourtyard;
