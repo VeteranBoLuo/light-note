@@ -35,14 +35,16 @@ describe('待办提醒通知状态', () => {
           { id: 'n1', type: 'todo_reminder', meta: { todoId: 'todo-pending' } },
           { id: 'n2', type: 'todo_reminder', meta: JSON.stringify({ todoId: 'todo-completed' }) },
           { id: 'n3', type: 'todo_reminder', meta: { todoId: 'todo-deleted' } },
+          { id: 'n4', type: 'todo_reminder', meta: { todoId: 'todo-skipped' } },
         ],
       ])
-      .mockResolvedValueOnce([[{ total: 3 }]])
+      .mockResolvedValueOnce([[{ total: 4 }]])
       .mockResolvedValueOnce([[{ unreadTotal: 1 }]])
       .mockResolvedValueOnce([
         [
           { id: 'todo-pending', status: 'pending' },
           { id: 'todo-completed', status: 'completed' },
+          { id: 'todo-skipped', status: 'pending', instanceState: 'skipped' },
         ],
       ]);
     const res = mockRes();
@@ -51,9 +53,9 @@ describe('待办提醒通知状态', () => {
 
     const payload = res.send.mock.calls[0][0];
     expect(payload.status).toBe(200);
-    expect(payload.data.items.map((item) => item.todoState)).toEqual(['pending', 'completed', 'unavailable']);
-    expect(query.mock.calls[3][0]).toContain('WHERE user_id = ? AND del_flag = 0 AND id IN (?,?,?)');
-    expect(query.mock.calls[3][1]).toEqual(['user-1', 'todo-pending', 'todo-completed', 'todo-deleted']);
+    expect(payload.data.items.map((item) => item.todoState)).toEqual(['pending', 'completed', 'unavailable', 'unavailable']);
+    expect(query.mock.calls[3][0]).toContain('WHERE user_id = ? AND del_flag = 0 AND id IN (?,?,?,?)');
+    expect(query.mock.calls[3][1]).toEqual(['user-1', 'todo-pending', 'todo-completed', 'todo-deleted', 'todo-skipped']);
     for (const callIndex of [0, 1, 2]) {
       expect(query.mock.calls[callIndex][0]).toContain("JSON_EXTRACT(meta, '$.kind')");
       expect(query.mock.calls[callIndex][0]).toContain("IN ('reply', 'mention')");

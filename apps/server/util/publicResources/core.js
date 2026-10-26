@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import pool from '../../db/index.js';
+import { queueNotificationSourceChange } from '../notificationRealtimeEvents.js';
 import { publicResourceSchemaReady } from './schema.js';
 
 export class PublicResourceError extends Error {
@@ -179,6 +180,7 @@ export async function audit(
   },
 ) {
   const publicId = randomUUID();
+  queueNotificationSourceChange(db, { kind: 'publication', ids: [publication.public_id] });
   const [result] = await db.query(
     'INSERT INTO public_resource_actions(public_id,publication_id,revision_id,actor_id,action,reason,version) VALUES(?,?,?,?,?,?,?)',
     [publicId, publication.id, revision, actor, action, reason, resultVersion],

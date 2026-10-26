@@ -1,4 +1,5 @@
 import { publicResourcesZh } from './publicResources';
+import { cloudFileScopeZh } from './cloudFileScope';
 import { profileBackgroundsZh, profileBackgroundItemsZh } from './profileBackgrounds';
 import { profileAppearanceZh } from './profileAppearance';
 import { MAKEUP_WINDOW_DAYS } from '@lightnote/shared';
@@ -7177,6 +7178,7 @@ export default {
     },
   },
   cloudSpace: {
+    ...cloudFileScopeZh,
     batchPreview: '预览',
     previewFile: '预览 {name}',
     pinFailed: '置顶状态更新失败，请稍后重试',

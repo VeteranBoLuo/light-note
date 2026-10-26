@@ -643,6 +643,7 @@
   }
 
   useNotificationRealtime(() => {
+    if (detailVisible.value && detailItem.value) void refreshNotificationDetail();
     if (props.page || open.value) {
       visibleRefreshQueued = true;
       void refreshVisibleNotifications();
@@ -653,6 +654,35 @@
   let visibleRefreshQueued = false;
   const notificationWrites = ref(0);
   let notificationMutationVersion = 0;
+  let detailRefreshGeneration = 0;
+  watch(detailVisible, () => {
+    detailRefreshGeneration++;
+  });
+  async function refreshNotificationDetail() {
+    const id = detailItem.value?.id;
+    if (!id) return;
+    const generation = ++detailRefreshGeneration;
+    const owner = user.id;
+    try {
+      const page = await fetchList({ notificationId: id, pageSize: 1 }, { throwOnError: true, syncUnread: false });
+      if (
+        generation !== detailRefreshGeneration ||
+        owner !== user.id ||
+        !detailVisible.value ||
+        detailItem.value?.id !== id
+      )
+        return;
+      const current = page.targetFound ? page.items.find((item) => item.id === id) : null;
+      if (current) detailItem.value = current;
+      else {
+        detailVisible.value = false;
+        detailItem.value = null;
+        message.warning(t('browserPush.unavailable'));
+      }
+    } catch {
+      /* Keep the current modal on transient transport failure. */
+    }
+  }
   async function withNotificationWrite(action: () => Promise<void>) {
     notificationWrites.value++;
     notificationMutationVersion++;
@@ -680,13 +710,22 @@
     const pages = currentPage.value;
     const firstPage = Math.floor(skippedItems / pageSize) + 1;
     const skipped = skippedItems;
+    const focusedId = targetId.value;
     const tab = activeTab.value;
     const nextItems: NotificationItem[] = [];
     let nextTotal = total.value;
+    let nextSkipped = skipped;
+    let nextLastPage = pages;
+    let lastLoadedPage = firstPage;
+    let nextLocateState = locateState.value;
+    let targetLocated = false;
     try {
-      for (let pageNumber = firstPage; pageNumber <= pages; pageNumber++) {
+      for (let pageNumber = firstPage; pageNumber <= nextLastPage; pageNumber++) {
+        const locateTarget = focusedId && !targetLocated;
         const page = await fetchList(
-          { currentPage: pageNumber, pageSize, type: tab },
+          locateTarget
+            ? { notificationId: focusedId, pageSize, type: tab }
+            : { currentPage: pageNumber, pageSize, type: tab },
           { throwOnError: true, syncUnread: false },
         );
         if (
@@ -696,11 +735,27 @@
           tab !== activeTab.value
         )
           return;
+        if (locateTarget) {
+          targetLocated = true;
+          // Re-locate the target directly, even if other removals have shifted thousands of earlier rows.
+          pageNumber = page.currentPage;
+          nextSkipped = (pageNumber - 1) * pageSize;
+          nextLastPage = pageNumber + (pages - firstPage);
+          nextLocateState =
+            page.targetFound && page.items.some((item) => item.id === focusedId) ? 'found' : 'unavailable';
+        }
         nextItems.push(...page.items);
         nextTotal = page.total;
+        lastLoadedPage = pageNumber;
+        if (nextSkipped + nextItems.length >= nextTotal) break;
       }
       items.value = nextItems;
-      total.value = Math.max(0, nextTotal - skipped);
+      total.value = Math.max(0, nextTotal - nextSkipped);
+      skippedItems = nextSkipped;
+      currentPage.value = lastLoadedPage;
+      if (focusedId) locateState.value = nextLocateState;
+      if (activeNotification.value && !nextItems.some((item) => item.id === activeNotification.value?.id))
+        notificationActionsOpen.value = false;
     } catch {
       /* Retain the current list on transient refresh failures. */
     } finally {
@@ -716,6 +771,7 @@
   onUnmounted(() => {
     notificationDisposed = true;
     listGeneration++;
+    detailRefreshGeneration++;
     visibleRefreshQueued = false;
     window.removeEventListener(NOTIFICATION_PANEL_OPEN_EVENT, handleExternalOpen);
   });
@@ -723,6 +779,13 @@
     () => user.id,
     () => {
       listGeneration++;
+      detailRefreshGeneration++;
+      detailVisible.value = false;
+      detailItem.value = null;
+      wrVisible.value = false;
+      wrData.value = null;
+      notificationActionsOpen.value = false;
+      activeNotification.value = null;
       items.value = [];
       targetId.value = '';
       locateState.value = 'idle';

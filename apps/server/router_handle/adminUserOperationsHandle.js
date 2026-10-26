@@ -1,5 +1,6 @@
 import { acquireAccountAiLifecycleConnection } from '../util/accountAiLifecycleLock.js';
 import pool from '../db/index.js';
+import { queueNotificationChange, queueNotificationSourceChange } from '../util/notificationRealtimeEvents.js';
 import { resultData } from '../util/common.js';
 import { removeUserSessions } from '../util/sessionStore.js';
 import { stableAgentErrorCode } from '../util/agent/logSafety.js';
@@ -104,6 +105,10 @@ export async function updateAdminUser(req, res) {
       nextRole,
       targetUserId,
     ]);
+    if (nextRole !== before.role) {
+      queueNotificationChange(connection, [targetUserId]);
+      queueNotificationSourceChange(connection, { kind: 'actor', ids: [targetUserId] });
+    }
     const receipt = await finishAdminAction(actionContext, {
       outcome: 'succeeded',
       metadata: {
@@ -163,6 +168,8 @@ async function setAdminUserDisabled(req, res, disabled) {
     }
     const nextFlag = disabled ? 1 : 0;
     const [result] = await connection.query('UPDATE user SET del_flag = ? WHERE id = ?', [nextFlag, targetUserId]);
+    queueNotificationChange(connection, [targetUserId]);
+    queueNotificationSourceChange(connection, { kind: 'actor', ids: [targetUserId] });
     const receipt = await finishAdminAction(actionContext, {
       outcome: 'succeeded',
       metadata: { affectedRows: Number(result.affectedRows || 0), resultingStatus: disabled ? 'disabled' : 'active' },

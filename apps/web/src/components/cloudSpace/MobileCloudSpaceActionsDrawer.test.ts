@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createApp, h, nextTick } from 'vue';
 import { createI18n } from 'vue-i18n';
+import { cloudFileScopeZh } from '@/i18n/locales/cloudFileScope';
 import MobileCloudSpaceActionsDrawer from './MobileCloudSpaceActionsDrawer.vue';
 
 vi.mock('@/components/base/BasicComponents/BDrawer.vue', () => ({
@@ -76,6 +77,7 @@ function mountDrawer(props: Record<string, unknown> = {}) {
         navigation: { resourceCenter: '资源中心', toolbox: '知识工坊' },
         organize: { title: '资源整理' },
         cloudSpace: {
+          ...cloudFileScopeZh,
           mobileActionsTitle: '云空间操作',
           newFolder: '新建文件夹',
           manageFolders: '文件夹管理',

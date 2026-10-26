@@ -1,4 +1,5 @@
 import { publicResourcesEn } from './publicResources';
+import { cloudFileScopeEn } from './cloudFileScope';
 import { profileBackgroundsEn, profileBackgroundItemsEn } from './profileBackgrounds';
 import { profileAppearanceEn } from './profileAppearance';
 import { MAKEUP_WINDOW_DAYS } from '@lightnote/shared';
@@ -7526,6 +7527,7 @@ export default {
     },
   },
   cloudSpace: {
+    ...cloudFileScopeEn,
     batchPreview: 'Preview',
     previewFile: 'Preview {name}',
     pinFailed: 'Could not update pin. Try again later.',

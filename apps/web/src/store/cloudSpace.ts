@@ -5,6 +5,7 @@ import i18n from '@/i18n';
 import { RESOURCE_LIST_PAGE_SIZE, mergeResourcePage } from '@/utils/resourcePagination';
 import type { CloudFolderNode } from '@/types/cloudFolder';
 import { cloudFolderAncestors, normalizeCloudFolderList } from '@/utils/cloudFolderTree';
+import useUserStore from './useUser';
 
 export type CloudFileSortField = 'createTime' | 'fileName' | 'fileSize';
 export type CloudFileSortOrder = 'asc' | 'desc';
@@ -74,6 +75,7 @@ export default defineStore('dom', {
         folder?: { id: string; name: string };
         searchFileName: string;
         loading: boolean;
+        fileError: boolean;
         folderLoading: boolean;
         loadingMore: boolean;
         filePage: number;
@@ -106,6 +108,7 @@ export default defineStore('dom', {
       },
       searchFileName: '',
       loading: false,
+      fileError: false,
       folderLoading: false,
       loadingMore: false,
       filePage: 0,
@@ -118,7 +121,9 @@ export default defineStore('dom', {
       cacheImgArr: [],
       draggingFile: null,
     },
-  getters: {},
+  getters: {
+    includeDescendants: () => useUserStore().preferences.cloudIncludeDescendants === true,
+  },
   actions: {
     /**
      * 拉取当前文件夹/筛选下的文件。
@@ -133,6 +138,7 @@ export default defineStore('dom', {
 
       const requestVersion = append ? this.fileRequestVersion : ++this.fileRequestVersion;
       const targetPage = append ? this.filePage + 1 : 1;
+      if (!append) this.fileError = false;
       if (append) {
         this.loadingMore = true;
       } else if (silent) {
@@ -153,6 +159,7 @@ export default defineStore('dom', {
             fileName: this.searchFileName,
             category: this.typeCheckValue,
             folderId: this.folder?.id ?? 'all',
+            includeDescendants: this.includeDescendants,
             pendingOnly: this.pendingOnly,
           },
           sort: this.fileSort,
@@ -160,6 +167,7 @@ export default defineStore('dom', {
         if (requestVersion !== this.fileRequestVersion) return false;
         // 校验业务码:失败时保留旧列表并兜底为数组,避免 fileList 被置成 undefined 导致模板 .length 抛错。
         if (res?.status !== 200) {
+          if (!append) this.fileError = true;
           this.fileList = this.fileList ?? [];
           return false;
         }
@@ -171,6 +179,7 @@ export default defineStore('dom', {
         this.fileHasMore = Boolean(res.data?.hasMore);
         return true;
       } catch (error) {
+        if (requestVersion === this.fileRequestVersion && !append) this.fileError = true;
         console.warn('加载云空间文件失败:', error);
         return false;
       } finally {
@@ -190,6 +199,7 @@ export default defineStore('dom', {
         fileName: this.searchFileName,
         category: this.typeCheckValue,
         folderId: this.folder?.id ?? 'all',
+        includeDescendants: this.includeDescendants,
         pendingOnly: this.pendingOnly,
       };
       const sort = this.fileSort;
@@ -354,6 +364,7 @@ export default defineStore('dom', {
       this.searchFileName = '';
       this.pendingOnly = false;
       this.loading = options.showLoading === true;
+      this.fileError = false;
       this.folderLoading = options.showLoading === true;
       this.loadingMore = false;
       this.filePage = 0;

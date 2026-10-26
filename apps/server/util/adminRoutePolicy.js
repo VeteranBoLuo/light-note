@@ -108,7 +108,11 @@ declare(ADMIN_POLICIES.ACCOUNT_WRITE, 'community', [
   ['PUT', '/community/preferences/me'],
 ]);
 
-declare(ADMIN_POLICIES.ACCOUNT_WRITE, 'file', [['GET', '/file/image/:id']]);
+declare(ADMIN_POLICIES.ACCOUNT_WRITE, 'file', [
+  ['GET', '/file/image/:id'],
+  ['GET', '/file/preferences'],
+  ['POST', '/file/preferences'],
+]);
 
 declare(ADMIN_POLICIES.BACKGROUND_WRITE, 'note', [['POST', '/image-previews/retry']]);
 
