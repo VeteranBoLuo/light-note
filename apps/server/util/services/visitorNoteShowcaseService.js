@@ -75,7 +75,7 @@ export function buildVisitorShowcasePlan(owner, rows) {
     if (remaining.length) {
       content +=
         definition.type === 'html'
-          ? `<h2>相关资料与项目</h2><ul>${remaining.map(([href, label]) => `<li><a href="${esc(href)}">${esc(label)}</a></li>`).join('')}</ul>`
+          ? `<div class="note-template-page ln-note-layout"><div class="ln-note-closing"><h2>相关资料与项目</h2><ul>${remaining.map(([href, label]) => `<li><a href="${esc(href)}">${esc(label)}</a></li>`).join('')}</ul></div></div>`
           : `\n\n## 相关资料与项目\n\n${remaining.map(([href, label]) => `- [${label.replaceAll('[', '').replaceAll(']', '').replaceAll('\n', ' ')}](${href})`).join('\n')}\n`;
     }
     content = sanitizePersistedNoteContent(content, definition.type, 'visitor-showcase');

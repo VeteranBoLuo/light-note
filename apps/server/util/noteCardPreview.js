@@ -140,7 +140,11 @@ function inspectHtmlCardPreview(content) {
 
   const flush = () => {
     const text = normalizePreviewLine(buffer);
-    if (text) (imageUrl ? afterImage : beforeImage).push(text);
+    if (text) {
+      (imageUrl ? afterImage : beforeImage).push(text);
+      // 只计已出现的正文段落；section/div/figure 等排版包装和空段落不占首图预算。
+      if (!imageUrl) blocks += 1;
+    }
     buffer = '';
   };
 
@@ -161,13 +165,12 @@ function inspectHtmlCardPreview(content) {
       const isBlock = !childSummaryIgnored && BLOCK_TAGS.has(tagName);
       if (isBlock) {
         flush();
-        if (!imageUrl && !childImageLocationIgnored) blocks += 1;
       }
       if (
         !imageUrl &&
         !childImageLocationIgnored &&
         textLength <= NOTE_CARD_PREVIEW_MAX_TEXT &&
-        blocks <= NOTE_CARD_PREVIEW_MAX_BLOCKS &&
+        blocks + (normalizePreviewLine(buffer) ? 1 : 0) <= NOTE_CARD_PREVIEW_MAX_BLOCKS &&
         (tagName === 'img' || tagName === 'source')
       ) {
         const candidate = tagName === 'img' ? node.attribs?.src : sourceFromSrcset(node.attribs?.srcset);

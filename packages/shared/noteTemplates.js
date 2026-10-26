@@ -27,208 +27,228 @@ function renderHtml(key, locale, example) {
   const t = (zh, en) => (locale === "zh-CN" ? zh : en);
   const value = (prompt, sample) => (example ? sample : hint(prompt));
   const date = "{{date}}";
-  if (key === "daily")
+  if (key === "daily") {
+    const entries = example
+      ? [
+          [
+            true,
+            t("完成项目说明初稿", "Finish the first project brief"),
+            t(
+              "已补齐目标、范围和分工，等待讨论定稿。相关资料可放在这一项下。",
+              "Goals, scope and responsibilities are ready for review. Keep related references with this item.",
+            ),
+          ],
+          [
+            true,
+            t("整理常用参考资料", "Organize frequently used references"),
+            t(
+              "合并重复链接，为常用文档补充用途说明。",
+              "Merged duplicate links and added a purpose to frequently used documents.",
+            ),
+          ],
+          [
+            false,
+            t("确认历史方案", "Confirm the earlier proposal"),
+            t(
+              "已联系资料负责人，等待补充；收到后对照初稿检查遗漏。",
+              "Contacted the document owner; awaiting a copy to check the draft for omissions.",
+            ),
+          ],
+        ]
+      : [
+          [
+            false,
+            t("事项一：填写具体任务", "Item 1: name a specific task"),
+            t(
+              "进展：做到哪一步？结果或资料：留下产出或链接。",
+              "Progress: where are you now? Outcome or reference: keep the result or a link.",
+            ),
+          ],
+          [
+            false,
+            t("事项二：填写具体任务", "Item 2: name a specific task"),
+            t(
+              "补充进展、结果或需要继续跟进的内容。",
+              "Add progress, an outcome or anything that needs follow-up.",
+            ),
+          ],
+          [
+            false,
+            t("事项三：按需添加或删除", "Item 3: add or remove as needed"),
+            t(
+              "未完成的事项也可以保留，写清下一步。",
+              "Keep unfinished work here too, with a clear next step.",
+            ),
+          ],
+        ];
+    const today = entries
+      .map(
+        ([done, title, detail]) =>
+          `<div class="ln-note-entry">${tasks([[done, `<strong>${title}</strong>`]])}<p class="ln-note-task-detail${example ? "" : " ln-note-hint"}">${detail}</p></div>`,
+      )
+      .join("");
     return page(
       key,
       head(t("今天的工作", "Today's work"), `${date} · {{weekday}}`) +
         block(
-          t("今日重点", "Today's focus"),
-          tasks(
-            example
-              ? [
-                  [
-                    true,
-                    t("完成项目说明初稿", "Finish the first project brief"),
-                  ],
-                  [
-                    true,
-                    t(
-                      "把散落的参考资料放回项目",
-                      "Bring scattered references into the project",
-                    ),
-                  ],
-                  [
-                    false,
-                    t(
-                      "确认本周讨论的时间",
-                      "Confirm a time for this week’s discussion",
-                    ),
-                  ],
-                ]
-              : [
-                  [
-                    false,
-                    t(
-                      "写下今天最想推进的一件事",
-                      "One thing you want to move forward today",
-                    ),
-                  ],
-                ],
-          ),
+          t("今日事项", "Today's tasks"),
+          today,
           "focus",
-          t("最多 3 件", "Up to 3"),
+          t("逐项记录 · 完成后勾选", "Track each item · check when done"),
         ) +
         columns(
           block(
-            t("完成与进展", "Progress & outcomes"),
-            value(
-              t(
-                "完成了什么？留下结果或相关资料。",
-                "What moved forward? Keep the result or a useful reference.",
-              ),
-              `<div class="ln-note-entry"><h3>${t("项目说明已经有了第一版", "The first project brief is ready")}</h3>${p(t("补齐目标、范围和分工，待讨论后定稿。", "Goals, scope and responsibilities are ready for discussion."))}</div>` +
-                `<div class="ln-note-entry"><h3>${t("资料入口整理好了", "References are now in one place")}</h3>${p(t("合并重复链接，给常用文档补了一句用途说明。", "Merged duplicate links and added a purpose to each frequently used document."))}</div>`,
+            t("明日计划", "Tomorrow's plan"),
+            tasks(
+              example
+                ? [
+                    [
+                      false,
+                      t(
+                        "补上历史方案，对照检查遗漏",
+                        "Compare the earlier proposal and check for omissions",
+                      ),
+                    ],
+                    [
+                      false,
+                      t(
+                        "把讨论问题提前发给参会人",
+                        "Send discussion questions to the participants",
+                      ),
+                    ],
+                  ]
+                : [
+                    [
+                      false,
+                      t("优先推进的一件事", "The first thing to move forward"),
+                    ],
+                    [false, t("需要接着跟进的事项", "An item to follow up")],
+                  ],
             ),
           ) +
             block(
-              t("卡点与协作", "Blockers & support"),
-              value(
-                t("有需要帮助的地方再写。", "Add this when you need help."),
-                p(
-                  t(
-                    "还缺一份历史方案。请资料负责人补充，其他内容可以继续推进。",
-                    "An earlier proposal is missing. Ask its owner for a copy; other work can continue.",
-                  ),
-                ),
-              ),
+              t("问题与协作", "Blockers & support"),
+              example
+                ? p(
+                    t(
+                      "<strong>问题：</strong>历史资料尚未补齐。",
+                      "<strong>Blocker:</strong> The earlier proposal is still missing.",
+                    ),
+                  ) +
+                    p(
+                      t(
+                        "<strong>协作：</strong>请资料负责人补充来源。",
+                        "<strong>Support:</strong> Ask the document owner for the source.",
+                      ),
+                    ) +
+                    p(
+                      t(
+                        "<strong>下一步：</strong>明日上午跟进，其他工作继续推进。",
+                        "<strong>Next step:</strong> Follow up tomorrow morning; other work can continue.",
+                      ),
+                    )
+                : hint(
+                    t("问题：卡在哪里？", "Blocker: what is holding you up?"),
+                  ) +
+                    hint(
+                      t(
+                        "协作：需要谁提供什么帮助？",
+                        "Support: who can help, and how?",
+                      ),
+                    ) +
+                    hint(
+                      t(
+                        "下一步：准备如何跟进？",
+                        "Next step: how will you follow up?",
+                      ),
+                    ),
               "side-note",
               t("选填", "Optional"),
             ),
           "daily",
         ) +
-        block(
-          t("明日安排", "Tomorrow"),
-          tasks(
-            example
-              ? [
-                  [
-                    false,
-                    t(
-                      "补上历史方案，对照检查遗漏",
-                      "Compare the earlier proposal and check for omissions",
-                    ),
-                  ],
-                  [
-                    false,
-                    t(
-                      "把讨论问题提前发给参会人",
-                      "Send discussion questions to the participants",
-                    ),
-                  ],
-                ]
-              : [[false, t("从哪一步开始？", "Where will you start?")]],
-          ),
-          "next",
-        ) +
         footer(
-          t("随手记", "A quick note"),
+          t("备注", "Notes"),
           t(
             example
-              ? "整理资料时补一句“为什么留下它”，下次更容易接着用。"
-              : "留一句今天的新发现，也可以删掉这一行。",
+              ? "整理资料时补一句用途，下次更容易接着用。"
+              : "临时信息或今日发现；不需要时可删除。",
             example
-              ? "A short note about why you saved something makes it easier to use later."
-              : "Keep one small discovery, or remove this line.",
+              ? "A short purpose makes a saved reference easier to use later."
+              : "Extra context or a discovery; remove this section when not needed.",
           ),
         ),
     );
+  }
   if (key === "weekly")
     return page(
       key,
       head(t("本周工作回顾", "This week in review"), date) +
-        `<div class="ln-note-summary"><span>${t("本周概览", "At a glance")}</span>${p(t(example ? "项目说明完成初稿，资料入口已整理。下周集中确认分工，开始小范围试用。" : "用一两句话概括本周最重要的进展。", example ? "The project brief and reference collection are ready. Next week, confirm responsibilities and try the workflow with a small group." : "Summarize the most important progress in one or two sentences."))}</div>` +
-        block(
-          t("本周完成", "Progress this week"),
-          table(
+        `<div class="ln-note-summary">${p(t(example ? "项目说明完成初稿，资料入口已整理。下周先确认尚未解决的问题。" : "用一两句话概括本周的收获；不需要时可删除。", example ? "The project brief and reference collection are ready. Next week, clarify the remaining questions." : "Summarize the week in a sentence or two; remove this introduction if unnecessary."))}</div>` +
+        section(
+          t("01 · 本周完成", "01 · Completed this week"),
+          example
+            ? list(
+                t(
+                  [
+                    "项目说明形成初稿：目标与边界已明确，等待讨论定稿。",
+                    "常用资料已有统一入口，补充了来源与用途。",
+                  ],
+                  [
+                    "Drafted the project brief with goals and scope ready for review.",
+                    "Collected common references and added their sources and purpose.",
+                  ],
+                ),
+              )
+            : list(
+                t(
+                  [
+                    "事项一：做了什么，形成了什么结果？",
+                    "事项二：补充成果或相关链接。",
+                  ],
+                  [
+                    "Item 1: what did you do, and what changed?",
+                    "Item 2: add an outcome or a useful link.",
+                  ],
+                ),
+              ),
+        ) +
+        section(
+          t("02 · 问题与思考", "02 · Questions & reflections"),
+          value(
             t(
-              ["事项", "进展", "结果 / 相关资料"],
-              ["Work", "Progress", "Outcome / reference"],
+              "哪里遇到了困难？哪些做法值得保留或调整？",
+              "What was difficult? What should continue or change?",
             ),
+            p(
+              t(
+                "整理得更细不一定更好找。与其继续拆分类，不如先补上资料的用途。历史方案尚未补齐，需要资料负责人协助。",
+                "More categories do not necessarily make things easier to find. Add a purpose first. The document owner still needs to supply the earlier proposal.",
+              ),
+            ),
+          ),
+        ) +
+        section(
+          t("03 · 下周计划", "03 · Next week"),
+          list(
             example
               ? t(
                   [
-                    ["项目说明", "已完成初稿", "目标与范围清楚，等待讨论定稿"],
-                    ["资料归档", "已完成", "常用链接集中到项目笔记"],
-                    ["小范围试用", "待开始", "先邀请 3 位同事走一遍流程"],
+                    "确认初稿，补齐缺失材料。",
+                    "用一次实际任务检验资料是否容易找回。",
                   ],
                   [
-                    [
-                      "Project brief",
-                      "Draft ready",
-                      "Goals and scope are ready for review",
-                    ],
-                    [
-                      "Reference collection",
-                      "Done",
-                      "Common links are in the project note",
-                    ],
-                    [
-                      "Small trial",
-                      "Not started",
-                      "Invite three colleagues to try the workflow",
-                    ],
+                    "Review the draft and complete missing references.",
+                    "Try finding a reference for an actual task.",
                   ],
                 )
-              : [
-                  t(
-                    ["填写本周的主要事项", "已完成 / 进行中", "结果或链接"],
-                    [
-                      "A key item from this week",
-                      "Done / in progress",
-                      "Outcome or link",
-                    ],
-                  ),
-                ],
-          ),
-          "open",
-        ) +
-        columns(
-          block(
-            t("问题与协作", "Issues & support"),
-            value(
-              t(
-                "有哪些影响进度的问题？需要什么支持？",
-                "What affects progress, and what help is needed?",
-              ),
-              p(
-                t(
-                  "旧资料的归属还不够清楚。下周请相关同事补充来源，避免重复整理。",
-                  "Ownership of older documents is unclear. Ask colleagues to add sources before reorganizing them.",
+              : t(
+                  ["优先事项：准备完成什么？", "需要谁协作，何时跟进？"],
+                  [
+                    "Priority: what do you plan to finish?",
+                    "Who can help, and when will you follow up?",
+                  ],
                 ),
-              ),
-            ),
-            "quiet",
-          ) +
-            block(
-              t("下周计划", "Next week"),
-              list(
-                example
-                  ? t(
-                      [
-                        "确认分工与完成时间",
-                        "试用一次资料回找流程",
-                        "记录需要调整的地方",
-                      ],
-                      [
-                        "Confirm owners and dates",
-                        "Try finding a saved document",
-                        "Record what needs adjustment",
-                      ],
-                    )
-                  : [t("最优先的一件事", "Your first priority")],
-              ),
-              "quiet",
-            ),
-        ) +
-        footer(
-          t("一点复盘", "Reflection"),
-          t(
-            example
-              ? "先统一命名和入口，比一次性设计很多分类更容易开始。"
-              : "有什么值得继续，或下周换个做法？",
-            example
-              ? "Consistent names and a shared starting point made it easier to begin."
-              : "What should continue, or change next week?",
           ),
         ),
     );
@@ -370,15 +390,12 @@ function renderHtml(key, locale, example) {
               "选一个小行动，或留下一个还想追问的问题。",
               "Choose a small action or a question to explore.",
             ),
-            tasks([
-              [
-                false,
-                t(
-                  "从最近的一条收藏开始，补上一句用途说明",
-                  "Add a purpose to one recent bookmark",
-                ),
-              ],
-            ]),
+            p(
+              t(
+                "从最近的一条收藏开始，补上一句用途说明。还想追问：哪些资料只保留入口就足够？",
+                "Add a purpose to one recent bookmark. A question to keep: when is saving the link enough?",
+              ),
+            ),
           ),
         ) +
         footer(
@@ -418,67 +435,66 @@ function renderHtml(key, locale, example) {
           "focus",
         ) +
         `<div class="ln-note-scope"><div><h3>${t("这次做", "In scope")}</h3>${p(t(example ? "常用文档、参考链接和会议记录" : "写清范围", example ? "Common documents, links and meeting notes" : "Describe the scope"))}</div><div><h3>${t("暂时不做", "Not yet")}</h3>${p(t(example ? "历史资料全量搬迁、复杂分类" : "写清边界", example ? "Moving all historical files or creating complex categories" : "Describe the boundary"))}</div></div>` +
-        block(
-          t("推进计划", "Milestones"),
-          table(
-            t(["阶段", "交付物", "完成时间"], ["Stage", "Deliverable", "Due"]),
-            example
-              ? t(
-                  [
-                    ["01 整理", "可浏览的资料清单", "第 1 周"],
-                    ["02 试用", "问题与反馈记录", "第 2 周"],
-                    ["03 调整", "更新后的项目说明", "第 2 周"],
-                  ],
-                  [
-                    ["01 Organize", "A reference collection", "Week 1"],
-                    ["02 Try", "Feedback and issues", "Week 2"],
-                    ["03 Adjust", "An updated project brief", "Week 2"],
-                  ],
-                )
-              : t(
-                  [
-                    ["第一步", "可检查的结果", "日期"],
-                    ["第二步", "可检查的结果", "日期"],
-                  ],
-                  [
-                    ["First step", "An observable result", "Date"],
-                    ["Second step", "An observable result", "Date"],
-                  ],
-                ),
-          ),
-          "open",
-        ) +
-        columns(
-          block(
-            t("需要留意", "Watch out for"),
-            value(
-              t("有哪些依赖或风险？", "Any dependencies or risks?"),
-              p(
-                t(
-                  "旧文件来源不完整，先标记待确认，保留原件。",
-                  "Some older files have no source. Mark them for review and keep the originals.",
-                ),
-              ),
-            ),
-            "quiet",
-          ) +
-            block(
-              t("现在就做", "Start here"),
-              tasks([
+        section(
+          t("阶段安排", "Milestones"),
+          (example
+            ? t(
                 [
-                  false,
-                  t(
-                    example
-                      ? "列出当前项目最常用的 10 份资料"
-                      : "写下可以立即开始的一步",
-                    example
-                      ? "List the ten most-used references in the project"
-                      : "One action you can start now",
-                  ),
+                  [
+                    "01 · 盘点 · 第 1 周",
+                    "列出缺失资料，确认每项来源，形成资料清单。",
+                  ],
+                  ["02 · 整理 · 第 2 周", "建立统一入口，产出资料包初稿。"],
+                  ["03 · 交接 · 第 2 周", "请接手人独立查找，按反馈补充说明。"],
                 ],
-              ]),
-              "quiet",
-            ),
+                [
+                  [
+                    "01 · Inventory · Week 1",
+                    "List missing references and confirm sources.",
+                  ],
+                  [
+                    "02 · Organize · Week 2",
+                    "Create a shared starting point and a draft reference pack.",
+                  ],
+                  [
+                    "03 · Handoff · Week 2",
+                    "Ask a colleague to find references independently and improve the instructions.",
+                  ],
+                ],
+              )
+            : t(
+                [
+                  ["01 · 第一阶段 · 日期", "填写可检查的交付物。"],
+                  ["02 · 第二阶段 · 日期", "填写交付物与验收方式。"],
+                ],
+                [
+                  [
+                    "01 · First stage · Date",
+                    "Name an observable deliverable.",
+                  ],
+                  [
+                    "02 · Second stage · Date",
+                    "Describe the deliverable and how to check it.",
+                  ],
+                ],
+              )
+          )
+            .map(
+              ([title, detail]) =>
+                `<div class="ln-note-milestone"><h3>${title}</h3>${p(detail)}</div>`,
+            )
+            .join(""),
+        ) +
+        footer(
+          t("依赖与风险", "Dependencies & risks"),
+          t(
+            example
+              ? "历史材料不完整时标注缺口，保留原件；不要假定已经补齐。"
+              : "需要哪些支持？有哪些尚未确认的条件？",
+            example
+              ? "Mark missing historical references and keep the originals; do not assume the gaps are filled."
+              : "What support is needed? Which conditions remain unconfirmed?",
+          ),
         ),
     );
   if (key === "review")
@@ -486,76 +502,60 @@ function renderHtml(key, locale, example) {
       key,
       head(
         t(
-          example ? "第一次资料整理，我们学到了什么" : "复盘事项",
-          example
-            ? "What we learned from the first attempt"
-            : "Topic to review",
+          example ? "一次交接之后" : "复盘事项",
+          example ? "After a handoff" : "Topic to review",
         ),
         date,
       ) +
-        `<div class="ln-note-review-facts"><div><h2>${t("原本希望", "What we expected")}</h2>${p(t(example ? "大家能独立找到项目常用资料。" : "最初预期是什么？", example ? "Everyone could find common project references independently." : "What was the initial expectation?"))}</div><div><h2>${t("实际发生", "What happened")}</h2>${p(t(example ? "大部分资料能找到，两份文件的命名仍让人困惑。" : "记录可核对的事实。", example ? "Most references were easy to find, but two file names were confusing." : "Keep verifiable facts."))}</div></div>` +
-        block(
-          t("原因与发现", "Causes & observations"),
-          value(
+        [
+          [
+            t("原本预期", "Expected"),
             t(
-              "哪些因素带来了差异？先写能确认的。",
-              "What caused the difference? Start with what you can verify.",
+              example ? "同事可以直接找到三份常用文档。" : "最初希望发生什么？",
+              example
+                ? "A colleague could find three common documents independently."
+                : "What did you expect?",
             ),
-            p(
-              t(
-                "按项目放在一起解决了入口分散的问题；只用“最终版”命名，仍然看不出文件的用途。",
-                "Grouping by project helped. Names such as “final version” still did not explain what the files were for.",
-              ),
+          ],
+          [
+            t("实际发生", "Observed"),
+            t(
+              example
+                ? "两份很快找到；另一份叫“最终版”，需要额外询问。"
+                : "记录可以核对的事实，区分观察与判断。",
+              example
+                ? "Two were easy to find. The one named “final” required clarification."
+                : "Record verifiable facts and separate observations from judgments.",
             ),
-          ),
-          "open",
-        ) +
-        columns(
-          block(
-            t("继续保持", "Keep"),
-            value(
-              t("有效的做法", "What worked"),
-              p(t("统一资料入口", "One place to find references")),
+          ],
+          [
+            t("原因分析", "Analysis"),
+            t(
+              example
+                ? "目录解决了入口问题，名称却没有表达用途。尚不能确认换名后是否对所有人都有帮助。"
+                : "哪些因素造成差异？哪些解释仍需验证？",
+              example
+                ? "The collection solved access, but the name did not express purpose. Whether renaming helps everyone is still unconfirmed."
+                : "What caused the difference? Which explanations need checking?",
             ),
-            "retro ln-note-keep",
-          ) +
-            block(
-              t("减少或停止", "Reduce or stop"),
-              value(
-                t("投入大、帮助小的做法", "Effort with little value"),
-                p(t("反复调整分类", "Repeatedly changing categories")),
-              ),
-              "retro ln-note-stop",
-            ) +
-            block(
-              t("下次尝试", "Try next"),
-              value(
-                t("一个值得试的改变", "A change worth trying"),
-                p(
-                  t("在文件名中写明用途", "Describe the purpose in file names"),
-                ),
-              ),
-              "retro ln-note-try",
+          ],
+          [
+            t("下次改变", "Next attempt"),
+            t(
+              example
+                ? "在文件名中加入用途。下次交接前请同事再找一次，观察是否仍需询问。"
+                : "尝试一个具体改变：谁来做、何时做、怎样判断是否有效？",
+              example
+                ? "Add the purpose to the file name. Before the next handoff, ask a colleague to find it and observe whether they still need help."
+                : "Try one concrete change: who, when, and how will you judge the result?",
             ),
-          "retro",
-        ) +
-        block(
-          t("下一步行动", "Next action"),
-          tasks([
-            [
-              false,
-              t(
-                example
-                  ? "下次讨论前更新两份文件的命名，再请同事找一次"
-                  : "谁在什么时候，尝试什么改变？",
-                example
-                  ? "Rename the two files before the next discussion, then ask a colleague to find them"
-                  : "Who will try what, and by when?",
-              ),
-            ],
-          ]),
-          "next",
-        ),
+          ],
+        ]
+          .map(
+            ([title, body]) =>
+              `<div class="ln-note-cause"><h2>${title}</h2><div>${p(body)}</div></div>`,
+          )
+          .join(""),
     );
   throw new Error("UNKNOWN_BUILTIN_NOTE_TEMPLATE");
 }
@@ -566,7 +566,9 @@ function renderMarkdown(key, locale, example) {
     return zh
       ? `> 记录于 {{date}}
 
-## 一句话理解
+## 问题与回答
+
+${example ? "**为什么文件名也值得认真写？**" : "写下一个明确的问题，再用自己的话回答。"}
 
 ${example ? "文件名既是名称，也是找回时的线索。" : "用自己的话解释这个概念。"}
 
@@ -588,7 +590,9 @@ ${example ? "资料整理与会议记录。" : "添加来源或关联笔记。"}
 `
       : `> Recorded on {{date}}
 
-## In one sentence
+## Question & answer
+
+${example ? "**Why does a file name matter?**" : "Write one specific question, then answer it in your own words."}
 
 ${example ? "A file name is also a clue for finding it later." : "Explain the concept in your own words."}
 

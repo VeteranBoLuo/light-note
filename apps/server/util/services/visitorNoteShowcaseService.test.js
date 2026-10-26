@@ -96,7 +96,9 @@ describe('visitor note showcase', () => {
       const $ = load(note.content),
         source = load(BUILTIN_NOTE_BODIES[key].exampleContent['zh-CN']);
       const headings = (doc) =>
-        doc('.ln-note-layout h2')
+        doc('.ln-note-layout')
+          .first()
+          .find('h2')
           .map((_, node) => doc(node).text())
           .get();
       expect(note.type).toBe('html');

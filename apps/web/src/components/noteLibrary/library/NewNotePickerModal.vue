@@ -497,7 +497,7 @@
     height: var(--ui-layout-11, 11px);
     float: right;
   }
-  .new-note-picker__mini:is(.is-weekly, .is-meeting, .is-project) i:nth-of-type(2) {
+  .new-note-picker__mini.is-meeting i:nth-of-type(2) {
     height: var(--ui-layout-15, 15px);
     background: repeating-linear-gradient(
       to bottom,
@@ -513,10 +513,14 @@
     border-left: 2px solid var(--primary-color);
     background: var(--workspace-purple-selected);
   }
-  .new-note-picker__mini.is-review i {
-    width: 45%;
-    float: left;
-    margin-right: 5%;
+  .new-note-picker__mini:is(.is-weekly, .is-review) i {
+    width: 100%;
+    border-left: 2px solid var(--workspace-note-text);
+  }
+  .new-note-picker__mini.is-project i {
+    width: 85%;
+    border-left: 2px solid var(--primary-color);
+    margin-left: var(--ui-space-3, 3px);
   }
   .new-note-picker__mini.is-mindmap i {
     height: var(--ui-layout-6, 6px);
