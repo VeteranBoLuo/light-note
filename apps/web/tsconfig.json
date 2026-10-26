@@ -29,6 +29,7 @@
     "paths": {
       "@": ["src"],
       "@/*": ["src/*"],
+      "@lightnote/shared/note-templates": ["../../packages/shared/noteTemplates.d.ts"],
       "@lightnote/shared/manor": ["../../packages/shared/manor.d.ts"],
       "@lightnote/shared/public-resources": ["../../packages/shared/publicResources.d.ts"],
       "@lightnote/shared/community-feed": ["../../packages/shared/communityFeed.d.ts"],

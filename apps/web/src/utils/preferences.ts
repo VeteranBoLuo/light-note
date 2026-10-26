@@ -67,7 +67,7 @@ export function shouldOpenNoteDirectly(preferences?: UserPreferences | null, isM
   return isMobile || preferences?.noteDirectEdit === true;
 }
 
-export const DEFAULT_HOME_PAGE: ApplicationHomePreference = 'bookmark';
+export const DEFAULT_HOME_PAGE: ApplicationHomePreference = 'workbench';
 // 移动端默认进入「今日」——它是每天打开轻笺后处理事情的第一站
 export const DEFAULT_MOBILE_HOME_PAGE: MobileHomePreference = 'workbench';
 
@@ -108,7 +108,7 @@ export function getDesktopHomePath(preferences?: UserPreferences | null): AppHom
 
 /**
  * 直接读原始偏好，不经过 `getHomePagePreference` 的桌面兜底——
- * 后者会把「没设置过」归一成书签，导致移动端默认值永远用不上。
+ * 后者允许资源中心作为桌面首页；移动端仍按一级入口范围独立解析。
  * 未设置、历史 `landing` 和移动端不支持的 `resourceCenter` 都落到今日。
  */
 export function getMobileHomePreference(preferences?: UserPreferences | null): MobileHomePreference {
@@ -156,8 +156,8 @@ export function getAppHomePath(preferences?: UserPreferences | null, isMobile = 
 }
 
 /**
- * `/app` 是稳定应用入口：手机进入资源模块，平板沿用书签首屏，
- * 桌面端按账号偏好进入。缺失或历史 `landing` 值会归一为书签，
+ * `/app` 是稳定应用入口：手机默认进入今日，平板无偏好时进入工作台，
+ * 桌面端按账号偏好进入。缺失或历史 `landing` 值会归一为工作台，
  * 绝不能让应用入口重新返回公开官网。
  */
 export function getApplicationEntryPath(
@@ -168,7 +168,7 @@ export function getApplicationEntryPath(
     return getMobileHomePath(preferences);
   }
   if (viewportWidth < 1024) {
-    return '/home';
+    return getHomePagePreference(preferences) === 'workbench' ? '/workbenches' : '/home';
   }
   return getDesktopHomePath(preferences);
 }

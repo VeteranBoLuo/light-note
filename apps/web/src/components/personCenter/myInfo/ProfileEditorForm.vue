@@ -107,10 +107,18 @@
         </div>
         <PassConfigDlg v-model:visible="configPassVisible" />
       </section>
-      <p v-if="isGuest" class="profile-visitor-hint"
-        >{{ t('myInfo.visitorDescription') }}
-        <BButton @click="bookmark.isShowLogin = true">{{ t('myInfo.loginToEdit') }}</BButton></p
+      <section
+        v-if="isGuest"
+        class="profile-visitor-hint"
+        :class="{ 'is-mobile': isMobileLayout }"
+        aria-labelledby="profile-login-heading"
       >
+        <div class="profile-visitor-hint__copy">
+          <h2 id="profile-login-heading">{{ t('myInfo.visitorAccessTitle') }}</h2>
+          <p>{{ t('myInfo.visitorDescription') }}</p>
+        </div>
+        <BButton type="primary" @click="bookmark.isShowLogin = true">{{ t('myInfo.loginToEdit') }}</BButton>
+      </section>
     </div>
     <component
       :is="isMobileLayout ? MobileStickyActionBar : 'footer'"
@@ -462,6 +470,55 @@
     padding-inline: var(--ui-space-4, 4px);
     font-size: var(--ui-font-13, 13px);
   }
+  .profile-visitor-hint {
+    display: flex;
+    align-items: center;
+    gap: var(--ui-space-20, 20px);
+    margin-top: var(--ui-space-20, 20px);
+    padding: var(--ui-space-16, 16px);
+    border: 1px solid var(--surface-border-color);
+    border-radius: 12px;
+    background: var(--surface-panel-bg);
+
+    &__copy {
+      flex: 1;
+      min-width: 0;
+    }
+
+    h2 {
+      margin: 0;
+      color: var(--text-color);
+      font-size: var(--ui-font-14, 14px);
+      line-height: 1.5;
+    }
+
+    p {
+      margin: var(--ui-space-4, 4px) 0 0;
+      color: var(--desc-color);
+      font-size: var(--ui-font-13, 13px);
+      line-height: 1.65;
+    }
+
+    > .b_btn {
+      flex: 0 0 auto;
+      min-width: var(--ui-layout-112, 112px);
+      height: var(--ui-control-36, 36px);
+      padding-inline: var(--ui-space-16, 16px);
+      white-space: nowrap;
+    }
+
+    &.is-mobile {
+      flex-direction: column;
+      align-items: stretch;
+      gap: var(--ui-space-12, 12px);
+
+      > .b_btn {
+        width: 100%;
+        height: var(--ui-control-44, 44px);
+      }
+    }
+  }
+
   .profile-save-footer {
     display: flex;
     align-items: center;

@@ -213,12 +213,14 @@
   }
 
   .auth-overlay--landing {
+    color-scheme: dark;
     --auth-card-bg: rgba(12, 13, 25, 0.96);
     --auth-card-border: rgba(135, 128, 255, 0.27);
     --auth-title: #f7f7ff;
     --auth-muted: rgba(224, 225, 242, 0.66);
     --auth-input-bg: rgba(255, 255, 255, 0.065);
     --auth-input-hover: rgba(255, 255, 255, 0.095);
+    --auth-autofill-base: #0c0d19;
     --auth-divider: rgba(255, 255, 255, 0.11);
     --auth-secondary-bg: rgba(255, 255, 255, 0.055);
     --auth-secondary-hover: rgba(255, 255, 255, 0.1);
@@ -505,12 +507,14 @@
   }
 
   :deep(.auth-input .b-input) {
+    --auth-input-surface: var(--auth-input-bg);
+    --auth-autofill-shadow: inset 0 0 0 0 transparent;
     height: var(--ui-control-48, 48px);
     padding-left: var(--ui-space-42, 42px) !important;
     color: var(--auth-title) !important;
     border: 1px solid var(--auth-divider) !important;
     border-radius: 12px;
-    background: var(--auth-input-bg) !important;
+    background: var(--auth-input-surface) !important;
     transition:
       border-color 0.18s ease,
       background 0.18s ease,
@@ -518,13 +522,15 @@
   }
 
   :deep(.auth-input .b-input:hover) {
-    background: var(--auth-input-hover) !important;
+    --auth-input-surface: var(--auth-input-hover);
   }
 
   :deep(.auth-input .b-input:focus-visible) {
+    --auth-input-surface: var(--auth-input-hover);
     border-color: rgba(112, 105, 255, 0.76) !important;
-    background: var(--auth-input-hover) !important;
-    box-shadow: 0 0 0 3px rgba(97, 92, 237, 0.13) !important;
+    box-shadow:
+      var(--auth-autofill-shadow),
+      0 0 0 3px rgba(97, 92, 237, 0.13) !important;
   }
 
   :deep(.auth-input .b-input::placeholder) {
@@ -642,8 +648,15 @@
     background: transparent !important;
   }
 
-  :deep(input:-webkit-autofill) {
-    -webkit-text-fill-color: var(--auth-title) !important;
+  :deep(.auth-input .b-input:is(:autofill, :-webkit-autofill)) {
+    /* 浏览器的自动填充底色不能直接覆盖；两层内阴影保留官网半透明表面，并以实色底阻隔它。 */
+    --auth-autofill-shadow:
+      inset 0 0 0 100vmax var(--auth-input-surface), inset 0 0 0 100vmax var(--auth-autofill-base, transparent);
+    -webkit-text-fill-color: var(--auth-title);
+    caret-color: var(--auth-title);
+    box-shadow: var(--auth-autofill-shadow);
+    /* 即时遮住浏览器底色，也覆盖 BInput 的超长背景过渡，避免填充或切换主题时闪色。 */
+    transition: border-color 0.18s ease;
   }
 
   .auth-panel-enter-active,

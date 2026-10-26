@@ -34,12 +34,14 @@ describe('应用入口路径策略', () => {
 
   it('普通桌面浏览器和桌面 PWA 按账号应用首页偏好进入', () => {
     expect(getRuntimeApplicationHomePath({ homePage: 'bookmark' }, false, { runtime: 'browser' })).toBe('/home');
-    expect(getRuntimeApplicationHomePath(undefined, false, { runtime: 'browser' })).toBe('/home');
-    expect(getRuntimeApplicationHomePath({ homePage: 'workbench' }, false, { runtime: 'browser' })).toBe('/workbenches');
+    expect(getRuntimeApplicationHomePath(undefined, false, { runtime: 'browser' })).toBe('/workbenches');
+    expect(getRuntimeApplicationHomePath({ homePage: 'workbench' }, false, { runtime: 'browser' })).toBe(
+      '/workbenches',
+    );
     expect(getRuntimeApplicationHomePath({ homePage: 'cloudSpace' }, false, { runtime: 'browser' })).toBe(
       '/cloudSpace',
     );
-    expect(getRuntimeApplicationHomePath({ homePage: 'landing' }, false, { runtime: 'browser' })).toBe('/home');
+    expect(getRuntimeApplicationHomePath({ homePage: 'landing' }, false, { runtime: 'browser' })).toBe('/workbenches');
     expect(getRuntimeApplicationHomePath({ homePage: 'workbench' }, false, { runtime: 'pwa-standalone' })).toBe(
       '/workbenches',
     );
@@ -56,9 +58,10 @@ describe('应用入口路径策略', () => {
     expect(getRuntimeApplicationEntryPath({ homePage: 'landing' }, 1440, { runtime: 'android-app' })).toBe(
       '/workbenches',
     );
-    // 平板保留书签首屏，桌面按偏好
+    // 平板无偏好时进入工作台，显式资料偏好保留原入口
+    expect(getRuntimeApplicationEntryPath(undefined, 820, { runtime: 'browser' })).toBe('/workbenches');
     expect(getRuntimeApplicationEntryPath({ homePage: 'noteLibrary' }, 820, { runtime: 'browser' })).toBe('/home');
-    expect(getRuntimeApplicationEntryPath(undefined, 1440, { runtime: 'browser' })).toBe('/home');
+    expect(getRuntimeApplicationEntryPath(undefined, 1440, { runtime: 'browser' })).toBe('/workbenches');
     expect(getRuntimeApplicationEntryPath({ homePage: 'cloudSpace' }, 1440, { runtime: 'browser' })).toBe(
       '/cloudSpace',
     );

@@ -104,6 +104,7 @@ let canvasContextSpy: ReturnType<typeof vi.spyOn> | undefined;
 
 beforeEach(() => {
   mocks.hasLoginHint = true;
+  mocks.bookmark.isMobile = false;
   mocks.user.id = '';
   mocks.user.role = 'visitor';
   mocks.retryAuth.mockImplementation(() => Promise.resolve());
@@ -189,6 +190,17 @@ afterEach(() => {
 });
 
 describe('Landing CTA', () => {
+  it('移动首屏保留独立账号入口，产品预览默认展示移动端', async () => {
+    mocks.bookmark.isMobile = true;
+    const host = await mountLanding('anonymous');
+    expect(host.querySelector('.carousel-dot[aria-pressed="true"]')?.textContent).toContain('landing.tabMobile');
+    const accountButton = host.querySelector<HTMLButtonElement>('.s-cover .btn-ghost');
+    expect(accountButton?.textContent).toContain('landing.ctaAccount');
+    accountButton?.click();
+    await vi.waitFor(() => expect(mocks.bookmark.openAuthModal).toHaveBeenCalledWith('注册', 'landing_account'));
+    expect(mocks.routerPush).not.toHaveBeenCalled();
+  });
+
   it('关键帧被禁用时仍保留稳定的首屏光晕与标题渐变位置', () => {
     expect(landingSource).toMatch(/\.orb\s*\{[^}]*opacity:\s*0\.12;/su);
     expect(landingSource).toMatch(/\.hero-brand\s*\{[^}]*background-position:\s*0% center;/su);

@@ -1,8 +1,17 @@
 <template>
   <div class="reference-summary">
-    <BChip :tone="type === 'todo' ? 'neutral' : type" size="medium" :class="{ 'is-todo': type === 'todo' }">
+    <BChip
+      :tone="type === 'todo' ? 'neutral' : type"
+      size="medium"
+      class="reference-summary__type"
+      :class="{ 'is-todo': type === 'todo' }"
+    >
       <span class="reference-summary__identity">
-        <SvgIcon :src="type === 'todo' ? icon.todoWorkspace.checkSquare : icon.resource[type]" size="15" aria-hidden="true" />
+        <SvgIcon
+          :src="type === 'todo' ? icon.todoWorkspace.checkSquare : icon.resource[type]"
+          size="15"
+          aria-hidden="true"
+        />
         {{ typeLabel }}
       </span>
     </BChip>
@@ -51,6 +60,18 @@
       line-height: 1.5;
       overflow-wrap: anywhere;
     }
+  }
+
+  .reference-summary__type.b-chip--note {
+    --b-chip-fg: var(--chip-bookmark-fg);
+    --b-chip-bg: var(--reference-chip-note-bg);
+    --b-chip-border: var(--reference-chip-note-bg);
+  }
+
+  .reference-summary__type.b-chip--file {
+    --b-chip-fg: var(--chip-bookmark-fg);
+    --b-chip-bg: var(--reference-chip-file-bg);
+    --b-chip-border: var(--reference-chip-file-bg);
   }
 
   .reference-summary__identity {

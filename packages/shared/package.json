@@ -130,7 +130,11 @@
       "types": "./manor.d.ts",
       "default": "./manor.js"
     },
-    "./manor-model": "./manorModel.js"
+    "./manor-model": "./manorModel.js",
+    "./note-templates": {
+      "types": "./noteTemplates.d.ts",
+      "default": "./noteTemplates.js"
+    }
   },
   "devDependencies": {
     "vitest": "^3.2.6"

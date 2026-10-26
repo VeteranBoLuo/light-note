@@ -793,6 +793,8 @@
       query: {
         ...route.query,
         section,
+        // 定位只属于本次兑换浏览，离开后不能随分区参数带回。
+        focus: section === 'rewards' && reward === 'shop' ? route.query.focus : undefined,
         ...(section === 'rewards'
           ? {
               reward,

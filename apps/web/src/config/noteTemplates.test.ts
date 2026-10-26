@@ -18,7 +18,9 @@ const templateByKey = (key: string): BuiltinNoteTemplate => {
 
 const sectionCount = (template: BuiltinNoteTemplate, locale: NoteTemplateLocale) => {
   const content = template.content[locale];
-  return template.type === 'html' ? (content.match(/<h2>/g) ?? []).length : (content.match(/^## /gm) ?? []).length;
+  return template.type === 'html'
+    ? (content.match(/<h2(?:\s[^>]*)?>/g) ?? []).length
+    : (content.match(/^## /gm) ?? []).length;
 };
 
 describe('BUILTIN_NOTE_TEMPLATES', () => {
@@ -53,7 +55,7 @@ describe('BUILTIN_NOTE_TEMPLATES', () => {
     BUILTIN_NOTE_TEMPLATES.filter((template) => template.type === 'html').forEach((template) => {
       locales.forEach((locale) => {
         expect(template.content[locale]).toContain('class="note-template-page');
-        expect(template.content[locale]).toContain('class="note-template-hero"');
+        expect(template.content[locale]).toContain('ln-note-layout');
         expect(template.content[locale]).not.toMatch(/\sstyle=/i);
       });
     });
@@ -82,15 +84,15 @@ describe('BUILTIN_NOTE_TEMPLATES', () => {
     ]);
   });
 
-  it.each(BUILTIN_NOTE_TEMPLATES)('$key 的双语标题、正文和三行摘要完整', (template) => {
+  it.each(BUILTIN_NOTE_TEMPLATES)('$key 的双语标题、空白正文和示例完整', (template) => {
     expect(template.nameKey).toMatch(/^note\.tpl.+Name$/);
     expect(template.descKey).toMatch(/^note\.tpl.+Desc$/);
 
     locales.forEach((locale) => {
       expect(template.titleTemplate[locale].trim()).not.toBe('');
       expect(template.content[locale].trim()).not.toBe('');
-      expect(template.preview[locale]).toHaveLength(3);
-      expect(template.preview[locale].every((line) => line.trim().length > 0)).toBe(true);
+      expect(template.exampleContent[locale].trim()).not.toBe('');
+      expect(template.exampleContent[locale]).not.toBe(template.content[locale]);
 
       const rendered = renderNoteTemplate(`${template.titleTemplate[locale]}\n${template.content[locale]}`, {
         now,
@@ -102,20 +104,21 @@ describe('BUILTIN_NOTE_TEMPLATES', () => {
     expect(sectionCount(template, 'zh-CN')).toBe(sectionCount(template, 'en-US'));
   });
 
-  it('周报只保留一套“成果 + 证据 + 影响”结构', () => {
-    const weekly = templateByKey('weekly');
-    expect(weekly.content['zh-CN']).toContain('<h2>关键成果、证据与影响</h2>');
-    expect(weekly.content['zh-CN']).not.toContain('数据与结果');
-    expect(weekly.content['en-US']).toContain('<h2>Key outcomes, evidence &amp; impact</h2>');
-    expect(weekly.content['en-US']).not.toContain('Data &amp; results');
-  });
-
-  it('复盘不再重复询问“结果事实”和“发生了什么”', () => {
-    const review = templateByKey('review');
-    expect(review.content['zh-CN']).toContain('<h2>事实与结果</h2>');
-    expect(review.content['zh-CN']).not.toContain('发生了什么');
-    expect(review.content['en-US']).toContain('<h2>Facts &amp; results</h2>');
-    expect(review.content['en-US']).not.toContain('What happened');
+  it('填写示例保留空白模板的章节，不把示例值带入新建正文', () => {
+    for (const template of BUILTIN_NOTE_TEMPLATES)
+      for (const locale of locales) {
+        const sections = (content: string) =>
+          template.type === 'html'
+            ? [...content.matchAll(/<h2[^>]*>(.*?)<\/h2>/g)].map((item) => item[1])
+            : [...content.matchAll(/^## (.*)$/gm)].map((item) => item[1]);
+        expect(sections(template.content[locale])).toEqual(sections(template.exampleContent[locale]));
+        expect(renderNoteTemplate(template.exampleContent[locale], { now, locale })).not.toContain('{{');
+        if (template.type === 'html') {
+          const document = new DOMParser().parseFromString(template.content[locale], 'text/html');
+          expect(document.querySelectorAll('input:checked')).toHaveLength(0);
+          expect(document.querySelectorAll('a[href="#"]')).toHaveLength(0);
+        }
+      }
   });
 
   it('阅读、项目、知识卡片和思维导图标题会提示用户替换主题', () => {
@@ -125,10 +128,14 @@ describe('BUILTIN_NOTE_TEMPLATES', () => {
     expect(templateByKey('mindmap').titleTemplate['zh-CN']).toContain('主题');
   });
 
-  it('思维导图的三条图上分支都有对应的图下说明区', () => {
+  it('思维导图提供可渲染源码，图下只保留补充与行动', () => {
     const mindmap = templateByKey('mindmap');
-    expect(mindmap.content['zh-CN'].match(/分支三/g)).toHaveLength(2);
-    expect(mindmap.content['en-US'].match(/Branch 3/g)).toHaveLength(2);
+    for (const locale of locales)
+      for (const field of ['content', 'exampleContent'] as const) {
+        expect(mindmap[field][locale]).toMatch(/```mermaid\nmindmap\n/);
+        expect(sectionCount(mindmap, locale)).toBe(3);
+      }
+    expect(mindmap.content['zh-CN'].match(/分支三/g)).toHaveLength(1);
   });
 
   it('会议标题包含时间，避免同日多场会议重名', () => {
