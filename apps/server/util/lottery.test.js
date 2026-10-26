@@ -1,4 +1,4 @@
-import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   getConnection: vi.fn(),
@@ -31,6 +31,8 @@ afterAll(() => {
   else process.env.POINTS_ECONOMY_REQUIRE_WRITE_VERSION = originalWriteVersionFlag;
 });
 
+afterEach(() => vi.unstubAllEnvs());
+
 function mockConnection({ points = 5000, totalCount = 9, paidCount = 9, paidPity = 9, freeUsed = 0 } = {}) {
   const conn = {
     beginTransaction: vi.fn(),
@@ -42,6 +44,7 @@ function mockConnection({ points = 5000, totalCount = 9, paidCount = 9, paidPity
       if (statement.includes('FROM points_economy_operations')) return [[]];
       if (statement.includes('INSERT IGNORE INTO points_economy_operations'))
         return [{ affectedRows: 1, insertId: 41 }];
+      if (statement.includes('FROM points_log')) return [Array.from({ length: freeUsed }, (_, id) => ({ id }))];
       if (statement.includes('FROM user_growth') && statement.includes('FOR UPDATE')) {
         return [
           [
@@ -132,6 +135,44 @@ describe('C4 加权随机边界', () => {
     expect(pickWeighted(pool, () => 0).id).toBe('a');
     expect(pickWeighted(pool, () => 2).id).toBe('b');
     expect(pickWeighted(pool, () => 9).id).toBe('c');
+  });
+});
+
+describe('C10 免费惊喜发放', () => {
+  it.each([
+    [0, 'points', 3], [649, 'points', 3],
+    [650, 'points', 5], [879, 'points', 5],
+    [880, 'points', 20], [899, 'points', 20],
+    [900, 'ai_pack', 20000], [979, 'ai_pack', 20000],
+    [980, 'ai_pack', 50000], [999, 'ai_pack', 50000],
+  ])('随机值 %i 发放 %s %i，保持免费次数与付费保底隔离', async (cursor, kind, amount) => {
+    vi.stubEnv('POINTS_ECONOMY_C10_ENABLED', 'true');
+    const conn = mockConnection();
+    const result = await drawLottery('u1', {
+      ...c4Request({ mode: 'free', calendar: { dayKey: '20261026' }, randomIntFn: () => cursor }),
+      economyVersion: 'points-economy-c10',
+    });
+    expect(result).toMatchObject({ ok: true, cost: 0, economyVersion: 'points-economy-c10', results: [{ kind, amount }] });
+    expect(conn.query.mock.calls.some(([sql]) => String(sql).includes('lottery_paid_pity_progress ='))).toBe(false);
+    if (kind === 'ai_pack') {
+      expect(mocks.creditAiBonusTokens).toHaveBeenCalledWith(conn, expect.objectContaining({
+        amountTokens: amount, sourceType: 'lottery_free', policyVersion: 'points-economy-c10',
+      }));
+    } else {
+      expect(conn.query.mock.calls.find(([sql]) => String(sql).includes('SET points = points +'))?.[1][0]).toBe(amount);
+      expect(mocks.creditAiBonusTokens).not.toHaveBeenCalled();
+    }
+    expect(conn.commit).toHaveBeenCalledOnce();
+  });
+
+  it('状态接口公示当前免费奖池，与发放共用同一目录', async () => {
+    vi.stubEnv('POINTS_ECONOMY_C10_ENABLED', 'true');
+    const status = await getLotteryStatus('visitor');
+    expect(status).toMatchObject({ economyVersion: 'points-economy-c10', free: { poolVersion: 'c10-free-v1', countsPaidPity: false } });
+    expect(status.free.pool.map(({ amount, normalRate }) => [amount, normalRate])).toEqual([
+      [3, 65], [5, 23], [20, 2], [20000, 8], [50000, 2],
+    ]);
+    expect(status.free.pool.every(({ pityRate }) => pityRate === 0)).toBe(true);
   });
 });
 

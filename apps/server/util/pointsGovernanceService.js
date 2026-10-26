@@ -765,7 +765,18 @@ export function simulatePointsPolicy(input = {}) {
     defaults.weekly.reduce((sum, item) => sum + item.reward, 0),
     { max: 5000 },
   );
-  const freeDrawExpected = boundedInteger(input.freeDrawExpected, 15, { max: 1000 });
+  const freePool = getEconomyRuntime().catalog.freePolicy.pool;
+  const freeWeight = freePool.reduce((sum, prize) => sum + prize.weight, 0);
+  const defaultFreeExpected =
+    freePool.reduce((sum, prize) => sum + (prize.kind === 'points' ? prize.amount * prize.weight : 0), 0) /
+    freeWeight;
+  const freeDrawExpected =
+    input.freeDrawExpected == null || input.freeDrawExpected === ''
+      ? defaultFreeExpected
+      : Number(input.freeDrawExpected);
+  if (!Number.isFinite(freeDrawExpected) || freeDrawExpected < 0 || freeDrawExpected > 1000) {
+    throw new PointsGovernanceError('INVALID_SIMULATOR_INPUT', '免费惊喜期望必须在 0～1000');
+  }
   const freeDrawsByTier = Array.isArray(input.freeDrawsByTier) ? input.freeDrawsByTier : [0, 1, 2, 3];
   if (freeDrawsByTier.length < 1 || freeDrawsByTier.length > 8) {
     throw new PointsGovernanceError('INVALID_SIMULATOR_INPUT', '免费次数档位无效');

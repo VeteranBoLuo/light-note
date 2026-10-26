@@ -1,19 +1,20 @@
-# 积分经济 C9 规范
+# 积分经济 C10 规范
 
 > 本文是积分商品、兑换上限、免费惊喜、积分抽奖、消费协议与运营观测的单一产品规范。代码中的权威目录位于 `apps/server/util/pointsEconomyCatalog.js`；任何价格、次数、概率、等级或奖池变化都必须升级经济版本并同步测试、本文与帮助中心。
 
-积分获取、用户积分中心、Root 治理、余额对账与活动发放由独立的 [积分获取与治理](./points-earning.md) 统一管理。消费目录 C9 的 `economyVersion` 与获取策略的 `policyVersion` 不得混用：商品或抽奖请求提交 `points-economy-c9`，任务和成就流水记录实际获取策略版本。
+积分获取、用户积分中心、Root 治理、余额对账与活动发放由独立的 [积分获取与治理](./points-earning.md) 统一管理。消费目录的 `economyVersion` 与获取策略的 `policyVersion` 不得混用：商品或抽奖请求提交服务端当前返回的经济版本，任务和成就流水记录实际获取策略版本。
 
 ## 目标与边界
 
 - C9 在 C8 的 AI、空间、头像框、补签卡和奖池目录上增加个人背景，既有商品价格不变。补签卡持有数量不限，库存规则独立于价格目录版本，赠送、兑换、抽奖和后台调整共用。
+- C10 只收紧每日惊喜的积分与 AI 发放，商品、积分抽奖、等级每日 AI 额度和免费次数沿用 C9；C3–C9 目录与旧成功收据保留，历史到账不重算。
 - AI 永久余额、永久空间和头像框按不同使用价值定价，避免只提高某一类商品导致相对价值失真。
 - 每日惊喜是轻量等级权益，不承担永久空间或补签卡发放，也不推进积分抽奖保底。
 - 积分抽奖是自愿的娱乐性积分出口；用户明确需要 AI 或空间时，直接兑换必须更稳定、更划算。
 - 知识工坊是按次消费出口，不发永久权益、不进入商店商品目录；一次执行只消费积分或其他单一介质，不能与 AI 额度叠加扣除。
 - 已有积分、永久余额、永久空间和已拥有头像框不回收、不贬损；历史直接兑换会占用对应空间档位的一次资格，抽奖或运营赠送空间不会占用。
 
-## C9 商品目录
+## 商品目录
 
 ### 个人背景
 
@@ -83,17 +84,17 @@ AI 入门包 `ai_pack_starter` 与空间复用 `points_shop_item_claims` 的原�
 | ---- | -----: | -----: | -----: | -------: | ----: |
 | 次数 |      0 |      1 |      2 |        3 |     3 |
 
-### 独立奖池 `c4-free-v1`
+### 独立奖池 `c10-free-v1`
 
 | 奖励                      | 概率 |
 | ------------------------- | ---: |
-| 10 积分                   |  50% |
-| 20 积分                   |  30% |
-| 40 积分                   |  10% |
-| AI 永久余额 +10 万 tokens |   8% |
-| AI 永久余额 +20 万 tokens |   2% |
+| 3 积分                    |  65% |
+| 5 积分                    |  23% |
+| 20 积分                   |   2% |
+| AI 永久余额 +2 万 tokens  |   8% |
+| AI 永久余额 +5 万 tokens  |   2% |
 
-单次积分期望为 15，AI 永久余额期望为 1.2 万 tokens。免费池不含永久空间、补签卡，不设保底，不读取或改变 `lottery_paid_pity_progress`。
+单次积分期望为 3.5，AI 永久余额期望为 2,600 tokens；AI 总中奖率仍为 10%。免费池不含永久空间、补签卡，不设保底，不读取或改变 `lottery_paid_pity_progress`。C4–C9 的 `c4-free-v1` 保留原 10/20/40 积分和 10/20 万 tokens 快照；重放旧收据不按 C10 缩减奖励。只读治理模拟器的默认免费积分期望从当前激活奖池计算，允许小数期望，但实际发放仍为整数。
 
 ## 积分抽奖
 
@@ -108,7 +109,7 @@ AI 入门包 `ai_pack_starter` 与空间复用 `points_shop_item_claims` 的原�
 商店购买、每日惊喜和积分抽奖都必须提交：
 
 - `clientRequestId`：12～64 位 `[A-Za-z0-9:_-]`，相同规范负载在结果未知时复用；
-- `economyVersion`：来自商店或抽奖状态响应，不允许前端写死；C9 为 `points-economy-c9`；
+- `economyVersion`：来自商店或抽奖状态响应，不允许前端写死；C10 为 `points-economy-c10`；
 - `expectedCost`：用户确认时看到的价格，免费操作为 0。
 
 服务端先按 `(user_id, request_id)` 读取 `points_economy_operations` 收据，再校验当前版本和价格。相同请求回放原结果并返回 `idempotent: true`；同一请求号换负载返回 `IDEMPOTENCY_KEY_REUSED`；旧页面或价格变化返回 409 应用信封，且不得扣分、发资产、占免费次数或推进保底。
@@ -119,6 +120,8 @@ AI 入门包 `ai_pack_starter` 与空间复用 `points_shop_item_claims` 的原�
 
 ## Schema、迁移与激活顺序
 
+C10 不新增业务 Schema。发布 C10 代码时保持 `POINTS_ECONOMY_C10_ENABLED=false`，在同次获授权上线中显式执行 [C10 帮助同步](../apps/server/migrations/20261026_points_economy_c10_knowledge.sql) 并刷新帮助检索缓存，再开启 C10 并验收新抽取、C9 收据回放及旧页面版本冲突。关闭 C10 后回到仍开启的旧目录，已到账奖励和历史记录不回收。知识工坊记账使用实际激活的经济版本，不能因代码包含新目录提前记为 C10。
+
 1. 先执行 [个人背景结构迁移](../apps/server/migrations/20261014_profile_backgrounds.sql)，通过 `check:schema`，再部署引用新列的代码；运行时 `ensurePointsSchema()` 同样具备幂等补列能力，不回填历史资产。
 2. 保留 C3–C8 目录和收据回放能力，发布 C9 代码时保持 `POINTS_ECONOMY_C9_ENABLED=false`。
 3. 在获授权的发布中执行 [个人背景帮助迁移](../apps/server/migrations/20261014_profile_backgrounds_knowledge.sql)，前后端就绪后开启 C9，并验收扣分、持有、切换和两处公开展示。
@@ -126,7 +129,7 @@ AI 入门包 `ai_pack_starter` 与空间复用 `points_shop_item_claims` 的原�
 
 补签卡库存不限量不新增 Schema 或重算历史资产，且适用于所有目录版本。公开帮助使用[补签卡库存规则迁移](../apps/server/migrations/20261014_makeup_card_unlimited_knowledge.sql)在获授权的发布中同步；不能重跑旧帮助迁移覆盖现行规则。目录保留历史定价快照，商店描述复用当前道具定义，抽奖状态的 `overflowPolicy` 为 `null`。
 
-C5–C9 激活都要求既有 `points-economy-c4-paid-pity-v1` 和 `points-economy-c5-storage-limits-v1` 标记，缺失时失败关闭。只有尚未建立这些基线的旧环境才需要单独执行原迁移，不在启动时静默回填。
+C5–C10 激活都要求既有 `points-economy-c4-paid-pity-v1` 和 `points-economy-c5-storage-limits-v1` 标记，缺失时失败关闭。只有尚未建立这些基线的旧环境才需要单独执行原迁移，不在启动时静默回填。
 
 ### 运行时开关
 
@@ -136,12 +139,13 @@ C5–C9 激活都要求既有 `points-economy-c4-paid-pity-v1` 和 `points-econo
 - `POINTS_ECONOMY_C7_ENABLED`
 - `POINTS_ECONOMY_C8_ENABLED`
 - `POINTS_ECONOMY_C9_ENABLED`
+- `POINTS_ECONOMY_C10_ENABLED`
 - `POINTS_ECONOMY_REQUIRE_WRITE_VERSION`
 - `POINTS_SHOP_PURCHASE_ENABLED`
 - `POINTS_LOTTERY_FREE_ENABLED`
 - `POINTS_LOTTERY_PAID_ENABLED`
 
-开关只接受明确的 true/false/1/0，未知值按关闭解析；C9 优先于 C8，C8 优先于 C7，C7 优先于 C6，C6 优先于 C5，C5 优先于 C4。资产与新流水不反向删除，已成功的 C3–C9 请求即使跨版本重试也必须回放原收据。C5 回退到 C4 前必须关闭购买，不能让回退窗口绕过空间限兑。
+开关只接受明确的 true/false/1/0，未知值按关闭解析；C10 优先于 C9，之后依次为 C8、C7、C6、C5、C4。资产与新流水不反向删除，已成功的 C3–C10 请求即使跨版本重试也必须回放原收据。C5 回退到 C4 前必须关闭购买，不能让回退窗口绕过空间限兑。
 
 ## 流水与运营观测
 
