@@ -60,7 +60,8 @@
     const width = canvas.value.getBoundingClientRect().width;
     // Raster resolution follows the *rendered* size; illustration coordinates scale once in the parent.
     const pixels = Math.min(768, Math.max(1, Math.ceil(width * Math.min(devicePixelRatio || 1, 2))));
-    if (canvas.value.width !== pixels) canvas.value.width = canvas.value.height = pixels;
+    if (canvas.value.width !== pixels || canvas.value.height !== pixels)
+      canvas.value.width = canvas.value.height = pixels;
     paint();
   };
   watch(motionState, sync);
