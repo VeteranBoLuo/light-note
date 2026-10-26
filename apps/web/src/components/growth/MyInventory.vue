@@ -25,7 +25,7 @@
           <BButton type="text" @click="selectTab('points')">{{
             t(bookmark.isMobileDevice ? 'growth.inventoryDetailShort' : 'growth.assetDetails')
           }}</BButton>
-          <BButton type="text" :disabled="readOnly" @click="goToExchange"
+          <BButton type="text" :disabled="readOnly" @click="goToExchange()"
             >{{ t('growth.assetExchange') }}<SvgIcon :src="icon.arrow_right" :size="15"
           /></BButton>
         </footer>
@@ -89,14 +89,20 @@
             @click="onUse(it)"
             >{{ t('growth.itemUse') }}</BButton
           >
-          <BButton
-            v-else-if="it.action === 'makeup'"
-            :loading="makingUp"
-            :disabled="readOnly || it.qty < 1 || !canMakeup"
-            :title="readOnly ? t('growth.adminContextActionUnavailable') : !canMakeup ? t('growth.itemMakeupHint') : ''"
-            @click="onMakeup"
-            >{{ t('growth.itemGoMakeup') }}</BButton
-          >
+          <div v-else-if="it.action === 'makeup'" class="item-actions">
+            <BButton type="text" :disabled="readOnly" @click="goToExchange('makeup_card')">
+              {{ t('growth.assetExchange') }}
+            </BButton>
+            <BButton
+              :loading="makingUp"
+              :disabled="readOnly || it.qty < 1 || !canMakeup"
+              :title="
+                readOnly ? t('growth.adminContextActionUnavailable') : !canMakeup ? t('growth.itemMakeupHint') : ''
+              "
+              @click="onMakeup"
+              >{{ t('growth.itemGoMakeup') }}</BButton
+            >
+          </div>
         </div>
       </div>
     </section>
@@ -171,9 +177,9 @@
   const usingId = ref<string | null>(null);
   const makingUp = ref(false);
 
-  function goToExchange() {
+  function goToExchange(focus?: string) {
     if (readOnly.value) return;
-    void router.push({ path: '/growth', query: { section: 'rewards', reward: 'shop' } });
+    void router.push({ path: '/growth', query: { section: 'rewards', reward: 'shop', ...(focus ? { focus } : {}) } });
   }
 
   function goToStore(category: 'ai' | 'storage') {
@@ -429,9 +435,18 @@
     font-size: .ui-font(12px) [];
     line-height: 1.6;
   }
+  .item-actions {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: .ui-space(8px) [];
+    margin-left: auto;
+  }
+  .item-actions > .b_btn,
   .inv-item > .b_btn {
     flex-shrink: 0;
   }
+  .item-actions > .b_btn:not(.text_btn):not(:disabled),
   .inv-item > .b_btn:not(:disabled) {
     border: 1px solid var(--primary-color);
     color: var(--workspace-purple-text);

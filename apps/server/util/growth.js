@@ -91,9 +91,9 @@ export const DAILY_QUEST_STAGES = resolveDailyQuestStages();
 // 把签到从「+5 经验」升级为值得长期坚持的习惯养成:越久回报越丰厚(存储是最实在的诱惑)。
 export const STREAK_MILESTONES = [
   { days: 7, points: 50, cards: 1 },
-  { days: 30, points: 300, storageMb: 512, cards: 1 },
-  { days: 100, points: 600, storageMb: 1024, cards: 1 },
-  { days: 365, points: 2000, storageMb: 2048, cards: 1 },
+  { days: 30, points: 300, storageMb: 512, cards: 2 },
+  { days: 100, points: 600, storageMb: 1024, cards: 3 },
+  { days: 365, points: 2000, storageMb: 2048, cards: 5 },
 ];
 
 const CHECKIN_BASE = 5; // 每日签到基础 +5
