@@ -1274,7 +1274,7 @@ function init() {
         dailyDialog();
         break;
       case "complete-daily":{
-          GardenLive.tasks();
+          GardenLive.tasks(+b.dataset.index);
           break;
         }
       case "claim-daily-water":{

@@ -5,7 +5,7 @@
       <BButton @click="initialise">{{ t('common.retry') }}</BButton>
       <BButton v-if="bookmark.isMobile" @click="exit">{{ t('manor.returnToApp') }}</BButton>
     </div>
-    <div v-else-if="loading || !frameShown" class="knowledge-manor__state"><BLoading inline loading :title="t('manor.loading')" /></div>
+    <ManorLoadingState v-else-if="loading || !frameShown" class="knowledge-manor__loading" />
     <iframe v-if="!loading && !failed" ref="frame" :key="nonce" :src="frameUrl" :title="t('manor.title')" referrerpolicy="same-origin" @error="failed = true" />
     <BButton v-if="bookmark.isMobile && !interactive && !failed" class="knowledge-manor__cancel" @click="exit">{{ t('manor.returnToApp') }}</BButton>
   </main>
@@ -22,6 +22,8 @@
   import { useGrowth } from '@/composables/useGrowth';
   import { useMobileTopBar } from '@/composables/useMobileTopBar';
   import { getManor, runManorCommand } from '@/api/manorApi';
+  import { resolveDailyQuestRoute } from '@/utils/growthNavigation';
+  import ManorLoadingState from './ManorLoadingState.vue';
   import { isUncertainManorResult, readPendingManorCommand, savePendingManorCommand } from '@/utils/manorPending';
   import { closeCurrentMobileOverlayThen, registerMobileOverlayHistory, releaseMobileOverlayHistory, type MobileOverlayHistoryHandle } from '@/utils/mobileOverlayHistory';
 
@@ -174,7 +176,13 @@
           }
         } finally { commanding = false; }
       } else if (data.action === 'exit') { await exit(); return; }
-      else if (data.action === 'tasks') { await router.push('/growth#growth-daily'); return; }
+      else if (data.action === 'tasks') {
+        const index = data.payload?.index;
+        if (index !== undefined && (!Number.isInteger(index) || index < 0 || !snapshot?.quests[index])) throw new Error('quest');
+        const key = snapshot?.quests[index]?.key;
+        await router.push(key ? resolveDailyQuestRoute(key, bookmark.isMobile) || { path: '/growth', query: { section: key === 'checkin' ? 'overview' : 'tasks' } } : '/growth#growth-daily');
+        return;
+      }
       // Older cached renderers may still ask the host. Keep them inside the
       // manor too; the current renderer opens its existing local ledger.
       else if (data.action === 'ledger') { control('open-ledger'); }
@@ -204,5 +212,6 @@
   .knowledge-manor { position: relative; width: 100%; height: 100%; min-height: 0; overflow: hidden; }
   .knowledge-manor iframe { display: block; width: 100%; height: 100%; border: 0; }
   .knowledge-manor__state { position: absolute; inset: 0; z-index: 1; display: grid; place-content: center; justify-items: center; gap: var(--ui-space-12, 12px); color: var(--text-color); background: var(--background-color); }
+  .knowledge-manor__loading { position: absolute; inset: 0; z-index: 1; }
   .knowledge-manor__cancel { position: absolute; z-index: 2; bottom: var(--ui-space-24, 24px); left: 50%; transform: translateX(-50%); }
 </style>

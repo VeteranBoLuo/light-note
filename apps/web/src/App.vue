@@ -19,6 +19,7 @@
           </BButton>
         </div>
       </div>
+      <ManorLoadingState v-else-if="manorEntry" />
     </div>
     <template v-else>
       <div class="app-workspace" :class="{ 'has-mobile-preview': mobilePreviewActive }">
@@ -123,6 +124,7 @@
   import { resolveRouteAuthDecision } from '@/utils/authNavigationIntent.ts';
   import { loadUserAuthModal } from '@/utils/userAuthModalLoader.ts';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import ManorLoadingState from '@/view/manor/ManorLoadingState.vue';
 
   const Login = defineAsyncComponent({
     loader: loadUserAuthModal,
@@ -405,9 +407,15 @@
   onMounted(() => navigator.serviceWorker?.addEventListener('message', onBrowserPushMessage));
   onBeforeUnmount(() => navigator.serviceWorker?.removeEventListener('message', onBrowserPushMessage));
 
+  const manorEntry = computed(() => {
+    const route = router.currentRoute.value;
+    return route.path === '/knowledge-manor' || (!route.name && window.location.pathname === '/knowledge-manor');
+  });
   const applicationAuthGateVisible = computed(() => {
     const route = router.currentRoute.value;
     const routeName = String(route.name || '');
+    // Keep the manor presentation while its lazy route resolves; auth rules below stay unchanged.
+    if (manorEntry.value && !routeName) return true;
     return (
       Boolean(routeName) &&
       applicationAuthStatus.value !== 'ready' &&

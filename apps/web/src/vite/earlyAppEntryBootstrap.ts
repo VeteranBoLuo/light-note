@@ -119,6 +119,7 @@ export function createEarlyAppEntryScript(): string {
       renderProfileOverride === 'mobile' ||
       (renderProfileOverride !== 'desktop' && usesMobileLayout);
     var root = document.documentElement;
+    root.classList.toggle('light-note-manor-entry', window.location.pathname === '/knowledge-manor');
     root.classList.toggle(config.mobileRenderingClass, usesMobileRendering);
     root.classList.toggle(config.androidWebViewClass, isAndroidWebView);
     root.setAttribute(

@@ -1,5 +1,6 @@
 {
   "desktop": {
+    "revision": "r58",
     "image": [
       3630,
       1732
@@ -343,7 +344,7 @@
         ]
       },
       {
-        "asset": "courtyard/pc-surface-calm-r56.png",
+        "asset": "courtyard/pc-surface-calm-r58.png",
         "pixels": [
           2097,
           750

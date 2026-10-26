@@ -4,12 +4,15 @@ Inputs remain immutable; use a new revision when changing the scene graph.
 Requires Pillow and numpy (asset-generation tools, not a production dependency).
 """
 from pathlib import Path
-import json, math, xml.etree.ElementTree as ET
+import argparse, json, math, xml.etree.ElementTree as ET
 import numpy as np
 from PIL import Image, ImageDraw, ImageFilter
 ROOT=Path(__file__).resolve().parents[2]/'public/manor/knowledge-garden-v19'
 REV='r56'
 scenes=json.loads(Path(__file__).with_name('scene-plates.json').read_text())
+parser=argparse.ArgumentParser(description=__doc__)
+parser.add_argument('--scene',choices=list(scenes),help='Recompile only the changed scene; keep other published assets immutable.')
+args=parser.parse_args()
 def image(path):
  p=ROOT/path
  # Use the lossless source painting where one exists.
@@ -61,13 +64,15 @@ def water_mask(scene,paint):
  arr[:,:,3]=(distance.astype('float32')/32*255).astype('uint8')
  return Image.fromarray(arr)
 for key,scene in scenes.items():
+ if args.scene and key!=args.scene: continue
+ rev=scene.get('revision',REV)
  name={'desktop':'pc','mobileGarden':'mobile-garden','mobileBay':'mobile-bay'}[key]
- paint=composite(scene);paint.save(ROOT/f'courtyard/{name}-scene-{REV}.webp',quality=96,method=6)
+ paint=composite(scene);paint.save(ROOT/f'courtyard/{name}-scene-{rev}.webp',quality=96,method=6)
  if key=='desktop':
   for width in [2048,2940]:
-   paint.resize((width,round(paint.height*width/paint.width)),Image.Resampling.LANCZOS).save(ROOT/f'courtyard/{name}-scene-{width}-{REV}.webp',quality=96,method=6)
- mask=water_mask(scene,paint);mask.save(ROOT/f'courtyard/{name}-water-{REV}.png',optimize=True)
+   paint.resize((width,round(paint.height*width/paint.width)),Image.Resampling.LANCZOS).save(ROOT/f'courtyard/{name}-scene-{width}-{rev}.webp',quality=96,method=6)
+ mask=water_mask(scene,paint);mask.save(ROOT/f'courtyard/{name}-water-{rev}.png',optimize=True)
  # Low frequencies used only for refraction cancellation, not visible scene art.
  w=min(1536,paint.width);smooth=paint.resize((w,round(paint.height*w/paint.width)),Image.Resampling.LANCZOS).filter(ImageFilter.GaussianBlur(5))
- smooth.save(ROOT/f'courtyard/{name}-smooth-{REV}.webp',quality=85,method=6)
- print(name,paint.size,(ROOT/f'courtyard/{name}-scene-{REV}.webp').stat().st_size)
+ smooth.save(ROOT/f'courtyard/{name}-smooth-{rev}.webp',quality=85,method=6)
+ print(name,paint.size,(ROOT/f'courtyard/{name}-scene-{rev}.webp').stat().st_size)
