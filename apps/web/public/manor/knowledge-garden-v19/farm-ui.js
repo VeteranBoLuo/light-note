@@ -691,7 +691,7 @@ const FarmUI = (() => {
     const use = c.bait ? "可作鱼饵" :
     c.fertilizer ? `每轮另得 1 份${M.FERT[c.fertilizer].name}，花束可售 ${c.sell} 积分` :
     c.sell === null ? "盛开后可长久观赏" : c.type === "flower" ? "采过后仍留在田里观赏" : c.harvests > 1 ? "一株多轮，无需重复浇水" : "收获后空出这块地";
-    return `<div class="seed-tile seed-choice ${c.tier}" data-seed-kind="${k}"><div class="seed-pack">${FarmArt.packet(k)}${c.bait ? `<span class="seed-bait-badge" title="收获后可在工坊手作鱼饵"><img src="${R2_ART}icon-bait${k === "rainbowcorn" ? "-rainbow" : ""}.webp" alt="">鱼饵</span>` : ""}</div><div class="seed-copy"><strong>${c.name}</strong><small>浇水后 ${cycleText(c.first)}${c.sell === null ? "盛开" : "首收"}${c.harvests > 1 ? ` · 共 ${c.harvests} 轮` : ""}</small>${!c.bait ? `<small class="seed-use">${use}</small>` : ""}<span class="seed-discovery ${state.cropDex[k] ? "known" : ""}">${state.cropDex[k] ? "已收录图鉴" : c.sell === null ? "首次盛开可点亮图鉴" : "首次收获可点亮图鉴"}</span><span class="seed-count">× ${n}</span></div>${target !== null ? `<button class="tile-btn primary${guide ? " guide-plant-seed" : ""}" data-action="plant-seed" data-plot="${target}" data-seed="${k}">${guide ? '<span class="plant-seed-cue">点这里</span>' : ""}种下</button>` : `<button class="tile-btn primary" data-action="seed-select" data-seed="${k}">去播种</button>`}${c.fertilizer ? `<small class="seed-output-note">${use}</small>` : ""}</div>`;
+    return `<div class="seed-tile seed-choice ${c.tier}" data-seed-kind="${k}"><div class="seed-pack">${FarmArt.packet(k)}${c.bait ? `<span class="seed-bait-badge" title="收获后可在工坊手作鱼饵"><img src="${R2_ART}icon-bait${k === "rainbowcorn" ? "-rainbow" : ""}.webp" alt="">鱼饵</span>` : ""}</div><div class="seed-copy"><strong>${c.name}</strong><small>浇水后 ${cycleText(c.first)}${c.sell === null ? "盛开" : "首收"}${c.harvests > 1 ? ` · 共 ${c.harvests} 轮` : ""}</small>${!c.bait ? `<small class="seed-use">${use}</small>` : ""}<span class="seed-discovery ${state.cropDex[k] ? "known" : ""}">${state.cropDex[k] ? "已收录图鉴" : c.sell === null ? "首次盛开可点亮图鉴" : "首次收获可点亮图鉴"}</span><span class="seed-count">× ${n}</span>${guide ? '<span class="plant-seed-cue">点击“种下”播种</span>' : ""}</div>${target !== null ? `<button class="tile-btn primary${guide ? " guide-plant-seed" : ""}" data-action="plant-seed" data-plot="${target}" data-seed="${k}">种下</button>` : `<button class="tile-btn primary" data-action="seed-select" data-seed="${k}">去播种</button>`}${c.fertilizer ? `<small class="seed-output-note">${use}</small>` : ""}</div>`;
   }
   const waitingFish = () => state.fish.filter((f) => !M.placed(state, f.id));
   const panelPositions = new Map();
@@ -753,7 +753,7 @@ const FarmUI = (() => {
     bagTarget = target;
     showDialog(
       target !== null ? `第 ${target + 1} 块地 · 选种子` : "背包",
-      target !== null ? state.guide === "plant" ? "选好小萝卜后，点击亮起的“种下”按钮。" : "选一种种子种下去。" : tab === "fert" ? "肥料收在这里，在作物详情中选用。" : "种子、收获、水族和肥料，都收在这里。",
+      target !== null ? state.guide === "plant" ? "点击小萝卜旁的“种下”，播下第一颗种子。" : "选一种种子种下去。" : tab === "fert" ? "肥料收在这里，在作物详情中选用。" : "种子、收获、水族和肥料，都收在这里。",
       bagBody(tab, target),
       `${tab === "seeds" && target === null ? '<button class="button" data-action="growth-gifts">稀有种子来源</button>' : tab === "fert" ? '<button class="button" data-action="farm">去养鱼舱收肥</button>' : tab === "crops" || tab === "fish" ? `<button class="button" data-action="shop-tab" data-tab="sell-${tab === "fish" ? "fish" : "crops"}">前往商店</button>` : ""}<button class="button primary" data-action="close">回到庄园</button>`,
       true,

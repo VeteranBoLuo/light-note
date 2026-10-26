@@ -11,6 +11,7 @@ import { setLocale } from '@/i18n';
 import zh from '@/i18n/locales/zh-CN';
 import en from '@/i18n/locales/en-US';
 import KnowledgeManor from '@/view/manor/KnowledgeManor.vue';
+import ManorLoadingState from '@/view/manor/ManorLoadingState.vue';
 import AppLayout from '@/view/index.vue';
 import '@/assets/css/index.less';
 import { createStaticPrewarmScheduler } from '@/utils/staticPrewarm';
@@ -159,7 +160,7 @@ createApp({ render: () => h('div', { style: { height: '100%', display: 'flex', f
     h('span', `${trace.value} · casting:${String(get().state.casting)} · first:${String(get().state.firstCompanionPending)} · guide:${String(get().state.discoveryGuide)}`),
     h('button', { onClick: () => { user.$patch({ id: user.id.endsWith('a') ? 'manor-fixture-b' : 'manor-fixture-a' }); account.value = user.id; } }, '切换账号'),
     h('button', { onClick: () => { loseResponse = true; } }, '下次回包丢失'),
-  ]), h('div', { style: { flex: '1', minHeight: '0' } }, [h(RouterView)]),
+  ]), h('div', { style: { flex: '1', minHeight: '0' } }, [h(params.get('loadingPreview') === 'true' ? ManorLoadingState : RouterView)]),
 ]) }).use(pinia).use(createI18n({ legacy: false, locale, messages: { 'zh-CN': zh, 'en-US': en } })).use(router).mount('#app');
 if (params.get('prewarm') === 'true') {
   const proof = document.createElement('pre'); proof.id = 'manor-prewarm-proof'; proof.hidden = true; document.body.append(proof);

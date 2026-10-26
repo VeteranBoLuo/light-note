@@ -129,6 +129,10 @@ function executeBootstrap({
 }
 
 describe('首屏前移动应用入口守卫', () => {
+  it('庄园直达首帧使用专属加载样式，其他页面不改变加载外观', () => {
+    expect(executeBootstrap({ pathname: '/knowledge-manor' }).classes.has('light-note-manor-entry')).toBe(true);
+    expect(executeBootstrap({ pathname: '/home' }).classes.has('light-note-manor-entry')).toBe(false);
+  });
   it('不包含搜索引擎 UA 特判', () => {
     expect(createEarlyAppEntryScript()).not.toMatch(/googlebot|baiduspider|bingbot/i);
   });

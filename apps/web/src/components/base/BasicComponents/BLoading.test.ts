@@ -48,6 +48,18 @@ describe('BLoading bar', () => {
 });
 
 describe('BLoading shared data feedback', () => {
+  it('自定义插画指示器沿用加载状态与无障碍语义，不额外显示通用圆点', () => {
+    const host = document.createElement('div');
+    const app = createApp({ render: () => h(BLoading, { loading: true, inline: true, title: '唤醒庄园' }, {
+      indicator: () => h('img', { src: '/manor-crest.svg', alt: '' }),
+    }) });
+    app.mount(host);
+    cleanup = () => app.unmount();
+    expect(host.querySelector('[role="status"]')?.textContent).toBe('唤醒庄园');
+    expect(host.querySelector('.b-loading-inline__indicator')?.getAttribute('aria-hidden')).toBe('true');
+    expect(host.querySelector('.b-loading-inline__indicator img')).not.toBeNull();
+    expect(host.querySelector('.b-loading-inline__indicator i')).toBeNull();
+  });
   it('hides an idle standalone layer and restores it only while loading', async () => {
     const host = document.createElement('div');
     const loading = ref(false);

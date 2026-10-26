@@ -288,7 +288,8 @@ const FarmStage = (() => {
     return {
       birds: birdStops(d).map(p => { const [x, y] = toScene(...p); return { x, y }; }),
       birdRoutes:d.birdRoutes?.map(route=>route.map(p=>{const [x,y]=toScene(...p);return {x,y};})),
-      lawn: { cx: lx, cy: ly, rx: lawn.rx * s, ry: lawn.ry * s },
+      lawn: { cx: lx, cy: ly, rx: lawn.rx * s, ry: lawn.ry * s, poly:lawn.poly?.map(p=>toScene(...p)) },
+      pickups: d.poop ? [{x:toScene(...d.poop)[0],y:toScene(...d.poop)[1],rx:50*s,ry:38*s}] : [],
       frog: { home: { x: fx, y: fy }, perches:(d.pier.frogPerches||[d.pier.frogRest]).map(p=>{const [x,y]=toScene(...p);return {x,y};}), water: { x: wx, y: wy }, face: wx > fx ? 1 : -1 },
       air: { cx: view.ox + sw * s * 0.45, cy: view.oy + sh * s * 0.42, rx: sw * s * 0.34, ry: sh * s * 0.22 },
       swim,

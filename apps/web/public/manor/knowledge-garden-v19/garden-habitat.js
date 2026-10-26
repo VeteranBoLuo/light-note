@@ -6,7 +6,7 @@ const GardenHabitat = (() => {
   const staged = () => (typeof FarmStage !== "undefined" ? FarmStage.habitat() : null);
   function lawn(mobile, w, h, pad = 0) {
     const st = staged();
-    if (st) return { cx: st.lawn.cx, cy: st.lawn.cy, rx: Math.max(3, st.lawn.rx - pad * 0.4), ry: Math.max(3, st.lawn.ry - pad * 0.12) };
+    if (st) return { ...st.lawn, rx: Math.max(3, st.lawn.rx - pad * 0.4), ry: Math.max(3, st.lawn.ry - pad * 0.12) };
     // 椭圆草坪左半边是苗床，兔子和麻雀只在右半边的草地上活动，不穿过作物
     const [x,y,rx,ry] = mobile ? [.595,.466,.05,.016] : [.545,.665,.052,.05];
     return { cx: x*w, cy: y*h, rx: Math.max(3, rx*w-pad), ry: Math.max(3, ry*h-pad*.18) };
@@ -40,10 +40,28 @@ const GardenHabitat = (() => {
     const [x,y,wx,wy] = mobile ? [.895,.355,.855,.285] : [.067,.765,.09,.87];
     return {home:{x:x*w,y:y*h},water:{x:wx*w,y:wy*h},face:wx>x?1:-1};
   }
-  const inLawn = (p,r) => ((p.x-r.cx)/r.rx)**2 + ((p.y-r.cy)/r.ry)**2 <= 1 + 1e-9;
+  const inLawn = (p,r) => r.poly ? inside(p,r.poly) : ((p.x-r.cx)/r.rx)**2 + ((p.y-r.cy)/r.ry)**2 <= 1 + 1e-9;
   function onLawn(p,r) {
+    if (r.poly) {
+      if (inside(p,r.poly)) return {x:p.x,y:p.y};
+      // Project to the closest edge, including a vertex. Iterating half-planes
+      // can leave an outside point at a narrow walkway corner.
+      let best, distance=Infinity;
+      r.poly.forEach((a,i)=>{
+        const b=r.poly[(i+1)%r.poly.length],dx=b[0]-a[0],dy=b[1]-a[1];
+        const t=clamp(((p.x-a[0])*dx+(p.y-a[1])*dy)/(dx*dx+dy*dy||1),0,1);
+        const q={x:a[0]+t*dx,y:a[1]+t*dy},d=(q.x-p.x)**2+(q.y-p.y)**2;
+        if(d<distance){distance=d;best=q;}
+      });
+      return best||p;
+    }
     const k = Math.max(1, Math.hypot((p.x-r.cx)/r.rx, (p.y-r.cy)/r.ry));
     return {x:r.cx+(p.x-r.cx)/k,y:r.cy+(p.y-r.cy)/k};
+  }
+  // The sprite extends above its feet. Keep that full body clear of a pickup,
+  // rather than checking only the animal's foot point against the drop centre.
+  function pickupClear(p,pickups,width,height) {
+    return pickups.every(q => p.x+width/2<q.x-q.rx || p.x-width/2>q.x+q.rx || p.y<q.y-q.ry || p.y-height>q.y+q.ry);
   }
   function rabbitHop(p) {
     const flight = clamp((p-.22)/.56,0,1);
@@ -158,6 +176,6 @@ const GardenHabitat = (() => {
   }
   // 轴向统一单位：高度随像素宽度计算，窄屏不把鱼拉长。
   const bodyPoint=(x,y,px,py,k,w,h,vw=2550)=>[(x+px*k)/vw,(y-100)/850+py*k*w/(vw*h)];
-  return { smooth,lawn,air,birdStops,birdRoute,birdFlight,frogShore,inLawn,onLawn,rabbitHop,water,planes,inside,project,swimField,fieldPoint,fitBody,bodyPoint };
+  return { smooth,lawn,air,birdStops,birdRoute,birdFlight,frogShore,inLawn,onLawn,pickupClear,rabbitHop,water,planes,inside,project,swimField,fieldPoint,fitBody,bodyPoint };
 })();
 if(typeof module!=="undefined") module.exports=GardenHabitat;

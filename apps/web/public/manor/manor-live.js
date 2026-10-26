@@ -1,4 +1,30 @@
 /* Account state and points are owned by the host's authenticated API, never this scene. */
+function createManorRefreshInput(doc) {
+  const pointers = new Set(), keys = new Set(), waiting = [];
+  let timer, settling = false;
+  const pressed = () => pointers.size || keys.size || settling;
+  const flush = () => { if (!pressed()) waiting.splice(0).forEach(resolve => resolve()); };
+  // pointerup/keyup precede the browser's click. Paint on the next task so the
+  // control that received the press survives until its click has dispatched.
+  const release = () => { settling = true; clearTimeout(timer); timer = setTimeout(() => { settling = false; flush(); }, 0); };
+  const down = e => { pointers.add(e.pointerId); };
+  const up = e => { pointers.delete(e.pointerId); release(); };
+  const key = e => e.key === 'Enter' || e.code === 'Space';
+  const keyDown = e => { if (key(e)) keys.add(e.code || e.key); };
+  const keyUp = e => { if (key(e)) { keys.delete(e.code || e.key); release(); } };
+  const blur = () => { pointers.clear(); keys.clear(); release(); };
+  const listeners = [['pointerdown',down],['pointerup',up],['pointercancel',up],['keydown',keyDown],['keyup',keyUp]];
+  listeners.forEach(([name, listener]) => doc.addEventListener(name, listener, true));
+  doc.defaultView?.addEventListener('blur', blur);
+  return {
+    waitForRelease: () => pressed() ? new Promise(resolve => waiting.push(resolve)) : Promise.resolve(),
+    destroy() {
+      listeners.forEach(([name, listener]) => doc.removeEventListener(name, listener, true));
+      doc.defaultView?.removeEventListener('blur', blur);
+      clearTimeout(timer); pointers.clear(); keys.clear(); settling = false; flush();
+    },
+  };
+}
 (() => {
   const nonce = new URLSearchParams(location.search).get('bridge');
   const uiScript = document.currentScript.dataset.uiScript;
@@ -6,6 +32,7 @@
   let snapshot, busy = false, sequence = 0, ready = false, refreshing = null, syncedAt = performance.now();
   const waiting = new Map();
   const origin = location.origin;
+  const refreshInput = createManorRefreshInput(document);
   const request = (action, payload = {}) => new Promise((resolve, reject) => {
     const id = ++sequence;
     waiting.set(id, { resolve, reject });
@@ -77,7 +104,7 @@
     resetTest: () => request("reset-test"),
     restoreFormal: () => request("restore-formal"),
     exit: () => request('exit'),
-    tasks: () => request('tasks'),
+    tasks: index => request('tasks', { index }),
     ledger: () => request('ledger'),
     dismissGuide: target => send(target, 'dismissGuide', []),
     claimSupply: (target, id) => send(target, 'claimSupply', [id]),
@@ -129,7 +156,8 @@
   });
   const refresh = (recover = false) => {
     if (!ready || document.hidden || busy || state.casting && !recover || refreshing) return;
-    refreshing = request('get').then(next => {
+    refreshing = request('get').then(async next => {
+      await refreshInput.waitForRelease();
       snapshot = next; syncedAt = performance.now(); apply(state, next.state); update();
     }).finally(() => { refreshing = null; });
     return refreshing;
@@ -150,3 +178,4 @@
   }, 60000);
   request('get').then(start).catch(() => request('load-error'));
 })();
+if (typeof module !== 'undefined') module.exports = { createManorRefreshInput };
