@@ -1,3 +1,4 @@
+import { withForegroundActivity } from '@/http/requestActivity';
 export type UserAuthModalModule = typeof import('@/view/login/UserAuthModal.vue');
 
 let pendingUserAuthModal: Promise<UserAuthModalModule> | null = null;
@@ -9,7 +10,7 @@ let pendingUserAuthModal: Promise<UserAuthModalModule> | null = null;
 export function loadUserAuthModal(): Promise<UserAuthModalModule> {
   if (pendingUserAuthModal) return pendingUserAuthModal;
 
-  pendingUserAuthModal = import('@/view/login/UserAuthModal.vue').catch((error) => {
+  pendingUserAuthModal = withForegroundActivity(() => import('@/view/login/UserAuthModal.vue')).catch((error) => {
     pendingUserAuthModal = null;
     throw error;
   });

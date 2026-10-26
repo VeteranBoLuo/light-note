@@ -114,7 +114,11 @@
   import { useCommunityChatUnreadRuntime } from '@/composables/useCommunityChatUnreadRuntime';
   import { nudgeVisible } from '@/composables/guestNudge';
   import { usePwaInstall } from '@/composables/usePwaInstall';
-  import { prefetchResolvedRoute } from '@/utils/routePrefetch';
+  import { disposeStaticPrewarm, setStaticPrewarmMobile, scheduleStaticPrewarm } from '@/utils/staticPrewarm';
+  import { scheduleAppearancePrewarm } from '@/utils/appearancePrewarm';
+  import { publicArtworkUrls, publicArtworkUrl } from '@/utils/publicArtwork';
+  import { COMMUNITY_CHAT_OFFICIAL_STICKERS } from '@lightnote/shared/community-chat-stickers';
+  import { stopRouteArtworkPrewarm, trackNavigationActivity } from '@/utils/routePrefetch';
   import { scheduleNoteEditorStartupPreload } from '@/utils/noteEditorStartupPreload';
   import { scheduleManorPrewarm } from '@/utils/manorPrewarm';
   import { resolveRouteAuthDecision } from '@/utils/authNavigationIntent.ts';
@@ -908,22 +912,10 @@
     disposeNoteEditorStartupPreload = null;
     const currentRouteName = String(router.currentRoute.value.name || '');
     const applicationRoute = Boolean(currentRouteName && !noteEditorPreloadExcludedRoutes.has(currentRouteName));
-    // 移动端不在启动后后台解析两套大型编辑器：这类预热会与笔记列表、图片和用户点击
-    // 争抢网络及主线程，反而造成数秒级随机卡顿。移动端只在具体卡片按下后加载对应类型。
+    // 桌面只缓存构建文件，不执行编辑器；移动端保留流量给当前页面和用户明确点击。
     const supportedPlatform = bookmark.isDesktop;
     if (!appStartupReady.value || !supportedPlatform || !applicationRoute) return;
-    disposeNoteEditorStartupPreload = scheduleNoteEditorStartupPreload({
-      supportedPlatform,
-      applicationRoute,
-      delayMs: 5_000,
-      prerender: Boolean((window as any).__PRERENDER__),
-      preloadRoute: () =>
-        prefetchResolvedRoute(router, {
-          name: 'noteDetail',
-          // 这里只解析并加载路由组件，不会触发导航守卫或请求这篇不存在的笔记。
-          params: { id: '__editor_runtime_warmup__' },
-        }),
-    });
+    disposeNoteEditorStartupPreload = scheduleNoteEditorStartupPreload();
   }
 
   watch(
@@ -940,13 +932,41 @@
     const name = String(router.currentRoute.value.name || '');
     if (!appStartupReady.value || !user.id || user.role !== 'root' || user.adminContext || !manorGrowth.growth.value?.features?.manor
       || !name || noteEditorPreloadExcludedRoutes.has(name) || publicStandaloneRoute.value) return;
-    disposeManorPrewarm = scheduleManorPrewarm(bookmark.isMobile);
+    disposeManorPrewarm = scheduleManorPrewarm(!bookmark.isDesktop);
   }
   // Stop at navigation intent, before an async guard or the next route starts loading.
-  const removeManorPrewarmBefore = router.beforeEach(stopManorPrewarm);
+  const removeNavigationActivity = trackNavigationActivity(router);
+  const removeManorPrewarmBefore = router.beforeEach(() => {
+    stopRouteArtworkPrewarm();
+    stopManorPrewarm();
+  });
   const removeManorPrewarmAfter = router.afterEach(syncManorPrewarm);
-  watch(() => [appStartupReady.value, user.id, user.role, user.adminContext, manorGrowth.growth.value?.features?.manor, bookmark.isMobile], syncManorPrewarm, { immediate: true });
-  onBeforeUnmount(() => { stopManorPrewarm(); removeManorPrewarmBefore(); removeManorPrewarmAfter(); });
+  watch(() => [appStartupReady.value, user.id, user.role, user.adminContext, manorGrowth.growth.value?.features?.manor, bookmark.isDesktop], syncManorPrewarm, { immediate: true });
+  onBeforeUnmount(() => { stopManorPrewarm(); removeNavigationActivity(); stopRouteArtworkPrewarm(); removeManorPrewarmBefore(); removeManorPrewarmAfter(); disposeStaticPrewarm(); });
+
+  let stopArtworkPrewarm: (() => void) | undefined;
+  watch(() => [appStartupReady.value, bookmark.isDesktop, router.currentRoute.value.name, user.id, user.adminContext,
+    manorGrowth.growth.value?.equippedFrame, manorGrowth.growth.value?.equippedBackground, manorGrowth.shop.value,
+    communityChatWorkspaceActive.value] as const, () => {
+    stopArtworkPrewarm?.();
+    setStaticPrewarmMobile(!bookmark.isDesktop);
+    const name = String(router.currentRoute.value.name || '');
+    if (!appStartupReady.value || !name || publicStandaloneRoute.value || noteEditorPreloadExcludedRoutes.has(name)) return;
+    const stops: Array<() => void> = [scheduleAppearancePrewarm({
+      desktop: bookmark.isDesktop,
+      frame: manorGrowth.growth.value?.equippedFrame,
+      background: manorGrowth.growth.value?.equippedBackground,
+      profileContext: ['personCenter', 'myInfo', 'settings', 'growth', 'communityOwnProfile'].includes(name),
+      ownedFrames: manorGrowth.shop.value?.frames?.filter(item => item.owned).map(item => item.id),
+    })];
+    if (name === 'growth') stops.push(scheduleStaticPrewarm({ priority: 1, urls: publicArtworkUrls('/achievements/', true) }));
+    if (communityChatWorkspaceActive.value) stops.push(scheduleStaticPrewarm({ priority: 1, urls: [
+      ...publicArtworkUrls('/community-chat/inline-emojis/'),
+      ...COMMUNITY_CHAT_OFFICIAL_STICKERS.slice(0, bookmark.isDesktop ? undefined : 8).map(item => publicArtworkUrl(item.assetPath)),
+    ] }));
+    stopArtworkPrewarm = () => stops.forEach(stop => stop());
+  }, { immediate: true });
+  onBeforeUnmount(() => stopArtworkPrewarm?.());
 
   const skipRouter = identityOptionalRoutes;
   const mobileAdminRoute = ['/apiLog', '/operationLog', '/userMg', '/userOpinion', '/imageMg', '/resourceGovernance'];

@@ -5,36 +5,34 @@
       ><span v-if="nameParts.extension" class="file-card-name__extension">{{ nameParts.extension }}</span>
     </BTooltip>
     <div class="file-card-folder-hint" :aria-hidden="!folder || undefined">
-      <BButton
-        v-if="folder"
-        class="file-card-folder"
-        type="text"
-        :disabled="disabled"
-        :aria-label="t('cloudSpace.filterByFolder', { path: folder.fullPath })"
-        @click.stop="emit('openFolder', folder)"
-        @keydown.enter.stop
-        @keydown.space.stop
-      >
+      <div v-if="folder" class="file-card-folder" @click.stop @dragstart.stop.prevent>
         <SvgIcon class="file-card-folder__icon" :src="icon.common.folderOutline" size="13" aria-hidden="true" />
-        <span class="file-card-folder__path">{{ folder.fullPath }}</span>
-      </BButton>
+        <CloudFolderBreadcrumb
+          :folders="folderPath?.length ? folderPath : [folder]"
+          :disabled="disabled"
+          @open-folder="emit('openFolder', $event)"
+        />
+      </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
   import { computed } from 'vue';
-  import { useI18n } from 'vue-i18n';
-  import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import CloudFolderBreadcrumb from './CloudFolderBreadcrumb.vue';
   import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon';
   import type { CloudFolderNode } from '@/types/cloudFolder';
 
   type FolderLocation = Pick<CloudFolderNode, 'id' | 'name' | 'fullPath'>;
-  const props = defineProps<{ fileName: string; folder?: FolderLocation | null; disabled?: boolean }>();
+  const props = defineProps<{
+    fileName: string;
+    folder?: FolderLocation | null;
+    folderPath?: FolderLocation[];
+    disabled?: boolean;
+  }>();
   const emit = defineEmits<{ openFolder: [folder: FolderLocation] }>();
-  const { t } = useI18n();
   const nameParts = computed(() => {
     const index = props.fileName.lastIndexOf('.');
     return index > 0 && index < props.fileName.length - 1
@@ -80,11 +78,11 @@
     min-width: 0;
   }
 
-  .file-card-folder.b_btn {
+  .file-card-folder {
+    display: flex;
+    align-items: baseline;
     min-width: 0;
     width: 100%;
-    height: var(--ui-control-24, 24px);
-    padding: 0;
     gap: var(--ui-space-6, 6px);
     justify-content: flex-start;
     color: var(--desc-color);
@@ -97,27 +95,7 @@
     flex: 0 0 auto;
   }
 
-  .file-card-folder__path {
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .file-card-folder:not(:disabled):hover {
-    color: var(--workspace-file-text);
-  }
-
-  .file-card-folder:not(:disabled):hover .file-card-folder__path {
-    text-decoration: underline;
-    text-underline-offset: 0.15em;
-  }
-
   html.light-note-mobile-rendering .file-card-folder-hint {
     min-height: var(--ui-control-32, 32px);
-  }
-
-  html.light-note-mobile-rendering .file-card-folder.b_btn {
-    height: var(--ui-control-32, 32px);
   }
 </style>

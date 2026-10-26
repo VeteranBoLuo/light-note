@@ -1,3 +1,4 @@
+import { publicArtworkUrl } from '@/utils/publicArtwork';
 import { ACHIEVEMENT_KEYS, type AchievementKey } from './achievements';
 import { ACHIEVEMENT_MOTION } from './achievementMotion';
 
@@ -5,5 +6,7 @@ import { ACHIEVEMENT_MOTION } from './achievementMotion';
 const keys = new Set<string>(ACHIEVEMENT_KEYS);
 export function achievementArtwork(key: string, large = false): string | undefined {
   if (!keys.has(key)) return undefined;
-  return `/achievements/enamel/${ACHIEVEMENT_MOTION[key] ? 'motion/' : ''}${key as AchievementKey}${large ? '' : '-small'}.webp`;
+  return publicArtworkUrl(
+    `/achievements/enamel/${ACHIEVEMENT_MOTION[key] ? 'motion/' : ''}${key as AchievementKey}${large ? '' : '-small'}.webp`,
+  );
 }

@@ -33,6 +33,7 @@
 </template>
 
 <script setup lang="ts">
+  import { withForegroundActivity } from '@/http/requestActivity';
   import { readTextPreviewSource } from '@/utils/textPreviewSource';
   import { onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
@@ -181,10 +182,12 @@
   }
 
   async function readPreviewSource(url: string): Promise<string> {
-    const response = await fetch(url);
-    if (!response.ok) throw new Error(`HTTP_${response.status}`);
-    const { content } = await readTextPreviewSource(response, SOURCE_READ_LIMIT);
-    return content;
+    return withForegroundActivity(async () => {
+      const response = await fetch(url);
+      if (!response.ok) throw new Error(`HTTP_${response.status}`);
+      const { content } = await readTextPreviewSource(response, SOURCE_READ_LIMIT);
+      return content;
+    });
   }
 
   async function sanitizeDocumentFragment(source: string, kind: PreviewKind): Promise<string> {

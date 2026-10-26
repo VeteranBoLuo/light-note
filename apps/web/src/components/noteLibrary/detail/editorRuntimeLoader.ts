@@ -1,4 +1,5 @@
 import type { Component } from 'vue';
+import { withForegroundActivity } from '@/http/requestActivity';
 
 type NoteEditorType = 'html' | 'markdown' | string | null | undefined;
 
@@ -34,7 +35,7 @@ function retryableImport(
 ) {
   const cached = current();
   if (cached) return cached;
-  const request = loader().catch((error) => {
+  const request = withForegroundActivity(loader).catch((error) => {
     save(null);
     throw error;
   });

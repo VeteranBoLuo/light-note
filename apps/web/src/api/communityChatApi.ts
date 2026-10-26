@@ -1,3 +1,4 @@
+import { withForegroundActivity } from '@/http/requestActivity';
 import axios from 'axios';
 import type { CommunityChatAttachment as CommunityChatAttachmentContract } from '@lightnote/shared/community-chat-attachments';
 import { apiBaseGet, apiBasePost, apiBasePut } from '@/http/request';
@@ -535,56 +536,58 @@ export async function uploadCommunityChatFile(
   file: File,
   options: { signal?: AbortSignal; onProgress?: (percent: number) => void } = {},
 ): Promise<CommunityChatAttachment> {
-  const prepareResponse = await apiBasePost(
-    `${roomPath(roomSlug)}/files/prepare`,
-    {
-      fileName: file.name,
-      fileType: file.type || 'application/octet-stream',
-      fileSize: file.size,
-    },
-    { silent: true },
-  );
-  const prepared = prepareResponse?.data;
-  const publicId = String(prepared?.attachment?.publicId || '');
-  if (prepareResponse?.status !== 200 || !publicId || !prepared?.uploadUrl) {
-    throw communityChatApiError(prepareResponse, 'COMMUNITY_CHAT_FILE_PREPARE_FAILED');
-  }
-  let uploadCompleted = false;
-  try {
-    await axios.put(prepared.uploadUrl, file, {
-      headers: {
-        ...(prepared.headers || {}),
-        'Content-Type': prepared.attachment.fileType || file.type || 'application/octet-stream',
+  return withForegroundActivity(async () => {
+    const prepareResponse = await apiBasePost(
+      `${roomPath(roomSlug)}/files/prepare`,
+      {
+        fileName: file.name,
+        fileType: file.type || 'application/octet-stream',
+        fileSize: file.size,
       },
-      signal: options.signal,
-      onUploadProgress: (event) => {
-        if (!event.total || event.total <= 0) return;
-        options.onProgress?.(Math.min(100, Math.max(0, Math.round((event.loaded / event.total) * 100))));
-      },
-    });
-    uploadCompleted = true;
-    options.onProgress?.(100);
-    const confirmed = await apiBasePost(
-      `/api/community-chat/files/${encodeURIComponent(publicId)}/confirm`,
-      {},
       { silent: true },
     );
-    if (confirmed?.status !== 200 || !confirmed?.data?.publicId) {
-      throw communityChatApiError(confirmed, 'COMMUNITY_CHAT_FILE_CONFIRM_FAILED');
+    const prepared = prepareResponse?.data;
+    const publicId = String(prepared?.attachment?.publicId || '');
+    if (prepareResponse?.status !== 200 || !publicId || !prepared?.uploadUrl) {
+      throw communityChatApiError(prepareResponse, 'COMMUNITY_CHAT_FILE_PREPARE_FAILED');
     }
-    return confirmed.data as CommunityChatAttachment;
-  } catch (error: any) {
-    if (uploadCompleted && error?.name !== 'CanceledError' && error?.name !== 'AbortError') {
-      const recovered = await apiBasePost(
+    let uploadCompleted = false;
+    try {
+      await axios.put(prepared.uploadUrl, file, {
+        headers: {
+          ...(prepared.headers || {}),
+          'Content-Type': prepared.attachment.fileType || file.type || 'application/octet-stream',
+        },
+        signal: options.signal,
+        onUploadProgress: (event) => {
+          if (!event.total || event.total <= 0) return;
+          options.onProgress?.(Math.min(100, Math.max(0, Math.round((event.loaded / event.total) * 100))));
+        },
+      });
+      uploadCompleted = true;
+      options.onProgress?.(100);
+      const confirmed = await apiBasePost(
         `/api/community-chat/files/${encodeURIComponent(publicId)}/confirm`,
         {},
         { silent: true },
-      ).catch(() => null);
-      if (recovered?.status === 200 && recovered?.data?.publicId) return recovered.data as CommunityChatAttachment;
+      );
+      if (confirmed?.status !== 200 || !confirmed?.data?.publicId) {
+        throw communityChatApiError(confirmed, 'COMMUNITY_CHAT_FILE_CONFIRM_FAILED');
+      }
+      return confirmed.data as CommunityChatAttachment;
+    } catch (error: any) {
+      if (uploadCompleted && error?.name !== 'CanceledError' && error?.name !== 'AbortError') {
+        const recovered = await apiBasePost(
+          `/api/community-chat/files/${encodeURIComponent(publicId)}/confirm`,
+          {},
+          { silent: true },
+        ).catch(() => null);
+        if (recovered?.status === 200 && recovered?.data?.publicId) return recovered.data as CommunityChatAttachment;
+      }
+      await discardCommunityChatFile(publicId).catch(() => undefined);
+      throw error;
     }
-    await discardCommunityChatFile(publicId).catch(() => undefined);
-    throw error;
-  }
+  });
 }
 
 export const discardCommunityChatFile = (filePublicId: string) =>

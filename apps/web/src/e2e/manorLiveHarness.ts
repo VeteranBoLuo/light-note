@@ -14,7 +14,7 @@ import KnowledgeManor from '@/view/manor/KnowledgeManor.vue';
 import ManorLoadingState from '@/view/manor/ManorLoadingState.vue';
 import AppLayout from '@/view/index.vue';
 import '@/assets/css/index.less';
-import { scheduleManorPrewarm } from '@/utils/manorPrewarm';
+import { createStaticPrewarmScheduler } from '@/utils/staticPrewarm';
 import { activeRequestCount } from '@/http/requestActivity';
 
 // Every API request in this page is resolved in memory. No credentials, production DB or providers.
@@ -25,6 +25,10 @@ const user = useUserStore(pinia), bookmark = bookmarkStore(pinia);
 user.$patch({ id: 'manor-fixture-a', role: params.get('role') === 'visitor' ? 'visitor' : params.get('role') === 'user' ? 'user' : 'root', adminContext: null });
 bookmark.screenWidth = innerWidth;
 const mobile = params.get('renderProfile') === 'mobile' || bookmark.isMobile;
+// Prewarm proof requires a production build, which supplies the entry-bound manifest.
+const prewarmScheduler = params.get('prewarm') === 'true'
+  ? createStaticPrewarmScheduler({ entryUrl: import.meta.url, mobile: () => mobile }) : undefined;
+window.addEventListener('pagehide', () => prewarmScheduler?.dispose(), { once: true });
 document.documentElement.classList.toggle('light-note-mobile-rendering', mobile);
 document.documentElement.dataset.theme = params.get('theme') === 'night' ? 'night' : 'day';
 applyUiDensity(params.get('density') === 'compact' ? 'small' : params.get('density') === 'comfortable' ? 'large' : 'standard', mobile);
@@ -143,7 +147,7 @@ async function fixtureNavigate(path: string, event: MouseEvent) {
 }
 router.beforeEach(() => { stopPrewarm?.(); stopPrewarm = undefined; });
 if (params.get('prewarm') === 'true') router.afterEach(() => {
-  if (router.currentRoute.value.path !== '/knowledge-manor' && user.role === 'root' && params.get('feature') !== 'off') stopPrewarm = scheduleManorPrewarm(mobile);
+  if (!mobile && router.currentRoute.value.path !== '/knowledge-manor' && user.role === 'root' && params.get('feature') !== 'off') stopPrewarm = prewarmScheduler?.submit({ groups: ['manor.desktop'], priority: 4 });
 });
 await router.push(Entry ? '/app' : '/knowledge-manor');
 createApp({ render: () => h('div', { style: { height: '100%', display: 'flex', flexDirection: 'column' } }, [

@@ -22,7 +22,7 @@
           <SvgIcon :src="icon.noteDetail.toolbar.image" size="22" aria-hidden="true" />
         </span>
         <img
-          :src="attachment.url"
+          :src="publicArtworkUrl(attachment.url || '')"
           :alt="t('communityChat.image.messageAlt', { name: authorName })"
           :width="positiveDimension(attachment.width)"
           :height="positiveDimension(attachment.height)"
@@ -85,6 +85,7 @@
 </template>
 
 <script setup lang="ts">
+  import { publicArtworkUrl } from '@/utils/publicArtwork';
   import { computed } from 'vue';
   import { useI18n } from 'vue-i18n';
   import type { CommunityChatAttachment } from '@/api/communityChatApi';

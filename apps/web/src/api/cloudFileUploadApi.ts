@@ -1,3 +1,4 @@
+import { withForegroundActivity } from '@/http/requestActivity';
 import axios from 'axios';
 import { apiBasePost } from '@/http/request';
 
@@ -130,101 +131,103 @@ export async function uploadManagedCloudFile(
   file: ManagedCloudUploadFile,
   options: ManagedCloudUploadOptions = {},
 ): Promise<CloudUploadResult> {
-  const metadata = {
-    fileName: String(options.fileName || file.name).trim(),
-    fileType: file.type || 'application/octet-stream',
-    fileSize: file.size,
-  };
-  const target = JSON.stringify([
-    metadata,
-    options.folderId ?? null,
-    options.addToInbox === true,
-    options.inboxSource || 'quick_capture',
-  ]);
-  const receipt = options.receipt;
-  const previous = receipt?.pending;
-  if (receipt && previous) {
-    if (previous.file !== file || previous.target !== target) throw new Error('UPLOAD_RECEIPT_MISMATCH');
-    // 上次确认和核验都未返回时，只核验原对象，不能重新签名并上传另一份。
-    const recovered = await abortManagedUpload(previous.objectKey, options).catch(() => null);
-    if (recovered?.alreadyConfirmed && recovered?.fileId) {
-      receipt.pending = undefined;
-      return {
-        filename: String(recovered.filename || metadata.fileName),
-        status: '已上传',
-        fileId: String(recovered.fileId),
-      };
-    }
-    if (recovered?.deleted !== true || recovered?.alreadyConfirmed === true) {
-      throw new Error('UPLOAD_RESULT_UNKNOWN');
-    }
-    receipt.pending = undefined;
-  }
-  if (options.signal?.aborted) throw new DOMException('Upload cancelled', 'AbortError');
-  // 先核验未知结果，再按需读取；回执只引用来源，不留住已读取的大 Blob。
-  const body = 'read' in file ? await file.read(options.signal) : file;
-  if (options.signal?.aborted) throw new DOMException('Upload cancelled', 'AbortError');
-  if (body.size !== file.size) throw new Error('UPLOAD_SOURCE_SIZE_CHANGED');
-  const prepareResponse = await managedRequest(options, 'prepareManagedUpload', metadata);
-  const uploadInfo = prepareResponse.data;
-  if (prepareResponse.status !== 200 || !uploadInfo?.uploadUrl || !uploadInfo?.objectKey) {
-    throw apiError(prepareResponse, 'UPLOAD_PREPARE_FAILED');
-  }
-
-  if (receipt) receipt.pending = { objectKey: String(uploadInfo.objectKey), file, target };
-  let confirmed = false;
-  try {
-    await axios.put(uploadInfo.uploadUrl, body, {
-      headers: {
-        ...(uploadInfo.headers || {}),
-        'Content-Type': uploadInfo.fileType || metadata.fileType,
-      },
-      signal: options.signal,
-      onUploadProgress: (event) => {
-        if (!event.total || event.total <= 0) return;
-        options.onProgress?.(Math.min(100, Math.max(0, Math.round((event.loaded / event.total) * 100))));
-      },
-    });
-    options.onProgress?.(100);
-
-    // PUT 完成与确认之间仍可能收到取消，不能继续创建文件记录。
-    // 抛入既有恢复流程，清理对象；如果结果已确认则保留已保存文件。
-    if (options.signal?.aborted) throw new DOMException('Upload cancelled', 'AbortError');
-
-    const confirmResponse = await managedRequest(options, 'confirmManagedUpload', {
-      objectKey: uploadInfo.objectKey,
-      fileName: metadata.fileName,
-      fileType: uploadInfo.fileType || metadata.fileType,
-      folderId: options.folderId ?? null,
-      addToInbox: options.addToInbox === true,
-      inboxSource: options.inboxSource || 'quick_capture',
-    });
-    const result = confirmResponse.data;
-    if (confirmResponse.status !== 200 || !result?.fileId || result.status !== '已上传') {
-      throw apiError(confirmResponse, 'UPLOAD_CONFIRM_FAILED');
-    }
-    confirmed = true;
-    if (receipt) receipt.pending = undefined;
-    return {
-      filename: String(result.filename || metadata.fileName),
-      status: '已上传',
-      fileId: String(result.fileId),
+  return withForegroundActivity(async () => {
+    const metadata = {
+      fileName: String(options.fileName || file.name).trim(),
+      fileType: file.type || 'application/octet-stream',
+      fileSize: file.size,
     };
-  } catch (error) {
-    if (!confirmed) {
-      const recovery = await abortManagedUpload(String(uploadInfo.objectKey), options).catch(() => null);
-      if (recovery?.alreadyConfirmed && recovery?.fileId) {
-        if (receipt) receipt.pending = undefined;
+    const target = JSON.stringify([
+      metadata,
+      options.folderId ?? null,
+      options.addToInbox === true,
+      options.inboxSource || 'quick_capture',
+    ]);
+    const receipt = options.receipt;
+    const previous = receipt?.pending;
+    if (receipt && previous) {
+      if (previous.file !== file || previous.target !== target) throw new Error('UPLOAD_RECEIPT_MISMATCH');
+      // 上次确认和核验都未返回时，只核验原对象，不能重新签名并上传另一份。
+      const recovered = await abortManagedUpload(previous.objectKey, options).catch(() => null);
+      if (recovered?.alreadyConfirmed && recovered?.fileId) {
+        receipt.pending = undefined;
         return {
-          filename: String(recovery.filename || metadata.fileName),
+          filename: String(recovered.filename || metadata.fileName),
           status: '已上传',
-          fileId: String(recovery.fileId),
+          fileId: String(recovered.fileId),
         };
       }
-      if (recovery?.deleted === true && recovery?.alreadyConfirmed !== true && receipt) receipt.pending = undefined;
+      if (recovered?.deleted !== true || recovered?.alreadyConfirmed === true) {
+        throw new Error('UPLOAD_RESULT_UNKNOWN');
+      }
+      receipt.pending = undefined;
     }
-    throw error;
-  }
+    if (options.signal?.aborted) throw new DOMException('Upload cancelled', 'AbortError');
+    // 先核验未知结果，再按需读取；回执只引用来源，不留住已读取的大 Blob。
+    const body = 'read' in file ? await file.read(options.signal) : file;
+    if (options.signal?.aborted) throw new DOMException('Upload cancelled', 'AbortError');
+    if (body.size !== file.size) throw new Error('UPLOAD_SOURCE_SIZE_CHANGED');
+    const prepareResponse = await managedRequest(options, 'prepareManagedUpload', metadata);
+    const uploadInfo = prepareResponse.data;
+    if (prepareResponse.status !== 200 || !uploadInfo?.uploadUrl || !uploadInfo?.objectKey) {
+      throw apiError(prepareResponse, 'UPLOAD_PREPARE_FAILED');
+    }
+
+    if (receipt) receipt.pending = { objectKey: String(uploadInfo.objectKey), file, target };
+    let confirmed = false;
+    try {
+      await axios.put(uploadInfo.uploadUrl, body, {
+        headers: {
+          ...(uploadInfo.headers || {}),
+          'Content-Type': uploadInfo.fileType || metadata.fileType,
+        },
+        signal: options.signal,
+        onUploadProgress: (event) => {
+          if (!event.total || event.total <= 0) return;
+          options.onProgress?.(Math.min(100, Math.max(0, Math.round((event.loaded / event.total) * 100))));
+        },
+      });
+      options.onProgress?.(100);
+
+      // PUT 完成与确认之间仍可能收到取消，不能继续创建文件记录。
+      // 抛入既有恢复流程，清理对象；如果结果已确认则保留已保存文件。
+      if (options.signal?.aborted) throw new DOMException('Upload cancelled', 'AbortError');
+
+      const confirmResponse = await managedRequest(options, 'confirmManagedUpload', {
+        objectKey: uploadInfo.objectKey,
+        fileName: metadata.fileName,
+        fileType: uploadInfo.fileType || metadata.fileType,
+        folderId: options.folderId ?? null,
+        addToInbox: options.addToInbox === true,
+        inboxSource: options.inboxSource || 'quick_capture',
+      });
+      const result = confirmResponse.data;
+      if (confirmResponse.status !== 200 || !result?.fileId || result.status !== '已上传') {
+        throw apiError(confirmResponse, 'UPLOAD_CONFIRM_FAILED');
+      }
+      confirmed = true;
+      if (receipt) receipt.pending = undefined;
+      return {
+        filename: String(result.filename || metadata.fileName),
+        status: '已上传',
+        fileId: String(result.fileId),
+      };
+    } catch (error) {
+      if (!confirmed) {
+        const recovery = await abortManagedUpload(String(uploadInfo.objectKey), options).catch(() => null);
+        if (recovery?.alreadyConfirmed && recovery?.fileId) {
+          if (receipt) receipt.pending = undefined;
+          return {
+            filename: String(recovery.filename || metadata.fileName),
+            status: '已上传',
+            fileId: String(recovery.fileId),
+          };
+        }
+        if (recovery?.deleted === true && recovery?.alreadyConfirmed !== true && receipt) receipt.pending = undefined;
+      }
+      throw error;
+    }
+  });
 }
 
 /**
@@ -232,46 +235,48 @@ export async function uploadManagedCloudFile(
  * 这里只封装无 UI 的原子能力，进度条和批量上传仍由云空间页面自身负责。
  */
 export async function uploadCloudFile(file: File, folderId: string | null): Promise<CloudUploadResult> {
-  const metadata = {
-    fileName: file.name,
-    fileType: file.type || 'application/octet-stream',
-    fileSize: file.size,
-  };
-  const prepareResponse = await apiBasePost('/api/file/uploadFiles', { files: [metadata] }, { silent: true });
-  const uploadInfo = prepareResponse.data?.[0];
-  if (prepareResponse.status !== 200 || !uploadInfo?.uploadUrl || uploadInfo?.status === '处理失败') {
-    throw apiError(prepareResponse, uploadInfo?.error || 'UPLOAD_PREPARE_FAILED');
-  }
+  return withForegroundActivity(async () => {
+    const metadata = {
+      fileName: file.name,
+      fileType: file.type || 'application/octet-stream',
+      fileSize: file.size,
+    };
+    const prepareResponse = await apiBasePost('/api/file/uploadFiles', { files: [metadata] }, { silent: true });
+    const uploadInfo = prepareResponse.data?.[0];
+    if (prepareResponse.status !== 200 || !uploadInfo?.uploadUrl || uploadInfo?.status === '处理失败') {
+      throw apiError(prepareResponse, uploadInfo?.error || 'UPLOAD_PREPARE_FAILED');
+    }
 
-  await axios.put(uploadInfo.uploadUrl, file, {
-    headers: {
-      ...(uploadInfo.headers || {}),
-      'Content-Type': uploadInfo.fileType || metadata.fileType,
-    },
+    await axios.put(uploadInfo.uploadUrl, file, {
+      headers: {
+        ...(uploadInfo.headers || {}),
+        'Content-Type': uploadInfo.fileType || metadata.fileType,
+      },
+    });
+
+    const confirmResponse = await apiBasePost(
+      '/api/file/confirmUpload',
+      {
+        files: [
+          {
+            fileName: uploadInfo.filename || metadata.fileName,
+            ...(uploadInfo.objectKey ? { objectKey: uploadInfo.objectKey } : {}),
+            fileType: uploadInfo.fileType || metadata.fileType,
+            fileSize: metadata.fileSize,
+          },
+        ],
+        folderId,
+      },
+      { silent: true },
+    );
+    const result = confirmResponse.data?.[0];
+    if (confirmResponse.status !== 200 || !result?.fileId || (result.status !== '已上传' && result.status !== '已覆盖')) {
+      throw apiError(confirmResponse, result?.error || 'UPLOAD_CONFIRM_FAILED');
+    }
+    return {
+      filename: String(result.filename || metadata.fileName),
+      status: result.status,
+      fileId: String(result.fileId),
+    };
   });
-
-  const confirmResponse = await apiBasePost(
-    '/api/file/confirmUpload',
-    {
-      files: [
-        {
-          fileName: uploadInfo.filename || metadata.fileName,
-          ...(uploadInfo.objectKey ? { objectKey: uploadInfo.objectKey } : {}),
-          fileType: uploadInfo.fileType || metadata.fileType,
-          fileSize: metadata.fileSize,
-        },
-      ],
-      folderId,
-    },
-    { silent: true },
-  );
-  const result = confirmResponse.data?.[0];
-  if (confirmResponse.status !== 200 || !result?.fileId || (result.status !== '已上传' && result.status !== '已覆盖')) {
-    throw apiError(confirmResponse, result?.error || 'UPLOAD_CONFIRM_FAILED');
-  }
-  return {
-    filename: String(result.filename || metadata.fileName),
-    status: result.status,
-    fileId: String(result.fileId),
-  };
 }

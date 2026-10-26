@@ -7233,6 +7233,8 @@ export default {
     filteringAllFileCount: '正在筛选文件，全部文件共 {total} 个',
     folderFileCountDescription: '当前文件夹有 {direct} 个文件，含子文件夹共 {total} 个',
     filterByFolder: '筛选文件夹“{path}”',
+    folderSidebarResizeLabel: '调整文件夹侧栏宽度',
+    folderSidebarResizeHint: '拖动调整宽度，双击或按 Home 恢复默认；仅保存在当前浏览器',
     openFolderTree: '打开文件夹目录',
     folderActionsFor: '“{name}”的文件夹操作',
     expandFolder: '展开“{name}”',

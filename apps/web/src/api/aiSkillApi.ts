@@ -1,3 +1,4 @@
+import { withForegroundActivity } from '@/http/requestActivity';
 import request, { apiBaseGet, apiBasePost, type RequestOptions } from '@/http/request';
 import {
   validateAiSkillResponse,
@@ -172,59 +173,61 @@ export async function executeAiSkillStream(
   skillRequest: AiSkillRequest,
   handlers: AiSkillStreamHandlers = {},
 ): Promise<AiSkillResponse> {
-  try {
-    const response = await request({
-      url: '/api/ai/skills/stream',
-      method: 'post',
-      data: skillRequest,
-      adapter: 'fetch',
-      responseType: 'stream',
-      signal: handlers.signal,
-      silent: true,
-    } as RequestOptions);
-    const stream = response.data as ReadableStream<Uint8Array> | null;
-    if (!stream || typeof stream.getReader !== 'function') {
-      throw new AiSkillApiError('AI_SKILL_STREAM_UNAVAILABLE', '当前环境无法读取 AI 流式响应', 502);
-    }
-    const reader = stream.getReader();
-    const decoder = new TextDecoder();
-    let buffer = '';
-    let completed: AiSkillResponse | null = null;
-    const handleFrame = (frame: string) => {
-      const parsed = parseSseFrame(frame);
-      if (!parsed) return;
-      if (parsed.event === 'start') handlers.onStart?.(parsed.data || {});
-      else if (parsed.event === 'delta') handlers.onDelta?.(String(parsed.data?.content || ''));
-      else if (parsed.event === 'reset') handlers.onReset?.();
-      else if (parsed.event === 'complete') completed = validateAiSkillResponse(parsed.data);
-      else if (parsed.event === 'error') {
-        throw new AiSkillApiError(
-          String(parsed.data?.code || 'AI_SKILL_FAILED'),
-          String(parsed.data?.message || 'AI 能力暂时不可用'),
-          Number(parsed.data?.status || 500),
-          true,
-          parsed.data || {},
-        );
+  return withForegroundActivity(async () => {
+    try {
+      const response = await request({
+        url: '/api/ai/skills/stream',
+        method: 'post',
+        data: skillRequest,
+        adapter: 'fetch',
+        responseType: 'stream',
+        signal: handlers.signal,
+        silent: true,
+      } as RequestOptions);
+      const stream = response.data as ReadableStream<Uint8Array> | null;
+      if (!stream || typeof stream.getReader !== 'function') {
+        throw new AiSkillApiError('AI_SKILL_STREAM_UNAVAILABLE', '当前环境无法读取 AI 流式响应', 502);
       }
-    };
-    while (true) {
-      const { done, value } = await reader.read();
-      buffer += decoder.decode(value || new Uint8Array(), { stream: !done }).replace(/\r\n?/g, '\n');
-      let boundary = buffer.indexOf('\n\n');
-      while (boundary >= 0) {
-        const frame = buffer.slice(0, boundary);
-        buffer = buffer.slice(boundary + 2);
-        handleFrame(frame);
-        boundary = buffer.indexOf('\n\n');
+      const reader = stream.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let completed: AiSkillResponse | null = null;
+      const handleFrame = (frame: string) => {
+        const parsed = parseSseFrame(frame);
+        if (!parsed) return;
+        if (parsed.event === 'start') handlers.onStart?.(parsed.data || {});
+        else if (parsed.event === 'delta') handlers.onDelta?.(String(parsed.data?.content || ''));
+        else if (parsed.event === 'reset') handlers.onReset?.();
+        else if (parsed.event === 'complete') completed = validateAiSkillResponse(parsed.data);
+        else if (parsed.event === 'error') {
+          throw new AiSkillApiError(
+            String(parsed.data?.code || 'AI_SKILL_FAILED'),
+            String(parsed.data?.message || 'AI 能力暂时不可用'),
+            Number(parsed.data?.status || 500),
+            true,
+            parsed.data || {},
+          );
+        }
+      };
+      while (true) {
+        const { done, value } = await reader.read();
+        buffer += decoder.decode(value || new Uint8Array(), { stream: !done }).replace(/\r\n?/g, '\n');
+        let boundary = buffer.indexOf('\n\n');
+        while (boundary >= 0) {
+          const frame = buffer.slice(0, boundary);
+          buffer = buffer.slice(boundary + 2);
+          handleFrame(frame);
+          boundary = buffer.indexOf('\n\n');
+        }
+        if (done) break;
       }
-      if (done) break;
+      if (buffer.trim()) handleFrame(buffer);
+      if (!completed) throw new AiSkillApiError('AI_SKILL_STREAM_INCOMPLETE', 'AI 流式响应未完整结束，请重试', 502);
+      return completed;
+    } catch (cause) {
+      throw normalizeAiSkillApiError(cause);
     }
-    if (buffer.trim()) handleFrame(buffer);
-    if (!completed) throw new AiSkillApiError('AI_SKILL_STREAM_INCOMPLETE', 'AI 流式响应未完整结束，请重试', 502);
-    return completed;
-  } catch (cause) {
-    throw normalizeAiSkillApiError(cause);
-  }
+  });
 }
 
 export const aiSkillApiInternals = Object.freeze({ parseSseFrame });

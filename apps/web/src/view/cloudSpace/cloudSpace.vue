@@ -164,12 +164,13 @@
         />
       </div>
       <div class="content-area">
-        <CloudFolder
-          v-if="!bookmark.isMobile"
-          :can-manage-tags="user.adminContext?.mode !== 'readonly'"
-          @uploadFiles="onUploadFiles"
-          @manage-tags="openFolderTags"
-        />
+        <CloudFolderSidebar v-if="!bookmark.isMobile">
+          <CloudFolder
+            :can-manage-tags="user.adminContext?.mode !== 'readonly'"
+            @uploadFiles="onUploadFiles"
+            @manage-tags="openFolderTags"
+          />
+        </CloudFolderSidebar>
         <FieldList
           :view-mode="viewMode"
           :batch-mode="batchMode"
@@ -277,6 +278,7 @@
   import { useCloudFileScope } from '@/composables/useCloudFileScope';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import CloudFolder from '@/components/cloudSpace/CloudFolder.vue';
+  import CloudFolderSidebar from '@/components/cloudSpace/CloudFolderSidebar.vue';
   import FileTypeFilter from '@/components/cloudSpace/FileTypeFilter.vue';
   import MoveFile from '@/components/cloudSpace/MoveFile.vue';
   import { recordOperation } from '@/api/commonApi.ts';
@@ -1431,7 +1433,7 @@
   }
 
   .content-area :deep(.folder-list) {
-    width: var(--ui-layout-230, 230px);
+    width: 100%;
     padding: var(--ui-space-12, 12px);
     box-sizing: border-box;
     border: 1px solid color-mix(in srgb, var(--card-border-color) 72%, transparent);

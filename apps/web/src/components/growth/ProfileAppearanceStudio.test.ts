@@ -53,6 +53,7 @@ vi.mock('@/config/builtinAvatars', () => ({
     },
   ],
   builtinAvatarPreviewStyle: () => ({}),
+  builtinAvatarAssetUrls: () => [],
   renderBuiltinAvatar: actions.render,
 }));
 const { default: Studio } = await import('./ProfileAppearanceStudio.vue');

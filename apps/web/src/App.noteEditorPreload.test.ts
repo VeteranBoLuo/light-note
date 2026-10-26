@@ -18,7 +18,7 @@ describe('笔记编辑器启动预热接入', () => {
     expect(preloadBlock).not.toContain('user.role');
     expect(appSource).toContain('appStartupReady.value = true');
     expect(appSource).toContain('disposeNoteEditorStartupPreload?.()');
-    expect(preloadBlock).toContain('delayMs: 5_000');
+    expect(preloadBlock).toContain('scheduleNoteEditorStartupPreload()');
   });
 
   it('官网等纯展示路由不会下载编辑器运行时', () => {
@@ -27,9 +27,9 @@ describe('笔记编辑器启动预热接入', () => {
     expect(appSource).toContain('noteEditorPreloadExcludedRoutes.has(currentRouteName)');
   });
 
-  it('只预热详情路由，不导航或请求虚构笔记', () => {
-    expect(appSource).toContain("name: 'noteDetail'");
-    expect(appSource).toContain("params: { id: '__editor_runtime_warmup__' }");
-    expect(appSource).not.toContain("router.push('__editor_runtime_warmup__')");
+  it('启动只提交静态资源，不导航或请求虚构笔记', () => {
+    expect(preloadBlock).not.toContain('prefetchResolvedRoute');
+    expect(preloadBlock).not.toContain('router.push');
+    expect(preloadBlock).not.toContain('import(');
   });
 });

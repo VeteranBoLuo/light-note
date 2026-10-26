@@ -19,365 +19,399 @@
     <span class="avatar-frame__portrait">
       <SvgIcon :src="src" :size="displayAvatarSize" :density-aware="false" />
     </span>
-    <AvatarFrameSubjectMotion
-      v-if="subjectArtwork"
-      :key="subjectArtwork.key"
-      :artwork="subjectArtwork"
-      :paused="isMotionPaused"
-      :chat="props.motionProfile === 'chat'"
-      @ready="onSubjectReady"
-    />
-    <span class="avatar-frame__canvas">
-      <span
-        v-if="artwork && variant === 'sunset'"
-        class="avatar-frame__sunset-orbit"
-        aria-hidden="true"
-      ></span>
-      <img
-        v-if="!subjectReady && artwork && !usesFrontStructuralShell"
-        class="avatar-frame__art"
-        :src="artwork.src"
-        alt=""
-        draggable="false"
-        aria-hidden="true"
-      />
-      <img
-        v-if="!subjectReady && hasArtDetail && !usesFrontStructuralShell"
-        class="avatar-frame__art-detail"
-        :src="artwork?.src"
-        alt=""
-        draggable="false"
-        aria-hidden="true"
-      />
-      <span
-        v-if="!subjectReady && artwork && !usesDedicatedInnerRing && !usesFrontStructuralShell"
-        class="avatar-frame__inner-ring"
-        aria-hidden="true"
-      >
-        <img class="avatar-frame__art-inner" :src="artwork.src" alt="" draggable="false" />
-      </span>
-      <span v-if="isDynamic && !publicContributionMotion" class="avatar-frame__motion avatar-frame__motion--back" aria-hidden="true">
-        <i></i><i></i><i></i><i></i>
-      </span>
-    </span>
-    <span class="avatar-frame__canvas avatar-frame__canvas--front" aria-hidden="true">
-      <AvatarFramePublicContributionMotion
-        v-if="publicContributionMotion"
-        :key="variant"
-        :kind="publicContributionMotion"
-        :avatar-size="displayAvatarSize"
+    <template v-if="assetsRequested">
+      <AvatarFrameSubjectMotion
+        v-if="subjectArtwork"
+        :key="subjectArtwork.key"
+        :artwork="subjectArtwork"
         :paused="isMotionPaused"
         :chat="props.motionProfile === 'chat'"
+        @ready="onSubjectReady"
       />
-      <template v-if="variant === 'celestial' && artwork?.motionSrc && artwork?.effectSrc">
+      <span class="avatar-frame__canvas">
+        <span
+          v-if="artwork && variant === 'sunset'"
+          class="avatar-frame__sunset-orbit"
+          aria-hidden="true"
+        ></span>
         <img
-          class="avatar-frame__wing-layer avatar-frame__wing-layer--left"
-          :src="artwork.motionSrc"
-          alt=""
-          draggable="false"
-        />
-        <img
-          class="avatar-frame__wing-layer avatar-frame__wing-layer--right"
-          :src="artwork.effectSrc"
-          alt=""
-          draggable="false"
-        />
-      </template>
-      <template
-        v-if="variant === 'streak-eternal' && artwork?.motionSrc && artwork?.effectSrc && artwork?.trailSrc"
-      >
-        <img
-          class="avatar-frame__wing-layer avatar-frame__wing-layer--spring"
-          :src="artwork.motionSrc"
-          alt=""
-          draggable="false"
-        />
-        <img
-          class="avatar-frame__wing-layer avatar-frame__wing-layer--autumn"
-          :src="artwork.effectSrc"
-          alt=""
-          draggable="false"
-        />
-        <img
-          class="avatar-frame__wing-layer avatar-frame__wing-layer--winter"
-          :src="artwork.trailSrc"
-          alt=""
-          draggable="false"
-        />
-      </template>
-      <img
-        v-if="!subjectReady && artwork && usesFrontStructuralShell"
-        class="avatar-frame__art avatar-frame__art--front-shell"
-        :src="artwork.src"
-        alt=""
-        draggable="false"
-      />
-      <img
-        v-if="!subjectReady && hasArtDetail && usesFrontStructuralShell"
-        class="avatar-frame__art-detail"
-        :src="artwork?.src"
-        alt=""
-        draggable="false"
-      />
-      <template v-if="variant === 'bookmark-archive' && artwork">
-        <img
-          v-if="!subjectReady"
-          class="avatar-frame__bookmark-current avatar-frame__bookmark-current--left"
+          decoding="async"
+          v-if="!subjectReady && artwork && !usesFrontStructuralShell"
+          class="avatar-frame__art"
           :src="artwork.src"
           alt=""
           draggable="false"
+          aria-hidden="true"
         />
         <img
-          v-if="!subjectReady"
-          class="avatar-frame__bookmark-current avatar-frame__bookmark-current--right"
-          :src="artwork.src"
+          decoding="async"
+          v-if="!subjectReady && hasArtDetail && !usesFrontStructuralShell"
+          class="avatar-frame__art-detail"
+          :src="artwork?.src"
           alt=""
           draggable="false"
+          aria-hidden="true"
         />
-        <img
-          v-if="!subjectReady"
-          class="avatar-frame__bookmark-booklight"
-          :src="artwork.src"
-          alt=""
-          draggable="false"
-        />
-        <span class="avatar-frame__bookmark-event">
-          <i v-if="!subjectReady" class="avatar-frame__bookmark-page avatar-frame__bookmark-page--one"></i>
-          <i v-if="!subjectReady" class="avatar-frame__bookmark-page avatar-frame__bookmark-page--two"></i>
-          <i class="avatar-frame__bookmark-glyph avatar-frame__bookmark-glyph--one"></i>
-          <i class="avatar-frame__bookmark-glyph avatar-frame__bookmark-glyph--two"></i>
-          <i class="avatar-frame__bookmark-glyph avatar-frame__bookmark-glyph--three"></i>
-          <i class="avatar-frame__bookmark-glyph avatar-frame__bookmark-glyph--four"></i>
-          <i class="avatar-frame__bookmark-glyph avatar-frame__bookmark-glyph--five"></i>
-          <i class="avatar-frame__bookmark-glyph avatar-frame__bookmark-glyph--six"></i>
-          <i class="avatar-frame__bookmark-glyph avatar-frame__bookmark-glyph--seven"></i>
-          <i class="avatar-frame__bookmark-glyph avatar-frame__bookmark-glyph--eight"></i>
-          <i class="avatar-frame__bookmark-glyph avatar-frame__bookmark-glyph--nine"></i>
-          <i class="avatar-frame__bookmark-glyph avatar-frame__bookmark-glyph--ten"></i>
-          <i class="avatar-frame__bookmark-gem avatar-frame__bookmark-gem--top"></i>
-          <i class="avatar-frame__bookmark-gem avatar-frame__bookmark-gem--bottom"></i>
+        <span
+          v-if="!subjectReady && artwork && !usesDedicatedInnerRing && !usesFrontStructuralShell"
+          class="avatar-frame__inner-ring"
+          aria-hidden="true"
+        >
+          <img class="avatar-frame__art-inner" :src="artwork.src" alt="" draggable="false" />
         </span>
-      </template>
-      <template v-if="variant === 'note-constellation' && artwork">
-        <img
-          v-if="!subjectReady"
-          class="avatar-frame__constellation-ink avatar-frame__constellation-ink--left"
-          :src="artwork.src"
-          alt=""
-          draggable="false"
-        />
-        <img
-          v-if="!subjectReady"
-          class="avatar-frame__constellation-ink avatar-frame__constellation-ink--right"
-          :src="artwork.src"
-          alt=""
-          draggable="false"
-        />
-        <span class="avatar-frame__constellation-star-route">
-          <i class="avatar-frame__constellation-link avatar-frame__constellation-link--one"></i>
-          <i class="avatar-frame__constellation-link avatar-frame__constellation-link--two"></i>
-          <i class="avatar-frame__constellation-link avatar-frame__constellation-link--three"></i>
-          <i class="avatar-frame__constellation-link avatar-frame__constellation-link--four"></i>
-          <i class="avatar-frame__constellation-link avatar-frame__constellation-link--five"></i>
-          <i class="avatar-frame__constellation-link avatar-frame__constellation-link--six"></i>
-          <i class="avatar-frame__constellation-link avatar-frame__constellation-link--seven"></i>
-          <i class="avatar-frame__constellation-link avatar-frame__constellation-link--eight"></i>
-          <i class="avatar-frame__constellation-pulse avatar-frame__constellation-pulse--top"></i>
-          <i class="avatar-frame__constellation-pulse avatar-frame__constellation-pulse--right"></i>
-          <i class="avatar-frame__constellation-pulse avatar-frame__constellation-pulse--bottom"></i>
-          <i class="avatar-frame__constellation-pulse avatar-frame__constellation-pulse--left"></i>
-          <i class="avatar-frame__constellation-pulse avatar-frame__constellation-pulse--upper-left"></i>
+        <span v-if="isDynamic && !publicContributionMotion" class="avatar-frame__motion avatar-frame__motion--back" aria-hidden="true">
+          <i></i><i></i><i></i><i></i>
         </span>
-        <span v-if="!subjectReady" class="avatar-frame__constellation-pen"></span>
-      </template>
-      <template v-if="variant === 'file-constellation' && artwork">
+      </span>
+      <span class="avatar-frame__canvas avatar-frame__canvas--front" aria-hidden="true">
+        <AvatarFramePublicContributionMotion
+          v-if="publicContributionMotion"
+          :key="variant"
+          :kind="publicContributionMotion"
+          :avatar-size="displayAvatarSize"
+          :paused="isMotionPaused"
+          :chat="props.motionProfile === 'chat'"
+        />
+        <template v-if="variant === 'celestial' && artwork?.motionSrc && artwork?.effectSrc">
+          <img
+            decoding="async"
+            class="avatar-frame__wing-layer avatar-frame__wing-layer--left"
+            :src="artwork.motionSrc"
+            alt=""
+            draggable="false"
+          />
+          <img
+            decoding="async"
+            class="avatar-frame__wing-layer avatar-frame__wing-layer--right"
+            :src="artwork.effectSrc"
+            alt=""
+            draggable="false"
+          />
+        </template>
+        <template
+          v-if="variant === 'streak-eternal' && artwork?.motionSrc && artwork?.effectSrc && artwork?.trailSrc"
+        >
+          <img
+            decoding="async"
+            class="avatar-frame__wing-layer avatar-frame__wing-layer--spring"
+            :src="artwork.motionSrc"
+            alt=""
+            draggable="false"
+          />
+          <img
+            decoding="async"
+            class="avatar-frame__wing-layer avatar-frame__wing-layer--autumn"
+            :src="artwork.effectSrc"
+            alt=""
+            draggable="false"
+          />
+          <img
+            decoding="async"
+            class="avatar-frame__wing-layer avatar-frame__wing-layer--winter"
+            :src="artwork.trailSrc"
+            alt=""
+            draggable="false"
+          />
+        </template>
         <img
-          v-if="!subjectReady"
-          class="avatar-frame__cloudvault-current avatar-frame__cloudvault-current--left"
+          decoding="async"
+          v-if="!subjectReady && artwork && usesFrontStructuralShell"
+          class="avatar-frame__art avatar-frame__art--front-shell"
           :src="artwork.src"
           alt=""
           draggable="false"
         />
         <img
-          v-if="!subjectReady"
-          class="avatar-frame__cloudvault-current avatar-frame__cloudvault-current--right"
-          :src="artwork.src"
-          alt=""
-          draggable="false"
-        />
-        <span class="avatar-frame__cloudvault-event">
-          <i class="avatar-frame__cloudvault-file avatar-frame__cloudvault-file--one"></i>
-          <i class="avatar-frame__cloudvault-file avatar-frame__cloudvault-file--two"></i>
-          <i class="avatar-frame__cloudvault-file avatar-frame__cloudvault-file--three"></i>
-          <i class="avatar-frame__cloudvault-file avatar-frame__cloudvault-file--four"></i>
-          <i class="avatar-frame__cloudvault-file avatar-frame__cloudvault-file--five"></i>
-          <i class="avatar-frame__cloudvault-file avatar-frame__cloudvault-file--six"></i>
-          <i class="avatar-frame__cloudvault-file avatar-frame__cloudvault-file--seven"></i>
-          <i class="avatar-frame__cloudvault-file avatar-frame__cloudvault-file--eight"></i>
-          <i class="avatar-frame__cloudvault-gate avatar-frame__cloudvault-gate--top"></i>
-          <i class="avatar-frame__cloudvault-gate avatar-frame__cloudvault-gate--bottom"></i>
-          <i class="avatar-frame__cloudvault-window avatar-frame__cloudvault-window--one"></i>
-          <i class="avatar-frame__cloudvault-window avatar-frame__cloudvault-window--two"></i>
-          <i class="avatar-frame__cloudvault-window avatar-frame__cloudvault-window--three"></i>
-        </span>
-      </template>
-      <template v-if="variant === 'ocean' && artwork?.motionSrc && artwork?.effectSrc">
-        <img
-          class="avatar-frame__ocean-current avatar-frame__ocean-current--surge"
-          :src="artwork.motionSrc"
-          alt=""
-          draggable="false"
-        />
-        <img
-          class="avatar-frame__ocean-current avatar-frame__ocean-current--crest"
-          :src="artwork.effectSrc"
-          alt=""
-          draggable="false"
-        />
-        <img
-          class="avatar-frame__ocean-current avatar-frame__ocean-current--return"
-          :src="artwork.effectSrc"
-          alt=""
-          draggable="false"
-        />
-      </template>
-      <template
-        v-if="variant === 'aurora' && artwork?.motionSrc && artwork?.effectSrc && artwork?.accentSrc"
-      >
-        <img
-          class="avatar-frame__aurora-flow avatar-frame__aurora-flow--left"
-          :src="artwork.motionSrc"
-          alt=""
-          draggable="false"
-        />
-        <img
-          class="avatar-frame__aurora-flow avatar-frame__aurora-flow--right"
-          :src="artwork.effectSrc"
-          alt=""
-          draggable="false"
-        />
-        <img
-          class="avatar-frame__aurora-crystal avatar-frame__aurora-crystal--top"
-          :src="artwork.accentSrc"
-          alt=""
-          draggable="false"
-        />
-        <img
-          class="avatar-frame__aurora-crystal avatar-frame__aurora-crystal--bottom"
-          :src="artwork.accentSrc"
-          alt=""
-          draggable="false"
-        />
-      </template>
-      <template v-if="variant === 'flame' && artwork?.effectSrc">
-        <img
-          v-for="layer in ['warm', 'hot']"
-          :key="layer"
-          :class="['avatar-frame__art-detail', 'avatar-frame__flame-fire', `avatar-frame__flame-fire--${layer}`]"
-          :src="artwork.effectSrc"
-          alt=""
-          draggable="false"
-        />
-      </template>
-      <img
-        v-if="hasArtFocus && variant !== 'sakura'"
-        class="avatar-frame__art-focus"
-        :src="variant === 'gold' && artwork?.accentSrc ? artwork.accentSrc : artwork?.src"
-        alt=""
-        draggable="false"
-      />
-      <template v-if="variant === 'sakura'">
-        <img
-          class="avatar-frame__art-focus avatar-frame__art-focus--sakura-top"
+          decoding="async"
+          v-if="!subjectReady && hasArtDetail && usesFrontStructuralShell"
+          class="avatar-frame__art-detail"
           :src="artwork?.src"
           alt=""
           draggable="false"
         />
+        <template v-if="variant === 'bookmark-archive' && artwork">
+          <img
+            decoding="async"
+            v-if="!subjectReady"
+            class="avatar-frame__bookmark-current avatar-frame__bookmark-current--left"
+            :src="artwork.src"
+            alt=""
+            draggable="false"
+          />
+          <img
+            decoding="async"
+            v-if="!subjectReady"
+            class="avatar-frame__bookmark-current avatar-frame__bookmark-current--right"
+            :src="artwork.src"
+            alt=""
+            draggable="false"
+          />
+          <img
+            decoding="async"
+            v-if="!subjectReady"
+            class="avatar-frame__bookmark-booklight"
+            :src="artwork.src"
+            alt=""
+            draggable="false"
+          />
+          <span class="avatar-frame__bookmark-event">
+            <i v-if="!subjectReady" class="avatar-frame__bookmark-page avatar-frame__bookmark-page--one"></i>
+            <i v-if="!subjectReady" class="avatar-frame__bookmark-page avatar-frame__bookmark-page--two"></i>
+            <i class="avatar-frame__bookmark-glyph avatar-frame__bookmark-glyph--one"></i>
+            <i class="avatar-frame__bookmark-glyph avatar-frame__bookmark-glyph--two"></i>
+            <i class="avatar-frame__bookmark-glyph avatar-frame__bookmark-glyph--three"></i>
+            <i class="avatar-frame__bookmark-glyph avatar-frame__bookmark-glyph--four"></i>
+            <i class="avatar-frame__bookmark-glyph avatar-frame__bookmark-glyph--five"></i>
+            <i class="avatar-frame__bookmark-glyph avatar-frame__bookmark-glyph--six"></i>
+            <i class="avatar-frame__bookmark-glyph avatar-frame__bookmark-glyph--seven"></i>
+            <i class="avatar-frame__bookmark-glyph avatar-frame__bookmark-glyph--eight"></i>
+            <i class="avatar-frame__bookmark-glyph avatar-frame__bookmark-glyph--nine"></i>
+            <i class="avatar-frame__bookmark-glyph avatar-frame__bookmark-glyph--ten"></i>
+            <i class="avatar-frame__bookmark-gem avatar-frame__bookmark-gem--top"></i>
+            <i class="avatar-frame__bookmark-gem avatar-frame__bookmark-gem--bottom"></i>
+          </span>
+        </template>
+        <template v-if="variant === 'note-constellation' && artwork">
+          <img
+            decoding="async"
+            v-if="!subjectReady"
+            class="avatar-frame__constellation-ink avatar-frame__constellation-ink--left"
+            :src="artwork.src"
+            alt=""
+            draggable="false"
+          />
+          <img
+            decoding="async"
+            v-if="!subjectReady"
+            class="avatar-frame__constellation-ink avatar-frame__constellation-ink--right"
+            :src="artwork.src"
+            alt=""
+            draggable="false"
+          />
+          <span class="avatar-frame__constellation-star-route">
+            <i class="avatar-frame__constellation-link avatar-frame__constellation-link--one"></i>
+            <i class="avatar-frame__constellation-link avatar-frame__constellation-link--two"></i>
+            <i class="avatar-frame__constellation-link avatar-frame__constellation-link--three"></i>
+            <i class="avatar-frame__constellation-link avatar-frame__constellation-link--four"></i>
+            <i class="avatar-frame__constellation-link avatar-frame__constellation-link--five"></i>
+            <i class="avatar-frame__constellation-link avatar-frame__constellation-link--six"></i>
+            <i class="avatar-frame__constellation-link avatar-frame__constellation-link--seven"></i>
+            <i class="avatar-frame__constellation-link avatar-frame__constellation-link--eight"></i>
+            <i class="avatar-frame__constellation-pulse avatar-frame__constellation-pulse--top"></i>
+            <i class="avatar-frame__constellation-pulse avatar-frame__constellation-pulse--right"></i>
+            <i class="avatar-frame__constellation-pulse avatar-frame__constellation-pulse--bottom"></i>
+            <i class="avatar-frame__constellation-pulse avatar-frame__constellation-pulse--left"></i>
+            <i class="avatar-frame__constellation-pulse avatar-frame__constellation-pulse--upper-left"></i>
+          </span>
+          <span v-if="!subjectReady" class="avatar-frame__constellation-pen"></span>
+        </template>
+        <template v-if="variant === 'file-constellation' && artwork">
+          <img
+            decoding="async"
+            v-if="!subjectReady"
+            class="avatar-frame__cloudvault-current avatar-frame__cloudvault-current--left"
+            :src="artwork.src"
+            alt=""
+            draggable="false"
+          />
+          <img
+            decoding="async"
+            v-if="!subjectReady"
+            class="avatar-frame__cloudvault-current avatar-frame__cloudvault-current--right"
+            :src="artwork.src"
+            alt=""
+            draggable="false"
+          />
+          <span class="avatar-frame__cloudvault-event">
+            <i class="avatar-frame__cloudvault-file avatar-frame__cloudvault-file--one"></i>
+            <i class="avatar-frame__cloudvault-file avatar-frame__cloudvault-file--two"></i>
+            <i class="avatar-frame__cloudvault-file avatar-frame__cloudvault-file--three"></i>
+            <i class="avatar-frame__cloudvault-file avatar-frame__cloudvault-file--four"></i>
+            <i class="avatar-frame__cloudvault-file avatar-frame__cloudvault-file--five"></i>
+            <i class="avatar-frame__cloudvault-file avatar-frame__cloudvault-file--six"></i>
+            <i class="avatar-frame__cloudvault-file avatar-frame__cloudvault-file--seven"></i>
+            <i class="avatar-frame__cloudvault-file avatar-frame__cloudvault-file--eight"></i>
+            <i class="avatar-frame__cloudvault-gate avatar-frame__cloudvault-gate--top"></i>
+            <i class="avatar-frame__cloudvault-gate avatar-frame__cloudvault-gate--bottom"></i>
+            <i class="avatar-frame__cloudvault-window avatar-frame__cloudvault-window--one"></i>
+            <i class="avatar-frame__cloudvault-window avatar-frame__cloudvault-window--two"></i>
+            <i class="avatar-frame__cloudvault-window avatar-frame__cloudvault-window--three"></i>
+          </span>
+        </template>
+        <template v-if="variant === 'ocean' && artwork?.motionSrc && artwork?.effectSrc">
+          <img
+            decoding="async"
+            class="avatar-frame__ocean-current avatar-frame__ocean-current--surge"
+            :src="artwork.motionSrc"
+            alt=""
+            draggable="false"
+          />
+          <img
+            decoding="async"
+            class="avatar-frame__ocean-current avatar-frame__ocean-current--crest"
+            :src="artwork.effectSrc"
+            alt=""
+            draggable="false"
+          />
+          <img
+            decoding="async"
+            class="avatar-frame__ocean-current avatar-frame__ocean-current--return"
+            :src="artwork.effectSrc"
+            alt=""
+            draggable="false"
+          />
+        </template>
+        <template
+          v-if="variant === 'aurora' && artwork?.motionSrc && artwork?.effectSrc && artwork?.accentSrc"
+        >
+          <img
+            decoding="async"
+            class="avatar-frame__aurora-flow avatar-frame__aurora-flow--left"
+            :src="artwork.motionSrc"
+            alt=""
+            draggable="false"
+          />
+          <img
+            decoding="async"
+            class="avatar-frame__aurora-flow avatar-frame__aurora-flow--right"
+            :src="artwork.effectSrc"
+            alt=""
+            draggable="false"
+          />
+          <img
+            decoding="async"
+            class="avatar-frame__aurora-crystal avatar-frame__aurora-crystal--top"
+            :src="artwork.accentSrc"
+            alt=""
+            draggable="false"
+          />
+          <img
+            decoding="async"
+            class="avatar-frame__aurora-crystal avatar-frame__aurora-crystal--bottom"
+            :src="artwork.accentSrc"
+            alt=""
+            draggable="false"
+          />
+        </template>
+        <template v-if="variant === 'flame' && artwork?.effectSrc">
+          <img
+            decoding="async"
+            v-for="layer in ['warm', 'hot']"
+            :key="layer"
+            :class="['avatar-frame__art-detail', 'avatar-frame__flame-fire', `avatar-frame__flame-fire--${layer}`]"
+            :src="artwork.effectSrc"
+            alt=""
+            draggable="false"
+          />
+        </template>
         <img
-          class="avatar-frame__art-focus avatar-frame__art-focus--sakura-bottom"
-          :src="artwork?.src"
+          decoding="async"
+          v-if="hasArtFocus && variant !== 'sakura'"
+          class="avatar-frame__art-focus"
+          :src="variant === 'gold' && artwork?.accentSrc ? artwork.accentSrc : artwork?.src"
           alt=""
           draggable="false"
         />
-      </template>
-      <template v-if="variant === 'sunset' && artwork?.motionSrc">
+        <template v-if="variant === 'sakura'">
+          <img
+            decoding="async"
+            class="avatar-frame__art-focus avatar-frame__art-focus--sakura-top"
+            :src="artwork?.src"
+            alt=""
+            draggable="false"
+          />
+          <img
+            decoding="async"
+            class="avatar-frame__art-focus avatar-frame__art-focus--sakura-bottom"
+            :src="artwork?.src"
+            alt=""
+            draggable="false"
+          />
+        </template>
+        <template v-if="variant === 'sunset' && artwork?.motionSrc">
+          <img
+            decoding="async"
+            class="avatar-frame__sunset-cloud avatar-frame__sunset-cloud--left"
+            :src="artwork.motionSrc"
+            alt=""
+            draggable="false"
+          />
+          <img
+            decoding="async"
+            class="avatar-frame__sunset-cloud avatar-frame__sunset-cloud--right"
+            :src="artwork.effectSrc"
+            alt=""
+            draggable="false"
+          />
+        </template>
         <img
-          class="avatar-frame__sunset-cloud avatar-frame__sunset-cloud--left"
-          :src="artwork.motionSrc"
-          alt=""
-          draggable="false"
-        />
-        <img
-          class="avatar-frame__sunset-cloud avatar-frame__sunset-cloud--right"
-          :src="artwork.effectSrc"
-          alt=""
-          draggable="false"
-        />
-      </template>
-      <img
-        v-if="variant === 'flame' && artwork?.trailSrc"
-        class="avatar-frame__flame-embers"
-        :src="artwork.trailSrc"
-        alt=""
-        draggable="false"
-        aria-hidden="true"
-      />
-      <template v-if="variant === 'dragon' && artwork?.trailSrc">
-        <img
-          v-for="layer in ['tail', 'body', 'mane']"
-          :key="layer"
-          :class="['avatar-frame__dragon-trail', `avatar-frame__dragon-trail--${layer}`]"
+          decoding="async"
+          v-if="variant === 'flame' && artwork?.trailSrc"
+          class="avatar-frame__flame-embers"
           :src="artwork.trailSrc"
           alt=""
           draggable="false"
           aria-hidden="true"
         />
-      </template>
-      <span v-if="variant === 'dragon'" class="avatar-frame__dragon-orbit-particles" aria-hidden="true">
-        <i
-          v-for="particle in dragonOrbitParticles"
-          :key="particle.id"
-          :style="particle.style"
-        ></i>
+        <template v-if="variant === 'dragon' && artwork?.trailSrc">
+          <img
+            decoding="async"
+            v-for="layer in ['tail', 'body', 'mane']"
+            :key="layer"
+            :class="['avatar-frame__dragon-trail', `avatar-frame__dragon-trail--${layer}`]"
+            :src="artwork.trailSrc"
+            alt=""
+            draggable="false"
+            aria-hidden="true"
+          />
+        </template>
+        <span v-if="variant === 'dragon'" class="avatar-frame__dragon-orbit-particles" aria-hidden="true">
+          <i
+            v-for="particle in dragonOrbitParticles"
+            :key="particle.id"
+            :style="particle.style"
+          ></i>
+        </span>
+        <span v-if="variant === 'dragon'" class="avatar-frame__dragon-particles" aria-hidden="true">
+          <i
+            v-for="particle in dragonParticles"
+            :key="particle.id"
+            :style="particle.style"
+          ></i>
+        </span>
+        <img
+          decoding="async"
+          v-for="spark in variant === 'flame' ? flameSparks : []"
+          :key="spark.id"
+          :class="[
+            'avatar-frame__flame-particle',
+            'avatar-frame__flame-spark',
+            spark.id === 'left-tip' || spark.id === 'right-tip' ? 'avatar-frame__scroll-core' : '',
+            spark.id.startsWith('outer-') ? 'avatar-frame__flame-spark--outer' : '',
+          ]"
+          :src="artwork?.particleSrcs?.[spark.sprite]"
+          :style="spark.style"
+          alt=""
+          draggable="false"
+          aria-hidden="true"
+        />
+        <span v-if="variant === 'celestial'" class="avatar-frame__celestial-dust" aria-hidden="true">
+          <i v-for="dust in celestialDustMotes" :key="dust.id" :style="dust.style"></i>
+        </span>
+        <span v-if="variant === 'streak-eternal'" class="avatar-frame__eternal-motes" aria-hidden="true">
+          <i
+            v-for="mote in eternalSeasonMotes"
+            :key="mote.id"
+            :class="`avatar-frame__eternal-mote--${mote.kind}`"
+            :style="mote.style"
+          ></i>
+        </span>
+        <span v-if="isDynamic && !publicContributionMotion" class="avatar-frame__motion avatar-frame__motion--front">
+          <i></i><i></i><i></i><i></i>
+        </span>
       </span>
-      <span v-if="variant === 'dragon'" class="avatar-frame__dragon-particles" aria-hidden="true">
-        <i
-          v-for="particle in dragonParticles"
-          :key="particle.id"
-          :style="particle.style"
-        ></i>
-      </span>
-      <img
-        v-for="spark in variant === 'flame' ? flameSparks : []"
-        :key="spark.id"
-        :class="[
-          'avatar-frame__flame-particle',
-          'avatar-frame__flame-spark',
-          spark.id === 'left-tip' || spark.id === 'right-tip' ? 'avatar-frame__scroll-core' : '',
-          spark.id.startsWith('outer-') ? 'avatar-frame__flame-spark--outer' : '',
-        ]"
-        :src="artwork?.particleSrcs?.[spark.sprite]"
-        :style="spark.style"
-        alt=""
-        draggable="false"
-        aria-hidden="true"
-      />
-      <span v-if="variant === 'celestial'" class="avatar-frame__celestial-dust" aria-hidden="true">
-        <i v-for="dust in celestialDustMotes" :key="dust.id" :style="dust.style"></i>
-      </span>
-      <span v-if="variant === 'streak-eternal'" class="avatar-frame__eternal-motes" aria-hidden="true">
-        <i
-          v-for="mote in eternalSeasonMotes"
-          :key="mote.id"
-          :class="`avatar-frame__eternal-mote--${mote.kind}`"
-          :style="mote.style"
-        ></i>
-      </span>
-      <span v-if="isDynamic && !publicContributionMotion" class="avatar-frame__motion avatar-frame__motion--front">
-        <i></i><i></i><i></i><i></i>
-      </span>
-    </span>
-    <span v-if="!subjectReady && artwork && variant !== 'first-light'" class="avatar-frame__bezel" aria-hidden="true"></span>
+      <span v-if="!subjectReady && artwork && variant !== 'first-light'" class="avatar-frame__bezel" aria-hidden="true"></span>
+    </template>
   </div>
 </template>
 
@@ -511,12 +545,19 @@
 
   const frameElement = ref<HTMLElement | null>(null);
   const isMotionVisible = ref(!props.pauseWhenOffscreen);
+  const assetsRequested = ref(!props.pauseWhenOffscreen || typeof IntersectionObserver === 'undefined');
+  let assetObserver: IntersectionObserver | null = null;
+  watch(() => props.pauseWhenOffscreen, value => { if (!value) assetsRequested.value = true; });
   const isMotionPaused = computed(() => !props.animated || (props.pauseWhenOffscreen && !isMotionVisible.value));
   let visibilityObserver: IntersectionObserver | null = null;
 
   onMounted(() => {
     if (!props.pauseWhenOffscreen || typeof IntersectionObserver === 'undefined' || !frameElement.value) return;
     const scrollContainer = frameElement.value.closest('.community-message-list');
+    assetObserver = new IntersectionObserver(([entry]) => {
+      if (entry?.isIntersecting) { assetsRequested.value = true; assetObserver?.disconnect(); }
+    }, { root: scrollContainer, rootMargin: '200px 0px' });
+    assetObserver.observe(frameElement.value);
     visibilityObserver = new IntersectionObserver(
       ([entry]) => {
         isMotionVisible.value = Boolean(entry?.isIntersecting);
@@ -531,6 +572,7 @@
   });
 
   onBeforeUnmount(() => {
+    assetObserver?.disconnect();
     visibilityObserver?.disconnect();
     visibilityObserver = null;
   });

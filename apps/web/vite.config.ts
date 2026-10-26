@@ -11,6 +11,7 @@ import earlyAppEntryBootstrap from './src/vite/earlyAppEntryBootstrap';
 import { assertLocalViteBackend, createLocalBackendProxy } from './src/vite/localBackendProxy';
 import seoPreviewRoutes from './src/vite/seoPreviewRoutes';
 import manorRuntime from './src/vite/manorRuntime';
+import staticPrewarmManifestPlugin, { publicArtworkPlugin } from './src/vite/staticPrewarm';
 
 import path from 'path';
 export default defineConfig(({ command, mode }) => {
@@ -26,9 +27,12 @@ export default defineConfig(({ command, mode }) => {
     build: {
       outDir: 'dist', // D:\nginx-1.24.0\html\dist
       sourcemap: false, // 默认就是false
+      manifest: true,
     },
     plugins: [
       manorRuntime(),
+      publicArtworkPlugin(),
+      staticPrewarmManifestPlugin(),
       earlyAppEntryBootstrap(),
       seoPreviewRoutes(),
       vue(),

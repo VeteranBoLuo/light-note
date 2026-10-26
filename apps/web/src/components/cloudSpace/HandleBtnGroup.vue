@@ -59,6 +59,7 @@
 </template>
 
 <script lang="ts" setup>
+  import { withForegroundActivity } from '@/http/requestActivity';
   import CloudStorageBar from '@/components/cloudSpace/CloudStorageBar.vue';
   import { bookmarkStore, cloudSpaceStore } from '@/store';
   import { apiBasePost } from '@/http/request.ts';
@@ -220,7 +221,7 @@
         }
         try {
           const fileData = filesData[index].file;
-          await axios.put(info.uploadUrl, fileData, {
+          await withForegroundActivity(() => axios.put(info.uploadUrl, fileData, {
             headers: {
               ...info.headers,
               'Content-Type': info.fileType,
@@ -247,7 +248,7 @@
                 uploadProgress.speed = uploadProgress.totalLoaded / elapsed;
               }
             },
-          });
+          }));
           // 很小的文件可能没有触发可用的进度事件，完成后确保进度收口到 100%。
           uploadProgress.files[index].progress = 100;
           uploadProgress.overall =

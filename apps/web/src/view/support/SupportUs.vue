@@ -6,8 +6,8 @@
     <MobileTopBar v-if="bookmark.isMobile" />
     <div v-auto-scrollbar class="support-page__scroll"
       ><div class="commerce-page-content"
-        ><div class="commerce-landscape commerce-landscape--support" aria-hidden="true"
-          ><img src="/brand-scenes/support-strip-footer.webp" alt="" loading="lazy" decoding="async"
+        ><div class="commerce-landscape commerce-landscape--support" :style="{ backgroundImage: 'url(' + publicArtworkUrl('/brand-scenes/support-strip-top.webp') + ')' }" aria-hidden="true"
+          ><img :src="publicArtworkUrl('/brand-scenes/support-strip-footer.webp')" alt="" loading="lazy" decoding="async"
         /></div>
         <BrandSceneHero
           scene="support"
@@ -89,7 +89,7 @@
               <h2><SvgIcon :src="icon.support.store" size="24" />{{ t('support.storeGatewayTitle') }}</h2
               ><p>{{ t('autumn.reference.resourceInvitation') }}</p>
               <div class="support-cross-art"
-                ><img src="/brand-scenes/cloud-object.webp" alt="" loading="lazy" /><div
+                ><img :src="publicArtworkUrl('/brand-scenes/cloud-object.webp')" alt="" loading="lazy" /><div
                   ><span><SvgIcon :src="icon.growth.ai" size="16" />{{ t('entitlementStore.tabs.ai') }}</span
                   ><span><SvgIcon :src="icon.growth.storage" size="16" />{{ t('entitlementStore.tabs.storage') }}</span
                   ><span
@@ -194,6 +194,7 @@
   </div>
 </template>
 <script setup lang="ts">
+  import { publicArtworkUrl } from '@/utils/publicArtwork';
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
   import BrandSceneHero from '@/components/support/BrandSceneHero.vue';
   import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue';

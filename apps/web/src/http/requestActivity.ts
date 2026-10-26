@@ -27,3 +27,18 @@ export function subscribeRequestActivity(listener: (active: number) => void) {
     listeners.delete(listener);
   };
 }
+
+/** Includes direct uploads, module loads and user-triggered streaming bodies. */
+export function holdForegroundActivity() {
+  const token = {};
+  beginRequestActivity(token);
+  return () => endRequestActivity(token);
+}
+export async function withForegroundActivity<T>(operation: () => Promise<T>): Promise<T> {
+  const release = holdForegroundActivity();
+  try {
+    return await operation();
+  } finally {
+    release();
+  }
+}

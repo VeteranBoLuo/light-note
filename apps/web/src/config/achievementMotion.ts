@@ -1,3 +1,4 @@
+import { publicArtworkUrl } from '@/utils/publicArtwork';
 export interface AchievementMotionArtwork {
   key: string;
   kind: 'pages' | 'pen' | 'sun' | 'bookmark' | 'files' | 'flag' | 'drawer' | 'tree' | 'lighthouse';
@@ -16,5 +17,5 @@ export const ACHIEVEMENT_MOTION: Readonly<Record<string, AchievementMotionArtwor
   join_365: { key: 'join_365', kind: 'tree', layers: ['base', 'left', 'right'] },
 };
 export function achievementMotionLayer(artwork: AchievementMotionArtwork, layer: string, large = false): string {
-  return `/achievements/enamel/motion/${artwork.key}-${layer}${large ? '' : '-small'}.webp`;
+  return publicArtworkUrl(`/achievements/enamel/motion/${artwork.key}-${layer}${large ? '' : '-small'}.webp`);
 }

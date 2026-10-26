@@ -10,7 +10,7 @@
       >
         <img
           class="chat-inline-emoji-text__image"
-          :src="segment.emoji.assetPath"
+          :src="publicArtworkUrl(segment.emoji.assetPath)"
           :alt="emojiLabel(segment.emoji.id)"
           :title="emojiLabel(segment.emoji.id)"
           :data-inline-emoji-token="segment.emoji.token"
@@ -29,6 +29,7 @@
 </template>
 
 <script setup lang="ts">
+  import { publicArtworkUrl } from '@/utils/publicArtwork';
   import { parseCommunityChatInlineEmojiContent } from '@lightnote/shared/community-chat-inline-emojis';
   import { computed, ref, onMounted, onBeforeUnmount } from 'vue';
   import { useI18n } from 'vue-i18n';

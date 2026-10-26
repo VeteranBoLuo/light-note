@@ -7583,6 +7583,8 @@ export default {
     filteringAllFileCount: 'Filtering files; all files: {total}',
     folderFileCountDescription: 'Files in this folder: {direct}; including subfolders: {total}',
     filterByFolder: 'Filter by folder “{path}”',
+    folderSidebarResizeLabel: 'Resize folder sidebar',
+    folderSidebarResizeHint: 'Drag to resize; double-click or press Home to reset. Saved in this browser only.',
     openFolderTree: 'Open folder tree',
     folderActionsFor: 'Folder actions for “{name}”',
     expandFolder: 'Expand “{name}”',
