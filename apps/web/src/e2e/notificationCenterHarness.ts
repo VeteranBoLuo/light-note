@@ -7,6 +7,7 @@ import { applyUiDensity } from '@/composables/useUiDensity';
 import request from '@/http/request';
 import globalDirect from '@/config/globalDirect';
 import NotificationBell from '@/components/notification/NotificationBell.vue';
+import { useNotification } from '@/composables/useNotification';
 import zh from '@/i18n/locales/zh-CN';
 import en from '@/i18n/locales/en-US';
 import '@/assets/css/index.less';
@@ -37,12 +38,32 @@ const items = [
 ];
 const counts = { todo_reminder: 21, system: 3, opinion_reply: 128, community_feed: 6, public_resource: 1 };
 const unread = params.get('unread') === 'off' ? { unreadTotal: 0, byType: {} } : { unreadTotal: 159, byType: counts };
+// Keep mock responses consistent with count changes while the popover remains open.
+window.addEventListener('fixture-notification-unread', (event) => {
+  const count = Number((event as CustomEvent<number>).detail) || 0;
+  unread.unreadTotal = count * 5;
+  unread.byType = Object.fromEntries(Object.keys(counts).map((type) => [type, count]));
+  void useNotification().refreshUnread();
+});
+const originalFetch = window.fetch.bind(window);
+window.fetch = (input, init) => {
+  const url = input instanceof Request ? input.url : String(input);
+  if (new URL(url, location.href).pathname === '/api/notification/stream')
+    return Promise.resolve(new Response('', { status: 503 }));
+  return originalFetch(input, init);
+};
 request.defaults.adapter = async (config) => {
   const path = String(config.url),
     input = typeof config.data === 'string' ? JSON.parse(config.data) : config.data || {};
   let data: unknown = {};
   if (path.endsWith('/notification/unreadCount')) data = unread;
-  else if (path.endsWith('/notification/list'))
+  else if (path.endsWith('/notification/markAllRead')) {
+    if (!input.type || input.type === 'all') {
+      unread.unreadTotal = 0;
+      unread.byType = {};
+      items.forEach((item) => (item.isRead = 1));
+    }
+  } else if (path.endsWith('/notification/list'))
     data = {
       items: params.get('state') === 'empty' || !['all', 'public_resource'].includes(input.type) ? [] : items,
       total: params.get('state') === 'empty' ? 0 : 1,
