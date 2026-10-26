@@ -8,7 +8,7 @@ vi.mock('../db/index.js', () => ({ default: mocks.pool }));
 vi.mock('./emailDelivery.js', () => ({ sendTrackedEmail: vi.fn() }));
 vi.mock('./notification.js', () => ({ createNotification: vi.fn() }));
 
-import { processDueTodoReminderJobs, todoReminderV2Internals } from './todoReminderV2.js';
+import { processDueTodoReminderJobs, recoverTodoReminderJobs, todoReminderV2Internals } from './todoReminderV2.js';
 import { sendTrackedEmail } from './emailDelivery.js';
 
 beforeEach(() => vi.stubEnv('LIGHTNOTE_RUNTIME_ENV', 'production'));
@@ -178,7 +178,7 @@ describe('todoReminderV2', () => {
   it('扫描过期租约时邮件转 unknown，站内提醒恢复 pending', async () => {
     mocks.pool.query.mockResolvedValueOnce([{ affectedRows: 2 }]).mockResolvedValueOnce([[]]);
 
-    await processDueTodoReminderJobs();
+    await recoverTodoReminderJobs();
 
     expect(mocks.pool.query.mock.calls[0][0]).toContain("IF(channel = 'email', 'unknown', 'pending')");
     expect(mocks.pool.query.mock.calls[1][0]).toContain("WHERE status = 'pending'");

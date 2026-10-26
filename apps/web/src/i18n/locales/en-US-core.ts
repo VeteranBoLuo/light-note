@@ -10067,7 +10067,9 @@ export default {
     itemUseFail: 'Failed, try again later',
     // —— Streak milestones ——
     streakMilestoneToast: '🎉 {days}-day streak reached! Reward: {reward}',
+    publicContributionRule: 'Only approved, active public resources of your own count. Duplicate URLs count once; saved public copies and system examples are excluded. Unlocks remain after withdrawal. Each tier can be claimed once.',
     achievementFamily: {
+      sharing: 'Public contributions',
       checkin: 'Check-in habits',
       bookmark: 'Bookmarks',
       note: 'Writing',
@@ -10197,6 +10199,9 @@ export default {
         name: 'Cosmic Cloud Vault',
         desc: 'Avatar frame · Five hundred files illuminate a stellar gate',
       },
+      frame_lantern_bearer: { name: 'Lantern Bearer', desc: 'Avatar frame · Fifty shared resources carry a gentle light' },
+      frame_shared_reading: { name: 'Shared Reading Light', desc: 'Avatar frame · Pages gather light and knowledge grows' },
+      frame_knowledge_lighthouse: { name: 'Knowledge Lighthouse', desc: 'Avatar frame · Sharing becomes a gentle guide' },
       frame_streak_eternal: { name: 'Everlasting Year', desc: 'Avatar frame · A full orbit of sun and moon' },
     },
     frameStyles: {
@@ -10228,6 +10233,9 @@ export default {
       frame_file_vault: 'Crystal vault',
       frame_note_constellation: 'Inkstar tide',
       frame_file_constellation: 'Cloud star gate',
+      frame_lantern_bearer: 'Lantern Bearer',
+      frame_shared_reading: 'Shared Reading Light',
+      frame_knowledge_lighthouse: 'Knowledge Lighthouse',
       frame_streak_eternal: 'Yearly orbit',
     },
     frameFilters: { all: 'All', basic: 'Classic', rare: 'Premium', epic: 'Animated', legendary: 'Legendary' },
@@ -10386,6 +10394,7 @@ export default {
     achClaimedAlready: 'Reward already claimed',
     achClaimLocked: 'Achievement not unlocked yet',
     achGroup: {
+      sharing: 'Public contributions',
       community: 'Community',
       checkin: 'Check-in',
       create: 'Creation',
@@ -10395,6 +10404,12 @@ export default {
       tenure: 'Tenure',
     },
     achName: {
+      public_resource_1: 'First Resource Shared',
+      public_resource_10: 'Open a New Chapter',
+      public_resource_50: 'Pass the Light',
+      public_resource_200: 'A Forest of Knowledge',
+      public_resource_500: 'Knowledge Lighthouse',
+
       community_post_1: 'First Share',
       community_post_10: 'Keep Sharing',
       community_post_50: 'Knowledge Keeper',
@@ -10441,6 +10456,12 @@ export default {
       join_365: 'A Year Together',
     },
     achDesc: {
+      public_resource_1: 'Have 1 approved, active public bookmark or plain-text note of your own.',
+      public_resource_10: 'Have 10 approved, active public bookmarks or plain-text notes of your own.',
+      public_resource_50: 'Have 50 approved, active public bookmarks or plain-text notes of your own.',
+      public_resource_200: 'Have 200 approved, active public bookmarks or plain-text notes of your own.',
+      public_resource_500: 'Have 500 approved, active public bookmarks or plain-text notes of your own.',
+
       community_post_1: 'Publish your first approved post',
       community_post_10: 'Publish 10 different approved posts',
       community_post_50: 'Publish 50 different approved posts',

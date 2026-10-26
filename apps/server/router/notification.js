@@ -3,10 +3,12 @@ import * as browserPush from '../router_handle/browserPushHandle.js';
 import rateLimit from 'express-rate-limit';
 import express from 'express';
 import * as notificationHandle from '../router_handle/notificationHandle.js';
+import { openNotificationStream } from '../util/notificationStream.js';
 
 const router = express.Router();
 
 const pushLimit = rateLimit({ windowMs: 60000, limit: 30 });
+router.post('/stream', rateLimit({ windowMs: 60000, limit: 15 }), (req, res) => openNotificationStream(req, res));
 router.post('/browser/config', pushLimit, browserPush.config);
 router.post('/browser/subscribe', pushLimit, browserPush.subscribe);
 router.post('/browser/activate', pushLimit, browserPush.activate);

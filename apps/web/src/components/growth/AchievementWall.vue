@@ -20,6 +20,7 @@
 
     <div v-for="g in visibleFamilies" :key="g" class="aw-group">
       <div class="aw-group-title">{{ t(`growth.achievementFamily.${g}`) }}</div>
+      <p v-if="g === 'sharing'" class="aw-family-hint">{{ t('growth.publicContributionRule') }}</p>
       <div class="aw-grid">
         <div
           v-for="a in byFamily(g)"
@@ -269,6 +270,7 @@
     'bookmark',
     'note',
     'file',
+    'sharing',
     'community',
     'todo',
     'organize',
@@ -418,6 +420,12 @@
     max-width: 100%;
     min-width: 0;
     overflow-x: auto;
+  }
+  .aw-family-hint {
+    margin: 0 0 var(--ui-space-12, 12px);
+    color: var(--desc-color);
+    font-size: var(--ui-font-12, 12px);
+    line-height: 1.6;
   }
   .aw-group {
     display: flex;

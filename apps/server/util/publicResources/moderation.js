@@ -1,3 +1,4 @@
+import { persistPublicResourceAchievements } from './growthMetrics.js';
 import { randomUUID } from 'node:crypto';
 import pool from '../../db/index.js';
 import { access, audit, date, fail, fields, first, json, ready, text, uuid, version, write } from './core.js';
@@ -172,6 +173,7 @@ export async function decide({ user, id, input, db = pool, env = process.env, ba
       }
       p = await first(c, 'SELECT * FROM public_resource_publications WHERE public_id=? FOR UPDATE', [id]);
       version(input.expectedVersion, p.version);
+      if (p.published_revision_id) await persistPublicResourceAchievements(p.owner_id, { db: c, env });
       const revisionId = p.pending_revision_id;
       if (['approve', 'reject'].includes(input.action)) {
         if (!revisionId || Number(p.removed) || Number(p.withdrawn)) fail('VERSION_CONFLICT', 409);
@@ -202,6 +204,7 @@ export async function decide({ user, id, input, db = pool, env = process.env, ba
           [input.action === 'remove' ? 1 : 0, reason, p.id],
         );
       }
+      if (input.action === 'approve') await persistPublicResourceAchievements(p.owner_id, { db: c, env });
       await audit(c, {
         publication: p,
         revision: revisionId || p.published_revision_id || p.latest_revision_id,
@@ -251,6 +254,7 @@ export async function handleReport({ user, id, input, db = pool, env = process.e
       if (current.status !== 'pending') fail('VERSION_CONFLICT', 409);
       if (input.action === 'remove') {
         version(input.publicationVersion, p.version);
+        if (p.published_revision_id) await persistPublicResourceAchievements(p.owner_id, { db: c, env });
         await cancelPending(c, p);
         await c.query(
           'UPDATE public_resource_publications SET removed=1,withdrawn=1,published_revision_id=NULL,pending_revision_id=NULL,reason=?,version=version+1,updated_at=NOW(6) WHERE id=?',

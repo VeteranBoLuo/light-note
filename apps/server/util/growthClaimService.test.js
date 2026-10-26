@@ -1,3 +1,4 @@
+import { PUBLIC_RESOURCE_ACHIEVEMENTS, PUBLIC_RESOURCE_FRAMES } from './publicResources/achievements.js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -91,6 +92,36 @@ beforeEach(() => {
 });
 
 describe('growthClaimService', () => {
+  it('claims the five contribution tiers and three frames together, then skips claimed tiers', async () => {
+    const conn = connection();
+    mocks.getConnection.mockResolvedValue(conn);
+    mocks.getAchievementFrameByKey.mockImplementation((key) => PUBLIC_RESOURCE_FRAMES.find((f) => f.achievementKey === key));
+    const achievements = PUBLIC_RESOURCE_ACHIEVEMENTS.map((a) => ({ ...a, unlocked: true, claimed: false }));
+    mocks.getGrowthDashboard.mockResolvedValue(dashboard({ achievements }));
+    const result = await claimGrowthRewards('contributor', { scopes: ['achievements'] });
+    expect(result).toMatchObject({ ok: true, points: 570, claimed: 5, frames: PUBLIC_RESOURCE_FRAMES.map((f) => f.id) });
+    expect(conn.query.mock.calls.filter(([sql]) => sql.includes('INSERT IGNORE INTO user_cosmetics'))).toHaveLength(3);
+    expect(conn.commit).toHaveBeenCalledOnce();
+    mocks.getGrowthDashboard.mockResolvedValue(dashboard({ achievements: achievements.map((a) => ({ ...a, claimed: true })) }));
+    mocks.earnPoints.mockClear();
+    expect(await claimGrowthRewards('contributor', { scopes: ['achievements'] })).toMatchObject({ ok: true, points: 0, claimed: 0 });
+    expect(mocks.earnPoints).not.toHaveBeenCalled();
+    mocks.getAchievementFrameByKey.mockReset();
+  });
+  it('rolls back contribution points if the matching frame cannot be saved', async () => {
+    const conn = connection();
+    mocks.getConnection.mockResolvedValue(conn);
+    mocks.getGrowthDashboard.mockResolvedValue(dashboard({ achievements: [{ ...PUBLIC_RESOURCE_ACHIEVEMENTS[2], unlocked: true }] }));
+    mocks.getAchievementFrameByKey.mockReturnValue(PUBLIC_RESOURCE_FRAMES[0]);
+    conn.query.mockImplementation(async (sql) => {
+      if (sql.includes('INSERT IGNORE INTO user_cosmetics')) throw new Error('cosmetic fixture failure');
+      return [{ affectedRows: 1 }];
+    });
+    await expect(claimGrowthRewards('contributor', { scopes: ['achievements'] })).rejects.toThrow('cosmetic fixture failure');
+    expect(conn.rollback).toHaveBeenCalledOnce();
+    expect(conn.commit).not.toHaveBeenCalled();
+    mocks.getAchievementFrameByKey.mockReset();
+  });
   it('C8 单项和一键领取共用阶段与旧成就快照，未来成就使用减半奖励', async () => {
     vi.stubEnv('POINTS_EARNING_C5_ENABLED', 'true');
     vi.stubEnv('POINTS_EARNING_C8_ENABLED', 'true');

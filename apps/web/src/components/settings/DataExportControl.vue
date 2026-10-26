@@ -79,6 +79,7 @@
   </BModal>
 </template>
 <script setup lang="ts">
+  import { useForegroundRefresh } from '@/composables/useForegroundRefresh';
   import { computed, onBeforeUnmount, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import {
@@ -160,7 +161,7 @@
     if (active.value && !document.hidden) timer = setTimeout(() => refresh(), 3000);
   }
   async function refresh() {
-    if (!props.owner || document.hidden) return;
+    if (!props.owner || document.hidden || loading.value) return;
     const g = generation,
       s = ++sequence;
     loading.value = true;
@@ -293,9 +294,9 @@
     a.click();
     a.remove();
   }
+  useForegroundRefresh({ refresh, staleMs: 1000, canRefresh: () => Boolean(props.owner) && !busy.value });
   function visibility() {
     if (document.hidden) clearTimeout(timer);
-    else if (!busy.value) void refresh();
   }
   watch(
     () => props.owner,

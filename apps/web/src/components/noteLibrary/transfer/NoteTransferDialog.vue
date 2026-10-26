@@ -392,6 +392,7 @@
   </BModal>
 </template>
 <script setup lang="ts">
+  import { useForegroundRefresh } from '@/composables/useForegroundRefresh';
   import { noteImportErrorKey } from '@/utils/noteImportError';
   import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
@@ -1131,15 +1132,14 @@
       clearTimeout(timer);
     }
   });
-  function handleVisibility() {
+  useForegroundRefresh({ refresh: async () => { await handleVisibility(); }, staleMs: 1000 });
+  async function handleVisibility() {
     if (document.hidden || !visible.value || busy.value) return;
     clearTimeout(timer);
-    if (mode.value === 'records') void loadRecords(false);
-    else if (task.value && ['parsing', 'queued', 'running'].includes(task.value.status)) void refreshTask();
+    if (mode.value === 'records') await loadRecords(false);
+    else if (task.value && ['parsing', 'queued', 'running'].includes(task.value.status)) await refreshTask();
   }
-  document.addEventListener('visibilitychange', handleVisibility);
   onBeforeUnmount(() => {
-    document.removeEventListener('visibilitychange', handleVisibility);
     generation++;
     clearTimeout(timer);
   });

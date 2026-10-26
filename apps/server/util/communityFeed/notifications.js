@@ -3,6 +3,7 @@ import pool from '../../db/index.js';
 import { communityGrowthMetrics } from './growthMetrics.js';
 import { persistAchievementUnlocksForMetrics } from '../growthAchievementState.js';
 import { createNotification } from '../notification.js';
+import { queueNotificationChange } from '../notificationRealtimeEvents.js';
 import { first, feature, parseJson, pairAllowed, authorVisibleSql } from './core.js';
 
 // No body snippets: unavailable sources must not leak through historical notifications.
@@ -176,6 +177,7 @@ async function deliver(db, event, userId) {
             'UPDATE notification SET title=?,meta=?,link=?,is_read=0,read_time=NULL,del_flag=0,create_time=NOW(6) WHERE id=? AND user_id=?',
             [title, JSON.stringify(meta), link, existing.id, userId],
           );
+          queueNotificationChange(c, [userId]);
         } else {
           await createNotification(
             userId,

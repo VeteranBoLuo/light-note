@@ -7,6 +7,11 @@ import request from '@/http/request';
 import { applyUiDensity } from '@/composables/useUiDensity';
 import { ACHIEVEMENT_KEYS, achievementVisualFor } from '@/config/achievements';
 import AchievementCollection from '@/components/growth/AchievementCollection.vue';
+import AvatarFramePreview from '@/components/growth/AvatarFramePreview.vue';
+import {
+  PUBLIC_RESOURCE_ACHIEVEMENTS,
+  PUBLIC_RESOURCE_FRAMES,
+} from '../../../server/util/publicResources/achievements.js';
 import AchievementEmblem from '@/components/growth/AchievementEmblem.vue';
 import AchievementMotionReview from './AchievementMotionReview.vue';
 import { renderBuiltinAvatar } from '@/config/builtinAvatars';
@@ -43,39 +48,50 @@ const scenario = params.get('state') || 'mixed';
 const achievements = ref<Achievement[]>(
   scenario === 'empty'
     ? []
-    : ACHIEVEMENT_KEYS.map((key, index) => {
-        const target = Number(key.split('_').at(-1));
-        const unlocked =
-          scenario === 'all' ||
-          (scenario !== 'new' &&
-            (key.startsWith('streak_')
-              ? target <= streak
-              : achievementVisualFor(key).tier <= 3 || key.startsWith('level_')));
-        return {
-          key,
-          group: achievementVisualFor(key).group,
-          target,
-          cur:
-            scenario === 'new' ? 0 : unlocked ? target : key.startsWith('streak_') ? streak : Math.floor(target * 0.76),
-          unlocked,
-          reward: 50,
-          claimed: unlocked && key !== 'streak_30',
-          claimable: unlocked && key === 'streak_30',
-          frameId:
-            key === 'streak_1'
-              ? 'frame_first_light'
-              : key === 'bookmark_500'
-                ? 'frame_bookmark_archive'
-                : key === 'note_500'
-                  ? 'frame_note_constellation'
-                  : null,
-          minLevel: key === 'bookmark_500' ? 8 : undefined,
-          currentLevel: 7,
-          unlockedAt: unlocked
-            ? new Date(Date.UTC(2026, 9, key === 'level_15' ? 25 : Math.max(1, 24 - index))).toISOString()
-            : null,
-        };
-      }),
+    : ACHIEVEMENT_KEYS.filter((key) => params.get('group') !== 'sharing' || key.startsWith('public_resource_')).map(
+        (key, index) => {
+          const target = Number(key.split('_').at(-1));
+          const unlocked =
+            scenario === 'all' ||
+            (scenario !== 'new' &&
+              (key.startsWith('streak_')
+                ? target <= streak
+                : achievementVisualFor(key).tier <= 3 || key.startsWith('level_')));
+          const publicAchievement = PUBLIC_RESOURCE_ACHIEVEMENTS.find((a) => a.key === key);
+          const publicFrame = PUBLIC_RESOURCE_FRAMES.find((f) => f.achievementKey === key);
+          return {
+            key,
+            group: achievementVisualFor(key).group,
+            target,
+            cur:
+              scenario === 'new'
+                ? 0
+                : unlocked
+                  ? target
+                  : key.startsWith('streak_')
+                    ? streak
+                    : Math.floor(target * 0.76),
+            unlocked,
+            reward: publicAchievement?.reward || 50,
+            claimed: unlocked && key !== 'streak_30' && scenario !== 'claimable',
+            claimable: unlocked && (key === 'streak_30' || scenario === 'claimable'),
+            frameId:
+              publicFrame?.id ||
+              (key === 'streak_1'
+                ? 'frame_first_light'
+                : key === 'bookmark_500'
+                  ? 'frame_bookmark_archive'
+                  : key === 'note_500'
+                    ? 'frame_note_constellation'
+                    : null),
+            minLevel: publicAchievement?.minLevel || (key === 'bookmark_500' ? 8 : undefined),
+            currentLevel: 7,
+            unlockedAt: unlocked
+              ? new Date(Date.UTC(2026, 9, key === 'level_15' ? 25 : Math.max(1, 24 - index))).toISOString()
+              : null,
+          };
+        },
+      ),
 );
 const claiming = ref<string | null>(null),
   result = ref('');
@@ -134,6 +150,28 @@ const app = createApp({
         onClaim: claim,
       }),
       h('p', { role: 'status' }, result.value),
+      params.get('group') === 'sharing' &&
+        h(
+          'div',
+          {
+            class: 'contribution-frame-review',
+            style: 'display:flex;flex-wrap:wrap;gap:var(--ui-space-24,24px);padding:var(--ui-space-24,24px)',
+          },
+          PUBLIC_RESOURCE_FRAMES.flatMap((frame) =>
+            [36, 64, 128].map((size) =>
+              h('div', { 'data-frame': frame.id }, [
+                h(AvatarFramePreview, {
+                  frameId: frame.id,
+                  src: icon.communityChat.defaultAvatar,
+                  size,
+                  animated: params.get('motion') !== 'off',
+                  pauseWhenOffscreen: true,
+                }),
+                h('p', frame.name),
+              ]),
+            ),
+          ),
+        ),
       h(
         'div',
         { style: 'display:flex;gap:var(--ui-space-8,8px);padding:var(--ui-space-20,20px)' },

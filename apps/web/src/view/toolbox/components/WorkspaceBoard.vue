@@ -146,6 +146,7 @@
   </div>
 </template>
 <script setup lang="ts">
+  import { useForegroundRefresh } from '@/composables/useForegroundRefresh';
   import ToolboxFeedback from './ToolboxFeedback.vue';
   import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue';
   import { useI18n } from 'vue-i18n';
@@ -233,9 +234,8 @@
   }
   onMounted(() => {
     window.addEventListener('scroll', refreshHover, true);
-    window.addEventListener('focus', refreshLinkedState);
-    document.addEventListener('visibilitychange', refreshLinkedState);
   });
+  useForegroundRefresh({ refresh: refreshLinkedState, staleMs: 1000 });
   let refreshing = false;
   async function refreshLinkedState() {
     if (!alive || busy.value || refreshing || document.visibilityState === 'hidden') return;
@@ -262,8 +262,6 @@
     alive = false;
     cancelAnimationFrame(hoverFrame);
     window.removeEventListener('scroll', refreshHover, true);
-    window.removeEventListener('focus', refreshLinkedState);
-    document.removeEventListener('visibilitychange', refreshLinkedState);
   });
   type Editor = {
     key: string;

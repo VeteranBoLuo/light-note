@@ -137,7 +137,12 @@ describe('communityChatNotificationService', () => {
   });
 
   it('回复与显式提及按同一规则幂等投递，同一消息回复并 @ 同一人也由来源键去重', async () => {
-    const db = { query: vi.fn().mockResolvedValueOnce([{ affectedRows: 1 }, []]) };
+    const db = {
+      query: vi
+        .fn()
+        .mockResolvedValueOnce([{ affectedRows: 1 }, []])
+        .mockResolvedValue([[{ userId: 'recipient' }]]),
+    };
     const result = await deliverCommunityChatMessageNotifications({
       messagePublicId: '11111111-1111-4111-8111-111111111111',
       env: PUBLIC_ENV,
@@ -154,7 +159,7 @@ describe('communityChatNotificationService', () => {
     expect(text).toContain("'mentionEveryone', IF(message.mention_everyone = 1, 1, 0)");
     expect(text).toContain('LEFT JOIN community_chat_messages reply ON reply.id = message.reply_to_id');
     expect(text).toContain('LEFT JOIN community_chat_message_mentions mention ON mention.message_id = message.id');
-    expect(db.query).toHaveBeenCalledTimes(1);
+    expect(db.query).toHaveBeenCalledTimes(2);
     expect(text).toContain('recipient.id = reply.user_id');
     expect(text).toContain('recipient.id = mention.mentioned_user_id');
     expect(text).toContain('message.mention_everyone = 1');
@@ -190,8 +195,22 @@ describe('communityChatNotificationService', () => {
     expect(params).toEqual(['11111111-1111-4111-8111-111111111111', 'rules-v1']);
   });
 
+  it('实时信号的收件人读取失败不能把已保存通知改成投递失败', async () => {
+    const db = { query: vi.fn()
+      .mockResolvedValueOnce([{ affectedRows: 1 }, []])
+      .mockRejectedValueOnce(new Error('temporary read failure')) };
+    await expect(deliverCommunityChatMessageNotifications({
+      messagePublicId: '11111111-1111-4111-8111-111111111111', env: PUBLIC_ENV, db,
+    })).resolves.toEqual({ delivered: 1 });
+  });
+
   it('调用方提供的可读预览会替代内部令牌，通知正文不暴露存储协议', async () => {
-    const db = { query: vi.fn(async () => [{ affectedRows: 1 }, []]) };
+    const db = {
+      query: vi
+        .fn()
+        .mockResolvedValueOnce([{ affectedRows: 1 }, []])
+        .mockResolvedValue([[{ userId: 'recipient' }]]),
+    };
     await deliverCommunityChatMessageNotifications({
       messagePublicId: '11111111-1111-4111-8111-111111111111',
       messagePreview: '你好 [开心]',

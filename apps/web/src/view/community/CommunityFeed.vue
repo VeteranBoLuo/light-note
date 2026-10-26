@@ -1275,6 +1275,7 @@
       },
     });
   }
+  let headCheckGeneration: number | null = null;
   watch(
     [() => route.fullPath, owner],
     () => {
@@ -1310,6 +1311,8 @@
       timer = setInterval(async () => {
         if (mode.value !== 'feed' || !caps.value.feedEnabled || document.hidden || loading.value) return;
         const current = generation;
+        if (headCheckGeneration === current) return;
+        headCheckGeneration = current;
         try {
           const data = await feedGet<FeedPage<FeedPost>>('posts', { ...appliedFilters, limit: 1 });
           if (current === generation)
@@ -1319,7 +1322,9 @@
               latestHeadPublishedAt.value,
               posts.value.map((post) => post.publicId),
             );
-        } catch {}
+        } catch {} finally {
+          if (headCheckGeneration === current) headCheckGeneration = null;
+        }
       }, 30000);
     },
     { immediate: true },

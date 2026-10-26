@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import pool from '../../db/index.js';
 import { createNotification } from '../notification.js';
+import { queueNotificationChange } from '../notificationRealtimeEvents.js';
 import { notificationSchedulerEnabled } from '../notificationSchedulerPolicy.js';
 import { first, json, transaction } from './core.js';
 import { publicResourceSchemaReady } from './schema.js';
@@ -54,11 +55,13 @@ async function deliver(db, event, userId) {
       if (existing) {
         const previous = json(existing.meta) || {},
           total = (value) => Object.values(value || {}).reduce((sum, count) => sum + Number(count || 0), 0);
-        if (total(counts) > total(previous.counts))
+        if (total(counts) > total(previous.counts)) {
           await c.query('UPDATE notification SET meta=?,is_read=0,read_time=NULL,create_time=NOW() WHERE id=?', [
             JSON.stringify({ ...previous, counts }),
             existing.id,
           ]);
+          queueNotificationChange(c, [userId]);
+        }
         // A retry never reopens a read notice, and a user's deletion is never undone.
         return;
       }

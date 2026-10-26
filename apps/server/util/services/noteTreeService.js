@@ -1190,6 +1190,10 @@ export async function deleteOwnedNoteSubtrees(connection, { userId, items } = {}
   const results = [];
   const deletedIds = [];
 
+  await withdrawDeletedSources(db, {
+    userId: normalizedUserId, kind: 'note',
+    ids: effectiveRoots.flatMap((root) => [root.id, ...root.descendantIds]),
+  });
   for (const root of effectiveRoots) {
     const subtreeIds = [root.id, ...root.descendantIds];
     const placeholders = subtreeIds.map(() => '?').join(',');
@@ -1216,7 +1220,6 @@ export async function deleteOwnedNoteSubtrees(connection, { userId, items } = {}
     });
   }
 
-  await withdrawDeletedSources(db, { userId: normalizedUserId, kind: 'note', ids: deletedIds });
   await removeInboxRelations(db, {
     userId: normalizedUserId,
     items: deletedIds.map((resourceId) => ({ resourceType: 'note', resourceId })),

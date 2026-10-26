@@ -418,7 +418,7 @@ describe('成就体系职责', () => {
     const retiredKeys = ['first_checkin', 'first_bookmark', 'first_note', 'first_file'];
     const keys = ACHIEVEMENTS.map((achievement) => achievement.key);
 
-    expect(keys).toHaveLength(43);
+    expect(keys).toHaveLength(48);
     expect(keys).not.toEqual(expect.arrayContaining(retiredKeys));
     expect(ACHIEVEMENTS.filter((achievement) => achievement.target === 1)).toEqual(
       expect.arrayContaining([
@@ -427,10 +427,10 @@ describe('成就体系职责', () => {
         expect.objectContaining({ key: 'streak_1', metric: 'maxStreak', reward: 10 }),
       ]),
     );
-    expect(ACHIEVEMENTS.filter((achievement) => achievement.target === 1)).toHaveLength(3);
+    expect(ACHIEVEMENTS.filter((achievement) => achievement.target === 1)).toHaveLength(4);
     expect(
       ACHIEVEMENTS.filter(
-        (achievement) => !['streak_1', 'community_post_1', 'community_answer_1'].includes(achievement.key),
+        (achievement) => !['public_resource_1', 'streak_1', 'community_post_1', 'community_answer_1'].includes(achievement.key),
       ).every((achievement) => achievement.target > 1),
     ).toBe(true);
     expect(
@@ -438,7 +438,7 @@ describe('成就体系职责', () => {
         counts[achievement.group] = (counts[achievement.group] || 0) + 1;
         return counts;
       }, {}),
-    ).toEqual({ checkin: 7, create: 17, action: 4, organize: 4, level: 3, tenure: 4, community: 4 });
+    ).toEqual({ checkin: 7, create: 17, action: 4, organize: 4, level: 3, tenure: 4, community: 4, sharing: 5 });
   });
 
   it('为书签、笔记和文件提供基础与进阶两级静态头像框门槛', () => {
