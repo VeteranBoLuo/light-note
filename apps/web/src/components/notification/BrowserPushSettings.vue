@@ -61,6 +61,7 @@
   </div>
 </template>
 <script setup lang="ts">
+  import { useForegroundRefresh } from '@/composables/useForegroundRefresh';
   import { computed, onMounted, onUnmounted } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { bookmarkStore, useUserStore } from '@/store';
@@ -89,18 +90,15 @@
       !busy.value &&
       document.visibilityState === 'visible'
     )
-      void refresh();
+      return refresh();
   };
+  useForegroundRefresh({ refresh: async () => { await refreshWhenVisible(); }, staleMs: 30_000 });
   let timer: number | undefined;
   onMounted(() => {
     refreshWhenVisible();
-    window.addEventListener('focus', refreshWhenVisible);
-    document.addEventListener('visibilitychange', refreshWhenVisible);
     timer = window.setInterval(refreshWhenVisible, 30000);
   });
   onUnmounted(() => {
-    window.removeEventListener('focus', refreshWhenVisible);
-    document.removeEventListener('visibilitychange', refreshWhenVisible);
     window.clearInterval(timer);
   });
 </script>

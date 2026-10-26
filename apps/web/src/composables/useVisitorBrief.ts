@@ -6,10 +6,11 @@ export function useVisitorBrief(input: { enabled: () => boolean; owner: () => st
     failed = ref(false);
   let generation = 0,
     timer: ReturnType<typeof setTimeout> | undefined,
-    lastRead = 0;
+    lastAttemptAt = -Infinity;
   async function refresh() {
     if (!input.enabled() || document.hidden || loading.value) return;
     const request = ++generation;
+    lastAttemptAt = Date.now();
     loading.value = true;
     failed.value = false;
     clearTimeout(timer);
@@ -19,7 +20,6 @@ export function useVisitorBrief(input: { enabled: () => boolean; owner: () => st
       if (response?.status !== 200 || response.data?.kind !== 'visitor_example')
         throw new Error('visitor brief unavailable');
       state.value = response.data;
-      lastRead = Date.now();
     } catch {
       if (request === generation) failed.value = true;
     } finally {
@@ -42,13 +42,13 @@ export function useVisitorBrief(input: { enabled: () => boolean; owner: () => st
       state.value = null;
       failed.value = false;
       loading.value = false;
-      lastRead = 0;
+      lastAttemptAt = -Infinity;
       void refresh();
     },
     { immediate: true },
   );
   const resume = () => {
-    if (!document.hidden && Date.now() - lastRead >= 60000) void refresh();
+    if (!document.hidden && Date.now() - lastAttemptAt >= 60000) void refresh();
   };
   document.addEventListener('visibilitychange', resume);
   window.addEventListener('focus', resume);

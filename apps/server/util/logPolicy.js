@@ -13,6 +13,7 @@ const API_LOG_SKIP_SUBSTRINGS = Object.freeze([
 ]);
 
 const PASSIVE_API_PATHS = new Set([
+  '/notification/stream',
   '/note/imports/list',
   '/note/imports/detail',
   '/note/imports/preview',

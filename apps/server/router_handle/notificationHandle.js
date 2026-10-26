@@ -10,6 +10,7 @@ import pool from '../db/index.js';
 import { resultData } from '../util/common.js';
 import { ensureNotVisitor } from '../util/auth.js';
 import { createNotification } from '../util/notification.js';
+import { queueNotificationChange } from '../util/notificationRealtimeEvents.js';
 import { EMAIL_EFFECTIVE_STATUS_SQL, maskEmail } from '../util/emailDelivery.js';
 import { stableAgentErrorCode } from '../util/agent/logSafety.js';
 import {
@@ -258,6 +259,7 @@ export const remove = async (req, res) => {
       [userId, ...ids],
     );
     res.send(resultData({ deleted: result.affectedRows || 0 }));
+    if (result.affectedRows) queueNotificationChange(null, [userId]);
   } catch (e) {
     res.send(resultData(null, 500, '删除通知失败: ' + e.message));
   }
@@ -279,6 +281,7 @@ export const markRead = async (req, res) => {
       [userId, ...ids],
     );
     res.send(resultData({ updated: result.affectedRows || 0 }));
+    if (result.affectedRows) queueNotificationChange(null, [userId]);
   } catch (e) {
     res.send(resultData(null, 500, '标记已读失败: ' + e.message));
   }
@@ -296,6 +299,7 @@ export const markAllRead = async (req, res) => {
     if (excludeCommunityChat) where.push(COMMUNITY_CHAT_EXCLUDED_SQL);
     const updated = await markNotificationSnapshotRead(pool, where, params);
     res.send(resultData({ updated }));
+    if (updated) queueNotificationChange(null, [req.user.id]);
   } catch {
     res.send(resultData(null, 500, '标记全部已读失败'));
   }

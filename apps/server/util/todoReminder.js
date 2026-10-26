@@ -4,9 +4,11 @@ import { createNotification } from './notification.js';
 import { sendTrackedEmail } from './emailDelivery.js';
 import { formatTodoDueAt, normalizeTodoLocale } from './todoDateFormat.js';
 
-const POLL_INTERVAL_MS = 60 * 1000;
+const POLL_INTERVAL_MS = 5_000;
+const RECOVERY_INTERVAL_MS = 60_000;
 const BATCH_SIZE = 50;
 let running = false;
+let recovering = false;
 
 function asDate(value) {
   if (value instanceof Date) return value;
@@ -238,28 +240,53 @@ export async function processDueTodoReminders() {
   if (running) return;
   running = true;
   try {
-    // 进程在投递中途退出时，processing 不应永久卡死；十分钟后回到待处理重试。
+    const [rows] = await pool.query(
+      `SELECT id FROM todo_reminders
+       WHERE status = 'pending' AND scheduled_at <= NOW()
+       ORDER BY scheduled_at ASC LIMIT ?`,
+      [BATCH_SIZE],
+    );
+    for (const row of rows) await processReminder(row.id);
+  } catch (error) {
+    console.error('[todo-reminder] 扫描失败 code=%s', error?.code || 'UNKNOWN');
+  } finally {
+    running = false;
+  }
+}
+
+export async function recoverTodoReminders() {
+  if (!notificationSchedulerEnabled() || recovering) return;
+  recovering = true;
+  try {
+    // 历史租约恢复和旧免打扰兼容留在分钟级维护通道。
     await pool.query(
       `UPDATE todo_reminders SET status = 'pending', last_error = 'processing timeout recovery'
        WHERE status = 'processing' AND update_time < DATE_SUB(NOW(), INTERVAL 10 MINUTE)`,
     );
     const [rows] = await pool.query(
       `SELECT id FROM todo_reminders
-       WHERE status = 'pending' AND (scheduled_at <= NOW() OR last_error = 'quiet hours deferred')
+       WHERE status = 'pending' AND last_error = 'quiet hours deferred'
        ORDER BY scheduled_at ASC LIMIT ?`,
       [BATCH_SIZE],
     );
     for (const row of rows) await processReminder(row.id);
   } catch (error) {
-    console.error('[todo-reminder] 扫描失败:', error?.message || error);
+    console.error('[todo-reminder] 恢复失败 code=%s', error?.code || 'UNKNOWN');
   } finally {
-    running = false;
+    recovering = false;
   }
 }
 
 export function startTodoReminderScheduler() {
   if (!notificationSchedulerEnabled()) return;
   const timer = setInterval(() => processDueTodoReminders(), POLL_INTERVAL_MS);
+  const recoveryTimer = setInterval(() => recoverTodoReminders(), RECOVERY_INTERVAL_MS);
   timer.unref?.();
-  setTimeout(() => processDueTodoReminders(), 15_000).unref?.();
+  recoveryTimer.unref?.();
+  void recoverTodoReminders();
+  void processDueTodoReminders();
+  return () => {
+    clearInterval(timer);
+    clearInterval(recoveryTimer);
+  };
 }

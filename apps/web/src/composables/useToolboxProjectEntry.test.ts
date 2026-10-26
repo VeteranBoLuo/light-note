@@ -57,6 +57,18 @@ it('coalesces requests across consumers and refreshes only after invalidation or
   await settle();
   expect(mocks.get).toHaveBeenCalledTimes(2);
 });
+it('failed background reads keep their cooldown while explicit retry remains available', async () => {
+  mocks.get.mockRejectedValue(new Error('offline'));
+  mount(2);
+  await settle();
+  for (let i = 0; i < 20; i++) {
+    document.dispatchEvent(new Event('visibilitychange'));
+    await settle();
+  }
+  expect(mocks.get).toHaveBeenCalledTimes(1);
+  await states[0].load(true);
+  expect(mocks.get).toHaveBeenCalledTimes(2);
+});
 it('does not treat a failed load as an empty account and allows visitor reads but excludes managed contexts', async () => {
   mocks.get.mockRejectedValue(new Error('network'));
   mount();

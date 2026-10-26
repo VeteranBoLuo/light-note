@@ -522,6 +522,7 @@
 </template>
 
 <script setup lang="ts">
+  import { useForegroundRefresh } from '@/composables/useForegroundRefresh';
   import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
@@ -1084,9 +1085,12 @@
     pollTimer = null;
   }
 
+  useForegroundRefresh({
+    refresh: async () => { schedulePolling(200); },
+    staleMs: 1000,
+  });
   function handleVisibilityChange() {
     if (document.hidden) stopPolling();
-    else schedulePolling(200);
   }
 
   function startEditing(suggestion: OrganizeAiSuggestion) {

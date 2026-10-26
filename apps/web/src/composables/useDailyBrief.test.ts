@@ -78,6 +78,19 @@ afterEach(() => {
 });
 
 describe('今日简报前台调度', () => {
+  it('密集前台信号共享恢复节流，失败不会每个信号重复检查', async () => {
+    mount();
+    await settle();
+    get.mockClear();
+    get.mockRejectedValue(new Error('offline'));
+    for (let i = 0; i < 50; i++) {
+      visibility('visible');
+      window.dispatchEvent(new Event('focus'));
+      await vi.advanceTimersByTimeAsync(100);
+    }
+    expect(get.mock.calls.length).toBeLessThanOrEqual(5);
+  });
+
   it('先展示已有简报，再检查新鲜度；没有变化不调用模型入口', async () => {
     const { model } = mount();
     await settle();

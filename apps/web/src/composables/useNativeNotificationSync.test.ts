@@ -57,11 +57,13 @@ describe('native notification resume', () => {
     document.dispatchEvent(new Event('visibilitychange'));
     window.dispatchEvent(new Event('online'));
     window.dispatchEvent(new Event('light-note:native-notification-open'));
-    expect(mocks.refreshUnread).toHaveBeenCalledTimes(3);
-    expect(mocks.tick).toHaveBeenCalledTimes(3);
+    expect(mocks.refreshUnread).toHaveBeenCalledTimes(1);
+    expect(mocks.tick).toHaveBeenCalledTimes(1);
     await vi.advanceTimersByTimeAsync(15000);
-    expect(mocks.tick).toHaveBeenCalledTimes(4);
-    expect(mocks.refreshUnread).toHaveBeenCalledTimes(3);
+    expect(mocks.tick).toHaveBeenCalledTimes(2);
+    expect(mocks.refreshUnread).toHaveBeenCalledTimes(1);
+    window.dispatchEvent(new Event('light-note:native-notification-resume'));
+    expect(mocks.refreshUnread).toHaveBeenCalledTimes(2);
   });
   it('does not refresh while hidden, offline, unauthenticated or outside an App', () => {
     const owner = mount();
