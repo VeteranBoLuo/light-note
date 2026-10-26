@@ -1087,7 +1087,7 @@
 
   useForegroundRefresh({
     refresh: async () => { schedulePolling(200); },
-    staleMs: 1000,
+    trailingWake: true, staleMs: 1000,
   });
   function handleVisibilityChange() {
     if (document.hidden) stopPolling();
