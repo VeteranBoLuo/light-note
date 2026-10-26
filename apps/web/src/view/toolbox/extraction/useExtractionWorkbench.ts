@@ -1,3 +1,4 @@
+import { useForegroundRefresh } from '@/composables/useForegroundRefresh';
 import { takeExtraction } from '@/utils/extractionHandoff';
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { useRoute, useRouter, onBeforeRouteLeave, onBeforeRouteUpdate } from 'vue-router';
@@ -448,13 +449,15 @@ export function useExtractionWorkbench() {
         error.value = explain(cause);
       }),
   );
+  useForegroundRefresh({
+    refresh: async () => {
+      try { await refresh(); } catch (cause) { error.value = explain(cause); schedule(); }
+    },
+    staleMs: 1000,
+    canRefresh: () => Boolean(active.value || table.value?.inFlight),
+  });
   function visibility() {
     if (document.hidden) clearTimeout(timer);
-    else if (active.value || table.value?.inFlight)
-      void refresh().catch((cause) => {
-        error.value = explain(cause);
-        schedule();
-      });
   }
   document.addEventListener('visibilitychange', visibility);
   const guardUnsaved = () => {

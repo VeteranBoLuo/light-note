@@ -14,6 +14,7 @@ export interface UseCommunityChatUnreadRuntimeOptions {
 
 const FALLBACK_REFRESH_INTERVAL_MS = 60_000;
 const REALTIME_REFRESH_DEBOUNCE_MS = 25;
+const PASSIVE_REFRESH_MIN_INTERVAL_MS = 1_000;
 
 /**
  * 应用级聊天室角标与全项目在线状态运行时。
@@ -32,34 +33,49 @@ export function useCommunityChatUnreadRuntime(options: UseCommunityChatUnreadRun
   const socketEnabled = computed(() => active.value && unread.realtimeAvailable.value && Boolean(roomSlug.value));
   const identityKey = computed(() => `${options.userId.value || 'guest'}:${options.userRole.value || 'visitor'}`);
   let mounted = false;
-  let realtimeRefreshTimer: number | undefined;
+  let passiveRefreshTimer: number | undefined;
   let fallbackRefreshTimer: number | undefined;
+  let lastPassiveRefreshAt = -Infinity;
+  let refreshAfterCurrent = false;
 
-  function clearRealtimeRefreshTimer() {
-    if (realtimeRefreshTimer !== undefined) window.clearTimeout(realtimeRefreshTimer);
-    realtimeRefreshTimer = undefined;
+  function clearPassiveRefreshTimer() {
+    if (passiveRefreshTimer !== undefined) window.clearTimeout(passiveRefreshTimer);
+    passiveRefreshTimer = undefined;
+    refreshAfterCurrent = false;
   }
 
   function refreshNow({ afterCurrent = false } = {}) {
     // 聊天室页面由 Workspace 的实时连接和目录刷新维护状态，
     // 根层角标运行时不应再发起一组重复 REST 请求。
-    if (!active.value) return;
+    if (!active.value || document.visibilityState !== 'visible') return;
     void unread.refresh({ afterCurrent });
   }
 
-  function scheduleAuthoritativeRefresh() {
-    if (!active.value || !authenticated.value || realtimeRefreshTimer !== undefined) return;
-    realtimeRefreshTimer = window.setTimeout(() => {
-      realtimeRefreshTimer = undefined;
-      refreshNow({ afterCurrent: true });
-    }, REALTIME_REFRESH_DEBOUNCE_MS);
+  function schedulePassiveRefresh({ afterCurrent = false, debounceMs = 0 } = {}) {
+    if (!active.value || document.visibilityState !== 'visible') return;
+    refreshAfterCurrent ||= afterCurrent;
+    if (passiveRefreshTimer !== undefined) return;
+    // 25ms 合并只覆盖同一小批事件。持续失效信号或重复前台唤醒仍会逐次读取目录，
+    // 因此共用最小间隔并保留尾部刷新；请求失败也不能变成高频重试。
+    const delay = Math.max(debounceMs, PASSIVE_REFRESH_MIN_INTERVAL_MS - (Date.now() - lastPassiveRefreshAt));
+    if (delay > 0) {
+      passiveRefreshTimer = window.setTimeout(() => {
+        passiveRefreshTimer = undefined;
+        schedulePassiveRefresh();
+      }, delay);
+      return;
+    }
+    const queuedAfterCurrent = refreshAfterCurrent;
+    refreshAfterCurrent = false;
+    lastPassiveRefreshAt = Date.now();
+    refreshNow({ afterCurrent: queuedAfterCurrent });
   }
 
   function handleRealtimeEvent(event: CommunityChatRealtimeEvent) {
     if (!authenticated.value) return;
     // 点赞等互动不会改变未读数，避免公共房间每次点赞都让所有在线用户请求目录。
     if (event.type === 'message.updated' && event.payload.reason !== 'recall') return;
-    scheduleAuthoritativeRefresh();
+    schedulePassiveRefresh({ afterCurrent: true, debounceMs: REALTIME_REFRESH_DEBOUNCE_MS });
   }
 
   const socket = useCommunityChatSocket({
@@ -69,14 +85,15 @@ export function useCommunityChatUnreadRuntime(options: UseCommunityChatUnreadRun
     onEvent: handleRealtimeEvent,
     // 断线期间可能漏过事件；重新订阅成功后必须用 REST 补齐权威角标。
     onSynchronized: () => {
-      if (authenticated.value) refreshNow({ afterCurrent: true });
+      if (authenticated.value) schedulePassiveRefresh({ afterCurrent: true });
     },
   });
 
   watch(
     [options.userId, options.userRole, previewContext],
     () => {
-      clearRealtimeRefreshTimer();
+      clearPassiveRefreshTimer();
+      lastPassiveRefreshAt = -Infinity;
       unread.reset();
       if (mounted) refreshNow();
     },
@@ -86,14 +103,15 @@ export function useCommunityChatUnreadRuntime(options: UseCommunityChatUnreadRun
   watch(
     active,
     (active) => {
-      clearRealtimeRefreshTimer();
+      clearPassiveRefreshTimer();
       if (mounted && active) refreshNow();
     },
     { flush: 'post' },
   );
 
   function handleVisibilityChange() {
-    if (document.visibilityState === 'visible') refreshNow();
+    if (document.visibilityState === 'visible') schedulePassiveRefresh();
+    else clearPassiveRefreshTimer();
   }
 
   onMounted(() => {
@@ -103,13 +121,13 @@ export function useCommunityChatUnreadRuntime(options: UseCommunityChatUnreadRun
     fallbackRefreshTimer = window.setInterval(() => {
       // 游客没有未读状态，首次读取开放策略后由 WebSocket 自身负责在线状态；
       // 只有登录账号需要用低频 REST 覆盖断线期间可能遗漏的角标变化。
-      if (active.value && authenticated.value && document.visibilityState === 'visible') refreshNow();
+      if (authenticated.value) schedulePassiveRefresh();
     }, FALLBACK_REFRESH_INTERVAL_MS);
   });
 
   onBeforeUnmount(() => {
     mounted = false;
-    clearRealtimeRefreshTimer();
+    clearPassiveRefreshTimer();
     if (fallbackRefreshTimer !== undefined) window.clearInterval(fallbackRefreshTimer);
     document.removeEventListener('visibilitychange', handleVisibilityChange);
   });

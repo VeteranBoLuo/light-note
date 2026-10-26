@@ -7,8 +7,8 @@ import pool from '../db/index.js';
 import { createNotification } from './notification.js';
 import { sendTrackedEmail } from './emailDelivery.js';
 import { notificationSchedulerEnabled } from './notificationSchedulerPolicy.js';
-import { processDueTodoReminders, startTodoReminderScheduler } from './todoReminder.js';
-import { processDueTodoReminderJobs, startTodoReminderV2Scheduler } from './todoReminderV2.js';
+import { processDueTodoReminders, recoverTodoReminders, startTodoReminderScheduler } from './todoReminder.js';
+import { processDueTodoReminderJobs, recoverTodoReminderJobs, startTodoReminderV2Scheduler } from './todoReminderV2.js';
 import { generateWeeklyReports } from './weeklyReport.js';
 import { generateGrowthNudges } from './growth.js';
 import { runOrganizeCompletionNotifications } from './services/organizeCompletionNotification.js';
@@ -46,6 +46,8 @@ describe('notification production isolation', () => {
       expect(vi.getTimerCount()).toBe(0);
       await processDueTodoReminders();
       await processDueTodoReminderJobs();
+      await recoverTodoReminders();
+      await recoverTodoReminderJobs();
       await generateWeeklyReports();
       await generateGrowthNudges();
       await runOrganizeCompletionNotifications('worker');
@@ -66,7 +68,7 @@ describe('notification production isolation', () => {
     pool.query.mockImplementation(async (sql) => (sql.trim().startsWith('SELECT') ? [[]] : [{ affectedRows: 0 }]));
     await processDueTodoReminders();
     await processDueTodoReminderJobs();
-    expect(pool.query).toHaveBeenCalledTimes(4);
+    expect(pool.query).toHaveBeenCalledTimes(2);
     expect(browserPushEnabled()).toBe(false);
     expect(notificationSchedulerEnabled()).toBe(true);
   });
@@ -77,4 +79,21 @@ describe('notification production isolation', () => {
     expect(notificationSchedulerEnabled({ LIGHTNOTE_RUNTIME_ENV: 'local', NODE_ENV: 'production' })).toBe(false);
     expect(notificationSchedulerEnabled({})).toBe(false);
   });
+
+  it.each([startTodoReminderScheduler, startTodoReminderV2Scheduler])(
+    'scans every five seconds but recovers leases once per minute',
+    async (start) => {
+      vi.stubEnv('LIGHTNOTE_RUNTIME_ENV', 'production');
+      pool.query.mockImplementation(async (sql) => (sql.trim().startsWith('SELECT') ? [[]] : [{ affectedRows: 0 }]));
+      const stop = start();
+      await vi.advanceTimersByTimeAsync(0);
+      pool.query.mockClear();
+      await vi.advanceTimersByTimeAsync(55_000);
+      expect(pool.query).toHaveBeenCalledTimes(11);
+      expect(pool.query.mock.calls.every(([sql]) => sql.includes('scheduled_at') && !sql.includes(' OR '))).toBe(true);
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(pool.query.mock.calls.filter(([sql]) => sql.trim().startsWith('UPDATE'))).toHaveLength(1);
+      stop();
+    },
+  );
 });

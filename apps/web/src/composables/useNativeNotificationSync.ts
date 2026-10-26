@@ -63,6 +63,7 @@ export function useNativeNotificationSync(owner: Ref<string | null>, open: () =>
   let timer: ReturnType<typeof setTimeout> | undefined;
   let mounted = false;
   let lastNotificationSync = 0;
+  let lastResumeAt = -Infinity;
   const canCheck = () => hasAndroidBridge() && Boolean(owner.value) && document.visibilityState === 'visible';
   const canRun = () => canCheck() && navigator.onLine !== false;
   const schedule = () => {
@@ -82,13 +83,27 @@ export function useNativeNotificationSync(owner: Ref<string | null>, open: () =>
       schedule();
     }
   };
-  const resume = () => {
+  const resume = (event: Event) => {
     updateNativeNotificationOnline(navigator.onLine !== false);
     clearTimeout(timer);
-    if (!canCheck()) return;
+    if (!canCheck()) {
+      lastResumeAt = -Infinity;
+      return;
+    }
+    if (navigator.onLine === false) {
+      lastResumeAt = -Infinity;
+      void tick();
+      return;
+    }
+    // WebView 会连续上报显隐、联网和原生恢复；同一次恢复只做一次同步。
+    if (event.type !== 'light-note:native-notification-retry' && Date.now() - lastResumeAt < 1000) {
+      schedule();
+      return;
+    }
+    lastResumeAt = Date.now();
     sync.retry();
     lastNotificationSync = 0;
-    if (navigator.onLine !== false) void refreshUnread().catch(() => {});
+    void refreshUnread().catch(() => {});
     void tick();
   };
   const stop = watch(
@@ -97,6 +112,7 @@ export function useNativeNotificationSync(owner: Ref<string | null>, open: () =>
       if (!hasAndroidBridge()) return;
       clearTimeout(timer);
       lastNotificationSync = 0;
+      lastResumeAt = -Infinity;
       if (value === null) sync.pause();
       else sync.setOwner(value);
       void tick();

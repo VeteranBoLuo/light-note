@@ -127,6 +127,7 @@
   const snapVisible = ref(false);
   const snapId = ref('');
   let poller: ReturnType<typeof setInterval> | null = null;
+  let summaryRequest: Promise<void> | null = null;
 
   const running = computed(() => Boolean(summary.value.scan?.running || summary.value.running));
   const progressTotal = computed(() => Number(summary.value.scan?.total ?? summary.value.total));
@@ -153,9 +154,13 @@
       suspect: d.suspect || [],
     };
   }
-  async function loadSummary() {
-    const res = await apiBaseGet('/api/bookmark/health');
-    if (res?.status === 200 && res.data) applySummary(res.data);
+  function loadSummary(): Promise<void> {
+    if (summaryRequest) return summaryRequest;
+    summaryRequest = (async () => {
+      const res = await apiBaseGet('/api/bookmark/health');
+      if (res?.status === 200 && res.data) applySummary(res.data);
+    })().finally(() => { summaryRequest = null; });
+    return summaryRequest;
   }
   function stopPoll() {
     if (poller) {
@@ -216,7 +221,7 @@
   watch(visible, (v) => {
     if (v) {
       loadSummary().then(() => {
-        if (summary.value.running && !poller) startPolling(); // 打开时若后台仍在跑,接着轮询
+        if (visible.value && summary.value.running && !poller) startPolling(); // 打开时若后台仍在跑,接着轮询
       });
     } else {
       stopPoll();
@@ -225,8 +230,11 @@
   function startPolling() {
     stopPoll();
     poller = setInterval(async () => {
-      await loadSummary();
-      if (!summary.value.running) stopPoll();
+      if (document.hidden || !visible.value) return;
+      try {
+        await loadSummary();
+        if (!summary.value.running) stopPoll();
+      } catch { /* 下一轮前台轮询重试，保留已确认进度。 */ }
     }, 2500);
   }
   onUnmounted(stopPoll);

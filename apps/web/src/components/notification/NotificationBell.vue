@@ -174,6 +174,7 @@
   import BPopover from '@/components/base/BasicComponents/BPopover.vue';
   import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
   import { useNotification, type NotificationItem } from '@/composables/useNotification.ts';
+  import { useNotificationRealtime } from '@/composables/useNotificationRealtime';
   import AsyncFeatureLoadingOverlay from '@/components/base/AsyncFeatureLoadingOverlay.vue';
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
@@ -311,7 +312,9 @@
   }
   async function markNotificationRead(n: NotificationItem) {
     if (n.isRead) return;
-    if (await markRead([n.id])) n.isRead = 1;
+    await withNotificationWrite(async () => {
+      if (await markRead([n.id])) n.isRead = 1;
+    });
   }
   // 升级通知按 type+meta 渲染 i18n(国际化);其余(反馈回复/系统/其他)用后端原文
   function renderTitle(n: NotificationItem): string {
@@ -453,19 +456,19 @@
   }
 
   async function onMarkAll() {
-    const visibleIds = new Set(items.value.map((item) => item.id));
-    const succeeded = await markAllRead(activeTab.value);
-    if (succeeded) {
-      items.value.forEach((n) => {
-        if (visibleIds.has(n.id)) n.isRead = 1;
-      });
-      recordOperation({ module: '通知中心', operation: '全部通知标记已读成功' });
-    }
+    await withNotificationWrite(async () => {
+      const visibleIds = new Set(items.value.map((item) => item.id));
+      const succeeded = await markAllRead(activeTab.value);
+      if (succeeded) {
+        items.value.forEach((n) => {
+          if (visibleIds.has(n.id)) n.isRead = 1;
+        });
+        recordOperation({ module: '通知中心', operation: '全部通知标记已读成功' });
+      }
+    });
   }
   async function onItemClick(n: NotificationItem) {
-    if (!n.isRead) {
-      if (await markRead([n.id])) n.isRead = 1;
-    }
+    await markNotificationRead(n);
     if (n.type === 'todo_reminder' && todoActionState(n) === 'unavailable') {
       message.warning(t('notification.todoUnavailable'));
       return;
@@ -500,43 +503,47 @@
     const todoId = getTodoId(n);
     if (!todoId || completingTodoId.value) return;
     completingTodoId.value = todoId;
-    try {
-      const res = await completeTodo(todoId, { silent: true });
-      if (res.status === 200) {
-        n.todoState = 'completed';
-        // 通知、顶部导航与移动底栏分别持有通知未读数和待办注意力计数。
-        // 完成成功后同步两份权威读模型，不能依赖进入待办页时顺带刷新角标。
-        await Promise.all([markNotificationRead(n), inbox.refreshCount()]);
-        message.success(t('notification.todoCompleted'));
-      } else if (res.status === 404) {
-        n.todoState = 'unavailable';
-        await markNotificationRead(n);
-        message.warning(t('notification.todoUnavailable'));
-      } else {
+    await withNotificationWrite(async () => {
+      try {
+        const res = await completeTodo(todoId, { silent: true });
+        if (res.status === 200) {
+          n.todoState = 'completed';
+          // 通知、顶部导航与移动底栏分别持有通知未读数和待办注意力计数。
+          // 完成成功后同步两份权威读模型，不能依赖进入待办页时顺带刷新角标。
+          await Promise.all([markNotificationRead(n), inbox.refreshCount()]);
+          message.success(t('notification.todoCompleted'));
+        } else if (res.status === 404) {
+          n.todoState = 'unavailable';
+          await markNotificationRead(n);
+          message.warning(t('notification.todoUnavailable'));
+        } else {
+          message.warning(t('notification.todoCompleteFailed'));
+        }
+      } catch {
         message.warning(t('notification.todoCompleteFailed'));
+      } finally {
+        completingTodoId.value = '';
       }
-    } catch {
-      message.warning(t('notification.todoCompleteFailed'));
-    } finally {
-      completingTodoId.value = '';
-    }
+    });
   }
   // 删除单条:本地即时移除 + 后端软删(未读的会由 refreshUnread 同步角标)
   async function onDelete(n: NotificationItem) {
-    const previousItems = items.value;
-    const previousTotal = total.value;
-    items.value = items.value.filter((x) => x.id !== n.id);
-    total.value = Math.max(0, total.value - 1);
-    const succeeded = await deleteNotifications([n.id]);
-    if (succeeded) {
-      recordOperation({
-        ...OPERATION_LOG_MAP.notification.deleteOne,
-        operation: `删除通知成功【${renderTitle(n)}】`,
-      });
-    } else {
-      items.value = previousItems;
-      total.value = previousTotal;
-    }
+    await withNotificationWrite(async () => {
+      const previousItems = items.value;
+      const previousTotal = total.value;
+      items.value = items.value.filter((x) => x.id !== n.id);
+      total.value = Math.max(0, total.value - 1);
+      const succeeded = await deleteNotifications([n.id]);
+      if (succeeded) {
+        recordOperation({
+          ...OPERATION_LOG_MAP.notification.deleteOne,
+          operation: `删除通知成功【${renderTitle(n)}】`,
+        });
+      } else {
+        items.value = previousItems;
+        total.value = previousTotal;
+      }
+    });
   }
 
   function getTodoId(n: NotificationItem) {
@@ -571,16 +578,80 @@
     if (action.key === 'delete' && activeNotification.value) void onDelete(activeNotification.value);
   }
 
-  // 未读数:进来拉一次 + 定时轮询(2 分钟) + 切号刷新
-  let timer: ReturnType<typeof setInterval> | null = null;
+  useNotificationRealtime(() => {
+    if (props.page || open.value) {
+      visibleRefreshQueued = true;
+      void refreshVisibleNotifications();
+    }
+  });
+
+  let refreshingVisible = false;
+  let visibleRefreshQueued = false;
+  let notificationWrites = 0;
+  let notificationMutationVersion = 0;
+  async function withNotificationWrite(action: () => Promise<void>) {
+    notificationWrites++;
+    notificationMutationVersion++;
+    try {
+      await action();
+    } finally {
+      notificationWrites--;
+      if (visibleRefreshQueued) void refreshVisibleNotifications();
+    }
+  }
+  watch([loading, locateState], () => {
+    if (visibleRefreshQueued) void refreshVisibleNotifications();
+  });
+  async function refreshVisibleNotifications() {
+    if (refreshingVisible || notificationWrites || loading.value || locateState.value === 'loading') return;
+    if (!props.page && !open.value) {
+      visibleRefreshQueued = false;
+      return;
+    }
+    visibleRefreshQueued = false;
+    refreshingVisible = true;
+    const generation = listGeneration;
+    const mutationVersion = notificationMutationVersion;
+    const owner = user.id;
+    const pages = currentPage.value;
+    const firstPage = Math.floor(skippedItems / pageSize) + 1;
+    const skipped = skippedItems;
+    const tab = activeTab.value;
+    const nextItems: NotificationItem[] = [];
+    let nextTotal = total.value;
+    try {
+      for (let pageNumber = firstPage; pageNumber <= pages; pageNumber++) {
+        const page = await fetchList(
+          { currentPage: pageNumber, pageSize, type: tab },
+          { throwOnError: true, syncUnread: false },
+        );
+        if (
+          generation !== listGeneration ||
+          mutationVersion !== notificationMutationVersion ||
+          owner !== user.id ||
+          tab !== activeTab.value
+        )
+          return;
+        nextItems.push(...page.items);
+        nextTotal = page.total;
+      }
+      items.value = nextItems;
+      total.value = Math.max(0, nextTotal - skipped);
+    } catch {
+      /* Retain the current list on transient refresh failures. */
+    } finally {
+      refreshingVisible = false;
+      if (visibleRefreshQueued) void refreshVisibleNotifications();
+    }
+  }
+
   onMounted(() => {
-    refreshUnread();
     if (props.page) locateFromRoute();
-    timer = setInterval(() => refreshUnread(), 120000);
     window.addEventListener(NOTIFICATION_PANEL_OPEN_EVENT, handleExternalOpen);
   });
   onUnmounted(() => {
-    if (timer) clearInterval(timer);
+    listGeneration++;
+    visibleRefreshQueued = false;
     window.removeEventListener(NOTIFICATION_PANEL_OPEN_EVENT, handleExternalOpen);
   });
   watch(

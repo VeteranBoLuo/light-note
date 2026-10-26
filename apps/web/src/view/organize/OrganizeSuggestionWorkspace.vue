@@ -607,6 +607,7 @@
   </section>
 </template>
 <script setup lang="ts">
+  import { useForegroundRefresh } from '@/composables/useForegroundRefresh';
   import { useRangeSelection } from '@/composables/useRangeSelection';
   import { vRangeSelect, vRangeSelectionScroll } from '@/directives/rangeSelection';
   import { useUiDensity } from '@/composables/useUiDensity';
@@ -1783,9 +1784,9 @@
     bookmark.refreshTag();
     emit('refresh-summary');
   }
+  useForegroundRefresh({ refresh: () => refresh(true), staleMs: 1000, canRefresh: () => Boolean(active && run.value) });
   function visibility() {
     if (document.hidden) clearTimeout(timer);
-    else if (active && run.value) void refresh(true);
   }
   watch(
     () => run.value?.id,

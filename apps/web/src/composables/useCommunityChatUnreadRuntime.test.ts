@@ -199,4 +199,79 @@ describe('useCommunityChatUnreadRuntime', () => {
     expect(mocks.socketOptions?.enabled.value).toBe(false);
     expect(mocks.getRooms).toHaveBeenCalledTimes(1);
   });
+
+  it('游客连续收到前台恢复信号时，不按每个信号重复读取目录', async () => {
+    const runtime = await mountRuntime();
+    runtime.userRole.value = 'visitor';
+    await flushRequests();
+    mocks.getRooms.mockClear();
+
+    for (let index = 0; index < 300; index++) {
+      document.dispatchEvent(new Event('visibilitychange'));
+      await vi.advanceTimersByTimeAsync(200);
+    }
+
+    expect(mocks.getRooms.mock.calls.length).toBeLessThanOrEqual(60);
+    expect(useCommunityChatUnread().totalUnread.value).toBe(0);
+  });
+
+  it('持续新消息以有界频率刷新，末尾事件仍能收敛到权威角标', async () => {
+    await mountRuntime();
+    mocks.getRooms.mockClear();
+    let unreadCount = 0;
+    mocks.getRooms.mockImplementation(async () => ({
+      data: {
+        access: { realtimeEnabled: true },
+        messagingEnabled: true,
+        items: [{ slug: 'general', unreadCount, mentionCount: 0 }],
+      },
+    }));
+    for (let index = 0; index < 200; index++) {
+      unreadCount++;
+      mocks.socketOptions?.onEvent({ type: 'message.created', payload: { roomSlug: 'general' } });
+      await vi.advanceTimersByTimeAsync(30);
+    }
+    await vi.advanceTimersByTimeAsync(1000);
+
+    expect(mocks.getRooms.mock.calls.length).toBeLessThanOrEqual(7);
+    expect(useCommunityChatUnread().totalUnread.value).toBe(200);
+  });
+
+  it('转入后台后取消已排队刷新，后台事件和重连回调都不请求目录', async () => {
+    await mountRuntime();
+    mocks.getRooms.mockClear();
+    mocks.socketOptions?.onEvent({ type: 'message.created', payload: { roomSlug: 'general' } });
+    Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' });
+    document.dispatchEvent(new Event('visibilitychange'));
+    await vi.advanceTimersByTimeAsync(2000);
+    mocks.socketOptions?.onSynchronized();
+    await vi.advanceTimersByTimeAsync(2000);
+
+    expect(mocks.getRooms).not.toHaveBeenCalled();
+    Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' });
+    document.dispatchEvent(new Event('visibilitychange'));
+    await flushRequests();
+    expect(mocks.getRooms).toHaveBeenCalledTimes(1);
+  });
+
+  it('连续失败也遵守刷新间隔，切号时取消旧身份的尾部任务', async () => {
+    const runtime = await mountRuntime();
+    mocks.getRooms.mockClear();
+    mocks.getRooms.mockRejectedValue(new Error('rate limited'));
+    for (let index = 0; index < 100; index++) {
+      mocks.socketOptions?.onSynchronized();
+      await vi.advanceTimersByTimeAsync(30);
+    }
+    expect(mocks.getRooms.mock.calls.length).toBeLessThanOrEqual(4);
+
+    mocks.getRooms.mockResolvedValue({
+      data: { messagingEnabled: true, items: [{ slug: 'general', unreadCount: 2, mentionCount: 0 }] },
+    });
+    runtime.userId.value = 'user-c';
+    await flushRequests();
+    const callsAfterSwitch = mocks.getRooms.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(mocks.getRooms).toHaveBeenCalledTimes(callsAfterSwitch);
+    expect(useCommunityChatUnread().totalUnread.value).toBe(2);
+  });
 });

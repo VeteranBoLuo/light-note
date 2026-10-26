@@ -135,4 +135,29 @@ describe('useNotification.fetchList', () => {
     expect(getNotificationList).not.toHaveBeenCalled();
     vi.unstubAllGlobals();
   });
+
+  it('合并同范围并发计数请求，变更发生在在途请求期间时补读一次', async () => {
+    let resolveFirst;
+    getUnreadCount
+      .mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolveFirst = resolve;
+        }),
+      )
+      .mockResolvedValue({ status: 200, data: { unreadTotal: 2, byType: {} } });
+    const notification = useNotification();
+    const first = notification.refreshUnread();
+    const duplicate = notification.refreshUnread();
+    const changed = notification.refreshUnread({ afterCurrent: true });
+    expect(getUnreadCount).toHaveBeenCalledOnce();
+    resolveFirst({ status: 200, data: { unreadTotal: 1, byType: {} } });
+    await Promise.all([first, duplicate, changed]);
+    expect(getUnreadCount).toHaveBeenCalledTimes(2);
+    expect(notification.unreadTotal.value).toBe(2);
+  });
+
+  it('静默列表刷新失败会抛错，让界面保留已有通知', async () => {
+    getNotificationList.mockRejectedValue(new Error('network'));
+    await expect(useNotification().fetchList({}, { throwOnError: true })).rejects.toThrow('network');
+  });
 });

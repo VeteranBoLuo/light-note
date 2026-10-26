@@ -27,9 +27,15 @@ export interface NotificationPage {
 const unreadTotal = ref(0);
 const unreadByType = ref<Record<string, number>>({}); // 分类型未读数(各 tab 角标)
 let ownerId: string | null = null;
+let generation = 0;
+const unreadRequests = new Map<string, Promise<void>>();
+const queuedUnreadRefreshes = new Set<string>();
 
 /** 登出/切号时作废未读缓存 */
 export function resetNotification() {
+  generation++;
+  unreadRequests.clear();
+  queuedUnreadRefreshes.clear();
   unreadTotal.value = 0;
   unreadByType.value = {};
   ownerId = null;
@@ -46,33 +52,53 @@ export function useNotification(options: { excludeCommunityChat?: MaybeRef<boole
   }
 
   // 轻量:刷新未读总数 + 分类型未读数(铃铛角标 + 各 tab 角标)。切号即清零。
-  async function refreshUnread() {
+  async function refreshUnread(options: { afterCurrent?: boolean } = {}) {
     if (isGuest()) {
       unreadTotal.value = 0;
       unreadByType.value = {};
       return;
     }
     const uid = useUserStore().id;
+    const requestGeneration = generation;
+    const scope = notificationScope();
+    const key = `${uid}:${scope.excludeCommunityChat}:${requestGeneration}`;
+    if (unreadRequests.has(key)) {
+      if (options.afterCurrent) queuedUnreadRefreshes.add(key);
+      return unreadRequests.get(key);
+    }
     if (ownerId !== uid) {
       unreadTotal.value = 0;
       unreadByType.value = {};
       ownerId = uid;
     }
+    const pending = (async () => {
+      do {
+        try {
+          queuedUnreadRefreshes.delete(key);
+          const res = await notificationApi.getUnreadCount(scope);
+          if (generation !== requestGeneration || useUserStore().id !== uid || isGuest()) return;
+          if (res?.status === 200 && res.data) {
+            unreadTotal.value = Number(res.data.unreadTotal) || 0;
+            unreadByType.value = res.data.byType || {};
+          }
+        } catch {
+          /* 忽略,下次轮询再试 */
+        }
+      } while (generation === requestGeneration && useUserStore().id === uid && queuedUnreadRefreshes.has(key));
+    })();
+    unreadRequests.set(key, pending);
     try {
-      const res = await notificationApi.getUnreadCount(notificationScope());
-      if (useUserStore().id !== uid || isGuest()) return;
-      if (res?.status === 200 && res.data) {
-        unreadTotal.value = Number(res.data.unreadTotal) || 0;
-        unreadByType.value = res.data.byType || {};
-      }
-    } catch {
-      /* 忽略,下次轮询再试 */
+      await pending;
+    } finally {
+      if (unreadRequests.get(key) === pending) unreadRequests.delete(key);
+      queuedUnreadRefreshes.delete(key);
     }
   }
 
   // 拉取分页列表(顺带同步未读数)
   async function fetchList(
     params: { currentPage?: number; pageSize?: number; type?: string; notificationId?: string } = {},
+    options: { throwOnError?: boolean; syncUnread?: boolean } = {},
   ): Promise<NotificationPage> {
     const empty: NotificationPage = {
       items: [],
@@ -87,7 +113,7 @@ export function useNotification(options: { excludeCommunityChat?: MaybeRef<boole
       const res = await notificationApi.getNotificationList({ ...params, ...notificationScope() });
       if (useUserStore().id !== uid || isGuest()) return empty;
       if (res?.status === 200 && res.data) {
-        unreadTotal.value = Number(res.data.unreadTotal ?? unreadTotal.value) || 0;
+        if (options.syncUnread !== false) unreadTotal.value = Number(res.data.unreadTotal ?? unreadTotal.value) || 0;
         return {
           items: Array.isArray(res.data.items) ? res.data.items : [],
           total: Number(res.data.total) || 0,
@@ -98,9 +124,9 @@ export function useNotification(options: { excludeCommunityChat?: MaybeRef<boole
         };
       }
     } catch (error) {
-      if (params.notificationId) throw error;
+      if (params.notificationId || options.throwOnError) throw error;
     }
-    if (params.notificationId) throw new Error('NOTIFICATION_LOCATE_FAILED');
+    if (params.notificationId || options.throwOnError) throw new Error('NOTIFICATION_LOCATE_FAILED');
     return empty;
   }
 
@@ -111,10 +137,10 @@ export function useNotification(options: { excludeCommunityChat?: MaybeRef<boole
     try {
       const response = await notificationApi.markNotificationsRead(ids);
       if (useUserStore().id !== uid) return false;
-      await refreshUnread();
+      await refreshUnread({ afterCurrent: true });
       return response?.status === 200;
     } catch {
-      await refreshUnread();
+      await refreshUnread({ afterCurrent: true });
       return false;
     }
   }
@@ -126,10 +152,10 @@ export function useNotification(options: { excludeCommunityChat?: MaybeRef<boole
     try {
       const res = await notificationApi.markAllNotificationsRead({ ...notificationScope(), type });
       if (useUserStore().id !== uid) return false;
-      await refreshUnread();
+      await refreshUnread({ afterCurrent: true });
       return res?.status === 200;
     } catch {
-      refreshUnread();
+      refreshUnread({ afterCurrent: true });
       return false;
     }
   }
@@ -143,7 +169,7 @@ export function useNotification(options: { excludeCommunityChat?: MaybeRef<boole
     } catch {
       return false;
     } finally {
-      refreshUnread();
+      refreshUnread({ afterCurrent: true });
     }
   }
 

@@ -3,6 +3,7 @@ import {
   findVerticalScrollContainer,
   scrollCenterIntoContainer,
   scrollIntoContainer,
+  scrollNearestHorizontallyIntoContainer,
   scrollNearestIntoContainer,
 } from './scrolling';
 
@@ -73,6 +74,50 @@ describe('scrollNearestIntoContainer', () => {
     targetRect.mockReturnValue({ top: 120, bottom: 180 } as DOMRect);
     scrollNearestIntoContainer(container, target);
     expect(scrollTo).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('scrollNearestHorizontallyIntoContainer', () => {
+  it('左右露出被裁切的标签，限制滚动范围，且不改变纵向和外层滚动', () => {
+    const outer = document.createElement('div');
+    const container = document.createElement('div');
+    const target = document.createElement('div');
+    outer.append(container);
+    container.append(target);
+    const outerScrollTo = vi.fn();
+    const scrollTo = vi.fn();
+    Object.defineProperty(outer, 'scrollTo', { value: outerScrollTo });
+    Object.defineProperties(container, {
+      clientLeft: { value: 2 },
+      clientWidth: { value: 200 },
+      scrollWidth: { value: 600 },
+      scrollLeft: { value: 50, writable: true },
+      scrollTop: { value: 70 },
+      scrollTo: { value: scrollTo },
+    });
+    vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({ left: 100 } as DOMRect);
+    const targetRect = vi.spyOn(target, 'getBoundingClientRect');
+
+    targetRect.mockReturnValue({ left: 240, right: 340 } as DOMRect);
+    scrollNearestHorizontallyIntoContainer(container, target, 'smooth');
+    expect(scrollTo).toHaveBeenLastCalledWith({ left: 88, behavior: 'smooth' });
+
+    targetRect.mockReturnValue({ left: 90, right: 160 } as DOMRect);
+    scrollNearestHorizontallyIntoContainer(container, target);
+    expect(scrollTo).toHaveBeenLastCalledWith({ left: 38, behavior: 'auto' });
+
+    targetRect.mockReturnValue({ left: 120, right: 280 } as DOMRect);
+    scrollNearestHorizontallyIntoContainer(container, target);
+    expect(scrollTo).toHaveBeenCalledTimes(2);
+
+    targetRect.mockReturnValue({ left: 700, right: 800 } as DOMRect);
+    scrollNearestHorizontallyIntoContainer(container, target);
+    expect(scrollTo).toHaveBeenLastCalledWith({ left: 400, behavior: 'auto' });
+    targetRect.mockReturnValue({ left: -200, right: -100 } as DOMRect);
+    scrollNearestHorizontallyIntoContainer(container, target);
+    expect(scrollTo).toHaveBeenLastCalledWith({ left: 0, behavior: 'auto' });
+    expect(container.scrollTop).toBe(70);
+    expect(outerScrollTo).not.toHaveBeenCalled();
   });
 });
 

@@ -4,6 +4,27 @@ import { useVisitorBrief } from './useVisitorBrief';
 const mocks = vi.hoisted(() => ({ get: vi.fn() }));
 vi.mock('@/api/dailyBriefApi', () => ({ getVisitorBrief: mocks.get }));
 describe('visitor brief request ownership', () => {
+  it('failed passive reads retain the one-minute retry interval across focus signals', async () => {
+    vi.useFakeTimers();
+    mocks.get.mockRejectedValue(new Error('offline'));
+    const scope = effectScope();
+    scope.run(() => useVisitorBrief({ enabled: () => true, owner: () => 'guest', locale: () => 'zh-CN' }));
+    try {
+      for (let i = 0; i < 100; i++) {
+        window.dispatchEvent(new Event('focus'));
+        document.dispatchEvent(new Event('visibilitychange'));
+        await vi.advanceTimersByTimeAsync(100);
+      }
+      expect(mocks.get).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(50_000);
+      expect(mocks.get).toHaveBeenCalledTimes(2);
+    } finally {
+      scope.stop();
+      vi.useRealTimers();
+      vi.resetAllMocks();
+    }
+  });
+
   it('ignores a response from a previous identity and retains current content after a refresh error', async () => {
     let oldResolve: any;
     mocks.get

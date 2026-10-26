@@ -251,8 +251,9 @@
     display: inline-flex;
     align-items: center;
     gap: var(--ui-space-8, 8px);
-    font-size: var(--ui-font-14, 14px);
+    font-size: var(--ui-font-16, 16px);
     font-weight: 700;
+    line-height: 1.5;
   }
   .dq-title-wrap {
     display: flex;
