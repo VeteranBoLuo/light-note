@@ -48,8 +48,8 @@ afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
-async function mount(paused = false) {
-  const props = reactive({ kind: 'legendary' as const, paused, chat: false });
+async function mount(paused = false, chat = false) {
+  const props = reactive({ kind: 'legendary' as const, paused, chat });
   app = createApp({ render: () => h(Motion, props) });
   app.mount(host);
   intersect([{ isIntersecting: true }]);
@@ -73,17 +73,18 @@ describe('public contribution frame motion lifecycle', () => {
     mocks.active.forEach((callback) => callback(0.2));
     props.paused = true;
     await nextTick();
-    expect(mocks.paint.mock.lastCall?.slice(-2)).toEqual([0.2, 0.2]);
+    expect(mocks.paint.mock.lastCall?.slice(3, 5)).toEqual([0.2, 0.2]);
+    expect(host.querySelector('.contribution-motion')?.classList.contains('paused')).toBe(true);
     expect(mocks.active.size).toBe(0);
     props.paused = false;
     await nextTick();
     mocks.active.forEach((callback) => callback(0.2));
-    expect(mocks.paint.mock.lastCall?.slice(-2)).toEqual([0.4, 0.4]);
+    expect(mocks.paint.mock.lastCall?.slice(3, 5)).toEqual([0.4, 0.4]);
     app.unmount();
     expect(mocks.active.size).toBe(0);
     expect(disconnect).toHaveBeenCalled();
   });
-  it('stops offscreen and renders reduced-motion leaves and beams without scheduling animation', async () => {
+  it('stops offscreen and returns the legendary artwork to its static fallback for reduced motion', async () => {
     await mount();
     expect(mocks.active.size).toBe(1);
     intersect([{ isIntersecting: false }]);
@@ -95,7 +96,22 @@ describe('public contribution frame motion lifecycle', () => {
     media.addEventListener.mock.calls[0][1]();
     await nextTick();
     expect(host.querySelector('canvas')?.getAttribute('data-motion-state')).toBe('reduced');
-    expect(mocks.paint.mock.lastCall?.slice(-2)).toEqual([0, 0]);
+    expect(mocks.paint.mock.lastCall?.slice(3)).toEqual([0, 0, true]);
+    expect(host.querySelector('.contribution-motion')?.classList.contains('reduced')).toBe(true);
     expect(mocks.active.size).toBe(0);
+  });
+  it('keeps the light channel live during chat scrolling and resumes pages and particles from their phase', async () => {
+    host.classList.add('community-message-list');
+    await mount(false, true);
+    mocks.active.forEach((callback) => callback(0.2));
+    host.classList.add('is-actively-scrolling');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    mocks.active.forEach((callback) => callback(0.2));
+    expect(mocks.paint.mock.lastCall?.slice(3, 5)).toEqual([0.4, 0.2]);
+    expect(host.querySelector('.contribution-motion')?.classList.contains('paused')).toBe(false);
+    host.classList.remove('is-actively-scrolling');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    mocks.active.forEach((callback) => callback(0.2));
+    expect(mocks.paint.mock.lastCall?.[4]).toBeCloseTo(0.4);
   });
 });

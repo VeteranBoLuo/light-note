@@ -1,5 +1,14 @@
 <template>
-  <canvas ref="canvas" class="contribution-motion" :data-motion-state="motionState" aria-hidden="true" />
+  <span
+    class="contribution-motion"
+    :class="{ 'contribution-motion--legendary': kind === 'legendary', paused: motionState !== 'playing', reduced }"
+    aria-hidden="true"
+  >
+    <template v-if="kind === 'legendary'">
+      <i class="beam beam-left"></i><i class="beam beam-right"></i><i class="lens"></i>
+    </template>
+    <canvas ref="canvas" :data-motion-state="motionState" />
+  </span>
 </template>
 <script setup lang="ts">
   import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
@@ -36,6 +45,7 @@
         props.kind,
         reduced.value ? 0 : time,
         reduced.value ? 0 : secondaryTime,
+        reduced.value,
       );
   };
   const sync = () => {
@@ -124,5 +134,99 @@
     height: var(--frame-art-size);
     transform: translate(-50%, calc(-50% + var(--frame-art-offset-y, 0px)));
     pointer-events: none;
+  }
+  .contribution-motion canvas {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    top: 0;
+    left: 0;
+  }
+  .contribution-motion--legendary canvas {
+    width: 112.75917%;
+    height: 112.75917%;
+    top: -6.379585%;
+    left: -6.379585%;
+  }
+  .beam {
+    position: absolute;
+    left: 50%;
+    top: 10.6%;
+    width: 32%;
+    height: 13%;
+    transform-origin: 0 50%;
+    clip-path: polygon(0 50%, 100% 0, 100% 100%);
+    background: linear-gradient(90deg, rgba(173, 207, 255, 0.68), rgba(113, 116, 241, 0.4) 35%, rgba(117, 97, 227, 0));
+  }
+  .beam-right {
+    animation: lighthouse-beam-right 5s ease-in-out infinite;
+  }
+  .beam-left {
+    animation: lighthouse-beam-left 5s ease-in-out infinite;
+  }
+  .lens {
+    position: absolute;
+    top: 8.6%;
+    left: 45.6%;
+    width: 8.6%;
+    height: 4.8%;
+    border-radius: 25%;
+    background: linear-gradient(
+      100deg,
+      transparent 20%,
+      rgba(151, 235, 255, 0.2) 35%,
+      rgba(217, 248, 255, 0.86) 48%,
+      rgba(170, 192, 255, 0.25) 60%,
+      transparent 75%
+    );
+    background-size: 240% 100%;
+    animation: lighthouse-lens-sweep 5s ease-in-out infinite;
+  }
+  .paused .beam,
+  .paused .lens {
+    animation-play-state: paused;
+  }
+  .reduced .beam,
+  .reduced .lens {
+    display: none;
+    animation: none;
+  }
+  @keyframes lighthouse-beam-right {
+    0%,
+    100% {
+      transform: translateY(-50%) rotate(-12deg);
+      opacity: 0.65;
+    }
+    50% {
+      transform: translateY(-50%) rotate(12deg);
+      opacity: 1;
+    }
+  }
+  @keyframes lighthouse-beam-left {
+    0%,
+    100% {
+      transform: translateY(-50%) rotate(168deg);
+      opacity: 1;
+    }
+    50% {
+      transform: translateY(-50%) rotate(192deg);
+      opacity: 0.65;
+    }
+  }
+  @keyframes lighthouse-lens-sweep {
+    0%,
+    100% {
+      background-position: 100% 50%;
+    }
+    50% {
+      background-position: 0 50%;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .beam,
+    .lens {
+      display: none;
+      animation: none;
+    }
   }
 </style>
