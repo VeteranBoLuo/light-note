@@ -29,6 +29,7 @@ let state = M.create("garden", FISH),
   productionTab = "farm",
   productionOpener = null;
 const atlasPositions = new Map();
+const manorIcons = document.getElementById("manor-icon-assets") ? JSON.parse(document.getElementById("manor-icon-assets").textContent) : null;
 // Preferred bait is restored from the authenticated account save.
 // 场景标定与舞台在 farm-calibration.js、farm-stage.js
 const farmFish = (slot) => M.farmFish(state, slot);
@@ -167,7 +168,7 @@ function hudHTML() {
   const rewardReady = M.pendingDailyWater(state).length;
   const pending = M.pendingLevelRewards(state).length;
   const pct = info.next ? (state.xp - info.at) / (info.next - info.at) * 100 : 100;
-  return `<button class="hud-back" data-action="exit" title="返回轻笺" aria-label="返回轻笺"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></button><div class="hud-identity"><button class="hud-stage" data-action="level" title="${pending ? pending + " 级奖励待领取" : "查看成长奖励"}" aria-label="庄园 Lv.${info.lv}，查看等级"><span class="hud-stage-name"><span class="hud-garden-badge" aria-hidden="true">${FarmArt.ui("crest")}</span><span id="phaseLabel"><span class="hud-manor-name">庄园 </span>Lv.${info.lv}</span>${pending ? `<span class="level-hud-pending" aria-label="${pending} 级奖励待领取">${pending}</span>` : ""}</span><span class="hud-growth"><span class="hud-growth-bar"><i id="hudGrowthBar" style="width:${pct}%"></i></span><span class="hud-growth-num">${info.next ? `<b id="hudGrowthNum">${state.xp - info.at}</b> / ${info.next - info.at}` : "已满级"}</span></span></button></div>${!isMobileView() ? `<nav class="game-dock" aria-label="庄园操作" id="gameTools">${dockHTML()}</nav>` : ""}<div class="hud-right"><div class="hud-resources" role="group" aria-label="资源"><button class="res-pill water" data-action="daily" aria-label="水滴 ${state.water} / ${R.waterCap}，通过每日任务和海水过滤器补水">${toolSprite("water")}<b id="waterCount">${state.water}</b><small>/ ${R.waterCap}</small></button><button class="res-pill" data-action="ledger" data-res="points" aria-label="积分 ${state.wallet}">${FarmArt.ui("coin", "res-icon")}<b id="wallet">${state.wallet}</b><small>积分</small></button></div><div class="hud-utils"><button class="util-btn ${rewardReady ? "has-reward" : ""}" data-action="daily" aria-label="每日任务 ${done}/3${rewardReady ? "，有奖励可领取" : ""}">${toolSprite("daily")}<span>任务</span><b>${done}/3</b></button><button class="util-btn plain" data-action="memories" aria-label="庄园日记，相伴 ${M.day(state)} 天"><span class="util-days"><b id="companionDays">${M.day(state)}</b> 天</span><span>相伴</span></button><button class="util-btn round" data-action="rules" aria-label="庄园玩法说明">?</button></div></div>${document.getElementById("manor-icon-assets") ? `<button class="hud-reset util-btn round${GardenLive.testing ? " is-testing" : ""}" data-action="reset-test" aria-label="重置测试庄园" title="${GardenLive.testing ? "测试存档：重置或返回正式庄园" : "从初始引导开始测试"}"><img src="${JSON.parse(document.getElementById("manor-icon-assets").textContent).reset}" alt="" draggable="false">${GardenLive.testing ? "<small>测试中</small>" : ""}</button>` : ""}<button class="hud-more" data-action="manor-menu" aria-label="更多：任务、日记和帮助">···${rewardReady ? '<i aria-hidden="true"></i>' : ""}</button>`;
+  return `<button class="hud-back" data-action="exit" title="返回轻笺" aria-label="返回轻笺"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></button><div class="hud-identity"><button class="hud-stage" data-action="level" title="${pending ? pending + " 级奖励待领取" : "查看成长奖励"}" aria-label="庄园 Lv.${info.lv}，查看等级"><span class="hud-stage-name"><span class="hud-garden-badge" aria-hidden="true">${FarmArt.ui("crest")}</span><span id="phaseLabel"><span class="hud-manor-name">庄园 </span>Lv.${info.lv}</span>${pending ? `<span class="level-hud-pending" aria-label="${pending} 级奖励待领取">${pending}</span>` : ""}</span><span class="hud-growth"><span class="hud-growth-bar"><i id="hudGrowthBar" style="width:${pct}%"></i></span><span class="hud-growth-num">${info.next ? `<b id="hudGrowthNum">${state.xp - info.at}</b> / ${info.next - info.at}` : "已满级"}</span></span></button></div>${!isMobileView() ? `<nav class="game-dock" aria-label="庄园操作" id="gameTools">${dockHTML()}</nav>` : ""}<div class="hud-right"><div class="hud-resources" role="group" aria-label="资源"><button class="res-pill water" data-action="daily" aria-label="水滴 ${state.water} / ${R.waterCap}，通过每日任务和海水过滤器补水">${toolSprite("water")}<b id="waterCount">${state.water}</b><small>/ ${R.waterCap}</small></button><button class="res-pill" data-action="ledger" data-res="points" aria-label="积分 ${state.wallet}">${FarmArt.ui("coin", "res-icon")}<b id="wallet">${state.wallet}</b><small>积分</small></button></div><div class="hud-utils"><button class="util-btn ${rewardReady ? "has-reward" : ""}" data-action="daily" aria-label="每日任务 ${done}/3${rewardReady ? "，有奖励可领取" : ""}">${toolSprite("daily")}<span>任务</span><b>${done}/3</b></button><button class="util-btn plain" data-action="memories" aria-label="庄园日记，相伴 ${M.day(state)} 天"><span class="util-days"><b id="companionDays">${M.day(state)}</b> 天</span><span>相伴</span></button><button class="util-btn round" data-action="rules" aria-label="庄园玩法说明">?</button></div></div>${document.getElementById("manor-icon-assets") ? `<button class="hud-reset util-btn round${GardenLive.testing ? " is-testing" : ""}" data-action="reset-test" aria-label="重置测试庄园" title="${GardenLive.testing ? "测试存档：重置或返回正式庄园" : "从初始引导开始测试"}"><img src="${manorIcons.reset}" alt="" draggable="false">${GardenLive.testing ? "<small>测试中</small>" : ""}</button>` : ""}<button class="hud-more" data-action="manor-menu" aria-label="更多：任务、日记和帮助">${manorIcons?.more ? `<img src="${manorIcons.more}" alt="" draggable="false">` : "···"}${rewardReady ? '<i aria-hidden="true"></i>' : ""}</button>`;
 }
 // 底栏：图标 + 名称两层；养鱼舱入住数写在图标右下角的小牌子上（背包不写数字：种子和仓库两种数会被误读），
 // 完整说明在按钮的读屏标签里
@@ -518,7 +519,10 @@ function animateNumber(el, from, to, ms) {
   }
   requestAnimationFrame(tick);
 }
-function showDialog(title, intro, body, foot = "", wide = false, family = "") {
+let disposeCatalogImages = () => {};
+function showDialog(title, intro, body, foot = "", wide = false, family = "", backTo = "") {
+  disposeCatalogImages();
+  disposeCatalogImages = () => {};
   body=FarmArt.html(body);foot=FarmArt.html(foot);
   FarmUI.rememberPanel();
   const focused = $("#tankProduction")?.contains(document.activeElement) ? $('[data-dock="farm"]') : document.activeElement;
@@ -581,13 +585,24 @@ function showDialog(title, intro, body, foot = "", wide = false, family = "") {
   } else {
     dialog.innerHTML = `<div class="dialog-head"><div><div class="game-title">${FarmArt.ui("leaves-left", "title-leaves")}<h2 id="dialogTitle">${title}</h2>${FarmArt.ui("leaves-right", "title-leaves")}</div>${intro ? `<p>${intro}</p>` : ""}</div><button class="dialog-close" data-action="close" aria-label="关闭弹窗">×</button></div><div class="dialog-body">${body}</div>${foot ? `<div class="dialog-foot">${foot}</div>` : ""}`;
   }
+  const close = dialog.querySelector(".dialog-close");
+  close.dataset.action = backTo ? "dialog-back" : "close";
+  close.setAttribute("aria-label", backTo === "atlas" ? "返回图鉴" : "关闭弹窗");
+  if (backTo) close.dataset.dialogBack = backTo;else delete close.dataset.dialogBack;
   FarmArt.decorateActions(dialog);
   $("#modal").hidden = false;
+  if (family === "atlas-dialog") disposeCatalogImages = FarmArt.mountCatalogImages(dialog.querySelector(".dialog-body"));
   if (sameFamily && focused?.isConnected) focused.focus({ preventScroll: true });else
   dialog.focus({ preventScroll: true });
   requestAnimationFrame(positionDiscoveryGuide);
 }
+function backFromDialog(nested = false) {
+  if ($(nested ? '[data-dialog-back="atlas"]' : '.dialog-close[data-dialog-back="atlas"]')) atlasDialog();
+  else if (!nested || !FarmFacilities.back() && !FarmUI.back()) closeDialog();
+}
 function closeDialog(restore = true) {
+  disposeCatalogImages();
+  disposeCatalogImages = () => {};
   FarmUI.rememberPanel();
   FarmUI.dismissPurchase();
   FarmFacilities.dismiss();
@@ -953,8 +968,7 @@ function wildlifeEntries() {
   return Object.keys(WILDLIFE_ATLAS).filter((key) => !isMobileView() || !["frog", "dragonfly"].includes(key)).map((key) => ({ type: "wildlife", key }));
 }
 function wildlifeArt(kind) {
-  const item = WILDLIFE_ATLAS[kind];
-  return item ? `<img src="knowledge-garden-v19/farm/wildlife-${kind}-r14.webp" alt="${item.name}" draggable="false">` : "";
+  return FarmArt.wildlife(kind);
 }
 function wildlifeGift(kind) {
   if (kind === "rabbit") return { art: FarmArt.fertilizer("rabbit"), name: M.FERT.rabbit.name, daily: `每日 1 份${M.FERT.rabbit.name}`, effect: `作物加速 ${M.FERT.rabbit.hours * 60} 分钟`, pickup: "拾取小路上的肥料袋，收进背包", status: M.poopReady(state) ? "草地有礼物" : "今日已拾取" };
@@ -970,10 +984,12 @@ function wildlifeDetail(kind) {
   const gift = wildlifeGift(kind);
   const giftHTML = gift ? `<section class="wildlife-gift-panel"><h3>每天的小礼物</h3><div class="wildlife-gift-content"><span class="wildlife-gift-art">${gift.art}</span><div><strong>${gift.name} <b>×1</b></strong><p>${gift.effect}</p><small>${gift.status}</small></div></div><p class="wildlife-pickup">${gift.pickup}</p></section>` : '<p class="wildlife-companion-note">在庄园陪伴你的小邻居，轻触会有随机动作。</p>';
   const actions = item.actions.map((label) => `<li>${kind === "rabbit" ? '<img src="knowledge-garden-v19/farm/wildlife-rabbit-action-3-r14.webp" alt="" draggable="false">' : ""}<span>${label}</span></li>`).join("");
-  showDialog(item.name, item.habitat, `<div class="wildlife-sheet"><div class="wildlife-detail-art">${wildlifeArt(kind)}</div><p class="wildlife-story">${item.text}</p>${giftHTML}<section class="wildlife-actions-panel"><h3>轻触时的动作</h3><ul>${actions}</ul></section>${gift ? '<p class="wildlife-daily-note">每天最多 1 份，未拾取不累积；互动不会增加产量。</p>' : ""}</div>`, '<button class="button" data-action="atlas" data-dialog-back="atlas">返回图鉴</button><button class="button primary" data-action="close">回到庄园</button>', false, "wildlife-detail-dialog");
+  showDialog(item.name, item.habitat, `<div class="wildlife-sheet"><div class="wildlife-detail-art">${wildlifeArt(kind)}</div><p class="wildlife-story">${item.text}</p>${giftHTML}<section class="wildlife-actions-panel"><h3>轻触时的动作</h3><ul>${actions}</ul></section>${gift ? '<p class="wildlife-daily-note">每天最多 1 份，未拾取不累积；互动不会增加产量。</p>' : ""}</div>`, '<button class="button primary" data-action="close">回到庄园</button>', false, "wildlife-detail-dialog", "atlas");
 }
 async function readAtlasEntry(type, key) {
-  if (await M.readAtlasEntry(state, type, key)) $("#gameTools").innerHTML = FarmArt.html(dockHTML());
+  try {
+    if (await M.readAtlasEntry(state, type, key)) $("#gameTools").innerHTML = FarmArt.html(dockHTML());
+  } catch { /* Reading metadata must never close or block a species detail. Retry on the next visit. */ }
 }
 function atlasDialog() {
   const restoreFocus = !$("#modal").hidden && $("#dialog").dataset.family !== "atlas-dialog";
@@ -993,9 +1009,9 @@ function atlasDialog() {
   ["all", "全部"], ["fish", "鱼类"], ["creature", "其他生物"], ["crops", "作物"], ["wildlife", "场景生物"], ["missing", "未发现"]].
   map(([k, t]) => `<button data-action="atlas-filter" data-kind="${k}" class="${atlasFilter === k ? "active" : ""}" aria-pressed="${atlasFilter === k}" aria-label="${t}${hasNew(k) ? "，有新物种未查看" : ""}">${t}${hasNew(k) ? '<i class="atlas-tab-dot" aria-hidden="true"></i>' : ""}</button>`).join("")}</div><div class="atlas-grid${atlasFilter === "wildlife" ? " wildlife-grid" : ""}">${items.map((item) => {
     const k = item.key,found = got(item);
-    if (item.type === "wildlife") return wildlifeCard(k);
-    if (item.type === "crop") return FarmUI.cropAtlasCard(k);
-    return `<button class="atlas-card ${found ? "discovered" : ""}" data-action="fish-detail" data-kind="${k}" data-atlas-entry="fish" aria-label="${found ? FISH[k].name : "尚未遇见的生物"}${M.atlasEntryUnread(state, "fish", k) ? "，新物种未查看" : ""}">${M.atlasEntryUnread(state, "fish", k) ? '<i class="atlas-unread-dot" aria-hidden="true"></i>' : ""}${fishArt(k, !found).replace('class="fish-art', `class="fish-art ${found ? "" : "silhouette"}`)}</button>`;
+    if (item.type === "wildlife") return FarmArt.deferCatalogImages(wildlifeCard(k));
+    if (item.type === "crop") return FarmArt.deferCatalogImages(FarmUI.cropAtlasCard(k));
+    return FarmArt.deferCatalogImages(`<button class="atlas-card ${found ? "discovered" : ""}" data-action="fish-detail" data-kind="${k}" data-atlas-entry="fish" aria-label="${found ? FISH[k].name : "尚未遇见的生物"}${M.atlasEntryUnread(state, "fish", k) ? "，新物种未查看" : ""}">${M.atlasEntryUnread(state, "fish", k) ? '<i class="atlas-unread-dot" aria-hidden="true"></i>' : ""}${fishArt(k, !found).replace('class="fish-art', `class="fish-art ${found ? "" : "silhouette"}`)}</button>`);
   }).join("")}</div>${!items.length ? '<div class="farm-empty">这一页已经收集齐了，去看看其他收藏吧。</div>' : ""}`,
   `<button class="button" data-action="collections">庄园成就</button>${atlasFilter === "wildlife" ? '<button class="button primary" data-action="close">回到庄园</button>' : '<button class="button primary" data-action="fishing">去钓鱼 ↗</button>'}`, true, "atlas-dialog");
   $("#dialog").dataset.atlasFilter = atlasFilter;
@@ -1017,7 +1033,7 @@ function fishDetail(k, from = "atlas") {
       "尚未遇见",
       acquisition,
       `<div class="fish-detail-art">${fishArt(k, true)}</div>`,
-      `<button class="button" data-action="${from === "tank" ? "tank-manage" : "atlas"}" data-dialog-back="${from === "tank" ? "tank-manage" : "atlas"}">${from === "tank" ? "返回养鱼舱" : "返回图鉴"}</button>${destination}`
+      `${from === "tank" ? '<button class="button" data-action="tank-manage" data-dialog-back="tank-manage">返回养鱼舱</button>' : ""}${destination}`, false, "", from === "tank" ? "" : "atlas"
     );
     return;
   }
@@ -1025,7 +1041,7 @@ function fishDetail(k, from = "atlas") {
     f.name,
     `${f.quality} · 已发现`,
     `<div class="fish-detail-art">${fishArt(k)}</div><p>${f.description}</p><p class="species-acquisition">获取方式：${acquisition}</p><div class="detail-grid"><div><small>体长</small><strong>${fishSize(k)}</strong></div><div class="fish-output"><small>${f.fertilizer ? "产出肥料" : "住处"}</small>${f.fertilizer ? `<span>${fertilizerArt(f.fertilizer)}<strong>${M.FERT[f.fertilizer].name}</strong></span><small>每份缩短 ${shortDuration(M.FERT[f.fertilizer].hours)}</small>` : "<strong>观赏位 · 不产肥</strong>"}</div><div><small>卖出价</small><strong>${M.sellPrice(k, FISH)} 积分</strong></div></div><div class="info-box">第一次相遇：第 ${state.discoveries[k]} 天。当前拥有 ${state.fish.filter((x) => x.kind === k).length} ${f.fertilizer ? "尾" : "位"}。<br>${f.fertilizer ? `每尾在产肥位每 ${R.productionHours} 小时产 1 份${M.FERT[f.fertilizer].name}，最多暂存 ${R.storageLimit} 份。` : "住在养鱼舱的观赏位里，不占产肥位。"}</div>`,
-    `<button class="button" data-action="${from === "tank" ? "tank-manage" : "atlas"}" data-dialog-back="${from === "tank" ? "tank-manage" : "atlas"}">${from === "tank" ? "返回养鱼舱" : "返回图鉴"}</button>${destination}`
+    `${from === "tank" ? '<button class="button" data-action="tank-manage" data-dialog-back="tank-manage">返回养鱼舱</button>' : ""}${destination}`, false, "", from === "tank" ? "" : "atlas"
   );
 }
 
@@ -1210,6 +1226,9 @@ function init() {
     // 引导期间只响应引导里的操作和第 1 块地
     if (state.guide && !["guide-adopt", "plot", "close"].includes(a) && !(state.guide === "plant" && a === "plant-seed")) return;
     switch (a) {
+      case "dialog-back":
+        backFromDialog();
+        break;
       case "close":
         closeDialog();
         break;
@@ -1430,8 +1449,8 @@ function init() {
         atlasDialog();
         break;
       case "fish-detail":
-        if (b.dataset.atlasEntry === "fish") await readAtlasEntry("fish", b.dataset.kind);
         fishDetail(b.dataset.kind, b.dataset.from);
+        if (b.dataset.atlasEntry === "fish") void readAtlasEntry("fish", b.dataset.kind);
         break;
       case "stored-filter":
         storedFilter = b.dataset.kind;
@@ -1454,7 +1473,7 @@ function init() {
     }
   });
   $("#modal").addEventListener("click", (e) => {
-    if (e.target === $("#modal")) closeDialog();
+    if (e.target === $("#modal")) backFromDialog();
   });
   document.addEventListener("keydown", (e) => {
     if ($("#modal").hidden) {
@@ -1474,7 +1493,7 @@ function init() {
     if (e.key === "Escape") {
       e.preventDefault();e.stopPropagation();
       document.documentElement.classList.remove("kbd-nav");
-      if ($('[data-dialog-back="atlas"]')) atlasDialog();else if (!FarmFacilities.back() && !FarmUI.back()) closeDialog();
+      backFromDialog(true);
     }
     if (e.key === "Tab") {
       const items = [

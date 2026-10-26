@@ -30,6 +30,7 @@ function createManorRefreshInput(doc) {
   const uiScript = document.currentScript.dataset.uiScript;
   if (!nonce || window.parent === window) return;
   let snapshot, busy = false, sequence = 0, ready = false, refreshing = null, syncedAt = performance.now();
+  let activeCommand = null, readQueue = Promise.resolve();
   const waiting = new Map();
   const origin = location.origin;
   const refreshInput = createManorRefreshInput(document);
@@ -42,20 +43,25 @@ function createManorRefreshInput(doc) {
     for (const name of Object.keys(target)) if (!(name in next)) delete target[name];
     Object.assign(target, next);
   };
-  const send = async (target, action, args) => {
-    if (busy) throw new Error('庄园操作正在处理中');
+  const send = (target, action, args) => {
+    if (busy) return Promise.reject(new Error('庄园操作正在处理中'));
     busy = true;
     document.documentElement.setAttribute('aria-busy', 'true');
-    try {
+    // Preserve the revision that the user actually saw, even if a background
+    // calibration arrives while their pointer is held down.
+    const revision = snapshot.revision;
+    activeCommand = (async () => {
       if (refreshing) await refreshing;
-      const next = await request('command', { action, args });
+      const next = await request('command', { action, args, revision });
       snapshot = next; syncedAt = performance.now();
       apply(target, next.state);
       return next.result;
-    } finally {
+    })().finally(() => {
       busy = false;
+      activeCommand = null;
       document.documentElement.removeAttribute('aria-busy');
-    }
+    });
+    return activeCommand;
   };
   const methods = ['adopt','plant','water','harvest','fertilize','remove','buySeed','sellCrop','sellAllCrops',
     'convertBait','buyBait','buyFry','beginCast','resolveCast','selectBait','sell','release','buyback',
@@ -72,7 +78,16 @@ function createManorRefreshInput(doc) {
         args = args.filter(v => v !== FISH && typeof v !== 'function');
         if (name === 'resolveCast') args = [target.castId];
         if (name === 'buyFry') args = [];
-        return send(target, name, args);
+        if (name !== 'readAtlasEntry') return send(target, name, args);
+        // Reading entries is metadata: serialize receipts without holding
+        // navigation or waiting for unrelated atlas images.
+        const read = readQueue.catch(() => {}).then(async () => {
+          if (activeCommand) await activeCommand.catch(() => {});
+          if (!GardenModel.atlasEntryUnread(target, ...args)) return false;
+          return send(target, name, args);
+        });
+        readQueue = read;
+        return read;
       };
     }
     const script = document.createElement('script');
@@ -126,10 +141,10 @@ function createManorRefreshInput(doc) {
     const data = event.data;
     if (event.source !== window.parent || event.origin !== origin || data?.nonce !== nonce) return;
     if (data?.type === 'lightnote-manor-control' && ready) {
-      if (data.action === 'close-dialog') closeDialog();
+      if (data.action === 'close-dialog') { backFromDialog(); request('dialog', { open: !document.getElementById('modal').hidden }); }
       else if (data.action === 'open-ledger') ledgerDialog();
       else if (data.action === 'back') {
-        if (!document.getElementById('modal').hidden) closeDialog(); else requestManorExit();
+        if (!document.getElementById('modal').hidden) { backFromDialog(); request('dialog', { open: !document.getElementById('modal').hidden }); } else requestManorExit();
       }
       return;
     }
@@ -140,9 +155,10 @@ function createManorRefreshInput(doc) {
     if (data.error) waiter.reject(new Error(data.error));
     else waiter.resolve(data.value);
   });
+  const readOnlyActions = new Set(['exit', 'close', 'dialog-back', 'atlas', 'atlas-filter', 'fish-detail', 'crop-detail', 'wildlife-detail']);
   document.addEventListener('click', event => {
     const action = event.target.closest('[data-action]');
-    if (busy && action && action.dataset.action !== 'exit') {
+    if (busy && action && !readOnlyActions.has(action.dataset.action)) {
       event.preventDefault(); event.stopImmediatePropagation();
     }
   }, true);
@@ -154,17 +170,22 @@ function createManorRefreshInput(doc) {
       refresh(true)?.then(() => resumeCatch()).catch(() => {});
     }
   });
-  const refresh = (recover = false) => {
-    if (!ready || document.hidden || busy || state.casting && !recover || refreshing) return;
-    refreshing = request('get').then(async next => {
+  const contentKey = value => JSON.stringify({ revision: value.revision, quests: value.quests,
+    state: Object.fromEntries(Object.entries(value.state).filter(([key]) => key !== 'now')) });
+  const refresh = (recover = false, background = false) => {
+    if (!ready || document.hidden || navigator.onLine === false || busy || state.casting && !recover || refreshing) return;
+    refreshing = request('get', { background }).then(async next => {
       await refreshInput.waitForRelease();
-      snapshot = next; syncedAt = performance.now(); apply(state, next.state); update();
+      const changed = contentKey(snapshot) !== contentKey(next);
+      snapshot = next; syncedAt = performance.now(); apply(state, next.state);
+      if (changed) { update(); FarmUI.refreshInventory(); }else refreshClocks();
     }).finally(() => { refreshing = null; });
     return refreshing;
   };
   document.addEventListener('visibilitychange', () => { refresh()?.catch(() => {}); });
   window.addEventListener('focus', () => { refresh()?.catch(() => {}); });
-  // Check the account day locally; only crossing midnight makes an API request.
+  // Only a visible formal scene calibrates across devices. Test saves stay
+  // isolated; passive reads yield to foreground work in the shared scheduler.
   setInterval(() => {
     if (!ready || document.hidden) return;
     const value = snapshot.state;
@@ -174,8 +195,8 @@ function createManorRefreshInput(doc) {
       : null;
     const parts = day && Object.fromEntries(day);
     const key = parts ? `${parts.year}${parts.month}${parts.day}` : new Date(now + value.calendarOffsetMinutes * 60000).toISOString().slice(0,10).replaceAll('-', '');
-    if (key !== value.dayKey) refresh()?.catch(() => {});
-  }, 60000);
+    if (key !== value.dayKey || !snapshot.testing) refresh(false, true)?.catch(() => {});
+  }, 10000);
   request('get').then(start).catch(() => request('load-error'));
 })();
 if (typeof module !== 'undefined') module.exports = { createManorRefreshInput };

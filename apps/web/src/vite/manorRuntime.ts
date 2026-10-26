@@ -90,9 +90,10 @@ export default function manorRuntime(): Plugin {
     ];
     const resetIcon = 'data:image/svg+xml,' + encodeURIComponent(icon.infrastructure.restart.replace('<svg ', '<svg style="color:#76572c" '));
     const loadingIcon = 'data:image/svg+xml,' + encodeURIComponent(icon.manor.entry);
+    const moreIcon = 'data:image/svg+xml,' + encodeURIComponent(icon.noteDetail.toolbar.more.replace('<svg ', '<svg style="color:#6e512b" '));
     html = html.replace(
       '</head>',
-      `<link rel="preload" as="script" href="${html.match(/data-ui-script="([^"]+)"/)![1]}"><script type="application/json" id="manor-icon-assets">${JSON.stringify({reset:resetIcon,loading:loadingIcon})}</script><script type="application/json" id="manor-boot-images">${JSON.stringify({ desktop: bootImages(calibration.desktop), mobile: bootImages(calibration.mobileGarden), mobileBay: bootImages(calibration.mobileBay), curtain: [{src:curtainAsset,variable:imageVariable(curtainAsset)}] })}</script></head>`,
+      `<link rel="preload" as="script" href="${html.match(/data-ui-script="([^"]+)"/)![1]}"><script type="application/json" id="manor-icon-assets">${JSON.stringify({reset:resetIcon,loading:loadingIcon,more:moreIcon})}</script><script type="application/json" id="manor-boot-images">${JSON.stringify({ desktop: bootImages(calibration.desktop), mobile: bootImages(calibration.mobileGarden), mobileBay: bootImages(calibration.mobileBay), curtain: [{src:curtainAsset,variable:imageVariable(curtainAsset)}] })}</script></head>`,
     );
     return { html, files };
   };
@@ -111,7 +112,16 @@ export default function manorRuntime(): Plugin {
         .filter(Boolean)
         .map((file) => `/manor/knowledge-garden-v19/${file}`);
     const common = (scene: PreloadScene) => firstScreenArt(scene).map(file => `/manor/knowledge-garden-v19/${file}`);
+    // Derive the catalog from the actual renderers, including SVG image atlases
+    // and their detail art. Never add it to the blocking first-screen manifest.
+    const fishArt = runInNewContext(`${readFileSync(new URL('knowledge-garden-v19/fish-art.js', publicRoot), 'utf8')};Object.keys(FISH).map(key=>fishArt(key)).join('')`) as string;
+    const cropArt = runInNewContext(`${classicSource()};${readFileSync(new URL('knowledge-garden-v19/farm-art.js', publicRoot), 'utf8')};Object.keys(GardenModel.CROPS).map(key=>FarmArt.icon(key)+FarmArt.cropCard(key,4)+FarmArt.packet(key)).join('')+Object.keys(GardenModel.FERT).map(key=>FarmArt.fertilizer(key)).join('')+Object.keys(FarmArt.WILDLIFE_IMAGES).map(key=>FarmArt.wildlife(key)).join('')`) as string;
+    const catalog = [...new Set([
+      ...[...`${fishArt}${cropArt}`.matchAll(/\b(?:src|href)="(knowledge-garden-v19\/[^"]+)"/g)].map(([, file]) => `/manor/${file}`),
+      '/manor/knowledge-garden-v19/farm/wildlife-rabbit-action-3-r14.webp',
+    ])];
     return JSON.stringify({
+      catalog,
       desktop: [...new Set([...art(calibration.desktop), ...common(calibration.desktop), ...code])],
       desktopCritical: [...new Set([...code, ...art(calibration.desktop), ...common(calibration.desktop)])],
       mobileCritical: [...new Set([...code, ...art(calibration.mobileGarden), ...common(calibration.mobileGarden)])],

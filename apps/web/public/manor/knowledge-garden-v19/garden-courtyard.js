@@ -89,28 +89,26 @@ const GardenCourtyard = (() => {
     paintAim(pond, [local.x, local.y]);
   }
   function bindAim(hit, canAim, move) {
-    let touch = null;
+    let pointer = null;
     const down = e => {
       if (!canAim() || e.isPrimary === false) return;
-      if (e.pointerType === "touch" || e.pointerType === "pen") {
-        touch = e.pointerId;
-        hit.setPointerCapture?.(touch);
-      }
+      pointer = e.pointerId;
+      hit.setPointerCapture?.(pointer);
       move(e);
     };
     const drag = e => {
-      if (!canAim() || ((e.pointerType === "touch" || e.pointerType === "pen") && e.pointerId !== touch)) return;
+      if (!canAim() || (pointer !== null ? e.pointerId !== pointer : e.pointerType !== "mouse")) return;
       move(e);
     };
     const release = e => {
-      if (e.pointerId !== touch) return;
+      if (e.pointerId !== pointer) return;
       if (e.type === "pointerup" && canAim()) move(e);
-      touch = null;
+      pointer = null;
       if (hit.hasPointerCapture?.(e.pointerId)) hit.releasePointerCapture(e.pointerId);
     };
     const listeners = [["pointerdown",down],["pointermove",drag],["pointerup",release],["pointercancel",release],["lostpointercapture",release]];
     listeners.forEach(([name, listener]) => hit.addEventListener(name,listener));
-    return () => {touch = null;listeners.forEach(([name, listener]) => hit.removeEventListener(name,listener));};
+    return () => {pointer = null;listeners.forEach(([name, listener]) => hit.removeEventListener(name,listener));};
   }
   function mount() {
     const scene = document.querySelector(".garden-scene");

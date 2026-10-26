@@ -7,7 +7,6 @@
     </div>
     <ManorLoadingState v-else-if="loading || !frameShown" class="knowledge-manor__loading" />
     <iframe v-if="!loading && !failed" ref="frame" :key="nonce" :src="frameUrl" :title="t('manor.title')" referrerpolicy="same-origin" @error="failed = true" />
-    <BButton v-if="bookmark.isMobile && !interactive && !failed" class="knowledge-manor__cancel" @click="exit">{{ t('manor.returnToApp') }}</BButton>
   </main>
 </template>
 
@@ -92,9 +91,9 @@
       }
     }
   }
-  async function refresh(g: number) {
+  async function refresh(g: number, background = false) {
     await settlePending(g);
-    const result = await getManor(readController.signal);
+    const result = await getManor(readController.signal, background);
     if (!current(g)) throw new Error('stale');
     snapshot = result;
     return decorated(result);
@@ -144,7 +143,7 @@
       else if (data.action === 'get') {
         if (initialRead) await initialRead;
         if (!current(g)) return;
-        value = testSession ? decorated(testSession.snapshot()) : !initialProvided && snapshot && !pending ? decorated(snapshot) : await refresh(g);
+        value = testSession ? decorated(testSession.snapshot()) : !initialProvided && snapshot && !pending ? decorated(snapshot) : await refresh(g, data.payload?.background === true);
         initialProvided = true;
       }
       else if (data.action === 'reset-test' || data.action === 'restore-formal') {
@@ -158,6 +157,7 @@
       }
       else if (data.action === 'command') {
         if (commanding || !snapshot || !MANOR_COMMANDS.includes(data.payload?.action) || !Array.isArray(data.payload?.args)) throw new Error('command');
+        if (data.payload.revision !== undefined && data.payload.revision !== (testSession ? testSession.snapshot().revision : snapshot.revision)) throw new Error('stale revision');
         commanding = true;
         try {
           if (testSession) {
@@ -215,5 +215,4 @@
   .knowledge-manor iframe { display: block; width: 100%; height: 100%; border: 0; }
   .knowledge-manor__state { position: absolute; inset: 0; z-index: 1; display: grid; place-content: center; justify-items: center; gap: var(--ui-space-12, 12px); color: var(--text-color); background: var(--background-color); }
   .knowledge-manor__loading { position: absolute; inset: 0; z-index: 1; }
-  .knowledge-manor__cancel { position: absolute; z-index: 2; bottom: var(--ui-space-24, 24px); left: 50%; transform: translateX(-50%); }
 </style>

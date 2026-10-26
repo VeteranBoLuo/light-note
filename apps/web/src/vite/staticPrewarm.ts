@@ -95,6 +95,7 @@ export function buildPrewarmManifest(bundle: OutputBundle) {
     const paths = [
       ...manor.desktop,
       ...(manor.mobile || []),
+      ...(manor.catalog || []),
       ...(manor.desktopScene || []).map((item: { url: string }) => item.url),
     ] as string[];
     for (const url of paths) {
@@ -108,6 +109,7 @@ export function buildPrewarmManifest(bundle: OutputBundle) {
     manorScene = manor.desktopScene;
     // Generated beside the actual boot manifest, not inferred from image list positions.
     groups['manor.mobile'] = (manor.mobile || []).filter((url: string) => assets[url]);
+    groups['manor.catalog'] = (manor.catalog || []).filter((url: string) => assets[url]);
     groups['manor.mobileCritical'] = (manor.mobileCritical || []).filter((url: string) => assets[url]);
     groups['manor.critical'] = (manor.desktopCritical || []).filter((url: string) => assets[url]);
   }

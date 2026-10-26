@@ -10,6 +10,17 @@ const FarmArt = (() => {
   const packet = (key) => img(`${BASE}seed-${key}.webp`, "farm-packet");
   const giftPack = () => img(`${BASE}seed-basic-gift.webp`, "farm-packet");
   const icon = (key) => img(cropSrc(key, 6), "farm-icon");
+  const WILDLIFE_IMAGES = {
+    rabbit: 'courtyard/animal-rabbit-r12.webp', sparrow: 'incoming/farm-r2/sprites/sparrow-1.webp',
+    frog: 'courtyard/frog-jump-r5.webp', butterfly: 'courtyard/wildlife-butterflyopen.webp',
+    ladybird: 'courtyard/wildlife-ladybird.webp', dragonfly: 'incoming/farm-r2/sprites/dragonfly-1.webp',
+  };
+  function wildlife(key) {
+    const file = WILDLIFE_IMAGES[key];
+    if (!file) return '';
+    // Use the resting half of the existing two-pose illustration sheet.
+    return key === 'frog' ? `<svg viewBox="180 300 600 470" aria-hidden="true"><image href="knowledge-garden-v19/${file}" width="1774" height="887" /></svg>` : img(`knowledge-garden-v19/${file}`, 'wildlife-illustration');
+  }
   const fryBag = () => img(`${BASE}fish-fry-bag.webp`, "farm-fry");
   // Semantic, multicolor game atlas. Each crop is measured in the native 1774×887 image.
   const UI_CROPS = {
@@ -120,6 +131,47 @@ const FarmArt = (() => {
       button.classList.add("has-action-art");
     });
   }
-  return { BASE, html, ui, UI_CROPS, sceneDetails, cropSrc, spriteStage, packet, giftPack, icon, fryBag, cropCard, cropPreview, cropPlacement, fertilizerSrc, fertilizer, decorateActions };
+  // SVG <image> has no native loading="lazy". Defer both kinds of image before
+  // insertion so opening the atlas cannot start every sprite download/paint.
+  function deferCatalogImages(markup) {
+    return markup.replace(/<(img|image)\b[^>]*>/g, tag => tag.replace(/\s(src|href)="([^"]+)"/g, ' data-catalog-$1="$2"'));
+  }
+  function mountCatalogImages(root) {
+    const cleanups = [];
+    const cards = [...root.querySelectorAll('.atlas-card')];
+    const load = card => {
+      const images = [...card.querySelectorAll('[data-catalog-src],[data-catalog-href]')];
+      let remaining = images.length, failed = false;
+      const settled = error => {
+        failed ||= error;
+        if (--remaining) return;
+        card.removeAttribute('aria-busy');
+        card.dataset.imageStatus = failed ? '图片暂未加载' : '';
+      };
+      images.forEach(el => {
+        let done = false;
+        const finish = error => { if (!done) { done = true; settled(error); } };
+        const onLoad = () => finish(false), onError = () => finish(true);
+        el.addEventListener('load', onLoad, { once: true });
+        el.addEventListener('error', onError, { once: true });
+        cleanups.push(() => { el.removeEventListener('load', onLoad); el.removeEventListener('error', onError); });
+        for (const name of ['src', 'href']) {
+          const value = el.getAttribute(`data-catalog-${name}`);
+          if (value) { el.setAttribute(name, value); el.removeAttribute(`data-catalog-${name}`); }
+        }
+        if (el.tagName === 'IMG' && el.complete) finish(!el.naturalWidth);
+      });
+    };
+    const observer = typeof IntersectionObserver === 'function' ? new IntersectionObserver(entries => {
+      entries.forEach(entry => { if (entry.isIntersecting) { observer.unobserve(entry.target); load(entry.target); } });
+    }, { root, rootMargin: '160px' }) : null;
+    cards.forEach(card => {
+      if (!card.querySelector('[data-catalog-src],[data-catalog-href]')) return;
+      card.dataset.imageStatus = '加载图片…'; card.setAttribute('aria-busy', 'true');
+      if (observer) observer.observe(card);else load(card);
+    });
+    return () => { observer?.disconnect(); cleanups.forEach(cleanup => cleanup()); };
+  }
+  return { BASE, html, ui, UI_CROPS, WILDLIFE_IMAGES, wildlife, sceneDetails, cropSrc, spriteStage, packet, giftPack, icon, fryBag, cropCard, cropPreview, cropPlacement, fertilizerSrc, fertilizer, decorateActions, deferCatalogImages, mountCatalogImages };
 })();
 if (typeof module !== "undefined") module.exports = FarmArt;

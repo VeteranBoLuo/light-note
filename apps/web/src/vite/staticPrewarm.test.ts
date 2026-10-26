@@ -50,8 +50,12 @@ it('庄园启动代码优先于场景和设施素材', () => {
     '/manor/runtime.css?v=1234567890abcdef',
   ];
   const bundle = Object.fromEntries(urls.map((url) => [url.split('?')[0].slice(1), { type: 'asset', source: 'abc' }]));
-  bundle['manor/preload.json'] = { type: 'asset', source: JSON.stringify({ desktop: urls, desktopCritical: [...urls.slice(2), urls[0]] }) };
+  bundle['manor/catalog.webp'] = { type: 'asset', source: 'catalog' };
+  bundle['manor/preload.json'] = { type: 'asset', source: JSON.stringify({ desktop: urls, desktopCritical: [...urls.slice(2), urls[0]], catalog: ['/manor/catalog.webp'] }) };
   const m = buildPrewarmManifest(bundle as unknown as OutputBundle);
   expect(m.groups['manor.critical'].slice(0, 2)).toEqual(urls.slice(2));
   expect(m.groups['manor.critical']).toContain(urls[0]);
+  expect(m.groups['manor.catalog']).toEqual(['/manor/catalog.webp']);
+  expect(m.assets['/manor/catalog.webp']).toBe(7);
+  expect(m.groups['manor.critical']).not.toContain('/manor/catalog.webp');
 });
