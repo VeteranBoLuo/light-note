@@ -5,7 +5,10 @@ import { createI18n } from 'vue-i18n';
 import zhCN from '@/i18n/locales/zh-CN';
 import icon from '@/config/icon';
 import rawWorkspaceSource from './CommunityChatWorkspace.vue?raw';
-const workspaceSource = rawWorkspaceSource.replace(/var\(--ui-(?:space|control|layout|font|card)-\d+, (\d+px)\)/g, '$1');
+const workspaceSource = rawWorkspaceSource.replace(
+  /var\(--ui-(?:space|control|layout|font|card)-\d+, (\d+px)\)/g,
+  '$1',
+);
 import { clearCommunityChatDraftMemory, getCommunityChatDraftSession } from '@/composables/useCommunityChatDraftMemory';
 
 const mocks = vi.hoisted(() => ({
@@ -331,7 +334,7 @@ beforeEach(() => {
   mocks.user.role = 'user';
   mocks.route.query = {};
   mocks.routerReplace.mockResolvedValue(undefined);
-  mocks.markRead.mockResolvedValue({ data: { unreadCount: 0 } });
+  mocks.markRead.mockResolvedValue({ status: 200, data: { unreadCount: 0 } });
   mocks.getRooms.mockResolvedValue({ data: { messagingEnabled: true, items: rooms } });
   mocks.ensureIdentity.mockResolvedValue({
     status: 200,
@@ -1683,6 +1686,49 @@ describe('CommunityChatWorkspace', () => {
     expect(host.querySelector('.community-message-list__new')).toBeNull();
   });
 
+  it('相同标记仍在请求时，滚动触发的已读同步不重复写入', async () => {
+    vi.useFakeTimers();
+    const pending = deferred<any>();
+    mocks.markRead.mockReturnValue(pending.promise);
+    const host = await mountWorkspace();
+    expect(mocks.markRead).toHaveBeenCalledTimes(1);
+    host.querySelector('.community-message-list')!.dispatchEvent(new Event('scroll'));
+    await vi.advanceTimersByTimeAsync(200);
+    expect(mocks.markRead).toHaveBeenCalledTimes(1);
+    pending.resolve({ status: 200, data: { unreadCount: 0 } });
+    await flushAsync();
+  });
+
+  it('慢已读响应不阻塞连续新消息刷新，最新标记不会被旧标记吞掉', async () => {
+    WorkspaceRealtimeSocket.instances = [];
+    vi.stubGlobal('WebSocket', WorkspaceRealtimeSocket);
+    const pending = deferred<any>();
+    mocks.markRead.mockReturnValue(pending.promise);
+    const host = await mountWorkspace({ access: { ...access, realtimeEnabled: true } });
+    const socket = WorkspaceRealtimeSocket.instances[0];
+    socket.open();
+    socket.message('room.subscribed', { roomSlug: 'general' });
+    await flushAsync();
+    await flushAsync();
+    for (const id of ['message-2', 'message-3']) {
+      mocks.getMessages.mockResolvedValueOnce({
+        data: {
+          roomSlug: 'general',
+          items: [chatMessage(), chatMessage({ publicId: id, content: id })],
+          hasMore: false,
+          nextBefore: null,
+        },
+      });
+      socket.message('message.created', { roomSlug: 'general', messagePublicId: id }, `event-${id}`);
+      await flushAsync();
+      await flushAsync();
+      expect(host.querySelector(`[data-message-public-id="${id}"]`)).not.toBeNull();
+    }
+    expect(mocks.markRead.mock.calls.map(([, marker]) => marker)).toEqual(['message-1', 'message-2', 'message-3']);
+    pending.resolve({ status: 200, data: { unreadCount: 0 } });
+    await flushAsync();
+  });
+
   it('进入真实频道后读取消息并推进已读，用户文本始终按纯文本渲染', async () => {
     mocks.getMessages.mockResolvedValueOnce({
       data: {
@@ -1696,7 +1742,11 @@ describe('CommunityChatWorkspace', () => {
     const host = await mountWorkspace();
 
     expect(mocks.getMessages).toHaveBeenCalledWith('general', { limit: 30 });
-    expect(mocks.markRead).toHaveBeenCalledWith('general', 'message-1');
+    expect(mocks.markRead).toHaveBeenCalledWith(
+      'general',
+      'message-1',
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
     expect(host.querySelector('.community-workspace__rooms')).toBeNull();
     expect(host.textContent).toContain('<img src=x onerror=alert(1)>纯文本');
     expect(host.querySelector('.community-message__content img')).toBeNull();
@@ -1727,8 +1777,12 @@ describe('CommunityChatWorkspace', () => {
 
     await mountWorkspace();
 
-    expect(mocks.markRead).toHaveBeenCalledWith('general', 'message-active');
-    expect(mocks.markRead).not.toHaveBeenCalledWith('general', 'message-recalled');
+    expect(mocks.markRead).toHaveBeenCalledWith(
+      'general',
+      'message-active',
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+    expect(mocks.markRead.mock.calls.some(([, marker]) => marker === 'message-recalled')).toBe(false);
   });
 
   it('当前窗口只有撤回消息时让服务端选择最后一条有效消息作为已读位置', async () => {
@@ -1750,7 +1804,11 @@ describe('CommunityChatWorkspace', () => {
 
     await mountWorkspace();
 
-    expect(mocks.markRead).toHaveBeenCalledWith('general', null);
+    expect(mocks.markRead).toHaveBeenCalledWith(
+      'general',
+      null,
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
   });
 
   it('本人消息随共享成长状态即时更新头像框，其他用户继续使用消息快照', async () => {
@@ -2111,7 +2169,11 @@ describe('CommunityChatWorkspace', () => {
 
     expect(messageList.scrollTop).toBe(1000);
     expect(host.querySelector('.community-message-list__new')).toBeNull();
-    expect(mocks.markRead).toHaveBeenCalledWith('general', 'message-2');
+    expect(mocks.markRead).toHaveBeenCalledWith(
+      'general',
+      'message-2',
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
   });
 
   it('仅切换模块导致组件重建时恢复文字、回复、提及和待发送图片', async () => {

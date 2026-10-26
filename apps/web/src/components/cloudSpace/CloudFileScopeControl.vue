@@ -1,5 +1,5 @@
 <template>
-  <BPopover v-model:open="open" trigger="click" placement="bottom-left">
+  <BPopover v-model:open="open" trigger="click" placement="bottom-left" overlay-class-name="cloud-scope-popover">
     <BButton
       ref="trigger"
       class="cloud-scope-trigger"
@@ -9,16 +9,15 @@
       aria-haspopup="menu"
       @keydown.down.prevent.stop="focusOptions"
     >
-      <span>{{
-        t('cloudSpace.scopeTrigger', {
-          scope: t(
-            allFiles
-              ? 'cloudSpace.scopeAll'
-              : includeDescendants
-                ? 'cloudSpace.scopeDescendants'
-                : 'cloudSpace.scopeCurrent',
-          ),
-        })
+      <span class="cloud-scope-trigger-label">{{ t('cloudSpace.scopeTriggerLabel') }}</span>
+      <span class="cloud-scope-trigger-value">{{
+        t(
+          allFiles
+            ? 'cloudSpace.scopeAll'
+            : includeDescendants
+              ? 'cloudSpace.scopeDescendants'
+              : 'cloudSpace.scopeCurrent',
+        )
       }}</span>
       <SvgIcon :src="icon.pagination.chevron" size="12" aria-hidden="true" />
     </BButton>
@@ -31,7 +30,6 @@
         @keydown="navigateOptions"
       >
         <strong class="cloud-scope-title">{{ t('cloudSpace.scopeTitle') }}</strong>
-        <p v-if="allFiles" class="cloud-scope-hint">{{ t('cloudSpace.scopeAllHint') }}</p>
         <BButton
           v-for="value in [false, true]"
           :key="String(value)"
@@ -42,19 +40,19 @@
           :aria-checked="includeDescendants === value"
           @click="choose(value)"
         >
-          <span class="cloud-scope-marker" aria-hidden="true"
-            ><SvgIcon v-if="includeDescendants === value" :src="icon.filterPanel.check" size="14"
-          /></span>
           <span class="cloud-scope-copy">
             <span class="cloud-scope-option-title"
-              >{{ t(value ? 'cloudSpace.scopeTreeTitle' : 'cloudSpace.scopeDirectTitle') }}
+              >{{ t(value ? 'cloudSpace.scopeDesktopTreeTitle' : 'cloudSpace.scopeDirectTitle') }}
               <small v-if="counts">{{
                 t('cloudSpace.fileCount', { count: value ? counts.total : counts.direct })
               }}</small>
             </span>
             <span class="cloud-scope-hint">{{
-              t(value ? 'cloudSpace.scopeTreeHint' : 'cloudSpace.scopeDirectHint')
+              t(value ? 'cloudSpace.scopeDesktopTreeHint' : 'cloudSpace.scopeDirectHint')
             }}</span>
+          </span>
+          <span class="cloud-scope-marker" aria-hidden="true">
+            <SvgIcon v-if="includeDescendants === value" :src="icon.filterPanel.check" size="14" />
           </span>
         </BButton>
         <div v-if="error" class="cloud-scope-error" role="alert">
@@ -63,7 +61,10 @@
             t('cloudSpace.scopeRetry')
           }}</BButton>
         </div>
-        <p class="cloud-scope-footer">{{ t(localOnly ? 'cloudSpace.scopeLocal' : 'cloudSpace.scopeAccount') }}</p>
+        <div class="cloud-scope-footer">
+          <p v-if="allFiles" class="cloud-scope-context">{{ t('cloudSpace.scopeDesktopAllHint') }}</p>
+          <p>{{ t(localOnly ? 'cloudSpace.scopeLocal' : 'cloudSpace.scopeAccount') }}</p>
+        </div>
       </div>
     </template>
   </BPopover>
@@ -137,27 +138,51 @@
 </script>
 
 <style scoped lang="less">
-  .cloud-scope-trigger {
+  :global(.b-popover-panel.cloud-scope-popover) {
+    border-color: var(--surface-border-color);
+    border-radius: 10px;
+    background: var(--menu-body-bg-color);
+    box-shadow: var(--action-menu-shadow);
+  }
+  .cloud-scope-trigger.b_btn {
     display: inline-flex;
     align-items: center;
-    gap: var(--ui-space-8, 8px);
-    min-height: var(--ui-control-28, 28px);
+    gap: var(--ui-space-6, 6px);
+    height: var(--ui-control-30, 30px);
+    padding: 0 var(--ui-space-10, 10px);
     white-space: nowrap;
     font-size: var(--ui-font-12, 12px);
-    border: 1px solid var(--card-border-color);
+    line-height: 1.3;
+    border: 1px solid var(--surface-border-color);
+    border-radius: 8px;
+    background: var(--menu-body-bg-color);
+    color: var(--text-color);
+  }
+  .cloud-scope-trigger.b_btn:hover,
+  .cloud-scope-trigger.b_btn[aria-expanded='true'] {
+    background: var(--menu-body-bg-color);
+    border-color: var(--desc-color);
+  }
+  .cloud-scope-trigger-label {
+    color: var(--desc-color);
+    font-weight: 400;
+  }
+  .cloud-scope-trigger-value {
+    font-weight: 600;
   }
   .cloud-scope-menu {
-    width: var(--ui-layout-360, 360px);
+    width: var(--ui-layout-320, 320px);
     max-width: calc(100vw - var(--ui-space-32, 32px));
     padding: var(--ui-space-8, 8px);
     color: var(--text-color);
   }
   .cloud-scope-title {
     display: block;
-    padding: var(--ui-space-8, 8px);
-    font-size: var(--ui-font-14, 14px);
+    padding: var(--ui-space-4, 4px) var(--ui-space-10, 10px) var(--ui-space-8, 8px);
+    font-size: var(--ui-font-12, 12px);
+    font-weight: 600;
   }
-  .cloud-scope-option {
+  .cloud-scope-option.b_btn {
     width: 100%;
     display: flex;
     align-items: flex-start;
@@ -166,13 +191,18 @@
     padding: var(--ui-space-10, 10px);
     text-align: left;
     white-space: normal;
-    border: 1px solid transparent;
+    line-height: 1.5;
+    border: 0;
+    border-radius: 6px;
     background: transparent;
   }
-  .cloud-scope-option.is-selected {
-    border-color: var(--resource-file-color);
+  .cloud-scope-option.b_btn:hover {
+    background: var(--menu-item-bg-color);
+  }
+  .cloud-scope-option.b_btn.is-selected,
+  .cloud-scope-option.b_btn.is-selected:hover {
     color: var(--text-color);
-    background: var(--workspace-hover);
+    background: var(--workspace-file-selected);
   }
   .cloud-scope-marker {
     display: inline-flex;
@@ -181,12 +211,7 @@
     width: var(--ui-layout-18, 18px);
     height: var(--ui-layout-18, 18px);
     flex-shrink: 0;
-    border: 1px solid var(--desc-color);
-    border-radius: 50%;
     color: var(--resource-file-color);
-  }
-  .is-selected .cloud-scope-marker {
-    border-color: var(--resource-file-color);
   }
   .cloud-scope-copy {
     display: flex;
@@ -200,7 +225,7 @@
     justify-content: space-between;
     gap: var(--ui-space-8, 8px);
     font-size: var(--ui-font-13, 13px);
-    font-weight: 600;
+    font-weight: 500;
   }
   .cloud-scope-option-title small {
     flex-shrink: 0;
@@ -208,14 +233,24 @@
     font-size: var(--ui-font-12, 12px);
     font-weight: 400;
   }
-  .cloud-scope-hint,
-  .cloud-scope-footer {
+  .cloud-scope-hint {
     color: var(--desc-color);
     font-size: var(--ui-font-12, 12px);
     line-height: 1.5;
   }
   .cloud-scope-footer {
-    margin: var(--ui-space-8, 8px) var(--ui-space-8, 8px) var(--ui-space-4, 4px);
+    margin-top: var(--ui-space-6, 6px);
+    padding: var(--ui-space-10, 10px) var(--ui-space-10, 10px) var(--ui-space-4, 4px);
+    border-top: 1px solid var(--surface-divider-color);
+    color: var(--desc-color);
+    font-size: var(--ui-font-11, 11px);
+    line-height: 1.5;
+  }
+  .cloud-scope-footer p {
+    margin: 0;
+  }
+  .cloud-scope-footer .cloud-scope-context {
+    margin-bottom: var(--ui-space-6, 6px);
   }
   .cloud-scope-error {
     display: flex;

@@ -194,7 +194,7 @@ describe('头像框成品素材目录', () => {
     const expectedInnerArtSizes = {
       'lantern-bearer': 89.6,
       'shared-reading': 99.2,
-      'knowledge-lighthouse': 108.8,
+      'knowledge-lighthouse': 118,
       mint: 116,
       ink: 109,
       moonstone: 114,

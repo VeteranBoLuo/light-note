@@ -863,7 +863,6 @@
     getCommunityChatReadReceiptCounts,
     getCommunityChatReadReceiptReaders,
     getCommunityChatFileDownload,
-    markCommunityChatRoomRead,
     pinCommunityChatMessage,
     recallCommunityChatMessage,
     reportCommunityChatMessage,
@@ -943,6 +942,7 @@
   } from '@/composables/useCommunityChatDraftMemory';
   import { useCommunityChatEmojiRecent } from '@/composables/useCommunityChatEmojiRecent';
   import { useCommunityChatViewportController } from '@/composables/useCommunityChatViewportController';
+  import { useCommunityChatReadSync } from '@/composables/useCommunityChatReadSync';
   import FilePreview from '@/components/FilePreview.vue';
   import { announceNativeDownloadStart } from '@/composables/useAndroidDownloadProgress';
   import icon from '@/config/icon';
@@ -1162,7 +1162,6 @@
   let initialBottomAnchorGeneration = 0;
   let initialBottomAnchorActive = false;
   let recallClockTimer: number | undefined;
-  let lastMarkedReadMessageId = '';
   let clearingFocusRouteValue = '';
   let latestRefreshInFlight = false;
   let latestRefreshQueued = false;
@@ -1353,6 +1352,38 @@
     Boolean(workspaceActive.value && props.access.realtimeEnabled && props.access.canRead),
   );
   const realtimeIdentityKey = computed(() => `${currentUser.id || 'guest'}:${currentUser.role || 'visitor'}`);
+  const latestReadMarker = computed(
+    () =>
+      [...chatMessages.value].reverse().find((item) => item.deliveryState !== 'sending' && item.status === 'active')
+        ?.publicId || null,
+  );
+  const roomReadSync = useCommunityChatReadSync({
+    scope: () =>
+      JSON.stringify([
+        realtimeIdentityKey.value,
+        selectedRoomSlug.value,
+        props.access.authenticated,
+        workspaceActive.value,
+        unread.captureDirectorySyncToken().generation,
+        currentUser.adminContext?.id,
+      ]),
+    canSync: () =>
+      Boolean(
+        props.access.authenticated &&
+        currentUser.id &&
+        currentUser.role !== 'visitor' &&
+        workspaceActive.value &&
+        !isUnmounted &&
+        !currentUser.adminContext &&
+        document.visibilityState === 'visible' &&
+        messageOwnerKey === realtimeIdentityKey.value,
+      ),
+    onRead: (roomSlug, marker) => {
+      if (roomSlug !== selectedRoomSlug.value || marker !== latestReadMarker.value) return;
+      unread.markRoomRead(roomSlug);
+      emit('roomRead', roomSlug);
+    },
+  });
   const emojiRecentOwnerId = computed(() => currentUser.id || 'visitor');
   const { recent: recentEmojis, remember: rememberEmoji } = useCommunityChatEmojiRecent(emojiRecentOwnerId);
   const {
@@ -2584,34 +2615,12 @@
   async function markLatestRead() {
     if (!props.access.authenticated || !workspaceActive.value || isUnmounted || document.visibilityState !== 'visible')
       return;
-    const identityAtStart = realtimeIdentityKey.value;
-    const unreadGeneration = unread.captureDirectorySyncToken().generation;
     const roomSlug = selectedRoomSlug.value;
     if (!roomSlug || !chatMessages.value.length) return;
     // 撤回消息仍保留在消息流里，但服务端明确不允许它作为已读游标。若直接提交最后一条
     // 撤回消息，接口会返回 READ_MESSAGE_INVALID，移动底栏角标便会一直残留。
-    const latestActiveMessage = [...chatMessages.value]
-      .reverse()
-      .find((item) => item.deliveryState !== 'sending' && item.status === 'active');
-    const readMarkerKey = latestActiveMessage?.publicId || `${roomSlug}:latest-active`;
-    if (readMarkerKey === lastMarkedReadMessageId) return;
-    try {
-      // 当前窗口全是撤回消息时交由服务端选择该房间最后一条有效消息，避免无效游标。
-      await markCommunityChatRoomRead(roomSlug, latestActiveMessage?.publicId || null);
-      if (
-        isUnmounted ||
-        !workspaceActive.value ||
-        identityAtStart !== realtimeIdentityKey.value ||
-        unreadGeneration !== unread.captureDirectorySyncToken().generation ||
-        roomSlug !== selectedRoomSlug.value
-      )
-        return;
-      lastMarkedReadMessageId = readMarkerKey;
-      unread.markRoomRead(roomSlug);
-      emit('roomRead', roomSlug);
-    } catch {
-      // 已读写入不阻断消息阅读，下一次前台刷新会继续尝试。
-    }
+    // 当前窗口全是撤回消息时交由服务端选择最后一条有效消息。
+    return roomReadSync.markRead(roomSlug, latestReadMarker.value);
   }
 
   async function requestPinnedMessage(roomSlug: string) {
@@ -2857,7 +2866,7 @@
       if (messageViewport.shouldFollowLatest() && messageNavigationGenerationAtStart === messageNavigationGeneration) {
         pendingNewMessageCount.value = 0;
         await scrollToBottom();
-        await markLatestRead();
+        void markLatestRead();
         if (focusedMessagePublicId.value && newMessageCount > 0) {
           focusedMessagePublicId.value = '';
           hasNewerThanFocus.value = false;
@@ -4922,7 +4931,6 @@
       queuedMessageDetailIds.clear();
       resetReadReceiptReaders({ close: true });
       deadlinePollRefreshRequestedIds.clear();
-      lastMarkedReadMessageId = '';
       lastAuthorityRefreshAt = 0;
       cancelInitialBottomAnchor();
       messageViewport.reset('follow-latest');
@@ -5094,6 +5102,7 @@
     refreshRecallClock();
     readReceiptForegroundActive = typeof document.hasFocus !== 'function' || document.hasFocus();
     void refreshLatest();
+    void markLatestRead();
     if (readReceiptForegroundActive) {
       scheduleVisibleReadReceipts();
       void refreshReadReceiptCounts();

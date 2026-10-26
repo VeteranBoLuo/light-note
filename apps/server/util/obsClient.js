@@ -103,7 +103,9 @@ export const copyObjectInObs = async (sourceKey, targetKey, { sourceEtag } = {})
     Bucket: bucketName,
     Key: targetKey,
     CopySource: `${bucketName}/${sourceKey}`,
-    ...(sourceEtag ? { CopySourceIfMatch: sourceEtag } : {}),
+    // HEAD returns a quoted ETag, but the OBS SDK URL-encodes header values.
+    // Send the opaque tag without its HTTP quotes so %22 cannot break If-Match.
+    ...(sourceEtag ? { CopySourceIfMatch: String(sourceEtag).replace(/^"([^"]+)"$/u, '$1') } : {}),
   });
 
 export const putObjectToObs = async (objectKey, filePath, contentType = 'application/octet-stream') =>
