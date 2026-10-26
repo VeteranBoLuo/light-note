@@ -75,8 +75,8 @@ describe('C5 积分治理时间窗与只读模拟器', () => {
       readOnly: true,
       policyVersion: 'points-earning-c8',
       stableWeek: 365,
-      input: { milestonePool: 2950, achievementPool: 4140 },
-      firstYearOneTime: 2_481_500,
+      input: { milestonePool: 2950, achievementPool: 4710 },
+      firstYearOneTime: 2_681_000,
       disclaimer: 'simulation_only_no_production_write',
     });
     expect(result.tiers.map((row) => row.expectedWeek)).toEqual([365, 470, 575, 680]);

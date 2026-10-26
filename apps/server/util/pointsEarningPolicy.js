@@ -359,7 +359,7 @@ export function resolveWeeklyChallenges(version = POINTS_EARNING_POLICY_VERSION)
 }
 
 export function applyAchievementEarningPolicy(achievement, version = POINTS_EARNING_POLICY_VERSION) {
-  if (!achievement || !usesC5EarningRules(version)) return { ...(achievement || {}) };
+  if (!achievement || achievement.rewardPolicy === 'public-contribution-v1' || !usesC5EarningRules(version)) return { ...(achievement || {}) };
   const resolved = { ...achievement, ...(ACHIEVEMENT_OVERRIDES[achievement.key] || {}) };
   return version === POINTS_EARNING_C8_POLICY_VERSION
     ? { ...resolved, reward: Math.floor(Number(resolved.reward || 0) / 2) }

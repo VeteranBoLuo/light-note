@@ -174,6 +174,12 @@ export default {
       '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none"><path d="M12 20v-7m0 0c0-3.5 2.1-5.6 6.25-6.25C18.1 10.8 16 12.9 12 13Zm0 2c0-2.9-1.75-4.65-5.25-5.25c.1 3.45 1.85 5.2 5.25 5.25Z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M7.5 20h9" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>',
     // 成就徽记：每个成就拥有独立图形，统一由 AchievementEmblem 组合成同一套徽章视觉。
     achievement: {
+      public_resource_1: achievementGlyph('<circle cx="12" cy="12" r="8"/><path d="M4 12h16M12 4c-5 4-5 12 0 16M12 4c5 4 5 12 0 16"/>'),
+      public_resource_10: achievementGlyph('<path d="M12 6c-3-2-6-2-9-1v14c3-1 6-1 9 1 3-2 6-2 9-1V5c-3-1-6-1-9 1v14M6 9h3M15 9h3"/>'),
+      public_resource_50: achievementGlyph('<path d="M9 11h6v8H9zM8 11h8M10 8h4M12 8V4M7 21h10M5 7l-2-2M19 7l2-2"/><path d="M12 15v1"/>'),
+      public_resource_200: achievementGlyph('<path d="M12 10v10M3 11c4-2 6-1 9 1 3-2 5-3 9-1v9c-4-2-6-1-9 1-3-2-5-3-9-1z"/><path d="M12 3c-5 4-3 7 0 6 3 1 5-2 0-6Z"/>'),
+      public_resource_500: achievementGlyph('<path d="m9 21 1-12h4l1 12M8 21h8M9 9h6V5H9v4ZM12 2v3M3 5l3 2-3 2M21 5l-3 2 3 2M10 14h4M11 18h2"/>'),
+
       community_post_1: achievementGlyph('<path d="M5 4h14v13H9l-4 4V4Z"/><path d="M8 8h8M8 11h5"/>'),
       community_post_10: achievementGlyph(
         '<path d="M7 4h13v12h-4l-4 4v-4H7V4Z"/><path d="M4 7H2v13h5M10 8h7M10 11h4"/>',

@@ -68,15 +68,16 @@ describe('头像框商店目录', () => {
     expect(epic.max).toBeLessThan(legendary.min);
   });
 
-  it('完整目录额外提供 16 款成就专属框，且不会混入积分购买目录', () => {
+  it('完整目录额外提供 19 款成就专属框，且不会混入积分购买目录', () => {
     const achievementKeys = achievementFrames.map((item) => item.achievementKey);
 
-    expect(FRAME_CATALOG).toHaveLength(29);
+    expect(FRAME_CATALOG).toHaveLength(32);
     expect(new Set(FRAME_CATALOG.map((item) => item.id)).size).toBe(FRAME_CATALOG.length);
-    expect(achievementFrames).toHaveLength(16);
+    expect(achievementFrames).toHaveLength(19);
     expect(new Set(achievementKeys).size).toBe(achievementKeys.length);
     expect(new Set(achievementKeys)).toEqual(
       new Set([
+        'public_resource_50', 'public_resource_200', 'public_resource_500',
         'streak_1',
         'streak_7',
         'streak_30',
@@ -100,7 +101,7 @@ describe('头像框商店目录', () => {
         result[item.rarity] = (result[item.rarity] || 0) + 1;
         return result;
       }, {}),
-    ).toEqual({ basic: 4, rare: 4, epic: 4, legendary: 4 });
+    ).toEqual({ basic: 4, rare: 5, epic: 5, legendary: 5 });
     expect(achievementFrames.every((item) => item.cost === undefined && item.achievementKey)).toBe(true);
     expect(achievementFrames.find((item) => item.id === 'frame_first_light')).toMatchObject({
       rarity: 'basic',
@@ -129,7 +130,7 @@ describe('头像框商店目录', () => {
       return result;
     }, {});
 
-    expect(counts).toEqual({ basic: 7, rare: 7, epic: 7, legendary: 8 });
+    expect(counts).toEqual({ basic: 7, rare: 8, epic: 8, legendary: 9 });
     expect(frames.reduce((result, item) => ({ ...result, [item.rarity]: (result[item.rarity] || 0) + 1 }), {})).toEqual(
       { basic: 3, rare: 3, epic: 3, legendary: 4 },
     );
@@ -153,6 +154,12 @@ describe('头像框商店目录', () => {
       rarity: 'legendary',
       achievementKey: 'file_500',
     });
+  });
+
+  it.each(['frame_lantern_bearer', 'frame_shared_reading', 'frame_knowledge_lighthouse'])('公开贡献框 %s 不可绕过成就购买', async (id) => {
+    vi.clearAllMocks();
+    expect(await buyItem('user-1', id)).toMatchObject({ ok: false, reason: 'not_found' });
+    expect(mocks.getConnection).not.toHaveBeenCalled();
   });
 
   it('购买接口拒绝成就专属头像框，不会创建扣款事务', async () => {
@@ -230,6 +237,24 @@ describe('历史成就头像框权益兼容', () => {
 
 describe('头像框佩戴校验', () => {
   beforeEach(() => vi.clearAllMocks());
+
+  it.each(['frame_lantern_bearer', 'frame_shared_reading', 'frame_knowledge_lighthouse'])('公开贡献框 %s 领取后方可佩戴', async (id) => {
+    const connection = {
+      beginTransaction: vi.fn().mockResolvedValue(undefined),
+      query: vi.fn().mockResolvedValueOnce([[]]),
+      commit: vi.fn().mockResolvedValue(undefined),
+      rollback: vi.fn().mockResolvedValue(undefined),
+      release: vi.fn(),
+    };
+    mocks.query.mockResolvedValueOnce([[]]);
+    mocks.getConnection.mockResolvedValueOnce(connection);
+    expect(await equipFrame('user-1', id)).toMatchObject({ ok: false, reason: 'not_owned' });
+    expect(connection.rollback).toHaveBeenCalledOnce();
+    expect(connection.release).toHaveBeenCalledOnce();
+    mocks.query.mockReset();
+    mocks.query.mockResolvedValueOnce([[{ owned: 1 }]]).mockResolvedValueOnce([{ affectedRows: 1 }]);
+    expect(await equipFrame('user-1', id)).toEqual({ ok: true, equipped: id });
+  });
 
   it('拒绝不在当前商店目录的装扮 id', async () => {
     await expect(equipFrame('root-1', 'frame_removed', { userRole: 'root' })).resolves.toMatchObject({

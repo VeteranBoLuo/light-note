@@ -35,7 +35,7 @@ const simulatorDefaults = {
   dailyQuestDaily: 15,
   weeklyChallenges: 120,
   freeDrawExpected: 15,
-  achievementPool: 4140,
+  achievementPool: 4710,
   milestonePool: 2950,
   activeRatio: 0.35,
   consumptionRatio: 0.65,

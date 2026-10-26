@@ -1,6 +1,9 @@
 // 头像框装扮样式:id → 可识别的视觉变体(兑换、成就领取、顶部佩戴处共用)。
 // 与后端 FRAME_CATALOG 的 frame_* id 对应；后端管获取来源，前端管样式。
 export const FRAME_VARIANTS = {
+  frame_lantern_bearer: 'lantern-bearer',
+  frame_shared_reading: 'shared-reading',
+  frame_knowledge_lighthouse: 'knowledge-lighthouse',
   frame_mint: 'mint',
   frame_ink: 'ink',
   frame_moonstone: 'moonstone',

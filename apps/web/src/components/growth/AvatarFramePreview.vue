@@ -56,11 +56,19 @@
       >
         <img class="avatar-frame__art-inner" :src="artwork.src" alt="" draggable="false" />
       </span>
-      <span v-if="isDynamic" class="avatar-frame__motion avatar-frame__motion--back" aria-hidden="true">
+      <span v-if="isDynamic && !publicContributionMotion" class="avatar-frame__motion avatar-frame__motion--back" aria-hidden="true">
         <i></i><i></i><i></i><i></i>
       </span>
     </span>
     <span class="avatar-frame__canvas avatar-frame__canvas--front" aria-hidden="true">
+      <AvatarFramePublicContributionMotion
+        v-if="publicContributionMotion"
+        :key="variant"
+        :kind="publicContributionMotion"
+        :avatar-size="displayAvatarSize"
+        :paused="isMotionPaused"
+        :chat="props.motionProfile === 'chat'"
+      />
       <template v-if="variant === 'celestial' && artwork?.motionSrc && artwork?.effectSrc">
         <img
           class="avatar-frame__wing-layer avatar-frame__wing-layer--left"
@@ -365,7 +373,7 @@
           :style="mote.style"
         ></i>
       </span>
-      <span v-if="isDynamic" class="avatar-frame__motion avatar-frame__motion--front">
+      <span v-if="isDynamic && !publicContributionMotion" class="avatar-frame__motion avatar-frame__motion--front">
         <i></i><i></i><i></i><i></i>
       </span>
     </span>
@@ -378,6 +386,7 @@
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import { avatarFrameArtwork } from '@/config/avatarFrameArtwork';
   import { frameVariant } from '@/config/growthFrames';
+  import AvatarFramePublicContributionMotion from './AvatarFramePublicContributionMotion.vue';
   import AvatarFrameSubjectMotion from './AvatarFrameSubjectMotion.vue';
   import { AVATAR_SUBJECT_ARTWORK } from '@/config/avatarFrameSubjects';
 
@@ -542,6 +551,8 @@
     if (subjectArtwork.value?.key === key) readySubjectKey.value = ready ? key : null;
   };
 
+  const publicContributionMotion = computed(() => variant.value === 'shared-reading' ? 'epic' :
+    variant.value === 'knowledge-lighthouse' ? 'legendary' : null);
   const isDynamic = computed(() => artwork.value?.motion !== undefined && artwork.value.motion !== 'static');
   // 完整透明中心的静态成品框属于实体结构：统一置于固定头像上方，后层画布只保留环境光。
   // 不能仅提高后层图片自身的 z-index，因为父级 canvas 的层叠上下文仍会被头像整体压住。
@@ -599,6 +610,7 @@
       '--frame-display-avatar-size': `${displayAvatarSize.value}px`,
       '--frame-canvas-scale': String(scale),
       '--frame-outer-size': `${FRAME_DESIGN_OUTER_SIZE}px`,
+      '--frame-art-offset-y': `${artwork.value?.offsetY || 0}px`,
       '--frame-art-size': `${artwork.value?.artSize ?? FRAME_DESIGN_OUTER_SIZE}px`,
       '--frame-inner-art-size': `${artwork.value?.innerArtSize ?? FRAME_DESIGN_OUTER_SIZE}px`,
       '--frame-effect-size': `${layoutOuterSize}px`,
@@ -692,11 +704,17 @@
     width: var(--frame-art-size);
     height: var(--frame-art-size);
     object-fit: contain;
-    transform: translate(-50%, -50%);
+    transform: translate(-50%, calc(-50% + var(--frame-art-offset-y, 0px)));
     transform-origin: 50% 50%;
     filter: drop-shadow(0 2px 2px rgba(15, 23, 42, 0.2)) drop-shadow(0 0 2.5px var(--frame-glow));
     user-select: none;
     -webkit-user-drag: none;
+  }
+
+  .avatar-frame--lantern-bearer .avatar-frame__art,
+  .avatar-frame--shared-reading .avatar-frame__art,
+  .avatar-frame--knowledge-lighthouse .avatar-frame__art {
+    filter: none;
   }
 
   // 只复制需要“素材本体局部运动”的主题区域；裁切后的高光与原画完全同源，避免悬浮贴纸感。

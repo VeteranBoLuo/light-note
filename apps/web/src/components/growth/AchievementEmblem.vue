@@ -166,6 +166,13 @@
   .achievement-emblem--animated .achievement-emblem__art {
     opacity: 0;
   }
+  .achievement-emblem--sharing .achievement-emblem__fallback {
+    border: 2px solid var(--achievement-metal-mid);
+    color: var(--achievement-deep);
+    background: linear-gradient(145deg, var(--achievement-highlight), var(--achievement-secondary));
+    box-shadow: inset 0 0 0 2px var(--achievement-metal-highlight);
+    border-radius: 28% 28% 42% 42%;
+  }
   .achievement-emblem__fallback {
     display: flex;
     align-items: center;

@@ -78,12 +78,13 @@ function click(host: HTMLElement, selector: string) {
   (host.querySelector(selector) as HTMLButtonElement).click();
 }
 describe('achievement collection behavior', () => {
-  it('shows every achievement exactly once across nine distinct families', () => {
+  it('shows every achievement exactly once across ten distinct families', () => {
     const { host } = mount(ACHIEVEMENT_KEYS.map((key) => achievement(key)));
-    expect(host.querySelectorAll('.aw-badge')).toHaveLength(43);
-    expect(host.querySelectorAll('.aw-group')).toHaveLength(9);
+    expect(host.querySelectorAll('.aw-badge')).toHaveLength(48);
+    expect(host.querySelectorAll('.aw-group')).toHaveLength(10);
     const groups = [...host.querySelectorAll('.aw-group')];
     for (const [label, count] of [
+      ['公开贡献', 5],
       ['书签收藏', 5],
       ['笔记创作', 6],
       ['云端文件', 6],

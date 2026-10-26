@@ -8,7 +8,7 @@ import { ACHIEVEMENT_MOTION, achievementMotionLayer } from './achievementMotion'
 describe('packaged achievement artwork', () => {
   it('ships a WebP thumbnail and detail image for every catalog key', () => {
     let thumbnailBytes = 0;
-    for (const key of ACHIEVEMENT_KEYS) {
+    for (const key of ACHIEVEMENT_KEYS.filter((key) => !key.startsWith('public_resource_'))) {
       for (const large of [false, true]) {
         const asset = achievementArtwork(key, large)!;
         const bytes = readFileSync(resolve(process.cwd(), 'public', asset.slice(1)));
@@ -34,6 +34,9 @@ describe('packaged achievement artwork', () => {
       }
     }
     expect(bytes).toBeLessThan(600 * 1024);
+  });
+  it('uses registered contribution glyphs without requesting nonexistent bitmaps', () => {
+    for (const key of ACHIEVEMENT_KEYS.filter((key) => key.startsWith('public_resource_'))) expect(achievementArtwork(key)).toBeUndefined();
   });
   it('does not construct asset URLs for unknown keys', () => {
     expect(achievementArtwork('future_achievement')).toBeUndefined();
