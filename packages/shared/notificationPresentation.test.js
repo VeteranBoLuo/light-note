@@ -5,6 +5,45 @@ import {
   formatWeeklyReportExperience,
 } from "./notificationPresentation.js";
 describe("shared notification presentation", () => {
+  it("summarizes batch review results and gives individual results a readable outcome", () => {
+    const item = {
+      type: "public_resource",
+      meta: { kind: "result", counts: { approve: 12, reject: 2 } },
+    };
+    expect(notificationPresentation(item, "zh-CN")).toEqual({
+      title: "公开资源批量审核结果",
+      content: "审核通过 12 项 · 审核未通过 2 项",
+    });
+    expect(
+      notificationPresentation(
+        { ...item, meta: JSON.stringify(item.meta) },
+        "en-US",
+      ),
+    ).toEqual({
+      title: "Public resource batch review result",
+      content: "Approved: 12 · Not approved: 2",
+    });
+    expect(
+      notificationPresentation(
+        {
+          type: "public_resource",
+          meta: {
+            kind: "result",
+            action: "reject",
+            resourceTitle: "示例",
+            reason: "请核对来源",
+          },
+        },
+        "zh-CN",
+      ).content,
+    ).toBe("示例 · 审核未通过 · 请核对来源");
+    expect(
+      notificationPresentation(
+        { type: "public_resource", title: "旧通知" },
+        "zh-CN",
+      ),
+    ).toEqual({ title: "公开资源审核结果", content: "" });
+  });
   it.each([[10, "+10"], [0, "+0"], [-9283, "-9283"]])(
     "formats weekly experience %s with one sign",
     (value, expected) => {

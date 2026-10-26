@@ -257,6 +257,9 @@
   .nt-tabs {
     gap: var(--ui-space-6, 6px);
     padding: var(--ui-space-10, 10px) var(--ui-space-12, 12px) var(--ui-space-6, 6px);
+    flex: 0 0 auto;
+    flex-wrap: wrap;
+    min-width: 0;
   }
 
   .nt-panel :deep(.native-notification-status) {
@@ -275,7 +278,8 @@
 
   .nt-tab {
     min-width: 0;
-    flex: 1 1 0;
+    flex: 0 0 auto;
+    white-space: nowrap;
     gap: var(--ui-space-4, 4px);
     border: 1px solid transparent;
     border-radius: var(--mobile-control-radius, 10px);
@@ -507,6 +511,7 @@
   .is-desktop-page .nt-tabs {
     flex: 0 0 auto;
     flex-wrap: wrap;
+    overflow-x: visible;
     gap: var(--ui-space-8, 8px);
     padding: var(--ui-space-14, 14px) var(--ui-space-16, 16px) var(--ui-space-12, 12px);
     border-bottom: 1px solid var(--surface-divider-color);
@@ -700,7 +705,7 @@
   }
 
   .is-mobile .nt-tab {
-    min-height: 36px;
+    min-height: var(--ui-control-44, 44px);
     border: 1px solid transparent;
     border-radius: 10px;
     font-size: 13px;

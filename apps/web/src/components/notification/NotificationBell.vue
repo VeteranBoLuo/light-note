@@ -646,7 +646,7 @@
   }
 
   .nt-popover-content {
-    width: var(--ui-layout-370, 370px);
+    width: max-content;
     max-width: calc(100vw - var(--ui-layout-24, 24px));
   }
 
@@ -849,10 +849,18 @@
 <!-- 面板样式不 scoped:BPopover 内容 teleport 到 body,scoped 命不中 -->
 <style lang="less">
   .notification-popover {
-    width: var(--ui-layout-370, 370px);
+    width: max-content;
     max-width: calc(100vw - var(--ui-layout-24, 24px));
     padding: 0;
     overflow: hidden;
+  }
+  .notification-popover .nt-panel {
+    width: max-content;
+  }
+  /* 仅页签决定弹框宽度，通知标题、正文和操作区随这个宽度排版。 */
+  .notification-popover .nt-panel > :not(.nt-tabs),
+  .notification-popover .nt-open-page {
+    contain: inline-size;
   }
   /* 暗色下通知项与面板默认同为 --card-background,整片糊在一起;
      面板改用更深的 panel 底,形成「页面 < 面板 < 通知卡」三层递进 */
@@ -890,6 +898,8 @@
   }
   .notification-popover .nt-tab {
     display: inline-flex;
+    flex: 0 0 auto;
+    white-space: nowrap;
     align-items: center;
     gap: var(--ui-space-5, 5px);
     padding: var(--ui-space-4, 4px) var(--ui-space-10, 10px);
