@@ -723,9 +723,6 @@
     void preloadRoute(BROWSER_EXTENSION_LANDING_PATH).catch(() => undefined);
   }
 
-  async function preloadSecondaryTargets() {
-    await Promise.allSettled([preloadRoute('/workbenches'), loadUserAuthModal()]);
-  }
 
   async function openExtensionDetails() {
     if (!beginLandingNavigation('extension', 'page')) return;
@@ -958,11 +955,7 @@
     if (bookmark.isMobile && resolveLightNoteRuntime() === 'browser') {
       markMobileLandingVisited();
     }
-    disposeLandingStartupPreload = scheduleLandingStartupPreload({
-      prerender: Boolean((window as any).__PRERENDER__),
-      preloadPrimary: preloadPrimaryTarget,
-      preloadSecondary: preloadSecondaryTargets,
-    });
+    disposeLandingStartupPreload = scheduleLandingStartupPreload(router, isLoggedIn.value ? applicationEntryTarget() : '/workbenches');
     window.addEventListener('pageshow', handlePageShow);
 
     const canvas = canvasRef.value;

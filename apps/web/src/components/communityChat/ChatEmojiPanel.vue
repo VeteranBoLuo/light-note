@@ -13,7 +13,7 @@
         <img
           v-if="inlineEmoji(category.icon)"
           class="chat-emoji-panel__category-image"
-          :src="inlineEmoji(category.icon)?.assetPath"
+          :src="publicArtworkUrl(inlineEmoji(category.icon)?.assetPath || '')"
           alt=""
           width="30"
           height="30"
@@ -37,7 +37,7 @@
         <img
           v-if="inlineEmoji(emoji)"
           class="chat-emoji-panel__inline-image"
-          :src="inlineEmoji(emoji)?.assetPath"
+          :src="publicArtworkUrl(inlineEmoji(emoji)?.assetPath || '')"
           :alt="emojiLabel(emoji)"
           width="36"
           height="36"
@@ -52,6 +52,7 @@
 </template>
 
 <script setup lang="ts">
+  import { publicArtworkUrl } from '@/utils/publicArtwork';
   import {
     resolveCommunityChatInlineEmoji,
     type CommunityChatInlineEmoji,

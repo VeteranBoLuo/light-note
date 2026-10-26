@@ -40,6 +40,8 @@ const AVATAR_SPRITES: Record<BuiltinAvatarSprite, { url: string; columns: number
   refined: { url: avatarRefinedSpriteUrl, columns: 3, rows: 2 },
 };
 
+export const builtinAvatarAssetUrls = () => Object.values(AVATAR_SPRITES).map(sprite => sprite.url);
+
 export interface BuiltinAvatar {
   id: BuiltinAvatarId;
   sprite: BuiltinAvatarSprite;

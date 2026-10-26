@@ -50,6 +50,7 @@
 </template>
 
 <script setup lang="ts">
+  import { publicArtworkUrl } from '@/utils/publicArtwork';
   import {
     COMMUNITY_CHAT_INLINE_EMOJI_MAX_PER_MESSAGE,
     COMMUNITY_CHAT_INLINE_EMOJI_MAX_RAW_LENGTH,
@@ -160,7 +161,7 @@
       }
       const image = document.createElement('img');
       image.className = 'chat-composer-input__emoji';
-      image.src = segment.emoji.assetPath;
+      image.src = publicArtworkUrl(segment.emoji.assetPath);
       image.alt = emojiLabel(segment.emoji.id);
       image.title = emojiLabel(segment.emoji.id);
       image.width = 28;

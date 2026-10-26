@@ -1,6 +1,7 @@
 import { isLocallyHandledModuleLoadError } from '@/utils/retryableModuleLoader';
 import { createApp } from 'vue';
 import App from '@/App.vue';
+import { configureStaticPrewarmEntry } from '@/utils/staticPrewarm';
 import router, { getPendingNavigationTarget, reloadOnceTo } from '@/router';
 import '@/assets/css/index.less';
 import globalDirect from '@/config/globalDirect';
@@ -28,6 +29,7 @@ if (!appRoot) throw new Error('Application root not found');
 const hasPrerenderedContent = hasPrerenderedApplicationContent(appRoot);
 
 const app = createApp(App);
+configureStaticPrewarmEntry(import.meta.url);
 const pinia = createPinia();
 
 app.use(pinia);

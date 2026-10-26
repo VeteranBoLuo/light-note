@@ -2,7 +2,7 @@
   <header class="brand-scene" :class="[`brand-scene--${scene}`, { 'brand-scene--mobile': bookmark.isMobile }]">
     <picture class="brand-scene__art" aria-hidden="true"
       ><img
-        :src="`/brand-scenes/${scene}${bookmark.isMobile ? '-mobile' : ''}.webp`"
+        :src="publicArtworkUrl(`/brand-scenes/${scene}${bookmark.isMobile ? '-mobile' : ''}.webp`)"
         alt=""
         fetchpriority="high"
         decoding="async"
@@ -38,6 +38,7 @@
   </header>
 </template>
 <script setup lang="ts">
+  import { publicArtworkUrl } from '@/utils/publicArtwork';
   import { computed } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { bookmarkStore } from '@/store';

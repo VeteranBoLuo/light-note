@@ -305,6 +305,7 @@
   import AvatarFramePreview from './AvatarFramePreview.vue';
   import ProfileAvatarOptions from '@/components/personCenter/myInfo/ProfileAvatarOptions.vue';
   import { useProfileAvatar } from '@/composables/useProfileAvatar';
+  import { scheduleAppearancePrewarm } from '@/utils/appearancePrewarm';
   import { BUILTIN_AVATARS } from '@/config/builtinAvatars';
 
   type DecorationCategory = 'background' | 'frame';
@@ -387,6 +388,15 @@
       frame: frame && frameVariant(frame) ? frame : null,
     };
   });
+
+  watch(() => [props.open, equipped.value.frame, equipped.value.background, shop.value, bookmark.isDesktop] as const,
+    ([open], _old, cleanup) => {
+      if (!open) return;
+      cleanup(scheduleAppearancePrewarm({ desktop: bookmark.isDesktop, profileContext: true,
+        frame: equipped.value.frame, background: equipped.value.background,
+        ownedFrames: shop.value?.frames?.filter(item => item.owned).map(item => item.id),
+      }));
+    }, { immediate: true });
 
   const backgroundItems = computed(
     () => shop.value?.items.filter((item) => item.effect === 'background' && profileBackground(item.id)) || [],

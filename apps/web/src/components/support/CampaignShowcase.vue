@@ -3,8 +3,8 @@
     class="campaign-showcase commerce-surface"
     :class="{ 'is-mobile': bookmark.isMobile, 'is-compact': !bookmark.isDesktop, 'is-dense': bookmark.isCompactLayout }"
   >
-    <div class="commerce-landscape commerce-landscape--campaign" aria-hidden="true"
-      ><img src="/brand-scenes/campaign-hd-footer.webp" alt="" loading="lazy" decoding="async"
+    <div class="commerce-landscape commerce-landscape--campaign" :style="{ backgroundImage: 'url(' + publicArtworkUrl('/brand-scenes/campaign-hd-top.webp') + ')' }" aria-hidden="true"
+      ><img :src="publicArtworkUrl('/brand-scenes/campaign-hd-footer.webp')" alt="" loading="lazy" decoding="async"
     /></div>
     <BrandSceneHero
       scene="campaign"
@@ -75,7 +75,7 @@
           </div> </section
         ><BCard as="aside" class="campaign-rules" padding="var(--ui-space-18, 18px)" radius="14px"
           ><SvgIcon :src="icon.growth.reward" size="28" aria-hidden="true" /><h2>{{ t('autumn.rulesTitle') }}</h2
-          ><img class="campaign-rules__gift" src="/brand-scenes/gift-object.webp" alt="" loading="lazy" /><p>{{
+          ><img class="campaign-rules__gift" :src="publicArtworkUrl('/brand-scenes/gift-object.webp')" alt="" loading="lazy" /><p>{{
             t('autumn.rules')
           }}</p>
           <ul
@@ -119,13 +119,14 @@
             ><h2>{{ t('autumn.reference.closing') }}</h2
             ><p>{{ t('autumn.comboDescription') }}</p
             ><slot name="closing" /></div
-          ><img src="/brand-scenes/autumn-vista.webp" alt="" loading="lazy"
+          ><img :src="publicArtworkUrl('/brand-scenes/autumn-vista.webp')" alt="" loading="lazy"
         /></section>
       </div>
     </div>
   </section>
 </template>
 <script setup lang="ts">
+  import { publicArtworkUrl } from '@/utils/publicArtwork';
   import { computed, ref, onMounted, onBeforeUnmount } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { bookmarkStore } from '@/store';

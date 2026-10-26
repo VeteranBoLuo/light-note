@@ -26,7 +26,7 @@
           @click="emit('select', sticker.key)"
         >
           <img
-            :src="sticker.assetPath"
+            :src="publicArtworkUrl(sticker.assetPath)"
             :alt="t(`communityChat.sticker.officialItems.${sticker.id}`)"
             width="96"
             height="96"
@@ -42,6 +42,7 @@
 </template>
 
 <script setup lang="ts">
+  import { publicArtworkUrl } from '@/utils/publicArtwork';
   import { COMMUNITY_CHAT_OFFICIAL_STICKERS } from '@lightnote/shared/community-chat-stickers';
   import { useI18n } from 'vue-i18n';
   import BButton from '@/components/base/BasicComponents/BButton.vue';

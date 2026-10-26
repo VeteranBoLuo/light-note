@@ -27,6 +27,7 @@
 </template>
 
 <script setup lang="ts">
+  import { holdForegroundActivity } from '@/http/requestActivity';
   import { computed, nextTick, ref, shallowRef, watch } from 'vue';
   import BTable from '@/components/base/BasicComponents/BTable/BTable.vue';
   import { readTextPreviewSource } from '@/utils/textPreviewSource';
@@ -70,6 +71,7 @@
       rows.value = undefined;
       page.value = 1;
       pageSize.value = 100;
+      const release = holdForegroundActivity();
       try {
         const response = await fetch(src, { signal: controller.signal });
         if (!response.ok) throw Object.assign(new Error('CSV_FETCH_FAILED'), { status: response.status });
@@ -82,7 +84,7 @@
         if (!controller.signal.aborted) emit('rendered');
       } catch (error) {
         if (!controller.signal.aborted) emit('error', error);
-      }
+      } finally { release(); }
     },
     { immediate: true },
   );

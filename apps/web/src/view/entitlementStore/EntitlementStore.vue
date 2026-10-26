@@ -6,8 +6,8 @@
     <MobileTopBar v-if="bookmark.isMobile" />
     <div v-auto-scrollbar class="store-page__scroll"
       ><div class="commerce-page-content"
-        ><div class="commerce-landscape commerce-landscape--store" aria-hidden="true"
-          ><img src="/brand-scenes/store-strip-footer.webp" alt="" loading="lazy" decoding="async"
+        ><div class="commerce-landscape commerce-landscape--store" :style="{ backgroundImage: 'url(' + publicArtworkUrl('/brand-scenes/store-strip-top.webp') + ')' }" aria-hidden="true"
+          ><img :src="publicArtworkUrl('/brand-scenes/store-strip-footer.webp')" alt="" loading="lazy" decoding="async"
         /></div>
         <BrandSceneHero
           scene="store"
@@ -107,7 +107,7 @@
                 <p>{{ t('autumn.reference.supportInvitation') }}</p>
               </div>
               <div class="store-support__art" aria-hidden="true"
-                ><img src="/brand-scenes/store-note.webp" alt="" loading="lazy" /><span>{{
+                ><img :src="publicArtworkUrl('/brand-scenes/store-note.webp')" alt="" loading="lazy" /><span>{{
                   t('autumn.reference.storeNote')
                 }}</span></div
               ><BButton @click="openSupport">{{ t('entitlementStore.supportAction') }}</BButton>
@@ -132,7 +132,7 @@
                   scrollToCatalog();
                 "
                 >{{ t('autumn.comboAction') }}</BButton
-              ><img class="store-combo__art" src="/brand-scenes/gift-object.webp" alt="" loading="lazy"
+              ><img class="store-combo__art" :src="publicArtworkUrl('/brand-scenes/gift-object.webp')" alt="" loading="lazy"
             /></BCard>
             <section class="store-section store-flow scene-panel" aria-labelledby="purchase-flow-title">
               <div class="store-section__heading">
@@ -233,6 +233,7 @@
 </template>
 
 <script setup lang="ts">
+  import { publicArtworkUrl } from '@/utils/publicArtwork';
   import BrandSceneHero from '@/components/support/BrandSceneHero.vue';
   import AiQuotaValueSection from '@/components/support/AiQuotaValueSection.vue';
   import CampaignEntry from '@/components/support/CampaignEntry.vue';

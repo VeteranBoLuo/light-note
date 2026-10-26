@@ -306,7 +306,7 @@
                         >
                           <img
                             v-if="chatMessage.sticker?.url"
-                            :src="chatMessage.sticker.url"
+                            :src="publicArtworkUrl(chatMessage.sticker.url)"
                             :alt="t('communityChat.sticker.messageAlt', { name: authorName(chatMessage) })"
                             width="128"
                             height="128"
@@ -429,7 +429,7 @@
                       >
                         <img
                           v-if="chatMessage.sticker?.url"
-                          :src="chatMessage.sticker.url"
+                          :src="publicArtworkUrl(chatMessage.sticker.url)"
                           :alt="t('communityChat.sticker.messageAlt', { name: authorName(chatMessage) })"
                           width="128"
                           height="128"
@@ -824,6 +824,7 @@
 </template>
 
 <script setup lang="ts">
+  import { publicArtworkUrl } from '@/utils/publicArtwork';
   import GrowthLevelChip from '@/components/growth/GrowthLevelChip.vue';
   import {
     COMMUNITY_CHAT_ATTACHMENT_MAX_COUNT,

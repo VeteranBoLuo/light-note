@@ -1,3 +1,4 @@
+import { withForegroundActivity } from '@/http/requestActivity';
 import type { ComparisonColumn } from '@lightnote/shared/comparison-table';
 import { invalidateToolboxProjects } from '@/utils/toolboxProjectState';
 import { recordAiProductEvent, type AiProductEventDimensions } from '@/api/aiTelemetry';
@@ -568,23 +569,25 @@ export async function saveToolboxArtifact(
 }
 
 export async function uploadToolboxDocument(file: File, toolId = 'ocr_to_text'): Promise<string> {
-  const fileType = inferToolboxDocumentMime(file);
-  const prepared = await apiBasePost(
-    '/api/toolbox/uploads',
-    { toolId, fileName: file.name, fileType, fileSize: file.size },
-    { silent: true },
-  );
-  const upload = prepared.data;
-  if (prepared.status !== 200 || !upload?.uploadUrl || !upload?.attachment?.id) {
-    throw apiFailure(prepared, 'TOOLBOX_UPLOAD_PREPARE_FAILED');
-  }
-  const response = await fetch(upload.uploadUrl, {
-    method: 'PUT',
-    headers: upload.headers || { 'Content-Type': fileType },
-    body: file,
+  return withForegroundActivity(async () => {
+    const fileType = inferToolboxDocumentMime(file);
+    const prepared = await apiBasePost(
+      '/api/toolbox/uploads',
+      { toolId, fileName: file.name, fileType, fileSize: file.size },
+      { silent: true },
+    );
+    const upload = prepared.data;
+    if (prepared.status !== 200 || !upload?.uploadUrl || !upload?.attachment?.id) {
+      throw apiFailure(prepared, 'TOOLBOX_UPLOAD_PREPARE_FAILED');
+    }
+    const response = await fetch(upload.uploadUrl, {
+      method: 'PUT',
+      headers: upload.headers || { 'Content-Type': fileType },
+      body: file,
+    });
+    if (!response.ok) throw new Error(`${file.name}: TOOLBOX_UPLOAD_FAILED`);
+    return String(upload.attachment.id);
   });
-  if (!response.ok) throw new Error(`${file.name}: TOOLBOX_UPLOAD_FAILED`);
-  return String(upload.attachment.id);
 }
 
 export function createToolboxClientRequestId(prefix: 'quote' | 'job' | 'save' = 'job') {

@@ -51,3 +51,9 @@ const backgrounds: Record<ProfileBackgroundId, ProfileBackground> = {
 export function profileBackground(id: unknown) {
   return isProfileBackgroundId(id) ? backgrounds[id] : null;
 }
+
+export function profileBackgroundAssetUrls(thumbnailsOnly = false) {
+  return Object.values(backgrounds).flatMap((background) =>
+    thumbnailsOnly ? [background.thumbnail] : [background.thumbnail, background.src],
+  );
+}

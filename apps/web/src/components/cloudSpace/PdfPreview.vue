@@ -192,6 +192,7 @@
 </template>
 
 <script setup lang="ts">
+  import { withForegroundActivity } from '@/http/requestActivity';
   import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
   import type { ComponentPublicInstance, CSSProperties } from 'vue';
   import type { PDFDocumentLoadingTask, PDFDocumentProxy, PDFPageProxy, RenderTask } from 'pdfjs-dist';
@@ -752,38 +753,40 @@
   }
 
   async function loadPdf(src?: string) {
-    await destroyPdf();
-    const generation = loadGeneration;
-    if (!src) {
-      emit('error', new Error('PDF URL is empty'));
-      return;
-    }
-    fetchController = new AbortController();
-    try {
-      const [pdfjs, response] = await Promise.all([
-        loadPdfJsRuntime(),
-        fetch(src, { mode: 'cors', signal: fetchController.signal }),
-      ]);
-      if (!response.ok) throw new Error(`PDF request failed with status ${response.status}`);
-      const data = new Uint8Array(await response.arrayBuffer());
-      if (generation !== loadGeneration) return;
-      loadingTask = pdfjs.getDocument({ data, isEvalSupported: false });
-      pdfDocument = await loadingTask.promise;
-      if (generation !== loadGeneration) return;
-      if (!pdfDocument.numPages) throw new Error('PDF contains no pages');
-      pdfDocumentRef.value = pdfDocument;
-      pageCount.value = pdfDocument.numPages;
-      currentPage.value = 1;
-      pageInput.value = '1';
-      await nextTick();
-      if (generation !== loadGeneration) return;
-      setupPageObserver();
-      setupResizeObserver();
-      void loadOutline(generation);
-    } catch (error) {
-      if (generation !== loadGeneration || (error instanceof Error && error.name === 'AbortError')) return;
-      emit('error', error instanceof Error ? error : new Error(String(error)));
-    }
+    return withForegroundActivity(async () => {
+      await destroyPdf();
+      const generation = loadGeneration;
+      if (!src) {
+        emit('error', new Error('PDF URL is empty'));
+        return;
+      }
+      fetchController = new AbortController();
+      try {
+        const [pdfjs, response] = await Promise.all([
+          loadPdfJsRuntime(),
+          fetch(src, { mode: 'cors', signal: fetchController.signal }),
+        ]);
+        if (!response.ok) throw new Error(`PDF request failed with status ${response.status}`);
+        const data = new Uint8Array(await response.arrayBuffer());
+        if (generation !== loadGeneration) return;
+        loadingTask = pdfjs.getDocument({ data, isEvalSupported: false });
+        pdfDocument = await loadingTask.promise;
+        if (generation !== loadGeneration) return;
+        if (!pdfDocument.numPages) throw new Error('PDF contains no pages');
+        pdfDocumentRef.value = pdfDocument;
+        pageCount.value = pdfDocument.numPages;
+        currentPage.value = 1;
+        pageInput.value = '1';
+        await nextTick();
+        if (generation !== loadGeneration) return;
+        setupPageObserver();
+        setupResizeObserver();
+        void loadOutline(generation);
+      } catch (error) {
+        if (generation !== loadGeneration || (error instanceof Error && error.name === 'AbortError')) return;
+        emit('error', error instanceof Error ? error : new Error(String(error)));
+      }
+    });
   }
 
   watch(currentPage, (pageNumber) => {

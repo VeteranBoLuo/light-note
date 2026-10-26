@@ -1,5 +1,10 @@
 /// <reference types="vite/client" />
 
+declare module 'virtual:lightnote-public-art' {
+  const urls: Record<string, string>;
+  export default urls;
+}
+
 interface ImportMetaEnv {
   /** 可选的公开爱发电创作者主页覆盖；不得填写 API Token 或其他凭据。 */
   readonly VITE_AFDIAN_SUPPORT_URL?: string;

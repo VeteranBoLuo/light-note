@@ -142,10 +142,7 @@ describe('mobile personal center experience', () => {
     expect(avatarFrameSource).toMatch(/\.avatar-frame--layout-slot\s*\{[\s\S]*?width:\s*100%;[\s\S]*?height:\s*100%;/);
     const backCanvasStart = avatarFrameSource.indexOf('<span class="avatar-frame__canvas">');
     const frontCanvasStart = avatarFrameSource.indexOf('class="avatar-frame__canvas avatar-frame__canvas--front"');
-    const frontCanvasEnd = avatarFrameSource.indexOf(
-      '</span>\n    <span v-if="!subjectReady && artwork',
-      frontCanvasStart,
-    );
+    const frontCanvasEnd = avatarFrameSource.indexOf('<span v-if="!subjectReady && artwork', frontCanvasStart);
     expect(frontCanvasEnd).toBeGreaterThan(frontCanvasStart);
     const backCanvasSource = avatarFrameSource.slice(backCanvasStart, frontCanvasStart);
     const frontCanvasSource = avatarFrameSource.slice(frontCanvasStart, frontCanvasEnd);
