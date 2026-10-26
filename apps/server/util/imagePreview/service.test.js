@@ -19,6 +19,8 @@ function database(artifacts, job) {
     rollback: vi.fn(),
     release: vi.fn(),
     query: vi.fn(async (sql) => {
+      if (sql.startsWith('SELECT status,source_version FROM image_assets'))
+        return [[{ status: 'active', source_version: 'current' }]];
       if (sql.startsWith('SELECT j.id')) return [[job].filter(Boolean)];
       if (sql.startsWith('SELECT * FROM file_preview_artifacts')) return [artifacts];
       return [{ affectedRows: 1 }];
