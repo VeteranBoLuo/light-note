@@ -1,6 +1,6 @@
 import frameLanternBearer from '@/assets/avatar-frames/frame_lantern_bearer_v1.webp';
 import frameSharedReading from '@/assets/avatar-frames/frame_shared_reading_v1.webp';
-import frameKnowledgeLighthouse from '@/assets/avatar-frames/frame_knowledge_lighthouse_v2.webp';
+import frameKnowledgeLighthouse from '@/assets/avatar-frames/frame_knowledge_lighthouse_v3.webp';
 import frameAuroraCrystal from '@/assets/avatar-frames/frame_aurora_crystal_v1.webp';
 import frameAuroraFlowLeft from '@/assets/avatar-frames/frame_aurora_flow_left_v1.webp';
 import frameAuroraFlowRight from '@/assets/avatar-frames/frame_aurora_flow_right_v1.webp';
@@ -431,10 +431,10 @@ export const AVATAR_FRAME_ARTWORK = {
   'knowledge-lighthouse': {
     src: frameKnowledgeLighthouse,
     foregroundShell: true,
-    artSize: 108.8,
-    innerArtSize: 108.8,
-    outerSize: 114,
-    offsetY: -3.84,
+    artSize: 118,
+    innerArtSize: 118,
+    outerSize: 120,
+    offsetY: -6,
     accent: '#8270d5',
     glow: 'rgba(112, 100, 211, 0.28)',
     motion: 'legendary',
