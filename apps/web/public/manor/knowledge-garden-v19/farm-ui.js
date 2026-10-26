@@ -346,7 +346,7 @@ const FarmUI = (() => {
       if (activeTool.kind === "shovel") return canShovel(i) ? removeConfirm(i) : toast("这块地没有可铲除的作物");
     }
     // 引导只教播种与浇水，随后自由游玩。
-    if (state.guide === "plant" && i === 0 && st === "empty") return await plantAt(0, "radish");
+    if (state.guide === "plant" && i === 0 && st === "empty") return bagDialog("seeds", i);
     if (state.guide === "water" && i === 0) return await waterPlots([0]);
     if (state.guide) return;
     if (st === "locked") return toast(`庄园 Lv.${unlockLevel(i)} 时开垦这块地`);
@@ -356,6 +356,7 @@ const FarmUI = (() => {
     plotCard(i);
   }
   async function plantAt(i, key) {
+    if (state.guide && (state.guide !== "plant" || i !== 0 || key !== "radish")) return false;
     if (!(await M.plant(state, i, key))) return false;
     closeDialog(false);
     update();
