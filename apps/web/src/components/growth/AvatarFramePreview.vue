@@ -7,6 +7,7 @@
       artwork ? `avatar-frame--motion-${artwork.motion}` : '',
       {
         'avatar-frame--dynamic': isDynamic,
+        'avatar-frame--subject-ready': subjectReady,
         'avatar-frame--motion-paused': isMotionPaused,
         'avatar-frame--profile-chat': props.motionProfile === 'chat',
         'avatar-frame--layout-slot': props.layoutMode === 'slot',
@@ -18,6 +19,14 @@
     <span class="avatar-frame__portrait">
       <SvgIcon :src="src" :size="displayAvatarSize" :density-aware="false" />
     </span>
+    <AvatarFrameSubjectMotion
+      v-if="subjectArtwork"
+      :key="subjectArtwork.key"
+      :artwork="subjectArtwork"
+      :paused="isMotionPaused"
+      :chat="props.motionProfile === 'chat'"
+      @ready="onSubjectReady"
+    />
     <span class="avatar-frame__canvas">
       <span
         v-if="artwork && variant === 'sunset'"
@@ -25,7 +34,7 @@
         aria-hidden="true"
       ></span>
       <img
-        v-if="artwork && !usesFrontStructuralShell"
+        v-if="!subjectReady && artwork && !usesFrontStructuralShell"
         class="avatar-frame__art"
         :src="artwork.src"
         alt=""
@@ -33,7 +42,7 @@
         aria-hidden="true"
       />
       <img
-        v-if="hasArtDetail && !usesFrontStructuralShell"
+        v-if="!subjectReady && hasArtDetail && !usesFrontStructuralShell"
         class="avatar-frame__art-detail"
         :src="artwork?.src"
         alt=""
@@ -41,7 +50,7 @@
         aria-hidden="true"
       />
       <span
-        v-if="artwork && !usesDedicatedInnerRing && !usesFrontStructuralShell"
+        v-if="!subjectReady && artwork && !usesDedicatedInnerRing && !usesFrontStructuralShell"
         class="avatar-frame__inner-ring"
         aria-hidden="true"
       >
@@ -89,14 +98,14 @@
         />
       </template>
       <img
-        v-if="artwork && usesFrontStructuralShell"
+        v-if="!subjectReady && artwork && usesFrontStructuralShell"
         class="avatar-frame__art avatar-frame__art--front-shell"
         :src="artwork.src"
         alt=""
         draggable="false"
       />
       <img
-        v-if="hasArtDetail && usesFrontStructuralShell"
+        v-if="!subjectReady && hasArtDetail && usesFrontStructuralShell"
         class="avatar-frame__art-detail"
         :src="artwork?.src"
         alt=""
@@ -104,26 +113,29 @@
       />
       <template v-if="variant === 'bookmark-archive' && artwork">
         <img
+          v-if="!subjectReady"
           class="avatar-frame__bookmark-current avatar-frame__bookmark-current--left"
           :src="artwork.src"
           alt=""
           draggable="false"
         />
         <img
+          v-if="!subjectReady"
           class="avatar-frame__bookmark-current avatar-frame__bookmark-current--right"
           :src="artwork.src"
           alt=""
           draggable="false"
         />
         <img
+          v-if="!subjectReady"
           class="avatar-frame__bookmark-booklight"
           :src="artwork.src"
           alt=""
           draggable="false"
         />
         <span class="avatar-frame__bookmark-event">
-          <i class="avatar-frame__bookmark-page avatar-frame__bookmark-page--one"></i>
-          <i class="avatar-frame__bookmark-page avatar-frame__bookmark-page--two"></i>
+          <i v-if="!subjectReady" class="avatar-frame__bookmark-page avatar-frame__bookmark-page--one"></i>
+          <i v-if="!subjectReady" class="avatar-frame__bookmark-page avatar-frame__bookmark-page--two"></i>
           <i class="avatar-frame__bookmark-glyph avatar-frame__bookmark-glyph--one"></i>
           <i class="avatar-frame__bookmark-glyph avatar-frame__bookmark-glyph--two"></i>
           <i class="avatar-frame__bookmark-glyph avatar-frame__bookmark-glyph--three"></i>
@@ -140,12 +152,14 @@
       </template>
       <template v-if="variant === 'note-constellation' && artwork">
         <img
+          v-if="!subjectReady"
           class="avatar-frame__constellation-ink avatar-frame__constellation-ink--left"
           :src="artwork.src"
           alt=""
           draggable="false"
         />
         <img
+          v-if="!subjectReady"
           class="avatar-frame__constellation-ink avatar-frame__constellation-ink--right"
           :src="artwork.src"
           alt=""
@@ -166,16 +180,18 @@
           <i class="avatar-frame__constellation-pulse avatar-frame__constellation-pulse--left"></i>
           <i class="avatar-frame__constellation-pulse avatar-frame__constellation-pulse--upper-left"></i>
         </span>
-        <span class="avatar-frame__constellation-pen"></span>
+        <span v-if="!subjectReady" class="avatar-frame__constellation-pen"></span>
       </template>
       <template v-if="variant === 'file-constellation' && artwork">
         <img
+          v-if="!subjectReady"
           class="avatar-frame__cloudvault-current avatar-frame__cloudvault-current--left"
           :src="artwork.src"
           alt=""
           draggable="false"
         />
         <img
+          v-if="!subjectReady"
           class="avatar-frame__cloudvault-current avatar-frame__cloudvault-current--right"
           :src="artwork.src"
           alt=""
@@ -353,15 +369,17 @@
         <i></i><i></i><i></i><i></i>
       </span>
     </span>
-    <span v-if="artwork && variant !== 'first-light'" class="avatar-frame__bezel" aria-hidden="true"></span>
+    <span v-if="!subjectReady && artwork && variant !== 'first-light'" class="avatar-frame__bezel" aria-hidden="true"></span>
   </div>
 </template>
 
 <script setup lang="ts">
-  import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+  import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import { avatarFrameArtwork } from '@/config/avatarFrameArtwork';
   import { frameVariant } from '@/config/growthFrames';
+  import AvatarFrameSubjectMotion from './AvatarFrameSubjectMotion.vue';
+  import { AVATAR_SUBJECT_ARTWORK } from '@/config/avatarFrameSubjects';
 
   // 装饰统一在 64px 设计画布中缩放；头像本体独立按请求像素渲染，避免小尺寸二次缩放失焦。
   const FRAME_DESIGN_AVATAR_SIZE = 64;
@@ -459,6 +477,8 @@
 
   const props = withDefaults(
     defineProps<{
+      /** Comparison harnesses can retain the original artwork; product callers keep the default. */
+      subjectMotion?: boolean;
       frameId?: string | null;
       src: string;
       size?: number;
@@ -476,6 +496,7 @@
       animated: true,
       pauseWhenOffscreen: false,
       motionProfile: 'full',
+      subjectMotion: true,
     },
   );
 
@@ -507,6 +528,20 @@
 
   const variant = computed(() => frameVariant(props.frameId));
   const artwork = computed(() => avatarFrameArtwork(variant.value));
+  const subjectArtwork = computed(() =>
+    props.subjectMotion && variant.value ? AVATAR_SUBJECT_ARTWORK[variant.value] : undefined,
+  );
+  const readySubjectKey = ref<string | null>(null);
+  const subjectReady = computed(() => Boolean(subjectArtwork.value && readySubjectKey.value === subjectArtwork.value.key));
+  watch(
+    subjectArtwork,
+    () => { readySubjectKey.value = null; },
+    { flush: 'sync' },
+  );
+  const onSubjectReady = (key: string, ready: boolean) => {
+    if (subjectArtwork.value?.key === key) readySubjectKey.value = ready ? key : null;
+  };
+
   const isDynamic = computed(() => artwork.value?.motion !== undefined && artwork.value.motion !== 'static');
   // 完整透明中心的静态成品框属于实体结构：统一置于固定头像上方，后层画布只保留环境光。
   // 不能仅提高后层图片自身的 z-index，因为父级 canvas 的层叠上下文仍会被头像整体压住。
@@ -5391,6 +5426,13 @@
       opacity: 1;
       transform: scale(1.3) rotate(45deg);
     }
+  }
+
+  // These CSS focal substitutes would duplicate the separated planet/moon subjects.
+  .avatar-frame--subject-ready.avatar-frame--galaxy .avatar-frame__motion--front::before,
+  .avatar-frame--subject-ready.avatar-frame--galaxy .avatar-frame__motion--front::after,
+  .avatar-frame--subject-ready.avatar-frame--streak-month .avatar-frame__motion--front::after {
+    display: none;
   }
 
   /*
