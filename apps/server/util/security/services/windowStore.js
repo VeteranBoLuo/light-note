@@ -1,4 +1,5 @@
 const buckets = new Map();
+const exceededThresholds = new Set();
 
 const now = () => Date.now();
 
@@ -29,6 +30,19 @@ export const countWindowEvents = (key, windowMs) => {
   return bucket.length;
 };
 
+// Compare successive observed windows, not equality with threshold + 1: expiration can
+// keep a sustained stream at that exact count for every request. A below-threshold
+// observation rearms the next episode; a quiet window naturally produces that observation.
+export const crossedWindowThreshold = (key, count, threshold) => {
+  if (count <= threshold) {
+    exceededThresholds.delete(key);
+    return false;
+  }
+  if (exceededThresholds.has(key)) return false;
+  exceededThresholds.add(key);
+  return true;
+};
+
 export const uniqueWindowValues = (key, field, windowMs) => {
   const bucket = getBucket(key);
   prune(bucket, windowMs);
@@ -42,6 +56,7 @@ setInterval(
       const compacted = bucket.filter((item) => item.time >= cutoff);
       if (compacted.length === 0) {
         buckets.delete(key);
+        exceededThresholds.delete(key);
       } else {
         buckets.set(key, compacted);
       }
