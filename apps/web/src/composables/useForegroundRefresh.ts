@@ -75,8 +75,11 @@ export function useForegroundRefresh(options: UseForegroundRefreshOptions): UseF
 
   function flushPendingWake() {
     if (!wakePending || wakeTimer !== undefined || refreshing.value || disposed) return;
-    if (document.visibilityState !== 'visible' || !FOREGROUND_REFRESH_ENABLED ||
-      (options.enabled !== undefined && !toValue(options.enabled))) {
+    if (
+      document.visibilityState !== 'visible' ||
+      !FOREGROUND_REFRESH_ENABLED ||
+      (options.enabled !== undefined && !toValue(options.enabled))
+    ) {
       cancelPendingWake();
       return;
     }
@@ -86,7 +89,10 @@ export function useForegroundRefresh(options: UseForegroundRefreshOptions): UseF
       WAKE_DEDUPE_MS - (now - lastWakeAt),
     );
     if (delay > 0) {
-      wakeTimer = setTimeout(() => { wakeTimer = undefined; flushPendingWake(); }, delay);
+      wakeTimer = setTimeout(() => {
+        wakeTimer = undefined;
+        flushPendingWake();
+      }, delay);
       return;
     }
     wakePending = false;
