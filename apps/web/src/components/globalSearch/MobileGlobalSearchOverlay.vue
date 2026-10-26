@@ -23,7 +23,7 @@
         <BButton class="gs-layer__cancel" @click="cancel">{{ t('globalSearch.cancel') }}</BButton>
       </header>
 
-      <PublicSearchScopeControl class="gs-layer__scope" />
+      <PublicSearchScopeControl class="gs-layer__scope" publication-entry @publish="openPublications" />
       <p v-if="publicFailed" class="gs-layer__public-error" role="status">{{ t('publicResources.publicFailed') }}</p>
       <div class="gs-layer__body">
         <template v-if="!trimmedKeyword">
@@ -188,6 +188,12 @@
     rememberKeyword(trimmedKeyword.value);
     recordOperation({ module: '全局搜索', operation: '定位移动端文件搜索结果' });
     closeSearch(() => locateSearchResult(router, snapshot));
+  }
+
+  function openPublications() {
+    closeSearch(() => {
+      void router.push('/search/publications');
+    });
   }
 
   function submitFullSearch() {

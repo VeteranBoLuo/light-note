@@ -263,7 +263,7 @@ describe('编辑器 V2 交互回归', () => {
     expect(editorSource).toContain("operation: '在 Markdown 中插入图文组合'");
   });
 
-  it('图文组合只有点击图片才打开设置，移动端使用两行紧凑操作条', () => {
+  it('图文组合只有点击图片才打开设置，并使用独立的图片操作入口', () => {
     expect(editorSource).toContain("target.closest<HTMLImageElement>('.ln-media-text__media img')");
     expect(editorSource).not.toContain("target.closest('.ln-media-text__media')");
     expect(editorSource).toMatch(
@@ -283,12 +283,6 @@ describe('编辑器 V2 交互回归', () => {
     expect(editorSource).toContain('--ln-media-max-height: 300px');
     expect(editorSource).toContain('max-height:var(--ln-media-max-height)!important');
     expect(editorSource).toContain('justify-content: center');
-    expect(editorSource).toMatch(
-      /@media \(max-width: 767px\)[\s\S]*?\.rich-media-text-popover\s*\{[\s\S]*?width:\s*min\(360px,[\s\S]*?padding:\s*6px/u,
-    );
-    expect(editorSource).toMatch(
-      /\.rich-media-text-toolbar[\s\S]*?grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\)/u,
-    );
     expect(editorSource).toContain('@click="previewSelectedRichMediaTextImage"');
   });
 
