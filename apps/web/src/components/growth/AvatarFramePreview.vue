@@ -3225,39 +3225,39 @@
     animation-delay: -4.2s;
   }
 
-  /* 岁序长明:年轮主体固定;三只不对称翼错相轻扬如季节波浪,辉光沿环一巡依次映亮四季,星冠长明呼吸,四季微粒各自飘舞。 */
+  /* 岁序长明:年轮主体固定;三只不对称翼依次舒展、收拢,辉光沿环一巡依次映亮四季,星冠长明呼吸,四季微粒各自飘舞。 */
   .avatar-frame--dynamic.avatar-frame--streak-eternal .avatar-frame__art {
     animation: frame-eternal-time-light 6.4s ease-in-out infinite;
   }
 
-  // 三翼分层素材与底图同画布,压在环体下方;各自以翼根为锚点错相轻扬,
-  // 同周期负延迟形成春→秋→冬依次传递的波浪,与巡回辉光同向呼应。
+  // 沿原有翼根扩大开合,不平移翼层;底图披挂继续遮住交叉渐隐带。
+  // 三翼仅短间隔跟随,让整个轮廓具有明确的收拢/展开阶段,不再各自零散轻晃。
   .avatar-frame--streak-eternal .avatar-frame__wing-layer--spring {
-    --wing-sway: -7deg;
+    --wing-sway: -15deg;
     transform-origin: 22.92% 39.06%;
   }
 
   .avatar-frame--streak-eternal .avatar-frame__wing-layer--autumn {
-    --wing-sway: 6.4deg;
+    --wing-sway: 14deg;
     transform-origin: 81.25% 36.46%;
   }
 
   .avatar-frame--streak-eternal .avatar-frame__wing-layer--winter {
-    --wing-sway: -6.2deg;
+    --wing-sway: -13deg;
     transform-origin: 72.92% 70.31%;
   }
 
   .avatar-frame--dynamic.avatar-frame--streak-eternal .avatar-frame__wing-layer {
-    animation: frame-eternal-wing-sway 4.4s ease-in-out infinite;
+    animation: frame-eternal-wing-sway 3.6s ease-in-out infinite;
     will-change: transform;
   }
 
   .avatar-frame--dynamic.avatar-frame--streak-eternal .avatar-frame__wing-layer--autumn {
-    animation-delay: -1.47s;
+    animation-delay: -3.44s;
   }
 
   .avatar-frame--dynamic.avatar-frame--streak-eternal .avatar-frame__wing-layer--winter {
-    animation-delay: -2.93s;
+    animation-delay: -3.28s;
   }
 
   // 四季粒子群:春樱瓣、夏流萤、秋枫叶、冬雪花各三颗,按季节区分布,错峰飘落/上浮。
