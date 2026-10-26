@@ -8,7 +8,7 @@ import json, math, xml.etree.ElementTree as ET
 import numpy as np
 from PIL import Image, ImageDraw, ImageFilter
 ROOT=Path(__file__).resolve().parents[2]/'public/manor/knowledge-garden-v19'
-REV='r53'
+REV='r56'
 scenes=json.loads(Path(__file__).with_name('scene-plates.json').read_text())
 def image(path):
  p=ROOT/path
@@ -21,7 +21,9 @@ def feather(size,horizontal=.04,vertical=.05):
 def composite(scene):
  size=tuple(scene['image']); out=image(scene['asset']).resize(size,Image.Resampling.LANCZOS)
  for tile in scene.get('detailTiles',[]):
-  im=image(tile['asset']);im=im.resize(tuple(tile['pixels']),Image.Resampling.LANCZOS)
+  im=image(tile['asset'])
+  if tile.get('sourceRect'): im=im.crop(tuple(tile['sourceRect']))
+  im=im.resize(tuple(tile['pixels']),Image.Resampling.LANCZOS)
   alpha=feather(im.size);im.putalpha(alpha)
   a,b,c,d,e,f=tile['matrix'];det=a*d-b*c
   plate=im.transform(size,Image.Transform.AFFINE,(d/det,-c/det,(c*f-d*e)/det,-b/det,a/det,(b*e-a*f)/det),Image.Resampling.BICUBIC)
@@ -45,6 +47,12 @@ def water_mask(scene,paint):
  adjacent=np.asarray(Image.fromarray(blue.astype('uint8')*255).filter(ImageFilter.MaxFilter(5)))>0
  white=(rgb[:,:,0]>140)&(rgb[:,:,1]>150)&(rgb[:,:,2]>105)
  wet=(arr[:,:,0]>128)&(arr[:,:,1]<128)&(arr[:,:,2]<128)&(blue|(white&adjacent))
+ # Painted sails and hulls must stay still, including their blue edge pixels.
+ # Color classification alone cannot distinguish blue sail trim from sea water.
+ dry=Image.new('L',size);draw=ImageDraw.Draw(dry)
+ for polygon in scene.get('waterExclusions',[]):
+  draw.polygon([(x*width/paint.width,y*height/paint.height) for x,y in polygon],fill=255)
+ wet&=np.asarray(dry)==0
  arr[~wet,:3]=0
  # Distance to shore is baked, so it never runs on the browser's input thread.
  alive=Image.fromarray(wet.astype('uint8')*255);distance=np.zeros((height,width),dtype='uint8')
@@ -55,6 +63,9 @@ def water_mask(scene,paint):
 for key,scene in scenes.items():
  name={'desktop':'pc','mobileGarden':'mobile-garden','mobileBay':'mobile-bay'}[key]
  paint=composite(scene);paint.save(ROOT/f'courtyard/{name}-scene-{REV}.webp',quality=96,method=6)
+ if key=='desktop':
+  for width in [2048,2940]:
+   paint.resize((width,round(paint.height*width/paint.width)),Image.Resampling.LANCZOS).save(ROOT/f'courtyard/{name}-scene-{width}-{REV}.webp',quality=96,method=6)
  mask=water_mask(scene,paint);mask.save(ROOT/f'courtyard/{name}-water-{REV}.png',optimize=True)
  # Low frequencies used only for refraction cancellation, not visible scene art.
  w=min(1536,paint.width);smooth=paint.resize((w,round(paint.height*w/paint.width)),Image.Resampling.LANCZOS).filter(ImageFilter.GaussianBlur(5))

@@ -240,15 +240,15 @@ describe('mobile personal center experience', () => {
     expect(176 - stableSlot - 2 * maxNameCardBleed).toBeGreaterThanOrEqual(8);
   });
 
-  it('implements all 29 unique themes and the static-to-ceiling motion ladder', () => {
+  it('implements all 32 unique themes and the static-to-ceiling motion ladder', () => {
     const variants = Object.keys(AVATAR_FRAME_ARTWORK);
     const staticVariants = variants.filter(
       (variant) => AVATAR_FRAME_ARTWORK[variant as keyof typeof AVATAR_FRAME_ARTWORK].motion === 'static',
     );
 
-    expect(variants).toHaveLength(29);
-    expect(variants.length - staticVariants.length).toBe(18);
-    expect(new Set(Object.values(AVATAR_FRAME_ARTWORK).map((item) => item.src)).size).toBe(29);
+    expect(variants).toHaveLength(32);
+    expect(variants.length - staticVariants.length).toBe(20);
+    expect(new Set(Object.values(AVATAR_FRAME_ARTWORK).map((item) => item.src)).size).toBe(32);
     expect(staticVariants).toEqual([
       'mint',
       'ink',
@@ -261,6 +261,7 @@ describe('mobile personal center experience', () => {
       'bookmark-seed',
       'note-flow',
       'file-seed',
+      'lantern-bearer',
     ]);
     expect(AVATAR_FRAME_ARTWORK.gold.motion).toBe('advanced');
     expect(AVATAR_FRAME_ARTWORK.ocean.motion).toBe('colorful');
@@ -283,7 +284,7 @@ describe('mobile personal center experience', () => {
     );
     expect(AVATAR_FRAME_ARTWORK.dragon.outerSize).toBeGreaterThan(AVATAR_FRAME_ARTWORK.galaxy.outerSize);
     expect(AVATAR_FRAME_ARTWORK.celestial.outerSize).toBeGreaterThan(AVATAR_FRAME_ARTWORK.dragon.outerSize);
-    expect(avatarArtworkSource.match(/\.webp';/g)).toHaveLength(48);
+    expect(avatarArtworkSource.match(/\.webp';/g)).toHaveLength(51);
     for (const layeredArtwork of [
       'frame_ocean_v2.webp',
       'frame_ocean_current_left_v1.webp',
