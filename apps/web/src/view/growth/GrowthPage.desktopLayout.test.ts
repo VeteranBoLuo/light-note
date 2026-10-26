@@ -60,11 +60,11 @@ describe('GrowthPage 宽屏桌面导航布局', () => {
   });
 
   it('移动端进入抽奖时等待面板布局稳定，并在积分抽奖标题上方保留完整间距', () => {
-    expect(source).toContain('async function scrollLotteryToPreferredPosition()');
+    expect(source).toContain('async function scrollLotteryToPreferredPosition(');
     expect(source).toContain("document.getElementById('lottery-title')");
     expect(source).toContain('requestAnimationFrame(() => requestAnimationFrame(() => resolve()))');
     expect(source).toContain('scrollIntoContainer(container, lotteryTitle, 112');
-    expect(source).toContain('@focus-header="scrollLotteryToPreferredPosition"');
+    expect(source).toContain('@focus-draw="scrollLotteryToPreferredPosition(true)"');
     expect(source).toContain("if (section === 'lottery') void scrollLotteryToPreferredPosition()");
   });
 

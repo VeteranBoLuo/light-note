@@ -7,7 +7,7 @@
       >
       <div class="lt-wallet"
         ><span>{{ t('growth.myPoints') }}</span
-        ><strong v-if="lottery">{{ points.toLocaleString(locale) }}</strong
+        ><strong v-if="lottery">{{ displayedPoints.toLocaleString(locale) }}</strong
         ><BLoading v-else inline loading
       /></div>
       <BButton class="lt-history-button" @click="records?.open()"
@@ -26,44 +26,39 @@
     >
     <div v-else class="lt-layout">
       <section class="lt-machine" :aria-busy="rolling || undefined" aria-labelledby="lottery-title">
-        <div class="lt-machine-head"
-          ><strong>{{
-            t(activePoolMode === 'free' ? 'growth.lotteryFreePoolTab' : 'growth.lotteryPaidPoolTab')
-          }}</strong>
-          <BButton v-if="canSkip" type="text" class="lt-skip" @click="presentation.skip()">
-            <SvgIcon :src="icon.growth.skip" :size="16" />{{ t('growth.lotterySkipAnimation') }}
-          </BButton>
-          <span v-else>{{
-            activePoolMode === 'free'
-              ? t('growth.lotteryLevelBenefit', { level: lottery.level })
-              : t('growth.lotteryPityPoolHint', { n: pityEvery })
-          }}</span></div
-        >
-        <LotteryRevealStage
-          :phase="visiblePhase"
-          :results="visibleResults"
-          :drawing-times="drawingTimes"
-          :motion-reduced="motionReduced || animationSkipped"
-          :narrow="bookmark.isMobileDevice"
-          :idle-title="idleTitle"
-          :idle-hint="t(activePoolMode === 'free' ? 'growth.lotteryStageIdleHint' : 'growth.lotteryPaidIdleHint')"
-          :delivery="resultDelivery"
-          :retry-allowed="canRetry"
-          @retry="retryDraw"
-          @history="records?.open()"
-          @backpack="goBackpack"
-        />
-        <div
-          v-if="activePoolCountsPity"
-          class="lt-pity-panel"
-          :class="{ 'is-triggered': pityTriggered && lastMode === activePoolMode }"
-        >
-          <div
+        <div class="lt-theater" :class="{ 'is-paid': activePoolMode === 'paid' }">
+          <div class="lt-machine-head"
             ><strong>{{
-              pityTriggered && lastMode === activePoolMode
-                ? t('growth.lotteryPityTriggered')
-                : t('growth.lotteryPityLeft', { n: pityRemaining })
-            }}</strong
+              t(activePoolMode === 'free' ? 'growth.lotteryFreePoolTab' : 'growth.lotteryPaidPoolTab')
+            }}</strong>
+            <BButton v-if="canSkip" type="text" class="lt-skip" @click="presentation.skip()">
+              <SvgIcon :src="icon.growth.skip" :size="16" />{{ t('growth.lotterySkipAnimation') }}
+            </BButton>
+            <span v-else>{{
+              activePoolMode === 'free'
+                ? t('growth.lotteryLevelBenefit', { level: lottery.level })
+                : t('growth.lotteryPityPoolHint', { n: pityEvery })
+            }}</span></div
+          >
+          <LotteryRevealStage
+            :phase="visiblePhase"
+            :mode="activePoolMode"
+            :results="visibleResults"
+            :drawing-times="drawingTimes"
+            :motion-reduced="motionReduced || animationSkipped"
+            :narrow="bookmark.isMobileDevice"
+            :idle-title="idleTitle"
+            :idle-hint="t(activePoolMode === 'free' ? 'growth.lotteryStageIdleHint' : 'growth.lotteryPaidIdleHint')"
+            :delivery="resultDelivery"
+            :retry-allowed="canRetry"
+            @retry="retryDraw"
+            @history="records?.open()"
+            @backpack="goBackpack"
+          />
+        </div>
+        <div v-if="activePoolCountsPity" class="lt-pity-panel" :class="{ 'is-triggered': showPityTriggered }">
+          <div
+            ><strong>{{ t('growth.lotteryPityLeft', { n: pityRemaining }) }}</strong
             ><span>{{ pityCurrent }}/{{ pityEvery }}</span></div
           >
           <div
@@ -114,19 +109,23 @@
                 :loading="rolling && drawingTimes === 1"
                 :disabled="readOnly || !canDraw(1)"
                 @click="onDraw(1)"
-                >{{ t('growth.lotteryDrawOne') }} ·
-                {{ t('growth.lotteryCostLabel', { n: lottery.paid.singleCost.toLocaleString(locale) }) }}</BButton
+                ><span>{{ t('growth.lotteryDrawOne') }} ·</span>
+                <span>{{
+                  t('growth.lotteryCostLabel', { n: lottery.paid.singleCost.toLocaleString(locale) })
+                }}</span></BButton
               >
               <BButton
                 class="lt-draw-button lt-draw-button--ten"
                 :loading="rolling && drawingTimes === 10"
                 :disabled="readOnly || !canDraw(10)"
                 @click="onDraw(10)"
-                >{{ t('growth.lotteryDrawTen') }} ·
-                {{ t('growth.lotteryCostLabel', { n: lottery.paid.tenCost.toLocaleString(locale) }) }}</BButton
+                ><span>{{ t('growth.lotteryDrawTen') }} ·</span>
+                <span>{{
+                  t('growth.lotteryCostLabel', { n: lottery.paid.tenCost.toLocaleString(locale) })
+                }}</span></BButton
               >
             </div>
-            <p v-if="points < lottery.paid.singleCost">{{ t('growth.shopInsufficient') }}</p>
+            <p v-if="!rolling && points < lottery.paid.singleCost">{{ t('growth.shopInsufficient') }}</p>
           </template>
           <p v-if="drawError" class="lt-draw-error" role="alert">{{ drawError }}</p>
           <p v-if="readOnly">{{ t('growth.adminContextActionUnavailable') }}</p>
@@ -166,7 +165,9 @@
             prize.pityRate ? formatRate(prize.pityRate) : t('growth.lotteryPityNotApplicable')
           }}</span>
         </div>
-        <p class="lt-pool-note">{{ t('growth.lotteryPermanentHint') }}</p>
+        <p class="lt-pool-note">{{
+          t(activePoolMode === 'free' ? 'growth.lotteryFreePermanentHint' : 'growth.lotteryPermanentHint')
+        }}</p>
         <p v-if="showOdds" id="lottery-odds" class="lt-pool-note">{{
           t(activePoolCountsPity ? 'growth.lotteryPityExplanation' : 'growth.lotteryFreePoolHint', { n: pityEvery })
         }}</p>
@@ -203,7 +204,7 @@
   const { t, locale } = useI18n();
   const router = useRouter();
   const props = withDefaults(defineProps<{ readOnly?: boolean }>(), { readOnly: false });
-  const emit = defineEmits<{ 'focus-header': [] }>();
+  const emit = defineEmits<{ 'focus-draw': [] }>();
   const readOnly = computed(() => props.readOnly);
   const { lottery, lotteryError, loadLottery, draw } = useGrowth();
   const bookmark = bookmarkStore();
@@ -227,11 +228,14 @@
   const lastMode = ref<'free' | 'paid'>('free');
   const visibleResults = computed(() => (lastMode.value === activePoolMode.value ? revealed.value : []));
   const visiblePhase = computed(() => (lastMode.value === activePoolMode.value ? revealPhase.value : 'idle'));
+  const showPityTriggered = computed(() => pityTriggered.value && visiblePhase.value === 'result');
   const unresolved = computed(() => revealPhase.value === 'uncertain' && retryAllowed.value);
   const canSkip = computed(() => rolling.value && !animationSkipped.value && !motionReduced.value);
   const isVisitor = computed(() => !user.id || user.id === 'visitor');
   const canRetry = computed(() => unresolved.value && !rolling.value && !readOnly.value && !isVisitor.value);
   const points = computed(() => lottery.value?.points || 0);
+  const pointsBeforeDraw = ref<number | null>(null);
+  const displayedPoints = computed(() => (rolling.value ? (pointsBeforeDraw.value ?? points.value) : points.value));
   const freeDaily = computed(() => lottery.value?.free.daily || 0);
   const freeRemaining = computed(() => lottery.value?.free.remaining || 0);
   const pityEvery = computed(() => lottery.value?.paid.pityEvery || 10);
@@ -292,6 +296,13 @@
     );
   }
   let generation = 0;
+  watch(revealPhase, (phase) => {
+    if (phase === 'result') {
+      historyRevision.value++;
+      // Ten-draw results can grow taller than the scene; keep desktop actions reachable.
+      if (!bookmark.isMobileDevice && !document.hidden) emit('focus-draw');
+    }
+  });
   watch(
     () => [user.id, user.adminContext?.id].join('|'),
     () => {
@@ -300,6 +311,7 @@
       drawError.value = '';
       retryAllowed.value = false;
       pityTriggered.value = false;
+      pointsBeforeDraw.value = null;
     },
   );
   watch(
@@ -318,13 +330,14 @@
   async function onDraw(times: number, free = false, retry = false) {
     if (retry ? !canRetry.value : readOnly.value || (free ? !canFree.value : !canDraw(times))) return;
     const requestGeneration = ++generation;
-    presentation.begin();
+    pointsBeforeDraw.value = points.value;
+    presentation.begin(free ? 'free' : 'paid');
     drawingTimes.value = times;
     drawError.value = '';
     retryAllowed.value = false;
     pityTriggered.value = false;
     lastMode.value = free ? 'free' : 'paid';
-    emit('focus-header');
+    emit('focus-draw');
     try {
       const res = await draw(times, free);
       if (requestGeneration !== generation) return;
@@ -332,7 +345,6 @@
         const results = Array.isArray(res.data.results) ? res.data.results : [];
         presentation.accept(results);
         pityTriggered.value = Boolean(res.data.pityTriggered || results.some((prize) => prize.guaranteed));
-        historyRevision.value++;
         recordOperation({
           module: '成长',
           operation: `积分抽奖 ${free ? '免费抽' : times === 10 ? '十连' : '单抽'}（-${res.data.cost} 积分）`,
@@ -408,20 +420,41 @@
   }
   .lt-layout {
     display: grid;
-    grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr) .ui-layout(280px) [];
     gap: .ui-space(18px) [];
   }
   .lt-machine,
   .lt-side {
     border: 1px solid var(--workspace-border);
-    border-radius: 14px;
+    border-radius: 18px;
     min-width: 0;
   }
   .lt-machine {
     background: var(--workspace-content);
-    padding: .ui-space(20px) [];
+    overflow: hidden;
     display: flex;
     flex-direction: column;
+  }
+  .lt-theater {
+    background: var(--workspace-content);
+    background: radial-gradient(
+      ellipse at 50% 45%,
+      color-mix(in srgb, var(--primary-color) 9%, transparent),
+      transparent 72%
+    );
+    padding-top: .ui-space(18px) [];
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-width: 0;
+  }
+  // The localized draw scene is a media stage; the surrounding page keeps its normal theme.
+  .lt-theater.is-paid {
+    --lottery-theater-text: #f2efff;
+    --lottery-theater-muted: #b5accf;
+    --lottery-theater-accent: #d3bfff;
+    color: var(--lottery-theater-text);
+    background: radial-gradient(ellipse at 50% 70%, #30204e, #100d23 65%);
   }
   .lt-machine-head {
     min-height: .ui-control(32px) [];
@@ -430,9 +463,10 @@
     justify-content: space-between;
     gap: .ui-space(12px) [];
     font-size: .ui-font(15px) [];
+    padding: 0 .ui-space(20px) [];
   }
   .lt-machine-head > span {
-    color: var(--chip-pin-fg);
+    color: var(--lottery-theater-muted, var(--chip-pin-fg));
     font-size: .ui-font(12px) [];
     text-align: right;
   }
@@ -448,11 +482,7 @@
     line-height: 1.2;
   }
   .lt-pity-panel {
-    border: 1px solid var(--workspace-border);
-    background: var(--workspace-content);
-    border-radius: 10px;
-    padding: .ui-space(12px) [];
-    margin-bottom: .ui-space(14px) [];
+    margin: .ui-space(16px) [] .ui-space(18px) [] .ui-space(14px) [];
   }
   .lt-pity-panel > div:first-child {
     display: flex;
@@ -465,10 +495,10 @@
     font-size: .ui-font(11px) [];
   }
   .lt-pity-panel.is-triggered {
-    border-color: var(--primary-color);
+    color: var(--chip-pin-fg);
   }
   .lt-progress {
-    height: .ui-layout(8px) [];
+    height: .ui-layout(6px) [];
     background: var(--workspace-divider);
     border-radius: 4px;
     margin: .ui-space(8px) [] 0;
@@ -483,21 +513,31 @@
   .lt-machine-head .lt-skip {
     gap: .ui-space(6px) [];
     font-size: .ui-font(12px) [];
+    color: var(--lottery-theater-accent, var(--primary-color));
   }
   .lt-draw-options .lt-draw-error {
     color: var(--danger-color);
   }
   .lt-draw-options {
     text-align: center;
+    padding: .ui-space(16px) [] .ui-space(18px) [] 0;
+  }
+  .lt-pity-panel + .lt-draw-options {
+    padding-top: 0;
   }
   .lt-draw-button {
     min-height: .ui-control(44px) [];
     height: auto;
     white-space: normal;
+    flex-wrap: wrap;
+    column-gap: .ui-space(4px) [];
+    row-gap: 0;
+  }
+  .lt-draw-button > span {
+    white-space: nowrap;
   }
   .lt-draw-button--free {
-    width: 70%;
-    margin-inline: auto;
+    width: 100%;
   }
   .lt-paid-actions {
     display: grid;
@@ -506,6 +546,20 @@
   }
   .lt-paid-actions .lt-draw-button {
     width: 100%;
+  }
+  .lt:not(.is-narrow) .lt-draw-button--free {
+    width: min(100%, .ui-layout(320px) []);
+    margin-inline: auto;
+  }
+  .lt:not(.is-narrow) .lt-paid-actions {
+    max-width: .ui-layout(560px) [];
+    margin-inline: auto;
+  }
+  .lt-draw-button--ten {
+    color: var(--chip-pin-fg);
+    border: 1px solid var(--primary-color);
+    background: var(--workspace-content);
+    background: color-mix(in srgb, var(--primary-color) 7%, var(--workspace-content));
   }
   .lt-draw-options p {
     margin: .ui-space(8px) [] 0 0;
@@ -519,8 +573,8 @@
     align-items: center;
     justify-content: center;
     border-top: 1px solid var(--workspace-divider);
-    padding-top: .ui-space(14px) [];
-    margin-top: .ui-space(16px) [];
+    padding: .ui-space(14px) [] 0 .ui-space(18px) [];
+    margin: .ui-space(16px) [] .ui-space(18px) [] 0;
     font-size: .ui-font(12px) [];
     color: var(--desc-color);
   }
@@ -633,9 +687,14 @@
     grid-column: 2;
     font-size: .ui-font(12px) [];
   }
-  .is-mobile .lt-machine,
   .is-mobile .lt-side {
     padding: .ui-space(14px) [];
+  }
+  .is-mobile .lt-machine-head {
+    padding-inline: .ui-space(14px) [];
+  }
+  .is-mobile .lt-machine-head > span {
+    font-size: .ui-font(11px) [];
   }
   .is-mobile .lt-draw-button--free {
     width: 100%;

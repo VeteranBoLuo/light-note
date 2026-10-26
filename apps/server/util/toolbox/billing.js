@@ -1,6 +1,6 @@
 import { settleFreeOcr } from './freeOcr.js';
 import { createHash } from 'node:crypto';
-import { POINTS_ECONOMY_VERSION } from '../pointsEconomyCatalog.js';
+import { getEconomyRuntime } from '../pointsEconomyCatalog.js';
 import { toolboxInputDigest } from './catalog.js';
 import { toolboxError } from './errors.js';
 
@@ -73,7 +73,7 @@ export async function reserveToolboxPoints(connection, { userId, clientRequestId
     [
       userId,
       requestId,
-      POINTS_ECONOMY_VERSION,
+      getEconomyRuntime().economyVersion,
       operationHash,
       JSON.stringify({ jobId, quoteId: quote.id, reservedPoints, billingStatus: 'reserved' }),
       toolId,

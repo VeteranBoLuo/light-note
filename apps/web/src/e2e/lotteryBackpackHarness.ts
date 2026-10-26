@@ -26,11 +26,11 @@ document.documentElement.classList.toggle('disable-animations', params.get('moti
 document.body.style.display = 'block';
 Object.assign(document.getElementById('app')!.style, { width: '100%', height: '100%', overflow: 'auto' });
 const freePool = [
-  { id: 'p10', kind: 'points', amount: 10, rate: 50 },
-  { id: 'p20', kind: 'points', amount: 20, rate: 30 },
-  { id: 'p40', kind: 'points', amount: 40, rate: 10 },
-  { id: 'ai100', kind: 'ai_pack', amount: 100000, rate: 8 },
-  { id: 'ai200', kind: 'ai_pack', amount: 200000, rate: 2 },
+  { id: 'p3', kind: 'points', amount: 3, rate: 65 },
+  { id: 'p5', kind: 'points', amount: 5, rate: 23 },
+  { id: 'p20', kind: 'points', amount: 20, rate: 2 },
+  { id: 'ai20', kind: 'ai_pack', amount: 20000, rate: 8 },
+  { id: 'ai50', kind: 'ai_pack', amount: 50000, rate: 2 },
 ];
 const paidPool = [
   { id: 'p20', kind: 'points', amount: 20, rate: 40 },
@@ -55,7 +55,7 @@ const pointsRows = Array.from({ length: 72 }, (_, i) => ({
   createTime: new Date(Date.UTC(2026, 9, 23, 2, 14 - i)).toISOString(),
 }));
 const lottery = {
-  economyVersion: 'points-economy-c9',
+  economyVersion: 'points-economy-c10',
   points: assets.points,
   level: 15,
   free: { enabled: true, daily: 3, remaining: scenario === 'exhausted' ? 0 : 2, countsPaidPity: false, pool: freePool },
@@ -64,16 +64,24 @@ const lottery = {
     singleCost: 170,
     tenCost: 1600,
     pityEvery: 10,
-    pityProgress: 8,
-    toPity: 2,
+    pityProgress: scenario === 'draw_guaranteed' ? 9 : 8,
+    toPity: scenario === 'draw_guaranteed' ? 1 : 2,
     overflowPolicy: null,
     pool: paidPool,
   },
 };
-const tenResults = Array.from({ length: 10 }, (_, i) => ({
-  ...(i === 0 ? paidPool[4] : i === 9 ? paidPool[5] : paidPool[i % 3]),
-  guaranteed: i === 9,
-}));
+const tenResults = [
+  paidPool[0],
+  { ...paidPool[5], guaranteed: true },
+  paidPool[1],
+  paidPool[0],
+  paidPool[2],
+  paidPool[0],
+  paidPool[4],
+  paidPool[1],
+  paidPool[3],
+  paidPool[0],
+];
 let receipts =
   scenario === 'empty'
     ? []
@@ -174,7 +182,18 @@ request.defaults.adapter = async (config) => {
     drawAttempts++;
     if (scenario === 'draw_slow') await new Promise((resolve) => setTimeout(resolve, 3400));
     const free = body.mode === 'free';
-    const results = body.times === 10 ? tenResults : [free ? freePool[3] : paidPool[4]];
+    const results =
+      body.times === 10
+        ? tenResults
+        : [
+            free
+              ? scenario === 'draw_points'
+                ? freePool[0]
+                : freePool[3]
+              : scenario === 'draw_guaranteed'
+                ? { ...paidPool[5], guaranteed: true }
+                : paidPool[4],
+          ];
     const cost = free ? 0 : body.times === 10 ? 1600 : 170;
     const cached = drawReceipts.get(body.clientRequestId);
     if (scenario === 'draw_failure') {
@@ -188,6 +207,10 @@ request.defaults.adapter = async (config) => {
       assets.aiBonusTokens += results.reduce((sum, row) => sum + (row.kind === 'ai_pack' ? row.amount : 0), 0);
       lottery.points = assets.points;
       if (free) lottery.free.remaining--;
+      else {
+        lottery.paid.pityProgress = (lottery.paid.pityProgress + body.times) % lottery.paid.pityEvery;
+        lottery.paid.toPity = lottery.paid.pityEvery - lottery.paid.pityProgress;
+      }
       results.forEach((prize, i) =>
         acquisitions.unshift({
           id: `draw-${Date.now()}-${i}`,
