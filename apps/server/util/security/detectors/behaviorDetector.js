@@ -1,5 +1,5 @@
 import { SECURITY_CONFIG } from '../rules.js';
-import { addWindowEvent, countWindowEvents, uniqueWindowValues } from '../services/windowStore.js';
+import { addWindowEvent, countWindowEvents, crossedWindowThreshold, uniqueWindowValues } from '../services/windowStore.js';
 import { truncateText } from '../payloadSanitizer.js';
 
 const evidence = ({ code, name, attackType, severity, scoreDelta, confidence, field, value, message }) => ({
@@ -60,7 +60,7 @@ export const detectRequestBehavior = (context) => {
 
   // 同一个滑窗只在首次越线时产一条证据；阈值后的每个请求都落事件会把一次突发流量
   // 放大成几十条待复核记录。计数仍持续保留，降回阈值后再次越线会形成新的证据。
-  if (requestCount1m === SECURITY_CONFIG.highFrequencyPerMinute + 1) {
+  if (crossedWindowThreshold(`req:${ip}`, requestCount1m, SECURITY_CONFIG.highFrequencyPerMinute)) {
     result.push(
       evidence({
         code: 'HIGH_FREQUENCY_REQUEST',
