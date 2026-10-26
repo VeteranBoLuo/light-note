@@ -151,9 +151,10 @@
   .wc-title {
     display: flex;
     align-items: center;
-    gap: var(--ui-space-6, 6px);
-    font-size: var(--ui-font-15, 15px);
+    gap: var(--ui-space-8, 8px);
+    font-size: var(--ui-font-16, 16px);
     font-weight: 700;
+    line-height: 1.5;
   }
   .wc-title-row {
     flex-wrap: wrap;

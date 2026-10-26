@@ -264,13 +264,15 @@
             </header>
 
             <section class="growth-panel growth-task-center">
-              <BTabs
-                v-model:active-tab="taskView"
-                class="growth-task-tabs"
-                variant="line"
-                :options="taskViewOptions"
-                @select="handleTaskViewSelect"
-              />
+              <div ref="taskTabsScrollRef" class="growth-task-tabs-scroll">
+                <BTabs
+                  v-model:active-tab="taskView"
+                  class="growth-task-tabs"
+                  variant="line"
+                  :options="taskViewOptions"
+                  @select="handleTaskViewSelect"
+                />
+              </div>
 
               <div class="growth-task-workspace">
                 <div class="growth-task-workspace__main">
@@ -440,7 +442,7 @@
 
 <script setup lang="ts">
   import { useMobileTopBar } from '@/composables/useMobileTopBar';
-  import { computed, nextTick, onMounted, ref, watch } from 'vue';
+  import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useRoute, useRouter } from 'vue-router';
   import GrowthCard from '@/components/growth/GrowthCard.vue';
@@ -475,7 +477,7 @@
   import { useUiDensity } from '@/composables/useUiDensity';
   import { resolveDailyQuestClaimFeedback } from '@/utils/dailyQuestClaim';
   import { resolveDailyQuestRoute, resolveGrowthActionRoute } from '@/utils/growthNavigation';
-  import { scrollIntoContainer } from '@/utils/scrolling';
+  import { scrollIntoContainer, scrollNearestHorizontallyIntoContainer } from '@/utils/scrolling';
   import {
     inventoryPointsRoute,
     inventoryTabFromQuery,
@@ -538,6 +540,9 @@
   );
   const growthPageRef = ref<HTMLElement | null>(null);
   const growthMainRef = ref<HTMLElement | null>(null);
+  const taskTabsScrollRef = ref<HTMLElement | null>(null);
+  let taskTabsRevealFrame = 0;
+  let taskTabsResizeObserver: ResizeObserver | undefined;
   const useWideDesktopLayout = computed(() => bookmark.isDesktop && !bookmark.isCompactLayout);
   const sectionOptions = computed<GrowthNavOption<GrowthSection>[]>(() => {
     const achievementBadge = achievementClaimableCount.value;
@@ -811,8 +816,28 @@
     handleSectionTabSelect(option.section);
   }
 
+  function revealTaskTab(behavior: ScrollBehavior = 'auto') {
+    cancelAnimationFrame(taskTabsRevealFrame);
+    // 下一帧读取最终布局，也等键盘焦点落定后再开始平滑滚动。
+    taskTabsRevealFrame = requestAnimationFrame(() => {
+      taskTabsRevealFrame = 0;
+      const container = taskTabsScrollRef.value;
+      const tab = container?.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]');
+      if (!container || !tab || container.scrollWidth <= container.clientWidth) return;
+      const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      container.scrollTo({ left: container.scrollLeft, behavior: 'auto' });
+      scrollNearestHorizontallyIntoContainer(container, tab, reduceMotion ? 'auto' : behavior);
+    });
+  }
+
+  onBeforeUnmount(() => {
+    taskTabsResizeObserver?.disconnect();
+    cancelAnimationFrame(taskTabsRevealFrame);
+  });
+
   function handleTaskViewSelect(view: string) {
     taskView.value = view as TaskView;
+    revealTaskTab('smooth');
     if (taskView.value === 'onboarding') void loadGrowthTasks();
   }
 
@@ -942,6 +967,24 @@
   function openWeeklyReport() {
     wrVisible.value = true;
   }
+
+  watch(
+    [taskTabsScrollRef, taskView, () => taskViewOptions.value.map((option) => option.label).join('|')] as const,
+    ([container, view], [previousContainer, previousView]) => {
+      if (container !== previousContainer) {
+        taskTabsResizeObserver?.disconnect();
+        taskTabsResizeObserver = undefined;
+        if (container && typeof ResizeObserver !== 'undefined') {
+          taskTabsResizeObserver = new ResizeObserver(() => revealTaskTab());
+          taskTabsResizeObserver.observe(container);
+          const row = container.querySelector('.growth-task-tabs');
+          if (row) taskTabsResizeObserver.observe(row);
+        }
+      }
+      revealTaskTab(view === previousView ? 'auto' : 'smooth');
+    },
+    { flush: 'post' },
+  );
 
   onMounted(() => {
     void load(); // 任务分区也需要今日经验与每日上限；共享请求会与概览卡片自动合并。
@@ -1462,6 +1505,9 @@
     padding: 0;
     overflow: hidden;
   }
+  .growth-task-tabs-scroll {
+    min-width: 0;
+  }
   .growth-task-tabs {
     padding: 0 var(--ui-space-16, 16px);
     border-bottom: 1px solid var(--card-border-color);
@@ -1729,13 +1775,36 @@
     .growth-section-heading .b_btn {
       width: 100%;
     }
-    .growth-task-tabs {
-      padding: 0 var(--ui-space-8, 8px);
+    .growth-task-center {
+      padding: 0;
+    }
+    .growth-task-tabs-scroll {
       overflow-x: auto;
+      scrollbar-width: none;
+
+      &::-webkit-scrollbar {
+        display: none;
+      }
+    }
+    .growth-task-tabs.tab-container {
+      // 按最长标签保留舒适内边距；空间足够时三项等宽铺满，不足时由外层滚动。
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      width: max-content;
+      min-width: 100%;
+      box-sizing: border-box;
+      gap: 0;
+      margin-bottom: 0;
+      padding: 0 var(--ui-space-8, 8px);
     }
     .growth-task-tabs :deep(.tab) {
-      min-width: max-content;
-      padding-inline: var(--ui-space-10, 10px);
+      min-width: var(--ui-layout-104, 104px);
+      min-height: var(--ui-control-44, 44px);
+      box-sizing: border-box;
+      justify-content: center;
+      padding: var(--ui-space-4, 4px) var(--ui-space-8, 8px);
+      line-height: 1.3;
+      white-space: nowrap;
     }
     .growth-task-workspace {
       padding: var(--ui-space-12, 12px);

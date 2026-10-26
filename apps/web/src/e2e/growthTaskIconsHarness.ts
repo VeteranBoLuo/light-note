@@ -20,6 +20,8 @@ const mobile = params.get('renderProfile') === 'mobile';
 const state = params.get('state') || 'mixed';
 const compact = params.get('compact') === 'true';
 const readOnly = params.get('readonly') === 'true';
+const fullPage = params.get('page') === 'full';
+const contentWidth = Number(params.get('contentWidth'));
 const locale = params.get('locale') === 'en-US' ? 'en-US' : 'zh-CN';
 document.documentElement.dataset.theme = params.get('theme') === 'night' ? 'night' : 'day';
 document.documentElement.lang = locale;
@@ -129,8 +131,24 @@ async function mountFixture() {
     .reduce((sum, challenge) => sum + challenge.reward, 0);
   weekly.totalPoints = weekly.challenges.reduce((sum, challenge) => sum + challenge.reward, 0);
   request.defaults.adapter = async (config) => {
-    if (state === 'loading') await new Promise(() => {});
+    const path = String(config.url || '');
+    if (state === 'loading' && (!fullPage || path.endsWith('/weekly'))) await new Promise(() => {});
     const failed = state === 'error';
+    const payloads: Record<string, unknown> = {
+      '/api/growth/me': {
+        level: 1,
+        exp: 10,
+        points: 0,
+        dailyExp: 5,
+        dailyCap: 200,
+        features: { growthCenterV2: true },
+      },
+      '/api/growth/dashboard': { quests, questBonus: bonus, achievements: [], timeline: [], stats: {} },
+      '/api/growth/tasks': data,
+      '/api/growth/weekly': weekly,
+      '/api/growth/claimable': { count: 0 },
+      '/api/growth/preferences': { lowPressureMode: false },
+    };
     return {
       config,
       status: 200,
@@ -138,11 +156,15 @@ async function mountFixture() {
       headers: {},
       data: {
         status: failed ? 500 : 200,
-        data: failed
-          ? null
-          : state === 'empty'
-            ? { ...weekly, challenges: [], earnedPoints: 0, totalPoints: 0 }
-            : weekly,
+        data: fullPage
+          ? failed
+            ? null
+            : payloads[path] || {}
+          : failed
+            ? null
+            : state === 'empty'
+              ? { ...weekly, challenges: [], earnedPoints: 0, totalPoints: 0 }
+              : weekly,
       },
     };
   };
@@ -151,14 +173,20 @@ async function mountFixture() {
     routes: [{ path: '/:pathMatch(.*)*', component: { render: () => null } }],
   });
   const panel = ref(params.get('panel') || 'daily');
+  const fullPageComponent = fullPage ? (await import('@/view/growth/GrowthPage.vue')).default : null;
   const components = {
     daily: () => h(DailyQuests, { quests, bonus, compact, readOnly, showClaimAction: false }),
     weekly: () => h(WeeklyChallenge, { readOnly }),
     onboarding: () => h(GrowthTasks, { data, compact, readOnly }),
   };
   const app = createApp({
-    render: () =>
-      h(
+    render: () => {
+      if (fullPageComponent) {
+        return h(fullPageComponent, {
+          style: contentWidth > 0 && Number.isFinite(contentWidth) ? { width: `${contentWidth}px` } : undefined,
+        });
+      }
+      return h(
         'main',
         {
           class: 'growth-page',
@@ -199,18 +227,21 @@ async function mountFixture() {
               .map(([key, render]) => h('section', { key, class: 'growth-panel', style: { minWidth: 0 } }, render())),
           ),
         ],
-      ),
+      );
+    },
   });
   app.use(pinia).use(router).use(i18n);
   app.directive('click-log', {});
-  await router.push('/growth?section=tasks');
+  await router.push(
+    `/growth?section=tasks${panel.value === 'weekly' ? '#growth-weekly' : panel.value === 'onboarding' ? '#growth-tasks' : ''}`,
+  );
   await router.isReady();
   app.mount('#app');
 }
 
 // 同源 iframe 提供真实的窄 CSS 视口，便于无设备模拟接口的浏览器验收媒体查询。
 const viewport = Number(params.get('viewport'));
-if ([320, 390].includes(viewport)) {
+if ([320, 360, 390].includes(viewport)) {
   const child = new URL(location.href);
   child.searchParams.delete('viewport');
   child.searchParams.set('renderProfile', 'mobile');
