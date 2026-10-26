@@ -870,7 +870,7 @@
       if (aiNavActive) await pollAiNav();
       if (activeView.value === 'bookmark_health') await refreshHealthScan({ silent: Boolean(healthSummary.value) });
     },
-    staleMs: 1000,
+    trailingWake: true, staleMs: 1000,
   });
   function aiNavVisibility() {
     if (document.hidden) {

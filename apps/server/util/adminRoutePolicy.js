@@ -635,6 +635,7 @@ declare(ADMIN_POLICIES.ACCOUNT_WRITE, 'feature_request', [
   ['POST', '/featureRequest/toggleVote'],
   ['POST', '/featureRequest/addSubmitterUpdate'],
 ]);
+declare(ADMIN_POLICIES.ACCOUNT_WRITE, 'notification', [['POST', '/notification/setReadState']]);
 declare(ADMIN_POLICIES.BACKGROUND_WRITE, 'notification', [
   ['POST', '/notification/markRead'],
   ['POST', '/notification/markAllRead'],
