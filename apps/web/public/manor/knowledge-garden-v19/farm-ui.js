@@ -761,6 +761,9 @@ const FarmUI = (() => {
     );
     panelNavigation(`bag:${bagTarget ?? "all"}:${tab}`, [".bag-tabs"], "bag");
   }
+  function refreshInventory() {
+    if (!$("#modal").hidden && $("#dialog").dataset.family === "inventory-dialog") bagDialog(bagTab, bagTarget);
+  }
   function shopDialog(tab) {
     if (tab === "seeds" || tab === "aquatic" || tab === "facilities") {shopTab = tab;shopMode = "buy";}
     if (tab === "sell-fish" || tab === "sell-crops") {shopMode = "sell";shopSellTab = tab === "sell-fish" ? "fish" : "crops";}
@@ -899,7 +902,7 @@ const FarmUI = (() => {
       d ? c.name : "尚未收获",
       d ? `${TIER_TEXT[c.tier]} · ${TYPE_TEXT[c.type]} · 第 ${d.first} 天第一次收获，共 ${d.count} 次` : c.tier === "rare" ? `获取途径：${RARE_SOURCE[k]}` : `商店有售 · 庄园 Lv.${c.unlock} 解锁`,
       `<div class="fish-detail-art crop-detail-art ${d ? "" : "silhouette"}">${FarmArt.cropCard(k, 4)}</div>${d ? `<div class="detail-grid"><div><small>成熟时间</small><strong>${cycleText(c.first)}</strong></div><div><small>卖出</small><strong>${c.sell === null ? "不可出售" : `${c.sell} 积分 / 份`}</strong></div><div><small>收获经验</small><strong>${c.xp}</strong></div><div><small>种子</small><strong>${c.price === null ? "不可购买" : `${c.price} 积分`}</strong></div></div>${c.fertilizer ? `<div class="info-box">首次 ${cycleText(c.first)}，之后每 ${cycleText(c.every)} 可剪一轮，共 ${c.harvests} 轮。每轮收 1 束${c.name}，另得 1 份${M.FERT[c.fertilizer].name}（缩短 ${shortDuration(M.FERT[c.fertilizer].hours)}）。剪完仍可留在田里观赏。</div>` : ""}` : ""}`,
-      `<button class="button" data-action="atlas" data-dialog-back="atlas">返回图鉴</button>${state.seeds[k] ? `<button class="button primary" data-action="seed-select" data-seed="${k}">去播种</button>` : c.price !== null ? `<button class="button primary" data-action="shop-tab" data-tab="seeds">去商店</button>` : `<button class="button primary" data-action="level">查看成长奖励</button>`}`
+      `${state.seeds[k] ? `<button class="button primary" data-action="seed-select" data-seed="${k}">去播种</button>` : c.price !== null ? `<button class="button primary" data-action="shop-tab" data-tab="seeds">去商店</button>` : `<button class="button primary" data-action="level">查看成长奖励</button>`}`, false, "", "atlas"
     );
   }
 
@@ -1078,8 +1081,8 @@ const FarmUI = (() => {
         await claimReward(b.dataset.reward);
         return true;
       case "crop-detail":
-        if (b.dataset.atlasEntry === "crop") await readAtlasEntry("crop", b.dataset.crop);
         cropDetail(b.dataset.crop);
+        if (b.dataset.atlasEntry === "crop") void readAtlasEntry("crop", b.dataset.crop);
         return true;
     }
     return false;
@@ -1164,5 +1167,5 @@ const FarmUI = (() => {
     });
   }
 
-  return { birdGiftScenePoint, deliverBirdSeed, needsBirdSeed: () => cal().area !== "bay" && M.birdCanDeliver(state), purchase, dismissPurchase, waitingFish, shopDialog, toolsHTML, toolIcon, fertilizerTarget, purifierHTML, layerHTML, sync, relayout, refreshClocks, stateKey, handle, bagDialog, fertDialog, cancelTool, cropAtlasCard, rewardsHTML, plotsIn, open, TYPE_TEXT, RARE_SOURCE, quadMatrix, coverQuad, rememberPanel, back };
+  return { refreshInventory, birdGiftScenePoint, deliverBirdSeed, needsBirdSeed: () => cal().area !== "bay" && M.birdCanDeliver(state), purchase, dismissPurchase, waitingFish, shopDialog, toolsHTML, toolIcon, fertilizerTarget, purifierHTML, layerHTML, sync, relayout, refreshClocks, stateKey, handle, bagDialog, fertDialog, cancelTool, cropAtlasCard, rewardsHTML, plotsIn, open, TYPE_TEXT, RARE_SOURCE, quadMatrix, coverQuad, rememberPanel, back };
 })();

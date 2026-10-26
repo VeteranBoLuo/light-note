@@ -160,6 +160,14 @@ createApp({ render: () => h('div', { style: { height: '100%', display: 'flex', f
     h('span', `${trace.value} · casting:${String(get().state.casting)} · first:${String(get().state.firstCompanionPending)} · guide:${String(get().state.discoveryGuide)}`),
     h('button', { onClick: () => { user.$patch({ id: user.id.endsWith('a') ? 'manor-fixture-b' : 'manor-fixture-a' }); account.value = user.id; } }, '切换账号'),
     h('button', { onClick: () => { loseResponse = true; } }, '下次回包丢失'),
+    params.get('sync') === 'true' ? h('button', { onClick: () => {
+      // Another device updates the fixture's server save; the scene receives
+      // nothing until its normal authenticated GET calibration.
+      const save = get();
+      const next = executeManorCommand(save.state, { action: 'pickPoop', args: [] }, ctx(save.state.wallet));
+      save.state = next.state;save.revision++;persist();
+      trace.value = '另一设备已拾取兔子肥料';
+    } }, '另一设备拾取兔子肥料') : null,
   ]), h('div', { style: { flex: '1', minHeight: '0' } }, [h(params.get('loadingPreview') === 'true' ? ManorLoadingState : RouterView)]),
 ]) }).use(pinia).use(createI18n({ legacy: false, locale, messages: { 'zh-CN': zh, 'en-US': en } })).use(router).mount('#app');
 if (params.get('prewarm') === 'true') {

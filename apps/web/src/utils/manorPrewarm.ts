@@ -5,6 +5,7 @@ export function manorPrewarmSelections(mobile: boolean): PrewarmSelection[] {
   return [
     { groups: [mobile ? 'manor.mobileCritical' : 'manor.critical'], priority: 1, optional: true },
     { groups: [mobile ? 'manor.mobile' : 'manor.desktop'], priority: 4, optional: true },
+    { groups: ['manor.catalog'], priority: 5, optional: true },
   ];
 }
 export function scheduleManorPrewarm(mobile: boolean) {

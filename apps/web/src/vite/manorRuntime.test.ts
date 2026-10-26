@@ -46,6 +46,14 @@ describe('庄园生产入口与经典规则脚本', () => {
     expect(entry).toMatch(/data-ui-script="knowledge-garden-v19\/garden-ui\.js\?v=[a-f0-9]{16}"/);
     expect(entry).not.toContain('garden-water-worker');
     const preload = JSON.parse(assets.get('manor/preload.json')!);
+    const art = readFileSync(new URL('../../public/manor/knowledge-garden-v19/fish-art.js', import.meta.url), 'utf8');
+    const fishImages = runInNewContext(`${art};Object.keys(FISH).map(key=>fishArt(key)).join('')`) as string;
+    for (const [, path] of fishImages.matchAll(/\bhref="(knowledge-garden-v19\/[^"]+)"/g)) {
+      expect(preload.catalog).toContain('/manor/' + path);
+    }
+    expect(preload.catalog).toContain('/manor/knowledge-garden-v19/farm/crop-radish-5-r55.webp');
+    expect(preload.catalog).toContain('/manor/knowledge-garden-v19/courtyard/animal-rabbit-r12.webp');
+    expect(preload.desktopCritical).not.toEqual(expect.arrayContaining(preload.catalog));
     expect(preload.desktop).toContain('/manor/knowledge-garden-v19/courtyard/pc-scene-r58.webp');
     expect(preload.desktopCritical).toEqual(expect.arrayContaining(['/manor/knowledge-garden-v19/courtyard/pc-scene-r58.webp']));
     const runtimeIndex = preload.desktopCritical.findIndex((url: string) => /runtime\.js\?v=/.test(url));
@@ -70,7 +78,7 @@ describe('庄园生产入口与经典规则脚本', () => {
     expect(assets.get('manor/knowledge-garden-v19/runtime.css')).toContain(`var(${controls.variable},url("farm/game-ui-r53.webp"))`);
     expect(new Set(boot.desktop.map(({src}: {src: string})=>src)).size).toBe(boot.desktop.length);
     expect(preload.desktopScene.map(({ width }: { width: number }) => width)).toEqual([2048, 2940, 3630]);
-    for (const url of [...preload.desktop, ...preload.mobile, ...preload.desktopScene.map(({ url }: { url: string }) => url)]) {
+    for (const url of [...preload.catalog, ...preload.desktop, ...preload.mobile, ...preload.desktopScene.map(({ url }: { url: string }) => url)]) {
       expect(url.startsWith('/manor/')).toBe(true);
       const file = url.replace('/manor/', '').split('?')[0];
       expect(

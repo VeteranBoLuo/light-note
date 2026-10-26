@@ -40,3 +40,14 @@ it('取消触摸、已抛竿和场景清理后不会继续移动鱼竿，鼠标�
   stop();send('pointerdown', 70);send('pointermove', 80, 1, 'mouse');
   expect(points).toEqual([10, 60]);
 });
+it('鼠标按住拖出水面也保持捕获，松开后释放，不吞掉抬手点击', () => {
+  const { hit, send, bind } = setup(), move = vi.fn(), cast = vi.fn();
+  hit.addEventListener('click', cast);
+  const stop = bind(hit, () => true, move);
+  send('pointerdown', 10, 1, 'mouse');send('pointermove', 30, 1, 'mouse');send('pointerup', 45, 1, 'mouse');
+  hit.click();
+  expect(move.mock.calls.map(([event]) => event.clientX)).toEqual([10, 30, 45]);
+  expect(hit.setPointerCapture).toHaveBeenCalledWith(1);
+  expect(hit.releasePointerCapture).toHaveBeenCalledWith(1);
+  expect(cast).toHaveBeenCalledOnce();stop();
+});

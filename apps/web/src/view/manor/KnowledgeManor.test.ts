@@ -81,6 +81,23 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 describe('庄园加载与主站导航', () => {
+  it('可见场景的被动同步读取正式存档，并拒绝将旧场景意图套用新版本', async () => {
+    await mount();
+    const frame = document.querySelector('iframe')!, reply = vi.spyOn(frame.contentWindow!, 'postMessage');
+    const send = async (id: number, action: string, payload = {}) => {
+      window.dispatchEvent(new MessageEvent('message', { source: frame.contentWindow, origin: location.origin,
+        data: { type: 'lightnote-manor', nonce: new URL(frame.src).searchParams.get('bridge'), id, action, payload } }));
+      await flush();
+    };
+    await send(1, 'get');
+    mocks.read.mockResolvedValueOnce({ quests: [], state: { fert: { rabbit: 1 } }, revision: 2, version: 'fixture' } as never);
+    await send(2, 'get', { background: true });
+    expect(mocks.read).toHaveBeenLastCalledWith(expect.any(AbortSignal), true);
+    expect(reply).toHaveBeenLastCalledWith(expect.objectContaining({ value: expect.objectContaining({ revision: 2, state: { fert: { rabbit: 1 } } }) }), location.origin);
+    await send(3, 'command', { action: 'pickPoop', args: [], revision: 0 });
+    expect(mocks.command).not.toHaveBeenCalled();
+    expect(reply).toHaveBeenLastCalledWith(expect.objectContaining({ id: 3, error: 'manor.actionFailed' }), location.origin);
+  });
   it.each([
     ['daily_note', '/noteLibrary'], ['daily_bookmark', '/home'], ['daily_file', '/cloudSpace'],
     ['daily_todo_create', '/inbox?tab=todo'], ['daily_todo', '/inbox?tab=todo'],
@@ -196,11 +213,11 @@ describe('庄园加载与主站导航', () => {
     expect(document.querySelector('nav')).not.toBeNull();
     expect(document.querySelector('iframe')).toBeNull();
   });
-  it('移动端加载时没有主站导航，保留退出按钮直到游戏就绪', async () => {
+  it('移动端加载时不显示额外返回按钮，游戏就绪后使用游戏内返回', async () => {
     mocks.bookmark.isMobile = true;
     await mount();
     expect(document.querySelector('nav')).toBeNull();
-    expect(document.body.textContent).toContain('manor.returnToApp');
+    expect(document.body.textContent).not.toContain('manor.returnToApp');
     const frame = document.querySelector('iframe')!, nonce = new URL(frame.src).searchParams.get('bridge');
     window.dispatchEvent(new MessageEvent('message', { source: frame.contentWindow, origin: location.origin,
       data: { type: 'lightnote-manor', nonce, id: 1, action: 'ready' } }));
