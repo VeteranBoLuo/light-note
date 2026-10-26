@@ -16,13 +16,14 @@
   import { onBeforeRouteLeave, useRouter } from 'vue-router';
   import { useI18n } from 'vue-i18n';
   import type { ManorCommand, ManorSnapshot } from '@lightnote/shared/manor';
+  import { createManorTestSession } from '@/utils/manorTestSession';
   import { MANOR_COMMANDS } from '@lightnote/shared/manor';
   import { useUserStore, bookmarkStore } from '@/store';
   import { useGrowth } from '@/composables/useGrowth';
   import { useMobileTopBar } from '@/composables/useMobileTopBar';
   import { getManor, runManorCommand } from '@/api/manorApi';
   import { isUncertainManorResult, readPendingManorCommand, savePendingManorCommand } from '@/utils/manorPending';
-  import { registerMobileOverlayHistory, releaseMobileOverlayHistory, type MobileOverlayHistoryHandle } from '@/utils/mobileOverlayHistory';
+  import { closeCurrentMobileOverlayThen, registerMobileOverlayHistory, releaseMobileOverlayHistory, type MobileOverlayHistoryHandle } from '@/utils/mobileOverlayHistory';
   import { inventoryPointsRoute } from '@/utils/inventoryNavigation';
 
   const user = useUserStore(), bookmark = bookmarkStore(), router = useRouter(), growth = useGrowth();
@@ -36,7 +37,13 @@
   let bootTimer: ReturnType<typeof setTimeout> | undefined;
   let snapshot: ManorSnapshot | null = null, pending: ManorCommand | null = null;
   let owner = '', generation = 0, disposed = false, commanding = false, initialProvided = false;
+  let testSession: ReturnType<typeof createManorTestSession> | null = null;
   let overlay: MobileOverlayHistoryHandle | null = null;
+  // Capture the parent route before iframe navigations add joint history entries.
+  const previous = router.options.history.state.back;
+  const returnTo = typeof previous === 'string' && previous.startsWith('/') && !previous.startsWith('//')
+    && !/^\/(?:knowledge-manor|manor)(?:[/?#]|$)/.test(previous) ? previous : '/app';
+  let exiting = false, initialRead: Promise<ManorSnapshot> | null = null;
   const frameUrl = computed(() => `/manor/index.html?bridge=${encodeURIComponent(nonce.value)}${bookmark.isMobile ? '&renderProfile=mobile' : ''}`);
   const questKeys: Record<string, string> = {
     checkin: 'growth.quest_checkin', create: 'growth.quest_create', exp30: 'growth.quest_exp30',
@@ -54,8 +61,8 @@
     }).catch(() => {});
   }
 
-  function decorated(value: ManorSnapshot): ManorSnapshot {
-    return { ...value, quests: value.quests.map(q => ({ ...q, label: t(questKeys[q.key] || 'growth.questUnknown') })) };
+  function decorated(value: ManorSnapshot): ManorSnapshot & {testing: boolean} {
+    return { ...value, testing: Boolean(testSession), quests: value.quests.map(q => ({ ...q, label: t(questKeys[q.key] || 'growth.questUnknown') })) };
   }
   async function settlePending(g: number) {
     if (!pending) return;
@@ -89,24 +96,35 @@
     snapshot = result;
     return decorated(result);
   }
+  function armBootTimer() {
+    clearTimeout(bootTimer);
+    const g = generation;
+    if (snapshot && !frameShown.value && !failed.value && document.visibilityState !== 'hidden')
+      bootTimer = setTimeout(() => { if (current(g)) failed.value = true; }, 30000);
+  }
   async function initialise() {
     const g = ++generation;
     readController.abort(); readController = new AbortController();
     clearTimeout(bootTimer); frameShown.value = false; interactive.value = false;
     releaseMobileOverlayHistory(overlay); overlay = null;
-    owner = user.id; snapshot = null; nonce.value = crypto.randomUUID(); initialProvided = false;
+    owner = user.id; testSession = null; snapshot = null; nonce.value = crypto.randomUUID(); initialProvided = false;
     loading.value = true; failed.value = false;
     pending = owner ? readPendingManorCommand(owner) : null;
     if (!owner || user.role !== 'root' || user.adminContext) { loading.value = false; failed.value = true; return; }
-    try { await refresh(g); if (current(g)) bootTimer = setTimeout(() => { if (current(g)) failed.value = true; }, 30000); }
+    // Start static downloads while the authenticated snapshot is in flight.
+    loading.value = false;
+    const read = refresh(g); initialRead = read;
+    try { await read; if (current(g)) armBootTimer(); }
     catch { if (g === generation) failed.value = true; }
-    finally { if (g === generation) loading.value = false; }
+    finally { if (initialRead === read) initialRead = null; }
   }
   async function exit() {
-    releaseMobileOverlayHistory(overlay); overlay = null;
-    const g = generation;
-    if (disposed || g !== generation) return;
-    if (window.history.state?.back) router.back(); else await router.replace('/app');
+    if (disposed || exiting) return;
+    exiting = true;
+    try {
+      await closeCurrentMobileOverlayThen(() => { releaseMobileOverlayHistory(overlay); overlay = null; },
+        () => disposed ? undefined : router.replace(returnTo));
+    } finally { exiting = false; }
   }
   async function message(event: MessageEvent) {
     const data = event.data;
@@ -120,13 +138,25 @@
       if (data.action === 'loading') { clearTimeout(bootTimer); frameShown.value = true; interactive.value = false; return; }
       else if (data.action === 'ready') { clearTimeout(bootTimer); frameShown.value = true; interactive.value = true; return; }
       else if (data.action === 'get') {
-        value = !initialProvided && snapshot && !pending ? decorated(snapshot) : await refresh(g);
+        if (initialRead) await initialRead;
+        if (!current(g)) return;
+        value = testSession ? decorated(testSession.snapshot()) : !initialProvided && snapshot && !pending ? decorated(snapshot) : await refresh(g);
         initialProvided = true;
+      }
+      else if (data.action === 'reset-test' || data.action === 'restore-formal') {
+        if (commanding || pending || !snapshot) throw new Error('command');
+        testSession = data.action === 'reset-test' ? createManorTestSession(snapshot) : null;
+        releaseMobileOverlayHistory(overlay); overlay = null;
+        interactive.value = false; frameShown.value = false; initialProvided = true;
+        nonce.value = crypto.randomUUID();
+        return;
       }
       else if (data.action === 'command') {
         if (commanding || !snapshot || !MANOR_COMMANDS.includes(data.payload?.action) || !Array.isArray(data.payload?.args)) throw new Error('command');
         commanding = true;
         try {
+          if (testSession) { value = decorated(testSession.execute(data.payload.action, data.payload.args)); }
+          else {
           if (pending) {
             const prior = pending;
             await settlePending(g);
@@ -137,6 +167,7 @@
             await settlePending(g);
           }
           value = decorated(snapshot);
+          }
         } finally { commanding = false; }
       } else if (data.action === 'exit') { await exit(); return; }
       else if (data.action === 'tasks') { await router.push('/growth#growth-daily'); return; }
@@ -159,8 +190,8 @@
     if (current(generation)) refreshSharedBalance();
   });
   watch(() => [user.id, user.role, Boolean(user.adminContext)], () => { void initialise(); });
-  onMounted(() => { window.addEventListener('message', message); void initialise(); });
-  onBeforeUnmount(() => { disposed = true; ++generation; readController.abort(); clearTimeout(bootTimer); window.removeEventListener('message', message); releaseMobileOverlayHistory(overlay); });
+  onMounted(() => { window.addEventListener('message', message); document.addEventListener('visibilitychange', armBootTimer); void initialise(); });
+  onBeforeUnmount(() => { disposed = true; ++generation; readController.abort(); clearTimeout(bootTimer); window.removeEventListener('message', message); document.removeEventListener('visibilitychange', armBootTimer); releaseMobileOverlayHistory(overlay); });
 </script>
 
 <style scoped>

@@ -11,7 +11,7 @@ const androidEngineStyles = readFileSync(resolve(sourceRoot, 'assets/css/android
 const styleIndex = readFileSync(resolve(sourceRoot, 'assets/css/index.less'), 'utf8');
 const viteConfig = readFileSync(resolve(process.cwd(), 'vite.config.ts'), 'utf8');
 const authModalStyles = readFileSync(resolve(sourceRoot, 'view/login/UserAuthModal.vue'), 'utf8');
-const lotteryDrawSource = readFileSync(resolve(sourceRoot, 'components/growth/LotteryDraw.vue'), 'utf8');
+const lotteryRevealSource = readFileSync(resolve(sourceRoot, 'components/growth/LotteryRevealStage.vue'), 'utf8');
 
 function walk(directory: string): string[] {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
@@ -67,8 +67,8 @@ describe('移动浏览器与 App 渲染一致性门禁', () => {
     expect(compiled.code).not.toMatch(/html\.light-note-mobile-rendering\s*\{/u);
   });
 
-  it('抽奖页禁用动画选择器编译后仍只作用于抽奖组件', () => {
-    const { descriptor } = parse(lotteryDrawSource, { filename: 'LotteryDraw.vue' });
+  it('礼盒抽奖禁用动画选择器编译后仍只作用于揭晓组件', () => {
+    const { descriptor } = parse(lotteryRevealSource, { filename: 'LotteryRevealStage.vue' });
     const style = descriptor.styles.find((item) => item.scoped);
 
     expect(style).toBeDefined();
@@ -76,7 +76,7 @@ describe('移动浏览器与 App 渲染一致性门禁', () => {
     const compiled = compileStyle({
       // compileStyle runs outside Vite; resolve the same @ alias used by the build.
       source: style!.content.replace(/(['"])@\//g, `$1${sourceRoot.replaceAll('\\', '/')}/`),
-      filename: resolve(sourceRoot, 'components/growth/LotteryDraw.vue'),
+      filename: resolve(sourceRoot, 'components/growth/LotteryRevealStage.vue'),
       id: 'data-v-lottery-gate',
       scoped: true,
       preprocessLang: style!.lang,
@@ -89,7 +89,7 @@ describe('移动浏览器与 App 渲染一致性门禁', () => {
     });
     expect(selectors.length).toBeGreaterThan(0);
     for (const selector of selectors) {
-      expect(selector).toMatch(/^\.disable-animations\s+\.lt(?:\s|\[|\.|:|>|~|\+|$)/u);
+      expect(selector).toMatch(/^\.disable-animations\s+\.lr-stage(?:\s|\[|\.|:|>|~|\+|$)/u);
     }
     expect(compiled.code).not.toMatch(/\.disable-animations\s*\{[^}]*animation:\s*none/iu);
   });

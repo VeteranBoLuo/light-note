@@ -66,7 +66,7 @@ export function scheduleManorPrewarm(mobile: boolean) {
           });
         else void next();
       },
-      Math.max(250, 8_000 - (Date.now() - lastActivity)),
+      Math.max(50, 8_000 - (Date.now() - lastActivity)),
     );
   }
   async function next() {
@@ -97,11 +97,30 @@ export function scheduleManorPrewarm(mobile: boolean) {
         )
           throw Error('prewarm manifest');
         // Never follow an unexpected manifest into API or cross-origin requests.
-        for (const path of [...data.desktop, ...data.mobile]) {
+        const sources = data.desktopScene;
+        if (sources !== undefined && (
+          !Array.isArray(sources) || !sources.length || sources.length > 8 ||
+          sources.some((source: { width: number; url: string }, index: number) =>
+            !source || !Number.isFinite(source.width) || source.width <= 0 ||
+            typeof source.url !== 'string' || (index > 0 && source.width <= sources[index - 1].width),
+          ) || !data.desktop.includes(sources[sources.length - 1].url)
+        )) throw Error('prewarm image variants');
+        for (const path of [...data.desktop, ...data.mobile, ...(sources || []).map((source: { url: string }) => source.url)]) {
+          if (typeof path !== 'string') throw Error('prewarm URL');
           const url = new URL(path, location.origin);
           if (url.origin !== location.origin || !url.pathname.startsWith('/manor/')) throw Error('prewarm URL');
         }
-        if (!request.signal.aborted) manifest = data;
+        if (!request.signal.aborted) {
+          // Warm the same pixel density that <img srcset> will choose, not every
+          // resolution or the full painting hidden behind the responsive one.
+          const pixels = window.innerWidth * (window.devicePixelRatio || 1);
+          const selected = sources?.find((source: { width: number }) => source.width >= pixels) || sources?.[sources.length - 1];
+          const original = sources?.[sources.length - 1].url;
+          manifest = {
+            desktop: data.desktop.map((path: string) => path === original ? selected.url : path),
+            mobile: data.mobile,
+          };
+        }
       } else {
         const path = manifest[mobile ? 'mobile' : 'desktop'].find((url) => !warmed.has(url));
         if (!path) {

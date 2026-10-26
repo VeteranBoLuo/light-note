@@ -38,6 +38,7 @@
     'readAtlasEntry'];
   async function start(data) {
     snapshot = data; syncedAt = performance.now();
+    if(typeof GardenStartup!=='undefined'&&GardenStartup.assetsReady&&!await GardenStartup.assetsReady)return;
     GardenModel.create = () => structuredClone(snapshot.state);
     for (const name of methods) {
       GardenModel[name] = async (target, ...args) => {
@@ -53,7 +54,7 @@
       if(typeof GardenStartup!=='undefined'&&!await GardenStartup.ready())return;
       ready = true;
       if(FarmStage.profile()==='mobile') {
-        const prefetch=()=>GardenArea.prepare(FarmStage.cal().area==='bay'?FARM_CAL.mobileGarden:FARM_CAL.mobileBay);
+        const prefetch=()=>GardenArea.prepare(FarmStage.cal().area==='bay'?FARM_CAL.mobileGarden:FARM_CAL.mobileBay,true);
         if(window.requestIdleCallback)requestIdleCallback(prefetch);else setTimeout(prefetch,0);
       }
       const modal = document.getElementById('modal');
@@ -72,6 +73,9 @@
     get quests() { return snapshot?.quests || []; },
     get snapshot() { return snapshot; },
     get busy() { return busy; },
+    get testing() { return Boolean(snapshot?.testing); },
+    resetTest: () => request("reset-test"),
+    restoreFormal: () => request("restore-formal"),
     exit: () => request('exit'),
     tasks: () => request('tasks'),
     ledger: () => request('ledger'),
@@ -109,7 +113,8 @@
     else waiter.resolve(data.value);
   });
   document.addEventListener('click', event => {
-    if (busy && event.target.closest('[data-action]')) {
+    const action = event.target.closest('[data-action]');
+    if (busy && action && action.dataset.action !== 'exit') {
       event.preventDefault(); event.stopImmediatePropagation();
     }
   }, true);

@@ -1505,7 +1505,7 @@ html.light-note-mobile-rendering #app .garden-play .seaside-courtyard .tank-capt
 .bait-memory-note { text-align: center; margin: calc(22px * var(--d)) 0; }
 /* 透明点击区贴合背景箱子，命中尺寸随场景几何缩放。 */
 .bait-chest { position: absolute; padding: 0; border: 0; background: transparent; pointer-events: auto; cursor: pointer; z-index: 4; }
-.bird-seed-packet {display:block;width:calc(33px * var(--d));height:calc(40px * var(--d));rotate:-14deg;filter:drop-shadow(0 calc(2px * var(--d)) calc(1px * var(--d)) #68442266);}
+.bird-seed-packet {display:block;width:calc(42px * var(--d));height:calc(30px * var(--d));rotate:-8deg;filter:drop-shadow(0 calc(2px * var(--d)) calc(1px * var(--d)) #68442266);}
 .bird-seed-packet img {display:block;width:100%;height:100%;object-fit:contain;}
 .light-note-mobile-rendering .bag-tabs { gap: 6px; margin-bottom: 12px; }
 .light-note-mobile-rendering .bag-tabs > button { flex-direction: column; gap: 1px; padding: 5px; min-height: 65px; font-size: 12px; }
@@ -1946,3 +1946,22 @@ html.light-note-mobile-rendering [data-manor-area="garden"] [data-dock="garden"]
 .area-route-name img {width:calc(30px * var(--d));height:calc(30px * var(--d));object-fit:contain;}
 .manor-area-veil.is-closing .area-route-name {opacity:1;transition-delay:.23s;}
 .area-changing > #gardenGuide { visibility: hidden; }
+
+/* Cursors belong to the game canvas, never to the host application. */
+@media (hover:hover) and (pointer:fine) {
+  html,body,#app,#modal { cursor:url("cursors/arrow-r53.svg") 4 2,default; }
+  #app :is(button,a,[role="button"]):not(:disabled),#modal :is(button,a,[role="button"]):not(:disabled) { cursor:url("cursors/hand-r53.svg") 13 3,pointer; }
+  #app button:disabled,#modal button:disabled { cursor:not-allowed; }
+  #app .garden-scene.tool-active,#app .garden-scene.tool-active .farm-plot { cursor:none; }
+}
+
+/* ui-density-fixed: independent game HUD follows its existing --d game density. */
+.hud-reset {flex:0 0 auto;width:calc(42px * var(--d));height:calc(42px * var(--d));padding:calc(8px * var(--d));}
+/* ui-density-fixed: game icon matches the other HUD controls. */
+.hud-reset img {display:block;width:100%;height:100%;}
+/* ui-density-fixed: disposable test status belongs to the independent game HUD. */
+.hud-reset.is-testing {position:relative;border-color:#699c45;}
+/* ui-density-fixed: state caption is tied to its game icon. */
+.hud-reset small {position:absolute;top:100%;right:0;white-space:nowrap;padding:calc(3px * var(--d)) calc(6px * var(--d));border-radius:calc(5px * var(--d));color:#fffdf1;background:#527c36;font-size:calc(10px * var(--d));}
+/* ui-density-fixed: mobile-only testing control sits below the existing top row. */
+html.light-note-mobile-rendering .game-hud .hud-reset {position:absolute;right:0;top:54px;width:44px;height:44px;padding:8px;}

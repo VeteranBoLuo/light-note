@@ -145,7 +145,7 @@ html:not(.light-note-mobile-rendering) .level-hud-pending {position:absolute;rig
 
 
 /* One icon atlas and one title/button treatment for every manor dialog. */
-.game-icon {display:inline-block;flex:none;width:calc(25px * var(--d));height:calc(25px * var(--d));vertical-align:middle;background-image:url("farm/game-ui-r20.webp");background-repeat:no-repeat;pointer-events:none;}
+.game-icon {display:inline-block;flex:none;width:calc(25px * var(--d));height:calc(25px * var(--d));vertical-align:middle;background-image:url("farm/game-ui-r53.webp");background-repeat:no-repeat;pointer-events:none;}
 .scene-detail-tile {position:absolute;z-index:0;pointer-events:none;}
 .scene-detail-tile > img {display:block;width:100%;height:100%;object-fit:fill;}
 #modal .dialog .dialog-head {padding:calc(18px * var(--d)) calc(24px * var(--d)) calc(12px * var(--d));}

@@ -113,14 +113,14 @@ const FarmUI = (() => {
     const layers = [];
     // 木/石框内沿独立于作物锚点；素材只取内部连续土面，透明边不参与贴合。
     const opening = p.soilOpening || p.soil;
-    const overlay = (kind) => `<span class="plot-soil" style="width:${sw}px;height:${sh}px;clip-path:polygon(${opening.map(([x, y]) => `${x}px ${y}px`).join(',')})"><img class="plot-overlay" src="${FarmArt.BASE}bed-${kind}.webp" alt="" draggable="false" style="transform:${quadMatrix(FARM_CAL.overlaySoil[kind], opening)}"></span>`;
+    const overlay = (kind) => `<span class="plot-soil" style="width:${sw}px;height:${sh}px;clip-path:polygon(${opening.map(([x, y]) => `${x}px ${y}px`).join(',')})"><img class="plot-overlay" src="${FarmArt.BASE}bed-${kind}-r55.webp" alt="" draggable="false" style="transform:${quadMatrix(FARM_CAL.overlaySoil[kind], opening)}"></span>`;
     if (st === "locked") {
       // 不透明织布映射到实测木框内沿，覆盖后沿土堆；不沿用作物的旧土面坐标。
       const core = [[0, 0], [512, 0], [512, 512], [0, 512]];
       const covered = coverQuad(p);
       const lockAt = covered.reduce((point, [x, y]) => [point[0] + x / 4, point[1] + y / 4], [0, 0]);
       const clip = covered.map(([x, y]) => `${x}px ${y}px`).join(",");
-      layers.push(`<span class="plot-cover" style="width:${sw}px;height:${sh}px;clip-path:polygon(${clip})"><img class="plot-overlay plot-canvas" src="${FarmArt.BASE}plot-canvas-r23.webp" alt="" draggable="false" style="transform:${quadMatrix(core, covered)}"></span>`, `<span class="plot-lock" style="left:${lockAt[0]}px;top:${lockAt[1]}px">Lv.${unlockLevel(i)}</span>`);
+      layers.push(`<span class="plot-cover" style="width:${sw}px;height:${sh}px;clip-path:polygon(${clip})"><img class="plot-overlay plot-canvas" src="${FarmArt.BASE}plot-canvas-r53.webp" alt="" draggable="false" style="transform:${quadMatrix(core, covered)}"></span>`, `<span class="plot-lock" style="left:${lockAt[0]}px;top:${lockAt[1]}px">Lv.${unlockLevel(i)}</span>`);
     }
     // Every open bed uses the same detailed soil plane. Otherwise empty beds
     // and later growth stages reveal the enlarged, low-detail background soil.
@@ -156,11 +156,13 @@ const FarmUI = (() => {
     const sign = d.areaSign ? `<button class="area-road-sign" data-action="area-${d.area === "garden" ? "bay" : "garden"}" style="left:${d.areaSign[0]}px;top:${d.areaSign[1]}px;width:${d.areaSign[2]}px;height:${d.areaSign[3]}px;--sign-angle:${d.areaSignAngle || 0}deg;--sign-font:${d.areaSignFont || 40}px">${d.nativePieces ? `<i class="road-sign-art" aria-hidden="true"><img src="knowledge-garden-v19/${d.asset}" alt="" draggable="false" style="left:${-23 / 174 * 100}%;top:${-478 / 84 * 100}%;width:${919 / 174 * 100}%;height:${1712 / 84 * 100}%"></i>` : ""}<span>${d.area === "garden" ? "去海湾 →" : "← 回菜园"}</span></button>` : "";
     return `<div class="farm-layer" id="farmLayer" data-profile="${FarmStage.profile()}">${sign}${d.area !== "bay" ? `<button class="seed-stall" data-action="stall" style="left:${x}px;top:${y}px;width:${w}px;height:${h}px" aria-label="商店：买种子、鱼饵和淡水鱼苗袋"><span class="stall-sign">商店</span></button>` : ""}${d.area !== "garden" ? `<button class="bait-chest ${baitChestUnseen() ? "unseen" : ""}" data-action="bait" style="left:${d.pier.baitChest[0]}px;top:${d.pier.baitChest[1]}px;width:${d.pier.baitChest[2]}px;height:${d.pier.baitChest[3]}px;--bait-caption-bottom:${d.pier.baitTagBottom || 81.66}%;--bait-hit:${FarmStage.hitClip(d.pier.baitHit)}" aria-label="打开码头箱子，选择鱼饵">${d.pier.baitBaked ? "" : `<img class="bait-chest-art" src="${FarmArt.BASE}${d.pier.baitAsset || "bait-chest-r19.webp"}" alt="" draggable="false">`}<span class="bait-chest-hit" aria-hidden="true"></span><span class="bait-chest-tag"><img src="${R2_ART}icon-bait.webp" alt="">鱼饵</span></button>` : ""}${Object.entries(d.signs).map(([name, p]) => `<div class="scene-sign ${name}-sign" style="left:${p[0]}px;top:${p[1]}px"><span>${name === "pier" ? "钓鱼区" : "养鱼舱"}</span></div>`).join("")}${(d.area === "bay" ? [] : d.plots).
     map((p, i) => `<button class="farm-plot" data-action="plot" data-plot="${i}" style="left:${p.hitRect[0]}px;top:${p.hitRect[1]}px;width:${p.hitRect[2]}px;height:${p.hitRect[3]}px" data-key=""></button>`).
-    join("")}<button class="poop-spot" id="poopSpot" data-action="poop" style="left:${d.poop[0]}px;top:${d.poop[1]}px" hidden aria-label="拾取兔子肥料，得到 1 份兔子肥" title="兔子肥料 · 点击拾取">${poopArt()}</button><button class="bird-seed-spot scene-gift" id="birdSeedSpot" data-action="bird-seed" hidden aria-label="领取麻雀带回的小萝卜种子 1 颗" data-gift-tip="领取麻雀的种子"><span class="bird-seed-packet" aria-hidden="true">${FarmArt.packet("radish")}</span></button></div>`;
+    join("")}<button class="poop-spot" id="poopSpot" data-action="poop" style="left:${d.poop[0]}px;top:${d.poop[1]}px" hidden aria-label="拾取兔子肥料，得到 1 份兔子肥" title="兔子肥料 · 点击拾取">${poopArt()}</button><button class="bird-seed-spot scene-gift" id="birdSeedSpot" data-action="bird-seed" hidden aria-label="领取麻雀带回的小萝卜种子 1 颗" data-gift-tip="领取麻雀的种子"><span class="bird-seed-packet" aria-hidden="true"><img src="knowledge-garden-v19/farm/raw-radish-seeds-r53.svg" alt="" draggable="false"></span></button></div>`;
   }
   function purifierArt() {const level = M.purifierStatus(state).level;return (level < 2 ? FarmFacilities.nativeSceneArt("purifier", !level) : "") || FarmFacilities.purifierArt(level);}
   function purifierHTML() {
-    return `<button id="purifierSpot" class="scene-purifier${cal().nativePieces?.purifier ? " native-purifier" : ""}" data-action="purifier-collect" type="button" hidden><img class="purifier-plinth" src="knowledge-garden-v19/farm/purifier-plinth-r36.webp" alt="" draggable="false"><span class="purifier-art" aria-hidden="true">${purifierArt()}<span class="purifier-water"><i></i><i></i><i></i><i></i><b></b></span></span><span class="purifier-state"></span></button>`;
+    // The mobile garden has no purifier hit area; its art belongs to the bay.
+    if(cal().area==="garden")return "";
+    return `<button id="purifierSpot" class="scene-purifier${cal().nativePieces?.purifier ? " native-purifier" : ""}" data-action="purifier-collect" type="button" hidden><img class="purifier-plinth" src="knowledge-garden-v19/farm/purifier-plinth-r53.webp" alt="" draggable="false"><span class="purifier-art" aria-hidden="true">${purifierArt()}<span class="purifier-water"><i></i><i></i><i></i><i></i><b></b></span></span><span class="purifier-state"></span></button>`;
   }
   function syncPurifier() {
     const fixture = $("#purifierSpot");if (!fixture) return;
@@ -171,7 +173,7 @@ const FarmUI = (() => {
     if (fixture.dataset.artLevel !== String(p.level)) {
       fixture.dataset.artLevel = String(p.level);
       const art = fixture.querySelector(".purifier-art");
-      art.innerHTML = purifierArt() + `<span class="purifier-water"><i></i><i></i><i></i><i></i><b></b></span>`;
+      art.innerHTML = FarmArt.html(purifierArt() + `<span class="purifier-water"><i></i><i></i><i></i><i></i><b></b></span>`);
     }
     if (p.owned) {
       const full = state.water >= R.waterCap;
@@ -274,7 +276,7 @@ const FarmUI = (() => {
       const i = +el.dataset.plot,
         key = plotKey(i);
       if (el.dataset.key !== key) {
-        el.innerHTML = plotInner(i);
+        el.innerHTML = FarmArt.html(plotInner(i));
         el.dataset.key = key;
         el.dataset.state = M.plotState(state, i);
       }

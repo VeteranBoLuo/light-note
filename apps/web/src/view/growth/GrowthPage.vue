@@ -1319,7 +1319,7 @@
     align-items: stretch;
   }
   .growth-panel.growth-reward-workspace {
-    background: var(--workspace-canvas);
+    background: var(--workspace-open-canvas);
     border-color: var(--workspace-border);
     box-shadow: none;
   }

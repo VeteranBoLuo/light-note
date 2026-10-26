@@ -27,8 +27,10 @@ const GardenArea = (() => {
     prepared.set(path, promise);
     return promise;
   }
-  async function prepare(cal) {
-    return (await Promise.all([cal.asset, cal.water, curtain].filter(Boolean).map(imageReady))).every(Boolean);
+  async function prepare(cal, background=false) {
+    const shared=typeof GardenStartup!=="undefined"&&GardenStartup.prepareArea?GardenStartup.prepareArea(cal.area,background):null;
+    if(shared)return shared;
+    return (await Promise.all([cal.asset, cal.water, cal.smooth, curtain].filter(Boolean).map(imageReady))).every(Boolean);
   }
   function unlock(trip) {
     trip.cover?.remove();

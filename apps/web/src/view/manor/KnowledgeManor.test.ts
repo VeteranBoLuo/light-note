@@ -2,6 +2,7 @@ import { createApp, h, nextTick, type App } from 'vue';
 import { createMemoryHistory, createRouter, RouterView } from 'vue-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import KnowledgeManor from './KnowledgeManor.vue';
+import { createManor, MANOR_VERSION } from '@lightnote/shared/manor';
 import AppLayout from '../index.vue';
 
 const mocks = vi.hoisted(() => ({
@@ -28,6 +29,7 @@ vi.mock('@/utils/manorPending', () => ({
   isUncertainManorResult: () => false,
 }));
 vi.mock('@/utils/mobileOverlayHistory', () => ({
+  closeCurrentMobileOverlayThen: async (close: () => void, next: () => unknown) => { close(); return next(); },
   registerMobileOverlayHistory: vi.fn(),
   releaseMobileOverlayHistory: vi.fn(),
 }));
@@ -36,7 +38,7 @@ const flush = async () => {
   for (let i = 0; i < 8; i++) await Promise.resolve();
   await nextTick();
 };
-async function mount() {
+async function mount(previous?: string) {
   const router = createRouter({
     history: createMemoryHistory(),
     routes: [
@@ -48,6 +50,7 @@ async function mount() {
     ],
   });
   await router.push('/knowledge-manor');
+  if (previous) router.options.history.state.back = previous;
   app = createApp(RouterView).use(router);
   app.component('BButton', { setup: (_, context) => () => h('button', context.attrs, context.slots.default?.()) });
   app.component('BLoading', { render: () => h('span', 'loading') });
@@ -72,6 +75,56 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 describe('庄园加载与主站导航', () => {
+  it('重置测试使用独立存档，命令不写正式 API，恢复后重新读取正式存档', async () => {
+    const state=createManor({now:new Date('2026-10-25T10:00:00Z'),points:320,calendar:{dayKey:'20261025',weekKey:'202643',utcOffsetMinutes:480}});
+    mocks.read.mockResolvedValue({quests:[],state,revision:8,version:MANOR_VERSION});
+    await mount();
+    const send=async(action:string,payload:object={})=>{
+      const frame=document.querySelector('iframe')!,nonce=new URL(frame.src).searchParams.get('bridge');
+      window.dispatchEvent(new MessageEvent('message',{source:frame.contentWindow,origin:location.origin,data:{type:'lightnote-manor',nonce,id:10,action,payload}}));
+      await flush();
+    };
+    await send('reset-test');
+    const frame=document.querySelector('iframe')!,reply=vi.spyOn(frame.contentWindow!,'postMessage');
+    await send('get');
+    expect(reply).toHaveBeenLastCalledWith(expect.objectContaining({value:expect.objectContaining({testing:true,state:expect.objectContaining({adopted:false})})}),location.origin);
+    await send('command',{action:'adopt',args:[]});
+    expect(mocks.command).not.toHaveBeenCalled();
+    expect(mocks.save).not.toHaveBeenCalled();
+    expect(mocks.read).toHaveBeenCalledTimes(1);
+    await send('restore-formal');
+    await send('get');
+    expect(mocks.read).toHaveBeenCalledTimes(2);
+  });
+
+  it('存档读取与 iframe 静态资源并行，桥接复用同一次初始读取', async () => {
+    let resolve!: (value: unknown) => void;
+    mocks.read.mockImplementationOnce(() => new Promise(r => { resolve = r; }) as ReturnType<typeof mocks.read>);
+    await mount();
+    const frame = document.querySelector('iframe')!, nonce = new URL(frame.src).searchParams.get('bridge');
+    expect(frame).not.toBeNull();
+    const reply = vi.spyOn(frame.contentWindow!, 'postMessage');
+    window.dispatchEvent(new MessageEvent('message', { source: frame.contentWindow, origin: location.origin,
+      data: { type: 'lightnote-manor', nonce, id: 1, action: 'get' } }));
+    await flush();
+    expect(reply).not.toHaveBeenCalled();
+    resolve({ quests: [], state: {}, revision: 0, version: 'fixture' });
+    await flush();
+    expect(mocks.read).toHaveBeenCalledTimes(1);
+    expect(reply).toHaveBeenCalledWith(expect.objectContaining({ id: 1, value: expect.objectContaining({ version: 'fixture' }) }), location.origin);
+  });
+  it('iframe 重试产生的同页历史不消耗返回点击，直接回到进入前的主站页面', async () => {
+    const router = await mount('/bookmarks');
+    router.options.history.state.back = '/knowledge-manor';
+    const back = vi.spyOn(router, 'back');
+    const frame = document.querySelector('iframe')!, nonce = new URL(frame.src).searchParams.get('bridge');
+    const exited = new Promise<void>(resolve => { const stop = router.afterEach(to => { if (to.path === '/bookmarks') { stop(); resolve(); } }); });
+    window.dispatchEvent(new MessageEvent('message', { source: frame.contentWindow, origin: location.origin,
+      data: { type: 'lightnote-manor', nonce, id: 1, action: 'exit' } }));
+    await exited;
+    expect(back).not.toHaveBeenCalled();
+    expect(router.currentRoute.value.path).toBe('/bookmarks');
+  });
   it('游戏内返回能退出独立场景，并恢复主站导航', async () => {
     const router = await mount();
     const frame = document.querySelector('iframe')!, nonce = new URL(frame.src).searchParams.get('bridge');

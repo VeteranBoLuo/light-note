@@ -30,57 +30,29 @@
           ><strong>{{
             t(activePoolMode === 'free' ? 'growth.lotteryFreePoolTab' : 'growth.lotteryPaidPoolTab')
           }}</strong>
-          <span>{{
+          <BButton v-if="canSkip" type="text" class="lt-skip" @click="presentation.skip()">
+            <SvgIcon :src="icon.growth.skip" :size="16" />{{ t('growth.lotterySkipAnimation') }}
+          </BButton>
+          <span v-else>{{
             activePoolMode === 'free'
               ? t('growth.lotteryLevelBenefit', { level: lottery.level })
               : t('growth.lotteryPityPoolHint', { n: pityEvery })
           }}</span></div
         >
-        <div class="lt-stage" aria-live="polite">
-          <BLoading v-if="rolling" inline loading :title="t('growth.lotteryRolling')" />
-          <template v-else-if="visibleResults.length">
-            <span class="lt-delivered"
-              ><SvgIcon :src="icon.growth.action" :size="18" />{{ t('growth.lotteryDelivered') }}</span
-            >
-            <div class="lt-prizes" :class="{ 'is-single': visibleResults.length === 1 }">
-              <div
-                v-for="(prize, i) in visibleResults"
-                :key="i"
-                class="lt-prize"
-                :class="{ 'is-guaranteed': prize.guaranteed }"
-              >
-                <SvgIcon :src="prizeIcon(prize)" :size="visibleResults.length === 1 ? 32 : 20" />
-                <strong>{{ label(prize) }}</strong>
-                <span v-if="prize.guaranteed" class="lt-prize-rare">{{ t('growth.lotteryPityHitBadge') }}</span>
-                <span v-else-if="prize.rare" class="lt-prize-rare">{{ t('growth.lotteryRare') }}</span>
-                <small v-if="prize.compensated">{{
-                  t('growth.lotteryOverflowCompensated', { n: prize.amount })
-                }}</small>
-              </div>
-            </div>
-            <p class="lt-delivery-note">{{ resultDelivery }}</p>
-            <BButton type="text" @click="goBackpack"
-              >{{ t('growth.lotteryViewBackpack') }}<SvgIcon :src="icon.arrow_right" :size="15"
-            /></BButton>
-          </template>
-          <template v-else>
-            <div class="lt-gift"
-              ><span aria-hidden="true"></span><img :src="gift" alt="" width="128" height="128"
-            /></div>
-            <h3>{{
-              t(
-                activePoolMode === 'free'
-                  ? freeRemaining > 0
-                    ? 'growth.lotteryStageIdleTitle'
-                    : freeDaily > 0
-                      ? 'growth.lotteryFreeUsedUp'
-                      : 'growth.lotteryFreeLocked'
-                  : 'growth.lotteryPaidIdle',
-              )
-            }}</h3>
-            <p>{{ t(activePoolMode === 'free' ? 'growth.lotteryStageIdleHint' : 'growth.lotteryPaidIdleHint') }}</p>
-          </template>
-        </div>
+        <LotteryRevealStage
+          :phase="visiblePhase"
+          :results="visibleResults"
+          :drawing-times="drawingTimes"
+          :motion-reduced="motionReduced || animationSkipped"
+          :narrow="bookmark.isMobileDevice"
+          :idle-title="idleTitle"
+          :idle-hint="t(activePoolMode === 'free' ? 'growth.lotteryStageIdleHint' : 'growth.lotteryPaidIdleHint')"
+          :delivery="resultDelivery"
+          :retry-allowed="canRetry"
+          @retry="retryDraw"
+          @history="records?.open()"
+          @backpack="goBackpack"
+        />
         <div
           v-if="activePoolCountsPity"
           class="lt-pity-panel"
@@ -115,13 +87,15 @@
               @click="onDraw(1, true)"
               >{{
                 t(
-                  isVisitor
-                    ? 'growth.lotteryVisitorTip'
-                    : freeDaily === 0
-                      ? 'growth.lotteryFreeLocked'
-                      : freeRemaining > 0
-                        ? 'growth.lotteryFreeDrawAction'
-                        : 'growth.lotteryFreeUsedUp',
+                  rolling
+                    ? 'growth.lotteryFreeDrawAction'
+                    : isVisitor
+                      ? 'growth.lotteryVisitorTip'
+                      : freeDaily === 0
+                        ? 'growth.lotteryFreeLocked'
+                        : freeRemaining > 0
+                          ? 'growth.lotteryFreeDrawAction'
+                          : 'growth.lotteryFreeUsedUp',
                 )
               }}</BButton
             >
@@ -154,6 +128,7 @@
             </div>
             <p v-if="points < lottery.paid.singleCost">{{ t('growth.shopInsufficient') }}</p>
           </template>
+          <p v-if="drawError" class="lt-draw-error" role="alert">{{ drawError }}</p>
           <p v-if="readOnly">{{ t('growth.adminContextActionUnavailable') }}</p>
           <p v-else-if="isVisitor">{{ t('growth.lotteryVisitorTip') }}</p>
           <p v-else-if="!activeModeEnabled">{{ t('growth.lotteryModeMaintenance') }}</p>
@@ -217,11 +192,12 @@
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import BTabs from '@/components/base/BasicComponents/BTabs.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
-  import message from '@/components/base/BasicComponents/BMessage/BMessage';
   import LotteryRecords from './LotteryRecords.vue';
+  import LotteryRevealStage from './LotteryRevealStage.vue';
+  import { useLotteryReveal } from './useLotteryReveal';
   import { prizeIcon, prizeLabel } from '@/utils/lotteryPresentation';
+  import { isAmbiguousPointsEconomyFailure } from '@/utils/pointsEconomyRequest';
   import icon from '@/config/icon';
-  import gift from '@/assets/images/growth/lottery-gift.png';
   import { recordOperation } from '@/api/commonApi';
 
   const { t, locale } = useI18n();
@@ -234,15 +210,27 @@
   const user = useUserStore();
   const records = ref<InstanceType<typeof LotteryRecords> | null>(null);
   const historyRevision = ref(0);
-  const rolling = ref(false);
+  const presentation = useLotteryReveal();
+  const {
+    phase: revealPhase,
+    results: revealed,
+    busy: rolling,
+    skipped: animationSkipped,
+    motionReduced,
+  } = presentation;
   const drawingTimes = ref(1);
-  const revealed = ref<LotteryPrize[]>([]);
+  const drawError = ref('');
+  const retryAllowed = ref(false);
   const pityTriggered = ref(false);
   const showOdds = ref(false);
   const activePoolMode = ref<'free' | 'paid'>('free');
   const lastMode = ref<'free' | 'paid'>('free');
   const visibleResults = computed(() => (lastMode.value === activePoolMode.value ? revealed.value : []));
+  const visiblePhase = computed(() => (lastMode.value === activePoolMode.value ? revealPhase.value : 'idle'));
+  const unresolved = computed(() => revealPhase.value === 'uncertain' && retryAllowed.value);
+  const canSkip = computed(() => rolling.value && !animationSkipped.value && !motionReduced.value);
   const isVisitor = computed(() => !user.id || user.id === 'visitor');
+  const canRetry = computed(() => unresolved.value && !rolling.value && !readOnly.value && !isVisitor.value);
   const points = computed(() => lottery.value?.points || 0);
   const freeDaily = computed(() => lottery.value?.free.daily || 0);
   const freeRemaining = computed(() => lottery.value?.free.remaining || 0);
@@ -251,11 +239,16 @@
   const pityCurrent = computed(() => Math.max(0, pityEvery.value - pityRemaining.value));
   const pityPercent = computed(() => Math.min(100, (pityCurrent.value / pityEvery.value) * 100));
   const canFree = computed(
-    () => !rolling.value && !isVisitor.value && Boolean(lottery.value?.free.enabled) && freeRemaining.value > 0,
+    () =>
+      !rolling.value &&
+      !unresolved.value &&
+      !isVisitor.value &&
+      Boolean(lottery.value?.free.enabled) &&
+      freeRemaining.value > 0,
   );
   const poolModeOptions = computed(() => [
-    { key: 'free', label: t('growth.lotteryFreePoolTab'), disabled: rolling.value },
-    { key: 'paid', label: t('growth.lotteryPaidPoolTab'), disabled: rolling.value },
+    { key: 'free', label: t('growth.lotteryFreePoolTab'), disabled: rolling.value || unresolved.value },
+    { key: 'paid', label: t('growth.lotteryPaidPoolTab'), disabled: rolling.value || unresolved.value },
   ]);
   const activePool = computed(() =>
     activePoolMode.value === 'free' ? lottery.value?.free.pool || [] : lottery.value?.paid.pool || [],
@@ -275,13 +268,24 @@
     ),
   );
   const label = (prize: LotteryPrize) => prizeLabel(prize, t, locale.value);
+  const idleTitle = computed(() =>
+    t(
+      activePoolMode.value === 'free'
+        ? freeRemaining.value > 0
+          ? 'growth.lotteryStageIdleTitle'
+          : freeDaily.value > 0
+            ? 'growth.lotteryFreeUsedUp'
+            : 'growth.lotteryFreeLocked'
+        : 'growth.lotteryPaidIdle',
+    ),
+  );
   const formatRate = (rate?: number) =>
     `${Number(rate || 0)
       .toFixed(2)
       .replace(/\.00$/, '')}%`;
   const goBackpack = () => router.push({ path: '/growth', query: { section: 'rewards', reward: 'inventory' } });
   function canDraw(times: number) {
-    if (rolling.value || isVisitor.value || !lottery.value) return false;
+    if (rolling.value || unresolved.value || isVisitor.value || !lottery.value) return false;
     return (
       lottery.value.paid.enabled &&
       points.value >= (times === 10 ? lottery.value.paid.tenCost : lottery.value.paid.singleCost)
@@ -292,27 +296,32 @@
     () => [user.id, user.adminContext?.id].join('|'),
     () => {
       ++generation;
-      rolling.value = false;
-      revealed.value = [];
+      presentation.reset();
+      drawError.value = '';
+      retryAllowed.value = false;
       pityTriggered.value = false;
     },
   );
   watch(
     () => lottery.value?.free.daily,
     (daily) => {
-      if (daily === 0) activePoolMode.value = 'paid';
+      if (daily === 0 && !rolling.value && !unresolved.value) activePoolMode.value = 'paid';
     },
     { immediate: true },
   );
   onBeforeUnmount(() => {
     ++generation;
   });
-  async function onDraw(times: number, free = false) {
-    if (readOnly.value || (free ? !canFree.value : !canDraw(times))) return;
+  function retryDraw() {
+    if (canRetry.value) void onDraw(drawingTimes.value, lastMode.value === 'free', true);
+  }
+  async function onDraw(times: number, free = false, retry = false) {
+    if (retry ? !canRetry.value : readOnly.value || (free ? !canFree.value : !canDraw(times))) return;
     const requestGeneration = ++generation;
-    rolling.value = true;
+    presentation.begin();
     drawingTimes.value = times;
-    revealed.value = [];
+    drawError.value = '';
+    retryAllowed.value = false;
     pityTriggered.value = false;
     lastMode.value = free ? 'free' : 'paid';
     emit('focus-header');
@@ -320,22 +329,33 @@
       const res = await draw(times, free);
       if (requestGeneration !== generation) return;
       if (res?.status === 200 && res.data?.ok) {
-        revealed.value = res.data.results || [];
-        pityTriggered.value = Boolean(res.data.pityTriggered || revealed.value.some((prize) => prize.guaranteed));
+        const results = Array.isArray(res.data.results) ? res.data.results : [];
+        presentation.accept(results);
+        pityTriggered.value = Boolean(res.data.pityTriggered || results.some((prize) => prize.guaranteed));
         historyRevision.value++;
         recordOperation({
           module: '成长',
           operation: `积分抽奖 ${free ? '免费抽' : times === 10 ? '十连' : '单抽'}（-${res.data.cost} 积分）`,
         });
-      } else if (res?.status === 409 && res.data?.refresh) {
-        message.warning(t('growth.economyCatalogChanged'));
-      } else if (res) {
-        message.error(res.data?.msg || res.msg || t('growth.lotteryDrawFailed'));
+      } else if (res?.data?.code === 'IDEMPOTENCY_RESULT_PENDING') {
+        retryAllowed.value = true;
+        presentation.uncertain();
+      } else {
+        presentation.reset();
+        drawError.value =
+          res?.status === 409 && res.data?.refresh
+            ? t('growth.economyCatalogChanged')
+            : res?.data?.msg || res?.msg || t('growth.lotteryDrawFailed');
       }
-    } catch {
-      if (requestGeneration === generation) message.error(t('growth.lotteryDrawFailed'));
-    } finally {
-      if (requestGeneration === generation) rolling.value = false;
+    } catch (error) {
+      if (requestGeneration !== generation) return;
+      if (isAmbiguousPointsEconomyFailure(error)) {
+        retryAllowed.value = true;
+        presentation.uncertain();
+      } else {
+        presentation.reset();
+        drawError.value = t('growth.lotteryDrawFailed');
+      }
     }
   }
   onMounted(loadLottery);
@@ -399,12 +419,12 @@
   }
   .lt-machine {
     background: var(--workspace-content);
-    background: color-mix(in srgb, var(--primary-color) 6%, var(--workspace-content));
     padding: .ui-space(20px) [];
     display: flex;
     flex-direction: column;
   }
   .lt-machine-head {
+    min-height: .ui-control(32px) [];
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -415,91 +435,6 @@
     color: var(--chip-pin-fg);
     font-size: .ui-font(12px) [];
     text-align: right;
-  }
-  .lt-stage {
-    display: flex;
-    flex: 1;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: .ui-space(10px) [];
-    min-height: .ui-layout(240px) [];
-    padding: .ui-space(16px) [] 0;
-    text-align: center;
-  }
-  .lt-stage h3 {
-    margin: 0;
-    font-size: .ui-font(21px) [];
-  }
-  .lt-stage p {
-    margin: 0;
-    color: var(--desc-color);
-    font-size: .ui-font(13px) [];
-    line-height: 1.6;
-  }
-  .lt-gift {
-    position: relative;
-    width: .ui-layout(160px) [];
-    height: .ui-layout(128px) [];
-    display: grid;
-    place-items: center;
-  }
-  .lt-gift img {
-    position: relative;
-    width: .ui-layout(128px) [];
-    height: .ui-layout(128px) [];
-    object-fit: contain;
-  }
-  .lt-gift > span {
-    position: absolute;
-    width: 100%;
-    height: 55%;
-    border: 1px solid var(--primary-color);
-    opacity: 0.2;
-    border-radius: 50%;
-    transform: rotate(-18deg);
-  }
-  .lt-delivered {
-    display: flex;
-    align-items: center;
-    gap: .ui-space(6px) [];
-    color: var(--success-color);
-    font-size: .ui-font(13px) [];
-  }
-  .lt-prizes {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: .ui-space(8px) [];
-    width: 100%;
-  }
-  .lt-prize {
-    display: flex;
-    align-items: center;
-    gap: .ui-space(6px) [];
-    padding: .ui-space(10px) [];
-    background: var(--workspace-content);
-    border: 1px solid var(--workspace-border);
-    border-radius: 8px;
-    font-size: .ui-font(12px) [];
-    flex-wrap: wrap;
-    animation: lt-reveal 0.18s ease-out;
-  }
-  .lt-prize > :first-child {
-    color: var(--primary-color);
-    flex-shrink: 0;
-  }
-  .lt-prizes.is-single {
-    display: block;
-  }
-  .is-single .lt-prize {
-    border: 0;
-    padding: .ui-space(16px) [] 0;
-    justify-content: center;
-    background: transparent;
-    font-size: .ui-font(25px) [];
-  }
-  .lt-prize.is-guaranteed {
-    border-color: var(--primary-color);
   }
   .lt-prize-rare {
     display: inline-flex;
@@ -544,6 +479,13 @@
     display: block;
     background: var(--primary-color);
     border-radius: inherit;
+  }
+  .lt-machine-head .lt-skip {
+    gap: .ui-space(6px) [];
+    font-size: .ui-font(12px) [];
+  }
+  .lt-draw-options .lt-draw-error {
+    color: var(--danger-color);
   }
   .lt-draw-options {
     text-align: center;
@@ -695,17 +637,6 @@
   .is-mobile .lt-side {
     padding: .ui-space(14px) [];
   }
-  .is-mobile .lt-stage {
-    min-height: .ui-layout(140px) [];
-    padding: .ui-space(12px) [] 0;
-  }
-  .is-mobile .lt-gift {
-    height: .ui-layout(96px) [];
-  }
-  .is-mobile .lt-gift img {
-    width: .ui-layout(96px) [];
-    height: .ui-layout(96px) [];
-  }
   .is-mobile .lt-draw-button--free {
     width: 100%;
   }
@@ -714,27 +645,12 @@
   }
   .is-mobile .lt-draw-button {
     font-size: .ui-font(12px) [];
+    line-height: 1.4;
     padding-left: .ui-space(8px) [];
     padding-right: .ui-space(8px) [];
   }
   .is-mobile .lt-pool-item {
     padding: .ui-space(12px) [] 0;
     font-size: .ui-font(13px) [];
-  }
-  @keyframes lt-reveal {
-    from {
-      opacity: 0;
-    }
-    to {
-      opacity: 1;
-    }
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .lt-prize {
-      animation: none;
-    }
-  }
-  :global(.disable-animations .lt .lt-prize) {
-    animation: none;
   }
 </style>
