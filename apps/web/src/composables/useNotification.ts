@@ -145,6 +145,20 @@ export function useNotification(options: { excludeCommunityChat?: MaybeRef<boole
     }
   }
 
+  async function setReadState(id: string, isRead: boolean) {
+    if (!id || isGuest()) return false;
+    const uid = useUserStore().id;
+    try {
+      const response = await notificationApi.setNotificationReadState(id, isRead);
+      if (useUserStore().id !== uid || isGuest()) return false;
+      await refreshUnread({ afterCurrent: true });
+      return useUserStore().id === uid && !isGuest() && response?.status === 200 && response.data?.isRead === isRead;
+    } catch {
+      if (useUserStore().id === uid) await refreshUnread({ afterCurrent: true });
+      return false;
+    }
+  }
+
   // 全部已读
   async function markAllRead(type = 'all') {
     if (isGuest()) return false;
@@ -173,5 +187,14 @@ export function useNotification(options: { excludeCommunityChat?: MaybeRef<boole
     }
   }
 
-  return { unreadTotal, unreadByType, refreshUnread, fetchList, markRead, markAllRead, deleteNotifications };
+  return {
+    unreadTotal,
+    unreadByType,
+    refreshUnread,
+    fetchList,
+    markRead,
+    setReadState,
+    markAllRead,
+    deleteNotifications,
+  };
 }

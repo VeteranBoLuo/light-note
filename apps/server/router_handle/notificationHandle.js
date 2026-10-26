@@ -287,6 +287,41 @@ export const markRead = async (req, res) => {
   }
 };
 
+// Explicit desired state makes retries idempotent; never recreate a notification or its push outbox.
+export const setReadState = async (req, res) => {
+  if (!ensureNotVisitor(req, res)) return;
+  if (req.adminContext) return res.send(resultData(null, 403, 'NOTIFICATION_READ_STATE_FORBIDDEN'));
+  const { id, isRead } = req.body || {};
+  if (typeof id !== 'string' || !id.trim() || id.length > 64 || typeof isRead !== 'boolean') {
+    return res.send(resultData(null, 400, 'INVALID_NOTIFICATION_READ_STATE'));
+  }
+  try {
+    const feedReady = await communityFeedSchemaReady(pool).catch(() => false);
+    const publicReady = await publicResourceSchemaReady(pool).catch(() => false);
+    const where = `user_id = ? AND id = ? AND del_flag = 0 AND COALESCE(recalled, 0) = 0
+      AND ${COMMUNITY_CHAT_TARGETED_NOTIFICATION_SQL}
+      AND (${feedNotificationVisibleSql(feedReady)}) AND (${publicResourceNotificationVisibleSql(publicReady)})`;
+    const state = isRead ? 1 : 0;
+    const owner = [req.user.id, id.trim()];
+    const [result] = await pool.query(
+      `UPDATE notification SET is_read = ?, read_time = CASE WHEN ? = 1 THEN NOW() ELSE NULL END
+       WHERE ${where} AND is_read <> ?`,
+      [state, state, ...owner, state],
+    );
+    if (!result.affectedRows) {
+      const [rows] = await pool.query(`SELECT is_read AS isRead FROM notification WHERE ${where} LIMIT 1`, owner);
+      if (!rows.length) return res.send(resultData(null, 404, 'NOTIFICATION_UNAVAILABLE'));
+      if (Boolean(Number(rows[0].isRead)) !== isRead) {
+        return res.send(resultData(null, 409, 'NOTIFICATION_READ_STATE_CHANGED'));
+      }
+    }
+    res.send(resultData({ id: id.trim(), isRead }));
+    if (result.affectedRows) queueNotificationChange(null, [req.user.id]);
+  } catch {
+    res.send(resultData(null, 500, 'NOTIFICATION_READ_STATE_FAILED'));
+  }
+};
+
 // POST /notification/markAllRead —— 全部已读(仅本人未读)
 export const markAllRead = async (req, res) => {
   if (!ensureNotVisitor(req, res)) return;

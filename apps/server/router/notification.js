@@ -22,6 +22,7 @@ router.post('/native/sync', pushLimit, notificationHandle.nativeSync);
 router.post('/list', notificationHandle.list);
 router.post('/unreadCount', notificationHandle.unreadCount);
 router.post('/markRead', notificationHandle.markRead);
+router.post('/setReadState', notificationHandle.setReadState);
 router.post('/markAllRead', notificationHandle.markAllRead);
 router.post('/delete', notificationHandle.remove);
 router.post('/send', notificationHandle.send);
