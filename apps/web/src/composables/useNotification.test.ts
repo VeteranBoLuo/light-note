@@ -162,6 +162,36 @@ describe('useNotification.fetchList', () => {
     getNotificationList.mockRejectedValue(new Error('network'));
     await expect(useNotification().fetchList({}, { throwOnError: true })).rejects.toThrow('network');
   });
+
+  it('连续通知不会让标记已读一直等待后续无关的计数请求', async () => {
+    const resolve: Array<(value: unknown) => void> = [];
+    getUnreadCount.mockImplementation(
+      () =>
+        new Promise((done) => {
+          resolve.push(done);
+        }),
+    );
+    markAllNotificationsRead.mockResolvedValue({ status: 200 });
+    const notification = useNotification();
+    const first = notification.refreshUnread();
+    let marked = false;
+    const mark = notification.markAllRead().then(() => {
+      marked = true;
+    });
+    await Promise.resolve();
+    const result = { status: 200, data: { unreadTotal: 0, byType: {} } };
+    resolve[0](result);
+    await vi.waitFor(() => expect(resolve).toHaveLength(2));
+    const later = notification.refreshUnread({ afterCurrent: true });
+    resolve[1](result);
+    await vi.waitFor(() => expect(resolve).toHaveLength(3));
+    try {
+      expect(marked).toBe(true);
+    } finally {
+      resolve[2](result);
+      await Promise.all([first, mark, later]);
+    }
+  });
 });
 
 describe('useNotification.setReadState', () => {
