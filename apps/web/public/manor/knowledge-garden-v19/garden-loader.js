@@ -9,6 +9,8 @@ const GardenStartup=(()=>{
   el.setAttribute('aria-valuemin','0');el.setAttribute('aria-valuemax','100');
   el.setAttribute('aria-valuenow','0');
   el.innerHTML='<div class="garden-loader-card"><div class="garden-loader-sprout" aria-hidden="true"></div><p>正在连接庄园</p><div class="garden-loader-bar"><i></i></div><small>等待账号与场景脚本</small></div>';
+  const loadingIcon=JSON.parse(document.getElementById('manor-icon-assets')?.textContent||'{}').loading;
+  if(loadingIcon){const crest=document.createElement('img');crest.src=loadingIcon;crest.alt='';el.querySelector('.garden-loader-sprout').append(crest);}
   document.body.append(el);
   const title=el.querySelector('p'),bar=el.querySelector('i'),label=el.querySelector('small');
   const work=[],images=new Map(),assetUrls=new Map(),downloads=new Map(),deferred=[];let finished=false,failed=false,mounted=false,readiness=null,completed=0,total=0,assetDone=0,assetTotal=0,assetBytes=0,assetController=null,boot=null;

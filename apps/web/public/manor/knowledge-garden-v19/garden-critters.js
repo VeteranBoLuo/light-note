@@ -732,7 +732,7 @@ const GardenCritters = (() => {
     function onMove(e) {
       const r = scene.getBoundingClientRect();
       if(fly.playLeft>0)fly.lure={x:e.clientX-r.left,y:e.clientY-r.top};
-      if (e.target.closest("button, a, input, select")) return;
+      if (e.target.closest("button, a, input, select")) {scene.classList.remove("critter-hover");return;}
       scene.classList.toggle("critter-hover", !!pick(e.clientX - r.left, e.clientY - r.top));
     }
     scene.addEventListener("click", onBirdRoadClick,true);

@@ -19,7 +19,7 @@ const firstScreenArt = (scene: PreloadScene) => [
     'farm/purifier-states-r53.webp', 'farm/purifier-plinth-r53.webp',
     'farm/workshop-states-r53.webp', 'incoming/dock-r3/aquarium.webp',
     'incoming/farm-r2/sprites/icon-bait.webp',
-    ...(scene.area ? [] : ['farm/bait-box-r36.webp']),
+    ...(scene.area ? [] : ['farm/bait-box-r57.webp']),
   ]),
 ];
 const imageVariable = (path: string) => `--manor-art-${createHash('sha256').update(path).digest('hex').slice(0, 12)}`;
@@ -89,9 +89,10 @@ export default function manorRuntime(): Plugin {
         .map((file) => ({ src: `knowledge-garden-v19/${file}`, variable: imageVariable(`knowledge-garden-v19/${file}`) })),
     ];
     const resetIcon = 'data:image/svg+xml,' + encodeURIComponent(icon.infrastructure.restart.replace('<svg ', '<svg style="color:#76572c" '));
+    const loadingIcon = 'data:image/svg+xml,' + encodeURIComponent(icon.manor.entry);
     html = html.replace(
       '</head>',
-      `<link rel="preload" as="script" href="${html.match(/data-ui-script="([^"]+)"/)![1]}"><script type="application/json" id="manor-icon-assets">${JSON.stringify({reset:resetIcon})}</script><script type="application/json" id="manor-boot-images">${JSON.stringify({ desktop: bootImages(calibration.desktop), mobile: bootImages(calibration.mobileGarden), mobileBay: bootImages(calibration.mobileBay), curtain: [{src:curtainAsset,variable:imageVariable(curtainAsset)}] })}</script></head>`,
+      `<link rel="preload" as="script" href="${html.match(/data-ui-script="([^"]+)"/)![1]}"><script type="application/json" id="manor-icon-assets">${JSON.stringify({reset:resetIcon,loading:loadingIcon})}</script><script type="application/json" id="manor-boot-images">${JSON.stringify({ desktop: bootImages(calibration.desktop), mobile: bootImages(calibration.mobileGarden), mobileBay: bootImages(calibration.mobileBay), curtain: [{src:curtainAsset,variable:imageVariable(curtainAsset)}] })}</script></head>`,
     );
     return { html, files };
   };

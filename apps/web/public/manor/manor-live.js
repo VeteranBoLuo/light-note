@@ -100,8 +100,9 @@
     if (event.source !== window.parent || event.origin !== origin || data?.nonce !== nonce) return;
     if (data?.type === 'lightnote-manor-control' && ready) {
       if (data.action === 'close-dialog') closeDialog();
+      else if (data.action === 'open-ledger') ledgerDialog();
       else if (data.action === 'back') {
-        if (!document.getElementById('modal').hidden) closeDialog(); else request('exit');
+        if (!document.getElementById('modal').hidden) closeDialog(); else requestManorExit();
       }
       return;
     }

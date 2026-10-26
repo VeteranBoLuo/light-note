@@ -154,7 +154,7 @@ const FarmUI = (() => {
     const d = cal();
     const [x, y, w, h] = d.stall.rect;
     const sign = d.areaSign ? `<button class="area-road-sign" data-action="area-${d.area === "garden" ? "bay" : "garden"}" style="left:${d.areaSign[0]}px;top:${d.areaSign[1]}px;width:${d.areaSign[2]}px;height:${d.areaSign[3]}px;--sign-angle:${d.areaSignAngle || 0}deg;--sign-font:${d.areaSignFont || 40}px">${d.nativePieces ? `<i class="road-sign-art" aria-hidden="true"><img src="knowledge-garden-v19/${d.asset}" alt="" draggable="false" style="left:${-23 / 174 * 100}%;top:${-478 / 84 * 100}%;width:${919 / 174 * 100}%;height:${1712 / 84 * 100}%"></i>` : ""}<span>${d.area === "garden" ? "去海湾 →" : "← 回菜园"}</span></button>` : "";
-    return `<div class="farm-layer" id="farmLayer" data-profile="${FarmStage.profile()}">${sign}${d.area !== "bay" ? `<button class="seed-stall" data-action="stall" style="left:${x}px;top:${y}px;width:${w}px;height:${h}px" aria-label="商店：买种子、鱼饵和淡水鱼苗袋"><span class="stall-sign">商店</span></button>` : ""}${d.area !== "garden" ? `<button class="bait-chest ${baitChestUnseen() ? "unseen" : ""}" data-action="bait" style="left:${d.pier.baitChest[0]}px;top:${d.pier.baitChest[1]}px;width:${d.pier.baitChest[2]}px;height:${d.pier.baitChest[3]}px;--bait-caption-bottom:${d.pier.baitTagBottom || 81.66}%;--bait-hit:${FarmStage.hitClip(d.pier.baitHit)}" aria-label="打开码头箱子，选择鱼饵">${d.pier.baitBaked ? "" : `<img class="bait-chest-art" src="${FarmArt.BASE}${d.pier.baitAsset || "bait-chest-r19.webp"}" alt="" draggable="false">`}<span class="bait-chest-hit" aria-hidden="true"></span><span class="bait-chest-tag"><img src="${R2_ART}icon-bait.webp" alt="">鱼饵</span></button>` : ""}${Object.entries(d.signs).map(([name, p]) => `<div class="scene-sign ${name}-sign" style="left:${p[0]}px;top:${p[1]}px"><span>${name === "pier" ? "钓鱼区" : "养鱼舱"}</span></div>`).join("")}${(d.area === "bay" ? [] : d.plots).
+    return `<div class="farm-layer" id="farmLayer" data-profile="${FarmStage.profile()}">${sign}${d.area !== "bay" ? `<button class="seed-stall" data-action="stall" style="left:${x}px;top:${y}px;width:${w}px;height:${h}px" aria-label="商店：买种子、鱼饵和淡水鱼苗袋"><span class="stall-sign">商店</span></button>` : ""}${d.area !== "garden" ? `<button class="bait-chest ${baitChestUnseen() ? "unseen" : ""}" data-action="bait" style="left:${d.pier.baitChest[0]}px;top:${d.pier.baitChest[1]}px;width:${d.pier.baitChest[2]}px;height:${d.pier.baitChest[3]}px;--bait-hit:${FarmStage.hitClip(d.pier.baitHit)}" aria-label="打开鱼饵箱，选择鱼饵">${d.pier.baitBaked ? "" : `<img class="bait-chest-art" src="${FarmArt.BASE}${d.pier.baitAsset || "bait-chest-r19.webp"}" alt="" draggable="false">`}<span class="bait-chest-hit" aria-hidden="true"></span></button>` : ""}${Object.entries(d.signs).map(([name, p]) => `<div class="scene-sign ${name}-sign" style="left:${p[0]}px;top:${p[1]}px"><span>${name === "pier" ? "钓鱼区" : "养鱼舱"}</span></div>`).join("")}${(d.area === "bay" ? [] : d.plots).
     map((p, i) => `<button class="farm-plot" data-action="plot" data-plot="${i}" style="left:${p.hitRect[0]}px;top:${p.hitRect[1]}px;width:${p.hitRect[2]}px;height:${p.hitRect[3]}px" data-key=""></button>`).
     join("")}<button class="poop-spot" id="poopSpot" data-action="poop" style="left:${d.poop[0]}px;top:${d.poop[1]}px" hidden aria-label="拾取兔子肥料，得到 1 份兔子肥" title="兔子肥料 · 点击拾取">${poopArt()}</button><button class="bird-seed-spot scene-gift" id="birdSeedSpot" data-action="bird-seed" hidden aria-label="领取麻雀带回的小萝卜种子 1 颗" data-gift-tip="领取麻雀的种子"><span class="bird-seed-packet" aria-hidden="true"><img src="knowledge-garden-v19/farm/raw-radish-seeds-r53.svg" alt="" draggable="false"></span></button></div>`;
   }
@@ -346,7 +346,7 @@ const FarmUI = (() => {
       if (activeTool.kind === "shovel") return canShovel(i) ? removeConfirm(i) : toast("这块地没有可铲除的作物");
     }
     // 引导只教播种与浇水，随后自由游玩。
-    if (state.guide === "plant" && i === 0 && st === "empty") return await plantAt(0, "radish");
+    if (state.guide === "plant" && i === 0 && st === "empty") return bagDialog("seeds", i);
     if (state.guide === "water" && i === 0) return await waterPlots([0]);
     if (state.guide) return;
     if (st === "locked") return toast(`庄园 Lv.${unlockLevel(i)} 时开垦这块地`);
@@ -356,6 +356,7 @@ const FarmUI = (() => {
     plotCard(i);
   }
   async function plantAt(i, key) {
+    if (state.guide && (state.guide !== "plant" || i !== 0 || key !== "radish")) return false;
     if (!(await M.plant(state, i, key))) return false;
     closeDialog(false);
     update();
@@ -686,10 +687,11 @@ const FarmUI = (() => {
   function seedTile(k, target) {
     const c = C(k),
       n = state.seeds[k] || 0;
+    const guide = state.guide === "plant" && target === 0 && k === "radish";
     const use = c.bait ? "可作鱼饵" :
     c.fertilizer ? `每轮另得 1 份${M.FERT[c.fertilizer].name}，花束可售 ${c.sell} 积分` :
     c.sell === null ? "盛开后可长久观赏" : c.type === "flower" ? "采过后仍留在田里观赏" : c.harvests > 1 ? "一株多轮，无需重复浇水" : "收获后空出这块地";
-    return `<div class="seed-tile seed-choice ${c.tier}" data-seed-kind="${k}"><div class="seed-pack">${FarmArt.packet(k)}${c.bait ? `<span class="seed-bait-badge" title="收获后可在工坊手作鱼饵"><img src="${R2_ART}icon-bait${k === "rainbowcorn" ? "-rainbow" : ""}.webp" alt="">鱼饵</span>` : ""}</div><div class="seed-copy"><strong>${c.name}</strong><small>浇水后 ${cycleText(c.first)}${c.sell === null ? "盛开" : "首收"}${c.harvests > 1 ? ` · 共 ${c.harvests} 轮` : ""}</small>${!c.bait ? `<small class="seed-use">${use}</small>` : ""}<span class="seed-discovery ${state.cropDex[k] ? "known" : ""}">${state.cropDex[k] ? "已收录图鉴" : c.sell === null ? "首次盛开可点亮图鉴" : "首次收获可点亮图鉴"}</span><span class="seed-count">× ${n}</span></div>${target !== null ? `<button class="tile-btn primary" data-action="plant-seed" data-plot="${target}" data-seed="${k}">种下</button>` : `<button class="tile-btn primary" data-action="seed-select" data-seed="${k}">去播种</button>`}${c.fertilizer ? `<small class="seed-output-note">${use}</small>` : ""}</div>`;
+    return `<div class="seed-tile seed-choice ${c.tier}" data-seed-kind="${k}"><div class="seed-pack">${FarmArt.packet(k)}${c.bait ? `<span class="seed-bait-badge" title="收获后可在工坊手作鱼饵"><img src="${R2_ART}icon-bait${k === "rainbowcorn" ? "-rainbow" : ""}.webp" alt="">鱼饵</span>` : ""}</div><div class="seed-copy"><strong>${c.name}</strong><small>浇水后 ${cycleText(c.first)}${c.sell === null ? "盛开" : "首收"}${c.harvests > 1 ? ` · 共 ${c.harvests} 轮` : ""}</small>${!c.bait ? `<small class="seed-use">${use}</small>` : ""}<span class="seed-discovery ${state.cropDex[k] ? "known" : ""}">${state.cropDex[k] ? "已收录图鉴" : c.sell === null ? "首次盛开可点亮图鉴" : "首次收获可点亮图鉴"}</span><span class="seed-count">× ${n}</span></div>${target !== null ? `<button class="tile-btn primary${guide ? " guide-plant-seed" : ""}" data-action="plant-seed" data-plot="${target}" data-seed="${k}">${guide ? '<span class="plant-seed-cue">点这里</span>' : ""}种下</button>` : `<button class="tile-btn primary" data-action="seed-select" data-seed="${k}">去播种</button>`}${c.fertilizer ? `<small class="seed-output-note">${use}</small>` : ""}</div>`;
   }
   const waitingFish = () => state.fish.filter((f) => !M.placed(state, f.id));
   const panelPositions = new Map();
@@ -751,7 +753,7 @@ const FarmUI = (() => {
     bagTarget = target;
     showDialog(
       target !== null ? `第 ${target + 1} 块地 · 选种子` : "背包",
-      target !== null ? "选一种种子种下去。" : tab === "fert" ? "肥料收在这里，在作物详情中选用。" : "种子、收获、水族和肥料，都收在这里。",
+      target !== null ? state.guide === "plant" ? "选好小萝卜后，点击亮起的“种下”按钮。" : "选一种种子种下去。" : tab === "fert" ? "肥料收在这里，在作物详情中选用。" : "种子、收获、水族和肥料，都收在这里。",
       bagBody(tab, target),
       `${tab === "seeds" && target === null ? '<button class="button" data-action="growth-gifts">稀有种子来源</button>' : tab === "fert" ? '<button class="button" data-action="farm">去养鱼舱收肥</button>' : tab === "crops" || tab === "fish" ? `<button class="button" data-action="shop-tab" data-tab="sell-${tab === "fish" ? "fish" : "crops"}">前往商店</button>` : ""}<button class="button primary" data-action="close">回到庄园</button>`,
       true,

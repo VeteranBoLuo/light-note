@@ -21,6 +21,7 @@ let state = M.create("garden", FISH),
   previousFocus = null,
   previousAction = null,
   toastTimer,
+  exitArmedUntil = 0,
   atlasFilter = "all",
   catchResult = null,
   fishingPhase = "idle",
@@ -102,12 +103,24 @@ function tankStyle() {
   return `--tank-k:${k};--tank-aspect:${aspect.toFixed(4)}`;
 }
 const tankHash = () => activeFishIds().join("-") + "|" + tankShape(M.tankSize(state, FISH)).aspect.toFixed(3);
-function toast(text) {
+function toast(text, { topCenter = false, duration } = {}) {
   clearTimeout(toastTimer);
   $("#toast").textContent = text;
   $("#toast").hidden = false;
+  $("#toast").dataset.topCenter = String(topCenter);
   positionFeedback();
-  toastTimer = setTimeout(() => $("#toast").hidden = true, text.length > 28 ? 3400 : 2200);
+  toastTimer = setTimeout(() => $("#toast").hidden = true, duration || (text.length > 28 ? 3400 : 2200));
+}
+function requestManorExit(button) {
+  if (Date.now() > exitArmedUntil) {
+    exitArmedUntil = Date.now() + 3000;
+    toast("再次点击退出庄园", { topCenter: true, duration: 3000 });
+    return;
+  }
+  exitArmedUntil = 0;
+  if (button) button.disabled = true;
+  toast("正在返回轻笺…", { topCenter: true });
+  GardenLive.exit().catch(() => { if (button?.isConnected) button.disabled = false; toast("暂时未能返回，请再试一次", { topCenter: true }); });
 }
 function positionFeedback() {
   const hud = $("#gameHud"),garden = $(".garden-scene"),mode = $("#farmToolMode");
@@ -117,6 +130,12 @@ function positionFeedback() {
   const feedback = $("#toast"),mobile = document.documentElement.classList.contains("light-note-mobile-rendering");
   const density = typeof getComputedStyle === "function" ? parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--d")) || 1 : 1;
   const skyTop = garden ? garden.getBoundingClientRect().top + 16 * density : top;
+  if (feedback.dataset.topCenter === "true") {
+    feedback.style.top = `${Math.max(12, (hud?.getBoundingClientRect().bottom || 0) + 8 * density)}px`;
+    feedback.style.left = "50%";
+    feedback.style.maxWidth = "";
+    return;
+  }
   feedback.style.top = `${dialog ? Math.max(dialog.getBoundingClientRect().top + 80, dialog.getBoundingClientRect().bottom - 120) : mobile ? top + (mode && !mode.hidden ? mode.getBoundingClientRect().height + 6 : 0) : skyTop}px`;
   const left = $('.hud-identity')?.getBoundingClientRect().right,right = $('.hud-right')?.getBoundingClientRect().left;
   const gap = !mobile && !dialog && left && right ? right - left - 24 * density : 0;
@@ -179,7 +198,7 @@ function guideHTML() {
   if (g === "welcome")
   return `<div class="guide-veil"></div><section class="guide-card" role="dialog" aria-modal="true" aria-labelledby="guideTitle"><h2 id="guideTitle">欢迎来到知识庄园</h2>${WELCOME_GIFT_ART}<p>在轻笺完成每日任务得到<strong>水滴</strong>，水滴用来浇灌你的菜地。<br>种子可以在商店买，最珍贵的种子只能靠坚持使用轻笺赢得。</p><div class="guide-gift">${toolSprite("water")}<span>见面礼 · 30 滴水 + 3 颗小萝卜种子</span></div><button class="guide-cta" data-action="guide-adopt">收下见面礼</button></section>`;
   const tip = (title, text) => `<div class="guide-tip" role="note"><strong>${title}</strong><span>${text}</span></div>`;
-  if (g === "plant") return tip("第一步 · 播种", "点亮着的这块地，种下小萝卜");
+  if (g === "plant") return tip("第一步 · 播种", "点击亮起的土地，从背包选一颗小萝卜种子");
   if (g === "water") return tip("第二步 · 浇水", "再点一下这块地，用 5 滴水浇灌种子");
   if (!g && state.discoveryGuide && !state.casting) {
     const step = discoveryStep();
@@ -1085,8 +1104,8 @@ function levelDialog(selected) {
 }
 function ledgerDialog() {
   const rows = state.ledger.slice().reverse().map((e) => `<li class="ledger-entry ${e.amount > 0 ? "income" : "expense"}"><span class="ledger-mark">${e.amount > 0 ? "+" : "−"}</span><div><strong>${esc(e.text)}</strong><small>第 ${Math.floor(e.at / 24)} 天</small></div><b>${e.amount > 0 ? "+" : ""}${e.amount}</b></li>`).join("");
-  showDialog("积分账本", "每一份收获，都记在这里。",
-  `<section class="manor-wallet"><span class="wallet-coin">${coinSprite}</span><div><small>我的积分</small><strong>${state.wallet}</strong></div><button class="tile-btn" data-action="shop-tab" data-tab="seeds">去商店</button></section><div class="ledger-heading"><h3>最近收支</h3><span>与轻笺共用积分</span></div>${rows ? `<ol class="manor-ledger">${rows}</ol>` : '<section class="ledger-empty"><span class="ledger-empty-mark">✦</span><h3>账本翻开了新的一页</h3><p>卖出收获、领取奖励和购买物品后，记录会留在这里。</p></section>'}`,
+  showDialog("积分账本", GardenLive.testing ? "测试账本 · 不影响正式积分" : "每一份收获，都记在这里。",
+  `<section class="manor-wallet"><span class="wallet-coin">${coinSprite}</span><div><small>${GardenLive.testing ? "测试积分" : "我的积分"}</small><strong>${state.wallet}</strong></div><button class="tile-btn" data-action="shop-tab" data-tab="seeds">去商店</button></section><div class="ledger-heading"><h3>庄园收支</h3><span>${GardenLive.testing ? "独立测试存档" : "与轻笺共用积分"}</span></div>${rows ? `<ol class="manor-ledger">${rows}</ol>` : '<section class="ledger-empty"><span class="ledger-empty-mark">✦</span><h3>账本翻开了新的一页</h3><p>卖出收获、领取奖励和购买物品后，记录会留在这里。</p></section>'}`,
   '<button class="button primary" data-action="close">收好账本</button>', false, "ledger-dialog");
 }
 
@@ -1166,9 +1185,9 @@ function init() {
     if (!b || b.disabled) return;
     const a = b.dataset.action;
     // Leaving never waits for a cast, guide or pending command receipt.
-    if (a === "exit") { b.disabled = true; toast("正在返回轻笺…"); GardenLive.exit().catch(() => { b.disabled = false; toast("暂时未能返回，请再试一次"); }); return; }
+    if (a === "exit") { requestManorExit(b); return; }
     if (a === "reset-test") {
-      showDialog("重置测试庄园", "Root 流程测试", '<p>从见面礼和首次引导重新开始。测试存档只在当前页面生效，测试中的购买、出售和奖励不会写入正式积分与资产。</p>', '<button class="button" data-action="close">取消</button>'+ (GardenLive.testing ? '<button class="button" data-action="restore-formal">返回正式庄园</button>' : '') + '<button class="button primary" data-action="confirm-reset-test">重新开始测试</button>');
+      showDialog("重置测试庄园", "Root 流程测试", '<p>从见面礼和首次引导重新开始。测试进度保留在当前标签页，刷新后继续测试；点击“返回正式庄园”恢复正式进度。测试中的购买、出售和奖励不会写入正式积分与资产。</p>', '<button class="button" data-action="close">取消</button>'+ (GardenLive.testing ? '<button class="button" data-action="restore-formal">返回正式庄园</button>' : '') + '<button class="button primary" data-action="confirm-reset-test">重新开始测试</button>');
       return;
     }
     if (a === "confirm-reset-test" || a === "restore-formal") {
@@ -1180,7 +1199,7 @@ function init() {
     if (state.casting && a !== "close" && a !== "cast") return;
     if (!["plot", "fert-select", "fert-cancel", "tool-select", "tools-toggle", "tool-cancel"].includes(a)) FarmUI.cancelTool();
     // 引导期间只响应引导里的操作和第 1 块地
-    if (state.guide && !["guide-adopt", "plot", "close"].includes(a)) return;
+    if (state.guide && !["guide-adopt", "plot", "close"].includes(a) && !(state.guide === "plant" && a === "plant-seed")) return;
     switch (a) {
       case "close":
         closeDialog();
@@ -1419,7 +1438,7 @@ function init() {
           break;
         }
       case "ledger":
-        GardenLive.ledger();
+        ledgerDialog();
         break;
       default:
         if (!(await FarmFacilities.handle(a, b))) await FarmUI.handle(a, b);

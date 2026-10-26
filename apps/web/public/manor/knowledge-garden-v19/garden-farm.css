@@ -1534,13 +1534,9 @@ html.light-note-mobile-rendering #app .garden-play .seaside-courtyard .tank-capt
 .light-note-mobile-rendering #modal .bait-dialog { height: auto; max-height: calc(100vh - 54px); max-height: calc(100dvh - 54px); }
 #modal .inventory-dialog .inventory-empty > .tile-btn { margin-top: 0; }
 
-/* 场景交互提示：小标签常驻；首次打开前短暂提亮，不持续闪烁。 */
-/* 标签抵消场景缩放以保持可读，定位仍跟随箱子，放在箱盖上方避开钓鱼区牌。 */
-/* The lid starts at y=230/1254 in the PNG. Anchor to the visible hinge, with a fixed screen gap. */
-.bait-chest-tag { position:absolute;left:46%;bottom:var(--bait-caption-bottom,81.66%);translate:-50% calc(-4px / var(--stage-s,1));scale:calc(1 / var(--stage-s,1));transform-origin:50% 100%;display:flex;align-items:center;gap:calc(3px * var(--d));padding:calc(3px * var(--d)) calc(6px * var(--d));border:1px solid #b28c4e;border-radius:calc(6px * var(--d));background:#fff2cc;color:#614520;font-size:calc(11px * var(--d));font-weight:700;white-space:nowrap;box-shadow:0 2px 0 #8b663b; }
-.bait-chest-tag img {width:calc(16px * var(--d));height:calc(16px * var(--d));object-fit:contain;}
-.bait-chest.unseen .bait-chest-tag {animation:chest-intro 1.8s ease-in-out 3;}
-@keyframes chest-intro {50%{box-shadow:0 0 0 4px #ffeb9d66,0 2px 0 #8b663b;}}
+/* 箱体已有刻字；首次打开前轻轻提亮箱子，不另悬浮信息牌。 */
+.bait-chest.unseen .bait-chest-art {animation:chest-intro 1.8s ease-in-out 3;}
+@keyframes chest-intro {50%{filter:brightness(1.1);}}
 #modal .inventory-dialog .seed-pack {position:relative;overflow:visible;}
 #modal .inventory-dialog .seed-bait-badge {position:absolute;left:50%;bottom:calc(-6px * var(--d));transform:translateX(-50%);display:flex;align-items:center;gap:calc(3px * var(--d));padding:calc(2px * var(--d)) calc(6px * var(--d));border:1px solid #b49256;border-radius:calc(5px * var(--d));background:#fff4cf;color:#705127;font-size:calc(10px * var(--d));font-weight:700;white-space:nowrap;box-shadow:0 1px 0 #d1b47d;}
 #modal .inventory-dialog .seed-bait-badge img {width:calc(17px * var(--d));height:calc(17px * var(--d));}
@@ -1569,7 +1565,7 @@ html.light-note-mobile-rendering .seaside-courtyard .discovery-guide:not([hidden
 html.light-note-mobile-rendering .discovery-guide > strong {display:block;font-size:13px;color:#624821;text-shadow:none;}
 html.light-note-mobile-rendering .discovery-guide > :is(.guide-pointer,.guide-short,p) {display:none;}
 html.light-note-mobile-rendering .discovery-guide > .guide-dismiss {display:block;font-size:12px;margin-top:4px;}
-@media(prefers-reduced-motion:reduce){.bait-chest.unseen .bait-chest-tag{animation:none;}}
+@media(prefers-reduced-motion:reduce){.bait-chest.unseen .bait-chest-art{animation:none;}}
 
 #gardenGuide > .discovery-guide {pointer-events:none;}
 
@@ -1660,7 +1656,6 @@ html.light-note-mobile-rendering .discovery-guide > .guide-dismiss {display:bloc
 @media(prefers-reduced-motion:reduce){.float-text.harvest-xp{animation:none;transform:translateY(-25px);}}
 
 /* 场景挂牌仅命名，动作落在水面与建筑本体。 */
-.light-note-mobile-rendering .bait-chest-tag {display:none;}
 .quest-bucket > span:not(.game-sprite) {min-width:0;flex:1;}
 #modal .quest-bucket > .quest-claim-all {margin-left:auto;flex:0 0 auto;width:auto;min-width:calc(128px * var(--d));min-height:calc(36px * var(--d));font-size:calc(12px * var(--d));}
 .light-note-mobile-rendering .quest-bucket {flex-wrap:wrap;}
@@ -1949,11 +1944,19 @@ html.light-note-mobile-rendering [data-manor-area="garden"] [data-dock="garden"]
 
 /* Cursors belong to the game canvas, never to the host application. */
 @media (hover:hover) and (pointer:fine) {
-  html,body,#app,#modal { cursor:url("cursors/arrow-r53.svg") 4 2,default; }
-  #app :is(button,a,[role="button"]):not(:disabled),#modal :is(button,a,[role="button"]):not(:disabled) { cursor:url("cursors/hand-r53.svg") 13 3,pointer; }
+  html,body,#app,#modal { cursor:url("cursors/arrow-r57.svg") 4 3,default; }
+  #app :is(button,a,[role="button"]):not(:disabled),#modal :is(button,a,[role="button"]):not(:disabled),#app .garden-scene.critter-hover:not(.tool-active) { cursor:url("cursors/hand-r57.svg") 14 3,pointer; }
   #app button:disabled,#modal button:disabled { cursor:not-allowed; }
   #app .garden-scene.tool-active,#app .garden-scene.tool-active .farm-plot { cursor:none; }
 }
+.pond-hit {touch-action:none;}
+#modal .seed-choice .guide-plant-seed {position:relative;outline:calc(3px * var(--d)) solid #d3e89a;outline-offset:calc(3px * var(--d));animation:guide-seed-pulse 1.8s ease-in-out infinite;}
+.plant-seed-cue {position:absolute;left:calc(100% + 8px * var(--d));top:50%;transform:translateY(-50%);padding:calc(3px * var(--d)) calc(6px * var(--d));border:1px solid #8cac55;border-radius:calc(5px * var(--d));background:#fff9e7;color:#4f6b31;font-size:calc(11px * var(--d));line-height:1.4;font-weight:700;white-space:nowrap;pointer-events:none;}
+.plant-seed-cue::after {content:" ←";}
+.light-note-mobile-rendering .plant-seed-cue {left:50%;top:auto;bottom:calc(100% + 7px * var(--d));transform:translateX(-50%);}
+.light-note-mobile-rendering .plant-seed-cue::after {content:" ↓";}
+@keyframes guide-seed-pulse {50% {box-shadow:0 0 0 calc(7px * var(--d)) #9fc95d33;}}
+@media (prefers-reduced-motion:reduce) {#modal .seed-choice .guide-plant-seed {animation:none;}}
 
 /* ui-density-fixed: independent game HUD follows its existing --d game density. */
 .hud-reset {flex:0 0 auto;width:calc(42px * var(--d));height:calc(42px * var(--d));padding:calc(8px * var(--d));}
