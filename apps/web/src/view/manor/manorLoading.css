@@ -1,0 +1,50 @@
+/* The same quiet loading state covers HTML bootstrap, authentication and scene handoff. */
+.manor-loading,
+html.light-note-manor-entry #app:empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--ui-space-24, 24px);
+  width: 100%;
+  height: 100%;
+  color: #2f5a33;
+  background: radial-gradient(ellipse at 50% 40%, #e9f6d8, #b9dca0 70%, #8fc27a);
+}
+html.light-note-manor-entry #app:empty { position: fixed; inset: 0; }
+.manor-loading .b-loading-inline {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ui-space-24, 24px);
+  color: inherit;
+  font-size: var(--ui-font-16, 16px);
+  font-weight: 600;
+}
+.manor-loading__crest,
+html.light-note-manor-entry #app:empty::before {
+  display: grid;
+  place-items: center;
+  width: var(--ui-layout-96, 96px);
+  height: var(--ui-layout-96, 96px);
+  box-sizing: border-box;
+  border: 4px solid #d7b263;
+  border-radius: 50%;
+  background: linear-gradient(150deg, #fffdf0, #e9f2ce);
+  box-shadow: inset 0 0 0 3px #fff9df, 0 5px 0 #a48040, 0 10px 24px #2a4a2a2b;
+}
+html.light-note-manor-entry #app:empty::before {
+  content: '';
+  background-image: var(--manor-loading-icon), linear-gradient(150deg, #fffdf0, #e9f2ce);
+  background-size: var(--ui-layout-64, 64px), 100%;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+html.light-note-manor-entry #app:empty::after {
+  content: '正在唤醒庄园…';
+  font: 600 var(--ui-font-16, 16px)/1.5 system-ui, sans-serif;
+}
+html[data-theme='night'] .manor-loading,
+html.light-note-manor-entry[data-theme='night'] #app:empty {
+  color: #cfe8c6;
+  background: radial-gradient(ellipse at 50% 40%, #2c4430, #1c2f22 70%, #132018);
+}

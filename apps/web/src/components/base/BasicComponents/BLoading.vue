@@ -4,9 +4,7 @@
   </div>
   <div v-else-if="inline" v-show="loading" class="b-loading-inline" role="status" aria-live="polite">
     <span class="b-loading-inline__indicator" aria-hidden="true">
-      <i></i>
-      <i></i>
-      <i></i>
+      <slot name="indicator"><i></i><i></i><i></i></slot>
     </span>
     <span class="b-loading-inline__title">
       <slot name="title">{{ displayTitle }}</slot>
@@ -23,7 +21,7 @@
       <slot></slot>
     </div>
     <div v-if="loading" class="b-loading-overlay" role="status" aria-live="polite">
-      <span class="b-loading-inline__indicator" aria-hidden="true"> <i></i><i></i><i></i> </span>
+      <span class="b-loading-inline__indicator" aria-hidden="true"><slot name="indicator"><i></i><i></i><i></i></slot></span>
       <span v-if="displayTitle || $slots.title" class="b-loading-inline__title">
         <slot name="title">{{ displayTitle }}</slot>
       </span>

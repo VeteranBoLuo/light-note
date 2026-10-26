@@ -1950,13 +1950,8 @@ html.light-note-mobile-rendering [data-manor-area="garden"] [data-dock="garden"]
   #app .garden-scene.tool-active,#app .garden-scene.tool-active .farm-plot { cursor:none; }
 }
 .pond-hit {touch-action:none;}
-#modal .seed-choice .guide-plant-seed {position:relative;outline:calc(3px * var(--d)) solid #d3e89a;outline-offset:calc(3px * var(--d));animation:guide-seed-pulse 1.8s ease-in-out infinite;}
-.plant-seed-cue {position:absolute;left:calc(100% + 8px * var(--d));top:50%;transform:translateY(-50%);padding:calc(3px * var(--d)) calc(6px * var(--d));border:1px solid #8cac55;border-radius:calc(5px * var(--d));background:#fff9e7;color:#4f6b31;font-size:calc(11px * var(--d));line-height:1.4;font-weight:700;white-space:nowrap;pointer-events:none;}
-.plant-seed-cue::after {content:" ←";}
-.light-note-mobile-rendering .plant-seed-cue {left:50%;top:auto;bottom:calc(100% + 7px * var(--d));transform:translateX(-50%);}
-.light-note-mobile-rendering .plant-seed-cue::after {content:" ↓";}
-@keyframes guide-seed-pulse {50% {box-shadow:0 0 0 calc(7px * var(--d)) #9fc95d33;}}
-@media (prefers-reduced-motion:reduce) {#modal .seed-choice .guide-plant-seed {animation:none;}}
+.plant-seed-cue {display:block;margin-top:calc(5px * var(--d));font-size:calc(12px * var(--d));line-height:1.6;font-weight:500;color:#53703a;}
+.light-note-mobile-rendering .plant-seed-cue {font-size:calc(11px * var(--d));margin-top:calc(2px * var(--d));}
 
 /* ui-density-fixed: independent game HUD follows its existing --d game density. */
 .hud-reset {flex:0 0 auto;width:calc(42px * var(--d));height:calc(42px * var(--d));padding:calc(8px * var(--d));}
@@ -1968,3 +1963,11 @@ html.light-note-mobile-rendering [data-manor-area="garden"] [data-dock="garden"]
 .hud-reset small {position:absolute;top:100%;right:0;white-space:nowrap;padding:calc(3px * var(--d)) calc(6px * var(--d));border-radius:calc(5px * var(--d));color:#fffdf1;background:#527c36;font-size:calc(10px * var(--d));}
 /* ui-density-fixed: mobile-only testing control sits below the existing top row. */
 html.light-note-mobile-rendering .game-hud .hud-reset {position:absolute;right:0;top:54px;width:44px;height:44px;padding:8px;}
+
+/* The art responds, while the chest hit target stays still during a click. */
+.bait-chest-art {transition:transform .16s ease-out;}
+#app .bait-chest:active {transform:none;}
+@media (hover:hover) and (pointer:fine) {
+  #app .bait-chest:hover .bait-chest-art {transform:translateY(calc(1px / var(--stage-s,1)));}
+}
+@media (prefers-reduced-motion:reduce) {.bait-chest-art {transition:none;}}
