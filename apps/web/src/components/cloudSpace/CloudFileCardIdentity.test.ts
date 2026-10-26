@@ -8,10 +8,16 @@ vi.mock('@/components/base/SvgIcon/src/SvgIcon.vue', () => ({
 }));
 
 const folder = { id: 'album', name: '相册', fullPath: '旅游 / 相册' };
+const parent = { id: 'travel', name: '旅游', fullPath: '旅游' };
 let cleanup: (() => void) | undefined;
 afterEach(() => cleanup?.());
 
-function mountIdentity(initial: { fileName: string; folder?: typeof folder | null; disabled?: boolean }) {
+function mountIdentity(initial: {
+  fileName: string;
+  folder?: typeof folder | null;
+  folderPath?: (typeof folder)[];
+  disabled?: boolean;
+}) {
   const props = ref(initial);
   const opened = vi.fn();
   const previewed = vi.fn();
@@ -53,12 +59,19 @@ describe('CloudFileCardIdentity', () => {
   });
 
   it('展示完整目录路径，点击只请求筛选目录而不触发卡片预览', async () => {
-    const { host, props, opened, previewed } = mountIdentity({ fileName: '照片.jpg', folder });
-    const button = host.querySelector<HTMLButtonElement>('.file-card-folder')!;
-    expect(button.textContent).toContain('旅游 / 相册');
-    expect(button.getAttribute('aria-label')).toBe('筛选文件夹“旅游 / 相册”');
-    button.click();
-    expect(opened).toHaveBeenCalledWith(folder);
+    const { host, props, opened, previewed } = mountIdentity({
+      fileName: '照片.jpg',
+      folder,
+      folderPath: [parent, folder],
+    });
+    const buttons = host.querySelectorAll<HTMLButtonElement>('.file-card-folder button');
+    expect([...buttons].map((button) => button.textContent)).toEqual(['旅游', '相册']);
+    expect(buttons[1].getAttribute('aria-label')).toBe('筛选文件夹“旅游 / 相册”');
+    buttons[0].click();
+    buttons[1].click();
+    expect(opened.mock.calls).toEqual([[parent], [folder]]);
+    host.querySelector<HTMLElement>('.cloud-folder-breadcrumb__separator')!.click();
+    expect(opened).toHaveBeenCalledTimes(2);
     expect(previewed).not.toHaveBeenCalled();
     props.value.folder = null;
     await nextTick();
@@ -66,11 +79,27 @@ describe('CloudFileCardIdentity', () => {
   });
 
   it('批量操作或加载中不能通过路径切换目录', () => {
-    const { host, opened, previewed } = mountIdentity({ fileName: '照片.jpg', folder, disabled: true });
-    const button = host.querySelector<HTMLButtonElement>('.file-card-folder')!;
-    expect(button.disabled).toBe(true);
-    button.click();
+    const { host, opened, previewed } = mountIdentity({
+      fileName: '照片.jpg',
+      folder,
+      folderPath: [parent, folder],
+      disabled: true,
+    });
+    for (const button of host.querySelectorAll<HTMLButtonElement>('.file-card-folder button')) {
+      expect(button.disabled).toBe(true);
+      button.click();
+    }
     expect(opened).not.toHaveBeenCalled();
     expect(previewed).not.toHaveBeenCalled();
+  });
+
+  it('同名目录按各自 ID 跳转，不从展示路径推断目标', () => {
+    const ancestor = { id: 'parent-id', name: '同名', fullPath: '同名' };
+    const child = { id: 'child-id', name: '同名', fullPath: '同名 / 同名' };
+    const { host, opened } = mountIdentity({ fileName: '文件.txt', folder: child, folderPath: [ancestor, child] });
+    const buttons = host.querySelectorAll<HTMLButtonElement>('.file-card-folder button');
+    buttons[0].click();
+    buttons[1].click();
+    expect(opened.mock.calls.map(([item]) => item.id)).toEqual(['parent-id', 'child-id']);
   });
 });
