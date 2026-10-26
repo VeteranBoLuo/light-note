@@ -31,6 +31,41 @@ async function deliver(db, event, userId) {
     )
       return;
     if (event.kind === 'result' && (!action || p.owner_id !== userId)) return;
+    // Batch identity is carried by the durable outbox key; historical single-item keys keep their behavior.
+    const batchId = event.kind === 'result' && /^result:([a-f0-9-]{36}):\d+$/i.exec(event.event_key)?.[1];
+    let counts = null;
+    if (batchId) {
+      const [rows] = await c.query(
+        `SELECT a.action,COUNT(*) AS count FROM public_resource_events e
+         JOIN public_resource_actions a ON a.id=e.action_id
+         JOIN public_resource_publications p ON p.id=a.publication_id
+         WHERE e.event_key LIKE ? AND e.kind='result' AND p.owner_id=? AND a.actor_id=? GROUP BY a.action`,
+        [`result:${batchId}:%`, userId, action.actor_id],
+      );
+      counts = Object.fromEntries(rows.map((row) => [row.action, Number(row.count)]));
+      // The recipient row lock serializes consumers, including different events from this same batch.
+      const existing = await first(
+        c,
+        `SELECT id,meta FROM notification WHERE user_id=? AND type='public_resource'
+         AND source_type='public_resource_result' AND batch_id=?
+         AND EXISTS(SELECT 1 FROM public_resource_actions a WHERE a.public_id=notification.source_id AND a.actor_id=?) FOR UPDATE`,
+        [userId, batchId, action.actor_id],
+      );
+      if (existing) {
+        const previous = json(existing.meta) || {},
+          total = (value) => Object.values(value || {}).reduce((sum, count) => sum + Number(count || 0), 0);
+        if (total(counts) > total(previous.counts))
+          await c.query('UPDATE notification SET meta=?,is_read=0,read_time=NULL,create_time=NOW() WHERE id=?', [
+            JSON.stringify({ ...previous, counts }),
+            existing.id,
+          ]);
+        // A retry never reopens a read notice, and a user's deletion is never undone.
+        return;
+      }
+    }
+    const revision = action
+      ? await first(c, 'SELECT title FROM public_resource_revisions WHERE id=?', [action.revision_id])
+      : null;
     await createNotification(
       userId,
       {
@@ -40,11 +75,14 @@ async function deliver(db, event, userId) {
         link: event.kind === 'review' ? '/community/moderation?tab=publicResources' : '/search/publications',
         sourceType: event.kind === 'review' ? 'public_resource_review' : 'public_resource_result',
         sourceId: action?.public_id || `${p.public_id}:${event.revision_id}`,
+        batchId: batchId || null,
         meta: {
           kind: event.kind,
           publicationId: p.public_id,
           revisionId: event.revision_id,
           ...(action ? { action: action.action } : {}),
+          ...(revision ? { resourceTitle: revision.title, reason: action.reason } : {}),
+          ...(counts ? { counts } : {}),
         },
       },
       c,
@@ -104,7 +142,10 @@ export function startPublicResourceEventScheduler({
     if (running || stopped) return;
     running = true;
     try {
-      await consumePublicResourceEvent({ db });
+      // Polling waits only when idle; a backlog must not wait five seconds between every notice.
+      for (let consumed = 0; consumed < 50 && !stopped; consumed++) {
+        if (!(await consumePublicResourceEvent({ db }))) break;
+      }
     } catch {
       onError();
     } finally {

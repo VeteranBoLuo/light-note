@@ -1151,6 +1151,118 @@ describe.skipIf(!socketPath)('public resource transactional boundaries', () => {
       (await db.query(`SELECT id FROM notification WHERE ${publicResourceNotificationVisibleSql(true)}`))[0],
     ).toEqual([]);
   });
+  it('merges one moderation intent by recipient, preserves read/delete state on replay, and separates later batches', async () => {
+    const first = await draft(),
+      second = await draft({ kind: 'bookmark', sourceId: 'b' });
+    await db.query(
+      "INSERT INTO note(id,create_by,title,content,type) VALUES('other','b','其他作者','<p>正文</p>','html')",
+    );
+    const third = await draft({ sourceId: 'other' }, B);
+    const request = input({
+      action: 'approve',
+      items: [first, second, third].map((p) => input({ publicId: p.publicId, expectedVersion: p.version })),
+    });
+    await moderationBatch(opts(ROOT, { input: request }));
+    for (let i = 0; i < 10 && (await consumePublicResourceEvent({ db })); i++) {
+      /* drain */
+    }
+    const [notices] = await db.query(
+      "SELECT * FROM notification WHERE source_type='public_resource_result' ORDER BY user_id",
+    );
+    expect(notices).toHaveLength(2);
+    expect(
+      notices.map((row) => JSON.parse(typeof row.meta === 'string' ? row.meta : JSON.stringify(row.meta)).counts),
+    ).toEqual([{ approve: 2 }, { approve: 1 }]);
+    expect(notices.every((row) => row.batch_id === request.requestId && !row.browser_push_pending)).toBe(true);
+    expect(
+      (
+        await db.query(
+          `SELECT id FROM notification WHERE source_type='public_resource_result' AND ${publicResourceNotificationVisibleSql(true)}`,
+        )
+      )[0],
+    ).toHaveLength(2);
+    await db.query("UPDATE notification SET is_read=1,del_flag=1 WHERE source_type='public_resource_result'");
+    await db.query("UPDATE public_resource_events SET status='pending',recipient_cursor='' WHERE kind='result'");
+    await Promise.all([consumePublicResourceEvent({ db }), consumePublicResourceEvent({ db })]);
+    for (let i = 0; i < 10 && (await consumePublicResourceEvent({ db })); i++) {
+      /* drain */
+    }
+    expect((await db.query("SELECT id FROM notification WHERE source_type='public_resource_result'"))[0]).toHaveLength(
+      2,
+    );
+    expect(
+      (
+        await db.query(
+          "SELECT id FROM notification WHERE source_type='public_resource_result' AND (is_read<>1 OR del_flag<>1)",
+        )
+      )[0],
+    ).toHaveLength(0);
+    await db.query("UPDATE note SET content='<p>新正文</p>' WHERE id='n'");
+    const update = await draft();
+    await moderationBatch(
+      opts(ROOT, {
+        input: input({
+          action: 'reject',
+          items: [input({ publicId: update.publicId, expectedVersion: update.version, reason: '请核对内容' })],
+        }),
+      }),
+    );
+    for (let i = 0; i < 10 && (await consumePublicResourceEvent({ db })); i++) {
+      /* drain */
+    }
+    const [later] = await db.query(
+      "SELECT meta FROM notification WHERE source_type='public_resource_result' AND del_flag=0",
+    );
+    expect(later).toHaveLength(1);
+    expect(typeof later[0].meta === 'string' ? JSON.parse(later[0].meta) : later[0].meta).toMatchObject({
+      counts: { reject: 1 },
+    });
+  });
+  it('updates a still-arriving batch once for new results without reopening the same count on retry', async () => {
+    const first = await draft(),
+      second = await draft({ kind: 'bookmark', sourceId: 'b' }),
+      batchId = randomUUID();
+    const approve = (p) =>
+      decide({
+        ...opts(ROOT, { id: p.publicId, input: input({ expectedVersion: p.version, action: 'approve' }) }),
+        batchId,
+      });
+    const drain = async () => {
+      for (let i = 0; i < 10 && (await consumePublicResourceEvent({ db })); i++) {
+        /* drain */
+      }
+    };
+    await approve(first);
+    await drain();
+    await db.query("UPDATE notification SET is_read=1 WHERE source_type='public_resource_result'");
+    await approve(second);
+    await drain();
+    const [rows] = await db.query("SELECT * FROM notification WHERE source_type='public_resource_result'");
+    expect(rows).toHaveLength(1);
+    expect(Number(rows[0].is_read)).toBe(0);
+    expect(typeof rows[0].meta === 'string' ? JSON.parse(rows[0].meta) : rows[0].meta).toMatchObject({
+      counts: { approve: 2 },
+    });
+    await db.query("INSERT INTO user(id,role,alias,preferences) VALUES('root2','root','另一管理员','{}')");
+    await db.query("UPDATE note SET content='<p>再次更新</p>' WHERE id='n'");
+    const next = await draft();
+    await decide({
+      ...opts(
+        { id: 'root2', role: 'root' },
+        {
+          id: next.publicId,
+          input: input({ expectedVersion: next.version, action: 'approve' }),
+        },
+      ),
+      batchId,
+    });
+    await drain();
+    const [isolated] = await db.query("SELECT meta FROM notification WHERE source_type='public_resource_result'");
+    expect(isolated).toHaveLength(2);
+    expect(
+      isolated.map((row) => (typeof row.meta === 'string' ? JSON.parse(row.meta) : row.meta).counts.approve).sort(),
+    ).toEqual([1, 2]);
+  });
   it('notifies Root again for a replacement revision while hiding its obsolete review notice', async () => {
     await draft();
     await consumePublicResourceEvent({ db });

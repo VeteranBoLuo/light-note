@@ -3,6 +3,7 @@ import { AI_DOCUMENT_SUMMARY_MAX_CHARS } from '@lightnote/shared/ai-skill-protoc
 import { validatePushSubscription } from '../browserPushPolicy.js';
 import { MAX_BOOKMARK_INPUT_LENGTH } from '@lightnote/shared';
 import { DRAWING_SCENE_MAX_BYTES } from '@lightnote/shared/drawing-note';
+import { MAX_EXPLICIT_RESOURCE_SELECTION } from '@lightnote/shared/resource-selection';
 import {
   DRAWING_THUMBNAIL_MAX_BYTES,
   NOTE_CONTENT_MAX_LENGTH,
@@ -49,6 +50,35 @@ const policy = ({
 // 这里只声明“通用安全检测如何理解字段”，不取代业务 handler 的权威内容校验。
 // 路由、字段、语义和容量预算必须一起命中；形态不符或超限时仍回到通用签名/异常检测。
 const REQUEST_FIELD_POLICIES = new Map([
+  [
+    'POST /search/batchDeleteResources',
+    new Map([
+      [
+        'body.items',
+        policy({
+          semantic: 'explicit-resource-selection',
+          maxSize: MAX_EXPLICIT_RESOURCE_SELECTION,
+          sizeUnit: 'items',
+          measure: (value) => (Array.isArray(value) ? value.length : 0),
+          accepts: (value) =>
+            Array.isArray(value) &&
+            value.every(
+              (item) =>
+                item &&
+                typeof item === 'object' &&
+                !Array.isArray(item) &&
+                Object.keys(item).every((key) => ['id', 'type'].includes(key)) &&
+                ['bookmark', 'note', 'file'].includes(item.type) &&
+                ((typeof item.id === 'string' &&
+                  item.id.trim().length > 0 &&
+                  /^[A-Za-z0-9_-]+$/u.test(item.id) &&
+                  item.id.length <= ORGANIZE_RESOURCE_ID_MAX_LENGTH) ||
+                  (typeof item.id === 'number' && Number.isFinite(item.id))),
+            ),
+        }),
+      ],
+    ]),
+  ],
   [
     'POST /organize/suggestions/previews',
     new Map([
