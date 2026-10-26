@@ -1,5 +1,6 @@
 import { randomUUID, createHash } from 'node:crypto';
 import pool from '../../db/index.js';
+import { queueNotificationSourceChange } from '../notificationRealtimeEvents.js';
 import {
   access,
   authorVisibleSql,
@@ -87,6 +88,7 @@ export async function withdrawComment({ user, input, env = process.env, db = poo
         comment.id,
       ]);
       await c.query('UPDATE community_posts SET solution_comment_id=NULL WHERE solution_comment_id=?', [comment.id]);
+      queueNotificationSourceChange(c, { kind: 'feed_comment', ids: [comment.public_id] });
       return { publicId: comment.public_id, status: 'withdrawn', revision: Number(comment.row_revision) + 1 };
     },
   );

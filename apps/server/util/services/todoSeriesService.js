@@ -1,5 +1,6 @@
 import { writeTodoOrganization, copyTodoOrganization, readTodoOrganization } from './todoOrganizationService.js';
 import crypto from 'crypto';
+import { queueNotificationChange, queueNotificationSourceChange } from '../notificationRealtimeEvents.js';
 import { getTodoFixedReminderTimes } from '@lightnote/shared/todo-reminder';
 import { Temporal } from '@js-temporal/polyfill';
 import { insertData } from '../agent/data.js';
@@ -972,6 +973,7 @@ export async function setV2TodoStatus(connection, userId, current, status, { und
     [status, current.id, userId, status],
   );
   if (!result.affectedRows) return 0;
+  queueNotificationSourceChange(connection, { kind: 'todo', ids: [current.id], userIds: [userId] });
   if (status === 'completed') {
     await recordTodoCompletion(connection, { userId, todoId: current.id });
     try {
@@ -1265,6 +1267,7 @@ export async function runSeriesAction(connection, userId, input = {}) {
     return { seriesId, status: 'active', affectedJobs: Number(jobs.affectedRows || 0), ...generated };
   }
   if (series.status === 'ended') return { seriesId, status: 'ended', affectedItems: 0, affectedJobs: 0 };
+  queueNotificationChange(connection, [userId]);
   await connection.query("UPDATE todo_series SET status = 'ended' WHERE id = ?", [seriesId]);
   const [items] = await connection.query(
     `UPDATE todo_items SET del_flag = 1, deleted_at = NOW()
@@ -1296,6 +1299,7 @@ export async function skipTodoInstance(connection, userId, todoId) {
     throw serviceError('TODO_INSTANCE_NOT_PENDING', '只有待处理的任务实例可以跳过', 409);
   }
   if (rows[0].instanceState === 'skipped') return { todoId, state: 'skipped', affectedJobs: 0 };
+  queueNotificationSourceChange(connection, { kind: 'todo', ids: [todoId], userIds: [userId] });
   await connection.query(
     `UPDATE todo_items SET instance_state = 'skipped', update_time = NOW()
       WHERE id = ? AND user_id = ? AND status = 'pending' AND instance_state = 'normal'`,
@@ -1310,6 +1314,7 @@ export async function skipTodoInstance(connection, userId, todoId) {
 }
 
 async function cancelRange(connection, userId, current, { includeAll = false } = {}) {
+  queueNotificationChange(connection, [userId]);
   const where = includeAll ? '' : 'AND occurrence_no >= ?';
   const params = includeAll
     ? [current.series_id, userId]
@@ -1353,6 +1358,7 @@ export async function updateTodoPlan(connection, userId, input = {}, options = {
   }
   input = { ...(await readTodoOrganization(connection, userId, current.id)), ...input };
   if (scope === 'current' && !current.series_id && preview.normalizedPlan.plan.type !== 'once') {
+    queueNotificationSourceChange(connection, { kind: 'todo', ids: [current.id], userIds: [userId] });
     await connection.query(
       `UPDATE todo_items SET del_flag = 1, deleted_at = NOW(), update_time = NOW()
         WHERE id = ? AND user_id = ? AND plan_version = 2 AND del_flag = 0`,
@@ -1475,6 +1481,8 @@ export async function deleteTodoPlan(connection, userId, input = {}) {
   );
   const current = rows[0];
   if (!current) throw serviceError('TODO_NOT_FOUND', '待办不存在或无权操作', 404);
+  if (scope === 'current' || !current.series_id) queueNotificationSourceChange(connection, { kind: 'todo', ids: [todoId], userIds: [userId] });
+  else queueNotificationChange(connection, [userId]);
   if (scope === 'current' || !current.series_id) {
     await connection.query('UPDATE todo_items SET del_flag = 1, deleted_at = NOW(), update_time = NOW() WHERE id = ?', [
       todoId,

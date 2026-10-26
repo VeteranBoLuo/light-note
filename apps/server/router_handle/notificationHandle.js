@@ -10,7 +10,7 @@ import pool from '../db/index.js';
 import { resultData } from '../util/common.js';
 import { ensureNotVisitor } from '../util/auth.js';
 import { createNotification } from '../util/notification.js';
-import { queueNotificationChange } from '../util/notificationRealtimeEvents.js';
+import { queueNotificationChange, queueNotificationSourceChange } from '../util/notificationRealtimeEvents.js';
 import { EMAIL_EFFECTIVE_STATUS_SQL, maskEmail } from '../util/emailDelivery.js';
 import { stableAgentErrorCode } from '../util/agent/logSafety.js';
 import {
@@ -88,11 +88,13 @@ async function attachTodoStates(items, userId, db = pool) {
 
   const placeholders = todoIds.map(() => '?').join(',');
   const [todos] = await db.query(
-    `SELECT id, status FROM todo_items
+    `SELECT id, status, instance_state AS instanceState FROM todo_items
      WHERE user_id = ? AND del_flag = 0 AND id IN (${placeholders})`,
     [userId, ...todoIds],
   );
-  const statusById = new Map(todos.map((todo) => [String(todo.id), todo.status]));
+  const statusById = new Map(
+    todos.map((todo) => [String(todo.id), todo.instanceState === 'skipped' ? 'unavailable' : todo.status]),
+  );
   reminderItems.forEach(({ item, todoId }) => {
     const status = statusById.get(todoId);
     item.todoState = status === 'pending' || status === 'completed' ? status : 'unavailable';
@@ -511,6 +513,7 @@ export const adminRecall = async (req, res) => {
       'UPDATE notification SET recalled = 1, del_flag = 1 WHERE (batch_id = ? OR id = ?) AND recalled = 0',
       [batchId, batchId],
     );
+    if (r.affectedRows) queueNotificationSourceChange(connection, { kind: 'batch', ids: [batchId] });
     const receipt = await finishAdminAction(actionContext, {
       outcome: 'succeeded',
       metadata: { affectedRows: Number(r.affectedRows || 0) },
@@ -560,6 +563,7 @@ export const adminDelete = async (req, res) => {
        WHERE (batch_id = ? OR id = ?) AND type IN (${typePlaceholders})`,
       [batchId, batchId, ...ADMIN_TYPES],
     );
+    if (result.affectedRows) queueNotificationSourceChange(connection, { kind: 'batch', ids: [batchId] });
     const receipt = await finishAdminAction(actionContext, {
       outcome: 'succeeded',
       metadata: { affectedRows: Number(result.affectedRows || 0), archived: true },

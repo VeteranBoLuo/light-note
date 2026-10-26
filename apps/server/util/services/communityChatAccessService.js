@@ -1,4 +1,5 @@
 import pool from '../../db/index.js';
+import { queueNotificationChange, queueNotificationSourceChange } from '../notificationRealtimeEvents.js';
 import { generateUUID } from '../agent/data.js';
 import { COMMUNITY_CHAT_PRIMARY_ROOM_SLUG, getCommunityChatFeatureState } from '../communityChatFeature.js';
 import { resolveCommunityChatImageAttachmentLimit } from '../communityChatImagePolicy.js';
@@ -773,6 +774,8 @@ export async function revokeCommunityChatMember({ user, targetUserId, reason = '
        VALUES (?, ?, 'access_revoked', ?)`,
       [user.id, normalizedTargetUserId, normalizedReason],
     );
+    queueNotificationChange(connection, [normalizedTargetUserId]);
+    queueNotificationSourceChange(connection, { kind: 'actor', ids: [normalizedTargetUserId] });
     await connection.commit();
     publishCommunityChatRealtimeEvent(
       'access.changed',

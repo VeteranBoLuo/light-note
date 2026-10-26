@@ -206,6 +206,15 @@ function chunkItems(items, size = CLOUD_FOLDER_MUTATION_BATCH_SIZE) {
   return chunks;
 }
 
+/** Server-owned folder scope, shared by listing and explicit tag selection. */
+export async function resolveOwnedCloudFolderScope({ userId, folderId, includeDescendants = false, database = pool }) {
+  const owner = normalizeOwnerId(userId);
+  const id = normalizeCloudFolderId(folderId);
+  const folders = await loadOwnedFolderSnapshot(database, owner);
+  requireOwnedFolder(folders, id);
+  return [String(id), ...(includeDescendants === true ? collectDescendantIds(folders, id) : [])];
+}
+
 /** 以目录快照准备标签操作的显式文件范围；不读取对象地址，也不按当前列表筛选截断。 */
 export async function resolveCloudFolderTagSelection({
   userId,
@@ -214,10 +223,7 @@ export async function resolveCloudFolderTagSelection({
   database = pool,
 } = {}) {
   const owner = normalizeOwnerId(userId);
-  const id = normalizeCloudFolderId(folderId);
-  const folders = await loadOwnedFolderSnapshot(database, owner);
-  requireOwnedFolder(folders, id);
-  const folderIds = [String(id), ...(includeDescendants === true ? collectDescendantIds(folders, id) : [])];
+  const folderIds = await resolveOwnedCloudFolderScope({ userId: owner, folderId, includeDescendants, database });
   const resolvedItems = [];
   for (const ids of chunkItems(folderIds)) {
     const [rows] = await database.query(

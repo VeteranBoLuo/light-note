@@ -12,24 +12,32 @@
     allFileCount: number;
     filtered: boolean;
     loading: boolean;
+    includeDescendants?: boolean;
+    folderName?: string;
+    compact?: boolean;
   }>();
   const { t } = useI18n();
   const summary = computed(() => {
     if (props.filtered) {
-      const total = props.counts?.total ?? props.allFileCount;
+      const total = props.counts
+        ? props.includeDescendants
+          ? props.counts.total
+          : props.counts.direct
+        : props.allFileCount;
       if (props.loading) {
-        if (!props.counts && !props.allFileCount) return t('common.loading');
-        return t(props.counts ? 'cloudSpace.filteringFolderFileCount' : 'cloudSpace.filteringAllFileCount', { total });
+        return t('common.loading');
       }
-      return t(props.counts ? 'cloudSpace.filteredFolderFileCount' : 'cloudSpace.filteredAllFileCount', {
+      return t('cloudSpace.scopeFilteredCount', {
         count: props.fileTotal,
         total,
       });
     }
     if (!props.counts)
       return props.loading ? t('common.loading') : t('cloudSpace.fileCount', { count: props.fileTotal });
-    return props.counts.direct === props.counts.total
-      ? t('cloudSpace.currentFolderFileCount', { count: props.counts.total })
-      : t('cloudSpace.folderFileCountDescription', props.counts);
+    if (props.compact)
+      return props.loading ? t('common.loading') : t('cloudSpace.fileCount', { count: props.fileTotal });
+    if (props.includeDescendants)
+      return t('cloudSpace.scopeTreeCount', { folder: props.folderName || '', count: props.counts.total });
+    return t('cloudSpace.scopeDirectCount', { count: props.counts.direct });
   });
 </script>

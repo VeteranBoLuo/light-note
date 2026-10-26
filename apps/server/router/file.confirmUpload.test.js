@@ -617,6 +617,47 @@ it('文件分页响应返回持久置顶状态，置顶排序发生在 LIMIT 之
   );
 });
 
+describe('cloud folder descendant browsing', () => {
+  it('resolves owned descendants before global sorting, pagination and count, preserving filters', async () => {
+    mocks.pool.query.mockReset();
+    mocks.pool.query.mockResolvedValueOnce([[
+      { id: 1, name: 'root', parent_id: null }, { id: 2, name: 'child', parent_id: 1 },
+      { id: 3, name: 'grandchild', parent_id: 2 }, { id: 4, name: 'outside', parent_id: null },
+    ]]).mockResolvedValueOnce([[]]).mockResolvedValueOnce([[{ total: 60 }]]);
+    const res = response();
+    await mocks.routes.get('/queryFiles').at(-1)({ user: { id: 'owner' }, body: {
+      currentPage: 2, pageSize: 48, filters: { folderId: '1', includeDescendants: true, fileName: 'report', category: ['pdf'], pendingOnly: true },
+      sort: { field: 'fileName', order: 'asc' },
+    } }, res);
+    const calls = mocks.pool.query.mock.calls;
+    expect(calls[0][1]).toEqual(['owner']);
+    for (const [sql, params] of calls.slice(1)) {
+      expect(sql).toContain('files.create_by = ? AND files.del_flag = 0 AND files.folder_id IN (?,?,?)');
+      expect(sql).toContain('resource_inbox');
+      expect(params.slice(0, 5)).toEqual(['owner', '1', '2', '3', '%report%']);
+      expect(params).not.toContain('4');
+    }
+    expect(calls[1][0]).toMatch(/ORDER BY files.is_top DESC, files.file_name ASC.*LIMIT \? OFFSET \?/s);
+    expect(calls[1][1].slice(-2)).toEqual([48, 48]);
+    expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ status: 200, data: expect.objectContaining({ total: 60 }) }));
+  });
+  it('a missing or foreign parent fails without falling back to all files', async () => {
+    mocks.pool.query.mockReset().mockResolvedValueOnce([[]]);
+    const res = response();
+    await mocks.routes.get('/queryFiles').at(-1)({ user: { id: 'owner' }, body: { filters: { folderId: '1', includeDescendants: true } } }, res);
+    expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ status: 404 }));
+    expect(mocks.pool.query).toHaveBeenCalledTimes(1);
+  });
+  it('all files does not duplicate or restrict results when descendants are enabled', async () => {
+    mocks.pool.query.mockReset().mockResolvedValueOnce([[]]).mockResolvedValueOnce([[{ total: 0 }]]);
+    const res = response();
+    await mocks.routes.get('/queryFiles').at(-1)({ user: { id: 'owner' }, body: { currentPage: 1, pageSize: 48, filters: { folderId: 'all', includeDescendants: true } } }, res);
+    expect(mocks.pool.query).toHaveBeenCalledTimes(2);
+    expect(mocks.pool.query.mock.calls[0][0]).not.toContain('folder_id IN');
+    expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ status: 200 }));
+  });
+});
+
 describe('legacy upload namespace and connection lifetime', () => {
   beforeEach(() => {
     vi.clearAllMocks();

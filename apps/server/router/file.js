@@ -47,6 +47,8 @@ import { purgeDocumentSourcesForCloudFiles } from '../util/aiDocument/service.js
 import { stableAgentErrorCode } from '../util/agent/logSafety.js';
 import { buildPagedResult, normalizeOptionalPagination } from '../util/pagination.js';
 import { buildFileListOrderBy } from '../util/fileListSort.js';
+import { resolveOwnedCloudFolderScope } from '../util/services/cloudFolderTreeService.js';
+import { getCloudSpacePreference, saveCloudSpacePreference } from '../router_handle/cloudSpacePreferenceHandle.js';
 import { localProcessingRateLimiter } from '../util/requestRateLimit.js';
 import {
   BYTES_PER_MB,
@@ -598,6 +600,9 @@ router.post('/setFilePin', async (req, res) => {
   }
 });
 
+router.get('/preferences', getCloudSpacePreference);
+router.post('/preferences', saveCloudSpacePreference);
+
 // 查询文件列表：主云空间显式分页；标签配置等旧调用未传 pageSize 时保持原数组结构。
 router.post('/queryFiles', async (req, res) => {
   try {
@@ -614,8 +619,18 @@ router.post('/queryFiles', async (req, res) => {
       filters.folderId !== '' &&
       filters.folderId !== 'all'
     ) {
-      where.push('files.folder_id = ?');
-      params.push(filters.folderId);
+      if (filters.includeDescendants === true) {
+        const folderIds = await resolveOwnedCloudFolderScope({
+          userId,
+          folderId: filters.folderId,
+          includeDescendants: true,
+        });
+        where.push(`files.folder_id IN (${folderIds.map(() => '?').join(',')})`);
+        params.push(...folderIds);
+      } else {
+        where.push('files.folder_id = ?');
+        params.push(filters.folderId);
+      }
     }
     if (filters.tagId) {
       where.push(`
@@ -700,6 +715,8 @@ router.post('/queryFiles', async (req, res) => {
     const total = Number(totalQueryResult?.[0]?.[0]?.total || 0);
     return res.send(resultData(buildPagedResult(formattedFiles, total, pagination)));
   } catch (error) {
+    if (['FOLDER_NOT_FOUND', 'FOLDER_ID_INVALID'].includes(error?.code))
+      return res.send(resultData({ code: error.code }, error.status, '文件夹不存在或无权限 / Folder unavailable'));
     return sendFileServerError(res, 'query-files', error);
   }
 });
