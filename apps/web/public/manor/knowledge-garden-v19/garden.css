@@ -90,9 +90,6 @@ select {
 button:hover:not(:disabled) {
   filter: brightness(0.97);
 }
-button:active:not(:disabled) {
-  transform: translateY(1px);
-}
 h1,
 h2,
 h3,

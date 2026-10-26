@@ -269,9 +269,18 @@ function positionDiscoveryGuide() {
       ctx.strokeStyle = "#fff";ctx.lineWidth = 1.25;ctx.setLineDash([5, 4]);ctx.strokeRect(r.left - s.left, r.top - s.top, r.width, r.height);
       tip.querySelector(".guide-short").textContent = "点路牌去海湾";
     } else {
-      const d = FarmStage.cal(),points = (step === "fish" ? d.pier.castRegion : d.aquarium.glassPolygon).map((p) => FarmStage.toScene(...p));
+      // The hit area and guide share the same calibrated water contour.
+      const d = FarmStage.cal(),region = step === "fish" ? d.pier.castRegion : d.aquarium.glassPolygon;
+      const points = region.map((p) => FarmStage.toScene(...p));
       ctx.beginPath();points.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y));ctx.closePath();
       ctx.fillStyle = "rgba(225,253,255,.22)";ctx.fill();
+      // The painting's outer edge is a crop, not an artificial shoreline.
+      ctx.beginPath();
+      points.forEach((p,i) => {
+        const next = (i + 1) % points.length,a = region[i],b = region[next];
+        if(step === "fish" && ((a[1] >= d.image[1] - .5 && b[1] >= d.image[1] - .5) || (a[0] <= .5 && b[0] <= .5)))return;
+        ctx.moveTo(...p);ctx.lineTo(...points[next]);
+      });
       ctx.strokeStyle = "rgba(255,255,255,.96)";ctx.lineWidth = 1.25;ctx.setLineDash([6, 5]);ctx.lineJoin = "round";ctx.stroke();
     }
     area.hidden = false;

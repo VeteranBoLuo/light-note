@@ -372,8 +372,8 @@ html.light-note-mobile-rendering #modal .fish-detail-art {height:clamp(calc(120p
 }
 .scene-facility:focus-visible .fixture-art {translate:0 calc(.75px * var(--d));filter:brightness(1.07);}
 .scene-purifier:focus-visible .purifier-art {translate:-50% calc(.75px * var(--d));filter:brightness(1.07);}
-.scene-facility:active .fixture-art {translate:0 calc(1.5px * var(--d));filter:brightness(1.02);}
-.scene-purifier:active .purifier-art {translate:-50% calc(1.5px * var(--d));filter:brightness(1.02);}
+.scene-facility:active .fixture-art {translate:0 calc(.75px * var(--d));filter:brightness(1.02);}
+.scene-purifier:active .purifier-art {translate:-50% calc(.75px * var(--d));filter:brightness(1.02);}
 @media (prefers-reduced-motion:reduce) {
   .scene-facility .fixture-art,.scene-purifier .purifier-art {transition:none;}
 }
