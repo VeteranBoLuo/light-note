@@ -164,6 +164,25 @@ describe.skipIf(!socketPath)('root chat subscription real SQL', () => {
     const [[ordinary]] = await db.query("SELECT COUNT(*) total FROM notification WHERE user_id='bob'");
     expect(ordinary.total).toBe(2);
   });
+
+  it('rechecks reply/mention source visibility after hiding, blocking, deletion and account suspension', async () => {
+    const msg = await message({ mentions: ['root','bob'] });
+    await deliver(msg);
+    expect(await rows()).toHaveLength(1);
+    for (const [deny,restore] of [
+      ["UPDATE community_chat_messages SET status='hidden'", "UPDATE community_chat_messages SET status='active'"],
+      ["UPDATE user SET del_flag=1 WHERE id='alice'", "UPDATE user SET del_flag=0 WHERE id='alice'"],
+      ["INSERT INTO community_chat_blocks(id,user_id,blocked_user_id) VALUES(UUID(),'root','alice')", 'DELETE FROM community_chat_blocks'],
+      [`INSERT INTO community_chat_message_deletions(message_id,user_id) VALUES(${msg.id},'root')`, 'DELETE FROM community_chat_message_deletions'],
+    ]) {
+      await db.query(deny);
+      expect(await rows()).toHaveLength(0);
+      await db.query(restore);
+      expect(await rows()).toHaveLength(1);
+    }
+    await db.query("UPDATE user SET role='user' WHERE id='root'");
+    expect(await rows()).toHaveLength(1); // Direct mentions remain available without root subscription privileges.
+  });
   it('cancels unsent alerts permanently while retaining inbox history and keeping new messages off', async () => {
     const binding = await bindHuaweiSubscription('root', 'a'.repeat(100), null, db);
     await activatePushSubscription('root', binding.id, binding.generation, db);

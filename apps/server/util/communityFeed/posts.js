@@ -5,6 +5,7 @@ import { bindImages, revisionImages, imageDto } from './images.js';
 import { publicGrowthProfile } from '../services/communityChatProfileService.js';
 import { randomUUID } from 'node:crypto';
 import pool from '../../db/index.js';
+import { queueNotificationSourceChange } from '../notificationRealtimeEvents.js';
 import { normalizeCommunityPost, parseCommunityPostDocument } from '@lightnote/shared/community-feed';
 import {
   access,
@@ -56,6 +57,9 @@ export async function audit(
   { actor, post, action, reason, comment = null, revision = post.row_revision, notify = true },
 ) {
   const id = randomUUID();
+  if (!['lock', 'unlock'].includes(action)) queueNotificationSourceChange(c, {
+    kind: comment ? 'feed_comment' : 'feed_post', ids: [comment?.public_id || post.public_id],
+  });
   const [result] = await c.query(
     'INSERT INTO community_moderation_actions (public_id,actor_id,subject_id,post_id,comment_id,target_revision,action,reason) VALUES (?,?,?,?,?,?,?,?)',
     [id, actor, comment?.author_id || post.author_id, post.id, comment?.id || null, revision, action, reason],
@@ -171,6 +175,7 @@ export async function submitPost({ user, input, env = process.env, db = pool }) 
       [revisionId, post.id],
     );
     post.pending_revision_id = revisionId;
+    queueNotificationSourceChange(c, { kind: 'feed_post', ids: [post.public_id] });
     if (account.role === 'root') {
       await publishRevision(c, post, revisionId, user.id);
       await audit(c, {
@@ -213,6 +218,7 @@ export async function withdrawPost({ user, input, env = process.env, db = pool }
         "UPDATE community_post_revisions SET status='withdrawn' WHERE post_id=? AND status='pending_review'",
         [post.id],
       );
+      queueNotificationSourceChange(c, { kind: 'feed_post', ids: [post.public_id] });
       return { publicId: post.public_id, status: 'withdrawn', revision: Number(post.row_revision) + 1 };
     },
   );
@@ -233,6 +239,7 @@ export async function deletePost({ user, input, env = process.env, db = pool }) 
         "UPDATE community_post_revisions SET status='withdrawn' WHERE post_id=? AND status='pending_review'",
         [post.id],
       );
+      queueNotificationSourceChange(c, { kind: 'feed_post', ids: [post.public_id] });
       return { publicId: post.public_id, status: 'deleted', revision: Number(post.row_revision) + 1 };
     },
   );

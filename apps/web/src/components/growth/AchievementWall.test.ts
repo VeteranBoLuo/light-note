@@ -18,7 +18,13 @@ vi.mock('@/components/base/BasicComponents/BModal/BModal.vue', () => ({
 }));
 vi.mock('@/components/base/SvgIcon/src/SvgIcon.vue', () => ({ default: { template: '<span />' } }));
 vi.mock('./AchievementEmblem.vue', () => ({ default: { template: '<span />' } }));
-vi.mock('./AvatarFramePreview.vue', () => ({ default: { template: '<span />' } }));
+vi.mock('./AvatarFramePreview.vue', () => ({
+  default: {
+    props: { frameId: String, animated: Boolean, pauseWhenOffscreen: Boolean },
+    template:
+      '<span class="frame-preview" :data-frame="frameId" :data-animated="animated" :data-offscreen="pauseWhenOffscreen" />',
+  },
+}));
 import AchievementWall from './AchievementWall.vue';
 let cleanup: () => void;
 const profile = {
@@ -78,12 +84,30 @@ function click(host: HTMLElement, selector: string) {
   (host.querySelector(selector) as HTMLButtonElement).click();
 }
 describe('achievement collection behavior', () => {
-  it('shows every achievement exactly once across nine distinct families', () => {
+  it('previews frame motion in the wall and detail while respecting the shared motion switch', async () => {
+    const { host, props } = mount([{ ...achievement('public_resource_500'), frameId: 'frame_knowledge_lighthouse' }], {
+      animated: true,
+    });
+    click(host, '.aw-badge__main');
+    await flush();
+    expect(host.querySelectorAll('.frame-preview')).toHaveLength(2);
+    for (const frame of host.querySelectorAll('.frame-preview')) {
+      expect(frame.getAttribute('data-animated')).toBe('true');
+      expect(frame.getAttribute('data-offscreen')).toBe('true');
+    }
+    Object.assign(props, { animated: false });
+    await flush();
+    expect(
+      [...host.querySelectorAll('.frame-preview')].every((frame) => frame.getAttribute('data-animated') === 'false'),
+    ).toBe(true);
+  });
+  it('shows every achievement exactly once across ten distinct families', () => {
     const { host } = mount(ACHIEVEMENT_KEYS.map((key) => achievement(key)));
-    expect(host.querySelectorAll('.aw-badge')).toHaveLength(43);
-    expect(host.querySelectorAll('.aw-group')).toHaveLength(9);
+    expect(host.querySelectorAll('.aw-badge')).toHaveLength(48);
+    expect(host.querySelectorAll('.aw-group')).toHaveLength(10);
     const groups = [...host.querySelectorAll('.aw-group')];
     for (const [label, count] of [
+      ['公开贡献', 5],
       ['书签收藏', 5],
       ['笔记创作', 6],
       ['云端文件', 6],

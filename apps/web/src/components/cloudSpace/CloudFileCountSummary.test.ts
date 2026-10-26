@@ -15,6 +15,9 @@ function mountSummary(locale = 'zh-CN') {
     allFileCount: 306,
     filtered: false,
     loading: false,
+    includeDescendants: false,
+    folderName: '旅游',
+    compact: false,
   });
   const host = document.createElement('div');
   const app = createApp({ render: () => h(CloudFileCountSummary, props.value) });
@@ -31,7 +34,7 @@ describe('CloudFileCountSummary', () => {
     props.value.counts = { direct: 9, total: 145 };
     props.value.fileTotal = 9;
     await nextTick();
-    expect(host.textContent).toBe('当前文件夹有 9 个文件，含子文件夹共 145 个');
+    expect(host.textContent).toBe('当前文件夹 9 个文件');
     for (const counts of [
       { direct: 0, total: 18 },
       { direct: 8, total: 8 },
@@ -39,11 +42,7 @@ describe('CloudFileCountSummary', () => {
     ]) {
       props.value.counts = counts;
       await nextTick();
-      expect(host.textContent).toBe(
-        counts.direct === counts.total
-          ? `当前文件夹共 ${counts.total} 个文件`
-          : `当前文件夹有 ${counts.direct} 个文件，含子文件夹共 ${counts.total} 个`,
-      );
+      expect(host.textContent).toBe(`当前文件夹 ${counts.direct} 个文件`);
     }
     props.value.counts = null;
     props.value.fileTotal = 306;
@@ -54,6 +53,7 @@ describe('CloudFileCountSummary', () => {
   it('搜索或类型筛选结果独立显示，不冒充本层库存或子树总量', async () => {
     const { host, props } = mountSummary();
     props.value = {
+      ...props.value,
       counts: { direct: 9, total: 145 },
       fileTotal: 2,
       allFileCount: 306,
@@ -61,34 +61,55 @@ describe('CloudFileCountSummary', () => {
       loading: false,
     };
     await nextTick();
-    expect(host.textContent).toBe('筛选到 2 个文件，当前文件夹共 145 个文件（含子文件夹）');
+    expect(host.textContent).toBe('找到 2 个文件（当前范围共 9 个）');
     props.value.fileTotal = 0;
     await nextTick();
-    expect(host.textContent).toBe('筛选到 0 个文件，当前文件夹共 145 个文件（含子文件夹）');
+    expect(host.textContent).toBe('找到 0 个文件（当前范围共 9 个）');
     props.value.counts = null;
     await nextTick();
-    expect(host.textContent).toBe('筛选到 0 个文件，全部文件共 306 个');
+    expect(host.textContent).toBe('找到 0 个文件（当前范围共 306 个）');
     props.value.allFileCount = 0;
     await nextTick();
-    expect(host.textContent).toBe('筛选到 0 个文件，全部文件共 0 个');
+    expect(host.textContent).toBe('找到 0 个文件（当前范围共 0 个）');
   });
 
   it('查询中不把上一请求的数量显示为新筛选的结果，并保留已知目录统计', async () => {
     const { host, props } = mountSummary();
-    props.value = { counts: { direct: 9, total: 145 }, fileTotal: 2, allFileCount: 306, filtered: true, loading: true };
+    props.value = {
+      ...props.value,
+      counts: { direct: 9, total: 145 },
+      fileTotal: 2,
+      allFileCount: 306,
+      filtered: true,
+      loading: true,
+    };
     await nextTick();
-    expect(host.textContent).toBe('正在筛选文件，当前文件夹共 145 个文件（含子文件夹）');
+    expect(host.textContent).toBe(zh.common.loading);
     props.value.counts = null;
     await nextTick();
-    expect(host.textContent).toBe('正在筛选文件，全部文件共 306 个');
+    expect(host.textContent).toBe(zh.common.loading);
     props.value.allFileCount = 0;
     await nextTick();
     expect(host.textContent).toBe(zh.common.loading);
   });
 
+  it('汇总、桌面精简统计和筛选分别遵循当前范围', async () => {
+    const { host, props } = mountSummary();
+    Object.assign(props.value, { counts: { direct: 0, total: 171 }, includeDescendants: true, fileTotal: 171 });
+    await nextTick();
+    expect(host.textContent).toBe('正在显示「旅游」及其子文件夹中的 171 个文件');
+    props.value.compact = true;
+    await nextTick();
+    expect(host.textContent).toBe('共 171 个文件');
+    Object.assign(props.value, { filtered: true, fileTotal: 3 });
+    await nextTick();
+    expect(host.textContent).toBe('找到 3 个文件（当前范围共 171 个）');
+  });
+
   it('英文保持同一统计口径', async () => {
     const { host, props } = mountSummary('en-US');
     props.value = {
+      ...props.value,
       counts: { direct: 9, total: 145 },
       fileTotal: 2,
       allFileCount: 306,
@@ -96,6 +117,6 @@ describe('CloudFileCountSummary', () => {
       loading: false,
     };
     await nextTick();
-    expect(host.textContent).toBe('Matching files: 2; folder total: 145 (including subfolders)');
+    expect(host.textContent).toBe('2 matches (9 files in this scope)');
   });
 });

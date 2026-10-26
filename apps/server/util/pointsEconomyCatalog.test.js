@@ -4,6 +4,7 @@ import {
   C5_POINTS_ECONOMY_VERSION,
   C6_POINTS_ECONOMY_VERSION,
   C7_POINTS_ECONOMY_VERSION,
+  C9_POINTS_ECONOMY_VERSION,
   freeDrawsFor,
   getEconomyCatalogSnapshot,
   getEconomyRuntime,
@@ -12,10 +13,10 @@ import {
 } from './pointsEconomyCatalog.js';
 
 describe('积分经济 C9 单一目录', () => {
-  const snapshot = getEconomyCatalogSnapshot();
+  const snapshot = getEconomyCatalogSnapshot(C9_POINTS_ECONOMY_VERSION);
 
   it('固定经济版本并完整覆盖 7 个实用商品和 13 个积分框', () => {
-    expect(snapshot.version).toBe(POINTS_ECONOMY_VERSION);
+    expect(snapshot.version).toBe(C9_POINTS_ECONOMY_VERSION);
     expect(snapshot.utilityItems.map(({ id, cost, purchaseLimit }) => [id, cost, purchaseLimit])).toEqual([
       ['ai_pack_starter', 60, 1],
       ['ai_pack_small', 240, null],

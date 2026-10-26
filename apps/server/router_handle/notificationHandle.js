@@ -10,6 +10,7 @@ import pool from '../db/index.js';
 import { resultData } from '../util/common.js';
 import { ensureNotVisitor } from '../util/auth.js';
 import { createNotification } from '../util/notification.js';
+import { queueNotificationChange, queueNotificationSourceChange } from '../util/notificationRealtimeEvents.js';
 import { EMAIL_EFFECTIVE_STATUS_SQL, maskEmail } from '../util/emailDelivery.js';
 import { stableAgentErrorCode } from '../util/agent/logSafety.js';
 import {
@@ -87,11 +88,13 @@ async function attachTodoStates(items, userId, db = pool) {
 
   const placeholders = todoIds.map(() => '?').join(',');
   const [todos] = await db.query(
-    `SELECT id, status FROM todo_items
+    `SELECT id, status, instance_state AS instanceState FROM todo_items
      WHERE user_id = ? AND del_flag = 0 AND id IN (${placeholders})`,
     [userId, ...todoIds],
   );
-  const statusById = new Map(todos.map((todo) => [String(todo.id), todo.status]));
+  const statusById = new Map(
+    todos.map((todo) => [String(todo.id), todo.instanceState === 'skipped' ? 'unavailable' : todo.status]),
+  );
   reminderItems.forEach(({ item, todoId }) => {
     const status = statusById.get(todoId);
     item.todoState = status === 'pending' || status === 'completed' ? status : 'unavailable';
@@ -258,6 +261,7 @@ export const remove = async (req, res) => {
       [userId, ...ids],
     );
     res.send(resultData({ deleted: result.affectedRows || 0 }));
+    if (result.affectedRows) queueNotificationChange(null, [userId]);
   } catch (e) {
     res.send(resultData(null, 500, '删除通知失败: ' + e.message));
   }
@@ -279,8 +283,44 @@ export const markRead = async (req, res) => {
       [userId, ...ids],
     );
     res.send(resultData({ updated: result.affectedRows || 0 }));
+    if (result.affectedRows) queueNotificationChange(null, [userId]);
   } catch (e) {
     res.send(resultData(null, 500, '标记已读失败: ' + e.message));
+  }
+};
+
+// Explicit desired state makes retries idempotent; never recreate a notification or its push outbox.
+export const setReadState = async (req, res) => {
+  if (!ensureNotVisitor(req, res)) return;
+  if (req.adminContext) return res.send(resultData(null, 403, 'NOTIFICATION_READ_STATE_FORBIDDEN'));
+  const { id, isRead } = req.body || {};
+  if (typeof id !== 'string' || !id.trim() || id.length > 64 || typeof isRead !== 'boolean') {
+    return res.send(resultData(null, 400, 'INVALID_NOTIFICATION_READ_STATE'));
+  }
+  try {
+    const feedReady = await communityFeedSchemaReady(pool).catch(() => false);
+    const publicReady = await publicResourceSchemaReady(pool).catch(() => false);
+    const where = `user_id = ? AND id = ? AND del_flag = 0 AND COALESCE(recalled, 0) = 0
+      AND ${COMMUNITY_CHAT_TARGETED_NOTIFICATION_SQL}
+      AND (${feedNotificationVisibleSql(feedReady)}) AND (${publicResourceNotificationVisibleSql(publicReady)})`;
+    const state = isRead ? 1 : 0;
+    const owner = [req.user.id, id.trim()];
+    const [result] = await pool.query(
+      `UPDATE notification SET is_read = ?, read_time = CASE WHEN ? = 1 THEN NOW() ELSE NULL END
+       WHERE ${where} AND is_read <> ?`,
+      [state, state, ...owner, state],
+    );
+    if (!result.affectedRows) {
+      const [rows] = await pool.query(`SELECT is_read AS isRead FROM notification WHERE ${where} LIMIT 1`, owner);
+      if (!rows.length) return res.send(resultData(null, 404, 'NOTIFICATION_UNAVAILABLE'));
+      if (Boolean(Number(rows[0].isRead)) !== isRead) {
+        return res.send(resultData(null, 409, 'NOTIFICATION_READ_STATE_CHANGED'));
+      }
+    }
+    res.send(resultData({ id: id.trim(), isRead }));
+    if (result.affectedRows) queueNotificationChange(null, [req.user.id]);
+  } catch {
+    res.send(resultData(null, 500, 'NOTIFICATION_READ_STATE_FAILED'));
   }
 };
 
@@ -296,6 +336,7 @@ export const markAllRead = async (req, res) => {
     if (excludeCommunityChat) where.push(COMMUNITY_CHAT_EXCLUDED_SQL);
     const updated = await markNotificationSnapshotRead(pool, where, params);
     res.send(resultData({ updated }));
+    if (updated) queueNotificationChange(null, [req.user.id]);
   } catch {
     res.send(resultData(null, 500, '标记全部已读失败'));
   }
@@ -472,6 +513,7 @@ export const adminRecall = async (req, res) => {
       'UPDATE notification SET recalled = 1, del_flag = 1 WHERE (batch_id = ? OR id = ?) AND recalled = 0',
       [batchId, batchId],
     );
+    if (r.affectedRows) queueNotificationSourceChange(connection, { kind: 'batch', ids: [batchId] });
     const receipt = await finishAdminAction(actionContext, {
       outcome: 'succeeded',
       metadata: { affectedRows: Number(r.affectedRows || 0) },
@@ -521,6 +563,7 @@ export const adminDelete = async (req, res) => {
        WHERE (batch_id = ? OR id = ?) AND type IN (${typePlaceholders})`,
       [batchId, batchId, ...ADMIN_TYPES],
     );
+    if (result.affectedRows) queueNotificationSourceChange(connection, { kind: 'batch', ids: [batchId] });
     const receipt = await finishAdminAction(actionContext, {
       outcome: 'succeeded',
       metadata: { affectedRows: Number(result.affectedRows || 0), archived: true },

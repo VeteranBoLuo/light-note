@@ -1,3 +1,4 @@
+import { publicResourceGrowthMetrics, persistPublicResourceAchievements } from './growthMetrics.js';
 import { combinedSearch, rankedPage } from './combinedSearch.js';
 import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
@@ -57,6 +58,8 @@ describe.skipIf(!socketPath)('public resource transactional boundaries', () => {
   beforeAll(async () => {
     if (!/^\/(?:private\/)?tmp\//.test(socketPath)) throw new Error('Temporary socket required');
     admin = await mysql.createConnection({ socketPath, user: 'root' });
+    const [[isolation]] = await admin.query('SELECT @@global.skip_networking AS isolated');
+    if (Number(isolation.isolated) !== 1) throw new Error('Isolated MySQL required');
     await admin.query(`CREATE DATABASE ${schema} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`);
     db = mysql.createPool({ socketPath, user: 'root', database: schema, connectionLimit: 8 });
     await db.query(
@@ -112,6 +115,12 @@ describe.skipIf(!socketPath)('public resource transactional boundaries', () => {
     await db.query(
       'CREATE TABLE security_account_restrictions(id int PRIMARY KEY,user_id varchar(255),restriction_type varchar(32),scope_json json,reason varchar(255),status varchar(20),expires_at datetime,created_at datetime)',
     );
+    await db.query('CREATE TABLE IF NOT EXISTS user_growth(user_id varchar(255) PRIMARY KEY,level int DEFAULT 1) ENGINE=InnoDB');
+    await db.query(`CREATE TABLE IF NOT EXISTS user_achievements(user_id varchar(255),achievement_key varchar(64),
+      unlocked_at datetime,claimed_at datetime, reward_points_snapshot int,reward_frame_id_snapshot varchar(64),policy_version varchar(32),
+      PRIMARY KEY(user_id,achievement_key)) ENGINE=InnoDB`);
+    await db.query(`CREATE TABLE IF NOT EXISTS onboarding_seed_resources(user_id varbinary(255),resource_type varchar(32),resource_id varbinary(255),
+      PRIMARY KEY(user_id,resource_type,resource_id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
     await migratePublicResourceSchema(db);
     await migratePublicResourceSchema(db);
   });
@@ -139,6 +148,64 @@ describe.skipIf(!socketPath)('public resource transactional boundaries', () => {
       "INSERT INTO bookmark(id,user_id,name,url,description) VALUES('b','a','资料','https://example.org/','说明')",
     );
   });
+  it('counts approved live own resources once, excluding copies, examples and deleted sources', async () => {
+    const first = await draft();
+    expect(await publicResourceGrowthMetrics('a', { db, env })).toEqual({ publicResourceCount: 0 });
+    await decide(opts(ROOT, { id: first.publicId, input: input({ action: 'approve', expectedVersion: first.version }) }));
+    expect(await publicResourceGrowthMetrics('a', { db, env })).toEqual({ publicResourceCount: 1 });
+    const bookmark = await draft({ kind: 'bookmark', sourceId: 'b' });
+    await decide(opts(ROOT, { id: bookmark.publicId, input: input({ action: 'approve', expectedVersion: bookmark.version }) }));
+    await db.query("INSERT INTO bookmark(id,user_id,name,url) VALUES('b-copy','a','duplicate','https://example.org/')");
+    const duplicate = await draft({ kind: 'bookmark', sourceId: 'b-copy' });
+    await decide(opts(ROOT, { id: duplicate.publicId, input: input({ action: 'approve', expectedVersion: duplicate.version }) }));
+    expect(await publicResourceGrowthMetrics('a', { db, env })).toEqual({ publicResourceCount: 2 });
+    expect(await publicResourceGrowthMetrics('b', { db, env })).toEqual({ publicResourceCount: 0 });
+    await db.query("INSERT INTO onboarding_seed_resources VALUES('a','note','n')");
+    expect((await publicResourceGrowthMetrics('a', { db, env })).publicResourceCount).toBe(1);
+    await db.query(`INSERT INTO public_resource_saved_sources(recipient_id,kind,resource_id,author_public_id,author_name,source_url,revision)
+      VALUES('a','bookmark','b','00000000-0000-4000-8000-000000000001','author','https://example.org/',1)`);
+    await db.query("UPDATE bookmark SET del_flag=1 WHERE id='b-copy'");
+    expect((await publicResourceGrowthMetrics('a', { db, env })).publicResourceCount).toBe(0);
+    expect((await publicResourceGrowthMetrics('a', { db, env: {} })).publicResourceCount).toBe(0);
+  });
+  it('freezes rewards on approval and preserves them after withdrawal or source deletion', async () => {
+    const published = await publish();
+    const [[state]] = await db.query("SELECT * FROM user_achievements WHERE user_id='a'");
+    expect(state).toMatchObject({ achievement_key: 'public_resource_1', reward_points_snapshot: 10, claimed_at: null });
+    await withdraw(opts(A, { id: published.publicId, input: input({ expectedVersion: published.version }) }));
+    expect((await publicResourceGrowthMetrics('a', { db, env })).publicResourceCount).toBe(0);
+    expect((await db.query("SELECT * FROM user_achievements WHERE user_id='a'"))[0]).toHaveLength(1);
+    await publish();
+    // Simulate an early contributor who has not opened growth since this release.
+    await db.query("DELETE FROM user_achievements WHERE user_id='a'");
+    await transaction(db, (c) => deleteOwnedNoteSubtrees(c, { userId: 'a', items: [{ id: 'n', expectedDescendantCount: 0 }] }));
+    expect((await publicResourceGrowthMetrics('a', { db, env })).publicResourceCount).toBe(0);
+    expect((await db.query("SELECT * FROM user_achievements WHERE user_id='a'"))[0]).toHaveLength(1);
+  });
+  it('combines 500 resources with Lv.8, snapshots all five tiers once and rolls back atomically', async () => {
+    await publish();
+    // Many distinct already-approved source facts, as at a release with existing contributors.
+    for (let i = 1; i < 500; i++) {
+      await db.query("INSERT INTO note(id,create_by,title,content,type) VALUES(?,'a','title','body','text')", ['tier-' + i]);
+      const [p] = await db.query("INSERT INTO public_resource_publications(public_id,owner_id,kind,source_id) VALUES(?,'a','note',?)", [randomUUID(), 'tier-' + i]);
+      const [r] = await db.query("INSERT INTO public_resource_revisions(publication_id,revision,title,body,fingerprint,status) VALUES(?,1,'title','body',?,'approved')", [p.insertId, 'a'.repeat(64)]);
+      await db.query('UPDATE public_resource_publications SET published_revision_id=? WHERE id=?', [r.insertId, p.insertId]);
+    }
+    await db.query("UPDATE user_growth SET level=7 WHERE user_id='a'");
+    await transaction(db, (c) => persistPublicResourceAchievements('a', { db: c, env }));
+    expect((await db.query("SELECT * FROM user_achievements WHERE user_id='a'"))[0]).toHaveLength(4);
+    await db.query("UPDATE user_growth SET level=8 WHERE user_id='a'");
+    await expect(transaction(db, async (c) => {
+      await persistPublicResourceAchievements('a', { db: c, env });
+      throw new Error('rollback fixture');
+    })).rejects.toThrow('rollback fixture');
+    expect((await db.query("SELECT * FROM user_achievements WHERE user_id='a'"))[0]).toHaveLength(4);
+    await Promise.all([0, 1].map(() => transaction(db, (c) => persistPublicResourceAchievements('a', { db: c, env }))));
+    const [rows] = await db.query("SELECT reward_points_snapshot,reward_frame_id_snapshot FROM user_achievements WHERE user_id='a'");
+    expect(rows).toHaveLength(5);
+    expect(rows.reduce((sum, r) => sum + r.reward_points_snapshot, 0)).toBe(570);
+    expect(rows.filter((r) => r.reward_frame_id_snapshot)).toHaveLength(3);
+  }, 20000);
   it('applies the help migration idempotently without modifying private resources', async () => {
     await db.query(
       "INSERT INTO knowledge_base(id,title,content,status,category,created_by) VALUES('private-article','全站搜索与公开资源','私人条目','private','个人知识','a')",

@@ -1,3 +1,4 @@
+import { persistPublicResourceAchievements } from './growthMetrics.js';
 import { randomUUID } from 'node:crypto';
 import pool from '../../db/index.js';
 import { ensureCommunityChatIdentity } from '../services/communityChatIdentityService.js';
@@ -285,6 +286,7 @@ export async function withdraw({ user, id, input, db = pool, env = process.env, 
     if (Number(p.removed)) fail('REMOVED', 423);
     if (Number(p.withdrawn) || (!p.published_revision_id && !p.pending_revision_id))
       return { publicId: p.public_id, version: Number(p.version), reused: true };
+    if (p.published_revision_id) await persistPublicResourceAchievements(user.id, { db: c, env });
     await cancelPending(c, p);
     await c.query(
       'UPDATE public_resource_publications SET withdrawn=1,pending_revision_id=NULL,published_revision_id=NULL,version=version+1,updated_at=NOW(6) WHERE id=?',

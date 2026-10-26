@@ -6,6 +6,10 @@
     ],
     "asset": "courtyard/pc-terrain-r36.webp",
     "water": "courtyard/desktop-water-r51.svg",
+    "waterExclusions": [
+      [[1139,62],[1158,62],[1217,232],[1220,250],[1071,250],[1062,232]],
+      [[1452,151],[1461,151],[1484,224],[1478,235],[1421,235],[1418,223]]
+    ],
     "detailTiles": [
       {
         "asset": "courtyard/pc-detail-r36-5.webp",
@@ -339,7 +343,7 @@
         ]
       },
       {
-        "asset": "courtyard/pc-surface-calm-r52.webp",
+        "asset": "courtyard/pc-surface-calm-r56.png",
         "pixels": [
           2097,
           750
@@ -487,6 +491,10 @@
     }
   },
   "mobileGarden": {
+    "waterExclusions": [
+      [[371,271],[378,271],[406,354],[397,364],[341,364],[337,353]],
+      [[486,302],[493,302],[510,358],[501,368],[463,368],[461,356]]
+    ],
     "image": [
       887,
       1774
@@ -564,7 +572,8 @@
         ]
       },
       {
-        "asset": "courtyard/mobile-tank-calm-r52.webp",
+        "asset": "courtyard/mobile-tank-calm-r56.png",
+        "sourceRect": [0,90,2170,634],
         "pixels": [
           919,
           232
@@ -627,6 +636,44 @@
             983
           ]
         ]
+      },
+      {
+        "asset": "courtyard/mobile-bait-box-r57.png",
+        "pixels": [
+          118,
+          106
+        ],
+        "matrix": [
+          1,
+          0,
+          0,
+          1,
+          563,
+          320
+        ],
+        "clip": [
+          [
+            570,
+            326
+          ],
+          [
+            661,
+            326
+          ],
+          [
+            678,
+            351
+          ],
+          [
+            678,
+            420
+          ],
+          [
+            568,
+            425
+          ]
+        ],
+        "feather": 1.5
       }
     ]
   }

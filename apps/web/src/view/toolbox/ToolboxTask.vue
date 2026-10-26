@@ -367,6 +367,7 @@
 </template>
 
 <script setup lang="ts">
+  import { useForegroundRefresh } from '@/composables/useForegroundRefresh';
   import ToolboxPageHeader from './components/ToolboxPageHeader.vue';
   import OcrResult from './components/OcrResult.vue';
   import KnowledgeAuditResult from './components/KnowledgeAuditResult.vue';
@@ -912,12 +913,15 @@
       : new Intl.DateTimeFormat(locale.value, { dateStyle: 'medium', timeStyle: 'short' }).format(date);
   }
 
+  useForegroundRefresh({
+    refresh: () => loadJob(true), trailingWake: true, staleMs: 1000,
+    canRefresh: () => Boolean(job.value) && !isTerminal.value,
+  });
   function handleVisibilityChange() {
     if (document.hidden) {
       clearPoll();
       return;
     }
-    if (job.value && !isTerminal.value) void loadJob(true);
   }
 
   async function resetPageScroll() {

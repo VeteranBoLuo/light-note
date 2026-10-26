@@ -20,6 +20,7 @@
 
     <div v-for="g in visibleFamilies" :key="g" class="aw-group">
       <div class="aw-group-title">{{ t(`growth.achievementFamily.${g}`) }}</div>
+      <p v-if="g === 'sharing'" class="aw-family-hint">{{ t('growth.publicContributionRule') }}</p>
       <div class="aw-grid">
         <div
           v-for="a in byFamily(g)"
@@ -56,7 +57,8 @@
               :frame-id="a.frameId"
               :src="icon.navigation.user"
               :size="dimension(30, 'layout')"
-              :animated="false"
+              :animated="animated"
+              pause-when-offscreen
             />
             <span>{{ t('growth.achFrameReward', { name: frameName(a.frameId) }) }}</span>
           </div>
@@ -144,7 +146,13 @@
           {{ t('growth.achRewardLabel') }} <SvgIcon :src="icon.growth.coin" size="14" /> {{ detail.reward }}
         </div>
         <div v-if="detail.frameId" class="awd-frame-reward">
-          <AvatarFramePreview :frame-id="detail.frameId" :src="icon.navigation.user" :size="dimension(46, 'layout')" />
+          <AvatarFramePreview
+            :frame-id="detail.frameId"
+            :src="icon.navigation.user"
+            :size="dimension(46, 'layout')"
+            :animated="animated"
+            pause-when-offscreen
+          />
           <span>{{ t('growth.achFrameReward', { name: frameName(detail.frameId) }) }}</span>
         </div>
         <BButton
@@ -269,6 +277,7 @@
     'bookmark',
     'note',
     'file',
+    'sharing',
     'community',
     'todo',
     'organize',
@@ -418,6 +427,12 @@
     max-width: 100%;
     min-width: 0;
     overflow-x: auto;
+  }
+  .aw-family-hint {
+    margin: 0 0 var(--ui-space-12, 12px);
+    color: var(--desc-color);
+    font-size: var(--ui-font-12, 12px);
+    line-height: 1.6;
   }
   .aw-group {
     display: flex;

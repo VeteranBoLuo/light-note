@@ -198,12 +198,23 @@ export async function retryImagePreview(owner, input, { db = pool } = {}) {
     await c.beginTransaction();
     const { asset } = await imageSourceAdapters[item.sourceType].resolve(c, owner, item.sourceId, { readOnly: true });
     if (!asset || asset.status === 'deleting') throw imageError('IMAGE_PREVIEW_NOT_FOUND');
+    // Serialize explicit retry with upload, claim, and publication before touching the job.
+    const [[currentAsset]] = await c.query('SELECT status,source_version FROM image_assets WHERE id=? FOR UPDATE', [
+      asset.id,
+    ]);
+    if (!currentAsset || currentAsset.status === 'deleting') throw imageError('IMAGE_PREVIEW_NOT_FOUND');
+    await c.query(
+      `SELECT id FROM file_preview_artifacts
+       WHERE source_type='image_asset' AND file_id=? AND source_revision=?
+         AND strategy='image_thumbnail' AND strategy_version=${CARD_IMAGE_PROFILE.version} FOR UPDATE`,
+      [asset.id, currentAsset.source_version],
+    );
     const [[job]] = await c.query(
       `SELECT j.id,j.status,j.error_code,j.available_at FROM file_preview_jobs j
       JOIN file_preview_artifacts a ON a.id=j.artifact_id
       WHERE a.source_type='image_asset' AND a.file_id=? AND a.source_revision=?
       AND a.strategy='image_thumbnail' AND a.strategy_version=${CARD_IMAGE_PROFILE.version} FOR UPDATE`,
-      [asset.id, asset.source_version],
+      [asset.id, currentAsset.source_version],
     );
     if (
       job?.status === 'failed' &&

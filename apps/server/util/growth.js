@@ -12,6 +12,8 @@
 import { MAKEUP_WINDOW_DAYS } from '@lightnote/shared';
 import { createHash } from 'node:crypto';
 import pool from '../db/index.js';
+import { PUBLIC_RESOURCE_ACHIEVEMENTS } from './publicResources/achievements.js';
+import { publicResourceGrowthMetrics, persistPublicResourceAchievements } from './publicResources/growthMetrics.js';
 import { communityGrowthMetrics } from './communityFeed/growthMetrics.js';
 import { earnPoints, earnStorage, getAchievementFrameByKey, titleName } from './points.js';
 import { grantItem } from './items.js';
@@ -304,6 +306,7 @@ export async function grantExp(userId, source, opts = {}, conn = null) {
     // 5. 升级 → 逐级落 level_up 里程碑(唯一键去重;通知中心第三刀读此)
     let leveledUp = false;
     if (toLevel > fromLevel) {
+      await persistPublicResourceAchievements(userId, { db: c });
       leveledUp = true;
       // 尊重用户「升级提醒」开关(preferences.notifyLevelUp === 'false' 时不发升级通知,但里程碑账本照记)
       const notifyLevelUp = await isLevelUpNotificationEnabled(c, userId);
@@ -536,6 +539,7 @@ export async function getGrowth(userId, { userRole = null, db = pool, calendar =
 // reward 按长期积累难度递增：首签 10；中阶 40~120；高阶 150~500；里程碑级 600~800。
 // points_log(reason='achievement', ref=key)负责到账幂等，user_achievements 负责永久解锁与领取展示状态。
 export const LEGACY_ACHIEVEMENTS = [
+  ...PUBLIC_RESOURCE_ACHIEVEMENTS,
   { key: 'community_post_1', group: 'community', metric: 'communityPostCount', target: 1, reward: 20 },
   { key: 'community_post_10', group: 'community', metric: 'communityPostCount', target: 10, reward: 60 },
   { key: 'community_post_50', group: 'community', metric: 'communityPostCount', target: 50, reward: 120 },
@@ -1211,7 +1215,8 @@ export async function getGrowthDashboard(userId, { userRole = null, db = pool, c
   }
   const activeDays = isGuest ? 0 : await getMeaningfulActiveDays(userId, { db, calendar: accountCalendar });
   const communityMetrics = isGuest ? {} : await communityGrowthMetrics(userId, { db });
-  const metrics = { ...stats, ...communityMetrics, level: growth.level, activeDays };
+  const publicMetrics = isGuest ? {} : await publicResourceGrowthMetrics(userId, { db });
+  const metrics = { ...stats, ...communityMetrics, ...publicMetrics, level: growth.level, activeDays };
   const achievements = achievementCatalog.map((a) => {
     const cur = Number(metrics[a.metric] || 0);
     const minLevel = Math.max(0, Number(a.minLevel || 0));

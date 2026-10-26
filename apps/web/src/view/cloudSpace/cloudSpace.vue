@@ -10,6 +10,16 @@
     @title-click="resetCloudSpace"
   >
     <template v-if="!bookmark.isMobile" #meta>
+      <CloudFileScopeControl
+        :include-descendants="cloud.includeDescendants"
+        :all-files="cloud.folder.id === 'all'"
+        :counts="currentFolderCounts"
+        :disabled="scopeDisabled"
+        :local-only="fileScope.localOnly.value"
+        :error="fileScope.error.value"
+        @change="changeFileScope"
+        @retry="fileScope.retry"
+      />
       <CloudFileCountSummary
         class="cloud-header-count"
         :counts="currentFolderCounts"
@@ -17,6 +27,9 @@
         :all-file-count="cloud.allFileCount"
         :filtered="hasFileFilters"
         :loading="cloud.loading || cloud.folderLoading"
+        :include-descendants="cloud.includeDescendants"
+        :folder-name="cloud.folder.name"
+        compact
       />
     </template>
     <template #actions>
@@ -146,6 +159,8 @@
           :all-file-count="cloud.allFileCount"
           :filtered="hasFileFilters"
           :loading="cloud.loading || cloud.folderLoading"
+          :include-descendants="cloud.includeDescendants"
+          :folder-name="cloud.folder.name"
         />
       </div>
       <div class="content-area">
@@ -159,6 +174,9 @@
           :view-mode="viewMode"
           :batch-mode="batchMode"
           :clear-key="clearSelectionKey"
+          :descendant-file-count="Math.max(0, (currentFolderCounts?.total || 0) - (currentFolderCounts?.direct || 0))"
+          :scope-disabled="scopeDisabled"
+          @show-descendants="changeFileScope(true)"
           @preview-file="previewFile"
           @move-field="moveField"
           @files-deleted="handleFilesDeleted"
@@ -225,11 +243,16 @@
       :folder-mutation-id="mobileFolderMutationId"
       :sort-value="cloudSortValue"
       :sort-options="cloudSortOptions"
+      :include-descendants="cloud.includeDescendants"
+      :scope-disabled="scopeDisabled"
+      :scope-error="fileScope.error.value"
       :before-open-create-folder="allowMobileFolderCreate"
       :before-manage-folders="allowMobileFolderCreate"
       :can-manage-tags="user.adminContext?.mode !== 'readonly'"
       @batch="toggleBatchMode"
       @sort="changeCloudSort"
+      @scope-change="changeFileScope"
+      @scope-retry="fileScope.retry"
       @create-folder="createMobileFolder"
       @rename-folder="renameMobileFolder"
       @move-folder="openMobileFolderMove"
@@ -250,6 +273,8 @@
   import HandleBtnGroup from '@/components/cloudSpace/HandleBtnGroup.vue';
   import CloudStorageBar from '@/components/cloudSpace/CloudStorageBar.vue';
   import CloudFileCountSummary from '@/components/cloudSpace/CloudFileCountSummary.vue';
+  import CloudFileScopeControl from '@/components/cloudSpace/CloudFileScopeControl.vue';
+  import { useCloudFileScope } from '@/composables/useCloudFileScope';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import CloudFolder from '@/components/cloudSpace/CloudFolder.vue';
   import FileTypeFilter from '@/components/cloudSpace/FileTypeFilter.vue';
@@ -299,6 +324,10 @@
   const bookmark = bookmarkStore();
   const cloud = cloudSpaceStore();
   const user = useUserStore();
+  const fileScope = useCloudFileScope();
+  const scopeReady = ref(false);
+  let initializationGeneration = 0;
+  let scopeLoad: Promise<void> | null = null;
   const route = useRoute();
   const router = useRouter();
   const { isOrganizingFromInbox, completingInbox, completeInboxResource } = useInboxOrganizer();
@@ -385,6 +414,32 @@
     () => cloud.refreshLoadedFiles(),
   );
   const batchMode = selection.mode;
+  const scopeDisabled = computed(
+    () =>
+      fileScope.loading.value ||
+      fileScope.saving.value ||
+      fileScope.error.value === 'load' ||
+      selection.busy.value ||
+      cloud.fileList.some((file) => file.isRename),
+  );
+  function changeFileScope(value: boolean) {
+    if (scopeDisabled.value) return;
+    void fileScope.save(value);
+  }
+  let appliedFileScope = cloud.includeDescendants;
+  watch(
+    [() => cloud.includeDescendants, () => selection.busy.value || cloud.fileList.some((file) => file.isRename)],
+    ([scope, busy]) => {
+      if (busy || scope === appliedFileScope) return;
+      appliedFileScope = scope;
+      if (!scopeReady.value || cloud.folder.id === 'all') return;
+      selection.clear();
+      clearSelectionKey.value++;
+      cloud.fileList = [];
+      cloud.fileTotal = 0;
+      void cloud.queryFieldList();
+    },
+  );
   const mobilePageActionsOpen = ref(false);
   const mobileFolderDrawerOpen = ref(false);
   const cloudContainerRef = ref<HTMLElement | null>(null);
@@ -573,6 +628,7 @@
   }
 
   async function applyFolderFromRoute() {
+    if (!scopeReady.value) return;
     const folderId = getRouteFolderId();
     if (folderId && !folderListLoaded) return;
     const targetFolder = folderId ? cloud.folderList.find((folder) => String(folder.id) === folderId) : null;
@@ -599,7 +655,14 @@
     suppressFolderRouteWatch = false;
   }
 
-  function initializeCloudSpace(fileName = getRouteFileName()) {
+  async function initializeCloudSpace(fileName = getRouteFileName()) {
+    const initialization = ++initializationGeneration;
+    if (!scopeReady.value) {
+      cloud.loading = true;
+      await (scopeLoad ||= fileScope.load());
+      if (initialization !== initializationGeneration) return;
+      scopeReady.value = true;
+    }
     suppressFolderRouteWatch = Boolean(getRouteFolderId());
     cloud.folder = {
       name: t('cloudSpace.allFile'),
@@ -1030,6 +1093,8 @@
   initializeCloudSpace();
 
   watch(cloudIdentityKey, () => {
+    scopeReady.value = false;
+    scopeLoad = null;
     folderListLoaded = false;
     unavailableFolderId = '';
     unavailableFileId = '';
@@ -1101,6 +1166,7 @@
   });
 
   onUnmounted(() => {
+    initializationGeneration++;
     // 移除window粘贴事件监听
     window.removeEventListener('paste', onPaste);
     window.clearTimeout(cloudSearchTimer);

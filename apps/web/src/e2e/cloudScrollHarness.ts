@@ -9,6 +9,7 @@ import en from '@/i18n/locales/en-US';
 import { bookmarkStore, cloudSpaceStore, useUserStore } from '@/store';
 import { useResourceSelectionStore } from '@/store/resourceSelection';
 import { applyUiDensity } from '@/composables/useUiDensity';
+import { getMobileTopBarBinding } from '@/composables/useMobileTopBar';
 import { useResourceSelectionRuntime } from '@/composables/useResourceSelection';
 import { buildNoteDetailRequestScope } from '@/api/noteDetailPrefetch';
 import ResourceBatchTagsHost from '@/components/resourceActions/ResourceBatchTagsHost.vue';
@@ -19,6 +20,7 @@ const pinia = createPinia();
 setActivePinia(pinia);
 // 使用内存文件驱动真实云空间页面，滚动验收不访问业务服务。
 const fileCount = Math.min(5000, Math.max(1, Number(params.get('count')) || 60));
+const scopeFixture = params.has('scope');
 const items = Array.from({ length: params.has('empty') ? 0 : fileCount }, (_, i) => ({
   id: params.has('numericIds') ? i + 1 : String(i + 1),
   fileName: `滚动验收资料 ${i + 1}.${params.has('preview') ? 'txt' : 'zip'}`,
@@ -29,8 +31,20 @@ const items = Array.from({ length: params.has('empty') ? 0 : fileCount }, (_, i)
   fileSize: 1024,
   uploadTime: '2026-09-11 12:00:00',
   tags: [],
-  folderName: params.has('batch') ? (i % 2 === 0 ? '项目资料' : '旅行资料') : '',
-  folderId: params.has('batch') ? (i % 2 === 0 ? 'folder-a' : 'folder-b') : undefined,
+  folderName: scopeFixture ? '旅行资料' : params.has('batch') ? (i % 2 === 0 ? '项目资料' : '旅行资料') : '',
+  folderId: scopeFixture
+    ? i >= 100
+      ? '4'
+      : i === 0 && !params.has('directEmpty')
+        ? '1'
+        : i % 2 === 0
+          ? '2'
+          : '3'
+    : params.has('batch')
+      ? i % 2 === 0
+        ? 'folder-a'
+        : 'folder-b'
+      : undefined,
   isPending: params.has('batch') && i % 3 !== 0,
 }));
 const fixture = {
@@ -39,6 +53,10 @@ const fixture = {
   delayWrite: 0,
   holdWrite: false,
   releaseWrite: () => {},
+  failNextPreferenceWrite: false,
+  holdPreferenceWrite: false,
+  releasePreferenceWrite: () => {},
+  failNextListRead: false,
 };
 const selectedFiles = (selection: any) =>
   (selection?.items || []).flatMap((ref: any) => {
@@ -64,12 +82,40 @@ request.defaults.adapter = async (config) => {
     return { config, status: 200, statusText: 'OK', headers: {}, data: { status: 500, msg: '验收写入失败' } };
   }
   let data: any = {};
-  if (url.endsWith('/queryFiles')) {
+  if (url.endsWith('/file/preferences')) {
+    if (config.method === 'post') {
+      if (fixture.holdPreferenceWrite)
+        await new Promise<void>((resolve) => {
+          fixture.releasePreferenceWrite = () => {
+            fixture.holdPreferenceWrite = false;
+            resolve();
+          };
+        });
+      if (fixture.failNextPreferenceWrite) {
+        fixture.failNextPreferenceWrite = false;
+        return { config, status: 200, statusText: 'OK', headers: {}, data: { status: 503 } };
+      }
+      localStorage.setItem('fixture:cloud-scope:account', JSON.stringify(body.includeDescendants));
+    }
+    data = { includeDescendants: JSON.parse(localStorage.getItem('fixture:cloud-scope:account') || 'false') === true };
+  } else if (url.endsWith('/queryFiles')) {
+    if (fixture.failNextListRead) {
+      fixture.failNextListRead = false;
+      return { config, status: 200, statusText: 'OK', headers: {}, data: { status: 503 } };
+    }
     if (params.has('slow')) await new Promise((resolve) => setTimeout(resolve, 1500));
     const files = items.filter(
       (item) =>
         (!body.filters?.pendingOnly || item.isPending) &&
-        (!body.filters?.folderId || body.filters.folderId === 'all' || item.folderId === body.filters.folderId),
+        (!body.filters?.folderId ||
+          body.filters.folderId === 'all' ||
+          item.folderId === body.filters.folderId ||
+          (scopeFixture &&
+            body.filters.folderId === '1' &&
+            body.filters.includeDescendants === true &&
+            ['2', '3'].includes(item.folderId || ''))) &&
+        (!scopeFixture || !body.filters?.fileName || item.fileName.includes(body.filters.fileName)) &&
+        (!scopeFixture || !body.filters?.category || body.filters.category.includes('compress')),
     );
     const page = Math.max(1, Number(body.currentPage) || 1);
     const pageSize = params.has('paged') ? Math.max(1, Number(body.pageSize) || 48) : files.length;
@@ -94,20 +140,38 @@ request.defaults.adapter = async (config) => {
   } else if (url.endsWith('/confirmUpload')) {
     data = body.files.map((file: any) => {
       const id = `uploaded-${++uploadedCount}`;
-      items.unshift({ ...file, id, uploadTime: '2026-10-13 12:00:00', tags: [], folderName: '', isPending: true });
+      items.unshift({
+        ...file,
+        id,
+        folderId: body.folderId || undefined,
+        uploadTime: '2026-10-13 12:00:00',
+        tags: [],
+        folderName: '',
+        isPending: true,
+      });
       return { filename: file.fileName, fileId: id, status: '已上传' };
     });
   } else if (url.endsWith('/queryFolder'))
     data = {
-      items: params.has('batch')
-        ? ['folder-a', 'folder-b'].map((id, i) => ({
-            id,
-            name: i === 0 ? '项目资料' : '旅行资料',
-            parentId: null,
-            sort: i,
-            directFileCount: items.filter((item) => item.folderId === id).length,
+      items: scopeFixture
+        ? [
+            { id: '1', parentId: null, name: '旅游' },
+            { id: '2', parentId: '1', name: '2026 旅行' },
+            { id: '3', parentId: '2', name: '原片' },
+            { id: '4', parentId: null, name: '其他资料' },
+          ].map((folder) => ({
+            ...folder,
+            directFileCount: items.filter((item) => item.folderId === folder.id).length,
           }))
-        : [],
+        : params.has('batch')
+          ? ['folder-a', 'folder-b'].map((id, i) => ({
+              id,
+              name: i === 0 ? '项目资料' : '旅行资料',
+              parentId: null,
+              sort: i,
+              directFileCount: items.filter((item) => item.folderId === id).length,
+            }))
+          : [],
       allFileCount: items.length,
     };
   else if (url.endsWith('/queryTotalFileSize')) data = { totalSizeMB: 1, quotaMB: 1024 };
@@ -161,7 +225,7 @@ for (const el of [document.documentElement, document.body, document.getElementBy
   el.style.width = '100%';
   el.style.margin = '0';
 }
-await router.push('/cloudSpace');
+await router.push(scopeFixture ? '/cloudSpace?folderId=1' : '/cloudSpace');
 const app = createApp({
   setup() {
     useResourceSelectionRuntime();
@@ -188,6 +252,7 @@ Object.assign(window, {
     cloud: cloudSpaceStore(),
     files: items,
     controls: fixture,
+    openMore: () => getMobileTopBarBinding('cloudSpace')?.onAuxiliaryAction?.(),
     // 夹具只挂载云空间工作区；手机共享导航不在此处加载，直接初始化其既有选择会话。
     enterBatch: () => useResourceSelectionStore().start('files', buildNoteDetailRequestScope(user)),
   },

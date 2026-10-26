@@ -264,13 +264,15 @@
             </header>
 
             <section class="growth-panel growth-task-center">
-              <BTabs
-                v-model:active-tab="taskView"
-                class="growth-task-tabs"
-                variant="line"
-                :options="taskViewOptions"
-                @select="handleTaskViewSelect"
-              />
+              <div ref="taskTabsScrollRef" class="growth-task-tabs-scroll">
+                <BTabs
+                  v-model:active-tab="taskView"
+                  class="growth-task-tabs"
+                  variant="line"
+                  :options="taskViewOptions"
+                  @select="handleTaskViewSelect"
+                />
+              </div>
 
               <div class="growth-task-workspace">
                 <div class="growth-task-workspace__main">
@@ -427,7 +429,7 @@
                 :focus="String(route.query.focus || '')"
                 :show-goal="pointsCenterEnabled"
               />
-              <LotteryDraw v-else :read-only="isAdminContext" @focus-header="scrollLotteryToPreferredPosition" />
+              <LotteryDraw v-else :read-only="isAdminContext" @focus-draw="scrollLotteryToPreferredPosition(true)" />
             </section>
           </template>
         </main>
@@ -440,7 +442,7 @@
 
 <script setup lang="ts">
   import { useMobileTopBar } from '@/composables/useMobileTopBar';
-  import { computed, nextTick, onMounted, ref, watch } from 'vue';
+  import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useRoute, useRouter } from 'vue-router';
   import GrowthCard from '@/components/growth/GrowthCard.vue';
@@ -472,9 +474,10 @@
   import { bookmarkStore, useUserStore } from '@/store';
   import { resetMobileScrollElement } from '@/composables/useMobileNavigationState';
   import { useForegroundRefresh } from '@/composables/useForegroundRefresh';
+  import { useUiDensity } from '@/composables/useUiDensity';
   import { resolveDailyQuestClaimFeedback } from '@/utils/dailyQuestClaim';
   import { resolveDailyQuestRoute, resolveGrowthActionRoute } from '@/utils/growthNavigation';
-  import { scrollIntoContainer } from '@/utils/scrolling';
+  import { scrollIntoContainer, scrollNearestHorizontallyIntoContainer } from '@/utils/scrolling';
   import {
     inventoryPointsRoute,
     inventoryTabFromQuery,
@@ -501,6 +504,7 @@
   const router = useRouter();
   const user = useUserStore();
   const bookmark = bookmarkStore();
+  const { dimension } = useUiDensity();
   const activeSection = computed<GrowthSection>({
     get: () => {
       const section = String(route.query.section || '');
@@ -536,6 +540,9 @@
   );
   const growthPageRef = ref<HTMLElement | null>(null);
   const growthMainRef = ref<HTMLElement | null>(null);
+  const taskTabsScrollRef = ref<HTMLElement | null>(null);
+  let taskTabsRevealFrame = 0;
+  let taskTabsResizeObserver: ResizeObserver | undefined;
   const useWideDesktopLayout = computed(() => bookmark.isDesktop && !bookmark.isCompactLayout);
   const sectionOptions = computed<GrowthNavOption<GrowthSection>[]>(() => {
     const achievementBadge = achievementClaimableCount.value;
@@ -714,21 +721,50 @@
     }
   }
 
-  async function scrollLotteryToPreferredPosition() {
-    if (!bookmark.isMobile) return;
+  async function scrollLotteryToPreferredPosition(focusDraw = false) {
+    const desktopDraw = focusDraw && bookmark.isDesktop;
+    if (!bookmark.isMobile && !useWideDesktopLayout.value && !desktopDraw) return;
     await nextTick();
-    // BTabs 先 emit select、再更新 v-model；同时 LotteryDraw 还需要一次挂载布局。
-    // 等两个绘制帧后再读取标题坐标，避免拿旧奖励页高度计算后被新面板顶偏。
-    await new Promise<void>((resolve) => {
-      requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
-    });
-    const container = growthPageRef.value;
+    // 分区切换等待挂载与 Tab 更新；抽取时组件已挂载，nextTick 后直接读取新状态。
+    if (!desktopDraw) {
+      await new Promise<void>((resolve) => {
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+      });
+    }
+    if (activeSection.value !== 'rewards' || activeRewardSection.value !== 'lottery') return;
+    const container = useWideDesktopLayout.value ? growthMainRef.value : growthPageRef.value;
+    if (!container) return;
+    const reduceMotion =
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches ||
+      document.documentElement.classList.contains('disable-animations');
+    // 连续抽取一次到位，避免按钮恢复可点击后仍有滚动动画。
+    const behavior = reduceMotion || desktopDraw ? 'auto' : 'smooth';
+    if (desktopDraw) {
+      const machine = container.querySelector<HTMLElement>('.lt-machine');
+      const actions = machine?.querySelector<HTMLElement>('.lt-draw-options');
+      if (!machine || !actions) return;
+      const viewport = container.getBoundingClientRect();
+      const scene = machine.getBoundingClientRect();
+      const gap = dimension(12);
+      const tabs = !useWideDesktopLayout.value ? container.querySelector<HTMLElement>('.growth-section-tabs') : null;
+      const topInset = tabs
+        ? tabs.getBoundingClientRect().height + (parseFloat(getComputedStyle(container).paddingTop) || 0) + gap
+        : gap;
+      // 矮窗口优先保住抽取操作，完整卡片放得下时也保留底部说明。
+      const bottom =
+        scene.height <= container.clientHeight - topInset - gap ? scene.bottom : actions.getBoundingClientRect().bottom;
+      if (scene.top >= viewport.top + topInset && bottom <= viewport.bottom - gap) return;
+      const offset = Math.min(topInset, container.clientHeight - gap - (bottom - scene.top));
+      scrollIntoContainer(container, machine, offset, behavior);
+      return;
+    }
     const lotteryTitle = document.getElementById('lottery-title');
-    if (!container || !lotteryTitle) return;
-    // 直接以“积分抽奖”标题为准，在标题上方保留主 Tab、间距和卡片内边距。
-    // 不再依赖旧面板的锚点位置，保证标题始终完整出现在首屏而不是被滚到顶部之外。
-    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    scrollIntoContainer(container, lotteryTitle, 112, reduceMotion ? 'auto' : 'smooth');
+    if (!lotteryTitle) return;
+    if (useWideDesktopLayout.value) {
+      scrollIntoContainer(container, lotteryTitle, 0, behavior);
+    } else {
+      scrollIntoContainer(container, lotteryTitle, 112, behavior);
+    }
   }
 
   function handleSectionTabSelect(section: string) {
@@ -780,8 +816,28 @@
     handleSectionTabSelect(option.section);
   }
 
+  function revealTaskTab(behavior: ScrollBehavior = 'auto') {
+    cancelAnimationFrame(taskTabsRevealFrame);
+    // 下一帧读取最终布局，也等键盘焦点落定后再开始平滑滚动。
+    taskTabsRevealFrame = requestAnimationFrame(() => {
+      taskTabsRevealFrame = 0;
+      const container = taskTabsScrollRef.value;
+      const tab = container?.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]');
+      if (!container || !tab || container.scrollWidth <= container.clientWidth) return;
+      const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      container.scrollTo({ left: container.scrollLeft, behavior: 'auto' });
+      scrollNearestHorizontallyIntoContainer(container, tab, reduceMotion ? 'auto' : behavior);
+    });
+  }
+
+  onBeforeUnmount(() => {
+    taskTabsResizeObserver?.disconnect();
+    cancelAnimationFrame(taskTabsRevealFrame);
+  });
+
   function handleTaskViewSelect(view: string) {
     taskView.value = view as TaskView;
+    revealTaskTab('smooth');
     if (taskView.value === 'onboarding') void loadGrowthTasks();
   }
 
@@ -911,6 +967,24 @@
   function openWeeklyReport() {
     wrVisible.value = true;
   }
+
+  watch(
+    [taskTabsScrollRef, taskView, () => taskViewOptions.value.map((option) => option.label).join('|')] as const,
+    ([container, view], [previousContainer, previousView]) => {
+      if (container !== previousContainer) {
+        taskTabsResizeObserver?.disconnect();
+        taskTabsResizeObserver = undefined;
+        if (container && typeof ResizeObserver !== 'undefined') {
+          taskTabsResizeObserver = new ResizeObserver(() => revealTaskTab());
+          taskTabsResizeObserver.observe(container);
+          const row = container.querySelector('.growth-task-tabs');
+          if (row) taskTabsResizeObserver.observe(row);
+        }
+      }
+      revealTaskTab(view === previousView ? 'auto' : 'smooth');
+    },
+    { flush: 'post' },
+  );
 
   onMounted(() => {
     void load(); // 任务分区也需要今日经验与每日上限；共享请求会与概览卡片自动合并。
@@ -1431,6 +1505,9 @@
     padding: 0;
     overflow: hidden;
   }
+  .growth-task-tabs-scroll {
+    min-width: 0;
+  }
   .growth-task-tabs {
     padding: 0 var(--ui-space-16, 16px);
     border-bottom: 1px solid var(--card-border-color);
@@ -1698,13 +1775,36 @@
     .growth-section-heading .b_btn {
       width: 100%;
     }
-    .growth-task-tabs {
-      padding: 0 var(--ui-space-8, 8px);
+    .growth-task-center {
+      padding: 0;
+    }
+    .growth-task-tabs-scroll {
       overflow-x: auto;
+      scrollbar-width: none;
+
+      &::-webkit-scrollbar {
+        display: none;
+      }
+    }
+    .growth-task-tabs.tab-container {
+      // 按最长标签保留舒适内边距；空间足够时三项等宽铺满，不足时由外层滚动。
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      width: max-content;
+      min-width: 100%;
+      box-sizing: border-box;
+      gap: 0;
+      margin-bottom: 0;
+      padding: 0 var(--ui-space-8, 8px);
     }
     .growth-task-tabs :deep(.tab) {
-      min-width: max-content;
-      padding-inline: var(--ui-space-10, 10px);
+      min-width: var(--ui-layout-104, 104px);
+      min-height: var(--ui-control-44, 44px);
+      box-sizing: border-box;
+      justify-content: center;
+      padding: var(--ui-space-4, 4px) var(--ui-space-8, 8px);
+      line-height: 1.3;
+      white-space: nowrap;
     }
     .growth-task-workspace {
       padding: var(--ui-space-12, 12px);

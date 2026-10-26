@@ -31,6 +31,7 @@
   </BModal>
 </template>
 <script setup lang="ts">
+  import { useForegroundRefresh } from '@/composables/useForegroundRefresh';
   import { ref, watch, onBeforeUnmount } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useUserStore } from '@/store';
@@ -131,15 +132,15 @@
       if (gen === generation) creating.value = false;
     }
   }
+  useForegroundRefresh({
+    refresh: async () => { attempts = 0; await refresh(); },
+    trailingWake: true, staleMs: 1000,
+    canRefresh: () => visible.value && Boolean(intentId.value) && !creating.value,
+  });
   function foreground() {
     if (document.hidden) stop();
-    else {
-      attempts = 0;
-      void refresh();
-    }
   }
   document.addEventListener('visibilitychange', foreground);
-  window.addEventListener('focus', foreground);
   watch(visible, (value) => {
     if (value) {
       attempts = 0;
@@ -168,7 +169,6 @@
     ++generation;
     stop();
     document.removeEventListener('visibilitychange', foreground);
-    window.removeEventListener('focus', foreground);
   });
   defineExpose({ start });
 </script>

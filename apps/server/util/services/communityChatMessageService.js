@@ -22,6 +22,7 @@ import {
 import { assertCommunityChatPostingAllowed, getCommunityChatBlockedUserIds } from './communityChatModerationService.js';
 import { publishCommunityChatRealtimeEvent } from '../communityChat/realtimeBroker.js';
 import { deliverCommunityChatMessageNotifications } from './communityChatNotificationService.js';
+import { queueNotificationChange, queueNotificationSourceChange } from '../notificationRealtimeEvents.js';
 import {
   COMMUNITY_CHAT_ATTACHMENT_MAX_COUNT,
   COMMUNITY_CHAT_ATTACHMENT_MAX_TOTAL_BYTES,
@@ -2102,6 +2103,7 @@ export async function recallCommunityChatMessage({ user, messagePublicId, env = 
         WHERE source_type = 'community_chat_message' AND source_id = ? AND del_flag = 0`,
       [target.publicId],
     );
+    queueNotificationSourceChange(connection, { kind: 'chat', ids: [target.publicId] });
     if (canModerate) {
       await connection.query(
         `INSERT INTO community_chat_moderation_actions
@@ -2176,6 +2178,7 @@ export async function deleteCommunityChatMessage({ user, messagePublicId, env = 
         WHERE user_id = ? AND source_type = 'community_chat_message' AND source_id = ? AND del_flag = 0`,
       [user.id, target.publicId],
     );
+    queueNotificationChange(connection, [user.id]);
     await connection.commit();
     return {
       publicId: target.publicId,

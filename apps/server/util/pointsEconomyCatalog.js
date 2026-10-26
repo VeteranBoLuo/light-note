@@ -8,7 +8,8 @@ export const C5_POINTS_ECONOMY_VERSION = 'points-economy-c5';
 export const C6_POINTS_ECONOMY_VERSION = 'points-economy-c6';
 export const C7_POINTS_ECONOMY_VERSION = 'points-economy-c7';
 export const C8_POINTS_ECONOMY_VERSION = 'points-economy-c8';
-export const POINTS_ECONOMY_VERSION = 'points-economy-c9';
+export const C9_POINTS_ECONOMY_VERSION = 'points-economy-c9';
+export const POINTS_ECONOMY_VERSION = 'points-economy-c10';
 
 const LEGACY_UTILITY_ITEMS = [
   {
@@ -126,6 +127,14 @@ const C4_FREE_POOL = [
   { id: 'p40', kind: 'points', amount: 40, name: '+40 积分', weight: 100 },
   { id: 'ai100', kind: 'ai_pack', amount: 100_000, name: 'AI 加油 +10 万', weight: 80 },
   { id: 'ai200', kind: 'ai_pack', amount: 200_000, name: 'AI 加油 +20 万', weight: 20 },
+];
+
+const C10_FREE_POOL = [
+  { id: 'p3', kind: 'points', amount: 3, name: '+3 积分', weight: 650 },
+  { id: 'p5', kind: 'points', amount: 5, name: '+5 积分', weight: 230 },
+  { id: 'p20', kind: 'points', amount: 20, name: '+20 积分', weight: 20 },
+  { id: 'ai20', kind: 'ai_pack', amount: 20_000, name: 'AI 加油 +2 万', weight: 80 },
+  { id: 'ai50', kind: 'ai_pack', amount: 50_000, name: 'AI 加油 +5 万', weight: 20 },
 ];
 
 // 权重合计严格为 1000；保底池只取 tier=rare 的 170 权重。
@@ -262,11 +271,11 @@ const C8_ECONOMY_CATALOGS = Object.freeze({
 });
 
 // 个人背景兑换一次永久拥有，名片和公开主页共用同一佩戴状态。
-export const ECONOMY_CATALOGS = Object.freeze({
+const C9_ECONOMY_CATALOGS = Object.freeze({
   ...C8_ECONOMY_CATALOGS,
-  [POINTS_ECONOMY_VERSION]: Object.freeze({
+  [C9_POINTS_ECONOMY_VERSION]: Object.freeze({
     ...C8_ECONOMY_CATALOGS[C8_POINTS_ECONOMY_VERSION],
-    version: POINTS_ECONOMY_VERSION,
+    version: C9_POINTS_ECONOMY_VERSION,
     backgroundItems: freezeItems(
       [
         { id: 'background_mountains', name: '纸上青山', cost: 600 },
@@ -284,6 +293,16 @@ export const ECONOMY_CATALOGS = Object.freeze({
   }),
 });
 
+// C10 仅收紧免费惊喜；已发布的 C9 奖池、商品和历史收据继续可解释。
+export const ECONOMY_CATALOGS = Object.freeze({
+  ...C9_ECONOMY_CATALOGS,
+  [POINTS_ECONOMY_VERSION]: Object.freeze({
+    ...C9_ECONOMY_CATALOGS[C9_POINTS_ECONOMY_VERSION],
+    version: POINTS_ECONOMY_VERSION,
+    freePolicy: freezePolicy({ poolVersion: 'c10-free-v1', pool: C10_FREE_POOL, countsPaidPity: false }),
+  }),
+});
+
 export function parseRuntimeFlag(value, defaultValue) {
   if (value === undefined || value === null || value === '') return Boolean(defaultValue);
   if (value === true || value === 'true' || value === '1') return true;
@@ -292,7 +311,8 @@ export function parseRuntimeFlag(value, defaultValue) {
 }
 
 export function getActiveEconomyVersion(env = process.env) {
-  if (parseRuntimeFlag(env.POINTS_ECONOMY_C9_ENABLED, false)) return POINTS_ECONOMY_VERSION;
+  if (parseRuntimeFlag(env.POINTS_ECONOMY_C10_ENABLED, false)) return POINTS_ECONOMY_VERSION;
+  if (parseRuntimeFlag(env.POINTS_ECONOMY_C9_ENABLED, false)) return C9_POINTS_ECONOMY_VERSION;
   if (parseRuntimeFlag(env.POINTS_ECONOMY_C8_ENABLED, false)) return C8_POINTS_ECONOMY_VERSION;
   if (parseRuntimeFlag(env.POINTS_ECONOMY_C7_ENABLED, false)) return C7_POINTS_ECONOMY_VERSION;
   if (parseRuntimeFlag(env.POINTS_ECONOMY_C6_ENABLED, false)) return C6_POINTS_ECONOMY_VERSION;
@@ -317,6 +337,7 @@ export function getEconomyRuntime(env = process.env) {
       C6_POINTS_ECONOMY_VERSION,
       C7_POINTS_ECONOMY_VERSION,
       C8_POINTS_ECONOMY_VERSION,
+      C9_POINTS_ECONOMY_VERSION,
       POINTS_ECONOMY_VERSION,
     ].includes(catalog.version),
     // C4 及其后续版本激活后协议不可降级；该开关只用于 C3 兼容代码提前上线时主动收紧旧写入口。

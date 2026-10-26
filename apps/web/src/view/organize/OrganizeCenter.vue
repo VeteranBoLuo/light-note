@@ -621,6 +621,7 @@
 </template>
 
 <script setup lang="ts">
+  import { useForegroundRefresh } from '@/composables/useForegroundRefresh';
   import { useRangeSelection } from '@/composables/useRangeSelection';
   import { vRangeSelect, vRangeSelectionScroll } from '@/directives/rangeSelection';
   import { buildNoteDetailRequestScope } from '@/api/noteDetailPrefetch';
@@ -864,11 +865,18 @@
     aiNavActive = true;
     void pollAiNav();
   }
+  useForegroundRefresh({
+    refresh: async () => {
+      if (aiNavActive) await pollAiNav();
+      if (activeView.value === 'bookmark_health') await refreshHealthScan({ silent: Boolean(healthSummary.value) });
+    },
+    trailingWake: true, staleMs: 1000,
+  });
   function aiNavVisibility() {
     if (document.hidden) {
       clearTimeout(aiNavTimer);
       aiNavGeneration++;
-    } else if (aiNavActive) void pollAiNav();
+    }
   }
   watch(organizeOwnerKey, () => {
     aiNavStatus.value = '';
@@ -1193,7 +1201,6 @@
 
   function handleHealthVisibilityChange() {
     if (document.hidden) stopHealthPolling();
-    else if (activeView.value === 'bookmark_health') void refreshHealthScan({ silent: Boolean(healthSummary.value) });
   }
 
   function untaggedKey(item: UntaggedResourceItem) {

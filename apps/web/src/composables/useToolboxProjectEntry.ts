@@ -6,7 +6,7 @@ import { toolboxProjectRevision, invalidateToolboxProjects } from '@/utils/toolb
 import type { ToolboxHomeWorkspaceSummary } from '@/api/toolbox';
 
 type Entry = { dismissed: boolean; hasProjects: boolean; projects: ToolboxHomeWorkspaceSummary[] };
-const cache = new Map<string, { value?: Entry; at: number; revision: number; pending?: Promise<Entry> }>();
+const cache = new Map<string, { value?: Entry; at: number; attemptedAt?: number; revision: number; pending?: Promise<Entry> }>();
 export function useToolboxProjectEntry() {
   const user = useUserStore();
   const owner = computed(() => toolboxRecentUseIdentityKey(user));
@@ -34,6 +34,7 @@ export function useToolboxProjectEntry() {
     try {
       if (!entry.pending) {
         const target = entry;
+        target.attemptedAt = Date.now();
         target.pending = apiBaseGet('/api/toolbox/project-entry', undefined, { silent: true })
           .then((response) => {
             if (response.status !== 200) throw new Error('project-entry');
@@ -73,7 +74,8 @@ export function useToolboxProjectEntry() {
     invalidateToolboxProjects();
   }
   function onVisible() {
-    if (document.visibilityState === 'visible') void load();
+    const attemptedAt = cache.get(owner.value)?.attemptedAt ?? -Infinity;
+    if (document.visibilityState === 'visible' && Date.now() - attemptedAt >= 60_000) void load();
   }
   watch(
     [owner, eligible],

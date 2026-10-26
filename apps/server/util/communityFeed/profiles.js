@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import pool from '../../db/index.js';
+import { queueNotificationChange } from '../notificationRealtimeEvents.js';
 import { buildProfilePayload, loadCommunityProfileAuthor } from '../services/communityChatProfileService.js';
 import {
   access,
@@ -177,11 +178,13 @@ export async function relation({ user, input, env = process.env, db = pool }) {
             target.user_id,
           ]);
       }
+      if (input.action === 'block') queueNotificationChange(c, [user.id, target.user_id]);
       return { userPublicId: input.userPublicId, action: input.action, enabled: input.enabled };
     },
   );
 }
 export async function clearBlockedRelations(c, a, b) {
+  queueNotificationChange(c, [a, b]);
   // Called from the old chat block transaction too; missing P2 tables must not break chat.
   try {
     await c.query(

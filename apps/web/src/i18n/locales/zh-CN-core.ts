@@ -1,4 +1,5 @@
 import { publicResourcesZh } from './publicResources';
+import { cloudFileScopeZh } from './cloudFileScope';
 import { profileBackgroundsZh, profileBackgroundItemsZh } from './profileBackgrounds';
 import { profileAppearanceZh } from './profileAppearance';
 import { MAKEUP_WINDOW_DAYS } from '@lightnote/shared';
@@ -7177,6 +7178,7 @@ export default {
     },
   },
   cloudSpace: {
+    ...cloudFileScopeZh,
     batchPreview: '预览',
     previewFile: '预览 {name}',
     pinFailed: '置顶状态更新失败，请稍后重试',
@@ -9507,9 +9509,14 @@ export default {
     lotteryHistoryStatus: '状态',
     lotteryDelivered: '已到账',
     lotterySkipAnimation: '跳过动画',
+    lotteryGiftCharging: '今日惊喜，正在开启',
+    lotteryGiftOpening: '礼盒开启，惊喜将至',
+    lotteryStarsCharging: '星光正在汇聚',
+    lotteryAiTokenUnit: 'AI tokens',
+    lotteryFreePermanentHint: 'AI 额度永久有效 · 每日等级额度优先使用',
     lotteryOpening: '你的惊喜即将揭晓',
     lotteryOpeningTen: '十份惊喜，正在开启',
-    lotteryOpeningHint: '正在开启幸运礼盒',
+    lotteryOpeningHint: '属于你的惊喜，即将到来',
     lotteryConfirming: '正在确认抽奖结果',
     lotteryConfirmingHint: '结果确认后会在这里揭晓',
     lotteryResultUncertain: '抽奖结果待确认',
@@ -9574,7 +9581,7 @@ export default {
     assetDetails: '查看明细',
     lotteryPityPoolHint: '每 {n} 抽必得稀有',
     lotteryViewBackpack: '查看背包',
-    lotteryPaidIdle: '每次抽取都有奖励',
+    lotteryPaidIdle: '让下一份惊喜，奔赴而来',
     lotteryPaidIdleHint: 'AI 额度、永久空间与实用道具',
     lotteryPaidPityOnly: '仅积分抽奖累计保底',
     lotteryCostLabel: '{n} 积分',
@@ -9614,7 +9621,9 @@ export default {
     itemUseFail: '使用失败,稍后再试',
     // —— 连签里程碑 ——
     streakMilestoneToast: '🎉 连签 {days} 天达成！奖励 {reward}',
+    publicContributionRule: '仅统计审核通过且当前有效的自有公开资源；相同网址只算一次，保存的公开副本和系统示例不计入。取消公开不影响已解锁成就，每档奖励仅可领取一次。',
     achievementFamily: {
+      sharing: '公开贡献',
       checkin: '签到习惯',
       bookmark: '书签收藏',
       note: '笔记创作',
@@ -9728,6 +9737,9 @@ export default {
       frame_file_vault: { name: '云阙宝库', desc: '头像框 · 晶辉守护云藏' },
       frame_note_constellation: { name: '翰墨星海', desc: '头像框 · 五百篇文光汇成星海' },
       frame_file_constellation: { name: '寰宇云藏', desc: '头像框 · 五百云藏辉映星门' },
+      frame_lantern_bearer: { name: '传灯者', desc: '头像框 · 五十份知识传递微光' },
+      frame_shared_reading: { name: '共读之光', desc: '头像框 · 书页汇光，共享成林' },
+      frame_knowledge_lighthouse: { name: '知识灯塔', desc: '头像框 · 让分享成为温柔的指引' },
       frame_streak_eternal: { name: '岁序长明', desc: '头像框 · 日月轮转一周年' },
     },
     frameStyles: {
@@ -9759,6 +9771,9 @@ export default {
       frame_file_vault: '晶辉云阙',
       frame_note_constellation: '翰墨星潮',
       frame_file_constellation: '云藏星门',
+      frame_lantern_bearer: '传灯者',
+      frame_shared_reading: '共读之光',
+      frame_knowledge_lighthouse: '知识灯塔',
       frame_streak_eternal: '日月年轮',
     },
     frameFilters: { all: '全部', basic: '基础', rare: '进阶', epic: '炫彩', legendary: '传说' },
@@ -9915,6 +9930,7 @@ export default {
     achClaimedAlready: '该成就奖励已领取',
     achClaimLocked: '成就尚未解锁',
     achGroup: {
+      sharing: '公开贡献',
       community: '社区交流',
       checkin: '签到成就',
       create: '创作成就',
@@ -9924,6 +9940,12 @@ export default {
       tenure: '资历成就',
     },
     achName: {
+      public_resource_1: '初次分享',
+      public_resource_10: '开卷有益',
+      public_resource_50: '星火传灯',
+      public_resource_200: '聚知成林',
+      public_resource_500: '知识灯塔',
+
       community_post_1: '初次分享',
       community_post_10: '持续分享',
       community_post_50: '经验沉淀',
@@ -9970,6 +9992,12 @@ export default {
       join_365: '周年知己',
     },
     achDesc: {
+      public_resource_1: '审核通过且有效公开 1 项自己的书签或纯文字笔记',
+      public_resource_10: '审核通过且有效公开 10 项自己的书签或纯文字笔记',
+      public_resource_50: '审核通过且有效公开 50 项自己的书签或纯文字笔记',
+      public_resource_200: '审核通过且有效公开 200 项自己的书签或纯文字笔记',
+      public_resource_500: '审核通过且有效公开 500 项自己的书签或纯文字笔记',
+
       community_post_1: '首次发布并审核通过 1 篇帖子',
       community_post_10: '累计发布并审核通过 10 篇不同帖子',
       community_post_50: '累计发布并审核通过 50 篇不同帖子',
@@ -10037,6 +10065,9 @@ export default {
     unreadCount: '{count} 条未读',
     preferences: '通知偏好',
     markAllRead: '全部已读',
+    markRead: '标记为已读',
+    markUnread: '标记为未读',
+    readStateFailed: '通知状态切换失败，请稍后重试',
     empty: '暂无通知',
     noContent: '(无更多内容)',
     invalidLink: '这条通知的跳转链接无效',

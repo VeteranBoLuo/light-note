@@ -264,6 +264,7 @@
     color: var(--text-color);
     font-size: var(--ui-font-16, 16px);
     font-weight: 700;
+    line-height: 1.5;
   }
 
   .growth-tasks__header p,

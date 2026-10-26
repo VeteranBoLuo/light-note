@@ -22,6 +22,9 @@ export const getUnreadCount = (options: NotificationScopeOptions = {}) =>
 // 标记指定通知已读
 export const markNotificationsRead = (ids: string[]) => apiBasePost('/api/notification/markRead', { ids });
 
+export const setNotificationReadState = (id: string, isRead: boolean) =>
+  apiBasePost('/api/notification/setReadState', { id, isRead }, { silent: true });
+
 // 全部已读
 export const markAllNotificationsRead = (options: NotificationScopeOptions = {}) =>
   apiBasePost('/api/notification/markAllRead', options);
@@ -86,6 +89,7 @@ export default {
   getNotificationList,
   getUnreadCount,
   markNotificationsRead,
+  setNotificationReadState,
   markAllNotificationsRead,
   deleteNotifications,
   sendNotification,

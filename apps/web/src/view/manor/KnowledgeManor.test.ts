@@ -61,6 +61,7 @@ async function mount(previous?: string) {
   return router;
 }
 beforeEach(() => {
+  sessionStorage.clear();
   vi.useFakeTimers();
   mocks.bookmark.isMobile = false;
   mocks.pending.mockReturnValue(null);
@@ -92,9 +93,25 @@ describe('庄园加载与主站导航', () => {
     expect(mocks.command).not.toHaveBeenCalled();
     expect(mocks.save).not.toHaveBeenCalled();
     expect(mocks.read).toHaveBeenCalledTimes(1);
+    app?.unmount();app=undefined;document.body.innerHTML='';
+    await mount();
+    const resumedFrame=document.querySelector('iframe')!,resumedReply=vi.spyOn(resumedFrame.contentWindow!,'postMessage');
+    await send('get');
+    expect(resumedReply).toHaveBeenLastCalledWith(expect.objectContaining({value:expect.objectContaining({testing:true,state:expect.objectContaining({adopted:true})})}),location.origin);
+    expect(mocks.command).not.toHaveBeenCalled();
     await send('restore-formal');
     await send('get');
-    expect(mocks.read).toHaveBeenCalledTimes(2);
+    expect(mocks.read).toHaveBeenCalledTimes(3);
+    expect(sessionStorage.getItem('lightnote-manor-test-v1:root-fixture')).toBeNull();
+  });
+
+  it('旧渲染器的积分入口也留在庄园内打开账本',async()=>{
+    const router=await mount(),frame=document.querySelector('iframe')!,nonce=new URL(frame.src).searchParams.get('bridge');
+    const reply=vi.spyOn(frame.contentWindow!,'postMessage');
+    window.dispatchEvent(new MessageEvent('message',{source:frame.contentWindow,origin:location.origin,data:{type:'lightnote-manor',nonce,id:10,action:'ledger'}}));
+    await flush();
+    expect(router.currentRoute.value.path).toBe('/knowledge-manor');
+    expect(reply).toHaveBeenCalledWith(expect.objectContaining({type:'lightnote-manor-control',action:'open-ledger'}),location.origin);
   });
 
   it('存档读取与 iframe 静态资源并行，桥接复用同一次初始读取', async () => {

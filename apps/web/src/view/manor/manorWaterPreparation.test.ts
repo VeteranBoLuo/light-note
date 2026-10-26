@@ -37,6 +37,11 @@ describe('预生成庄园水面',()=>{
     expect(point(2800,700)[0]).toBe(0);
     expect(point(1500,1300)[0]).toBe(0);
   });
+  it('移动端船帆、船体和蓝色描边不会被当成海水变形',()=>{
+    const scene=cal.mobileGarden,mask=rgbaPNG(scene.water);
+    for(const [x,y] of [[371,310],[371,352],[488,348],[386,331]])
+      expect(mask.pixel(x*mask.width/scene.image[0],y*mask.height/scene.image[1])[0]).toBe(0);
+  });
   it('高分屏按真实显示尺寸渲染，波场连续推进而不是整体反向移动或扩散圆环',()=>{
     const module={exports:{} as {renderSize:(w:number,h:number,dpr:number)=>{width:number;height:number};swellField:(n:number,rng:()=>number)=>{update:(t:number)=>Float32Array}}};
     runInNewContext(readFileSync(new URL('garden-environment-r53.js',root),'utf8'),{module});

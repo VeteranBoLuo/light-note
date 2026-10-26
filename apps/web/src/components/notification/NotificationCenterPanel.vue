@@ -9,7 +9,7 @@
   >
     <div v-if="showHeader" class="nt-head">
       <span class="nt-title">{{ t('notification.title') }}</span>
-      <BButton class="nt-markall" :disabled="unreadTotal <= 0" @click="emit('mark-all')">
+      <BButton class="nt-markall" :disabled="unreadTotal <= 0 || readStateDisabled" @click="emit('mark-all')">
         <SvgIcon :src="icon.settings.notificationReadAll" size="15" aria-hidden="true" />
         {{ t('notification.markAllRead') }}
       </BButton>
@@ -111,13 +111,34 @@
                   </BChip>
                 </div>
               </div>
-              <BButton
-                class="nt-item-action"
-                :aria-label="mobile ? t('common.more') : t('notification.delete')"
-                @click.stop="mobile ? emit('more', item) : emit('delete', item)"
-              >
-                <SvgIcon :src="mobile ? icon.common.more : icon.noteDetail.delete" size="18" aria-hidden="true" />
-              </BButton>
+              <div class="nt-item-actions">
+                <BTooltip v-if="!mobile" :title="readStateLabel(item)">
+                  <BButton
+                    class="nt-item-action nt-read-state"
+                    icon-only
+                    :aria-label="`${readStateLabel(item)} · ${renderTitle(item)}`"
+                    :loading="readStatePendingId === item.id"
+                    :disabled="loading || readStateDisabled"
+                    @click.stop="emit('toggle-read', item)"
+                  >
+                    <SvgIcon
+                      :src="item.isRead ? icon.settings.notificationMarkUnread : icon.settings.notificationMarkRead"
+                      size="18"
+                      aria-hidden="true"
+                    />
+                  </BButton>
+                </BTooltip>
+                <BTooltip :title="mobile ? t('common.more') : t('notification.delete')">
+                  <BButton
+                    class="nt-item-action"
+                    :disabled="readStatePendingId === item.id"
+                    :aria-label="mobile ? t('common.more') : t('notification.delete')"
+                    @click.stop="mobile ? emit('more', item) : emit('delete', item)"
+                  >
+                    <SvgIcon :src="mobile ? icon.common.more : icon.noteDetail.delete" size="18" aria-hidden="true" />
+                  </BButton>
+                </BTooltip>
+              </div>
             </article>
           </div>
         </section>
@@ -134,6 +155,7 @@
   import type { NotificationItem } from '@/composables/useNotification';
   import BChip from '@/components/base/BasicComponents/BChip.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon';
 
@@ -159,6 +181,8 @@
       total: number;
       loading: boolean;
       completingTodoId: string;
+      readStatePendingId?: string;
+      readStateDisabled?: boolean;
       mobile?: boolean;
       desktopPage?: boolean;
       wideDesktopPage?: boolean;
@@ -170,7 +194,16 @@
       todoId: (item: NotificationItem) => string;
       todoActionState: (item: NotificationItem) => 'pending' | 'completed' | 'unavailable';
     }>(),
-    { targetId: '', locateState: 'idle', mobile: false, desktopPage: false, wideDesktopPage: false, showHeader: true },
+    {
+      targetId: '',
+      locateState: 'idle',
+      mobile: false,
+      desktopPage: false,
+      wideDesktopPage: false,
+      showHeader: true,
+      readStatePendingId: '',
+      readStateDisabled: false,
+    },
   );
   const emit = defineEmits<{
     'retry-locate': [];
@@ -178,11 +211,14 @@
     'switch-tab': [value: string];
     'item-click': [item: NotificationItem];
     'complete-todo': [item: NotificationItem];
+    'toggle-read': [item: NotificationItem];
     more: [item: NotificationItem];
     delete: [item: NotificationItem];
     'load-more': [];
   }>();
   const { t } = useI18n();
+  const readStateLabel = (item: NotificationItem) =>
+    t(item.isRead ? 'notification.markUnread' : 'notification.markRead');
 
   function notificationIcon(item: NotificationItem) {
     if (item.type === 'todo_reminder') return icon.growth.action;
@@ -450,16 +486,34 @@
     font-size: var(--ui-font-11, 11px);
   }
 
-  .nt-item-action {
+  .nt-panel:not(.is-mobile) .nt-item {
+    padding-right: var(--ui-space-84, 84px);
+  }
+
+  .nt-item-actions {
     position: absolute;
     top: 0;
     right: var(--ui-space-6, 6px);
-    width: var(--ui-control-44, 44px);
-    min-width: var(--ui-control-44, 44px);
+    display: flex;
+    gap: var(--ui-space-2, 2px);
+  }
+
+  .nt-item-action {
+    width: var(--ui-control-32, 32px);
+    min-width: var(--ui-control-32, 32px);
     height: var(--ui-control-44, 44px);
     padding: 0;
     color: var(--desc-color);
     background: transparent !important;
+  }
+
+  .nt-item-action:hover:not(:disabled) {
+    color: var(--primary-color);
+  }
+
+  .is-mobile .nt-item-action {
+    width: var(--ui-control-44, 44px);
+    min-width: var(--ui-control-44, 44px);
   }
 
   .nt-todo-actions {
@@ -603,8 +657,8 @@
     white-space: nowrap;
   }
 
-  .is-desktop-page .nt-item-action {
-    top: var(--ui-space-10, 10px);
+  .is-desktop-page .nt-item-actions {
+    top: var(--ui-space-2, 2px);
     right: var(--ui-space-8, 8px);
   }
 

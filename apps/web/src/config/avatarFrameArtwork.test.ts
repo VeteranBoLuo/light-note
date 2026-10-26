@@ -3,12 +3,12 @@ import { AVATAR_FRAME_ARTWORK, type AvatarFrameArtwork } from './avatarFrameArtw
 import { FRAME_VARIANTS } from './growthFrames';
 
 describe('头像框成品素材目录', () => {
-  it('完整覆盖 29 个视觉变体且每款使用独立素材', () => {
+  it('完整覆盖 32 个视觉变体且每款使用独立素材', () => {
     const variants = Object.values(FRAME_VARIANTS);
     const artworkVariants = Object.keys(AVATAR_FRAME_ARTWORK);
 
     expect(new Set(artworkVariants)).toEqual(new Set(variants));
-    expect(new Set(Object.values(AVATAR_FRAME_ARTWORK).map((item) => item.src)).size).toBe(29);
+    expect(new Set(Object.values(AVATAR_FRAME_ARTWORK).map((item) => item.src)).size).toBe(32);
   });
 
   it('保持静态、动态与当前动效天花板的档位约束', () => {
@@ -29,11 +29,12 @@ describe('头像框成品素材目录', () => {
       'bookmark-seed',
       'note-flow',
       'file-seed',
+      'lantern-bearer',
     ]);
     expect(variantsFor('advanced')).toEqual(['gold', 'sakura', 'sunset']);
     expect(variantsFor('ceiling')).toEqual(['celestial', 'streak-eternal']);
-    expect(Object.values(AVATAR_FRAME_ARTWORK).filter((item) => item.motion !== 'static')).toHaveLength(18);
-    expect(Object.values(AVATAR_FRAME_ARTWORK).every((item) => item.artSize >= 100 && item.artSize <= 140)).toBe(true);
+    expect(Object.values(AVATAR_FRAME_ARTWORK).filter((item) => item.motion !== 'static')).toHaveLength(20);
+    expect(Object.values(AVATAR_FRAME_ARTWORK).every((item) => item.artSize >= 89 && item.artSize <= 140)).toBe(true);
     expect(Object.values(AVATAR_FRAME_ARTWORK).every((item) => item.outerSize >= 86 && item.outerSize <= 124)).toBe(
       true,
     );
@@ -191,6 +192,9 @@ describe('头像框成品素材目录', () => {
 
   it('逐款标定中央内孔，同时保持外框视觉外径独立', () => {
     const expectedInnerArtSizes = {
+      'lantern-bearer': 89.6,
+      'shared-reading': 99.2,
+      'knowledge-lighthouse': 108.8,
       mint: 116,
       ink: 109,
       moonstone: 114,

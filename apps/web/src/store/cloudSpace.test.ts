@@ -20,8 +20,44 @@ vi.mock('@/i18n', () => ({
 }));
 
 const { CLOUD_FILE_SORT_STORAGE_KEY, default: useCloudSpaceStore } = await import('./cloudSpace');
+const { default: useUserStore } = await import('./useUser');
 
 describe('cloud space pagination', () => {
+  it('carries the account scope through pagination and mutation refresh without changing the upload folder', async () => {
+    setActivePinia(createPinia());
+    const cloud = useCloudSpaceStore();
+    useUserStore().preferences.cloudIncludeDescendants = true;
+    cloud.folder = { id: '1', name: '旅行' };
+    mocks.apiQueryPost.mockResolvedValue({ status: 200, data: { items: [], total: 100, page: 1, hasMore: true } });
+    await cloud.queryFieldList();
+    await cloud.loadMoreFiles();
+    await cloud.refreshLoadedFiles();
+    for (const [, body] of mocks.apiQueryPost.mock.calls)
+      expect(body.filters).toMatchObject({ folderId: '1', includeDescendants: true });
+    expect(cloud.folder).toEqual({ id: '1', name: '旅行' });
+  });
+  it('ignores a previous scope response and exposes a failed new scope instead of a false empty state', async () => {
+    setActivePinia(createPinia());
+    const cloud = useCloudSpaceStore();
+    let finish!: (value: any) => void;
+    mocks.apiQueryPost.mockReturnValueOnce(
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+    );
+    const oldRequest = cloud.queryFieldList();
+    useUserStore().preferences.cloudIncludeDescendants = true;
+    mocks.apiQueryPost.mockResolvedValueOnce({ status: 503 });
+    await cloud.queryFieldList();
+    finish({ status: 200, data: { items: [{ id: 'stale' }], total: 1, page: 1 } });
+    await oldRequest;
+    expect(cloud.fileError).toBe(true);
+    expect(cloud.fileList).toEqual([]);
+    mocks.apiQueryPost.mockResolvedValueOnce({ status: 200, data: { items: [{ id: 'current' }], total: 1, page: 1 } });
+    await cloud.queryFieldList();
+    expect(cloud.fileError).toBe(false);
+    expect(cloud.fileList[0].id).toBe('current');
+  });
   beforeEach(() => {
     vi.clearAllMocks();
     window.localStorage.clear();
@@ -42,9 +78,14 @@ describe('cloud space pagination', () => {
     await store.queryFieldList();
     await store.loadMoreFiles();
     await store.refreshLoadedFiles();
-    for (const [, body] of mocks.apiQueryPost.mock.calls) expect(body.filters).toEqual({
-      pendingOnly: true, folderId: 'folder-1', fileName: 'report', category: ['pdf'],
-    });
+    for (const [, body] of mocks.apiQueryPost.mock.calls)
+      expect(body.filters).toEqual({
+        pendingOnly: true,
+        folderId: 'folder-1',
+        fileName: 'report',
+        category: ['pdf'],
+        includeDescendants: false,
+      });
     store.reset();
     expect(store.pendingOnly).toBe(false);
   });

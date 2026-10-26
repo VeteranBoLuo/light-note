@@ -342,6 +342,7 @@
 </template>
 
 <script lang="ts" setup>
+  import { useForegroundRefresh } from '@/composables/useForegroundRefresh';
   import { captureResourceOpen } from '@/utils/resourceReuseRuntime';
   import { useMobileTopBar } from '@/composables/useMobileTopBar';
   import NoteTransferDialog from '@/components/noteLibrary/transfer/NoteTransferDialog.vue';
@@ -821,14 +822,11 @@
     await resolveEditorResourceRefs(currentEditorResourceRefs);
   }
 
-  function refreshEditorResourceRefs() {
-    if (document.visibilityState === 'hidden' || !currentEditorResourceRefs.length) return;
-    void resolveEditorResourceRefs(currentEditorResourceRefs, true);
-  }
-
-  function handleResourceRefVisibilityChange() {
-    if (document.visibilityState === 'visible') refreshEditorResourceRefs();
-  }
+  const resourceRefsForeground = useForegroundRefresh({
+    refresh: async () => { await resolveEditorResourceRefs(currentEditorResourceRefs, true); },
+    trailingWake: true, staleMs: 1000,
+    canRefresh: () => currentEditorResourceRefs.length > 0,
+  });
 
   watch(
     () => note.id,
@@ -2467,9 +2465,7 @@
 
   onMounted(() => {
     document.addEventListener('keydown', handleKeyDown);
-    document.addEventListener('visibilitychange', handleResourceRefVisibilityChange);
-    window.addEventListener('focus', refreshEditorResourceRefs);
-    window.addEventListener('pageshow', refreshEditorResourceRefs);
+    window.addEventListener('pageshow', resourceRefsForeground.refreshOnWake);
     window.addEventListener('offline', handleNetworkOffline);
     window.addEventListener('online', handleNetworkOnline);
   });
@@ -2480,9 +2476,7 @@
     detailTreeMotionCleanupTimers.forEach((timer) => window.clearTimeout(timer));
     detailTreeMotionCleanupTimers.clear();
     document.removeEventListener('keydown', handleKeyDown);
-    document.removeEventListener('visibilitychange', handleResourceRefVisibilityChange);
-    window.removeEventListener('focus', refreshEditorResourceRefs);
-    window.removeEventListener('pageshow', refreshEditorResourceRefs);
+    window.removeEventListener('pageshow', resourceRefsForeground.refreshOnWake);
     window.removeEventListener('offline', handleNetworkOffline);
     window.removeEventListener('online', handleNetworkOnline);
     readonlyToolbarObserver?.disconnect();

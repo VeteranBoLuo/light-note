@@ -7,11 +7,13 @@ import { createNotification } from './notification.js';
 import { buildTodoReminderEmail } from './todoReminder.js';
 import { normalizeTodoLocale } from './todoDateFormat.js';
 
-const POLL_INTERVAL_MS = 60_000;
+const POLL_INTERVAL_MS = 5_000;
+const RECOVERY_INTERVAL_MS = 60_000;
 const LEASE_MINUTES = 10;
 const BATCH_SIZE = 50;
 const MAX_RETRIES = 2;
 let running = false;
+let recovering = false;
 
 function parsePreferences(value) {
   if (!value) return {};
@@ -240,16 +242,9 @@ export async function processDueTodoReminderJobs() {
   if (running) return;
   running = true;
   try {
-    // 站内通知可凭 source_id 幂等重试；邮件在进程崩溃后无法判断 SMTP 是否已受理，必须转 unknown，禁止自动重发。
-    await pool.query(
-      `UPDATE todo_reminder_jobs
-          SET status = IF(channel = 'email', 'unknown', 'pending'),
-              last_error = 'lease_expired', lease_token = NULL, lease_until = NULL
-        WHERE status = 'processing' AND lease_until < UTC_TIMESTAMP()`,
-    );
     const [rows] = await pool.query(
       `SELECT id FROM todo_reminder_jobs
-        WHERE status = 'pending' AND (scheduled_at_utc <= UTC_TIMESTAMP() OR cancel_reason = 'quiet_hours_deferred')
+        WHERE status = 'pending' AND scheduled_at_utc <= UTC_TIMESTAMP()
         ORDER BY scheduled_at_utc, id LIMIT ?`,
       [BATCH_SIZE],
     );
@@ -261,11 +256,43 @@ export async function processDueTodoReminderJobs() {
   }
 }
 
+export async function recoverTodoReminderJobs() {
+  if (!notificationSchedulerEnabled() || recovering) return;
+  recovering = true;
+  try {
+    // 邮件外发结果不明确时仍转 unknown，不能因调度提速自动重发。
+    await pool.query(
+      `UPDATE todo_reminder_jobs
+          SET status = IF(channel = 'email', 'unknown', 'pending'),
+              last_error = 'lease_expired', lease_token = NULL, lease_until = NULL
+        WHERE status = 'processing' AND lease_until < UTC_TIMESTAMP()`,
+    );
+    const [rows] = await pool.query(
+      `SELECT id FROM todo_reminder_jobs
+        WHERE status = 'pending' AND cancel_reason = 'quiet_hours_deferred'
+        ORDER BY scheduled_at_utc, id LIMIT ?`,
+      [BATCH_SIZE],
+    );
+    for (const row of rows) await processJob(row.id);
+  } catch (error) {
+    console.error('[todo-reminder-v2] 恢复失败 code=%s', error?.code || 'UNKNOWN');
+  } finally {
+    recovering = false;
+  }
+}
+
 export function startTodoReminderV2Scheduler() {
   if (!notificationSchedulerEnabled()) return;
   const timer = setInterval(() => processDueTodoReminderJobs(), POLL_INTERVAL_MS);
+  const recoveryTimer = setInterval(() => recoverTodoReminderJobs(), RECOVERY_INTERVAL_MS);
   timer.unref?.();
-  setTimeout(() => processDueTodoReminderJobs(), 20_000).unref?.();
+  recoveryTimer.unref?.();
+  void recoverTodoReminderJobs();
+  void processDueTodoReminderJobs();
+  return () => {
+    clearInterval(timer);
+    clearInterval(recoveryTimer);
+  };
 }
 
 export const todoReminderV2Internals = {

@@ -108,7 +108,11 @@ declare(ADMIN_POLICIES.ACCOUNT_WRITE, 'community', [
   ['PUT', '/community/preferences/me'],
 ]);
 
-declare(ADMIN_POLICIES.ACCOUNT_WRITE, 'file', [['GET', '/file/image/:id']]);
+declare(ADMIN_POLICIES.ACCOUNT_WRITE, 'file', [
+  ['GET', '/file/image/:id'],
+  ['GET', '/file/preferences'],
+  ['POST', '/file/preferences'],
+]);
 
 declare(ADMIN_POLICIES.BACKGROUND_WRITE, 'note', [['POST', '/image-previews/retry']]);
 
@@ -601,6 +605,7 @@ declare(ADMIN_POLICIES.ADMIN_ONLY, 'support', [
 ]);
 
 declare(ADMIN_POLICIES.ACCOUNT_WRITE, 'notification', [
+  ['POST', '/notification/stream'],
   // Sync can display native reminders; never run on behalf of a previewed account.
   ['POST', '/notification/native/sync'],
   ['POST', '/notification/huawei/subscribe'],
@@ -634,6 +639,7 @@ declare(ADMIN_POLICIES.ACCOUNT_WRITE, 'feature_request', [
   ['POST', '/featureRequest/toggleVote'],
   ['POST', '/featureRequest/addSubmitterUpdate'],
 ]);
+declare(ADMIN_POLICIES.ACCOUNT_WRITE, 'notification', [['POST', '/notification/setReadState']]);
 declare(ADMIN_POLICIES.BACKGROUND_WRITE, 'notification', [
   ['POST', '/notification/markRead'],
   ['POST', '/notification/markAllRead'],

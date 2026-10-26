@@ -2,6 +2,7 @@ import { huaweiPushEnabled } from './huaweiPushPolicy.js';
 import { ensureBrowserPushTables } from './browserPushSchema.js';
 import { browserPushEnabled } from './browserPushPolicy.js';
 import pool from '../db/index.js';
+import { queueNotificationChange } from './notificationRealtimeEvents.js';
 // 使用无路由副作用的数据工具，避免业务 service -> common.js -> router -> Agent 的循环依赖。
 import { insertData } from './agent/data.js';
 
@@ -129,5 +130,7 @@ export async function createNotification(
       : 'INSERT INTO notification SET ?, browser_push_created_at = CURRENT_TIMESTAMP(6)',
     [row],
   );
-  return Number(result?.affectedRows || 0) > 0 ? row.id : null;
+  if (Number(result?.affectedRows || 0) <= 0) return null;
+  queueNotificationChange(conn, [userId]);
+  return row.id;
 }

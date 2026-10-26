@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const getNotificationList = vi.fn();
 const getUnreadCount = vi.fn();
 const markAllNotificationsRead = vi.fn();
+const setNotificationReadState = vi.fn();
 const deleteNotifications = vi.fn();
 
 vi.mock('@/api/notificationApi.ts', () => ({
@@ -10,6 +11,7 @@ vi.mock('@/api/notificationApi.ts', () => ({
     getNotificationList: (...args: any[]) => getNotificationList(...args),
     getUnreadCount: (...args: any[]) => getUnreadCount(...args),
     markNotificationsRead: vi.fn(),
+    setNotificationReadState: (...args: any[]) => setNotificationReadState(...args),
     markAllNotificationsRead: (...args: any[]) => markAllNotificationsRead(...args),
     deleteNotifications: (...args: any[]) => deleteNotifications(...args),
   },
@@ -134,5 +136,108 @@ describe('useNotification.fetchList', () => {
     expect(created).not.toHaveBeenCalled();
     expect(getNotificationList).not.toHaveBeenCalled();
     vi.unstubAllGlobals();
+  });
+
+  it('合并同范围并发计数请求，变更发生在在途请求期间时补读一次', async () => {
+    let resolveFirst;
+    getUnreadCount
+      .mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolveFirst = resolve;
+        }),
+      )
+      .mockResolvedValue({ status: 200, data: { unreadTotal: 2, byType: {} } });
+    const notification = useNotification();
+    const first = notification.refreshUnread();
+    const duplicate = notification.refreshUnread();
+    const changed = notification.refreshUnread({ afterCurrent: true });
+    expect(getUnreadCount).toHaveBeenCalledOnce();
+    resolveFirst({ status: 200, data: { unreadTotal: 1, byType: {} } });
+    await Promise.all([first, duplicate, changed]);
+    expect(getUnreadCount).toHaveBeenCalledTimes(2);
+    expect(notification.unreadTotal.value).toBe(2);
+  });
+
+  it('静默列表刷新失败会抛错，让界面保留已有通知', async () => {
+    getNotificationList.mockRejectedValue(new Error('network'));
+    await expect(useNotification().fetchList({}, { throwOnError: true })).rejects.toThrow('network');
+  });
+
+  it('连续通知不会让标记已读一直等待后续无关的计数请求', async () => {
+    const resolve: Array<(value: unknown) => void> = [];
+    getUnreadCount.mockImplementation(
+      () =>
+        new Promise((done) => {
+          resolve.push(done);
+        }),
+    );
+    markAllNotificationsRead.mockResolvedValue({ status: 200 });
+    const notification = useNotification();
+    const first = notification.refreshUnread();
+    let marked = false;
+    const mark = notification.markAllRead().then(() => {
+      marked = true;
+    });
+    await Promise.resolve();
+    const result = { status: 200, data: { unreadTotal: 0, byType: {} } };
+    resolve[0](result);
+    await vi.waitFor(() => expect(resolve).toHaveLength(2));
+    const later = notification.refreshUnread({ afterCurrent: true });
+    resolve[1](result);
+    await vi.waitFor(() => expect(resolve).toHaveLength(3));
+    try {
+      expect(marked).toBe(true);
+    } finally {
+      resolve[2](result);
+      await Promise.all([first, mark, later]);
+    }
+  });
+});
+
+describe('useNotification.setReadState', () => {
+  beforeEach(() => {
+    resetNotification();
+    user.id = 'user-1';
+    user.role = 'user';
+    setNotificationReadState.mockReset();
+    getUnreadCount.mockReset();
+  });
+
+  it.each([true, false])('synchronizes authoritative badge counts after setting state %s', async (isRead) => {
+    setNotificationReadState.mockResolvedValue({ status: 200, data: { isRead } });
+    getUnreadCount.mockResolvedValue({
+      status: 200,
+      data: { unreadTotal: isRead ? 0 : 1, byType: { system: isRead ? 0 : 1 } },
+    });
+    const state = useNotification();
+    expect(await state.setReadState('n-1', isRead)).toBe(true);
+    expect(setNotificationReadState).toHaveBeenCalledWith('n-1', isRead);
+    expect(state.unreadTotal.value).toBe(isRead ? 0 : 1);
+    expect(state.unreadByType.value.system).toBe(isRead ? 0 : 1);
+  });
+
+  it('keeps the old state on failure and still reconciles counts', async () => {
+    setNotificationReadState.mockRejectedValue(new Error('network'));
+    getUnreadCount.mockResolvedValue({ status: 200, data: { unreadTotal: 3, byType: {} } });
+    const state = useNotification();
+    expect(await state.setReadState('n-1', false)).toBe(false);
+    expect(state.unreadTotal.value).toBe(3);
+  });
+
+  it('ignores a response after switching accounts', async () => {
+    let finish!: (value: any) => void;
+    setNotificationReadState.mockImplementation(() => new Promise((resolve) => (finish = resolve)));
+    const pending = useNotification().setReadState('n-1', false);
+    user.id = 'user-2';
+    finish({ status: 200, data: { isRead: false } });
+    expect(await pending).toBe(false);
+    expect(getUnreadCount).not.toHaveBeenCalled();
+  });
+
+  it('rejects empty IDs and guest writes', async () => {
+    expect(await useNotification().setReadState('', false)).toBe(false);
+    user.role = 'visitor';
+    expect(await useNotification().setReadState('n-1', false)).toBe(false);
+    expect(setNotificationReadState).not.toHaveBeenCalled();
   });
 });

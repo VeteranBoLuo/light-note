@@ -1,3 +1,6 @@
+import frameLanternBearer from '@/assets/avatar-frames/frame_lantern_bearer_v1.webp';
+import frameSharedReading from '@/assets/avatar-frames/frame_shared_reading_v1.webp';
+import frameKnowledgeLighthouse from '@/assets/avatar-frames/frame_knowledge_lighthouse_v2.webp';
 import frameAuroraCrystal from '@/assets/avatar-frames/frame_aurora_crystal_v1.webp';
 import frameAuroraFlowLeft from '@/assets/avatar-frames/frame_aurora_flow_left_v1.webp';
 import frameAuroraFlowRight from '@/assets/avatar-frames/frame_aurora_flow_right_v1.webp';
@@ -68,6 +71,8 @@ export interface AvatarFrameArtwork {
   motionSpriteSrc?: string;
   /** 64px 头像设计基准下的透明素材盒尺寸。 */
   artSize: number;
+  /** Original artwork registration relative to the fixed portrait center. */
+  offsetY?: number;
   /** 只用于内沿同源材质层的素材盒尺寸；逐款标定为 64px 中央头像孔。 */
   innerArtSize: number;
   /** 主题主体的目标视觉外径，同时作为布局预留尺寸。 */
@@ -402,6 +407,37 @@ export const AVATAR_FRAME_ARTWORK = {
     accent: '#ffe29a',
     glow: 'rgba(245, 158, 11, 0.56)',
     motion: 'ceiling',
+  },
+  'lantern-bearer': {
+    src: frameLanternBearer,
+    foregroundShell: true,
+    artSize: 89.6,
+    innerArtSize: 89.6,
+    outerSize: 90,
+    accent: '#c8b1ec',
+    glow: 'rgba(197, 167, 226, 0.18)',
+    motion: 'static',
+  },
+  'shared-reading': {
+    src: frameSharedReading,
+    foregroundShell: true,
+    artSize: 99.2,
+    innerArtSize: 99.2,
+    outerSize: 96,
+    accent: '#dac5f5',
+    glow: 'rgba(197, 167, 226, 0.2)',
+    motion: 'colorful',
+  },
+  'knowledge-lighthouse': {
+    src: frameKnowledgeLighthouse,
+    foregroundShell: true,
+    artSize: 108.8,
+    innerArtSize: 108.8,
+    outerSize: 114,
+    offsetY: -3.84,
+    accent: '#8270d5',
+    glow: 'rgba(112, 100, 211, 0.28)',
+    motion: 'legendary',
   },
 } as const satisfies Record<FrameVariant, AvatarFrameArtwork>;
 

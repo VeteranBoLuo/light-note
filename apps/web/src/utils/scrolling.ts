@@ -59,6 +59,29 @@ export function scrollNearestIntoContainer(
 }
 
 /**
+ * 横向露出被裁切的目标，只滚动指定容器，并保留页面的纵向位置。
+ */
+export function scrollNearestHorizontallyIntoContainer(
+  container: HTMLElement,
+  el: HTMLElement,
+  behavior: ScrollBehavior = 'auto',
+): void {
+  const containerRect = container.getBoundingClientRect();
+  const elementRect = el.getBoundingClientRect();
+  const leftEdge = containerRect.left + container.clientLeft;
+  const rightEdge = leftEdge + container.clientWidth;
+  let delta = 0;
+
+  if (elementRect.left < leftEdge) delta = elementRect.left - leftEdge;
+  else if (elementRect.right > rightEdge) delta = elementRect.right - rightEdge;
+  else return;
+
+  const maxScrollLeft = Math.max(0, container.scrollWidth - container.clientWidth);
+  const left = Math.max(0, Math.min(maxScrollLeft, container.scrollLeft + delta));
+  container.scrollTo({ left, behavior });
+}
+
+/**
  * 从目标元素向上查找当前真正承担纵向滚动的祖先。
  *
  * 响应式页面可能在不同断点切换滚动层级：桌面端由内容区滚动，移动端则由页面外壳滚动。
