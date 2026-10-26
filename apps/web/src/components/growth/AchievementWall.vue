@@ -57,7 +57,8 @@
               :frame-id="a.frameId"
               :src="icon.navigation.user"
               :size="dimension(30, 'layout')"
-              :animated="false"
+              :animated="animated"
+              pause-when-offscreen
             />
             <span>{{ t('growth.achFrameReward', { name: frameName(a.frameId) }) }}</span>
           </div>
@@ -145,7 +146,13 @@
           {{ t('growth.achRewardLabel') }} <SvgIcon :src="icon.growth.coin" size="14" /> {{ detail.reward }}
         </div>
         <div v-if="detail.frameId" class="awd-frame-reward">
-          <AvatarFramePreview :frame-id="detail.frameId" :src="icon.navigation.user" :size="dimension(46, 'layout')" />
+          <AvatarFramePreview
+            :frame-id="detail.frameId"
+            :src="icon.navigation.user"
+            :size="dimension(46, 'layout')"
+            :animated="animated"
+            pause-when-offscreen
+          />
           <span>{{ t('growth.achFrameReward', { name: frameName(detail.frameId) }) }}</span>
         </div>
         <BButton

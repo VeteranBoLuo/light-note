@@ -19,6 +19,11 @@
       @load="onLoad(layer)"
       @error="onError"
     />
+    <span v-if="artwork.kind === 'lighthouse'" class="enamel-lighthouse">
+      <i class="enamel-lighthouse__beam enamel-lighthouse__beam--left" />
+      <i class="enamel-lighthouse__beam enamel-lighthouse__beam--right" />
+      <i class="enamel-lighthouse__lens" />
+    </span>
   </span>
 </template>
 <script setup lang="ts">
@@ -322,11 +327,69 @@
       transform: rotate(-6deg);
     }
   }
-  .enamel-motion--paused .enamel-motion__layer {
+  // These percentages are registered to the lamp room in the 512px illustration.
+  // The tower and book never transform; the optical lens and emitted beams sweep.
+  .enamel-lighthouse {
+    position: absolute;
+    inset: 0;
+  }
+  .enamel-lighthouse__beam {
+    position: absolute;
+    top: 18.8%;
+    width: 34%;
+    height: 10%;
+    background: linear-gradient(90deg, #e5fbff 0%, #63bdffb8 20%, #6955e080 62%, #6b49d300 100%);
+    clip-path: polygon(0 42%, 100% 0, 100% 100%, 0 58%);
+    animation: enamel-lighthouse-sweep 4.2s ease-in-out var(--enamel-phase, 0s) infinite;
+  }
+  .enamel-lighthouse__beam--right {
+    left: 50%;
+    transform-origin: 0 50%;
+  }
+  .enamel-lighthouse__beam--left {
+    right: 50%;
+    background: linear-gradient(-90deg, #e5fbff 0%, #63bdffb8 20%, #6955e080 62%, #6b49d300 100%);
+    clip-path: polygon(100% 42%, 0 0, 0 100%, 100% 58%);
+    transform-origin: 100% 50%;
+    animation-direction: reverse;
+  }
+  .enamel-lighthouse__lens {
+    position: absolute;
+    left: 45.8%;
+    top: 18.4%;
+    width: 8.4%;
+    height: 8.5%;
+    border-radius: 35% 35% 28% 28%;
+    background: linear-gradient(100deg, #4543c9 0%, #68ceff 35%, #e6ffff 48%, #36b1ed 62%, #5540a8 100%);
+    background-size: 220% 100%;
+    opacity: 0.86;
+    animation: enamel-lighthouse-lens 4.2s ease-in-out var(--enamel-phase, 0s) infinite;
+  }
+  @keyframes enamel-lighthouse-sweep {
+    0%,
+    100% {
+      transform: rotate(-14deg);
+    }
+    50% {
+      transform: rotate(14deg);
+    }
+  }
+  @keyframes enamel-lighthouse-lens {
+    0%,
+    100% {
+      background-position: 0% 50%;
+    }
+    50% {
+      background-position: 100% 50%;
+    }
+  }
+  .enamel-motion--paused .enamel-motion__layer,
+  .enamel-motion--paused .enamel-lighthouse > i {
     animation-play-state: paused;
   }
   @media (prefers-reduced-motion: reduce) {
-    .enamel-motion__layer {
+    .enamel-motion__layer,
+    .enamel-lighthouse > i {
       animation: none !important;
     }
   }

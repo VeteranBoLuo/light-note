@@ -214,6 +214,35 @@ function star(ctx: CanvasRenderingContext2D, x: number, y: number, size: number,
   ctx.fill();
   ctx.restore();
 }
+function lighthouseLamp(ctx: CanvasRenderingContext2D, time: number, peak: number) {
+  // Colour belongs to the glass chamber, not a white bloom over the whole gold crown.
+  // Keep the original roof, uprights and base readable around this inset lens.
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(606, 94);
+  ctx.quadraticCurveTo(627, 85, 648, 94);
+  ctx.lineTo(648, 134);
+  ctx.quadraticCurveTo(627, 140, 606, 134);
+  ctx.closePath();
+  ctx.clip();
+  const glass = ctx.createLinearGradient(604, 0, 650, 0);
+  glass.addColorStop(0, '#4b338f');
+  glass.addColorStop(0.3, '#6557c9');
+  glass.addColorStop(0.55, '#69c9f5');
+  glass.addColorStop(1, '#443280');
+  ctx.fillStyle = glass;
+  ctx.fillRect(603, 86, 48, 55);
+  const x = 627 + Math.sin((time * 2 * Math.PI) / 3.6) * 10;
+  const lens = ctx.createLinearGradient(x - 13, 0, x + 13, 0);
+  lens.addColorStop(0, 'rgba(91,203,255,0)');
+  lens.addColorStop(0.4, '#6edcff');
+  lens.addColorStop(0.54, '#ecffff');
+  lens.addColorStop(1, 'rgba(137,143,255,0)');
+  ctx.globalAlpha = 0.88 + peak * 0.12;
+  ctx.fillStyle = lens;
+  ctx.fillRect(x - 13, 91, 26, 45);
+  ctx.restore();
+}
 const ease = (v) => {
   const x = Math.max(0, Math.min(1, v));
   return x * x * (3 - 2 * x);
@@ -319,9 +348,6 @@ export function paintPublicContributionFrame(
       const send = (phase - 0.56 - i * 0.035) / 0.4;
       if (send > 0 && send < 1) stream(ctx, p, send, 1.04, 25);
     });
-    const lamp = 0.56 + 0.07 * Math.sin(t * 2.4) + peak * 0.12;
-    light(ctx, 627, 113, 72 + peak * 15, lamp);
-    light(ctx, 627, 113, 26 + peak * 5, 0.72 + peak * 0.25);
     // Both beams remain visible and sweep up/down every 3.6 seconds, outside the face.
     [-1, 1].forEach((side, i) => {
       const wave = Math.sin((t * 2 * Math.PI) / 3.6 + i * 0.32);
@@ -329,20 +355,35 @@ export function paintPublicContributionFrame(
       ctx.translate(627, 115);
       ctx.scale(side, 1);
       ctx.rotate(0.04 + wave * 0.18);
-      const length = 310 + peak * 16;
+      const length = 340 + peak * 16;
       const g = ctx.createLinearGradient(12, 0, length, 0);
-      g.addColorStop(0, 'rgba(255,246,196,' + (0.35 + peak * 0.08) + ')');
-      g.addColorStop(0.45, 'rgba(244,229,255,.20)');
-      g.addColorStop(1, 'rgba(235,213,255,0)');
+      g.addColorStop(0, 'rgba(89,183,248,' + (0.84 + peak * 0.12) + ')');
+      g.addColorStop(0.26, 'rgba(96,105,209,.76)');
+      g.addColorStop(0.65, 'rgba(117,76,192,.48)');
+      g.addColorStop(1, 'rgba(126,87,205,0)');
       ctx.fillStyle = g;
       ctx.beginPath();
       ctx.moveTo(9, -5);
-      ctx.lineTo(length, -31);
-      ctx.lineTo(length, 31);
+      ctx.lineTo(length, -42);
+      ctx.lineTo(length, 42);
+      ctx.closePath();
+      ctx.fill();
+      // A narrow blue centre gives the beam a direction at 30–46px preview sizes.
+      const core = ctx.createLinearGradient(9, 0, length, 0);
+      core.addColorStop(0, 'rgba(161,235,255,.96)');
+      core.addColorStop(0.4, 'rgba(82,151,228,.72)');
+      core.addColorStop(1, 'rgba(111,84,195,0)');
+      ctx.fillStyle = core;
+      ctx.beginPath();
+      ctx.moveTo(9, -3);
+      ctx.lineTo(length * 0.94, -7);
+      ctx.lineTo(length * 0.94, 7);
+      ctx.lineTo(9, 3);
       ctx.closePath();
       ctx.fill();
       ctx.restore();
     });
+    lighthouseLamp(ctx, t, peak);
     [
       [193, 829],
       [1041, 735],

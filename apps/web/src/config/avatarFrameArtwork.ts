@@ -435,8 +435,8 @@ export const AVATAR_FRAME_ARTWORK = {
     innerArtSize: 108.8,
     outerSize: 114,
     offsetY: -3.84,
-    accent: '#ebd5a4',
-    glow: 'rgba(197, 167, 226, 0.22)',
+    accent: '#8270d5',
+    glow: 'rgba(112, 100, 211, 0.28)',
     motion: 'legendary',
   },
 } as const satisfies Record<FrameVariant, AvatarFrameArtwork>;
