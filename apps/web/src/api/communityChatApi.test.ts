@@ -68,7 +68,7 @@ describe('communityChatApi', () => {
     expect(mocks.apiBasePut).toHaveBeenCalledWith(
       '/api/community-chat/rooms/general/read',
       { lastMessagePublicId: 'message-1' },
-      { silent: true, signal: controller.signal },
+      { silent: true, signal: controller.signal, activity: 'background' },
     );
   });
 
@@ -134,7 +134,7 @@ describe('communityChatApi', () => {
     expect(mocks.apiBasePut).toHaveBeenCalledWith(
       '/api/community-chat/rooms/general/read',
       { lastMessagePublicId: 'message-1' },
-      { silent: true },
+      { silent: true, activity: 'background' },
     );
   });
 
@@ -154,7 +154,7 @@ describe('communityChatApi', () => {
     expect(mocks.apiBaseGet).toHaveBeenCalledWith(
       '/api/community-chat/rooms/general/read-receipt-counts',
       { messagePublicIds: 'message-1,message-2' },
-      { silent: true },
+      { silent: true, activity: 'background' },
     );
     expect(mocks.apiBaseGet).toHaveBeenCalledWith(
       '/api/community-chat/messages/message%2F1/readers',
@@ -187,7 +187,7 @@ describe('communityChatApi', () => {
     expect(mocks.apiBasePost).toHaveBeenCalledWith(
       '/api/community-chat/rooms/general/read-receipts',
       { messagePublicIds: ['message/1', 'message/2'] },
-      { silent: true },
+      { silent: true, activity: 'background' },
     );
   });
 

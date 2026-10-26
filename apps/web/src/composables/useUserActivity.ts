@@ -35,6 +35,7 @@ export function useUserActivity() {
           silent: true,
           suppressAuthExpired: true,
           timeout: 3000,
+          activity: 'background',
           signal: abortSignal,
         },
       );

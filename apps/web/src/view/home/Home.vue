@@ -526,7 +526,7 @@
     }
   };
 
-  const fetchBookmarkList = async (type: string, params: Record<string, any> = {}, page = 1) => {
+  const fetchBookmarkList = async (type: string, params: Record<string, any> = {}, page = 1, append = false) => {
     const user = useUserStore();
     const res = await apiQueryPost('/api/bookmark/getBookmarkList', {
       pageSize: RESOURCE_LIST_PAGE_SIZE,
@@ -536,7 +536,7 @@
         type,
         ...params,
       },
-    });
+    }, { activity: append ? 'incremental' : 'foreground' });
     if (res.status !== 200) return null;
     return {
       items: Array.isArray(res.data?.items) ? res.data.items : [],
@@ -589,7 +589,7 @@
     bookmarkLoadMoreError.value = false;
     bookmark.bookmarkLoadingMore = true;
     try {
-      const result = await fetchBookmarkList(requestType, params, bookmark.bookmarkPage + 1);
+      const result = await fetchBookmarkList(requestType, params, bookmark.bookmarkPage + 1, true);
       if (requestSequence !== bookmarkRequestSequence || requestType !== bookmark.type) return false;
       if (!result) {
         bookmarkLoadMoreError.value = true;

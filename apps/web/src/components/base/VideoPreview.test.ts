@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createApp, h, nextTick } from 'vue';
 import VideoPreview from './VideoPreview.vue';
+import { requestActivitySnapshot } from '@/http/requestActivity';
 
 vi.mock('vue-i18n', () => ({
   useI18n: () => ({ t: (key: string) => key }),
@@ -153,4 +154,23 @@ describe('VideoPreview', () => {
     await nextTick();
     expect(onError.mock.calls.at(-1)?.[0]?.message).toBe('cloudSpace.previewPanel.mediaPlayFailed');
   });
+});
+
+it('metadata-only preview releases its lease; seeking/buffering hold only until ready or closed', async () => {
+  const host = mountVideoPreview();
+  const video = host.querySelector('video')!;
+  expect(requestActivitySnapshot().foreground).toBe(1);
+  video.dispatchEvent(new Event('loadedmetadata'));
+  expect(requestActivitySnapshot().foreground).toBe(0);
+  video.dispatchEvent(new Event('waiting'));
+  expect(requestActivitySnapshot().foreground).toBe(1);
+  video.dispatchEvent(new Event('playing'));
+  expect(requestActivitySnapshot().foreground).toBe(0);
+  video.dispatchEvent(new Event('seeking'));
+  expect(requestActivitySnapshot().foreground).toBe(1);
+  video.dispatchEvent(new Event('error'));
+  expect(requestActivitySnapshot().foreground).toBe(0);
+  video.dispatchEvent(new Event('loadstart'));
+  cleanup?.(); cleanup = undefined;
+  expect(requestActivitySnapshot().foreground).toBe(0);
 });

@@ -5,7 +5,7 @@ export async function resolveImagePreviews(
   items: ImagePreviewSource[],
   refreshUrl = false,
 ): Promise<ImagePreviewState[]> {
-  const r = await apiBasePost('/api/image-previews/resolve', { items, refreshUrl }, { silent: true, timeout: 10000 });
+  const r = await apiBasePost('/api/image-previews/resolve', { items, refreshUrl }, { silent: true, timeout: 10000, activity: 'background' });
   if (r.status !== 200 || !Array.isArray(r.data)) throw new Error('IMAGE_PREVIEW_UNAVAILABLE');
   return r.data;
 }

@@ -1,5 +1,6 @@
 import { subscribeAndroidPrewarmNetwork } from './androidBridge';
-import { activeRequestCount, subscribeRequestActivity } from '@/http/requestActivity';
+import { requestActivitySnapshot, subscribeRequestActivity } from '@/http/requestActivity';
+import { observePrewarmImages } from './prewarmImages';
 
 export interface PrewarmManifest {
   version: 1;
@@ -96,26 +97,10 @@ export function validatePrewarmManifest(value: unknown, entryUrl: string): Prewa
 }
 
 function foregroundReady() {
-  return (
-    activeRequestCount() === 0 &&
-    document.readyState === 'complete' &&
-    document.fonts?.status !== 'loading' &&
-    [...document.images].every((image) => {
-      if (image.complete) return true;
-      const rect = image.getBoundingClientRect();
-      return (
-        !rect.width ||
-        !rect.height ||
-        rect.bottom <= 0 ||
-        rect.top >= innerHeight ||
-        rect.right <= 0 ||
-        rect.left >= innerWidth
-      );
-    })
-  );
+  return document.readyState !== 'loading' && document.fonts?.status !== 'loading';
 }
 
-/** One finite, byte-only queue. Native HTTP cache owns storage and version reuse. */
+/** One finite byte-only queue; browser HTTP cache owns storage and version reuse. */
 export function createStaticPrewarmScheduler(options: {
   entryUrl: string;
   mobile: () => boolean;
@@ -125,42 +110,65 @@ export function createStaticPrewarmScheduler(options: {
 }) {
   const fetcher = options.fetcher || fetch;
   const ready = options.ready || foregroundReady;
-  const delay = options.delayMs ?? 8000;
+  const initialDelay = options.delayMs ?? 1000;
   const connection = (navigator as Navigator & { connection?: Connection }).connection;
   const scopes = new Map<object, PrewarmSelection>();
   const completed = new Set<string>(),
-    failed = new Set<string>(),
-    ownRequests = new Set<string>();
+    failed = new Set<string>();
   const failures = new Map<string, number>(),
     interruptions = new Map<string, number>();
   const retryAt = new Map<string, number>();
+  type PauseReason = 'foreground' | 'incremental' | 'restricted' | 'selection' | 'disposed';
+  const aborts: Record<PauseReason, number> = {
+    foreground: 0,
+    incremental: 0,
+    restricted: 0,
+    selection: 0,
+    disposed: 0,
+  };
   let manifest: PrewarmManifest | undefined;
   let disposed = false,
     disabled = false,
     fetching = false,
-    readBytes = 0;
+    acquiring = false,
+    started = false;
+  let readBytes = 0,
+    settleAt = 0,
+    lockRetryAt = 0,
+    nextFileAt = 0,
+    revision = 0;
+  let initialReadyAt: number | undefined;
+  let hardBlocked = false,
+    restricted = false,
+    locksUnavailable = false,
+    pageSuspended = false;
   let nativeUnmetered: boolean | undefined;
-  let lastActivity = Date.now(),
-    settleAt = 0;
   let timer: number | undefined, idle: number | undefined;
-  let controller: AbortController | undefined, activeUrl: string | undefined;
+  let controller: AbortController | undefined, activeUrl: string | undefined, abortReason: PauseReason | undefined;
+  let watchingImages = false,
+    stopImages: (() => void) | undefined;
   const mode = () => prewarmNetworkMode(options.mobile(), connection, nativeUnmetered);
   const allowed = () =>
     !disposed &&
     !disabled &&
+    !pageSuspended &&
     scopes.size > 0 &&
     navigator.onLine !== false &&
     document.visibilityState === 'visible' &&
     mode() !== 'paused';
   function cancelScheduled() {
+    revision++;
     clearTimeout(timer);
+    timer = undefined;
     if (idle !== undefined) window.cancelIdleCallback?.(idle);
     idle = undefined;
   }
-  function pause(resetQuiet = true) {
-    if (resetQuiet) lastActivity = Date.now();
-    cancelScheduled();
-    controller?.abort();
+  function pause(reason: PauseReason) {
+    if (controller && !controller.signal.aborted) {
+      abortReason = reason;
+      aborts[reason]++;
+      controller.abort();
+    }
   }
   function urls(selection: PrewarmSelection) {
     const result = [
@@ -186,59 +194,147 @@ export function createStaticPrewarmScheduler(options: {
     }
     return [...unique.values()];
   }
-  function pending() {
-    return manifest
+  const pending = () =>
+    manifest
       ? selected().filter((item) => !completed.has(item.url) && !failed.has(item.url))
       : [{ url: '/static-prewarm.json', bytes: manifestLimit }];
+  const slowIncremental = (state = requestActivitySnapshot()) =>
+    state.oldestIncrementalAt !== null && Date.now() >= state.oldestIncrementalAt + 1000;
+  function trackImages(enabled: boolean) {
+    if (watchingImages === enabled) return;
+    watchingImages = enabled;
+    if (enabled) stopImages = observePrewarmImages();
+    else {
+      const stop = stopImages;
+      stopImages = undefined;
+      stop?.();
+    }
   }
-  const availableAt = (url: string) =>
-    Math.max(
-      retryAt.get(url) || 0,
-      lastActivity + ((interruptions.get(url) || 0) >= 2 ? Math.max(delay, 30000) : delay),
-    );
-  function queue(minDelay = 50) {
-    cancelScheduled();
-    if (!allowed() || fetching || activeRequestCount() > 0) return;
-    const items = pending();
-    if (!items.length) return;
-    const nextAt = Math.min(...items.map((item) => availableAt(item.url)));
+  function schedule(delay: number, useIdle = false) {
+    const current = revision;
     timer = window.setTimeout(
       () => {
-        if (!allowed()) return;
-        if (!ready()) {
-          queue(500);
+        timer = undefined;
+        if (current !== revision || disposed) return;
+        if (!useIdle) {
+          queue();
           return;
         }
-        if (window.requestIdleCallback) {
+        if (window.requestIdleCallback)
           idle = window.requestIdleCallback(
             (deadline) => {
               idle = undefined;
+              if (current !== revision) return;
               if (deadline.didTimeout || deadline.timeRemaining() >= 1) void next();
               else queue(100);
             },
             { timeout: 1000 },
           );
-        } else void next();
+        else void next();
       },
-      Math.max(minDelay, nextAt - Date.now(), settleAt - Date.now()),
+      Math.max(0, delay),
+    );
+  }
+  function queue(minDelay = 0) {
+    cancelScheduled();
+    if (!allowed()) {
+      restricted = true;
+      if (!started) initialReadyAt = undefined;
+      pause(disposed ? 'disposed' : 'restricted');
+      trackImages(false);
+      return;
+    }
+    if (restricted) {
+      restricted = false;
+      if (started) settleAt = Math.max(settleAt, Date.now() + 500);
+    }
+    if (activeUrl && manifest && !selected().some((item) => item.url === activeUrl)) pause('selection');
+    const items = pending();
+    if (!items.length) {
+      trackImages(false);
+      return;
+    }
+    trackImages(true);
+    const state = requestActivitySnapshot();
+    const hard = state.foreground > 0 || !ready() || slowIncremental(state);
+    if (hard) {
+      hardBlocked = true;
+      if (!started) initialReadyAt = undefined;
+      pause(state.foreground > 0 || !ready() ? 'foreground' : 'incremental');
+      // Covers DOM/font readiness; request/image lifecycle events also wake immediately.
+      schedule(250);
+      return;
+    }
+    if (hardBlocked) {
+      hardBlocked = false;
+      settleAt = Math.max(settleAt, Date.now() + 500);
+    }
+    if (state.incremental > 0) {
+      if (!started) initialReadyAt = undefined;
+      schedule(state.oldestIncrementalAt! + 1000 - Date.now());
+      return;
+    }
+    if (!started) initialReadyAt ??= Date.now() + initialDelay;
+    if (fetching || acquiring) return;
+    const nextAt = Math.max(
+      initialReadyAt || 0,
+      settleAt,
+      lockRetryAt,
+      nextFileAt,
+      Math.min(...items.map((item) => retryAt.get(item.url) || 0)),
+    );
+    schedule(Math.max(minDelay, nextAt - Date.now()), true);
+  }
+  function canStart() {
+    const state = requestActivitySnapshot();
+    return (
+      allowed() &&
+      !fetching &&
+      ready() &&
+      state.foreground === 0 &&
+      state.incremental === 0 &&
+      Date.now() >= Math.max(initialReadyAt ?? Infinity, settleAt, lockRetryAt, nextFileAt)
     );
   }
   async function next() {
-    if (!allowed() || fetching) return;
-    if (!ready()) {
-      queue(500);
-      return;
-    }
-    const item = pending().find((item) => availableAt(item.url) <= Date.now());
-    if (!item || Date.now() < settleAt) {
+    if (!canStart() || acquiring) {
       queue();
       return;
     }
+    acquiring = true;
+    let entered = false;
+    const run = async () => {
+      entered = true;
+      if (!canStart()) return;
+      const item = pending().find((item) => (retryAt.get(item.url) || 0) <= Date.now());
+      if (item) await download(item);
+    };
+    try {
+      const locks = !locksUnavailable && navigator.locks;
+      if (locks?.request)
+        await locks.request('lightnote:static-prewarm', { ifAvailable: true }, async (lock) => {
+          if (lock) await run();
+          else lockRetryAt = Date.now() + 500;
+        });
+      else await run();
+    } catch {
+      // Denied/unavailable lock API falls back once; never repeat an entered transfer.
+      if (!entered) {
+        locksUnavailable = true;
+        await run();
+      }
+    } finally {
+      acquiring = false;
+      queue();
+    }
+  }
+  async function download(item: { url: string; bytes: number }) {
     const request = new AbortController();
     controller = request;
     activeUrl = item.url;
-    ownRequests.add(new URL(item.url, location.origin).href);
-    fetching = true;
+    abortReason = undefined;
+    fetching = started = true;
+    initialReadyAt = 0;
     let timedOut = false,
       terminal = false;
     const timeout = window.setTimeout(() => {
@@ -305,10 +401,11 @@ export function createStaticPrewarmScheduler(options: {
       interruptions.delete(item.url);
     } catch {
       if (!terminal && request.signal.aborted && !timedOut) {
-        const count = (interruptions.get(item.url) || 0) + 1;
-        interruptions.set(item.url, count);
-        // A busy user must not blacklist an asset. Repeated half-downloads get a longer rest.
-        if (count >= 2) retryAt.set(item.url, Date.now() + Math.min(120000, 30000 * 2 ** Math.min(count - 2, 2)));
+        if (abortReason === 'foreground' || abortReason === 'incremental') {
+          const count = (interruptions.get(item.url) || 0) + 1;
+          interruptions.set(item.url, count);
+          if (count >= 2) retryAt.set(item.url, Date.now() + Math.min(30000, 5000 * 2 ** Math.min(count - 2, 3)));
+        }
       } else {
         const count = (failures.get(item.url) || 0) + 1;
         failures.set(item.url, count);
@@ -317,76 +414,93 @@ export function createStaticPrewarmScheduler(options: {
           if (!manifest) disabled = true;
         } else retryAt.set(item.url, Date.now() + 5000 * count);
       }
-      // Rejected headers/status must not leave an unread response downloading in the background.
       request.abort();
     } finally {
       clearTimeout(timeout);
       controller = undefined;
       activeUrl = undefined;
       fetching = false;
-      queue();
+      nextFileAt = Date.now() + 50;
     }
   }
-  const isOwnResource = (entry: PerformanceEntry) =>
-    (entry as PerformanceResourceTiming).initiatorType === 'fetch' && ownRequests.has(entry.name);
   function markLoaded(resource: PerformanceResourceTiming) {
-    if (resource.decodedBodySize <= 0 || isOwnResource(resource)) return;
+    if (resource.decodedBodySize <= 0) return false;
     const url = new URL(resource.name, location.origin);
-    if (url.origin === location.origin && manifest?.assets[url.pathname + url.search])
-      completed.add(url.pathname + url.search);
+    const path = url.pathname + url.search;
+    // Full decoded bytes only: canceled/partial responses cannot claim completion.
+    if (url.origin !== location.origin || manifest?.assets[path] !== resource.decodedBodySize || completed.has(path))
+      return false;
+    completed.add(path);
+    return true;
   }
-  const activity = () => {
-    pause();
-    queue();
-  };
-  const unsubscribe = subscribeRequestActivity((_count, kind) => {
-    pause(kind === 'foreground');
-    settleAt = Date.now() + 250;
+  const unsubscribe = subscribeRequestActivity((_state, kind, phase) => {
+    if (kind === 'background') return;
+    if (phase === 'end') settleAt = Math.max(settleAt, Date.now() + (kind === 'foreground' ? 500 : 100));
     queue();
   });
+  const activity = () => queue();
   const unsubscribeNetwork = subscribeAndroidPrewarmNetwork((value) => {
     nativeUnmetered = value;
-    activity();
+    queue();
   });
-  const inputEvents = ['pointerdown', 'keydown', 'touchstart', 'scroll'] as const;
-  for (const event of inputEvents) window.addEventListener(event, activity, { passive: true, capture: true });
   for (const event of ['online', 'offline', 'load', 'resize']) window.addEventListener(event, activity);
+  const pagehide = () => {
+    pageSuspended = true;
+    queue();
+  };
+  const pageshow = () => {
+    pageSuspended = false;
+    queue();
+  };
+  window.addEventListener('pageshow', pageshow);
+  window.addEventListener('pagehide', pagehide);
   document.addEventListener('visibilitychange', activity);
+  document.fonts?.addEventListener('loading', activity);
+  document.fonts?.addEventListener('loadingdone', activity);
+  document.fonts?.addEventListener('loadingerror', activity);
   connection?.addEventListener('change', activity);
   const observer =
     typeof PerformanceObserver === 'undefined'
       ? undefined
       : new PerformanceObserver((list) => {
-          const external = list.getEntries().filter((entry) => !isOwnResource(entry));
-          for (const entry of external) markLoaded(entry as PerformanceResourceTiming);
-          if (external.length) {
-            // Resource completion is not a new user action; polling cannot restart the quiet window forever.
-            pause(false);
-            settleAt = Date.now() + 250;
-            queue();
-          }
+          let changed = false;
+          for (const resource of list.getEntries())
+            changed = markLoaded(resource as PerformanceResourceTiming) || changed;
+          // Unrelated polling completions must not postpone scheduled work.
+          if (changed) queue();
         });
   try {
     observer?.observe({ entryTypes: ['resource'] });
   } catch {
     observer?.disconnect();
   }
-  function remove(scope: object) {
-    scopes.delete(scope);
-    if (!scopes.size || (activeUrl && manifest && !selected().some((item) => item.url === activeUrl))) pause(false);
-    queue();
-  }
   return {
     submit(selection: PrewarmSelection) {
       const scope = {};
       scopes.set(scope, selection);
       queue();
-      return () => remove(scope);
+      return () => {
+        scopes.delete(scope);
+        if (!scopes.size) pause('selection');
+        queue();
+      };
     },
     activity,
     snapshot: () => {
       const items = selected(),
-        remaining = pending();
+        remaining = pending(),
+        state = requestActivitySnapshot();
+      const nextStartAt =
+        remaining.length && allowed() && ready() && !fetching && !state.foreground && !state.incremental
+          ? Math.max(
+              Date.now(),
+              initialReadyAt ?? 0,
+              settleAt,
+              lockRetryAt,
+              nextFileAt,
+              Math.min(...remaining.map((item) => retryAt.get(item.url) || 0)),
+            )
+          : null;
       return {
         mode: mode(),
         readBytes,
@@ -397,41 +511,58 @@ export function createStaticPrewarmScheduler(options: {
         pending: manifest ? remaining.length : 0,
         deferred: selected(true).length - items.length,
         disabled,
+        activities: state,
+        aborts: { ...aborts },
+        nextStartAt,
         reason: disposed
           ? 'disposed'
           : disabled
             ? 'disabled'
             : !allowed()
               ? 'restricted'
-              : !ready()
+              : state.foreground > 0 || !ready()
                 ? 'foreground'
-                : fetching
-                  ? 'fetching'
-                  : Date.now() < lastActivity + delay
-                    ? 'quiet-period'
-                    : !manifest
-                      ? 'manifest'
+                : slowIncremental(state)
+                  ? 'incremental-slow'
+                  : state.incremental > 0
+                    ? 'incremental'
+                    : fetching
+                      ? 'fetching'
                       : !remaining.length
                         ? items.some((item) => failed.has(item.url))
                           ? 'complete-with-errors'
                           : selected(true).length > items.length
                             ? 'core-complete'
                             : 'complete'
-                        : !remaining.some((item) => availableAt(item.url) <= Date.now())
-                          ? 'retry-wait'
-                          : 'idle',
+                        : !started && (initialReadyAt === undefined || Date.now() < initialReadyAt)
+                          ? 'startup'
+                          : Date.now() < settleAt
+                            ? 'settling'
+                            : Date.now() < lockRetryAt
+                              ? 'other-tab'
+                              : !remaining.some((item) => (retryAt.get(item.url) || 0) <= Date.now())
+                                ? 'retry-wait'
+                                : !manifest
+                                  ? 'manifest'
+                                  : 'idle',
       };
     },
     dispose() {
       disposed = true;
-      pause();
-      scopes.clear();
+      cancelScheduled();
+      pause('disposed');
       unsubscribe();
+      trackImages(false);
+      scopes.clear();
       unsubscribeNetwork();
       observer?.disconnect();
-      for (const event of inputEvents) window.removeEventListener(event, activity, true);
       for (const event of ['online', 'offline', 'load', 'resize']) window.removeEventListener(event, activity);
+      window.removeEventListener('pagehide', pagehide);
+      window.removeEventListener('pageshow', pageshow);
       document.removeEventListener('visibilitychange', activity);
+      document.fonts?.removeEventListener('loading', activity);
+      document.fonts?.removeEventListener('loadingdone', activity);
+      document.fonts?.removeEventListener('loadingerror', activity);
       connection?.removeEventListener('change', activity);
     },
   };

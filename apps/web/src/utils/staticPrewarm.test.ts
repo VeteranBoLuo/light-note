@@ -12,6 +12,7 @@ import {
   endRequestActivity,
   holdForegroundActivity,
   withForegroundActivity,
+  holdRequestActivity,
 } from '@/http/requestActivity';
 
 const connection = new EventTarget() as EventTarget & { saveData?: boolean; effectiveType?: string; type?: string };
@@ -42,7 +43,7 @@ beforeEach(() => {
   scheduler = createStaticPrewarmScheduler({
     entryUrl: entry,
     mobile: () => mobile,
-    ready: () => ready && activeRequestCount() === 0,
+    ready: () => ready,
     fetcher,
   });
 });
@@ -59,10 +60,10 @@ afterEach(() => {
 const advance = () => vi.advanceTimersByTimeAsync(9000);
 
 describe('统一静态预热', () => {
-  it('首屏完成且空闲八秒才下载清单，然后按优先级串行去重', async () => {
+  it('首屏完成一秒后才下载清单，然后按优先级串行去重', async () => {
     scheduler.submit({ urls: [second], priority: 4 });
     scheduler.submit({ urls: [asset, second], priority: 0 });
-    await vi.advanceTimersByTimeAsync(7999);
+    await vi.advanceTimersByTimeAsync(999);
     expect(fetcher).not.toHaveBeenCalled();
     await advance();
     expect(fetcher.mock.calls.map(([url]) => url)).toEqual(['/static-prewarm.json', asset, second]);
@@ -81,57 +82,75 @@ describe('统一静态预热', () => {
     await advance();
     expect(fetcher).not.toHaveBeenCalled();
     release();
-    await vi.advanceTimersByTimeAsync(7999);
+    await vi.advanceTimersByTimeAsync(999);
     expect(fetcher).not.toHaveBeenCalled();
     await advance();
     expect(fetcher).toHaveBeenCalledTimes(3);
   });
-  it('已排队的 idle 回调在用户操作后不能跳过新的静默窗口', async () => {
+  it('连续点击、输入、滚动不会取消下载或重置启动窗口', async () => {
+    let signal: AbortSignal | undefined;
+    fetcher.mockImplementation(async (url, init) => {
+      if (String(url).endsWith('.json')) return manifestResponse();
+      signal = init!.signal!;
+      return new Promise((_resolve, reject) =>
+        signal!.addEventListener('abort', () => reject(Error('abort')), { once: true }),
+      );
+    });
+    scheduler.submit({ urls: [asset], priority: 1 });
+    for (let i = 0; i < 100; i++) {
+      for (const type of ['pointerdown', 'keydown', 'scroll']) window.dispatchEvent(new Event(type));
+      await vi.advanceTimersByTimeAsync(100);
+    }
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(signal?.aborted).toBe(false);
+    expect(scheduler.snapshot().aborts.foreground).toBe(0);
+  });
+  it('过期 idle 回调不能跳过前台活动门禁', async () => {
     const callbacks: IdleRequestCallback[] = [];
     vi.stubGlobal('requestIdleCallback', (callback: IdleRequestCallback) => {
       callbacks.push(callback);
       return callbacks.length;
     });
-    const cancel = vi.fn();
-    vi.stubGlobal('cancelIdleCallback', cancel);
+    vi.stubGlobal('cancelIdleCallback', vi.fn());
     scheduler.submit({ urls: [asset], priority: 1 });
-    await vi.advanceTimersByTimeAsync(8000);
+    await vi.advanceTimersByTimeAsync(1000);
     const stale = callbacks[0];
-    window.dispatchEvent(new Event('pointerdown'));
-    expect(cancel).toHaveBeenCalledWith(1);
+    const release = holdForegroundActivity();
     stale({ didTimeout: false, timeRemaining: () => 30 });
-    await vi.advanceTimersByTimeAsync(7999);
     expect(fetcher).not.toHaveBeenCalled();
-    await vi.advanceTimersByTimeAsync(1);
+    release();
+    await vi.advanceTimersByTimeAsync(1000);
     callbacks.at(-1)!({ didTimeout: false, timeRemaining: () => 30 });
     await vi.advanceTimersByTimeAsync(0);
     expect(fetcher).toHaveBeenCalledTimes(1);
   });
-  it('点击立即中止；多次让路后仍可恢复，已完成文件不重下', async () => {
+  it('前台立即中止；反复中断只延后当前文件，其他资源继续', async () => {
     let signal: AbortSignal | undefined;
     fetcher.mockImplementation(async (url, init) => {
       if (String(url).endsWith('.json')) return manifestResponse();
-      if (url === asset) return response(128);
+      if (url === second) return response(256);
       signal = init!.signal!;
       return new Promise((_resolve, reject) =>
-        signal!.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')), { once: true }),
+        signal!.addEventListener('abort', () => reject(Error('abort')), { once: true }),
       );
     });
     scheduler.submit({ groups: ['frames'], priority: 1 });
-    await advance();
-    expect(signal?.aborted).toBe(false);
-    window.dispatchEvent(new Event('pointerdown'));
+    await vi.advanceTimersByTimeAsync(1100);
+    let release = holdForegroundActivity();
     expect(signal?.aborted).toBe(true);
-    await advance();
-    window.dispatchEvent(new Event('keydown'));
-    await advance();
-    expect(fetcher.mock.calls.filter(([url]) => url === asset)).toHaveLength(1);
-    expect(fetcher.mock.calls.filter(([url]) => url === second)).toHaveLength(2);
-    fetcher.mockImplementation(async (url) => response(data.assets[String(url)]));
-    await vi.advanceTimersByTimeAsync(60000);
-    expect(fetcher.mock.calls.filter(([url]) => url === second)).toHaveLength(3);
-    expect(scheduler.snapshot().completed).toBe(2);
-    expect(scheduler.snapshot().failed).toBe(0);
+    await vi.advanceTimersByTimeAsync(0);
+    release();
+    await vi.advanceTimersByTimeAsync(550);
+    expect(signal?.aborted).toBe(false);
+    release = holdForegroundActivity();
+    await vi.advanceTimersByTimeAsync(0);
+    release();
+    await vi.advanceTimersByTimeAsync(600);
+    expect(fetcher.mock.calls.filter(([url]) => url === asset)).toHaveLength(2);
+    expect(fetcher.mock.calls.filter(([url]) => url === second)).toHaveLength(1);
+    fetcher.mockImplementation(async () => response(128));
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(scheduler.snapshot()).toMatchObject({ completed: 2, failed: 0 });
   });
   it('作用域取消不取消其他调用方还需要的同一资源', async () => {
     let signal: AbortSignal | undefined;
@@ -267,24 +286,65 @@ it('一次空闲连续完成超过 12 MiB 的有限清单，未知桌面网络�
   expect(fetcher).toHaveBeenCalledTimes(6);
 });
 
-it('频繁短请求不会不断重置用户的八秒空闲窗口；在途时仍暂停', async () => {
+it('后台轮询不阻塞启动，也不取消正在进行的预热', async () => {
+  const release = holdRequestActivity('background');
   scheduler.submit({ urls: [asset], priority: 1 });
-  for (let i = 0; i < 2; i++) {
-    await vi.advanceTimersByTimeAsync(2900);
-    const request = {};
-    beginRequestActivity(request);
-    await vi.advanceTimersByTimeAsync(100);
-    expect(fetcher).not.toHaveBeenCalled();
-    endRequestActivity(request);
-  }
-  await vi.advanceTimersByTimeAsync(1900);
-  const request = {};
-  beginRequestActivity(request);
-  await vi.advanceTimersByTimeAsync(300);
-  expect(fetcher).not.toHaveBeenCalled();
-  endRequestActivity(request);
-  await vi.advanceTimersByTimeAsync(500);
-  expect(fetcher.mock.calls.map(([url]) => url)).toEqual(['/static-prewarm.json', asset]);
+  await vi.advanceTimersByTimeAsync(1200);
+  expect(scheduler.snapshot().completed).toBe(1);
+  release();
+});
+
+it('短续页允许当前下载完成，结束100ms后才启动下一项', async () => {
+  let finish!: () => void;
+  let signal: AbortSignal | undefined;
+  fetcher.mockImplementation(async (url, init) => {
+    if (String(url).endsWith('.json')) return manifestResponse();
+    if (url === second) return response(256);
+    signal = init!.signal!;
+    await new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    return response(128);
+  });
+  scheduler.submit({ groups: ['frames'], priority: 1 });
+  await vi.advanceTimersByTimeAsync(1100);
+  const release = holdRequestActivity('incremental');
+  finish();
+  await vi.advanceTimersByTimeAsync(200);
+  expect(signal?.aborted).toBe(false);
+  expect(fetcher).toHaveBeenCalledTimes(2);
+  release();
+  await vi.advanceTimersByTimeAsync(99);
+  expect(fetcher).toHaveBeenCalledTimes(2);
+  await vi.advanceTimersByTimeAsync(1);
+  expect(fetcher).toHaveBeenCalledTimes(3);
+});
+
+it('重叠续页以最早未结束请求计时，一秒后升级，结束500ms后恢复', async () => {
+  let signal: AbortSignal | undefined;
+  fetcher.mockImplementation(async (url, init) => {
+    if (String(url).endsWith('.json')) return manifestResponse();
+    signal = init!.signal!;
+    return new Promise((_resolve, reject) =>
+      signal!.addEventListener('abort', () => reject(Error('abort')), { once: true }),
+    );
+  });
+  scheduler.submit({ urls: [asset], priority: 1 });
+  await vi.advanceTimersByTimeAsync(1100);
+  const a = holdRequestActivity('incremental');
+  await vi.advanceTimersByTimeAsync(600);
+  const b = holdRequestActivity('incremental');
+  await vi.advanceTimersByTimeAsync(399);
+  expect(signal?.aborted).toBe(false);
+  await vi.advanceTimersByTimeAsync(1);
+  expect(signal?.aborted).toBe(true);
+  a();
+  b();
+  fetcher.mockImplementation(async () => response(128));
+  await vi.advanceTimersByTimeAsync(499);
+  expect(fetcher).toHaveBeenCalledTimes(2);
+  await vi.advanceTimersByTimeAsync(1);
+  expect(scheduler.snapshot().completed).toBe(1);
 });
 
 it('真正的网络失败最多重试两次，其他资源不被坏文件阻塞', async () => {
@@ -321,7 +381,7 @@ it('切后台中止下载，回前台重新等待空闲后恢复', async () => {
   fetcher.mockImplementation(async () => response(128));
   vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
   document.dispatchEvent(new Event('visibilitychange'));
-  await vi.advanceTimersByTimeAsync(7999);
+  await vi.advanceTimersByTimeAsync(499);
   expect(fetcher).toHaveBeenCalledTimes(2);
   await advance();
   expect(scheduler.snapshot().completed).toBe(1);
@@ -399,11 +459,11 @@ it('清单下载多次被主动打断也不会永久禁用预热', async () => {
   );
   scheduler.submit({ urls: [asset], priority: 1 });
   await advance();
-  window.dispatchEvent(new Event('pointerdown'));
+  holdForegroundActivity()();
   await advance();
-  window.dispatchEvent(new Event('pointerdown'));
+  holdForegroundActivity()();
   await vi.advanceTimersByTimeAsync(0);
-  expect(scheduler.snapshot().disabled).toBe(false);
+  expect(scheduler.snapshot()).toMatchObject({ disabled: false, aborts: { foreground: 2 } });
   fetcher.mockImplementation(async (url) => (String(url).endsWith('.json') ? manifestResponse() : response(128)));
   await vi.advanceTimersByTimeAsync(60000);
   expect(scheduler.snapshot()).toMatchObject({ disabled: false, completed: 1, reason: 'complete' });
@@ -420,4 +480,137 @@ it('拒绝响应头后立即取消响应，不能留下未读的大文件占用�
   await advance();
   expect(signal?.aborted).toBe(true);
   expect(scheduler.snapshot()).toMatchObject({ failed: 1, reason: 'complete-with-errors' });
+});
+
+it('pagehide cannot restart a canceled download until pageshow', async () => {
+  fetcher.mockImplementation(async (url, init) =>
+    String(url).endsWith('.json')
+      ? manifestResponse()
+      : new Promise((_resolve, reject) => init!.signal!.addEventListener('abort', () => reject(Error('abort')))),
+  );
+  scheduler.submit({ urls: [asset], priority: 1 });
+  await vi.advanceTimersByTimeAsync(1100);
+  window.dispatchEvent(new Event('pagehide'));
+  await vi.advanceTimersByTimeAsync(10000);
+  expect(fetcher).toHaveBeenCalledTimes(2);
+  expect(scheduler.snapshot().aborts.restricted).toBe(1);
+  fetcher.mockImplementation(async () => response(128));
+  window.dispatchEvent(new Event('pageshow'));
+  await vi.advanceTimersByTimeAsync(499);
+  expect(fetcher).toHaveBeenCalledTimes(2);
+  await vi.advanceTimersByTimeAsync(51);
+  expect(scheduler.snapshot().completed).toBe(1);
+});
+it('Web Locks contention retries after 500ms without holding a lock while foreground runs', async () => {
+  let free = false;
+  const request = vi.fn(async (_name, _options, callback) => callback(free ? {} : null));
+  Object.assign(navigator, { locks: { request } });
+  scheduler.submit({ urls: [asset], priority: 1 });
+  await vi.advanceTimersByTimeAsync(1000);
+  expect(request).toHaveBeenCalledTimes(1);
+  expect(fetcher).not.toHaveBeenCalled();
+  await vi.advanceTimersByTimeAsync(499);
+  expect(request).toHaveBeenCalledTimes(1);
+  const release = holdForegroundActivity();
+  free = true;
+  await vi.advanceTimersByTimeAsync(1500);
+  expect(request).toHaveBeenCalledTimes(1);
+  release();
+  await vi.advanceTimersByTimeAsync(1000);
+  expect(fetcher).toHaveBeenCalled();
+  expect(request).toHaveBeenCalledWith('lightnote:static-prewarm', { ifAvailable: true }, expect.any(Function));
+});
+it('denied Web Locks safely fall back to one transfer at a time', async () => {
+  const request = vi.fn().mockRejectedValue(new Error('denied'));
+  Object.assign(navigator, { locks: { request } });
+  scheduler.submit({ groups: ['frames'], priority: 1 });
+  await advance();
+  expect(request).toHaveBeenCalledTimes(1);
+  expect(fetcher).toHaveBeenCalledTimes(3);
+  expect(scheduler.snapshot().completed).toBe(2);
+});
+
+it('background completions neither postpone launch nor cancel another in-flight file', async () => {
+  scheduler.dispose();
+  let notify!: PerformanceObserverCallback;
+  vi.stubGlobal(
+    'PerformanceObserver',
+    class {
+      constructor(callback: PerformanceObserverCallback) {
+        notify = callback;
+      }
+      observe() {}
+      disconnect() {}
+    },
+  );
+  scheduler = createStaticPrewarmScheduler({ entryUrl: entry, mobile: () => false, ready: () => true, fetcher });
+  let signal: AbortSignal | undefined;
+  fetcher.mockImplementation(async (url, init) => {
+    if (String(url).endsWith('.json')) return manifestResponse();
+    signal = init!.signal!;
+    return new Promise((_resolve, reject) => signal!.addEventListener('abort', () => reject(Error('abort'))));
+  });
+  scheduler.submit({ groups: ['frames'], priority: 1 });
+  const emit = (name: string, decodedBodySize: number) =>
+    notify(
+      { getEntries: () => [{ name, decodedBodySize }] } as PerformanceObserverEntryList,
+      {} as PerformanceObserver,
+      {},
+    );
+  for (let i = 0; i < 110; i++) {
+    emit('/api/background', 32);
+    await vi.advanceTimersByTimeAsync(10);
+  }
+  expect(fetcher).toHaveBeenCalledTimes(2);
+  emit(second, 256);
+  expect(signal?.aborted).toBe(false);
+  expect(scheduler.snapshot().completed).toBe(1);
+  emit(asset, 64);
+  expect(scheduler.snapshot().completed).toBe(1);
+});
+
+it('resize preserves a matching scene and cancels only an obsolete size', async () => {
+  vi.stubGlobal('innerWidth', 800);
+  vi.stubGlobal('devicePixelRatio', 1);
+  data.manorScene = [
+    { url: asset, width: 1000 },
+    { url: second, width: 2000 },
+  ];
+  data.groups['manor.critical'] = [second];
+  let signal: AbortSignal | undefined;
+  fetcher.mockImplementation(async (url, init) => {
+    if (String(url).endsWith('.json')) return manifestResponse();
+    signal = init!.signal!;
+    return new Promise((_resolve, reject) => signal!.addEventListener('abort', () => reject(Error('abort'))));
+  });
+  scheduler.submit({ groups: ['manor.critical'], priority: 1 });
+  await vi.advanceTimersByTimeAsync(1100);
+  vi.stubGlobal('innerWidth', 900);
+  window.dispatchEvent(new Event('resize'));
+  expect(signal?.aborted).toBe(false);
+  vi.stubGlobal('innerWidth', 1600);
+  window.dispatchEvent(new Event('resize'));
+  expect(signal?.aborted).toBe(true);
+  fetcher.mockImplementation(async () => response(256));
+  await vi.advanceTimersByTimeAsync(100);
+  expect(fetcher.mock.calls.at(-1)?.[0]).toBe(second);
+  expect(scheduler.snapshot()).toMatchObject({ completed: 1, aborts: { selection: 1, foreground: 0 } });
+});
+it('revoking an account scope aborts its resource; a new scope can proceed without the old queue', async () => {
+  let signal: AbortSignal | undefined;
+  fetcher.mockImplementation(async (url, init) => {
+    if (String(url).endsWith('.json')) return manifestResponse();
+    signal = init!.signal!;
+    return new Promise((_resolve, reject) => signal!.addEventListener('abort', () => reject(Error('abort'))));
+  });
+  const logout = scheduler.submit({ urls: [asset], priority: 1 });
+  await vi.advanceTimersByTimeAsync(1100);
+  logout();
+  expect(signal?.aborted).toBe(true);
+  await vi.advanceTimersByTimeAsync(1000);
+  expect(fetcher).toHaveBeenCalledTimes(2);
+  fetcher.mockImplementation(async () => response(256));
+  scheduler.submit({ urls: [second], priority: 1 });
+  await vi.advanceTimersByTimeAsync(600);
+  expect(scheduler.snapshot()).toMatchObject({ selected: 1, completed: 1 });
 });

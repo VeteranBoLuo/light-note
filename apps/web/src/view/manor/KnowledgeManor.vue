@@ -12,6 +12,7 @@
 </template>
 
 <script setup lang="ts">
+  import { useForegroundLoading } from '@/composables/useForegroundLoading';
   import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
   import { onBeforeRouteLeave, useRouter } from 'vue-router';
   import { useI18n } from 'vue-i18n';
@@ -45,6 +46,7 @@
   const returnTo = typeof previous === 'string' && previous.startsWith('/') && !previous.startsWith('//')
     && !/^\/(?:knowledge-manor|manor)(?:[/?#]|$)/.test(previous) ? previous : '/app';
   let exiting = false, initialRead: Promise<ManorSnapshot> | null = null;
+  useForegroundLoading(() => !interactive.value && !failed.value);
   const frameUrl = computed(() => `/manor/index.html?bridge=${encodeURIComponent(nonce.value)}${bookmark.isMobile ? '&renderProfile=mobile' : ''}`);
   const questKeys: Record<string, string> = {
     checkin: 'growth.quest_checkin', create: 'growth.quest_create', exp30: 'growth.quest_exp30',

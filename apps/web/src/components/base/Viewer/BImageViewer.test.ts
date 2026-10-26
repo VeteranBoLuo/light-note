@@ -7,6 +7,7 @@ import zhCN from '@/i18n/locales/zh-CN';
 import type { ImageViewerItem } from '@/types/imageViewer';
 import viewerSource from './BImageViewer.vue?raw';
 import BImageViewer from './BImageViewer.vue';
+import { requestActivitySnapshot } from '@/http/requestActivity';
 
 const themeSource = readFileSync(resolve(process.cwd(), 'src/assets/css/theme.less'), 'utf8');
 
@@ -392,4 +393,21 @@ describe('BImageViewer', () => {
       }
     }
   });
+});
+
+it('viewer load, source switch, failure and close release foreground leases', async () => {
+  const { visible, viewerImages } = await mountViewer();
+  expect(requestActivitySnapshot().foreground).toBe(1);
+  currentImage()!.dispatchEvent(new Event('load'));
+  expect(requestActivitySnapshot().foreground).toBe(0);
+  viewerImages.value = [{ ...images[0], src: '/replacement.png' }];
+  await nextTick(); await nextTick();
+  expect(requestActivitySnapshot().foreground).toBe(1);
+  currentImage()!.dispatchEvent(new Event('error'));
+  expect(requestActivitySnapshot().foreground).toBe(0);
+  viewerImages.value = [{ ...images[0], src: '/another.png' }];
+  await nextTick(); await nextTick();
+  expect(requestActivitySnapshot().foreground).toBe(1);
+  visible.value = false; await nextTick();
+  expect(requestActivitySnapshot().foreground).toBe(0);
 });

@@ -2247,7 +2247,7 @@
             tagId: getActiveNoteTagId(),
           },
           // 列表有本地骨架/软刷新状态，不再同时点亮全局顶部请求条。
-          { feedback: false },
+          { feedback: false, activity: append ? 'incremental' : 'foreground' },
         );
       const res = await requestPage(targetPage);
       if (preserveLoaded && res.status === 200 && Array.isArray(res.data?.items)) {

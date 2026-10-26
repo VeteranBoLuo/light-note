@@ -117,6 +117,7 @@ describe('cloud space pagination', () => {
         currentPage: 2,
         sort: { field: 'createTime', order: 'desc' },
       }),
+      { activity: 'incremental' },
     );
   });
 
@@ -131,6 +132,7 @@ describe('cloud space pagination', () => {
     expect(mocks.apiQueryPost).toHaveBeenLastCalledWith(
       '/api/file/queryFiles',
       expect.objectContaining({ sort: { field: 'fileName', order: 'asc' } }),
+      { activity: 'foreground' },
     );
     expect(JSON.parse(window.localStorage.getItem(CLOUD_FILE_SORT_STORAGE_KEY) || '{}')).toEqual({
       field: 'fileName',
@@ -141,24 +143,28 @@ describe('cloud space pagination', () => {
     expect(mocks.apiQueryPost).toHaveBeenLastCalledWith(
       '/api/file/queryFiles',
       expect.objectContaining({ sort: { field: 'fileName', order: 'desc' } }),
+      { activity: 'foreground' },
     );
 
     await store.setFileSort('fileSize');
     expect(mocks.apiQueryPost).toHaveBeenLastCalledWith(
       '/api/file/queryFiles',
       expect.objectContaining({ sort: { field: 'fileSize', order: 'desc' } }),
+      { activity: 'foreground' },
     );
 
     await store.setFileSortValue({ field: 'fileSize', order: 'asc' });
     expect(mocks.apiQueryPost).toHaveBeenLastCalledWith(
       '/api/file/queryFiles',
       expect.objectContaining({ sort: { field: 'fileSize', order: 'asc' } }),
+      { activity: 'foreground' },
     );
 
     await store.setFileSortValue({ field: 'createTime', order: 'asc' });
     expect(mocks.apiQueryPost).toHaveBeenLastCalledWith(
       '/api/file/queryFiles',
       expect.objectContaining({ sort: { field: 'createTime', order: 'asc' } }),
+      { activity: 'foreground' },
     );
 
     setActivePinia(createPinia());
@@ -185,6 +191,7 @@ describe('cloud space pagination', () => {
     expect(mocks.apiQueryPost).toHaveBeenLastCalledWith(
       '/api/file/queryFiles',
       expect.objectContaining({ currentPage: 1, sort: { field: 'createTime', order: 'desc' } }),
+      { activity: 'foreground' },
     );
     expect(store.filePage).toBe(1);
     expect(store.fileList).toEqual([{ id: 'latest-file' }]);
@@ -193,6 +200,7 @@ describe('cloud space pagination', () => {
     expect(mocks.apiQueryPost).toHaveBeenLastCalledWith(
       '/api/file/queryFiles',
       expect.objectContaining({ currentPage: 1, sort: { field: 'createTime', order: 'asc' } }),
+      { activity: 'foreground' },
     );
     expect(JSON.parse(window.localStorage.getItem(CLOUD_FILE_SORT_STORAGE_KEY) || '{}')).toEqual({
       field: 'createTime',

@@ -368,7 +368,7 @@
       locateState.value = 'idle';
     }
     try {
-      const page = await fetchList({ currentPage: currentPage.value, pageSize, type: activeTab.value });
+      const page = await fetchList({ currentPage: currentPage.value, pageSize, type: activeTab.value }, { activity: reset ? 'foreground' : 'incremental' });
       if (generation !== listGeneration) return;
       items.value = reset ? page.items : [...items.value, ...page.items];
       total.value = Math.max(0, page.total - skippedItems);

@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import KnowledgeManor from './KnowledgeManor.vue';
 import { createManor, MANOR_VERSION } from '@lightnote/shared/manor';
 import AppLayout from '../index.vue';
+import { requestActivitySnapshot } from '@/http/requestActivity';
 
 const mocks = vi.hoisted(() => ({
   bookmark: { isMobile: false },
@@ -181,7 +182,9 @@ describe('庄园加载与主站导航', () => {
         data: { type: 'lightnote-manor', nonce, id: 1, action } }));
       await flush();
     };
+    expect(requestActivitySnapshot().foreground).toBe(1);
     await notify('ready');
+    expect(requestActivitySnapshot().foreground).toBe(0);
     expect(document.querySelector('nav')).toBeNull();
     const exited = new Promise<void>(resolve => {
       const stop = router.afterEach(to => { if (to.path === '/app') { stop(); resolve(); } });
@@ -218,16 +221,20 @@ describe('庄园加载与主站导航', () => {
       }));
       await flush();
     };
+    expect(requestActivitySnapshot().foreground).toBe(1);
     await notify('ready');
+    expect(requestActivitySnapshot().foreground).toBe(0);
     expect(document.querySelector('nav')).toBeNull();
     expect(document.querySelector('iframe')).toBe(frame);
     expect(document.body.textContent).not.toContain('manor.returnToApp');
     await notify('loading');
+    expect(requestActivitySnapshot().foreground).toBe(1);
     expect(document.querySelector('nav')).not.toBeNull();
     expect(document.querySelector('iframe')).toBe(frame);
     expect(document.body.textContent).not.toContain('manor.returnToApp');
     await notify('ready');
     await notify('load-error');
+    expect(requestActivitySnapshot().foreground).toBe(0);
     expect(document.querySelector('nav')).not.toBeNull();
     expect(document.querySelector('[role="alert"]')).not.toBeNull();
   });
@@ -241,6 +248,7 @@ describe('庄园加载与主站导航', () => {
     await flush();
     expect(document.body.textContent).toContain('bookmarks-ready');
     expect(signal.aborted).toBe(true);
+    expect(requestActivitySnapshot().foreground).toBe(0);
     expect(document.querySelector('iframe')).toBeNull();
   });
   it('场景未就绪时不等待积分与背包刷新，移除正在加载的 iframe', async () => {

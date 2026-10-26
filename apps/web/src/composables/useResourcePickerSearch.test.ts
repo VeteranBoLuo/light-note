@@ -225,6 +225,7 @@ describe('useResourcePickerSearch', () => {
         cursor: { type: 'note', offset: 2 },
         includeMetadata: false,
       }),
+      { activity: 'incremental' },
     );
     expect(picker.results.value.map((row) => row.id)).toEqual(['n1', 'n2', 'n3']);
     expect(picker.hasMore.value).toBe(false);

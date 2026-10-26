@@ -1540,10 +1540,11 @@
     force: boolean,
     query: Parameters<typeof fetchGlobalSearch>[3],
     seq: number,
+    append = false,
   ) {
     if (publicScope.included && publicScope.caps.enabled && !usingPersonalFallback) {
       try {
-        return await fetchCombinedSearch(keyword, { ...query, pageSize });
+        return await fetchCombinedSearch(keyword, { ...query, pageSize }, undefined, { activity: append ? 'incremental' : 'foreground' });
       } catch (error) {
         if (seq !== requestSeq) throw error;
         publicSearchFailed.value = true;
@@ -1554,7 +1555,7 @@
         usingPersonalFallback = true;
       }
     }
-    const result = await fetchGlobalSearch(keyword, pageSize, force, query);
+    const result = await fetchGlobalSearch(keyword, pageSize, force, query, { activity: append ? 'incremental' : 'foreground' });
     return { ...result, publicSearchFailed: usingPersonalFallback };
   }
 
@@ -1630,6 +1631,7 @@
           separateTagMatches: true,
         },
         seq,
+        append,
       );
       if (preserveLoaded || returnSnapshot) {
         const refreshedItems = normalizeSearchResultItems(res);

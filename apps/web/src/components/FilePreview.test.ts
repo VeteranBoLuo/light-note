@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp, h, nextTick, ref } from 'vue';
 import FilePreview from './FilePreview.vue';
+import { requestActivitySnapshot } from '@/http/requestActivity';
 import { HTML_PREVIEW_REFERRER_POLICY, HTML_PREVIEW_SANDBOX } from '@/utils/htmlPreview';
 import { MOBILE_OVERLAY_HISTORY_STATE_KEY, resetMobileOverlayHistoryForTests } from '@/utils/mobileOverlayHistory';
 
@@ -1422,4 +1423,17 @@ describe('FilePreview verified image content', () => {
     expect(document.querySelector('.preview-image')?.getAttribute('src')).toBe('/current-jpeg');
     expect(document.querySelector('.preview-error')).toBeNull();
   });
+});
+
+it('file preview protects loading until rendering/error, and releases on close', async () => {
+  await mountPdfPreview();
+  expect(requestActivitySnapshot().foreground).toBeGreaterThan(0);
+  document.querySelector<HTMLButtonElement>('.pdf-fail')!.click();
+  await nextTick();
+  expect(requestActivitySnapshot().foreground).toBe(0);
+  cleanup?.(); cleanup = undefined;
+  await mountPdfPreview();
+  expect(requestActivitySnapshot().foreground).toBeGreaterThan(0);
+  cleanup?.(); cleanup = undefined;
+  expect(requestActivitySnapshot().foreground).toBe(0);
 });

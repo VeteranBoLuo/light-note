@@ -558,7 +558,7 @@ describe('CommunityChatWorkspace', () => {
     socket.message('message.created', { roomSlug: 'general', messagePublicId: 'message-2' }, 'event-0002');
     await flushAsync();
 
-    expect(mocks.getMessages).toHaveBeenCalledWith('general', { limit: 30 });
+    expect(mocks.getMessages).toHaveBeenCalledWith('general', { limit: 30 }, { activity: 'foreground' });
     expect(host.textContent).toContain('实时补齐的新消息');
     expect(host.querySelector('.community-conversation-header__delivery')?.getAttribute('aria-label')).toBe(
       zhCN.communityChat.realtimeConnected,
@@ -2108,7 +2108,7 @@ describe('CommunityChatWorkspace', () => {
     expect(mocks.getMessages).toHaveBeenNthCalledWith(2, 'general', {
       after: 'message-after-1',
       limit: 30,
-    });
+    }, { activity: 'incremental' });
     expect(host.querySelector('[data-message-public-id="message-after-2"]')?.textContent).toContain('后续消息二');
     expect(host.querySelector('.community-message-list__new')).toBeNull();
   });
@@ -2158,6 +2158,7 @@ describe('CommunityChatWorkspace', () => {
     await vi.advanceTimersByTimeAsync(8000);
     await flushAsync();
 
+    expect(mocks.getMessages).toHaveBeenLastCalledWith('general', { limit: 30 }, { activity: 'background' });
     expect(messageList.scrollTop).toBe(120);
     const newMessagesButton = host.querySelector<HTMLButtonElement>('.community-message-list__new');
     expect(newMessagesButton?.textContent).toContain('1 条新消息');
@@ -2465,7 +2466,7 @@ describe('CommunityChatWorkspace', () => {
     expect(host.querySelector('.community-message-list__older')).toBeNull();
 
     expect(mocks.getMessages).toHaveBeenNthCalledWith(1, 'general', { limit: 30 });
-    expect(mocks.getMessages).toHaveBeenNthCalledWith(2, 'general', { before: 'message-2', limit: 30 });
+    expect(mocks.getMessages).toHaveBeenNthCalledWith(2, 'general', { before: 'message-2', limit: 30 }, { activity: 'incremental' });
     expect(host.textContent).toContain('更早消息');
     expect(host.textContent).toContain('最新消息');
   });

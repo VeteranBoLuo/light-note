@@ -4,10 +4,16 @@ import { createI18n } from 'vue-i18n';
 import { chatArtworkPrewarmSelections } from '@/utils/chatArtworkPrewarm';
 import { manorPrewarmSelections } from '@/utils/manorPrewarm';
 import { createStaticPrewarmScheduler } from '@/utils/staticPrewarm';
-import { withForegroundActivity } from '@/http/requestActivity';
+import {
+  withForegroundActivity,
+  withRequestActivity,
+  holdRequestActivity,
+  type ActivityKind,
+} from '@/http/requestActivity';
 import { applyUiDensity } from '@/composables/useUiDensity';
 import AvatarFramePreview from '@/components/growth/AvatarFramePreview.vue';
 import ProfileBackgroundArt from '@/components/growth/ProfileBackgroundArt.vue';
+import BInput from '@/components/base/BasicComponents/BInput.vue';
 import BButton from '@/components/base/BasicComponents/BButton.vue';
 import { FRAME_IDS } from '@/config/growthFrames';
 import icon from '@/config/icon';
@@ -26,7 +32,20 @@ const scheduler = createStaticPrewarmScheduler({ entryUrl: import.meta.url, mobi
 let stop: (() => void) | undefined;
 const elapsed = ref(0),
   loaded = ref(false);
+const leases = new Map<string, () => void>();
+const text = ref('');
 const harness = {
+  hold(id: string, kind: ActivityKind) {
+    leases.get(id)?.();
+    leases.set(id, holdRequestActivity(kind));
+  },
+  release(id: string) {
+    leases.get(id)?.();
+    leases.delete(id);
+  },
+  warmMany() {
+    scheduler.submit({ urls: Array.from({ length: 70 }, (_, i) => `/assets/prewarm-${i}.js`), priority: 1 });
+  },
   start() {
     stop?.();
     stop = scheduler.submit({ urls: ['/assets/prewarm-payload.js'], priority: 1 });
@@ -43,6 +62,15 @@ const harness = {
     stop?.();
   },
   snapshot: scheduler.snapshot,
+  async incremental() {
+    const start = performance.now();
+    await withRequestActivity('incremental', async () => {
+      await (await fetch(`/assets/foreground-test.js?run=${Date.now()}`)).arrayBuffer();
+    });
+    elapsed.value = performance.now() - start;
+    loaded.value = true;
+    return elapsed.value;
+  },
   async navigate() {
     const start = performance.now();
     await withForegroundActivity(() => import(/* @vite-ignore */ `/assets/foreground-test.js?run=${Date.now()}`));
@@ -57,6 +85,15 @@ const app = createApp({
     return () =>
       h('main', { style: { padding: 'var(--ui-space-24, 24px)', maxWidth: '900px', margin: 'auto' } }, [
         h('h1', '静态资源与切换验收'),
+        h(BInput, {
+          id: 'typing',
+          modelValue: text.value,
+          'onUpdate:modelValue': (value: string) => {
+            text.value = value;
+          },
+        }),
+        h(BButton, { id: 'plain-click' }, () => '普通点击'),
+        h(BButton, { id: 'incremental', onClick: harness.incremental }, () => '追加一页'),
         h(BButton, { id: 'navigate', onClick: harness.navigate }, () => '切换模块'),
         h('output', { id: 'elapsed', 'data-loaded': loaded.value }, String(elapsed.value)),
         h('section', { style: { height: '150px', position: 'relative', margin: '24px 0' } }, [

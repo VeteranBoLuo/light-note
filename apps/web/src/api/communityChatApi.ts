@@ -1,7 +1,7 @@
 import { withForegroundActivity } from '@/http/requestActivity';
 import axios from 'axios';
 import type { CommunityChatAttachment as CommunityChatAttachmentContract } from '@lightnote/shared/community-chat-attachments';
-import { apiBaseGet, apiBasePost, apiBasePut } from '@/http/request';
+import { apiBaseGet, apiBasePost, apiBasePut, type RequestOptions } from '@/http/request';
 
 export type CommunityChatAccessStatus =
   'login_required' | 'read_only' | 'closed' | 'not_invited' | 'requested' | 'rules_required' | 'active' | 'restricted';
@@ -407,7 +407,7 @@ export const requestCommunityChatAccess = (message = '') =>
 export const acceptCommunityChatRules = (rulesVersion: string) =>
   apiBasePost('/api/community-chat/membership/accept-rules', { rulesVersion }, { silent: true });
 
-export const getCommunityChatRooms = () => apiBaseGet('/api/community-chat/rooms', undefined, { silent: true });
+export const getCommunityChatRooms = (options?: RequestOptions) => apiBaseGet('/api/community-chat/rooms', undefined, { silent: true, ...options });
 
 export const ensureCommunityChatIdentity = () => apiBasePost('/api/community-chat/identity', {}, { silent: true });
 
@@ -426,7 +426,8 @@ const messagePath = (messagePublicId: string) => `/api/community-chat/messages/$
 export const getCommunityChatMessages = (
   roomSlug: string,
   params: { before?: string; focus?: string; after?: string; limit?: number } = {},
-) => apiBaseGet(`${roomPath(roomSlug)}/messages`, params, { silent: true });
+  options?: RequestOptions,
+) => apiBaseGet(`${roomPath(roomSlug)}/messages`, params, { silent: true, ...options });
 
 export const getCommunityChatPinnedMessage = (roomSlug: string) =>
   apiBaseGet(`${roomPath(roomSlug)}/pin`, undefined, { silent: true });
@@ -446,7 +447,7 @@ export const getCommunityChatReadReceiptCounts = (roomSlug: string, messagePubli
   apiBaseGet(
     `${roomPath(roomSlug)}/read-receipt-counts`,
     { messagePublicIds: messagePublicIds.join(',') },
-    { silent: true },
+    { silent: true, activity: 'background' },
   );
 
 export const getCommunityChatPollOptionVoters = (
@@ -604,11 +605,11 @@ export const markCommunityChatRoomRead = (
   apiBasePut(
     `${roomPath(roomSlug)}/read`,
     { lastMessagePublicId: lastMessagePublicId || null },
-    { silent: true, ...options },
+    { silent: true, activity: 'background', ...options },
   );
 
 export const recordCommunityChatReadReceipts = (roomSlug: string, messagePublicIds: string[]) =>
-  apiBasePost(`${roomPath(roomSlug)}/read-receipts`, { messagePublicIds }, { silent: true });
+  apiBasePost(`${roomPath(roomSlug)}/read-receipts`, { messagePublicIds }, { silent: true, activity: 'background' });
 
 export const saveCommunityChatMessageSticker = (messagePublicId: string) =>
   apiBasePost(`${messagePath(messagePublicId)}/save-sticker`, {}, { silent: true });

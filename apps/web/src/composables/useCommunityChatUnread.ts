@@ -74,7 +74,7 @@ async function refresh(options: { afterCurrent?: boolean } = {}): Promise<Commun
   const task: DirectoryRequest = { promise: Promise.resolve(null) };
   task.promise = (async () => {
     const requestToken = captureDirectorySyncToken();
-    return await getCommunityChatRooms()
+    return await getCommunityChatRooms({ activity: 'background' })
       .then((response) => {
         const nextDirectory = response.data as CommunityChatRoomDirectory;
         if (requestGeneration === generation) syncDirectory(nextDirectory, requestToken);

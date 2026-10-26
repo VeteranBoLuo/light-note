@@ -163,7 +163,7 @@ export default defineStore('dom', {
             pendingOnly: this.pendingOnly,
           },
           sort: this.fileSort,
-        });
+        }, { activity: append ? 'incremental' : 'foreground' });
         if (requestVersion !== this.fileRequestVersion) return false;
         // 校验业务码:失败时保留旧列表并兜底为数组,避免 fileList 被置成 undefined 导致模板 .length 抛错。
         if (res?.status !== 200) {

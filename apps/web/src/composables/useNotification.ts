@@ -102,7 +102,7 @@ export function useNotification(options: { excludeCommunityChat?: MaybeRef<boole
   // 拉取分页列表(顺带同步未读数)
   async function fetchList(
     params: { currentPage?: number; pageSize?: number; type?: string; notificationId?: string } = {},
-    options: { throwOnError?: boolean; syncUnread?: boolean } = {},
+    options: { throwOnError?: boolean; syncUnread?: boolean; activity?: import('@/http/requestActivity').ActivityKind } = {},
   ): Promise<NotificationPage> {
     const empty: NotificationPage = {
       items: [],
@@ -114,7 +114,7 @@ export function useNotification(options: { excludeCommunityChat?: MaybeRef<boole
     if (isGuest()) return empty;
     const uid = useUserStore().id;
     try {
-      const res = await notificationApi.getNotificationList({ ...params, ...notificationScope() });
+      const res = await notificationApi.getNotificationList({ ...params, ...notificationScope() }, { activity: options.activity });
       if (useUserStore().id !== uid || isGuest()) return empty;
       if (res?.status === 200 && res.data) {
         if (options.syncUnread !== false) unreadTotal.value = Number(res.data.unreadTotal ?? unreadTotal.value) || 0;

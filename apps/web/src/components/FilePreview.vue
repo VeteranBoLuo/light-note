@@ -367,6 +367,7 @@
 </template>
 
 <script setup lang="ts">
+  import { useForegroundLoading } from '@/composables/useForegroundLoading';
   import { captureResourceOpen } from '@/utils/resourceReuseRuntime';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
@@ -453,6 +454,7 @@
 
   // 内部状态
   const loading = ref(false);
+  useForegroundLoading(() => props.visible && loading.value);
   const previewAttempt = ref(0);
   const error = ref(false);
   const errorMessage = ref('');

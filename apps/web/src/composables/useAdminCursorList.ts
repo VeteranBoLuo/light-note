@@ -19,7 +19,7 @@ interface LoadOptions {
 }
 
 interface AdminCursorListOptions<T> {
-  request: (cursor: string | null, limit: number) => Promise<CursorResponse<T>>;
+  request: (cursor: string | null, limit: number, options: import('@/http/request').RequestOptions) => Promise<CursorResponse<T>>;
   limit?: number;
   itemKey?: keyof T | ((item: T) => unknown);
   mapItems?: (items: T[]) => T[];
@@ -53,7 +53,7 @@ export function useAdminCursorList<T>(options: AdminCursorListOptions<T>) {
     const cursor = reset ? null : nextCursor.value;
     loading.value = true;
     try {
-      const response = await options.request(cursor, limit);
+      const response = await options.request(cursor, limit, { activity: cursor ? 'incremental' : 'foreground' });
       if (seq !== requestSeq) return false;
       if (response?.status !== 200 && response?.status !== true) {
         throw new Error(response?.msg || '列表加载失败');

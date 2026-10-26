@@ -950,7 +950,7 @@
             scrollMemory(),
             () => current === generation,
           )
-        : await feedGet<FeedPage<any>>(path, params);
+        : await feedGet<FeedPage<any>>(path, params, { activity: more ? 'incremental' : 'foreground' });
     if (current !== generation || !data) return;
     if ('restoreFailed' in data && data.restoreFailed) moreFailed.value = true;
     if (['manage', 'moderation'].includes(mode.value))

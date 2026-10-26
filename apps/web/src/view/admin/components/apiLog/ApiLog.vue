@@ -273,7 +273,7 @@
     reload,
     cancel,
   } = useAdminCursorList<any>({
-    request: (cursor, limit) =>
+    request: (cursor, limit, options) =>
       apiQueryPost('/api/common/getApiLogs', {
         cursor,
         limit,
@@ -287,7 +287,7 @@
           endDate: filters.endDate,
           hideInternal: filters.hideInternal,
         },
-      }),
+      }, options),
     onError: (_error, silent) => {
       if (!silent) message.error(t('common.requestFailedDescription'));
     },

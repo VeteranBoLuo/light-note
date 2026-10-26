@@ -244,12 +244,13 @@ export async function fetchCombinedSearch(
     source?: string;
   } = {},
   signal?: AbortSignal,
+  requestOptions?: import('@/http/request').RequestOptions,
 ): Promise<GlobalSearchResponse> {
   const { paginationMode: _, separateTagMatches: __, todoPriority, page: ___, ...query } = options;
   const response = await apiBasePost(
     '/api/public-resources/search/combined',
     { keyword, ...query, ...(todoPriority ? { todoPriorities: todoPriority } : {}) },
-    { silent: true, signal },
+    { silent: true, ...requestOptions, signal },
   );
   if (response.status !== 200) throw apiError(response);
   return response.data;

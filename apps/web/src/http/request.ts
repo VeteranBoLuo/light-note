@@ -12,7 +12,7 @@ import {
   getAdminLoginPreviewReturnUrl,
 } from '@/utils/authStorage.ts';
 import { buildQueryRequestData, type QueryData } from '@/http/queryRequest.ts';
-import { beginRequestActivity, endRequestActivity } from '@/http/requestActivity';
+import { beginRequestActivity, endRequestActivity, type ActivityKind } from '@/http/requestActivity';
 
 // 常量定义
 const TIMEOUT = 120000;
@@ -43,6 +43,8 @@ export interface ApiResponse {
 
 export type RequestOptions = AxiosRequestConfig & {
   silent?: boolean;
+  /** Local scheduling metadata; never serialized into headers, params or body. */
+  activity?: ActivityKind;
   suppressAuthExpired?: boolean;
   /** 兼容旧调用方；全局进度条已移除，本选项不再产生视觉反馈。 */
   feedback?: boolean;
@@ -195,7 +197,7 @@ request.interceptors.request.use(
       // 说明这是一条「陈旧的在途响应」,notifyAuthExpired 会据此忽略其过期信号,避免误弹「登录已过期」
       (config as any).__reqUserId = useUserStore().id || '';
     }
-    beginRequestActivity(config);
+    beginRequestActivity(config, (config as RequestOptions).activity);
     return config;
   },
   (error) => {
@@ -349,7 +351,7 @@ request.interceptors.response.use(
 export const apiQueryPost = async (
   url: string,
   data?: QueryData,
-  options?: AxiosRequestConfig,
+  options?: RequestOptions,
 ): Promise<ApiResponse> => {
   const res = await request({
     url,

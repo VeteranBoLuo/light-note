@@ -8,9 +8,21 @@
         preload="metadata"
         playsinline
         @loadedmetadata="handleLoaded"
-        @play="hasStarted = true"
-        @pause="hasStarted = false"
-        @ended="hasStarted = false"
+        @loadstart="buffering = true"
+        @waiting="buffering = true"
+        @seeking="buffering = true"
+        @canplay="buffering = false"
+        @playing="buffering = false"
+        @seeked="handleSeeked"
+        @play="handlePlay"
+        @pause="
+          hasStarted = false;
+          buffering = false;
+        "
+        @ended="
+          hasStarted = false;
+          buffering = false;
+        "
         @error="handleError"
       />
       <span v-if="formatLabel" class="video-format">{{ formatLabel }}</span>
@@ -27,6 +39,7 @@
 </template>
 
 <script setup lang="ts">
+  import { useForegroundLoading } from '@/composables/useForegroundLoading';
   import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
@@ -43,6 +56,11 @@
   }>();
   const videoPlayer = ref<HTMLVideoElement | null>(null);
   const loaded = ref(false);
+  const buffering = ref(true);
+  useForegroundLoading(() => Boolean(props.videoUrl) && buffering.value);
+  function handleSeeked() {
+    if (videoPlayer.value && videoPlayer.value.readyState >= 2) buffering.value = false;
+  }
   const hasStarted = ref(false);
   const isMobileLayout = useMobileLayout();
   const emit = defineEmits<{
@@ -52,20 +70,29 @@
 
   const handleLoaded = () => {
     loaded.value = true;
+    buffering.value = false;
     emit('loaded');
   };
 
   const handleError = () => {
     loaded.value = false;
+    buffering.value = false;
     hasStarted.value = false;
     emit('error', new Error(t('cloudSpace.previewPanel.mediaLoadFailed')));
   };
 
+  function handlePlay() {
+    hasStarted.value = true;
+    buffering.value = (videoPlayer.value?.readyState ?? 0) < 3;
+  }
+
   async function playVideo() {
     if (!videoPlayer.value) return;
+    buffering.value = videoPlayer.value.readyState < 3;
     try {
       await videoPlayer.value.play();
     } catch {
+      buffering.value = false;
       emit('error', new Error(t('cloudSpace.previewPanel.mediaPlayFailed')));
     }
   }
@@ -101,6 +128,7 @@
     () => [props.videoUrl, props.mimeType],
     async () => {
       loaded.value = false;
+      buffering.value = true;
       hasStarted.value = false;
       await nextTick();
       videoPlayer.value?.load();

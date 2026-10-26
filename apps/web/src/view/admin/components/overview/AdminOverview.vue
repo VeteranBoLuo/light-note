@@ -367,20 +367,20 @@
   let resourceRecentLoadMode: 'initial' | 'append' = 'initial';
   let userRecentLoadMode: 'initial' | 'append' = 'initial';
 
-  function requestRecentPage<T>(target: AdminRecentTarget, cursor: string | null, limit: number) {
+  function requestRecentPage<T>(target: AdminRecentTarget, cursor: string | null, limit: number, options: import('@/http/request').RequestOptions) {
     return apiBasePost('/api/common/getAdminOverviewRecent', {
       hideInternal: hideInternal.value,
       ...recentFilter.value,
       target,
       cursor,
       limit,
-    }) as Promise<{ status?: number | boolean; msg?: string; data?: AdminRecentPage<T> }>;
+    }, options) as Promise<{ status?: number | boolean; msg?: string; data?: AdminRecentPage<T> }>;
   }
 
   const resourceRecent = useAdminCursorList<AdminRecentResource>({
     limit: 20,
     itemKey: (item) => `${item.type}:${item.id}`,
-    request: (cursor, limit) => requestRecentPage<AdminRecentResource>('resource', cursor, limit),
+    request: (cursor, limit, options) => requestRecentPage<AdminRecentResource>('resource', cursor, limit, options),
     onError: () => {
       resourceRecentError.value = resourceRecentLoadMode;
     },
@@ -388,7 +388,7 @@
   const userRecent = useAdminCursorList<AdminRecentUser>({
     limit: 20,
     itemKey: 'id',
-    request: (cursor, limit) => requestRecentPage<AdminRecentUser>('user', cursor, limit),
+    request: (cursor, limit, options) => requestRecentPage<AdminRecentUser>('user', cursor, limit, options),
     onError: () => {
       userRecentError.value = userRecentLoadMode;
     },

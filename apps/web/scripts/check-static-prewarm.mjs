@@ -27,6 +27,7 @@ const payload = Buffer.from('window.__prewarmExecuted = true;\n//' + 'x'.repeat(
 const foreground = Buffer.from('export const ready = true;\n//' + 'y'.repeat(32 * 1024));
 const manifest = JSON.parse(await readFile(path.join(dist, 'static-prewarm.json'), 'utf8'));
 manifest.assets['/assets/prewarm-payload.js'] = payload.length;
+for (let i = 0; i < 70; i++) manifest.assets[`/assets/prewarm-${i}.js`] = payload.length;
 const requests = [];
 const server = createServer(async (req, res) => {
   const url = new URL(req.url, 'http://127.0.0.1');
@@ -44,8 +45,8 @@ const server = createServer(async (req, res) => {
     res.end(JSON.stringify(manifest));
     return;
   }
-  if (url.pathname === '/assets/prewarm-payload.js' || url.pathname === '/assets/foreground-test.js') {
-    const body = url.pathname.includes('prewarm-payload') ? payload : foreground;
+  if (/^\/assets\/prewarm-(?:payload|\d+)\.js$/.test(url.pathname) || url.pathname === '/assets/foreground-test.js') {
+    const body = url.pathname.includes('prewarm-') ? payload : foreground;
     res.setHeader('Content-Type', 'application/javascript');
     res.setHeader('Content-Length', body.length);
     let offset = 0;
@@ -59,6 +60,17 @@ const server = createServer(async (req, res) => {
       else setTimeout(send, 15);
     };
     send();
+    return;
+  }
+  if (url.pathname === '/assets/slow-visible.svg') {
+    res.setHeader('Content-Type', 'image/svg+xml');
+    setTimeout(
+      () =>
+        res.end(
+          '<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80"><rect width="80" height="80" fill="purple"/></svg>',
+        ),
+      1500,
+    );
     return;
   }
   try {
@@ -88,7 +100,16 @@ const server = createServer(async (req, res) => {
 await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
 const origin = `http://127.0.0.1:${server.address().port}`;
 const browser = await chromium.launch({ channel: 'chrome', headless: true });
-const results = { comparisons: [], visual: [], cache: false, manorCache: false, paperCache: false };
+const results = {
+  continuous: [],
+  locks: false,
+  visibleImage: false,
+  comparisons: [],
+  visual: [],
+  cache: false,
+  manorCache: false,
+  paperCache: false,
+};
 const images = path.join(output, 'screenshots');
 await mkdir(images);
 async function pageFor(query = '', mobile = false) {
@@ -221,53 +242,130 @@ try {
     await context.close();
   }
 
-  for (const mobile of [false, true]) {
-    const baseline = [],
-      warming = [];
-    for (let index = 0; index < 10; index++) {
-      for (const warm of [false, true]) {
-        const { page, context } = await pageFor(mobile ? 'renderProfile=mobile' : '', mobile);
-        const cdp = await context.newCDPSession(page);
-        await cdp.send('Network.enable');
-        await cdp.send('Network.emulateNetworkConditions', {
-          offline: false,
-          latency: 80,
-          downloadThroughput: 200 * 1024,
-          uploadThroughput: 200 * 1024,
-        });
-        let request;
-        if (warm) {
-          const before = requests.length;
-          await page.evaluate(() => window.__staticPrewarmHarness.start());
-          await page.waitForFunction(() => window.__staticPrewarmHarness.snapshot().fetching);
-          for (let attempt = 0; attempt < 100 && !request; attempt++) {
-            request = requests.slice(before).find((item) => item.path === '/assets/prewarm-payload.js');
-            if (!request) await new Promise((resolve) => setTimeout(resolve, 20));
-          }
-          assert(request, 'background resource must start');
-          assert(!request.completed, 'must interrupt an in-flight download');
-        }
-        await page.locator('#navigate').click();
-        await page.waitForFunction(() => document.querySelector('#elapsed').dataset.loaded === 'true');
-        const elapsed = Number(await page.locator('#elapsed').textContent());
-        (warm ? warming : baseline).push(elapsed);
-        if (request) {
-          await page.waitForFunction(() => !window.__staticPrewarmHarness.snapshot().fetching);
-          for (let attempt = 0; attempt < 20 && !request.closed; attempt++)
-            await new Promise((resolve) => setTimeout(resolve, 20));
-          assert(request.closed && !request.completed, 'navigation must cancel the background transfer');
-        }
-        await context.close();
+  // One minute of real input must not starve byte downloads or cause input cancellations.
+  {
+    const { page, context } = await pageFor();
+    await page.evaluate(() => window.__staticPrewarmHarness.warmMany());
+    const start = Date.now();
+    let sampleAt = 0,
+      sequence = 0;
+    while (Date.now() - start < 60000) {
+      await page.locator('#typing input, input#typing').fill(`持续输入 ${sequence++}`);
+      await page.locator('#plain-click').click();
+      await page.locator('#frames').hover();
+      await page.mouse.wheel(0, sequence % 2 ? 30 : -30);
+      if (Date.now() - start >= sampleAt) {
+        results.continuous.push(await page.evaluate(() => window.__staticPrewarmHarness.snapshot().completed));
+        sampleAt += 5000;
       }
+      await page.waitForTimeout(150);
     }
-    const metric = (values, p) => [...values].sort((a, b) => a - b)[Math.ceil(values.length * p) - 1];
-    for (const p of [0.5, 0.95]) {
-      const normal = metric(baseline, p),
-        warm = metric(warming, p);
-      assert(warm - normal <= Math.max(100, normal * 0.1), `foreground latency regression: ${normal} -> ${warm}`);
-    }
-    results.comparisons.push({ mobile, baseline, warming });
+    const state = await page.evaluate(() => window.__staticPrewarmHarness.snapshot());
+    assert(state.completed > 20, 'continuous interaction must allow meaningful progress');
+    assert.equal(state.aborts.foreground, 0, 'input without work must never abort');
+    assert(results.continuous.at(-1) > results.continuous[1]);
+    await context.close();
   }
+  // Same-origin tabs hold a Web Lock only during each transfer, then reuse the native cache.
+  {
+    const { page, context } = await pageFor();
+    const other = await context.newPage();
+    await other.goto(`${origin}/e2e/static-prewarm.html`, { waitUntil: 'networkidle' });
+    await other.waitForFunction(() => Boolean(window.__staticPrewarmHarness));
+    const before = requests.filter((item) => item.path === '/assets/prewarm-payload.js').length;
+    await Promise.all([page, other].map((tab) => tab.evaluate(() => window.__staticPrewarmHarness.start())));
+    await Promise.all(
+      [page, other].map((tab) => tab.waitForFunction(() => window.__staticPrewarmHarness.snapshot().completed === 1)),
+    );
+    assert.equal(
+      requests.filter((item) => item.path === '/assets/prewarm-payload.js').length - before,
+      1,
+      'tabs must serialize and share completed cache',
+    );
+    results.locks = true;
+    await context.close();
+  }
+  // A truly visible slow image upgrades after a second, then releases when decoded.
+  {
+    const { page, context } = await pageFor();
+    const cdp = await context.newCDPSession(page);
+    await cdp.send('Network.enable');
+    await cdp.send('Network.emulateNetworkConditions', {
+      offline: false,
+      latency: 20,
+      downloadThroughput: 200 * 1024,
+      uploadThroughput: 200 * 1024,
+    });
+    await page.evaluate(() => window.__staticPrewarmHarness.start());
+    await page.waitForFunction(
+      () =>
+        window.__staticPrewarmHarness.snapshot().fetching && window.__staticPrewarmHarness.snapshot().selected === 1,
+    );
+    await page.evaluate(() => {
+      const image = document.createElement('img');
+      image.id = 'slow-visible';
+      image.width = image.height = 80;
+      image.style.position = 'fixed';
+      image.style.top = '0';
+      image.src = '/assets/slow-visible.svg';
+      document.body.append(image);
+    });
+    await page.waitForFunction(() => window.__staticPrewarmHarness.snapshot().aborts.incremental === 1);
+    await page.waitForFunction(() => document.querySelector('#slow-visible').complete);
+    await page.waitForFunction(() => window.__staticPrewarmHarness.snapshot().completed === 1);
+    results.visibleImage = true;
+    await context.close();
+  }
+
+  for (const purpose of ['navigate', 'incremental'])
+    for (const mobile of [false, true]) {
+      const baseline = [],
+        warming = [];
+      for (let index = 0; index < 10; index++) {
+        for (const warm of [false, true]) {
+          const { page, context } = await pageFor(mobile ? 'renderProfile=mobile' : '', mobile);
+          const cdp = await context.newCDPSession(page);
+          await cdp.send('Network.enable');
+          await cdp.send('Network.emulateNetworkConditions', {
+            offline: false,
+            latency: 80,
+            downloadThroughput: 200 * 1024,
+            uploadThroughput: 200 * 1024,
+          });
+          let request;
+          if (warm) {
+            const before = requests.length;
+            await page.evaluate(() => window.__staticPrewarmHarness.start());
+            await page.waitForFunction(() => window.__staticPrewarmHarness.snapshot().fetching);
+            for (let attempt = 0; attempt < 100 && !request; attempt++) {
+              request = requests.slice(before).find((item) => item.path === '/assets/prewarm-payload.js');
+              if (!request) await new Promise((resolve) => setTimeout(resolve, 20));
+            }
+            assert(request, 'background resource must start');
+            assert(!request.completed, 'must interrupt an in-flight download');
+          }
+          await page.locator(`#${purpose}`).click();
+          await page.waitForFunction(() => document.querySelector('#elapsed').dataset.loaded === 'true');
+          const elapsed = Number(await page.locator('#elapsed').textContent());
+          (warm ? warming : baseline).push(elapsed);
+          if (request && purpose === 'navigate') {
+            await page.waitForFunction(() => !window.__staticPrewarmHarness.snapshot().fetching);
+            for (let attempt = 0; attempt < 20 && !request.closed; attempt++)
+              await new Promise((resolve) => setTimeout(resolve, 20));
+            assert(request.closed && !request.completed, 'navigation must cancel the background transfer');
+          }
+          await context.close();
+        }
+      }
+      const metric = (values, p) => [...values].sort((a, b) => a - b)[Math.ceil(values.length * p) - 1];
+      for (const p of [0.5, 0.95]) {
+        const normal = metric(baseline, p),
+          warm = metric(warming, p);
+        const threshold = purpose === 'navigate' ? Math.max(100, normal * 0.1) : Math.max(200, normal * 0.2);
+        assert(warm - normal <= threshold, `${purpose} latency regression: ${normal} -> ${warm}`);
+      }
+      results.comparisons.push({ purpose, mobile, baseline, warming });
+    }
   for (const mobile of [false, true])
     for (const theme of ['day', 'night'])
       for (const density of mobile ? ['standard'] : ['compact', 'standard', 'comfortable']) {
@@ -296,11 +394,15 @@ try {
   console.log(
     JSON.stringify({
       output,
+      continuous: results.continuous,
+      locks: results.locks,
+      visibleImage: results.visibleImage,
       cache: results.cache,
       paperCache: results.paperCache,
       manorCache: results.manorCache,
       visualCases: results.visual.length,
       comparisons: results.comparisons.map((item) => ({
+        purpose: item.purpose,
         mobile: item.mobile,
         medianBaseline: [...item.baseline].sort((a, b) => a - b)[4],
         medianWarming: [...item.warming].sort((a, b) => a - b)[4],

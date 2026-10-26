@@ -1167,6 +1167,7 @@
   let latestRefreshInFlight = false;
   let latestRefreshQueued = false;
   let latestRefreshQueuedForce = false;
+  let latestRefreshQueuedBackground = true;
   let lastAuthorityRefreshAt = 0;
   let realtimeAuthorityRefreshPending = false;
   let readReceiptCountRefreshInFlight = false;
@@ -2761,7 +2762,7 @@
     const viewportAnchor = captureMessageViewportAnchor();
     const previousScrollHeight = element?.scrollHeight || 0;
     try {
-      const response = await getCommunityChatMessages(roomSlug, { before, limit: INITIAL_MESSAGE_PAGE_SIZE });
+      const response = await getCommunityChatMessages(roomSlug, { before, limit: INITIAL_MESSAGE_PAGE_SIZE }, { activity: 'incremental' });
       if (roomSlug !== selectedRoomSlug.value) return;
       const page = response.data as CommunityChatMessagePage;
       syncCommunityClock(page.serverTime);
@@ -2806,7 +2807,7 @@
       const response = await getCommunityChatMessages(roomSlug, {
         after,
         limit: INITIAL_MESSAGE_PAGE_SIZE,
-      });
+      }, { activity: 'incremental' });
       if (roomSlug !== selectedRoomSlug.value || after !== nextAfter.value) return;
       const page = response.data as CommunityChatMessagePage;
       syncCommunityClock(page.serverTime);
@@ -2828,7 +2829,7 @@
     }
   }
 
-  async function refreshLatest({ force = false } = {}) {
+  async function refreshLatest({ force = false, background = false } = {}) {
     const roomSlug = selectedRoomSlug.value;
     // Redis 跨实例广播不可用时，WebSocket 仍可能保持“已连接”。保留 30 秒级权威安全刷新，
     // 避免客户端在连接不断开的情况下永久漏掉其他实例写入。
@@ -2842,13 +2843,14 @@
     if (latestRefreshInFlight) {
       latestRefreshQueued = true;
       latestRefreshQueuedForce ||= force;
+      latestRefreshQueuedBackground &&= background;
       return;
     }
     latestRefreshInFlight = true;
     const messageNavigationGenerationAtStart = messageNavigationGeneration;
     const existingIds = new Set(chatMessages.value.map((item) => item.publicId));
     try {
-      const response = await getCommunityChatMessages(roomSlug, { limit: INITIAL_MESSAGE_PAGE_SIZE });
+      const response = await getCommunityChatMessages(roomSlug, { limit: INITIAL_MESSAGE_PAGE_SIZE }, { activity: background ? 'background' : 'foreground' });
       if (roomSlug !== selectedRoomSlug.value) return;
       const page = response.data as CommunityChatMessagePage;
       syncCommunityClock(page.serverTime);
@@ -2886,9 +2888,11 @@
       latestRefreshInFlight = false;
       if (latestRefreshQueued) {
         const queuedForce = latestRefreshQueuedForce;
+        const queuedBackground = latestRefreshQueuedBackground;
         latestRefreshQueued = false;
         latestRefreshQueuedForce = false;
-        void refreshLatest({ force: queuedForce });
+        latestRefreshQueuedBackground = true;
+        void refreshLatest({ force: queuedForce, background: queuedBackground });
       }
     }
   }
@@ -5102,7 +5106,7 @@
     }
     refreshRecallClock();
     readReceiptForegroundActive = typeof document.hasFocus !== 'function' || document.hasFocus();
-    void refreshLatest();
+    void refreshLatest({ background: true });
     void markLatestRead();
     if (readReceiptForegroundActive) {
       scheduleVisibleReadReceipts();
@@ -5132,7 +5136,7 @@
     }
     pollTimer = window.setInterval(() => {
       if (!workspaceActive.value) return;
-      void refreshLatest();
+      void refreshLatest({ background: true });
       void refreshReadReceiptCounts();
     }, 8000);
     recallClockTimer = window.setInterval(() => {

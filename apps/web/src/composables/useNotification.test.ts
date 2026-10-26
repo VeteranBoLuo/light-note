@@ -96,11 +96,14 @@ describe('useNotification.fetchList', () => {
     await notification.markAllRead();
 
     expect(getUnreadCount).toHaveBeenCalledWith({ excludeCommunityChat: true });
-    expect(getNotificationList).toHaveBeenCalledWith({
-      currentPage: 1,
-      pageSize: 20,
-      excludeCommunityChat: true,
-    });
+    expect(getNotificationList).toHaveBeenCalledWith(
+      {
+        currentPage: 1,
+        pageSize: 20,
+        excludeCommunityChat: true,
+      },
+      { activity: undefined },
+    );
     expect(markAllNotificationsRead).toHaveBeenCalledWith({ excludeCommunityChat: true, type: 'all' });
   });
 

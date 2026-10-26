@@ -1,4 +1,4 @@
-import { apiBasePost } from '@/http/request.ts';
+import { apiBasePost, type RequestOptions } from '@/http/request.ts';
 
 export interface NotificationScopeOptions {
   excludeCommunityChat?: boolean;
@@ -13,11 +13,12 @@ export const getNotificationList = (
     type?: string;
     notificationId?: string;
   } & NotificationScopeOptions = {},
-) => apiBasePost('/api/notification/list', params);
+  options?: RequestOptions,
+) => apiBasePost('/api/notification/list', params, options);
 
 // 仅未读数(铃铛角标轮询用,轻量)
 export const getUnreadCount = (options: NotificationScopeOptions = {}) =>
-  apiBasePost('/api/notification/unreadCount', options);
+  apiBasePost('/api/notification/unreadCount', options, { activity: 'background' });
 
 // 标记指定通知已读
 export const markNotificationsRead = (ids: string[]) => apiBasePost('/api/notification/markRead', { ids });

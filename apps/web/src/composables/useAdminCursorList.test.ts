@@ -24,8 +24,8 @@ describe('useAdminCursorList', () => {
     await list.reload();
     await list.loadMore();
 
-    expect(request).toHaveBeenNthCalledWith(1, null, 50);
-    expect(request).toHaveBeenNthCalledWith(2, 'c1', 50);
+    expect(request).toHaveBeenNthCalledWith(1, null, 50, { activity: 'foreground' });
+    expect(request).toHaveBeenNthCalledWith(2, 'c1', 50, { activity: 'incremental' });
     expect(list.items.value).toEqual([{ id: '1' }, { id: '2' }]);
     expect(list.total.value).toBe(2);
     expect(list.hasMore.value).toBe(false);

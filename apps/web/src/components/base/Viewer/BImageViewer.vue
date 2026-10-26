@@ -202,6 +202,7 @@
 </template>
 
 <script setup lang="ts">
+  import { useForegroundLoading } from '@/composables/useForegroundLoading';
   import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, type CSSProperties } from 'vue';
   import { useI18n } from 'vue-i18n';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
@@ -304,6 +305,8 @@
       total: images.value.length,
     }),
   );
+  useForegroundLoading(() => Boolean(visible.value && currentImage.value && !imageLoaded.value && !imageFailed.value));
+
   const canTransform = computed(() => Boolean(currentImage.value && imageLoaded.value && !imageFailed.value));
   const hasTransform = computed(() => Math.abs(scale.value - 1) > 0.001 || rotation.value % 360 !== 0);
   const imageLayout = computed(() =>

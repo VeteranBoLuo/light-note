@@ -74,16 +74,21 @@ describe('fetchGlobalSearch cache policy', () => {
 
     expect(first.items[0]?.id).toBe('page-1');
     expect(second.items[0]?.id).toBe('page-2');
-    expect(mocks.apiBasePost).toHaveBeenNthCalledWith(2, '/api/search/global', {
-      keyword: '项目',
-      limitPerType: 12,
-      page: 2,
-      type: 'note',
-      sort: 'updated',
-      date: '30d',
-      tags: ['工作'],
-      untagged: false,
-    });
+    expect(mocks.apiBasePost).toHaveBeenNthCalledWith(
+      2,
+      '/api/search/global',
+      {
+        keyword: '项目',
+        limitPerType: 12,
+        page: 2,
+        type: 'note',
+        sort: 'updated',
+        date: '30d',
+        tags: ['工作'],
+        untagged: false,
+      },
+      undefined,
+    );
   });
 
   it('有序分页按游标请求 40 条，追加批次不会重复请求统计元数据', async () => {
@@ -131,30 +136,40 @@ describe('fetchGlobalSearch cache policy', () => {
       includeMetadata: false,
     });
 
-    expect(mocks.apiBasePost).toHaveBeenNthCalledWith(1, '/api/search/global', {
-      keyword: '',
-      pageSize: 40,
-      type: 'all',
-      sort: 'relevance',
-      date: 'all',
-      tags: [],
-      untagged: false,
-      paginationMode: 'ordered',
-      cursor: null,
-      includeMetadata: true,
-    });
-    expect(mocks.apiBasePost).toHaveBeenNthCalledWith(2, '/api/search/global', {
-      keyword: '',
-      pageSize: 40,
-      type: 'all',
-      sort: 'relevance',
-      date: 'all',
-      tags: [],
-      untagged: false,
-      paginationMode: 'ordered',
-      cursor: { type: 'note', offset: 0 },
-      includeMetadata: false,
-    });
+    expect(mocks.apiBasePost).toHaveBeenNthCalledWith(
+      1,
+      '/api/search/global',
+      {
+        keyword: '',
+        pageSize: 40,
+        type: 'all',
+        sort: 'relevance',
+        date: 'all',
+        tags: [],
+        untagged: false,
+        paginationMode: 'ordered',
+        cursor: null,
+        includeMetadata: true,
+      },
+      undefined,
+    );
+    expect(mocks.apiBasePost).toHaveBeenNthCalledWith(
+      2,
+      '/api/search/global',
+      {
+        keyword: '',
+        pageSize: 40,
+        type: 'all',
+        sort: 'relevance',
+        date: 'all',
+        tags: [],
+        untagged: false,
+        paginationMode: 'ordered',
+        cursor: { type: 'note', offset: 0 },
+        includeMetadata: false,
+      },
+      undefined,
+    );
     expect(initial.nextCursor).toEqual({ type: 'note', offset: 0 });
     expect(initial.typeTotals).toEqual({ bookmark: 40, note: 20, file: 0, tag: 0, todo: 0 });
     expect(appended.items).toHaveLength(20);
@@ -188,20 +203,24 @@ describe('fetchGlobalSearch cache policy', () => {
       separateTagMatches: true,
     });
 
-    expect(mocks.apiBasePost).toHaveBeenCalledWith('/api/search/global', {
-      keyword: '项目',
-      pageSize: 40,
-      types: ['bookmark', 'file', 'note'],
-      type: 'all',
-      sort: 'relevance',
-      date: 'all',
-      tags: [],
-      untagged: false,
-      paginationMode: 'ordered',
-      cursor: null,
-      includeMetadata: true,
-      separateTagMatches: true,
-    });
+    expect(mocks.apiBasePost).toHaveBeenCalledWith(
+      '/api/search/global',
+      {
+        keyword: '项目',
+        pageSize: 40,
+        types: ['bookmark', 'file', 'note'],
+        type: 'all',
+        sort: 'relevance',
+        date: 'all',
+        tags: [],
+        untagged: false,
+        paginationMode: 'ordered',
+        cursor: null,
+        includeMetadata: true,
+        separateTagMatches: true,
+      },
+      undefined,
+    );
     expect(result.tagMatches).toEqual([
       {
         id: 'tag-1',
@@ -338,6 +357,7 @@ describe('global material cursor transport', () => {
     expect(mocks.apiBasePost).toHaveBeenLastCalledWith(
       '/api/search/global',
       expect.objectContaining({ paginationMode: 'global', pageSize: 40, cursor }),
+      undefined,
     );
     expect(result.nextCursor).toEqual(cursor);
     mocks.apiBasePost.mockClear();
@@ -375,7 +395,11 @@ it('preserves ordered seek values in both directions while retaining the legacy 
     cursor,
     includeMetadata: false,
   });
-  expect(mocks.apiBasePost).toHaveBeenLastCalledWith('/api/search/global', expect.objectContaining({ cursor }));
+  expect(mocks.apiBasePost).toHaveBeenLastCalledWith(
+    '/api/search/global',
+    expect.objectContaining({ cursor }),
+    undefined,
+  );
   expect(result.nextCursor).toEqual(cursor);
 });
 
@@ -395,6 +419,10 @@ it('round-trips cross-type relevance cursors without dropping sort keys or requi
     types: ['bookmark', 'todo'],
     cursor,
   });
-  expect(mocks.apiBasePost).toHaveBeenLastCalledWith('/api/search/global', expect.objectContaining({ cursor }));
+  expect(mocks.apiBasePost).toHaveBeenLastCalledWith(
+    '/api/search/global',
+    expect.objectContaining({ cursor }),
+    undefined,
+  );
   expect(result.nextCursor).toEqual(cursor);
 });

@@ -227,7 +227,7 @@ export function useResourcePickerSearch(options: UseResourcePickerSearchOptions 
         paginationMode: options.exhaustive ? 'global' : 'ordered',
         cursor,
         includeMetadata: false,
-      });
+      }, { activity: 'incremental' });
       if (currentRequest !== requestId) return;
       const existingKeys = results.value.map(resourceItemKey);
       const candidates = normalizeItems(data?.items || [], browseTypes, existingKeys);

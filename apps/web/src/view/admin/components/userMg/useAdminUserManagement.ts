@@ -261,7 +261,7 @@ export function useAdminUserManagementList({
 
   const list = useAdminCursorList<any>({
     limit,
-    request: (cursor, pageLimit) =>
+    request: (cursor, pageLimit, options) =>
       apiQueryPost('/api/user/getUserList', {
         cursor,
         limit: pageLimit,
@@ -272,7 +272,7 @@ export function useAdminUserManagementList({
           activityWindow: activityFilter.value,
         },
         sort: requestSort.value,
-      }),
+      }, options),
     onError: (_error, silent) => {
       if (!silent) message.error(t('common.requestFailedDescription'));
     },

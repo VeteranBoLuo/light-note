@@ -1,5 +1,5 @@
 import type { PublicResourceItem } from '@lightnote/shared/public-resources';
-import { apiBasePost } from '@/http/request.ts';
+import { apiBasePost, type RequestOptions } from '@/http/request.ts';
 import i18n from '@/i18n';
 import {
   GLOBAL_SEARCH_TYPES,
@@ -214,6 +214,7 @@ export async function fetchGlobalSearch(
   pageSize = 12,
   force = false,
   query: GlobalSearchQuery = {},
+  options?: RequestOptions,
 ): Promise<GlobalSearchResponse> {
   const normalizedKeyword = keyword.trim();
   const locale = i18n.global.locale.value;
@@ -263,7 +264,7 @@ export async function fetchGlobalSearch(
     keyword: normalizedKeyword,
     ...(paginationMode !== 'perType' ? { pageSize } : { limitPerType: pageSize }),
     ...normalizedQuery,
-  });
+  }, options);
 
   if (res.status !== 200) {
     const error = new Error(String(res.msg || i18n.global.t('common.requestFailedDescription'))) as Error & {
