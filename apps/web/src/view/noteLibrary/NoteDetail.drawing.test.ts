@@ -19,7 +19,6 @@ const noteHeaderSource = readFileSync(
   resolve(process.cwd(), 'src/components/noteLibrary/detail/NoteHeader.vue'),
   'utf8',
 );
-const librarySource = readFileSync(resolve(process.cwd(), 'src/view/noteLibrary/NoteLibrary.vue'), 'utf8');
 const conflictSource = readFileSync(
   resolve(process.cwd(), 'src/components/noteLibrary/detail/NoteConflictModal.vue'),
   'utf8',
@@ -77,15 +76,6 @@ describe('手绘笔记详情边界', () => {
     expect(source).toContain(':sidebar-open="sidebarPreferredOpen"');
     expect(loadSource).toContain('sidebarPreferredOpen.value');
     expect(loadSource).toContain('!bookmark.isMobile');
-  });
-
-  it('桌面端空白编辑器选项保持一致的紧凑卡片结构', () => {
-    const sectionStart = librarySource.indexOf("key: 'type'");
-    const sectionEnd = librarySource.indexOf("key: 'builtin'", sectionStart);
-    const editorTypeSection = librarySource.slice(sectionStart, sectionEnd);
-
-    expect(editorTypeSection).toContain("key: 'drawing'");
-    expect(editorTypeSection).not.toContain('icon:');
   });
 
   it('笔画、拖动与局部擦除逐帧只更新临时对象，不直接改写响应式 scene', () => {

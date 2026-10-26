@@ -47,7 +47,7 @@ const GardenCompanions = (() => {
     {
       const to=action==='flutter'?{x:a.x,y:a.y}:nextPerch(a);
       const lift=a.kind==='butterfly'?L*(action==='flutter'?.16:.25):action==='flutter'?L*.5:L;
-      travel(a,to,lift,3.2);a.reactionLeft=a.route.duration+.6;
+      travel(a,to,lift,a.kind==='butterfly'?(action==='flutter'?4.8:6.4):3.2);a.reactionLeft=a.route.duration+.6;
     }
     return true;
   }
@@ -112,7 +112,7 @@ const GardenCompanions = (() => {
       const im=sprite(key);if(!im.complete||!im.naturalWidth)return;
       if(a.kind==='ladybird'&&GardenAnimals3D.update(a.kind,{x:a.x,y:a.y,size:L*.48,face:a.face,flying:!!a.route&&!reduced.matches,time:t}))return;
       ctx.save();ctx.translate(a.x,a.y);ctx.scale(a.face,1);
-      if(a.kind==='butterfly'&&a.route&&!reduced.matches)ctx.scale(.35+.65*Math.abs(Math.sin(t*13)),1);
+      if(a.kind==='butterfly'&&a.route&&!reduced.matches)ctx.scale(.35+.65*Math.abs(Math.sin(t*8.5)),1);
       if(a.kind==='ladybird'&&a.route&&!reduced.matches) {
         // 红色鞘翅分成两片绕胸部展开，薄翅在下面扇动，头部保持固定。
         const opening=.42*Math.sin(Math.PI*a.route.p);
@@ -138,7 +138,7 @@ const GardenCompanions = (() => {
         advance(a,dt);
         if(!reduced.matches&&!a.route&&!a.reactionLeft&&a.age>a.wait) {
           const to=nextPerch(a);
-          travel(a,to,L*(a.kind==='butterfly'?.25:.4),4);a.wait=12+Math.random()*8;
+          travel(a,to,L*(a.kind==='butterfly'?.25:.4),a.kind==='butterfly'?8:4);a.wait=12+Math.random()*8;
         }
         draw(a,clock);const b=buttons.get(a.kind);b.style.left=a.x+'px';b.style.top=(a.y-L*.25)+'px';
       }
