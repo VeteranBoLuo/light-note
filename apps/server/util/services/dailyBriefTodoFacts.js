@@ -19,6 +19,8 @@ export async function compileBriefTodoFacts(database, userId, calendar, definiti
   const base = `SELECT i.id,i.title,i.priority,DATE_FORMAT(i.due_at,'%Y-%m-%d %H:%i:%s') AS dueAt,DATE_FORMAT(i.start_at,'%Y-%m-%d %H:%i:%s') AS startAt,
       DATE_FORMAT(i.occurrence_date,'%Y-%m-%d') AS occurrenceDate,${reminder} AS reminderAt
     FROM todo_items i WHERE i.user_id=? AND i.del_flag=0 AND i.status='pending'
+      AND NOT EXISTS(SELECT 1 FROM onboarding_seed_resources seed
+        WHERE seed.user_id=i.user_id AND seed.resource_type='todo' AND seed.resource_id=i.id)
       AND COALESCE(i.instance_state,'normal')='normal'
       AND NULLIF(i.series_id,'') IS NULL
       AND (i.recurrence_rule IS NULL OR i.recurrence_rule='' OR i.recurrence_rule='null')`;

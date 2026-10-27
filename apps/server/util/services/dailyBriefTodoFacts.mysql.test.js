@@ -21,7 +21,7 @@ describe.skipIf(!socketPath)('日报待办与今日新增 SQL（隔离 MySQL）'
     admin = await mysql.createConnection({ socketPath, user: 'root' });
     const [[row]] = await admin.query('SELECT @@global.skip_networking AS isolated');
     if (Number(row.isolated) !== 1) throw new Error('Disposable MySQL required');
-    await admin.query(`CREATE DATABASE ${schema} CHARACTER SET utf8mb4`);
+    await admin.query(`CREATE DATABASE ${schema} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`);
     created = true;
     db = await mysql.createConnection({ socketPath, user: 'root', database: schema, dateStrings: true });
     await db.query(`CREATE TABLE todo_items(id VARCHAR(64) PRIMARY KEY,user_id VARCHAR(64),title VARCHAR(255),priority INT DEFAULT 1,
@@ -33,6 +33,8 @@ describe.skipIf(!socketPath)('日报待办与今日新增 SQL（隔离 MySQL）'
     await db.query(
       `CREATE TABLE todo_reminders(id VARCHAR(64) PRIMARY KEY,todo_id VARCHAR(64),user_id VARCHAR(64),scheduled_at DATETIME,status VARCHAR(16))`,
     );
+    await db.query(`CREATE TABLE onboarding_seed_resources(user_id VARBINARY(255),resource_type VARCHAR(32),resource_id VARBINARY(255),
+      PRIMARY KEY(user_id,resource_type,resource_id))`);
     for (const [table, owner] of [
       ['bookmark', 'user_id'],
       ['note', 'create_by'],
@@ -43,7 +45,15 @@ describe.skipIf(!socketPath)('日报待办与今日新增 SQL（隔离 MySQL）'
       );
   });
   beforeEach(async () => {
-    for (const table of ['todo_reminders', 'todo_reminder_jobs', 'todo_items', 'bookmark', 'note', 'files'])
+    for (const table of [
+      'todo_reminders',
+      'todo_reminder_jobs',
+      'todo_items',
+      'bookmark',
+      'note',
+      'files',
+      'onboarding_seed_resources',
+    ])
       await db.query(`DELETE FROM ${table}`);
   });
   afterAll(async () => {

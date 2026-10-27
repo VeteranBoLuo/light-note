@@ -62,9 +62,10 @@ it('从真实读模型接入所有整理来源；十月十六日的有效建议�
     limit: 2,
     view: 'summary',
     includeCounts: false,
+    excludeOnboardingSeeds: true,
   });
-  expect(sources.untagged).toHaveBeenCalledWith(db, { userId: 'owner' });
-  expect(sources.review).toHaveBeenCalledWith(db, 'owner');
+  expect(sources.untagged).toHaveBeenCalledWith(db, { userId: 'owner', excludeOnboardingSeeds: true });
+  expect(sources.review).toHaveBeenCalledWith(db, 'owner', { excludeOnboardingSeeds: true });
   const brief = dailyBriefServiceInternals.buildBrief(calendar, facts);
   expect(brief.insights.map((item) => item.text)).toEqual([
     '有 3 条 AI 整理建议待审核。涉及书签和笔记，包括标签和标题建议。 4 项资料待整理；510 项资源尚无标签。最近收集的有笔记《简报优化》、文件《方案截图.png》。',

@@ -15,7 +15,7 @@ export const DAILY_BRIEF_FACT_DEFINITIONS = Object.freeze([
   ['organize_untagged', '无标签资源', 'Untagged resources', '/organize?issue=untagged'],
 ]);
 
-// 新增计数供顶部概览，库存存在性仅用于全空引导，不进入模型。
+// 注册赠送资源按来源登记排除；新增计数供顶部概览，个人库存存在性仅用于引导，不进入模型。
 export async function compileBriefActivityFacts(database, userId, calendar) {
   return Promise.all(
     [
@@ -25,8 +25,12 @@ export async function compileBriefActivityFacts(database, userId, calendar) {
     ].map(async ([kind, table, owner, zh, en]) => {
       const [[row]] = await database.query(
         `SELECT COUNT(*) AS total,
-          EXISTS(SELECT 1 FROM ${table} WHERE ${owner}=? AND del_flag=0 LIMIT 1) AS hasResources
-          FROM ${table} WHERE ${owner}=? AND del_flag=0 AND create_time>=? AND create_time<?`,
+          EXISTS(SELECT 1 FROM ${table} r WHERE r.${owner}=? AND r.del_flag=0
+            AND NOT EXISTS(SELECT 1 FROM onboarding_seed_resources seed
+              WHERE seed.user_id=r.${owner} AND seed.resource_type='${kind}' AND seed.resource_id=CAST(r.id AS CHAR)) LIMIT 1) AS hasResources
+          FROM ${table} r WHERE r.${owner}=? AND r.del_flag=0 AND r.create_time>=? AND r.create_time<?
+            AND NOT EXISTS(SELECT 1 FROM onboarding_seed_resources seed
+              WHERE seed.user_id=r.${owner} AND seed.resource_type='${kind}' AND seed.resource_id=CAST(r.id AS CHAR))`,
         [userId, userId, calendar.todayStart, calendar.todayEnd],
       );
       return {
@@ -52,7 +56,9 @@ export async function compileBriefOnboardingFact(database, userId, activity, kno
   const extractionReady = await extractionSchemaReady(database);
   const [[presence]] = await database.query(
     `SELECT
-      EXISTS(SELECT 1 FROM todo_items WHERE user_id=? AND del_flag=0 LIMIT 1) AS hasTodos,
+      EXISTS(SELECT 1 FROM todo_items i WHERE i.user_id=? AND i.del_flag=0
+        AND NOT EXISTS(SELECT 1 FROM onboarding_seed_resources seed
+          WHERE seed.user_id=i.user_id AND seed.resource_type='todo' AND seed.resource_id=i.id) LIMIT 1) AS hasTodos,
       EXISTS(SELECT 1 FROM toolbox_workspaces WHERE user_id=? LIMIT 1) AS hasWorkspaces,
       EXISTS(SELECT 1 FROM toolbox_jobs job WHERE user_id=? AND ${taskVisibleSql()} LIMIT 1) AS hasJobs,
       ${extractionReady ? 'EXISTS(SELECT 1 FROM toolbox_extractions WHERE user_id=? LIMIT 1)' : '0'} AS hasExtractions`,
@@ -91,9 +97,15 @@ export function selectDailyBriefFacts(facts) {
 export async function compileDailyBriefFacts(database, userId, calendar) {
   const [todos, review, pending, untagged, workshop, activity] = await Promise.all([
     compileBriefTodoFacts(database, userId, calendar, DAILY_BRIEF_FACT_DEFINITIONS.slice(0, 3)),
-    summarizePendingOrganizeReview(database, userId),
-    listInboxResources(database, { userId, limit: 2, view: 'summary', includeCounts: false }),
-    summarizeUntaggedResources(database, { userId }),
+    summarizePendingOrganizeReview(database, userId, { excludeOnboardingSeeds: true }),
+    listInboxResources(database, {
+      userId,
+      limit: 2,
+      view: 'summary',
+      includeCounts: false,
+      excludeOnboardingSeeds: true,
+    }),
+    summarizeUntaggedResources(database, { userId, excludeOnboardingSeeds: true }),
     compileWorkshopBriefFacts(database, userId, calendar),
     compileBriefActivityFacts(database, userId, calendar),
   ]);

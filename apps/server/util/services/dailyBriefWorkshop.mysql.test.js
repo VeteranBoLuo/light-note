@@ -4,6 +4,11 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { compileWorkshopBriefFacts } from './dailyBriefWorkshop.js';
 import { dailyBriefServiceInternals } from './dailyBriefService.js';
 import { compileBriefActivityFacts, compileBriefOnboardingFact } from './dailyBriefFacts.js';
+import { compileBriefTodoFacts } from './dailyBriefTodoFacts.js';
+import { listInboxResources } from '../resourceInbox.js';
+import { summarizeUntaggedResources } from './resourceInventoryService.js';
+import { summarizePendingOrganizeReview } from './organizeReviewSummary.js';
+import { adviceContext } from './dailyBriefAdvice.js';
 import { EXTRACTION_SCHEMA } from '../extraction/schema.js';
 
 const socketPath = process.env.LIGHTNOTE_TEST_MYSQL_SOCKET;
@@ -24,7 +29,7 @@ describe.skipIf(!socketPath)('简报工坊待处理状态 SQL（隔离 MySQL）'
     admin = await mysql.createConnection({ socketPath, user: 'root' });
     const [[row]] = await admin.query('SELECT @@global.skip_networking AS isolated');
     if (Number(row.isolated) !== 1) throw new Error('Disposable MySQL required');
-    await admin.query(`CREATE DATABASE ${schema} CHARACTER SET utf8mb4`);
+    await admin.query(`CREATE DATABASE ${schema} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`);
     created = true;
     db = await mysql.createConnection({ socketPath, user: 'root', database: schema, dateStrings: true });
     await db.query(
@@ -36,22 +41,62 @@ describe.skipIf(!socketPath)('简报工坊待处理状态 SQL（隔离 MySQL）'
     await db.query(
       `CREATE TABLE toolbox_job_inputs(job_id VARCHAR(64),input_index INT,input_type VARCHAR(32),resource_type VARCHAR(16),resource_id VARCHAR(64),document_source_id VARCHAR(64))`,
     );
+    await db.query(`CREATE TABLE onboarding_seed_resources(user_id VARBINARY(255),resource_type VARCHAR(32),resource_id VARBINARY(255),
+      PRIMARY KEY(user_id,resource_type,resource_id))`);
     for (const [table, owner] of [
       ['bookmark', 'user_id'],
       ['note', 'create_by'],
       ['files', 'create_by'],
     ])
       await db.query(
-        `CREATE TABLE ${table}(id VARCHAR(64) PRIMARY KEY,${owner} VARCHAR(64),create_time DATETIME,del_flag INT DEFAULT 0)`,
+        `CREATE TABLE ${table}(id VARCHAR(64) PRIMARY KEY,${owner} VARCHAR(64),create_time DATETIME,update_time DATETIME,del_flag INT DEFAULT 0, name VARCHAR(255),title VARCHAR(255),description TEXT,content TEXT,url TEXT,type VARCHAR(32),file_name VARCHAR(255),file_type VARCHAR(32),folder_id INT)`,
       );
-    await db.query('CREATE TABLE todo_items(id VARCHAR(64),user_id VARCHAR(64),del_flag INT DEFAULT 0)');
+    await db.query(`CREATE TABLE todo_items(id VARCHAR(64),user_id VARCHAR(64),del_flag INT DEFAULT 0,title VARCHAR(255),priority INT DEFAULT 1,
+      due_at DATETIME,start_at DATETIME,occurrence_date DATE,status VARCHAR(16) DEFAULT 'pending',instance_state VARCHAR(16),series_id VARCHAR(64),recurrence_rule TEXT)`);
+    await db.query(
+      'CREATE TABLE todo_reminder_jobs(todo_id VARCHAR(64),user_id VARCHAR(64),scheduled_at_utc DATETIME,status VARCHAR(16))',
+    );
+    await db.query(
+      'CREATE TABLE todo_reminders(todo_id VARCHAR(64),user_id VARCHAR(64),scheduled_at DATETIME,status VARCHAR(16))',
+    );
+    await db.query(
+      'CREATE TABLE resource_inbox(id VARCHAR(64),user_id VARCHAR(64),resource_type VARCHAR(16),resource_id VARCHAR(64),status VARCHAR(16),source VARCHAR(32),create_time DATETIME)',
+    );
+    await db.query('CREATE TABLE tag(id VARCHAR(64),user_id VARCHAR(64),name VARCHAR(255),del_flag INT DEFAULT 0)');
+    await db.query(
+      'CREATE TABLE resource_tag_relations(user_id VARCHAR(64),resource_type VARCHAR(16),resource_id VARCHAR(64),tag_id VARCHAR(64))',
+    );
+    await db.query(
+      'CREATE TABLE organize_issue_suppressions(user_id VARCHAR(64),issue_type VARCHAR(32),subject_key VARCHAR(128))',
+    );
+    await db.query(
+      'CREATE TABLE organize_suggestion_runs(id VARCHAR(64),user_id VARCHAR(64),status VARCHAR(32),started_at DATETIME,created_at DATETIME)',
+    );
+    await db.query(
+      'CREATE TABLE organize_suggestion_items(id VARCHAR(64),user_id VARCHAR(64),run_id VARCHAR(64),resource_type VARCHAR(16),resource_id VARCHAR(64))',
+    );
+    await db.query(
+      'CREATE TABLE organize_suggestions(id VARCHAR(64),user_id VARCHAR(64),run_id VARCHAR(64),item_id VARCHAR(64),status VARCHAR(32),kind VARCHAR(32),payload_json JSON)',
+    );
     await db.query('CREATE TABLE toolbox_workspaces(id VARCHAR(64),user_id VARCHAR(64))');
     for (const sql of EXTRACTION_SCHEMA) await db.query(sql);
   });
   beforeEach(async () => {
     await db.query('DELETE FROM toolbox_artifacts');
     await db.query('DELETE FROM toolbox_jobs');
-    for (const table of ['bookmark', 'note', 'files', 'todo_items', 'toolbox_workspaces', 'toolbox_extractions'])
+    for (const table of [
+      'bookmark',
+      'note',
+      'files',
+      'todo_items',
+      'toolbox_workspaces',
+      'toolbox_extractions',
+      'onboarding_seed_resources',
+      'resource_inbox',
+      'organize_suggestion_runs',
+      'organize_suggestion_items',
+      'organize_suggestions',
+    ])
       await db.query(`DELETE FROM ${table}`);
   });
   afterAll(async () => {
@@ -94,6 +139,78 @@ describe.skipIf(!socketPath)('简报工坊待处理状态 SQL（隔离 MySQL）'
       ...values,
     });
   };
+  it('注册赠送的三类资料、待办与整理关系不触发建议；用户新增同名资料后正常切换', async () => {
+    const personalCalendar = dailyBriefServiceInternals.resolveCalendar(
+      { timezone: 'Asia/Shanghai', locale: 'zh-CN' },
+      new Date('2026-10-22T02:00:00Z'),
+    );
+    for (const [table, owner, type] of [
+      ['bookmark', 'user_id', 'bookmark'],
+      ['note', 'create_by', 'note'],
+      ['files', 'create_by', 'file'],
+    ]) {
+      await db.query(
+        `INSERT INTO ${table} SET id='seed',${owner}='owner',create_time='2026-10-22',title='示例',name='示例',file_name='示例'`,
+      );
+      await db.query('INSERT INTO onboarding_seed_resources VALUES (?,?,?)', ['owner', type, 'seed']);
+      await db.query("INSERT INTO resource_inbox VALUES (?,'owner',?,'seed','pending','manual','2026-10-22')", [
+        type,
+        type,
+      ]);
+    }
+    await db.query(
+      "INSERT INTO todo_items SET id='seed-todo',user_id='owner',title='默认待办',due_at='2026-10-22 12:00:00'",
+    );
+    await db.query("INSERT INTO onboarding_seed_resources VALUES ('owner','todo','seed-todo')");
+    await db.query("INSERT INTO organize_suggestion_runs VALUES ('run','owner','completed','2026-10-22','2026-10-22')");
+    await db.query("INSERT INTO organize_suggestion_items VALUES ('item','owner','run','note','seed')");
+    await db.query(
+      `INSERT INTO organize_suggestions VALUES ('suggestion','owner','run','item','pending','title','{}')`,
+    );
+    const activity = await compileBriefActivityFacts(db, 'owner', personalCalendar);
+    expect(activity.map((item) => item.count)).toEqual([0, 0, 0]);
+    expect(activity.every((item) => item.inventoryEmpty === true)).toBe(true);
+    const todos = await compileBriefTodoFacts(db, 'owner', personalCalendar, [
+      ['todo_overdue'],
+      ['todo_due_today'],
+      ['todo_scheduled_today'],
+    ]);
+    expect(todos.every((item) => item.count === 0)).toBe(true);
+    const onboarding = await compileBriefOnboardingFact(db, 'owner', activity, todos);
+    const guide = dailyBriefServiceInternals.buildBrief(personalCalendar, [...activity, ...todos, onboarding]);
+    expect(guide.recommendationFactIds).toEqual(['onboarding_empty']);
+    expect(adviceContext([...activity, ...todos, onboarding], personalCalendar.locale).signals).toEqual([]);
+    const options = { userId: 'owner', excludeOnboardingSeeds: true };
+    expect((await listInboxResources(db, { ...options, view: 'summary', includeCounts: false })).total).toBe(0);
+    expect((await summarizeUntaggedResources(db, options)).total).toBe(0);
+    expect((await summarizePendingOrganizeReview(db, 'owner', options)).total).toBe(0);
+    // 原资料与整理页仍可显示示例，过滤仅作用于简报读模型。
+    expect((await listInboxResources(db, { userId: 'owner', view: 'summary', includeCounts: false })).total).toBe(3);
+    expect((await summarizeUntaggedResources(db, { userId: 'owner' })).total).toBe(3);
+    expect((await summarizePendingOrganizeReview(db, 'owner')).total).toBe(1);
+    await db.query("INSERT INTO note SET id='mine',create_by='owner',title='示例',create_time='2026-10-22'");
+    // 其他账号同 ID 的来源记录不能排除当前用户的个人资料。
+    await db.query("INSERT INTO onboarding_seed_resources VALUES ('other','note','mine')");
+    const changed = await compileBriefActivityFacts(db, 'owner', personalCalendar);
+    expect(changed.map((item) => item.count)).toEqual([0, 1, 0]);
+    expect((await compileBriefOnboardingFact(db, 'owner', changed)).count).toBe(0);
+    expect(adviceContext(changed, personalCalendar.locale).signals.map((item) => item.id)).toContain(
+      'note_created_today',
+    );
+    expect((await summarizeUntaggedResources(db, options)).total).toBe(1);
+    await db.query(
+      "INSERT INTO todo_items SET id='mine-todo',user_id='owner',title='默认待办',due_at='2026-10-22 12:00:00'",
+    );
+    expect(
+      (
+        await compileBriefTodoFacts(db, 'owner', personalCalendar, [
+          ['todo_overdue'],
+          ['todo_due_today'],
+          ['todo_scheduled_today'],
+        ])
+      )[1].entries[0].id,
+    ).toBe('mine-todo');
+  });
   it('全空引导隔离账号，零新增但有旧资料时不显示；已删除资料不阻挡引导', async () => {
     await db.query("INSERT INTO note SET id='foreign',create_by='other',create_time='2000-01-01'");
     let activity = await compileBriefActivityFacts(db, 'owner', calendar);
