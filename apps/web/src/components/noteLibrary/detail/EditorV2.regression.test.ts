@@ -4,6 +4,7 @@ import { standardDensitySource } from '@/test/standardDensitySource';
 const readFileSync = (path: string, encoding: 'utf8') => standardDensitySource(rawReadFileSync(path, encoding));
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import less from 'less';
 import icon from '@/config/icon';
 import { getNoteTreePageColor, getNoteTreePageIcon, isMarkdownNoteTreePage } from '@/utils/noteTreePresentation';
 
@@ -59,6 +60,40 @@ function sourceBetween(source: string, startText: string, endText: string) {
   expect(start).toBeGreaterThan(-1);
   expect(end).toBeGreaterThan(start);
   return source.slice(start, end);
+}
+
+// Compile the actual component styles, including shared Less imports. These assertions
+// describe the delivered CSS contract rather than where its declarations are authored.
+let markdownCss: Promise<Map<string, CSSStyleDeclaration>> | undefined;
+function renderedMarkdownCss() {
+  return (markdownCss ??= (async () => {
+    const previewSource = rawReadFileSync(
+      resolve(process.cwd(), 'src/components/noteLibrary/template/NoteTemplateBodyPreview.vue'),
+      'utf8',
+    );
+    const sources = [editorSource, previewSource];
+    const rules = new Map<string, CSSStyleDeclaration>();
+    for (const source of sources) {
+      for (const [, block] of source.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/g)) {
+        const { css } = await less.render(
+          block.replaceAll('@/assets/css/', resolve(process.cwd(), 'src/assets/css') + '/'),
+        );
+        const element = document.createElement('style');
+        element.textContent = css;
+        document.head.append(element);
+        try {
+          for (const rule of Array.from(element.sheet!.cssRules)) {
+            if (!('selectorText' in rule)) continue;
+            const styleRule = rule as CSSStyleRule;
+            for (const selector of styleRule.selectorText.split(',')) rules.set(selector.trim(), styleRule.style);
+          }
+        } finally {
+          element.remove();
+        }
+      }
+    }
+    return rules;
+  })());
 }
 
 describe('编辑器 V2 交互回归', () => {
@@ -182,28 +217,36 @@ describe('编辑器 V2 交互回归', () => {
     );
   });
 
-  it('Markdown 编辑与预览共用字体、行高和正文起点，首个预览块不额外下沉', () => {
+  it('Markdown 编辑与两处预览共用字体、行高和正文起点，首个预览块不额外下沉', async () => {
     expect(codeMirrorSource).toContain("fontSize: 'var(--note-markdown-font-size, 13px)'");
     expect(codeMirrorSource).toContain("lineHeight: 'var(--note-markdown-line-height, 22px)'");
     expect(codeMirrorSource).toContain('var(--note-markdown-padding-top, 14px)');
-    expect(editorSource).toContain('font-size: var(--note-markdown-font-size, 13px);');
-    expect(editorSource).toContain('line-height: var(--note-markdown-line-height, 22px);');
-    expect(editorSource).toContain('padding: var(--note-markdown-padding-top, 14px)');
-    expect(editorSource).toContain('--note-markdown-line-height: 25.5px;');
-    expect(editorSource).toMatch(/\.md-preview\s*\{[\s\S]*?> :first-child\s*\{[\s\S]*?margin-top:\s*0;/u);
+    const css = await renderedMarkdownCss();
+    for (const root of ['.md-preview', '.note-template-body.note-template-body--markdown']) {
+      expect(css.get(root)?.getPropertyValue('font-size')).toBe('var(--note-markdown-font-size, 13px)');
+      expect(css.get(root)?.getPropertyValue('line-height')).toBe('var(--note-markdown-line-height, 22px)');
+      expect(parseFloat(css.get(`${root} > :first-child`)?.getPropertyValue('margin-top') || '')).toBe(0);
+    }
+    expect(css.get('.md-preview')?.getPropertyValue('padding')).toContain('var(--note-markdown-padding-top, 14px)');
+    expect(css.get('#editor-container.note-editor.is-mobile')?.getPropertyValue('--note-markdown-line-height')).toBe(
+      '25.5px',
+    );
   });
 
-  it('Markdown 预览中的普通正文和代码块都按栏宽软换行', () => {
-    const previewStyles = sourceBetween(editorSource, '.md-preview {', '@media (max-width: 420px)');
-    expect(previewStyles).toContain('overflow-wrap: anywhere;');
-    expect(previewStyles).toContain('word-break: break-word;');
-    expect(previewStyles).toMatch(
-      /pre\s*\{[\s\S]*?overflow:\s*visible;[\s\S]*?white-space:\s*pre-wrap;[\s\S]*?overflow-wrap:\s*anywhere;[\s\S]*?word-break:\s*break-word;/u,
-    );
-    expect(previewStyles).toMatch(/pre[\s\S]*?code\s*\{[\s\S]*?white-space:\s*inherit;/u);
-    expect(previewStyles).toMatch(
-      /th,[\s\S]*?td\s*\{[\s\S]*?overflow-wrap:\s*anywhere;[\s\S]*?word-break:\s*break-word;/u,
-    );
+  it('两处 Markdown 预览的正文、代码块和表格保留软换行，引用块样式一致', async () => {
+    const css = await renderedMarkdownCss();
+    for (const root of ['.md-preview', '.note-template-body.note-template-body--markdown']) {
+      for (const target of ['', ' pre', ' table th', ' table td']) {
+        expect(css.get(root + target)?.getPropertyValue('overflow-wrap')).toBe('anywhere');
+        expect(css.get(root + target)?.getPropertyValue('word-break')).toBe('break-word');
+      }
+      expect(css.get(`${root} pre`)?.getPropertyValue('overflow')).toBe('visible');
+      expect(css.get(`${root} pre`)?.getPropertyValue('white-space')).toBe('pre-wrap');
+      expect(css.get(`${root} pre code`)?.getPropertyValue('white-space')).toBe('inherit');
+      const quote = css.get(`${root} blockquote`);
+      expect(quote?.getPropertyValue('border-left')).toBe('3px solid var(--primary-color, #615ced)');
+      expect(quote?.getPropertyValue('background')).toBe('var(--common-tag-bg-color, #f9f9f9)');
+    }
   });
 
   it('模板 Markdown 默认使用完整编辑宽度，同时保留分栏与预览切换', () => {
