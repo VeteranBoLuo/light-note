@@ -1,3 +1,4 @@
+import { PREWARM_PRIORITY } from '@/config/staticPrewarmGroups';
 import { avatarFrameArtwork } from '@/config/avatarFrameArtwork';
 import { AVATAR_SUBJECT_ARTWORK } from '@/config/avatarFrameSubjects';
 import { FRAME_IDS, frameVariant } from '@/config/growthFrames';
@@ -34,24 +35,27 @@ export function scheduleAppearancePrewarm(options: {
   const background = profileBackground(options.background);
   const stops = [
     scheduleStaticPrewarm({
-      priority: 0,
+      priority: PREWARM_PRIORITY.current,
       urls: [
         ...frameAssetUrls(options.frame),
         ...(background ? [background.thumbnail, background.src] : []),
-        ...profileBackgroundAssetUrls(true),
       ],
+    }),
+    scheduleStaticPrewarm({
+      priority: PREWARM_PRIORITY.nearby,
+      urls: profileBackgroundAssetUrls(true),
     }),
   ];
   if (options.profileContext)
     stops.push(
       scheduleStaticPrewarm({
-        priority: 1,
+        priority: PREWARM_PRIORITY.current,
         urls: [...builtinAvatarAssetUrls(), ...(options.ownedFrames || []).flatMap(frameAssetUrls)],
       }),
     );
   stops.push(
     scheduleStaticPrewarm({
-      priority: 5,
+      priority: PREWARM_PRIORITY.decorative,
       optional: true,
       urls: [...profileBackgroundAssetUrls(), ...FRAME_IDS.flatMap(frameAssetUrls)],
     }),
