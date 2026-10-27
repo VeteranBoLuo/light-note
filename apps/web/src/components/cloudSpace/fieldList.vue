@@ -909,7 +909,6 @@
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import { cloneDeep } from 'lodash-es';
   import { useI18n } from 'vue-i18n';
-  import JSZip from 'jszip';
   import {
     CLOUD_FILE_CATEGORY_LABEL_KEY,
     getCloudPreviewType,
@@ -2096,6 +2095,8 @@
     };
 
     try {
+      const { default: JSZip } = await import('jszip');
+      if (batchDownloadCancelled.value || !current()) throw new Error('BATCH_DOWNLOAD_CANCELLED');
       const zip = new JSZip();
       const usedNames = new Set<string>();
 

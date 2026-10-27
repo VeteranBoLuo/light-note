@@ -32,6 +32,7 @@
 
           <div
             id="nav-bookmark-entry"
+            v-route-prefetch="'/home'"
             :style="{ color: route.path.includes('/home') ? '#615ced' : '' }"
             style="font-size: 14px; cursor: pointer"
             v-click-log="OPERATION_LOG_MAP.navigation.home"
@@ -40,6 +41,7 @@
           >
           <div
             id="nav-note-entry"
+            v-route-prefetch="'/noteLibrary'"
             :style="{ color: route.path.includes('/noteLibrary') ? '#615ced' : '' }"
             style="font-size: 14px; cursor: pointer"
             v-click-log="OPERATION_LOG_MAP.navigation.note"
@@ -48,6 +50,7 @@
           >
           <div
             id="nav-cloud-entry"
+            v-route-prefetch="'/cloudSpace'"
             :style="{ color: route.path.includes('/cloudSpace') ? '#615ced' : '' }"
             style="font-size: 14px; cursor: pointer"
             v-click-log="OPERATION_LOG_MAP.navigation.cloudSpace"
@@ -80,6 +83,7 @@
 
           <div
             id="nav-tag-entry"
+            v-route-prefetch="'/manage/tagMg'"
             :style="{ color: isTagRoute ? '#615ced' : '' }"
             style="font-size: 14px; cursor: pointer"
             v-click-log="OPERATION_LOG_MAP.navigation.tag"
@@ -89,6 +93,7 @@
 
           <div
             id="nav-resource-center-entry"
+            v-route-prefetch="'/search'"
             :style="{ color: route.path.startsWith('/search') ? '#615ced' : '' }"
             style="font-size: 14px; cursor: pointer"
             v-click-log="OPERATION_LOG_MAP.navigation.resourceCenter"
@@ -149,7 +154,9 @@
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import { useCommunityChatUnread } from '@/composables/useCommunityChatUnread';
   import icon from '@/config/icon';
+  import { createRoutePrefetchDirective } from '@/directives/routePrefetch';
 
+  const vRoutePrefetch = createRoutePrefetchDirective(router);
   const route = useRoute();
   const user = useUserStore();
   const inbox = inboxStore();
