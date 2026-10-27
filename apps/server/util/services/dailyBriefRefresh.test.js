@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { ensureDailyBrief, getDailyBrief, refreshDailyBrief } from './dailyBriefService.js';
 import { DAILY_BRIEF_FACT_DEFINITIONS } from './dailyBriefFacts.js';
 import { DAILY_BRIEF_REFRESH_POLICY } from './dailyBriefFreshness.js';
+import { ADVICE_POLICY_VERSION } from './dailyBriefAdvice.js';
 import { validateDailyBriefInput } from '../aiSkill/skills/routineDailyBriefSkill.js';
 
 function fixture() {
@@ -456,6 +457,46 @@ describe('真实资料建议的生成与复用', () => {
     expect(state.brief.lastAdviceResult.recommendation).toContain(proposal.action);
     expect(state.brief.insights.map((item) => item.id)).toContain('todo_a');
     expect((await f.get()).shouldGenerate).toBe(false); // Provider 失败不自动重放
+  });
+  it.each(['current', 'previous'])('策略失效的%s建议只读时立即隐藏，冷却与失败不再带回旧内容', async (place) => {
+    const f = fixture();
+    f.change('recommendation_evidence', { evidence });
+    f.executeAiSkill.mockImplementation(async (_request, _req, deps) =>
+      deps.commitValidatedResult({ response: { result: { insights: [], recommendation: proposal } } }),
+    );
+    await f.ensure();
+    const row = f.rows.get('2026-09-05');
+    const legacy = JSON.parse(row.briefJson);
+    legacy.advicePolicyVersion = ADVICE_POLICY_VERSION - 1;
+    delete legacy.lastAdviceResult.advicePolicyVersion;
+    if (place === 'previous') {
+      legacy.adviceStatus = 'failed';
+      legacy.recommendation = '';
+    }
+    row.briefJson = JSON.stringify(legacy);
+    f.preferences.dailyBriefAutoUpdate = false;
+    f.database.query.mockClear();
+    const state = await f.get();
+    expect(state.brief.recommendation).toBe('');
+    expect(state.brief.lastAdviceResult).toBeUndefined();
+    expect(state.brief.adviceStatus).toBe(place === 'current' ? 'not_evaluated' : 'failed');
+    expect(f.database.query.mock.calls.every(([sql]) => sql.trim().startsWith('SELECT'))).toBe(true);
+    expect(f.executeAiSkill).toHaveBeenCalledTimes(1);
+    expect(row.briefJson).toBe(JSON.stringify(legacy));
+    f.preferences.dailyBriefAutoUpdate = true;
+    // 模拟旧策略的输入键，当前策略不得复用旧判断。
+    legacy.adviceKey = 'previous-policy';
+    legacy.snapshot.fingerprint = 'previous-policy';
+    row.briefJson = JSON.stringify(legacy);
+    const waiting = await f.ensure();
+    expect(waiting.brief.recommendation).toBe('');
+    expect(waiting.brief.lastAdviceResult?.recommendation).toBeFalsy();
+    expect(f.executeAiSkill).toHaveBeenCalledTimes(1);
+    f.advance(11 * 60000);
+    f.executeAiSkill.mockRejectedValue(Object.assign(new Error('unavailable'), { code: 'PROVIDER_FAILED' }));
+    const failed = await f.ensure();
+    expect(failed.brief.recommendation).toBe('');
+    expect(failed.brief.lastAdviceResult?.recommendation).toBeFalsy();
   });
 });
 

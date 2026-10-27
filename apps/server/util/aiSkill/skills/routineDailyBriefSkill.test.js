@@ -201,6 +201,43 @@ it.each(['valid', 'empty', 'invalid'])('建议引用错误只修复一次，结�
   expect(requestAi.mock.calls[1][1].billingScope).toBe('platform');
 });
 
+it.each(['zh-CN', 'en-US'])('正文身份不能给建议补证据，正常返回空判断且不增加修复调用：%s', async (locale) => {
+  const english = locale === 'en-US';
+  const sample = {
+    key: 'material_1',
+    title: english ? 'Brief feedback' : '工作台反馈',
+    excerpt: english
+      ? 'The brief should prioritize reminders ahead of statistics.'
+      : '简报没有重点，今天有待办时应该把提醒放在前面。',
+  };
+  const recommendation = {
+    sourceKey: sample.key,
+    quote: sample.excerpt,
+    action: english
+      ? 'Consider moving Check in into a section ahead of the organizing statistics.'
+      : '可考虑在简报开头单列今日待办，把例行签到提醒放在最前面。',
+  };
+  const prepared = await routineDailyBriefSkill.prepare({
+    input: validateDailyBriefInput({
+      ...input([]),
+      locale,
+      evidence: [sample],
+      body: [english ? '“Check in” has a reminder set.' : '今天留意一下「例行签到」：已设置提醒，目前仍待完成。'],
+    }),
+  });
+  vi.mocked(requestAi)
+    .mockReset()
+    .mockResolvedValueOnce(response({ insights: [], recommendation }));
+  expect(
+    await callStructuredSkillModel({
+      ...prepared,
+      modelPolicy: routineDailyBriefSkill.resolveModelPolicy({ evidence: [sample] }),
+    }),
+  ).toMatchObject({ recommendation: null });
+  expect(requestAi).toHaveBeenCalledTimes(1);
+  expect(routineDailyBriefSkill.resolveModelPolicy({ evidence: [sample] }).maxTokens).toBe(900);
+});
+
 it('admits grounded applications without requiring a defect and keeps the existing evidence/output budgets', async () => {
   const inputData = { ...input([]), evidence: [{ key: 'material_1', title: '阅读方法', excerpt: '阅读时区分作者主张和支持主张的证据，复述时保留二者的对应关系。' }], body: [] };
   const prepared = await routineDailyBriefSkill.prepare({ input: inputData });

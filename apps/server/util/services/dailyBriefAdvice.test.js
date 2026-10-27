@@ -132,6 +132,70 @@ it('中英文通用建议和正文近似重复均不展示', () => {
   expect(resolveAdvice(proposal, evidence, [proposal.action.replace('可以', '建议')])).toBeNull();
 });
 
+it('不借用正文中的待办给产品反馈凑建议，也不复述短引文之外已经明确的行动', () => {
+  const material = [{ ...evidence[0], title: '工作台反馈', excerpt: '简报没有重点，今天有待办时应该把提醒放在前面。' }];
+  const feedback = {
+    sourceKey: 'material_1',
+    quote: '今天有待办时应该把提醒放在前面',
+    action: '可考虑在简报开头单列一个「今日待办」区块，把例行签到提醒放在最前面，再列整理统计。',
+  };
+  expect(resolveAdvice(feedback, material, ['今天留意一下「例行签到」：已设置提醒，目前仍待完成。'])).toBeNull();
+  const request = [
+    {
+      ...evidence[0],
+      excerpt: '这段学习说明将回忆和核对分成两个环节，先合上资料复述核心论点，再打开原文逐项核对遗漏。',
+    },
+  ];
+  expect(
+    resolveAdvice(
+      {
+        ...proposal,
+        quote: '这段学习说明将回忆和核对分成两个环节',
+        action: '可以先合上资料复述核心论点，再打开原文逐项核对遗漏。',
+      },
+      request,
+    ),
+  ).toBeNull();
+});
+
+it('英文正文身份也只用于排重；同名在所选资料中有依据时仍允许具体检查', () => {
+  const material = [
+    {
+      ...evidence[0],
+      title: 'Brief feedback',
+      excerpt: 'The brief should prioritize reminders ahead of organizing statistics.',
+    },
+  ];
+  const feedback = {
+    sourceKey: 'material_1',
+    quote: 'The brief should prioritize reminders',
+    action: 'Consider placing Check in ahead of the organizing statistics in a dedicated section.',
+  };
+  expect(resolveAdvice(feedback, material, ['“Check in” has a reminder set.'])).toBeNull();
+  const grounded = [{ ...evidence[0], excerpt: excerpt + '需要验证「附件备份」待办中的限制提示。' }];
+  expect(
+    resolveAdvice(
+      { ...proposal, action: '可以对照附件备份待办与导出页面，核对两处是否使用一致的附件范围说明。' },
+      grounded,
+      ['今天留意一下「附件备份」。'],
+    ),
+  ).not.toBeNull();
+});
+
+it('保留没有缺陷的知识应用建议，不靠全面提高门槛减少输出', () => {
+  const material = [
+    { ...evidence[0], excerpt: '主动回忆要求在不看资料时提取已学内容，再对照原文发现遗漏，比重复阅读更有助于理解。' },
+  ];
+  const application = {
+    ...proposal,
+    quote: '主动回忆要求在不看资料时提取已学内容',
+    action: '读完这段后可合上资料写出中心论点，再打开原文核对遗漏的条件。',
+  };
+  expect(resolveAdvice(application, material, ['今天留意一下「例行签到」。'])).toMatchObject({
+    action: application.action,
+  });
+});
+
 it('真实模型回归：数字在同一已读片段中即可，不要求全部出现在短引文；按完整数值拒绝子串碰撞', () => {
   const materials = [{ ...evidence[0], excerpt: evidence[0].excerpt + '验收覆盖 12 种附件，单个文件限制 510 MB。' }];
   const action = '可以将 12 种附件的导出检查加入验收清单，同时核对 510 MB 限制的提示。';

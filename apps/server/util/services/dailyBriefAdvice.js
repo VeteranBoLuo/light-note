@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { load } from 'cheerio';
 
 export const ADVICE_FACT_ID = 'recommendation_evidence';
-export const ADVICE_POLICY_VERSION = 6;
+export const ADVICE_POLICY_VERSION = 7;
 export const ADVICE_CONTEXT_FACT_IDS = Object.freeze([
   'todo_overdue',
   'todo_due_today',
@@ -58,6 +58,31 @@ const normalize = (text) =>
     .toLowerCase()
     .replace(/[\p{P}\p{Z}\s]/gu, '');
 
+function mentionsName(text, name) {
+  if (/^[\p{Script=Latin}\d\s]+$/u.test(name)) {
+    const pattern = name
+      .trim()
+      .replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')
+      .replace(/\s+/gu, '\\s+');
+    return new RegExp(`\\b${pattern}\\b`, 'iu').test(text);
+  }
+  return normalize(text).includes(normalize(name));
+}
+
+// 正文仅用于排重，不能给建议补充所选资料中没有的任务、项目或其他资料身份。
+function borrowsBodyIdentity(action, material, body) {
+  const supported = `${material.title || ''}\n${material.excerpt}`;
+  for (const text of body) {
+    for (const match of text.matchAll(
+      /「([^」\n]{2,120})」|《([^》\n]{2,120})》|“([^”\n]{2,120})”|"([^"\n]{2,120})"/gu,
+    )) {
+      const name = match.slice(1).find(Boolean);
+      if (mentionsName(action, name) && !mentionsName(supported, name)) return true;
+    }
+  }
+  return false;
+}
+
 // 来源身份、标题与引用由服务端绑定；模型只能选择来源 key 和原文中存在的短引文。
 export function resolveAdvice(proposal, evidence, body = []) {
   if (proposal == null) return null;
@@ -111,7 +136,16 @@ export function resolveAdvice(proposal, evidence, body = []) {
     if (actionPairs.size < 12) return false;
     return [...actionPairs].filter((pair) => original.includes(pair)).length / actionPairs.size > 0.85;
   };
-  if (body.some(repeats) || repeats(quote)) return null;
+  const proposedStep = normalize(
+    action.replace(/^(?:你可以|可以|建议你?|可考虑|请|please\s+|you\s+(?:can|could|should)\s+|consider\s+)\s*/iu, ''),
+  );
+  if (
+    body.some(repeats) ||
+    repeats(quote) ||
+    (proposedStep.length >= 12 && normalize(material.excerpt).includes(proposedStep)) ||
+    borrowsBodyIdentity(action, material, body)
+  )
+    return null;
   if (
     /^(?:(?:please|you|can|should|review|organize|open|check|the|these|your|resources|materials|content|suggestions|first|then|and|pending|changes)|[\s.,])+$/iu.test(
       action,

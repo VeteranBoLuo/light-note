@@ -1,4 +1,10 @@
-import { ADVICE_FACT_ID, ADVICE_CONTEXT_FACT_IDS, adviceContext, resolveAdvice } from './dailyBriefAdvice.js';
+import {
+  ADVICE_FACT_ID,
+  ADVICE_CONTEXT_FACT_IDS,
+  ADVICE_POLICY_VERSION,
+  adviceContext,
+  resolveAdvice,
+} from './dailyBriefAdvice.js';
 import { randomUUID } from 'node:crypto';
 import { Temporal } from '@js-temporal/polyfill';
 import pool from '../../db/index.js';
@@ -83,6 +89,30 @@ function hydrateBriefNarrative(brief) {
         : section.items,
     })),
   };
+}
+
+// 策略修正后旧输出不能继续以“上次建议”展示；只投影缓存，不触发模型或批量回写。
+function currentAdviceProjection(brief) {
+  if (!brief || typeof brief !== 'object') return brief;
+  const invalidCurrent = Boolean(brief.recommendation) && brief.advicePolicyVersion !== ADVICE_POLICY_VERSION;
+  const invalidPrevious =
+    Boolean(brief.lastAdviceResult?.recommendation) &&
+    brief.lastAdviceResult.advicePolicyVersion !== ADVICE_POLICY_VERSION;
+  if (!invalidCurrent && !invalidPrevious) return brief;
+  const result = { ...brief };
+  if (invalidCurrent) {
+    result.recommendation = '';
+    if (result.adviceStatus === 'ready') result.adviceStatus = 'not_evaluated';
+    for (const key of [
+      'recommendationKind',
+      'recommendationFactIds',
+      'recommendationSources',
+      'adviceKey',
+      'adviceProposal',
+    ]) delete result[key];
+  }
+  if (invalidPrevious) delete result.lastAdviceResult;
+  return result;
 }
 
 function sqlDateTime(value) {
@@ -377,6 +407,7 @@ function buildBrief(calendar, facts, narrative = null) {
         ? `From the excerpt in “${recommendation.source.title}”: “${recommendation.quote}”. ${recommendation.action}`
         : `《${recommendation.source.title}》的片段提到「${recommendation.quote}」。${recommendation.action}`
       : '',
+    advicePolicyVersion: ADVICE_POLICY_VERSION,
     adviceStatus: !advice.evidence.length
       ? 'no_evidence'
       : narrative?.adviceKey === advice.key
@@ -442,7 +473,7 @@ function rowStatus({ featureEnabled, preference, calendar, row }) {
       lastErrorCode: null,
     };
   }
-  const parsedBrief = hydrateBriefNarrative(parseJson(row.briefJson ?? row.brief_json, null));
+  const parsedBrief = currentAdviceProjection(hydrateBriefNarrative(parseJson(row.briefJson ?? row.brief_json, null)));
   const staleReadyBrief =
     String(row.status || '') === 'ready' && Number(parsedBrief?.version || 0) < DAILY_BRIEF_VERSION;
   if (staleReadyBrief) {
@@ -547,7 +578,7 @@ async function generateDailyBriefForActiveUser(
   const leaseToken = randomUUID();
   const previousAttempt = parseJson(existing?.factsJson, {});
   const advice = adviceContext(facts, calendar.locale);
-  let previousBrief = parseJson(existing?.briefJson);
+  let previousBrief = currentAdviceProjection(parseJson(existing?.briefJson));
   if (!previousBrief && (advice.key || facts.some((fact) => fact.id === 'workshop_result' && fact.count > 0))) {
     const [previousRows] = await database.query(
       `SELECT brief_json AS briefJson FROM workbench_daily_briefs
@@ -555,7 +586,7 @@ async function generateDailyBriefForActiveUser(
         ORDER BY brief_date DESC LIMIT 1`,
       [userId, calendar.date],
     );
-    previousBrief = parseJson(previousRows[0]?.briefJson);
+    previousBrief = currentAdviceProjection(parseJson(previousRows[0]?.briefJson));
   }
   const cachedResult =
     currentSnapshot.factRevisions.workshop_result &&
@@ -678,6 +709,7 @@ async function generateDailyBriefForActiveUser(
     if (lastResult) {
       brief.lastAdviceResult = {
         adviceStatus: lastResult.adviceStatus,
+        ...(lastResult.advicePolicyVersion ? { advicePolicyVersion: lastResult.advicePolicyVersion } : {}),
         recommendation: lastResult.recommendation || '',
         ...(lastResult.recommendationKind ? { recommendationKind: lastResult.recommendationKind } : {}),
         ...(lastResult.recommendationFactIds ? { recommendationFactIds: lastResult.recommendationFactIds } : {}),
