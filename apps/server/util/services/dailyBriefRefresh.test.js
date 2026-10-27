@@ -133,6 +133,31 @@ function fixture() {
 }
 
 describe('工作台行动建议的生成与复用', () => {
+  it('全空固定引导反复刷新也不调用模型、不增加自动尝试；有数据后退出且失败不带回引导', async () => {
+    const f = fixture();
+    f.change('todo_due_today', { count: 0, entries: [] });
+    f.change('onboarding_empty', { count: 1 });
+    const first = await f.ensure();
+    expect(first.brief).toMatchObject({
+      generatedBy: 'facts',
+      recommendationKind: 'action',
+      adviceStatus: 'ready',
+      recommendationFactIds: ['onboarding_empty'],
+    });
+    expect(first.brief.recommendation).toContain('先收集一份资料');
+    await f.ensure();
+    await f.refresh();
+    await f.get();
+    expect(f.executeAiSkill).not.toHaveBeenCalled();
+    expect(JSON.parse(f.rows.get('2026-09-05').factsJson).automaticAttempts).toBe(0);
+    f.change('file_created_today', { count: 1 });
+    f.change('onboarding_empty', { count: 0 });
+    f.executeAiSkill.mockRejectedValue(new Error('unavailable'));
+    const changed = await f.ensure();
+    expect(changed.brief.recommendation).toBe('');
+    expect(changed.brief.lastAdviceResult?.recommendation).toBeFalsy();
+    expect(f.executeAiSkill).toHaveBeenCalledTimes(1);
+  });
   it('没有需要行动的状态时仅交付事实，不调用模型', async () => {
     const f = fixture();
     f.change('todo_due_today', { count: 0, entries: [] });

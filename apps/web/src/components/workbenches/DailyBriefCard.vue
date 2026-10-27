@@ -80,22 +80,12 @@
         <p>{{ adviceStatusText }}</p>
       </aside>
       <aside v-if="briefRecommendation" class="daily-brief-card__preview-recommendation">
-        <strong>{{
-          t(
-            guestSample
-              ? 'workbench.dailyBrief.sampleSuggestion'
-              : recommendationStale
-                ? 'workbench.dailyBrief.previousRecommendation'
-                : displayedAdvice?.recommendationKind === 'action'
-                  ? 'workbench.dailyBrief.actionRecommendation'
-                  : 'workbench.dailyBrief.aiRecommendation',
-          )
-        }}</strong>
+        <strong>{{ t(recommendationLabelKey) }}</strong>
         <p>{{ briefRecommendation }}</p>
       </aside>
       <p v-if="displayBrief && errorMessage" class="daily-brief-card__refresh-error" role="alert">{{ errorMessage }}</p>
       <BButton
-        v-if="!displayBrief || briefInsights.length || briefRecommendation"
+        v-if="!displayBrief || briefInsights.length || (briefRecommendation && !isOnboardingAdvice)"
         size="small"
         class="daily-brief-card__view-brief"
         @click="detailsVisible = true"
@@ -324,17 +314,7 @@
           <p>{{ adviceStatusText }}</p>
         </aside>
         <aside v-if="briefRecommendation" class="daily-brief-card__recommendation">
-          <strong>{{
-            t(
-              guestSample
-                ? 'workbench.dailyBrief.sampleSuggestion'
-                : recommendationStale
-                  ? 'workbench.dailyBrief.previousRecommendation'
-                  : displayedAdvice?.recommendationKind === 'action'
-                    ? 'workbench.dailyBrief.actionRecommendation'
-                    : 'workbench.dailyBrief.aiRecommendation',
-            )
-          }}</strong>
+          <strong>{{ t(recommendationLabelKey) }}</strong>
           <div>
             <p>{{ briefRecommendation }}</p>
             <div v-if="displayedAdvice?.recommendationSources?.length" class="daily-brief-insight__sources">
@@ -485,6 +465,11 @@
       : undefined,
   );
   const displayedAdvice = computed(() => previousAdvice.value || displayBrief.value);
+  const isOnboardingAdvice = computed(
+    () =>
+      displayedAdvice.value?.recommendationKind === 'action' &&
+      displayedAdvice.value?.recommendationFactIds?.includes('onboarding_empty'),
+  );
   const briefRecommendation = computed(() => displayedAdvice.value?.recommendation || '');
   const recommendationStale = computed(
     () =>
@@ -493,6 +478,14 @@
         (!displayBrief.value?.recommendationFactIds?.length ||
           displayBrief.value.recommendationFactIds.some((id) => state.value?.staleFactIds?.includes(id)))),
   );
+  const recommendationLabelKey = computed(() => {
+    if (guestSample.value) return 'workbench.dailyBrief.sampleSuggestion';
+    if (isOnboardingAdvice.value) return 'workbench.dailyBrief.onboardingRecommendation';
+    if (recommendationStale.value) return 'workbench.dailyBrief.previousRecommendation';
+    return displayedAdvice.value?.recommendationKind === 'action'
+      ? 'workbench.dailyBrief.actionRecommendation'
+      : 'workbench.dailyBrief.aiRecommendation';
+  });
   const hasActivitySummary = computed(
     () =>
       !guestSample.value &&

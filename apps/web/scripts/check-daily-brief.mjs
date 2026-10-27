@@ -97,7 +97,7 @@ const cases = [];
 for (const mobile of [false, true])
   for (const theme of ['day', 'night'])
     for (const density of mobile ? ['standard'] : ['small', 'standard', 'large'])
-      for (const mode of ['mixed', 'priority', 'advice', 'advice-stale', 'advice-failed'])
+      for (const mode of ['mixed', 'priority', 'advice', 'advice-stale', 'advice-failed', 'onboarding'])
         cases.push({ mobile, theme, density, mode, locale: 'zh-CN' });
 for (const mobile of [false, true])
   for (const theme of ['day', 'night']) {
@@ -112,6 +112,7 @@ for (const mobile of [false, true])
     });
     cases.push({ mobile, theme, density: 'standard', mode: 'priority', locale: 'en-US' });
     cases.push({ mobile, theme, density: 'standard', mode: 'advice', locale: 'en-US' });
+    cases.push({ mobile, theme, density: 'standard', mode: 'onboarding', locale: 'en-US' });
   }
 for (const mobile of [false, true]) {
   cases.push({ mobile, theme: 'day', density: 'standard', mode: 'quiet', locale: 'zh-CN' });
@@ -252,6 +253,12 @@ try {
     if (mode === 'advice' && locale === 'en-US')
       selectedBrief.recommendation =
         'Finish the task due today first, then check and save the workshop result before continuing with organizing.';
+    if (mode === 'onboarding') selectedBrief = {
+      ...localizedBrief, insights: [], sections: [], adviceStatus: 'ready',
+      headline: locale === 'en-US' ? 'No resources added today, and nothing needs special attention.' : '今天暂无新增资源，也没有需要特别关注的事项。',
+      recommendation: locale === 'en-US' ? 'Start by collecting a resource, writing a note, or creating a to-do—one small step to get started with Light Note.' : '可以先收集一份资料、写一篇笔记，或新建一条待办，从一件小事开始使用轻笺。',
+      recommendationKind: 'action', recommendationFactIds: ['onboarding_empty'], recommendationSources: [],
+    };
     if (mode === 'advice-failed') selectedBrief = { ...localizedBrief, adviceStatus: 'failed', recommendation: '' };
     const adviceStates = {
       'advice-empty': 'no_value',
@@ -310,7 +317,7 @@ try {
     assert(Math.abs((await card.boundingBox()).width - viewportWidth) < 2, '验收卡片必须使用实际视口宽度');
     await page
       .getByText(
-        ['quiet', 'activity', 'no-new-quiet'].includes(mode) ? data.brief.headline : selectedBrief.insights[0].text,
+        ['quiet', 'activity', 'no-new-quiet', 'onboarding'].includes(mode) ? data.brief.headline : selectedBrief.insights[0].text,
         {
           exact: false,
         },
@@ -325,6 +332,12 @@ try {
         .count(),
       selectedBrief.recommendation ? 1 : 0,
     );
+    if (mode === 'onboarding') {
+      await card.getByText(locale === 'en-US' ? 'Getting started' : '使用引导', { exact: true }).waitFor();
+      await card.getByText(selectedBrief.recommendation, { exact: true }).waitFor();
+      assert.equal(await card.locator('.daily-brief-card__advice-status').count(), 0);
+      assert.equal(await card.getByText(locale === 'en-US' ? 'AI suggestion' : 'AI 建议', {exact:true}).count(), 0);
+    }
     if (mode === 'restored') {
       await page.getByText(selectedBrief.headline, { exact: true }).waitFor();
       await page.getByText('处理建议', { exact: true }).waitFor();
@@ -339,7 +352,7 @@ try {
         selectedBrief.insights[0].text,
         '移动摘要直接显示失败提醒',
       );
-    if (['quiet', 'activity', 'no-new-quiet'].includes(mode)) {
+    if (['quiet', 'activity', 'no-new-quiet', 'onboarding'].includes(mode)) {
       assert.equal(await page.locator('.daily-brief-insight').count(), 0);
       assert.equal(await page.locator('.daily-brief-card__view-brief').count(), 0);
     } else {

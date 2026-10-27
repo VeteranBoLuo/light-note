@@ -3,6 +3,8 @@ import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { compileWorkshopBriefFacts } from './dailyBriefWorkshop.js';
 import { dailyBriefServiceInternals } from './dailyBriefService.js';
+import { compileBriefActivityFacts, compileBriefOnboardingFact } from './dailyBriefFacts.js';
+import { EXTRACTION_SCHEMA } from '../extraction/schema.js';
 
 const socketPath = process.env.LIGHTNOTE_TEST_MYSQL_SOCKET;
 describe.skipIf(!socketPath)('简报工坊待处理状态 SQL（隔离 MySQL）', () => {
@@ -10,7 +12,13 @@ describe.skipIf(!socketPath)('简报工坊待处理状态 SQL（隔离 MySQL）'
   let admin,
     db,
     created = false;
-  const calendar = { date: '2026-10-22', yesterdayStart: '2026-10-21', locale: 'zh-CN' };
+  const calendar = {
+    date: '2026-10-22',
+    todayStart: '2026-10-22 00:00:00',
+    todayEnd: '2026-10-23 00:00:00',
+    yesterdayStart: '2026-10-21',
+    locale: 'zh-CN',
+  };
   beforeAll(async () => {
     if (!/^\/(?:private\/)?tmp\//.test(socketPath)) throw new Error('Disposable socket required');
     admin = await mysql.createConnection({ socketPath, user: 'root' });
@@ -25,11 +33,26 @@ describe.skipIf(!socketPath)('简报工坊待处理状态 SQL（隔离 MySQL）'
     await db.query(
       `CREATE TABLE toolbox_artifacts(id VARCHAR(64) PRIMARY KEY,job_id VARCHAR(64),user_id VARCHAR(64),tool_id VARCHAR(64),title VARCHAR(255),artifact_version INT DEFAULT 1,content TEXT,coverage_json JSON,status VARCHAR(32),expires_at DATETIME,create_time DATETIME)`,
     );
-    await db.query(`CREATE TABLE toolbox_job_inputs(job_id VARCHAR(64),input_index INT,input_type VARCHAR(32),resource_type VARCHAR(16),resource_id VARCHAR(64),document_source_id VARCHAR(64))`);
+    await db.query(
+      `CREATE TABLE toolbox_job_inputs(job_id VARCHAR(64),input_index INT,input_type VARCHAR(32),resource_type VARCHAR(16),resource_id VARCHAR(64),document_source_id VARCHAR(64))`,
+    );
+    for (const [table, owner] of [
+      ['bookmark', 'user_id'],
+      ['note', 'create_by'],
+      ['files', 'create_by'],
+    ])
+      await db.query(
+        `CREATE TABLE ${table}(id VARCHAR(64) PRIMARY KEY,${owner} VARCHAR(64),create_time DATETIME,del_flag INT DEFAULT 0)`,
+      );
+    await db.query('CREATE TABLE todo_items(id VARCHAR(64),user_id VARCHAR(64),del_flag INT DEFAULT 0)');
+    await db.query('CREATE TABLE toolbox_workspaces(id VARCHAR(64),user_id VARCHAR(64))');
+    for (const sql of EXTRACTION_SCHEMA) await db.query(sql);
   });
   beforeEach(async () => {
     await db.query('DELETE FROM toolbox_artifacts');
     await db.query('DELETE FROM toolbox_jobs');
+    for (const table of ['bookmark', 'note', 'files', 'todo_items', 'toolbox_workspaces', 'toolbox_extractions'])
+      await db.query(`DELETE FROM ${table}`);
   });
   afterAll(async () => {
     await db?.end();
@@ -71,6 +94,35 @@ describe.skipIf(!socketPath)('简报工坊待处理状态 SQL（隔离 MySQL）'
       ...values,
     });
   };
+  it('全空引导隔离账号，零新增但有旧资料时不显示；已删除资料不阻挡引导', async () => {
+    await db.query("INSERT INTO note SET id='foreign',create_by='other',create_time='2000-01-01'");
+    let activity = await compileBriefActivityFacts(db, 'owner', calendar);
+    expect(activity.every((item) => item.inventoryEmpty === true)).toBe(true);
+    expect(await compileBriefOnboardingFact(db, 'owner', activity)).toMatchObject({ count: 1 });
+    await db.query("INSERT INTO note SET id='old',create_by='owner',create_time='2000-01-01'");
+    activity = await compileBriefActivityFacts(db, 'owner', calendar);
+    expect(activity.every((item) => item.count === 0)).toBe(true);
+    expect(await compileBriefOnboardingFact(db, 'owner', activity)).toMatchObject({ count: 0 });
+    await db.query("UPDATE note SET del_flag=1 WHERE id='old'");
+    expect(
+      await compileBriefOnboardingFact(db, 'owner', await compileBriefActivityFacts(db, 'owner', calendar)),
+    ).toMatchObject({ count: 1 });
+  });
+  it('未进入今日重点的待办和暂停提取表也属于已有数据', async () => {
+    const activity = await compileBriefActivityFacts(db, 'owner', calendar);
+    await db.query("INSERT INTO todo_items SET id='future',user_id='owner'");
+    expect(await compileBriefOnboardingFact(db, 'owner', activity)).toMatchObject({ count: 0 });
+    await db.query('DELETE FROM todo_items');
+    await db.query('INSERT INTO toolbox_extractions SET id=?,user_id=?,request_id=?,input_digest=?,title=?,status=?', [
+      randomUUID(),
+      'owner',
+      randomUUID(),
+      '0'.repeat(64),
+      '提取表',
+      'paused',
+    ]);
+    expect(await compileBriefOnboardingFact(db, 'owner', activity)).toMatchObject({ count: 0 });
+  });
   it('较早生成但仍有效未保存的成果保留；排除已保存、已过期及其他账号', async () => {
     await job('old', { artifact_id: 'old' });
     await artifact('old');

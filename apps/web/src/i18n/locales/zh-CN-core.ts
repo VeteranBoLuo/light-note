@@ -5486,6 +5486,7 @@ export default {
       adviceFailedReadOnly: 'AI 建议生成失败。',
       adviceFailed: 'AI 建议生成失败，可稍后点击更新重试。',
       aiRecommendation: 'AI 建议',
+      onboardingRecommendation: '使用引导',
       actionRecommendation: '处理建议',
       sharedTag: '关联依据：共同标签「{tag}」',
       reviewAiSuggestions: '审核 AI 建议',

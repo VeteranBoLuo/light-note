@@ -3,6 +3,8 @@ import { compileWorkshopBriefFacts } from './dailyBriefWorkshop.js';
 import { compileBriefTodoFacts } from './dailyBriefTodoFacts.js';
 import { listInboxResources } from '../resourceInbox.js';
 import { summarizeUntaggedResources } from './resourceInventoryService.js';
+import { extractionSchemaReady } from '../extraction/schema.js';
+import { taskVisibleSql } from '../toolbox/taskIdentity.js';
 
 export const DAILY_BRIEF_FACT_DEFINITIONS = Object.freeze([
   ['todo_overdue', '单次待办重点（逾期）', 'One-time task focus (overdue)', '/inbox?tab=todo'],
@@ -13,7 +15,7 @@ export const DAILY_BRIEF_FACT_DEFINITIONS = Object.freeze([
   ['organize_untagged', '无标签资源', 'Untagged resources', '/organize?issue=untagged'],
 ]);
 
-// 仅供顶部概览，独立于重点条目的筛选和额度，不把收集数量扩写成洞察。
+// 新增计数供顶部概览，库存存在性仅用于全空引导，不进入模型。
 export async function compileBriefActivityFacts(database, userId, calendar) {
   return Promise.all(
     [
@@ -22,17 +24,48 @@ export async function compileBriefActivityFacts(database, userId, calendar) {
       ['file', 'files', 'create_by', '今天新增文件', 'Files added today'],
     ].map(async ([kind, table, owner, zh, en]) => {
       const [[row]] = await database.query(
-        `SELECT COUNT(*) AS total FROM ${table} WHERE ${owner}=? AND del_flag=0 AND create_time>=? AND create_time<?`,
-        [userId, calendar.todayStart, calendar.todayEnd],
+        `SELECT COUNT(*) AS total,
+          EXISTS(SELECT 1 FROM ${table} WHERE ${owner}=? AND del_flag=0 LIMIT 1) AS hasResources
+          FROM ${table} WHERE ${owner}=? AND del_flag=0 AND create_time>=? AND create_time<?`,
+        [userId, userId, calendar.todayStart, calendar.todayEnd],
       );
       return {
         id: `${kind}_created_today`,
         label: calendar.locale === 'en-US' ? en : zh,
         count: Number(row.total),
         samples: [],
+        inventoryEmpty: [0, '0'].includes(row.hasResources) ? true : [1, '1'].includes(row.hasResources) ? false : null,
       };
     }),
   );
+}
+
+// 今日没有新增不代表账号没有资料；仅对已核实全空的账号给固定引导。
+export async function compileBriefOnboardingFact(database, userId, activity, knownWork = []) {
+  const empty = { id: 'onboarding_empty', count: 0 };
+  if (
+    activity.length !== 3 ||
+    !activity.every((fact) => fact.inventoryEmpty === true) ||
+    knownWork.some((fact) => fact.count > 0)
+  )
+    return empty;
+  const extractionReady = await extractionSchemaReady(database);
+  const [[presence]] = await database.query(
+    `SELECT
+      EXISTS(SELECT 1 FROM todo_items WHERE user_id=? AND del_flag=0 LIMIT 1) AS hasTodos,
+      EXISTS(SELECT 1 FROM toolbox_workspaces WHERE user_id=? LIMIT 1) AS hasWorkspaces,
+      EXISTS(SELECT 1 FROM toolbox_jobs job WHERE user_id=? AND ${taskVisibleSql()} LIMIT 1) AS hasJobs,
+      ${extractionReady ? 'EXISTS(SELECT 1 FROM toolbox_extractions WHERE user_id=? LIMIT 1)' : '0'} AS hasExtractions`,
+    [userId, userId, userId, ...(extractionReady ? [userId] : [])],
+  );
+  return {
+    ...empty,
+    count: ['hasTodos', 'hasWorkspaces', 'hasJobs', 'hasExtractions'].every((key) =>
+      [0, '0', false].includes(presence?.[key]),
+    )
+      ? 1
+      : 0,
+  };
 }
 
 // 同一套资格规则供生成决策与交付使用，模型不能把低价值事实重新写回简报。
@@ -65,6 +98,11 @@ export async function compileDailyBriefFacts(database, userId, calendar) {
     compileBriefActivityFacts(database, userId, calendar),
   ]);
   const organize = [review, pending, untagged];
+  const onboarding = await compileBriefOnboardingFact(database, userId, activity, [
+    ...todos,
+    ...workshop,
+    ...organize.map((item) => ({ count: item.total })),
+  ]);
   return [
     ...todos,
     ...DAILY_BRIEF_FACT_DEFINITIONS.slice(3).map(([id, zh, en, route], index) => ({
@@ -95,5 +133,6 @@ export async function compileDailyBriefFacts(database, userId, calendar) {
     })),
     ...workshop,
     ...activity,
+    onboarding,
   ];
 }

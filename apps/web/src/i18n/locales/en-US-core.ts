@@ -5804,6 +5804,7 @@ export default {
       adviceFailedReadOnly: 'AI suggestion failed.',
       adviceFailed: 'AI suggestion failed. Refresh to retry later.',
       aiRecommendation: 'AI suggestion',
+      onboardingRecommendation: 'Getting started',
       actionRecommendation: 'Suggested next step',
       sharedTag: 'Connection basis: shared tag “{tag}”',
       reviewAiSuggestions: 'Review AI suggestions',

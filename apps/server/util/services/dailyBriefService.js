@@ -380,6 +380,7 @@ function buildBrief(calendar, facts, narrative = null) {
       : organizingHeadline
     : activityHeadline;
   const advice = adviceContext(facts, calendar.locale);
+  const onboarding = !advice.signals.length && facts.some((fact) => fact.id === 'onboarding_empty' && fact.count === 1);
   const recommendation =
     narrative?.adviceKey === advice.key
       ? resolveAdvice(
@@ -396,15 +397,21 @@ function buildBrief(calendar, facts, narrative = null) {
     headline,
     // 失败、单次待办、项目、成果、整理各最多一项，不靠截断遗漏后面的类别。
     insights,
-    recommendation: recommendation?.action || '',
+    recommendation: onboarding
+      ? english
+        ? 'Start by collecting a resource, writing a note, or creating a to-do—one small step to get started with Light Note.'
+        : '可以先收集一份资料、写一篇笔记，或新建一条待办，从一件小事开始使用轻笺。'
+      : recommendation?.action || '',
     advicePolicyVersion: ADVICE_POLICY_VERSION,
-    adviceStatus: !advice.signals.length
-      ? 'no_evidence'
-      : narrative?.adviceKey === advice.key
-        ? recommendation
-          ? 'ready'
-          : 'no_value'
-        : 'not_evaluated',
+    adviceStatus: onboarding
+      ? 'ready'
+      : !advice.signals.length
+        ? 'no_evidence'
+        : narrative?.adviceKey === advice.key
+          ? recommendation
+            ? 'ready'
+            : 'no_value'
+          : 'not_evaluated',
     ...(narrative?.adviceKey === advice.key && advice.key
       ? { adviceKey: advice.key, adviceProposal: recommendation ? narrative.adviceProposal : null }
       : {}),
@@ -415,6 +422,7 @@ function buildBrief(calendar, facts, narrative = null) {
           recommendationSources: recommendation.sources,
         }
       : {}),
+    ...(onboarding ? { recommendationKind: 'action', recommendationFactIds: ['onboarding_empty'] } : {}),
     sections: [
       { id: 'today_actions', title: SECTION_TITLES[calendar.locale]?.today_actions || '今日行动', items: todos },
       ...(activity.length || activityMeasured
@@ -709,14 +717,18 @@ async function generateDailyBriefForActiveUser(
       : completed.includes(previousBrief?.adviceStatus)
         ? previousBrief
         : previousBrief?.lastAdviceResult;
+    const isFixedGuide = candidateResult?.recommendationFactIds?.includes('onboarding_empty');
     const lastResult =
-      !candidateResult?.recommendation ||
-      ((candidateResult.recommendationFactIds || []).every((id) => advice.signals.some((signal) => signal.id === id)) &&
-        (candidateResult.recommendationSources || []).every((source) =>
-          advice.signals.some((signal) =>
-            signal.sources.some((current) => current.type === source.type && current.id === source.id),
-          ),
-        ))
+      !isFixedGuide &&
+      (!candidateResult?.recommendation ||
+        ((candidateResult.recommendationFactIds || []).every((id) =>
+          advice.signals.some((signal) => signal.id === id),
+        ) &&
+          (candidateResult.recommendationSources || []).every((source) =>
+            advice.signals.some((signal) =>
+              signal.sources.some((current) => current.type === source.type && current.id === source.id),
+            ),
+          )))
         ? candidateResult
         : null;
     if (lastResult) {
