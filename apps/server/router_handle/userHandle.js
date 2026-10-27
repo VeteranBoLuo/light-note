@@ -728,14 +728,17 @@ export const getUserList = async (req, res) => {
     const sortColumn = sortField === 'lastActiveTime' ? 'ua.last_active_at' : 'u.create_time';
     const direction = sortOrder.toUpperCase();
     const operator = sortOrder === 'asc' ? '>' : '<';
-    const conditions = [
-      `(u.alias LIKE CONCAT('%', ?, '%')
+    const conditions = [];
+    const filterParams = [];
+    if (key) {
+      conditions.push(`(u.alias LIKE CONCAT('%', ?, '%')
         OR u.email LIKE CONCAT('%', ?, '%')
-        OR aur.remark_name LIKE CONCAT('%', ?, '%'))`,
-    ];
-    const filterParams = [key, key, key];
-    if (status === 'active') conditions.push('u.del_flag = 0');
-    if (status === 'banned') conditions.push('u.del_flag = 1');
+        OR aur.remark_name LIKE CONCAT('%', ?, '%'))`);
+      filterParams.push(key, key, key);
+    }
+    // 与 VARCHAR 列同类型比较，让注册时间排序继续使用现有复合索引。
+    if (status === 'active') conditions.push("u.del_flag = '0'");
+    if (status === 'banned') conditions.push("u.del_flag = '1'");
     if (role) {
       conditions.push('u.role = ?');
       filterParams.push(role);
@@ -759,7 +762,7 @@ export const getUserList = async (req, res) => {
       conditions.push('u.create_time < DATE_ADD(?, INTERVAL 1 DAY)');
       filterParams.push(createTo);
     }
-    const whereSql = conditions.join(' AND ');
+    const whereSql = conditions.length ? conditions.join(' AND ') : '1 = 1';
     const scope = adminCursorScope('users-real-activity', [
       key,
       role,

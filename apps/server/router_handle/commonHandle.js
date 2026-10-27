@@ -752,15 +752,17 @@ export const getOperationLogs = async (req, res) => {
       .slice(0, 255);
     const startDate = normalizeAdminLogDate(filters.start_date);
     const endDate = normalizeAdminLogDate(filters.end_date, true);
-    const conditions = [
-      `(u.alias LIKE CONCAT('%', ?, '%')
+    // del_flag 是 VARCHAR；数值比较会使 (del_flag, create_time, id) 索引失效。
+    const conditions = ["o.del_flag = '0'"];
+    const baseParams = [];
+    if (key) {
+      conditions.push(`(u.alias LIKE CONCAT('%', ?, '%')
         OR u.email LIKE CONCAT('%', ?, '%')
         OR o.operation LIKE CONCAT('%', ?, '%')
         OR o.module LIKE CONCAT('%', ?, '%')
-        OR o.ip LIKE CONCAT('%', ?, '%'))`,
-      'o.del_flag = 0',
-    ];
-    const baseParams = [key, key, key, key, key];
+        OR o.ip LIKE CONCAT('%', ?, '%'))`);
+      baseParams.push(key, key, key, key, key);
+    }
     if (hideInternal) {
       conditions.push(`(u.role IS NULL OR u.role NOT IN (${rolePh}))`);
       baseParams.push(...INTERNAL_ROLES);
