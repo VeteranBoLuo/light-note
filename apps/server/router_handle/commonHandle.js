@@ -552,21 +552,29 @@ export const getApiLogs = async (req, res) => {
     );
     let totalPromise = Promise.resolve(undefined);
     if (shouldCount && !hasBusinessFilters) {
-      // 游标负责后续分页，total 只需首屏计算。默认首屏在同一个 SQL 快照中用两个窄索引计数
-      // 相减，避免为了排除 root/test 对 11 万行日志逐行 LEFT JOIN user，同时保证差值口径一致。
+      // 同一 SQL 快照中：有效总数 -（内部账号全部日志 - 内部账号无效日志）。
+      // 三段都只读覆盖索引；user_time 不含 del_flag，不能沿该索引回表检查删除标记。
       const defaultCountSql = hideInternal
         ? `SELECT
              (SELECT COUNT(*) FROM api_logs active_log FORCE INDEX (idx_api_logs_admin_list)
                WHERE active_log.del_flag = '0')
-             -
-             (SELECT COUNT(*)
+             - (
+               (SELECT COUNT(*)
                 FROM api_logs internal_log FORCE INDEX (idx_api_logs_user_time)
                 INNER JOIN user internal_user ON internal_log.user_id = internal_user.id
-               WHERE internal_log.del_flag = '0' AND internal_user.role IN (${rolePh})) AS total`
+                WHERE internal_user.role IN (${rolePh}))
+               -
+               (SELECT COUNT(*)
+                FROM api_logs inactive_internal_log FORCE INDEX (idx_api_logs_duration_time)
+                WHERE inactive_internal_log.del_flag <> '0'
+                  AND inactive_internal_log.user_id IN (
+                    SELECT internal_user.id FROM user internal_user WHERE internal_user.role IN (${rolePh})
+                  ))
+             ) AS total`
         : `SELECT COUNT(*) AS total FROM api_logs active_log FORCE INDEX (idx_api_logs_admin_list)
             WHERE active_log.del_flag = '0'`;
       totalPromise = pool
-        .query(defaultCountSql, hideInternal ? INTERNAL_ROLES : [])
+        .query(defaultCountSql, hideInternal ? [...INTERNAL_ROLES, ...INTERNAL_ROLES] : [])
         .then(([rows]) => Math.max(0, Number(rows[0]?.total || 0)));
     } else if (shouldCount) {
       // 只有关键词会读取 user 的 alias/email；其他筛选的总数无需关联用户表。

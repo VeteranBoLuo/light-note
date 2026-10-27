@@ -232,6 +232,11 @@ describe.skipIf(!socketPath)('后台游标列表 SQL 与索引', () => {
     expect(first.total).toBe(12000);
     expect(first.items[0].id).toBe('api-23999');
     expect(first.items.every((r) => !('req' in r))).toBe(true);
+    const [countSql, countParams] = query.mock.calls[1];
+    const [countPlan] = await db.query('EXPLAIN ' + countSql, countParams);
+    for (const key of ['idx_api_logs_admin_list', 'idx_api_logs_user_time', 'idx_api_logs_duration_time']) {
+      expect(countPlan.find((row) => row.key === key).Extra).toContain('Using index');
+    }
     await expectOrderedIndex('a', 'idx_api_logs_admin_list');
     const next = await read(getApiLogs, { ...body, cursor: first.nextCursor });
     expect(next.total).toBeUndefined();
@@ -364,6 +369,24 @@ describe.skipIf(!socketPath)('后台游标列表 SQL 与索引', () => {
       expect(seen).toEqual([...ids].reverse());
     } finally {
       await db.query("UPDATE api_logs SET duration_ms=IF(id='api-00102',2000,10) WHERE id IN (?)", [ids]);
+    }
+  });
+
+  it('默认总数的索引差值覆盖非标准删除标记、全部清空和仅剩内部账号，不发生无符号下溢', async () => {
+    await db.beginTransaction();
+    try {
+      await db.query(`INSERT INTO api_logs (id,user_id,request_time,del_flag,ip)
+        VALUES ('archived-root','user-0000','2026-10-20 10:00:00','2','203.0.113.1')`);
+      const original = await read(getApiLogs, { cursor: null, limit: 10, filters: {} });
+      expect(original.total).toBe(12000);
+      await db.query("UPDATE api_logs SET del_flag='1'");
+      const cleared = await read(getApiLogs, { cursor: null, limit: 10, filters: {} });
+      expect(cleared).toMatchObject({ items: [], total: 0, hasMore: false, nextCursor: null });
+      await db.query("UPDATE api_logs SET del_flag='0' WHERE user_id='user-0000'");
+      const internalOnly = await read(getApiLogs, { cursor: null, limit: 10, filters: {} });
+      expect(internalOnly).toMatchObject({ items: [], total: 0, hasMore: false, nextCursor: null });
+    } finally {
+      await db.rollback();
     }
   });
 
