@@ -52,3 +52,28 @@ it('restores native HTML clipboard emoji without inserting markup or executable 
   } });
   expect(readInlineEmojiClipboard(event)).toBe(`你好😀${token}\n下一行`);
 });
+
+it('copies emoji and real line breaks without exporting the editor caret sentinel', () => {
+  const token = '[[ln-emoji:jian-tuan-v1:gentle-smile]]';
+  const host = document.createElement('div');
+  host.innerHTML = `文字<img alt="微笑" data-inline-emoji-token="${token}"><br><br data-composer-caret-sentinel="true">`;
+  document.body.append(host);
+  const range = document.createRange();
+  range.selectNodeContents(host);
+  window.getSelection()?.addRange(range);
+  const values = new Map<string, string>();
+  const event = new Event('copy', { cancelable: true }) as ClipboardEvent;
+  Object.defineProperty(event, 'clipboardData', { value: {
+    setData: (type: string, value: string) => values.set(type, value),
+    getData: (type: string) => values.get(type) || '',
+  } });
+  copyInlineEmojiSelection(event);
+  expect(values.get('text/plain')).toBe('文字[微笑]\n');
+  expect(readInlineEmojiClipboard(event)).toBe(`文字${token}\n`);
+  host.querySelector('br')!.remove();
+  range.selectNodeContents(host);
+  const secondEvent = new Event('copy', { cancelable: true }) as ClipboardEvent;
+  Object.defineProperty(secondEvent, 'clipboardData', { value: event.clipboardData });
+  copyInlineEmojiSelection(secondEvent);
+  expect(readInlineEmojiClipboard(secondEvent)).toBe(`文字${token}`);
+});

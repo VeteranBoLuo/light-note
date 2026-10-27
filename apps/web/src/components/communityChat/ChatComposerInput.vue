@@ -187,7 +187,19 @@
       caretSentinel.dataset.composerCaretSentinel = 'true';
       fragment.append(caretSentinel);
     }
+    ensureTrailingCaret(fragment);
     root.replaceChildren(fragment);
+  }
+
+  function ensureTrailingCaret(root: ParentNode) {
+    const last = root.lastChild;
+    if (!(last instanceof HTMLElement) || last.dataset.composerCaretSentinel === 'true') return;
+    if (!last.hasAttribute('data-emoji-atom') && !(last instanceof HTMLBRElement)) return;
+    // 末尾不可编辑表情需要后续行内落点，否则 Chromium/WebView 虽有选区却
+    // 不绘制右侧光标。复用不计入正文的 BR，避免隐藏字符影响删除、字数和撤销。
+    const sentinel = document.createElement('br');
+    sentinel.dataset.composerCaretSentinel = 'true';
+    root.append(sentinel);
   }
 
   function removeRichCaretSentinels() {
@@ -393,6 +405,31 @@
       return;
     }
     beforeInputSnapshot = snapshot();
+    // 使用浏览器给出的删除范围更新逻辑正文，避免原生删除在不可编辑表情/
+    // 空行边界重写 BR 后，把光标挪到上一行。也覆盖移动键盘的 beforeinput。
+    const root = richInput.value;
+    const target = event.getTargetRanges?.()[0];
+    if (
+      root &&
+      event.cancelable &&
+      !event.isComposing &&
+      event.inputType.startsWith('delete') &&
+      target &&
+      root.contains(target.startContainer) &&
+      root.contains(target.endContainer)
+    ) {
+      const prefix = document.createRange();
+      prefix.selectNodeContents(root);
+      prefix.setEnd(target.startContainer, target.startOffset);
+      const start = serializeNode(prefix.cloneContents()).length;
+      prefix.setEnd(target.endContainer, target.endOffset);
+      const end = serializeNode(prefix.cloneContents()).length;
+      if (end > start) {
+        event.preventDefault();
+        const value = beforeInputSnapshot.value;
+        updateEditorValue(value.slice(0, start) + value.slice(end), { start, end: start });
+      }
+    }
   }
 
   function handlePlainValueUpdate(value: unknown) {
@@ -432,9 +469,17 @@
   }
 
   function handleRichInput() {
+    // 原生编辑会消耗原有哨兵，并在删空末尾文字后生成无标记的占位 BR。
+    // 先标记浏览器的末尾 BR 再清理，不能把真实换行后的已标记哨兵清理后
+    // 再判断，否则会把正文的真实换行也吞掉。
+    const last = richInput.value?.lastChild;
+    if (last instanceof HTMLBRElement) last.dataset.composerCaretSentinel = 'true';
     removeRichCaretSentinels();
     const selection = richSelectionRange() || { start: props.value.length, end: props.value.length };
     updateEditorValue(serializeRichContent(), selection);
+    // 原生删除末尾文字时 DOM 已与新 value 一致，不会触发重绘；表情和真实
+    // 换行后都要恢复落点，保证下一次退格从正确的行开始。
+    if (richInput.value) ensureTrailingCaret(richInput.value);
   }
 
   function handleRichKeydown(event: KeyboardEvent) {
@@ -609,5 +654,4 @@
     pointer-events: auto;
     user-select: none;
   }
-
 </style>
