@@ -2,6 +2,7 @@ import {
   ADVICE_FACT_ID,
   ADVICE_CONTEXT_FACT_IDS,
   ADVICE_POLICY_VERSION,
+  MIN_SAFE_ADVICE_POLICY_VERSION,
   adviceContext,
   resolveAdvice,
 } from './dailyBriefAdvice.js';
@@ -91,13 +92,14 @@ function hydrateBriefNarrative(brief) {
   };
 }
 
-// 策略修正后旧输出不能继续以“上次建议”展示；只投影缓存，不触发模型或批量回写。
+// 低于安全展示版本的输出不能作为“上次建议”；只投影缓存，不触发模型或批量回写。
 function currentAdviceProjection(brief) {
   if (!brief || typeof brief !== 'object') return brief;
-  const invalidCurrent = Boolean(brief.recommendation) && brief.advicePolicyVersion !== ADVICE_POLICY_VERSION;
+  const safeVersion = (value) =>
+    Number.isInteger(value) && value >= MIN_SAFE_ADVICE_POLICY_VERSION && value <= ADVICE_POLICY_VERSION;
+  const invalidCurrent = Boolean(brief.recommendation) && !safeVersion(brief.advicePolicyVersion);
   const invalidPrevious =
-    Boolean(brief.lastAdviceResult?.recommendation) &&
-    brief.lastAdviceResult.advicePolicyVersion !== ADVICE_POLICY_VERSION;
+    Boolean(brief.lastAdviceResult?.recommendation) && !safeVersion(brief.lastAdviceResult.advicePolicyVersion);
   if (!invalidCurrent && !invalidPrevious) return brief;
   const result = { ...brief };
   if (invalidCurrent) {
@@ -109,7 +111,8 @@ function currentAdviceProjection(brief) {
       'recommendationSources',
       'adviceKey',
       'adviceProposal',
-    ]) delete result[key];
+    ])
+      delete result[key];
   }
   if (invalidPrevious) delete result.lastAdviceResult;
   return result;

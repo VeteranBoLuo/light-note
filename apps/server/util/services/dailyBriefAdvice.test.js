@@ -196,6 +196,83 @@ it('保留没有缺陷的知识应用建议，不靠全面提高门槛减少输�
   });
 });
 
+const normalMaterialCases = [
+  [
+    '学习笔记',
+    '主动回忆是在不看原文时提取记忆，再通过反馈发现遗漏。',
+    '主动回忆是在不看原文时提取记忆',
+    '阅读这份资料后，可合上正文复述要点，再打开原文检查遗漏。',
+    '今天留意一下「阅读」：目前仍待完成。',
+  ],
+  [
+    '论证结构',
+    '论证段落应明确区分结论与支持结论的证据，避免把二者混为一谈。',
+    '论证段落应明确区分结论与支持结论的证据',
+    '写作时可用这段方法改写一个段落，核对结论与证据是否对应。',
+    '今天留意一下「写作」：目前仍待完成。',
+  ],
+  [
+    'Memory notes',
+    'Recall requires retrieving a concept from memory before checking the original explanation.',
+    'Recall requires retrieving a concept from memory',
+    'Review this explanation by recalling its main concept, then compare your account with the original.',
+    '“Review” has a reminder set.',
+  ],
+  [
+    '接口设计',
+    '接口重试必须携带相同的请求标识，服务端用唯一约束防止重复创建。',
+    '接口重试必须携带相同的请求标识',
+    '可用相同请求标识连续提交接口，核对是否始终返回同一个已创建结果。',
+    '今天留意一下「打卡」：目前仍待完成。',
+  ],
+  [
+    '方案对照',
+    '本地索引支持离线读取，远程索引需要联网，但可在设备之间共享更新。',
+    '本地索引支持离线读取，远程索引需要联网',
+    '可以分别按离线可用性和跨设备更新列出两种索引的差异，再对照各自适用的场景。',
+    '今天留意一下「方案」：目前仍待完成。',
+  ],
+  [
+    '时间文案反馈',
+    '提醒时间与截止时间含义不同，当前页面将提醒误标成截止。',
+    '提醒时间与截止时间含义不同',
+    '可以选一条仅设置提醒且未设置截止的待办核对文案，确认两种时间概念是否被区分。',
+    '今天留意一下「阅读」：目前仍待完成。',
+  ],
+];
+it.each(normalMaterialCases)(
+  '正常资料保留应用、验证与对照；不把同词当成同一待办：%s',
+  (title, text, quote, action, body) => {
+    for (const resourceType of ['note', 'bookmark', 'file']) {
+      const selected = compileAdviceEvidence([
+        {
+          resourceType,
+          resourceId: 'owned',
+          title,
+          ...(resourceType === 'file' ? { preparedText: text } : { summary: `<p>${text}</p>` }),
+        },
+      ]);
+      expect(selected).toHaveLength(1);
+      expect(resolveAdvice({ sourceKey: selected[0].key, quote, action }, selected, [body])).toMatchObject({ action });
+    }
+  },
+);
+
+it.each(['例行签到', 'Review', '日常(复盘)'])('排除明确引用源外事项，不依赖特定资料标题或任务名：%s', (name) => {
+  const selected = [
+    { ...evidence[0], title: '任意资料', excerpt: '把提醒和截止时间分开表达，避免读者混淆两种不同的时间含义。' },
+  ];
+  const body = [`今天留意一下「${name}」：目前仍待完成。`];
+  for (const action of [
+    `可以把「${name}」放在简报的最前面，再列出其他内容。`,
+    `可考虑单列今天的重点，例如${name}提醒，再列出整理统计。`,
+  ]) {
+    expect(
+      resolveAdvice({ sourceKey: 'material_1', quote: '把提醒和截止时间分开表达', action }, selected, body),
+    ).toBeNull();
+  }
+});
+
 it('真实模型回归：数字在同一已读片段中即可，不要求全部出现在短引文；按完整数值拒绝子串碰撞', () => {
   const materials = [{ ...evidence[0], excerpt: evidence[0].excerpt + '验收覆盖 12 种附件，单个文件限制 510 MB。' }];
   const action = '可以将 12 种附件的导出检查加入验收清单，同时核对 510 MB 限制的提示。';

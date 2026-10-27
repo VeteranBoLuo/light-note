@@ -2,7 +2,9 @@ import { createHash } from 'node:crypto';
 import { load } from 'cheerio';
 
 export const ADVICE_FACT_ID = 'recommendation_evidence';
-export const ADVICE_POLICY_VERSION = 7;
+export const ADVICE_POLICY_VERSION = 8;
+// 放宽误伤校验不需要撤下已通过上一版安全校验的正常建议。
+export const MIN_SAFE_ADVICE_POLICY_VERSION = 7;
 export const ADVICE_CONTEXT_FACT_IDS = Object.freeze([
   'todo_overdue',
   'todo_due_today',
@@ -58,26 +60,44 @@ const normalize = (text) =>
     .toLowerCase()
     .replace(/[\p{P}\p{Z}\s]/gu, '');
 
+const QUOTED_IDENTITY = /「([^」\n]{2,120})」|《([^》\n]{2,120})》|“([^”\n]{2,120})”|"([^"\n]{2,120})"/gu;
+const escapePattern = (value) =>
+  value
+    .trim()
+    .replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')
+    .replace(/\s+/gu, '\\s+');
+const quotedNames = (text) => [...text.matchAll(QUOTED_IDENTITY)].map((match) => match.slice(1).find(Boolean));
+
+// 模型只看排重背景，真实事项名称只留给服务端校验，避免借用它们补例子。
+export const adviceBodyContext = (body) => body.map((text) => text.replace(QUOTED_IDENTITY, '[...]'));
+
 function mentionsName(text, name) {
   if (/^[\p{Script=Latin}\d\s]+$/u.test(name)) {
-    const pattern = name
-      .trim()
-      .replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')
-      .replace(/\s+/gu, '\\s+');
-    return new RegExp(`\\b${pattern}\\b`, 'iu').test(text);
+    return new RegExp(`\\b${escapePattern(name)}\\b`, 'iu').test(text);
   }
   return normalize(text).includes(normalize(name));
+}
+
+function explicitlyReferencesName(action, name) {
+  if (quotedNames(action).some((value) => normalize(value) === normalize(name))) return true;
+  const pattern = escapePattern(name);
+  // 仅识别明确的事项引用；同词作为普通动词（如“阅读”或 review）不代表引用了同名待办。
+  return (
+    new RegExp(`${pattern}(?:的)?(?:待办|任务|提醒|项目|事项)`, 'u').test(action) ||
+    new RegExp(
+      `\\b(?:task|project|reminder|item)\\s+(?:(?:named|called)\\s+)?${pattern}\\b|\\b${pattern}\\s+(?:task|project|reminder|item)\\b|\\b(?:move|moving|place|placing|put|putting)\\s+${pattern}\\s+(?:ahead|before|first|into|at|to)\\b`,
+      'iu',
+    ).test(action)
+  );
 }
 
 // 正文仅用于排重，不能给建议补充所选资料中没有的任务、项目或其他资料身份。
 function borrowsBodyIdentity(action, material, body) {
   const supported = `${material.title || ''}\n${material.excerpt}`;
   for (const text of body) {
-    for (const match of text.matchAll(
-      /「([^」\n]{2,120})」|《([^》\n]{2,120})》|“([^”\n]{2,120})”|"([^"\n]{2,120})"/gu,
-    )) {
-      const name = match.slice(1).find(Boolean);
-      if (mentionsName(action, name) && !mentionsName(supported, name)) return true;
+    for (const name of quotedNames(text)) {
+      if (mentionsName(action, name) && explicitlyReferencesName(action, name) && !mentionsName(supported, name))
+        return true;
     }
   }
   return false;

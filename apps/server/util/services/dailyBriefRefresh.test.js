@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { ensureDailyBrief, getDailyBrief, refreshDailyBrief } from './dailyBriefService.js';
 import { DAILY_BRIEF_FACT_DEFINITIONS } from './dailyBriefFacts.js';
 import { DAILY_BRIEF_REFRESH_POLICY } from './dailyBriefFreshness.js';
-import { ADVICE_POLICY_VERSION } from './dailyBriefAdvice.js';
+import { MIN_SAFE_ADVICE_POLICY_VERSION } from './dailyBriefAdvice.js';
 import { validateDailyBriefInput } from '../aiSkill/skills/routineDailyBriefSkill.js';
 
 function fixture() {
@@ -467,7 +467,7 @@ describe('真实资料建议的生成与复用', () => {
     await f.ensure();
     const row = f.rows.get('2026-09-05');
     const legacy = JSON.parse(row.briefJson);
-    legacy.advicePolicyVersion = ADVICE_POLICY_VERSION - 1;
+    legacy.advicePolicyVersion = MIN_SAFE_ADVICE_POLICY_VERSION - 1;
     delete legacy.lastAdviceResult.advicePolicyVersion;
     if (place === 'previous') {
       legacy.adviceStatus = 'failed';
@@ -497,6 +497,31 @@ describe('真实资料建议的生成与复用', () => {
     const failed = await f.ensure();
     expect(failed.brief.recommendation).toBe('');
     expect(failed.brief.lastAdviceResult?.recommendation).toBeFalsy();
+  });
+  it('放宽判断策略时仍保留上一安全版本的正常建议，不因冷却或失败再次清空', async () => {
+    const f = fixture();
+    f.change('recommendation_evidence', { evidence });
+    f.executeAiSkill.mockImplementation(async (_request, _req, deps) =>
+      deps.commitValidatedResult({ response: { result: { insights: [], recommendation: proposal } } }),
+    );
+    await f.ensure();
+    const row = f.rows.get('2026-09-05');
+    const older = JSON.parse(row.briefJson);
+    older.advicePolicyVersion = MIN_SAFE_ADVICE_POLICY_VERSION;
+    older.lastAdviceResult.advicePolicyVersion = MIN_SAFE_ADVICE_POLICY_VERSION;
+    older.adviceKey = 'previous-safe-policy';
+    older.snapshot.fingerprint = 'previous-safe-policy';
+    row.briefJson = JSON.stringify(older);
+    expect((await f.get()).brief.recommendation).toContain(proposal.action);
+    const waiting = await f.ensure();
+    expect(waiting.brief.lastAdviceResult.recommendation).toContain(proposal.action);
+    expect(waiting.brief.lastAdviceResult.advicePolicyVersion).toBe(MIN_SAFE_ADVICE_POLICY_VERSION);
+    expect(f.executeAiSkill).toHaveBeenCalledTimes(1);
+    f.advance(11 * 60000);
+    f.executeAiSkill.mockRejectedValue(Object.assign(new Error('unavailable'), { code: 'PROVIDER_FAILED' }));
+    const failed = await f.ensure();
+    expect(failed.brief.lastAdviceResult.recommendation).toContain(proposal.action);
+    expect((await f.get()).brief.lastAdviceResult.recommendation).toContain(proposal.action);
   });
 });
 

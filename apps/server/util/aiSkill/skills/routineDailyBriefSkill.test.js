@@ -236,6 +236,9 @@ it.each(['zh-CN', 'en-US'])('正文身份不能给建议补证据，正常返回
   ).toMatchObject({ recommendation: null });
   expect(requestAi).toHaveBeenCalledTimes(1);
   expect(routineDailyBriefSkill.resolveModelPolicy({ evidence: [sample] }).maxTokens).toBe(900);
+  const sent = JSON.parse(prepared.messages.at(-1).content);
+  expect(sent.body.join(' ')).not.toContain(english ? 'Check in' : '例行签到');
+  expect(sent.evidence).toEqual([sample]);
 });
 
 it('admits grounded applications without requiring a defect and keeps the existing evidence/output budgets', async () => {
