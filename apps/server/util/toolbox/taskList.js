@@ -66,6 +66,7 @@ export function extractionTask(row) {
   };
 }
 // Page identities across both domains before loading bounded summaries; never concatenate two truncated lists.
+// Legacy toolbox tables may use general_ci while extraction uses unicode_ci. Normalize only the UNION projection.
 export async function listToolboxTaskPage({ userId, filter = 'all', cursor, limit = 20, database }) {
   if (!Object.hasOwn(JOB_FILTERS, filter)) throw toolboxError('TOOLBOX_FILTER_INVALID', '任务筛选无效', 400);
   const boundary = decodeCursor(cursor, filter);
@@ -79,9 +80,9 @@ export async function listToolboxTaskPage({ userId, filter = 'all', cursor, limi
   }
   const [ids] = await database.query(
     `SELECT * FROM (
-      SELECT 'job' AS kind,id,DATE_FORMAT(updated_at,'%Y-%m-%d %H:%i:%s') AS sort_at FROM toolbox_jobs job
+      SELECT 'job' AS kind,id COLLATE utf8mb4_unicode_ci AS id,DATE_FORMAT(updated_at,'%Y-%m-%d %H:%i:%s') AS sort_at FROM toolbox_jobs job
       WHERE user_id=? AND tool_id<>'translation' AND ${taskVisibleSql()} AND ${JOB_FILTERS[filter]}
-      ${withExtraction ? `UNION ALL SELECT 'extraction' AS kind,id,DATE_FORMAT(updated_at,'%Y-%m-%d %H:%i:%s') AS sort_at FROM toolbox_extractions WHERE user_id=? AND ${EXTRACTION_FILTERS[filter]}` : ''}
+      ${withExtraction ? `UNION ALL SELECT 'extraction' AS kind,id COLLATE utf8mb4_unicode_ci AS id,DATE_FORMAT(updated_at,'%Y-%m-%d %H:%i:%s') AS sort_at FROM toolbox_extractions WHERE user_id=? AND ${EXTRACTION_FILTERS[filter]}` : ''}
     ) tasks ${clause} ORDER BY sort_at DESC,id DESC,kind DESC LIMIT ?`,
     [...params, take + 1],
   );

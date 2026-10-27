@@ -13,10 +13,11 @@ describe.skipIf(!socketPath)('task list across domains (isolated MySQL)', () => 
     admin = await mysql.createConnection({ socketPath, user: 'root' });
     const [[state]] = await admin.query('SELECT @@global.skip_networking AS isolated');
     if (Number(state.isolated) !== 1) throw new Error('Disposable MySQL required');
-    await admin.query(`CREATE DATABASE ${schema} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`);
+    // Production's legacy toolbox tables use general_ci; extraction installs unicode_ci explicitly.
+    await admin.query(`CREATE DATABASE ${schema} CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci`);
     database = mysql.createPool({ socketPath, user: 'root', database: schema, dateStrings: true });
     await database.query(
-      `CREATE TABLE toolbox_jobs(id VARCHAR(64) PRIMARY KEY,user_id VARCHAR(64),tool_id VARCHAR(64),status VARCHAR(32),stage VARCHAR(32),error_code VARCHAR(64),error_message VARCHAR(255),external_cost_committed INT DEFAULT 0,started_at DATETIME,completed_at DATETIME,save_status VARCHAR(32),artifact_id VARCHAR(64),options_json JSON,billing_medium VARCHAR(16),billing_status VARCHAR(24),quoted_points INT DEFAULT 0,actual_points INT DEFAULT 0,updated_at DATETIME,create_time DATETIME)`,
+      `CREATE TABLE toolbox_jobs(id VARCHAR(64) PRIMARY KEY,user_id VARCHAR(64),tool_id VARCHAR(64),status VARCHAR(32),stage VARCHAR(32),error_code VARCHAR(64),error_message VARCHAR(255),external_cost_committed INT DEFAULT 0,started_at DATETIME,completed_at DATETIME,save_status VARCHAR(32),artifact_id VARCHAR(64),options_json JSON,billing_medium VARCHAR(16),billing_status VARCHAR(24),quoted_points INT DEFAULT 0,actual_points INT DEFAULT 0,updated_at DATETIME,create_time DATETIME) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci`,
     );
     await database.query(
       `CREATE TABLE toolbox_artifacts(id VARCHAR(64) PRIMARY KEY,user_id VARCHAR(64),artifact_type VARCHAR(64),title VARCHAR(255),content_type VARCHAR(32),artifact_version INT,status VARCHAR(32),expires_at DATETIME)`,
@@ -97,6 +98,15 @@ describe.skipIf(!socketPath)('task list across domains (isolated MySQL)', () => 
     const home = await listToolboxHomeTasks({ userId: 'owner', database });
     expect(home.recent.some((item) => item.id === 'old')).toBe(false);
     expect(home.attention).toMatchObject([{ id: 'old', title: '阅读摘记' }]);
+  });
+  it('pages tied identities across legacy general and extraction unicode collations', async () => {
+    await job('same-id', { updated_at: '2026-10-14 10:00:00' });
+    await extraction('same-id');
+    const first = await listToolboxTaskPage({ userId: 'owner', limit: 1, database });
+    expect(first.items[0]).toMatchObject({ id: 'same-id', toolId: 'material_to_note' });
+    const second = await listToolboxTaskPage({ userId: 'owner', limit: 1, cursor: first.nextCursor, database });
+    expect(second.items[0]).toMatchObject({ id: 'same-id', toolId: 'extraction' });
+    expect(second.nextCursor).toBeNull();
   });
   it('dismisses from visible lists without changing billing or deleting the retained task', async () => {
     await job('failed', { billing_status: 'released' });
