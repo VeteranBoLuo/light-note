@@ -468,15 +468,31 @@
       const prefix = document.createRange();
       prefix.selectNodeContents(root);
       prefix.setEnd(target.startContainer, target.startOffset);
-      const start = serializeNode(prefix.cloneContents()).length;
+      let start = serializeNode(prefix.cloneContents()).length;
       prefix.setEnd(target.endContainer, target.endOffset);
-      const end = serializeNode(prefix.cloneContents()).length;
-      // 删除范围只含辅助字符时不改正文，也不让浏览器把空 span 改写成 BR。
+      let end = serializeNode(prefix.cloneContents()).length;
+      // 阻止浏览器直接删除辅助字符后把空 span 改写成 BR。
       event.preventDefault();
+      if (
+        start === end &&
+        beforeInputSnapshot.start === beforeInputSnapshot.end &&
+        window.getSelection()?.isCollapsed &&
+        ['deleteContentBackward', 'deleteContentForward'].includes(event.inputType)
+      ) {
+        // 原生删除范围若仅覆盖占位字符，跨过它继续删除相邻正文；不能
+        // 让行首退格变成空操作。原生 character 扩展保留组合字符边界。
+        const direction = event.inputType === 'deleteContentBackward' ? 'backward' : 'forward';
+        const selection = window.getSelection();
+        selection?.modify('move', direction, 'character');
+        selection?.modify('extend', direction, 'character');
+        const adjacent = richSelectionRange();
+        if (adjacent) ({ start, end } = adjacent);
+      }
       if (end > start) {
         const value = beforeInputSnapshot.value;
         updateEditorValue(value.slice(0, start) + value.slice(end), { start, end: start });
       } else {
+        setSelectionRange(beforeInputSnapshot.start, beforeInputSnapshot.end);
         beforeInputSnapshot = null;
       }
     }
@@ -602,6 +618,21 @@
       element?.closest('[data-composer-caret-anchor="true"]') &&
       !(event instanceof KeyboardEvent && event.isComposing)
     ) {
+      // 左移到占位字符前时继续跨过它；否则重新归一到字符后会把光标
+      // 困在新行开头。使用原生字符移动，保留换行和 Unicode 字符边界。
+      if (
+        event instanceof KeyboardEvent &&
+        event.key === 'ArrowLeft' &&
+        !event.shiftKey &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.altKey &&
+        node?.nodeType === Node.TEXT_NODE &&
+        node.textContent?.[selection.anchorOffset] === '\u200b'
+      ) {
+        selection.modify('move', 'backward', 'character');
+        lastSelection = getSelectionRange();
+      }
       setSelectionRange(lastSelection.start, lastSelection.end);
     }
     syncRichEmojiSelection();

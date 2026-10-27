@@ -119,7 +119,10 @@ try {
         await page.keyboard.press('Backspace');
         await checkDraft(token);
         await clickSide(0, 'left', 0);
-        await editor.screenshot({ path: `/tmp/lightnote-leading-caret-${width}-${theme}-${density}.png`, caret: 'initial' });
+        await editor.screenshot({
+          path: `/tmp/lightnote-leading-caret-${width}-${theme}-${density}.png`,
+          caret: 'initial',
+        });
         await page.keyboard.press('Home');
         await page.keyboard.press('Delete');
         await checkDraft('');
@@ -138,6 +141,20 @@ try {
         await reset('前文\n' + token);
         await clickSide(0, 'left', 3);
         assert(await page.evaluate(() => window.getSelection().anchorNode.nodeType === Node.TEXT_NODE));
+        await page.keyboard.press('ArrowLeft');
+        assert.deepEqual(await page.evaluate(() => window.caretFixture.input.getSelectionRange()), {
+          start: 2,
+          end: 2,
+        });
+        await page.keyboard.press('ArrowRight');
+        assert.deepEqual(await page.evaluate(() => window.caretFixture.input.getSelectionRange()), {
+          start: 3,
+          end: 3,
+        });
+        await page.keyboard.press('Backspace');
+        await checkDraft('前文' + token);
+        await undo();
+        await checkDraft('前文\n' + token);
         await page.keyboard.insertText('行首');
         await checkDraft('前文\n行首' + token);
         await undo();
