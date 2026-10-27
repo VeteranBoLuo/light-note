@@ -24,6 +24,7 @@ import BPopover from '@/components/base/BasicComponents/BPopover.vue';
 import BButton from '@/components/base/BasicComponents/BButton.vue';
 import { useProjectResourceAction } from '@/composables/useProjectResourceAction';
 const ToolboxTask = () => import('@/view/toolbox/ToolboxTask.vue');
+const ToolboxTasks = () => import('@/view/toolbox/ToolboxTasks.vue');
 const ToolboxHome = () => import('@/view/toolbox/ToolboxHome.vue');
 import type { ToolboxHomeWorkspaceSummary, ToolboxWorkspace, ToolboxJob } from '@/api/toolbox';
 import '@/assets/css/index.less';
@@ -34,7 +35,7 @@ const locale = params.get('locale') === 'en-US' ? 'en-US' : 'zh-CN';
 const state = ['populated', 'empty', 'error', 'loading', 'long'].includes(params.get('state') || '')
   ? String(params.get('state'))
   : 'populated';
-const view = ['home', 'detail', 'entry', 'join', 'desktop', 'mobile'].includes(params.get('view') || '')
+const view = ['home', 'tasks', 'detail', 'entry', 'join', 'desktop', 'mobile'].includes(params.get('view') || '')
   ? String(params.get('view'))
   : 'list';
 const kind = ['research', 'learning', 'writing'].includes(params.get('kind') || '')
@@ -357,6 +358,12 @@ const homeTaskFixtures = (['processing', 'succeeded', 'failed'] as const).map((s
   updatedAt: now,
 }));
 
+const taskFlowJobs: ToolboxJob[] = [
+  { ...homeTaskFixtures[2], id: 'old-failure', toolId: 'material_to_note', title: '阅读摘记 · 资料转笔记', error: { code: 'AI_SKILL_OUTPUT_PROFILE_INVALID', message: 'Fixture' }, billing: { medium: 'ai_quota', status: 'released', quotedPoints: 0, actualPoints: 0, refundedPoints: 0 }, input: { question: '整理阅读材料中的主张与证据，保留具体的应用建议。', options: { detailLevel: 'balanced' }, materials: [{ type: 'note', id: 'visual-note', title: '阅读摘记', available: true }] } },
+  { ...homeTaskFixtures[2], id: 'legacy-failure', toolId: 'material_to_note', input: { question: '', materials: [], options: {} } },
+  { ...homeTaskFixtures[0], id: 'paused-extraction', toolId: 'extraction', title: '阅读资料提取表', extraction: { title: '阅读资料提取表', status: 'paused', processed: 0, total: 1 } },
+  ...Array.from({ length: 24 }, (_, index) => ({ ...homeTaskFixtures[1], id: `ready-${index}`, title: `阅读方法研究简报 ${index+1}` })),
+];
 function response(config: any, data: unknown, status = 200) {
   return {
     data: { status, msg: 'ok', data },
@@ -392,6 +399,25 @@ request.defaults.adapter = async (config) => {
 
   if (toolId === 'source_comparison') { const reply = comparisonFixture(config); if (reply) return reply; }
   const url = String(config.url || '');
+  if (params.get('taskFlow') === '1') ((window as any).taskFlowRequests ||= []).push({ url, method: config.method });
+  if (params.get('taskFlow') === '1') {
+    const visible = taskFlowJobs.filter(job => !sessionStorage.getItem(`toolbox-dismissed-${job.id}`));
+    if (url === '/api/toolbox/home') return response(config, { schemaVersion: 2, workspaces: { continue: homeWorkspaceFixtures, recent: homeWorkspaceFixtures }, tasks: { active: visible.filter(job => job.extraction), ready: visible.filter(job => job.status==='succeeded').slice(0,4), recent: [], attention: visible.filter(job => job.status==='failed') } });
+    if (url === '/api/toolbox/tasks') {
+      if (state === 'error') return response(config, {}, 500);
+      const filter = config.params?.filter || 'all';
+      const filtered = state === 'empty' ? [] : visible.filter(job => filter==='all' || (filter==='failed' && job.status==='failed') || (filter==='paused' && job.extraction) || (filter==='ready' && job.status==='succeeded'));
+      const offset = Number(config.params?.cursor || 0);
+      return response(config, { items: filtered.slice(offset,offset+20), nextCursor: filtered.length>offset+20 ? String(offset+20) : null });
+    }
+    if (url === '/api/toolbox/quotes') return response(config, { id: 'flow-quote', toolId: 'material_to_note', billingMedium: 'ai_quota', quotedPoints: 0, expiresAt: '2099-01-01T00:00:00Z', inputSummary: {itemCount:1,resourceCount:1,uploadCount:0} });
+    if (url === '/api/toolbox/jobs' && config.method === 'post') {
+      const job = {...taskFlowJobs[0], id:'restarted-job', status:'processing' as const, stage:'generating', error:null, billing:{...taskFlowJobs[0].billing,status:'quoted'}};
+      taskFlowJobs.push(job); return response(config,job);
+    }
+    const match = url.match(/^\/api\/toolbox\/jobs\/([^/]+)$/);
+    if (match && config.method === 'get') return response(config, taskFlowJobs.find(job => job.id===match[1]));
+  }
   if (params.get('summaryMock') === '1' && url === '/api/toolbox/artifacts/summary-artifact/save') {
     summaryJob.save.status = 'saved';
     (window as any).summarySaveCalls = ((window as any).summarySaveCalls || 0) + 1;
@@ -721,7 +747,8 @@ if (params.get('resources') === 'empty') { workspaceFixture.resources = []; work
 const router = createRouter({
   history: createMemoryHistory(),
   routes: [
-    { path: '/toolbox/task/:jobId', component: ToolboxTask },
+    { path: '/toolbox/tasks', name: 'toolboxTasks', meta: { mobileShell: 'toolbox' }, component: ToolboxTasks },
+    { path: '/toolbox/task/:jobId', name: 'toolboxTask', meta: { mobileShell: 'toolbox' }, component: ToolboxTask },
     { path: '/noteLibrary/:noteId', component: { render: () => h('div', [h('h2', fixtureNotes.get(String(router.currentRoute.value.params.noteId))?.title || 'Saved summary note'), h('p',fixtureNotes.get(String(router.currentRoute.value.params.noteId))?.content || ''),h(BButton,{onClick:()=>router.back()},()=> '返回项目')]) } },
     {path:'/inbox',component:{setup(){const revision=ref(0);return()=>{void revision.value;const task=fixtureTodos.get(String(router.currentRoute.value.query.todoId));return h('div',[h('p','待办目标页 · 虚构测试数据'),h('h2',task?.title),h('p',task?.status==='completed'?'已完成':'未完成'),h(BButton,{onClick:()=>{if(task)task.status='completed';hydrateFixture();revision.value++;}},()=> '完成待办'),h(BButton,{onClick:()=>router.back()},()=> '返回项目')]);};}}},
     { path: '/toolbox', name: 'toolboxHome', meta: { mobileShell: 'toolbox' }, component: ToolboxHome },
@@ -749,7 +776,7 @@ router.afterEach((_to, from) => {
   router.options.history.state.back = from.fullPath;
 });
 await router.push(
-  params.get('resultMock') === '1' ? {path: '/toolbox/task/visual-result'} : view === 'home'
+  view === 'tasks' ? { path: '/toolbox/tasks', query: params.get('filter') ? { filter: params.get('filter') } : {} } : params.get('resultMock') === '1' ? {path: '/toolbox/task/visual-result'} : view === 'home'
     ? { path: '/toolbox', query: params.get('tab') === 'catalog' ? { view: 'catalog' } : {} }
     : { path: `/toolbox/${toolId}`, query: view === 'detail' ? { workspace: 'visual-workspace' } : {} },
 );

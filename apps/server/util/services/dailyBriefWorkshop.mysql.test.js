@@ -25,6 +25,7 @@ describe.skipIf(!socketPath)('简报工坊待处理状态 SQL（隔离 MySQL）'
     await db.query(
       `CREATE TABLE toolbox_artifacts(id VARCHAR(64) PRIMARY KEY,job_id VARCHAR(64),user_id VARCHAR(64),tool_id VARCHAR(64),title VARCHAR(255),artifact_version INT DEFAULT 1,content TEXT,coverage_json JSON,status VARCHAR(32),expires_at DATETIME,create_time DATETIME)`,
     );
+    await db.query(`CREATE TABLE toolbox_job_inputs(job_id VARCHAR(64),input_index INT,input_type VARCHAR(32),resource_type VARCHAR(16),resource_id VARCHAR(64),document_source_id VARCHAR(64))`);
   });
   beforeEach(async () => {
     await db.query('DELETE FROM toolbox_artifacts');

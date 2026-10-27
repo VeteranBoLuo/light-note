@@ -61,7 +61,7 @@
     <div
       :key="homeView"
       class="workshop-view-content"
-      :class="{ 'is-overview': homeView === 'work', 'has-tasks': !isGuest && continueJobs.length > 0 }"
+      :class="{ 'is-overview': homeView === 'work', 'has-tasks': !isGuest }"
     >
       <BButton
         v-if="!isGuest && homeView === 'work' && attentionJob && !overviewLoading && !overviewFailed"
@@ -150,16 +150,29 @@
         </div>
       </section>
 
-      <section
-        v-if="!isGuest && homeView === 'work' && continueJobs.length"
-        class="toolbox-section toolbox-tasks"
-        ref="taskSection"
-      >
+      <section v-if="!isGuest && homeView === 'work'" class="toolbox-section toolbox-tasks" ref="taskSection">
         <header class="toolbox-section__head"
-          ><h2>{{ t('toolbox.presentation.tasks') }}</h2></header
+          ><h2>{{ t('toolbox.presentation.tasks') }}</h2
+          ><BButton type="text" @click="openAllTasks">{{ t('toolbox.taskList.allTasks') }}</BButton></header
         >
+        <div v-if="overviewLoading && !continueJobs.length" class="toolbox-home__state"
+          ><BLoading inline loading :title="t('common.loading')"
+        /></div>
+        <div v-else-if="!continueJobs.length" class="toolbox-home__state">{{
+          t(
+            overviewFailed
+              ? 'toolbox.home.loadFailed'
+              : overviewLoading
+                ? 'common.loading'
+                : 'toolbox.taskList.homeEmpty',
+          )
+        }}</div>
         <div class="toolbox-task-list">
-          <div v-for="job in continueJobs" :key="`task-${job.id}`" class="toolbox-task-row">
+          <div
+            v-for="job in continueJobs"
+            :key="`task-${job.extraction ? 'extraction' : 'job'}:${job.id}`"
+            class="toolbox-task-row"
+          >
             <BButton
               class="toolbox-activity-card is-task"
               :class="`is-${presentation(job.toolId).accent}`"
@@ -172,7 +185,7 @@
                 <span class="toolbox-activity-card__topline">
                   <BChip :tone="toolboxJobStatusTone(job.status)">{{ taskStateLabel(job) }}</BChip>
                 </span>
-                <strong>{{ job.extraction?.title || job.artifact?.title || toolName(job.toolId) }}</strong>
+                <strong>{{ taskTitle(job) }}</strong>
                 <span>{{ taskContinueDescription(job) }}</span>
                 <small>{{ toolName(job.toolId) }}</small>
               </span>
@@ -189,7 +202,7 @@
                 :loading="dismissingJobs.has(job.id)"
                 :aria-label="
                   t('toolbox.home.dismissTaskLabel', {
-                    title: job.extraction?.title || job.artifact?.title || toolName(job.toolId),
+                    title: taskTitle(job),
                   })
                 "
                 @click="confirmDismissTask(job)"
@@ -500,6 +513,20 @@
     TOOLBOX_PINNED_TOOL_LIMIT,
   } from '@/utils/toolboxPinnedTools';
 
+  import {
+    toolboxTaskTitle,
+    toolboxTaskStateLabel,
+    toolboxTaskReady,
+    toolboxTaskCanDismiss,
+  } from '@/utils/toolboxTaskPresentation';
+  import { notifyToolboxTaskChange } from '@/utils/toolboxTaskState';
+  function taskTitle(job: ToolboxJob) {
+    return toolboxTaskTitle(job, t, locale.value);
+  }
+  function openAllTasks() {
+    rememberHomeScroll();
+    void router.push('/toolbox/tasks');
+  }
   type CategoryFilter = 'all' | 'free' | 'points';
   type QuickView = 'common' | 'recent';
   type ToolboxHomeGroupId = (typeof TOOLBOX_HOME_GROUPS)[number]['id'];
@@ -599,29 +626,28 @@
       .slice(0, 4),
   );
   const continueJobs = computed(() => {
+    const tasks = overview.value?.tasks;
+    const attention =
+      tasks?.attention ||
+      (tasks?.recent || []).filter((job) => job.status === 'failed' || job.save.status === 'save_failed');
+    const active = tasks?.active || [],
+      ready = tasks?.ready || [];
+    // Keep a failure, an available result and an active task discoverable independently.
+    const candidates = [attention[0], ready[0], active[0], ...attention, ...ready, ...active];
     const seen = new Set<string>();
-    return [
-      ...(overview.value?.tasks?.active || []),
-      ...(overview.value?.tasks?.ready || []),
-      ...(overview.value?.tasks?.recent || []).filter(
-        (job) => job.status === 'failed' || job.save.status === 'save_failed',
-      ),
-    ]
-      .filter((job) => {
-        if (seen.has(job.id)) return false;
-        seen.add(job.id);
+    return candidates
+      .filter((job): job is ToolboxJob => {
+        if (!job) return false;
+        const key = `${job.extraction ? 'extraction' : 'job'}:${job.id}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
         return true;
       })
-      .sort((a, b) => Number(needsAttention(b)) - Number(needsAttention(a)))
       .slice(0, 3);
   });
   const dismissingJobs = ref(new Set<string>());
   function canDismissTask(job: ToolboxJob) {
-    return (
-      !job.extraction &&
-      ['succeeded', 'partial_succeeded', 'failed', 'cancelled', 'expired'].includes(job.status) &&
-      job.save.status !== 'saving'
-    );
+    return toolboxTaskCanDismiss(job);
   }
   function confirmDismissTask(job: ToolboxJob) {
     if (!canDismissTask(job) || dismissingJobs.value.has(job.id)) return;
@@ -647,7 +673,9 @@
         tasks.active = tasks.active.filter((job) => job.id !== jobId);
         tasks.ready = tasks.ready.filter((job) => job.id !== jobId);
         tasks.recent = tasks.recent.filter((job) => job.id !== jobId);
+        tasks.attention = tasks.attention?.filter((job) => job.id !== jobId);
       }
+      notifyToolboxTaskChange(user.id, jobId);
     } catch {
       if (identity === identityKey.value) message.error(t('toolbox.home.dismissTaskFailed'));
     } finally {
@@ -867,11 +895,10 @@
     return tool.executionMode === 'service' ? t('toolbox.accountFreeLabel') : t('toolbox.localFreeLabel');
   }
   function isReadyTask(job: ToolboxJob) {
-    return job.artifactState === 'ready' && ['unsaved', 'save_failed'].includes(job.save.status);
+    return toolboxTaskReady(job);
   }
   function taskStateLabel(job: ToolboxJob) {
-    if (job.extraction) return t(`extraction.statuses.${job.extraction.status}`);
-    return isReadyTask(job) ? t('toolbox.home.resultReady') : t(`toolbox.task.${job.status}`);
+    return toolboxTaskStateLabel(job, t);
   }
   function taskContinueDescription(job: ToolboxJob) {
     if (job.extraction)

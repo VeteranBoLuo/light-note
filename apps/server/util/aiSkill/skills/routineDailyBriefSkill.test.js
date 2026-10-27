@@ -200,3 +200,13 @@ it.each(['valid', 'empty', 'invalid'])('建议引用错误只修复一次，结�
   expect(requestAi.mock.calls[1][0].at(-1).content).toContain('ADVICE_QUOTE_NOT_FOUND');
   expect(requestAi.mock.calls[1][1].billingScope).toBe('platform');
 });
+
+it('admits grounded applications without requiring a defect and keeps the existing evidence/output budgets', async () => {
+  const inputData = { ...input([]), evidence: [{ key: 'material_1', title: '阅读方法', excerpt: '阅读时区分作者主张和支持主张的证据，复述时保留二者的对应关系。' }], body: [] };
+  const prepared = await routineDailyBriefSkill.prepare({ input: inputData });
+  const system = prepared.messages.filter(message => message.role === 'system').map(message => message.content).join('\n');
+  expect(system).toContain('不要求资料先暴露问题或缺陷');
+  expect(system).toContain('精确原文短引文');
+  expect(routineDailyBriefSkill.resolveModelPolicy(inputData).maxTokens).toBe(900);
+  expect(prepared.validateArguments({ insights: [], recommendation: { sourceKey: 'material_1', quote: '区分作者主张和支持主张的证据', action: '可以选用这篇资料中的主张，分别标出对应证据，再核对复述是否保持二者的关系。' } }).recommendation).not.toBeNull();
+});

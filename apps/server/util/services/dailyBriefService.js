@@ -483,6 +483,21 @@ async function loadBriefRow(database, userId, date) {
   return rows[0] || null;
 }
 
+// Dismissal is effective even with automatic generation disabled or an older stored brief.
+// This read projection never generates advice or changes billing/history.
+async function hideDismissedBriefTasks(database, userId, row) {
+  const brief = parseJson(row?.briefJson ?? row?.brief_json);
+  const ids = [...new Set((brief?.insights || []).flatMap(item => (item.sources || []).filter(source => source.type === 'toolbox_task').map(source => String(source.id))))];
+  if (!ids.length) return row;
+  const [hidden] = await database.query(
+    `SELECT id FROM toolbox_jobs WHERE user_id=? AND id IN (${ids.map(()=>'?').join(',')})
+      AND COALESCE(JSON_UNQUOTE(JSON_EXTRACT(options_json,'$.homeDismissed')),'false') IN ('true','1')`, [userId,...ids],
+  );
+  if (!hidden.length) return row;
+  const dismissed = new Set(hidden.map(item => String(item.id)));
+  return { ...row, briefJson: { ...brief, insights: brief.insights.filter(item => !(item.sources || []).some(source => source.type === 'toolbox_task' && dismissed.has(String(source.id)))) } };
+}
+
 export async function getDailyBrief(
   database = pool,
   { userId, now = new Date(), env = process.env, check = false } = {},
@@ -493,7 +508,7 @@ export async function getDailyBrief(
   const featureEnabled = isDailyBriefFeatureEnabled(env);
   if (!featureEnabled || !preference.enabled)
     return { ...rowStatus({ featureEnabled, preference, calendar, row: null }), autoUpdate: preference.autoUpdate };
-  const row = await loadBriefRow(database, userId, calendar.date);
+  const row = await hideDismissedBriefTasks(database, userId, await loadBriefRow(database, userId, calendar.date));
   const facts =
     check && (row?.status !== 'generating' || Number(row?.leaseExpired || 0))
       ? await (dependencies.compileFacts || compileFacts)(database, userId, calendar)

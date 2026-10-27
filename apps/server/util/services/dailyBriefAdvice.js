@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { load } from 'cheerio';
 
 export const ADVICE_FACT_ID = 'recommendation_evidence';
-export const ADVICE_POLICY_VERSION = 5;
+export const ADVICE_POLICY_VERSION = 6;
 export const ADVICE_CONTEXT_FACT_IDS = Object.freeze([
   'todo_overdue',
   'todo_due_today',

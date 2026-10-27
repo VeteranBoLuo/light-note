@@ -198,7 +198,24 @@ export type ToolboxQuote = {
   };
 };
 
+export type ToolboxJobInput = {
+  question: string;
+  materials: {
+    type: 'note' | 'bookmark' | 'file' | 'document_source';
+    id: string;
+    title: string;
+    available: boolean;
+    version?: string;
+  }[];
+  options: NonNullable<ToolboxInput['options']>;
+};
+export type ToolboxTaskFilter = 'all' | 'failed' | 'active' | 'paused' | 'ready' | 'finished';
 export type ToolboxJob = {
+  title?: string;
+  materialCount?: number;
+  materialTitles?: string[];
+  dismissed?: boolean;
+  input?: ToolboxJobInput;
   extraction?: { title: string; status: string; processed: number; total: number };
   sourceWorkspaceId?: string | null;
   id: string;
@@ -238,6 +255,7 @@ export type ToolboxHomeOverview = {
     active: ToolboxJob[];
     ready: ToolboxJob[];
     recent: ToolboxJob[];
+    attention?: ToolboxJob[];
   };
 };
 
@@ -515,6 +533,14 @@ export async function fetchToolboxJobs(limit = 20): Promise<ToolboxJob[]> {
   const response = await apiBaseGet('/api/toolbox/tasks', { limit }, { silent: true });
   if (response.status !== 200) throw apiFailure(response, 'TOOLBOX_TASKS_FAILED');
   return Array.isArray(response.data?.items) ? response.data.items : [];
+}
+
+export async function fetchToolboxTaskPage(
+  params: { filter?: ToolboxTaskFilter; cursor?: string; limit?: number } = {},
+): Promise<{ items: ToolboxJob[]; nextCursor: string | null }> {
+  const response = await apiBaseGet('/api/toolbox/tasks', params, { silent: true });
+  if (response.status !== 200) throw apiFailure(response, 'TOOLBOX_TASKS_FAILED');
+  return { items: response.data?.items || [], nextCursor: response.data?.nextCursor || null };
 }
 
 export async function fetchToolboxJob(jobId: string): Promise<ToolboxJob> {

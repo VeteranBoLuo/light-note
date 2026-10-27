@@ -8,7 +8,7 @@ function createRouterStub(historyBack: unknown) {
   const resolve = vi.fn((target: string) => {
     const path = target.split(/[?#]/u, 1)[0];
     const name =
-      path === '/toolbox' ? 'toolboxHome' : path === '/toolbox/translation' ? 'toolboxTranslation' : path.startsWith('/toolbox/task/') ? 'toolboxTask' : 'toolboxWorkbench';
+      path === '/toolbox' ? 'toolboxHome' : path === '/toolbox/tasks' ? 'toolboxTasks' : path === '/toolbox/translation' ? 'toolboxTranslation' : path.startsWith('/toolbox/task/') ? 'toolboxTask' : 'toolboxWorkbench';
     return {
       name,
       meta: path.startsWith('/toolbox') ? { mobileShell: 'toolbox' } : {},
@@ -245,4 +245,10 @@ describe('toolbox scroll snapshots', () => {
       }),
     ).toBe(false);
   });
+});
+
+it('任务详情返回完整任务列表，保留筛选和滚动历史', () => {
+ const { router, back }=createRouterStub('/toolbox/tasks?filter=failed');
+ expect(returnFromToolboxPage(router,'task')).toBe('back');
+ expect(back).toHaveBeenCalledOnce();
 });

@@ -1,3 +1,5 @@
+import { listToolboxTaskPage } from '../util/toolbox/taskList.js';
+import pool from '../db/index.js';
 import { reviewComparisonCell } from '../util/toolbox/comparisonReview.js';
 import { streamTranslation } from '../util/toolbox/translationStream.js';
 import { operateBoard, readBoardItem } from '../util/toolbox/board.js';
@@ -21,7 +23,6 @@ import {
   getToolboxCatalog,
   getToolboxJob,
   listToolboxHomeTasks,
-  listToolboxJobs,
   listTranslationHistory,
   deleteTranslationHistory,
   getTranslationRecord,
@@ -364,8 +365,8 @@ export async function translationRecord(req, res) {
 export async function listJobs(req, res) {
   if (!requireRead(req, res)) return;
   try {
-    const jobs = await listToolboxJobs({ userId: readUserId(req), limit: req.query?.limit });
-    return res.send(resultData({ items: jobs }));
+    const page = await listToolboxTaskPage({ userId: readUserId(req), limit: req.query?.limit, filter: req.query?.filter, cursor: req.query?.cursor, database: pool });
+    return res.send(resultData(page));
   } catch (error) {
     return sendError(res, error);
   }

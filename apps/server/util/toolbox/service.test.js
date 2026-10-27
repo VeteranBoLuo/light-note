@@ -21,6 +21,7 @@ vi.mock('../aiDocument/service.js', () => ({
 }));
 vi.mock('../personalKnowledgeSearch.js', () => ({
   resolvePersonalKnowledgeResourceVersions: mocks.resolvePersonalKnowledgeResourceVersions,
+  resolvePersonalKnowledgeResourceMetadata: mocks.resolvePersonalKnowledgeResourceVersions,
 }));
 
 const {
@@ -317,7 +318,7 @@ describe('toolbox service boundaries', () => {
 
   it('binds a quote to the authoritative input snapshot and replays the same request idempotently', async () => {
     const authoritative = { type: 'note', id: 'note-1', version: 'version-1' };
-    mocks.resolvePersonalKnowledgeResourceVersions.mockResolvedValue([authoritative]);
+    mocks.resolvePersonalKnowledgeResourceVersions.mockResolvedValue([{ ...authoritative, title: '服务端材料名称' }]);
     const database = {
       query: vi
         .fn()
@@ -344,7 +345,7 @@ describe('toolbox service boundaries', () => {
     expect(JSON.parse(inserted[7])).toEqual({
       resourceRefs: [authoritative],
       sourceIds: [],
-      options: {},
+      options: { taskMaterials: [{ type: 'note', id: 'note-1', title: '服务端材料名称' }] },
     });
 
     const replayDatabase = {
@@ -411,6 +412,7 @@ describe('toolbox service boundaries', () => {
         question: '写一篇解释个人知识库长期价值的文章，面向刚入职的产品经理',
         intent: 'article',
         detailLevel: 'detailed',
+        taskMaterials: [],
       },
     });
   });
@@ -737,7 +739,8 @@ describe('toolbox service boundaries', () => {
     expect(result.ready[0].artifact).not.toHaveProperty('content');
     expect(database.query.mock.calls[0][0]).not.toContain('job.*');
     expect(database.query.mock.calls[0][0]).not.toContain('artifact.content,');
-    expect(database.query.mock.calls[0][0].split('FROM toolbox_jobs')[0]).not.toContain('options_json');
+    expect(database.query.mock.calls[0][0]).not.toMatch(/job\.artifact_id,\s*job\.options_json/);
+    expect(database.query.mock.calls[0][0]).toContain("LEFT(JSON_UNQUOTE(JSON_EXTRACT(job.options_json,'$.question')),120)");
     expect(database.query.mock.calls[0][0]).toContain("JSON_EXTRACT(job.options_json, '$.homeDismissed')");
     expect(database.query.mock.calls[0][1]).toEqual(['user-1']);
   });

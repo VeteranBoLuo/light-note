@@ -14,8 +14,18 @@ const homeMeta = {
 } as const;
 
 const toolboxRouter: RouteRecordRaw[] = [
-  { path: '/toolbox/extraction', name: 'toolboxExtraction', meta: { ...commonMeta, title: '资料转表格' }, component: () => import('@/view/toolbox/extraction/ExtractionWorkbench.vue') },
-  { path: '/toolbox/translation', name: 'toolboxTranslation', meta: { ...commonMeta, title: '翻译' }, component: () => import('@/view/toolbox/TranslationWorkbench.vue') },
+  {
+    path: '/toolbox/extraction',
+    name: 'toolboxExtraction',
+    meta: { ...commonMeta, title: '资料转表格' },
+    component: () => import('@/view/toolbox/extraction/ExtractionWorkbench.vue'),
+  },
+  {
+    path: '/toolbox/translation',
+    name: 'toolboxTranslation',
+    meta: { ...commonMeta, title: '翻译' },
+    component: () => import('@/view/toolbox/TranslationWorkbench.vue'),
+  },
   {
     path: '/toolbox/forms/:formId?',
     name: 'collectionForms',
@@ -27,6 +37,12 @@ const toolboxRouter: RouteRecordRaw[] = [
     name: 'toolboxHome',
     meta: { ...homeMeta, title: '知识工坊' },
     component: () => import('@/view/toolbox/ToolboxHome.vue'),
+  },
+  {
+    path: '/toolbox/tasks',
+    name: 'toolboxTasks',
+    meta: { ...commonMeta, title: '任务与成果' },
+    component: () => import('@/view/toolbox/ToolboxTasks.vue'),
   },
   {
     path: '/toolbox/task/:jobId',

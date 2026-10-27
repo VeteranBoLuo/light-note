@@ -378,6 +378,8 @@
   import { useRouter } from 'vue-router';
   import type { DailyBrief, DailyBriefInsight } from '@/api/dailyBriefApi';
   import { useVisitorBrief } from '@/composables/useVisitorBrief';
+  import { toolboxTaskChange } from '@/utils/toolboxTaskState';
+  import { useUserStore } from '@/store';
   import { useDailyBrief } from '@/composables/useDailyBrief';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BChip from '@/components/base/BasicComponents/BChip.vue';
@@ -425,6 +427,10 @@
     eligible: () => props.eligible && !guestSample.value,
     ownerKey: () => props.ownerKey,
     passive: () => readOnly.value,
+  });
+  const currentUser = useUserStore();
+  watch(toolboxTaskChange, (change) => {
+    if (change?.owner === currentUser.id && !readOnly.value && !guestSample.value) void refreshAfterChange();
   });
   const readyBrief = computed<DailyBrief | null>(() => (state.value?.brief?.version === 2 ? state.value.brief : null));
   const displayBrief = computed(() => (guestSample.value ? visitorState.value?.brief : readyBrief.value));

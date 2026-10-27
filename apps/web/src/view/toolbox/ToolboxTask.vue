@@ -3,7 +3,7 @@
     <div class="toolbox-task__inner">
       <ToolboxPageHeader
         :tool-id="job?.toolId"
-        :title="isTranslation ? t('translation.title') : artifact?.title || t('toolbox.task.title')"
+        :title="isTranslation ? t('translation.title') : taskTitle"
         :category="job ? t(`toolbox.tool.${job.toolId}.name`) : undefined"
         :back-label="t('toolbox.task.backHome')"
         @back="returnToToolboxParent"
@@ -82,16 +82,96 @@
         </section>
 
         <section
-          v-if="job.error"
+          v-if="job.error || job.status === 'failed'"
           class="toolbox-task__error"
           :class="{ 'is-retrying': isRetrying }"
           :role="isRetrying ? 'status' : 'alert'"
         >
           <SvgIcon :src="job.status === 'failed' ? icon.message.error : icon.message.warning" size="19" /><div
-            ><strong>{{ isRetrying ? t('toolbox.task.retryingTitle') : t(`toolbox.task.${job.status}`) }}</strong
+            ><strong>{{
+              isRetrying
+                ? t('toolbox.task.retryingTitle')
+                : job.status === 'failed'
+                  ? t('toolbox.taskContext.failedTitle')
+                  : t(`toolbox.task.${job.status}`)
+            }}</strong
             ><span>{{ visibleErrorMessage }}</span></div
           >
+          <div v-if="job.status === 'failed' && !user.adminContext" class="toolbox-task__recovery">
+            <BButton type="primary" @click="retryTask">{{ t('toolbox.taskContext.restart') }}</BButton>
+            <BButton v-if="canDismiss" type="text" :loading="dismissing" @click="confirmDismiss">{{
+              t('toolbox.home.dismissTask')
+            }}</BButton>
+          </div>
         </section>
+
+        <section
+          v-if="!isTranslation && (job.status === 'failed' || job.save.status === 'save_failed')"
+          class="toolbox-task__context"
+        >
+          <div class="toolbox-task__context-heading"
+            ><h2>{{ t('toolbox.taskContext.title') }}</h2
+            ><small>{{ t('toolbox.taskContext.created', { time: formatDate(job.createdAt) }) }}</small></div
+          >
+          <div class="toolbox-task__context-field"
+            ><span>{{ t('toolbox.taskContext.question') }}</span
+            ><p>{{ job.input?.question || t('toolbox.taskContext.noQuestion') }}</p></div
+          >
+          <div class="toolbox-task__context-field"
+            ><span>{{ t('toolbox.taskContext.materials') }}</span>
+            <div
+              v-for="material in inputMaterials"
+              :key="`${material.type}:${material.id}`"
+              class="toolbox-task__input-material"
+            >
+              <SvgIcon :src="resourceIcon(material.type === 'document_source' ? 'file' : material.type)" size="18" />
+              <strong>{{ material.title || t('toolbox.taskContext.unknownMaterial') }}</strong>
+              <BButton v-if="materialTarget(material)" type="text" @click="router.push(materialTarget(material)!)">{{
+                t('toolbox.taskContext.openMaterial')
+              }}</BButton>
+              <small v-else>{{
+                t(material.available ? 'toolbox.taskContext.uploadedMaterial' : 'toolbox.taskContext.unavailable')
+              }}</small>
+            </div>
+            <p v-if="!inputMaterials.length">{{ t('toolbox.taskContext.noMaterials') }}</p>
+          </div>
+          <div class="toolbox-task__context-field"
+            ><span>{{ t('toolbox.task.billingTab') }}</span>
+            <p
+              >{{
+                t(
+                  job.billing.medium === 'ai_quota'
+                    ? 'toolbox.taskContext.aiQuota'
+                    : job.billing.medium === 'free'
+                      ? 'toolbox.free'
+                      : 'toolbox.pointsLabel',
+                )
+              }}
+              ·
+              {{
+                t(
+                  `toolbox.taskContext.billingStates.${['quoted', 'reserved', 'settled', 'partially_settled', 'released', 'refunded', 'free'].includes(job.billing.status) ? job.billing.status : 'unknown'}`,
+                )
+              }}</p
+            >
+            <small v-if="job.billing.medium === 'points'">{{
+              t('toolbox.taskContext.pointReceipt', {
+                actual: job.billing.actualPoints,
+                refunded: job.billing.refundedPoints,
+              })
+            }}</small>
+          </div>
+        </section>
+        <div v-if="!isTranslation" class="toolbox-task__context-links"
+          ><BButton type="text" @click="router.push('/toolbox/tasks')">{{ t('toolbox.taskList.allTasks') }}</BButton
+          ><BButton
+            v-if="canDismiss && job.status !== 'failed'"
+            type="text"
+            :loading="dismissing"
+            @click="confirmDismiss"
+            >{{ t('toolbox.home.dismissTask') }}</BButton
+          ></div
+        >
 
         <template v-if="artifact && isTranslation">
           <div class="translation-task-source"
@@ -337,7 +417,7 @@
         </template>
 
         <div
-          v-else-if="isTerminal"
+          v-else-if="isTerminal && job.status !== 'failed'"
           class="toolbox-task__state"
           :class="{ 'is-error': artifactLoadFailed }"
           :role="artifactLoadFailed ? 'alert' : 'status'"
@@ -391,6 +471,7 @@
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import {
     cancelToolboxJob,
+    dismissToolboxJob,
     fetchToolboxArtifact,
     fetchToolboxJob,
     fetchToolboxWorkspaces,
@@ -426,6 +507,8 @@
     toolboxSourceWarningKinds,
   } from '@/utils/toolboxArtifactPresentation';
 
+  import { toolboxTaskTitle, toolboxTaskCanDismiss } from '@/utils/toolboxTaskPresentation';
+  import { notifyToolboxTaskChange } from '@/utils/toolboxTaskState';
   const { t, locale } = useI18n();
   const route = useRoute();
   const router = useRouter();
@@ -513,6 +596,52 @@
   const POLL_DELAY_MS = 1800;
   const MAX_POLL_RETRY_DELAY_MS = 15_000;
   const jobId = computed(() => String(route.params.jobId || ''));
+  const taskTitle = computed(
+    () => artifact.value?.title || (job.value ? toolboxTaskTitle(job.value, t, locale.value) : t('toolbox.task.title')),
+  );
+  const dismissing = ref(false);
+  const canDismiss = computed(() => Boolean(job.value && !user.adminContext && toolboxTaskCanDismiss(job.value)));
+  const inputMaterials = computed(() => job.value?.input?.materials || []);
+  function materialTarget(material: (typeof inputMaterials.value)[number]) {
+    return material.available && material.type !== 'document_source'
+      ? resolveResourceRoute(
+          { type: material.type, id: material.id, title: material.title },
+          { noteReturnPath: route.fullPath },
+        )
+      : null;
+  }
+  function retryTask() {
+    if (!job.value || user.adminContext) return;
+    rememberTaskScroll();
+    void router.push({ path: `/toolbox/${encodeURIComponent(job.value.toolId)}`, query: { retryJob: job.value.id } });
+  }
+  function confirmDismiss() {
+    const current = job.value,
+      owner = toolboxRecentUseIdentityKey(user);
+    if (!current || !canDismiss.value || dismissing.value) return;
+    Alert.alert({
+      title: t('toolbox.home.dismissTask'),
+      content: t('toolbox.home.dismissTaskHint'),
+      okText: t('toolbox.home.dismissTask'),
+      cancelText: t('common.cancel'),
+      onOk: async () => {
+        if (owner !== toolboxRecentUseIdentityKey(user) || current.id !== job.value?.id || dismissing.value) return;
+        dismissing.value = true;
+        try {
+          await dismissToolboxJob(current.id);
+          if (owner !== toolboxRecentUseIdentityKey(user)) return;
+          notifyToolboxTaskChange(user.id, current.id);
+          const back = router.options.history.state.back;
+          if (typeof back === 'string' && router.resolve(back).name === 'toolboxTasks') router.back();
+          else await router.replace('/toolbox/tasks');
+        } catch {
+          if (owner === toolboxRecentUseIdentityKey(user)) message.error(t('toolbox.home.dismissTaskFailed'));
+        } finally {
+          if (owner === toolboxRecentUseIdentityKey(user)) dismissing.value = false;
+        }
+      },
+    });
+  }
   const isTerminal = computed(() =>
     Boolean(
       job.value && ['succeeded', 'partial_succeeded', 'failed', 'cancelled', 'expired'].includes(job.value.status),
@@ -520,11 +649,9 @@
   );
   const isRetrying = computed(() => job.value?.status === 'queued' && job.value?.stage === 'retrying');
   const usesAiQuota = computed(() => job.value?.billing.medium === 'ai_quota');
-  const visibleErrorMessage = computed(() => {
-    const key = toolboxErrorMessageKey(job.value?.error, 'toolbox.task.processingFailed');
-    if (key !== 'toolbox.task.processingFailed') return t(key);
-    return job.value?.status === 'failed' ? t('toolbox.task.finalFailureMessage') : t('toolbox.task.processingFailed');
-  });
+  const visibleErrorMessage = computed(() =>
+    t(toolboxErrorMessageKey(job.value?.error, 'toolbox.task.processingFailed')),
+  );
   const showProgress = computed(() => ['queued', 'processing'].includes(job.value?.status || ''));
   const translationLanguages = computed(() => {
     const data = artifact.value?.meta?.translation;
@@ -709,7 +836,7 @@
   }
 
   useMobileTopBar(['toolboxTask'], {
-    title: () => (isTranslation.value ? t('translation.title') : artifact.value?.title || t('toolbox.task.title')),
+    title: () => (isTranslation.value ? t('translation.title') : taskTitle.value),
     onBack: returnToToolboxParent,
     searchMode: 'icon',
     showNotification: false,
@@ -914,7 +1041,9 @@
   }
 
   useForegroundRefresh({
-    refresh: () => loadJob(true), trailingWake: true, staleMs: 1000,
+    refresh: () => loadJob(true),
+    trailingWake: true,
+    staleMs: 1000,
     canRefresh: () => Boolean(job.value) && !isTerminal.value,
   });
   function handleVisibilityChange() {
@@ -940,6 +1069,7 @@
     pendingProjectLink.value = null;
     sourceProjectAvailable.value = false;
     linkingProject.value = false;
+    dismissing.value = false;
     saving.value = false;
     activeTab.value = 'output';
     translationMode.value = 'translationOnly';
@@ -974,6 +1104,84 @@
 </script>
 
 <style scoped lang="less">
+  .toolbox-task__recovery,
+  .toolbox-task__context-links {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--ui-space-16, 16px);
+    margin: var(--ui-space-12, 12px) 0;
+  }
+  .toolbox-task__error .toolbox-task__recovery {
+    display: flex;
+    flex-direction: row;
+    margin: 0 0 0 auto;
+    flex-shrink: 0;
+    gap: var(--ui-space-16, 16px);
+  }
+  @media (max-width: 767px) {
+    .toolbox-task__error {
+      flex-wrap: wrap;
+    }
+    .toolbox-task__error .toolbox-task__recovery {
+      flex-basis: 100%;
+      margin: 0;
+      padding-left: var(--ui-space-28, 28px);
+      min-width: 0;
+    }
+  }
+  .toolbox-task__context {
+    margin: var(--ui-space-16, 16px) 0;
+    padding: var(--ui-space-20, 20px);
+    border: 1px solid var(--workspace-border);
+    background: var(--workspace-content);
+    border-radius: 14px;
+  }
+  .toolbox-task__context-heading {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--ui-space-8, 8px);
+  }
+  .toolbox-task__context h2 {
+    margin: 0;
+    font-size: var(--ui-font-16, 16px);
+  }
+  .toolbox-task__context small,
+  .toolbox-task__context-field > span {
+    color: var(--desc-color);
+    font-size: var(--ui-font-12, 12px);
+  }
+  .toolbox-task__context-field {
+    padding-top: var(--ui-space-16, 16px);
+    margin-top: var(--ui-space-16, 16px);
+    border-top: 1px solid var(--workspace-divider);
+  }
+  .toolbox-task__context-field p {
+    margin: var(--ui-space-8, 8px) 0 0;
+    color: var(--text-secondary);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+  .toolbox-task__input-material {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--ui-space-10, 10px);
+    margin-top: var(--ui-space-8, 8px);
+    padding: var(--ui-space-10, 10px) var(--ui-space-12, 12px);
+    border: 1px solid var(--workspace-border);
+    border-radius: 8px;
+  }
+  .toolbox-task__input-material strong {
+    flex: 1;
+    min-width: 0;
+    overflow-wrap: anywhere;
+    font-size: var(--ui-font-14, 14px);
+    font-weight: 500;
+  }
+
   .toolbox-source-link {
     width: 100%;
     height: auto;

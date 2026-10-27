@@ -6,6 +6,7 @@ import { validateDailyBriefInput } from '../aiSkill/skills/routineDailyBriefSkil
 
 function fixture() {
   const rows = new Map();
+  const dismissed = new Set();
   const preferences = { lang: 'zh-CN', timezone: 'Asia/Shanghai', dailyBrief: true, dailyBriefAutoUpdate: true };
   let facts = DAILY_BRIEF_FACT_DEFINITIONS.map(([id, label, , route]) => ({
     id,
@@ -26,6 +27,7 @@ function fixture() {
   const options = () => ({ userId: 'user-1', req: {}, now });
   const database = {
     query: vi.fn(async (sql, params) => {
+      if (sql.includes('SELECT id FROM toolbox_jobs')) return [params.slice(1).filter(id => dismissed.has(id)).map(id => ({id}))];
       if (sql.startsWith('SELECT preferences')) return [[{ preferences }]];
       if (sql.includes('brief_date < ?')) {
         const priorDate = [...rows.keys()]
@@ -89,6 +91,7 @@ function fixture() {
   const deps = { compileFacts, executeAiSkill, withActiveUserAiDispatch };
   return {
     database,
+    dismissed,
     deps,
     rows,
     addResult: () => {
@@ -616,4 +619,19 @@ it.each([false, true])('旧等待记录自动恢复，无需手动刷新，Provi
   f.advance(11 * 60000);
   await f.ensure();
   expect(f.executeAiSkill).toHaveBeenCalledTimes(2);
+});
+
+it('移除提醒后过滤已生成简报，即使自动更新关闭也不调用模型或写缓存', async () => {
+  const f = fixture();
+  f.change('workshop_attention', { count: 1, samples: ['工坊任务处理失败：旧任务'], sources: [{type:'toolbox_task',id:'old-failure',title:'旧任务'}], revision:'failed' });
+  const generated = await f.ensure();
+  expect(generated.brief.insights.some(item => item.id==='workshop_attention')).toBe(true);
+  const stored = f.rows.get('2026-09-05').briefJson;
+  f.preferences.dailyBriefAutoUpdate = false; f.dismissed.add('old-failure');
+  f.database.query.mockClear();
+  const response = await f.get();
+  expect(response.brief.insights.some(item => item.id==='workshop_attention')).toBe(false);
+  expect(f.executeAiSkill).not.toHaveBeenCalled();
+  expect(f.rows.get('2026-09-05').briefJson).toBe(stored);
+  expect(f.database.query.mock.calls.every(([sql]) => !/INSERT|UPDATE /u.test(sql))).toBe(true);
 });

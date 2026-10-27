@@ -1,3 +1,4 @@
+import { taskVisibleSql, taskIdentity, hydrateTaskIdentities } from '../toolbox/taskIdentity.js';
 import { createHash } from 'node:crypto';
 import { boardTodoJoin, boardOpenSql, boardDueSql } from '../toolbox/itemDetails.js';
 
@@ -28,7 +29,7 @@ export async function compileWorkshopBriefFacts(database, userId, calendar, { pr
     `SELECT a.id, a.job_id, a.title, a.artifact_version, LEFT(a.content, 3000) AS content, a.coverage_json
     FROM toolbox_artifacts a JOIN toolbox_jobs j ON j.id = a.job_id AND j.user_id = a.user_id
     WHERE a.user_id = ? AND a.status = 'ready' AND a.expires_at > NOW() AND j.save_status = 'unsaved'
-      AND j.status IN ('succeeded','partial_succeeded')
+      AND j.status IN ('succeeded','partial_succeeded') AND ${taskVisibleSql('j')}
       AND a.tool_id IN ('material_to_note','research_brief','source_comparison','study_kit','concept_map')
     ORDER BY a.create_time DESC LIMIT 5`,
     [userId],
@@ -70,7 +71,7 @@ export async function compileWorkshopBriefFacts(database, userId, calendar, { pr
     ],
   );
   const [attention] = await database.query(
-    `SELECT j.id,j.status,j.save_status,j.updated_at,
+    `SELECT j.id,j.tool_id,j.status,j.save_status,j.updated_at,j.options_json,
       COALESCE(a.title,JSON_UNQUOTE(JSON_EXTRACT(j.options_json,'$.title')),'') AS title
     FROM toolbox_jobs j LEFT JOIN toolbox_artifacts a ON a.id=j.artifact_id AND a.user_id=j.user_id
     WHERE j.user_id=? AND j.tool_id<>'translation'
@@ -147,8 +148,10 @@ export async function compileWorkshopBriefFacts(database, userId, calendar, { pr
         : '',
     };
   });
-  const failed = attention[0];
-  const title = clean(failed?.title).slice(0, 80);
+  const failed = (await hydrateTaskIdentities(database,userId,attention))[0];
+  const identity = failed ? taskIdentity(failed) : null;
+  const fallback = calendar.locale === 'en-US' ? 'Workshop task' : ({ material_to_note: '资料转笔记', research_brief: '研究简报', source_comparison: '多资料对照', study_kit: '学习套件', concept_map: '概念图谱', idea_to_draft: '灵感成稿', ocr_to_text: '文字识别' }[failed?.tool_id] || '工坊任务');
+  const title = clean(identity?.title || (failed ? `${fallback} · ${String(failed.updated_at instanceof Date ? failed.updated_at.toISOString() : failed.updated_at || '').slice(0,10)}` : '')).slice(0,80);
   const reason = failed
     ? calendar.locale === 'en-US'
       ? failed.save_status === 'save_failed'

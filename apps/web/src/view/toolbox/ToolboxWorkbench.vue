@@ -26,7 +26,7 @@
         </template>
       </ToolboxPageHeader>
 
-      <div v-if="loading" class="toolbox-workbench__state"
+      <div v-if="loading || restoringInput" class="toolbox-workbench__state"
         ><BLoading inline loading :title="t('common.loading')"
       /></div>
       <div v-else-if="!tool" class="toolbox-workbench__state is-error" role="alert">
@@ -41,6 +41,10 @@
       </div>
 
       <template v-else>
+        <div v-if="restoreMessage" class="toolbox-workbench__restore" role="status"
+          >{{ restoreMessage
+          }}<BButton v-if="restoreFailed" type="text" @click="restoreInput">{{ t('common.retry') }}</BButton></div
+        >
         <section v-if="tool.executionMode === 'browser' && localToolComponent" class="toolbox-workbench__surface">
           <component :is="localToolComponent" :tool-id="routeToolId" />
         </section>
@@ -150,11 +154,23 @@
                     :expand-note-branches="tool.id !== 'ocr_to_text'"
                     :file-extensions="tool.id === 'ocr_to_text' ? [...TOOLBOX_OCR_FILE_EXTENSIONS] : undefined"
                     :max="tool.input.maxItems"
-                    :external-count="uploadFiles.length"
+                    :external-count="uploadFiles.length + restoredSources.length"
                     :disabled="quoting || uploading"
                     :page-scroll="false"
                   />
 
+                  <div v-if="restoredSources.length" class="toolbox-upload-list">
+                    <article v-for="source in restoredSources" :key="source.id"
+                      ><span class="toolbox-upload-list__copy"
+                        ><strong>{{ source.title }}</strong
+                        ><small>{{ t('toolbox.taskContext.uploadedMaterial') }}</small></span
+                      ><BButton
+                        :disabled="quoting || uploading"
+                        :aria-label="t('toolbox.workbench.removeFile')"
+                        @click="restoredSources = restoredSources.filter((item) => item.id !== source.id)"
+                        ><SvgIcon :src="icon.toolbox.delete" size="15" /></BButton
+                    ></article>
+                  </div>
                   <div v-if="tool.id === 'ocr_to_text'" class="toolbox-upload-panel">
                     <div class="toolbox-upload-panel__head">
                       <div
@@ -541,6 +557,9 @@
     createFreeOcrJob,
     createToolboxQuote,
     fetchToolboxCatalog,
+    fetchToolboxJob,
+    fetchToolboxWorkspaces,
+    dismissToolboxJob,
     inferToolboxDocumentMime,
     uploadToolboxDocument,
     type ToolboxCatalogItem,
@@ -561,6 +580,7 @@
     returnFromToolboxPage,
     saveToolboxScrollSnapshot,
   } from '@/utils/toolboxNavigation';
+  import { notifyToolboxTaskChange } from '@/utils/toolboxTaskState';
   import { toolboxErrorMessageKey } from '@/utils/toolboxErrorPresentation';
   import { recordToolboxRecentUse, toolboxRecentUseIdentityKey } from '@/utils/toolboxRecentUse';
   import type { ToolboxSelectedResource } from '@/utils/toolboxResourceSelection';
@@ -600,6 +620,11 @@
   const selectedResources = ref<ToolboxSelectedResource[]>([]);
   const uploadFiles = ref<UploadEntry[]>([]);
   const question = ref('');
+  const restoredSources = ref<{ id: string; title: string }[]>([]);
+  const restoringInput = ref(false),
+    restoreFailed = ref(false),
+    restoreMessage = ref('');
+  const retrySourceWorkspace = ref<string | undefined>();
   const comparisonMode = ref<'report' | 'table'>('report');
   const comparisonColumns = ref<ComparisonColumn[]>([]);
   const comparisonSetup = ref<InstanceType<typeof ComparisonTableSetup> | null>(null);
@@ -642,7 +667,9 @@
   const allowedTypes = computed<ResourcePickerType[]>(
     () => [...(tool.value?.input.resourceTypes || [])] as ResourcePickerType[],
   );
-  const selectedCount = computed(() => selectedResources.value.length + uploadFiles.value.length);
+  const selectedCount = computed(
+    () => selectedResources.value.length + uploadFiles.value.length + restoredSources.value.length,
+  );
   const isPromptTool = computed(() => tool.value?.input.kind === 'prompt');
   const resourceWorkspaceActive = computed(
     () =>
@@ -836,6 +863,11 @@
     stateVersion += 1;
     selectedResources.value = [];
     uploadFiles.value = [];
+    restoredSources.value = [];
+    restoringInput.value = false;
+    restoreFailed.value = false;
+    restoreMessage.value = '';
+    retrySourceWorkspace.value = undefined;
     question.value = '';
     comparisonMode.value = 'report';
     comparisonColumns.value = [];
@@ -885,7 +917,8 @@
   function addUploadFiles(value: File[]) {
     if (!tool.value || quoting.value || uploading.value) return;
     const files = Array.isArray(value) ? value : [];
-    const total = selectedResources.value.length + uploadFiles.value.length + files.length;
+    const total =
+      selectedResources.value.length + uploadFiles.value.length + restoredSources.value.length + files.length;
     if (total > tool.value.input.maxItems) {
       message.warning(t('toolbox.workbench.validationMax', { max: tool.value.input.maxItems }));
       return;
@@ -928,9 +961,22 @@
           throw error;
         }
       }
-      return entries.map((entry) => entry.sourceId).filter(Boolean) as string[];
+      return [
+        ...restoredSources.value.map((source) => source.id),
+        ...entries.map((entry) => entry.sourceId).filter(Boolean),
+      ] as string[];
     } finally {
       if (version === stateVersion) uploading.value = false;
+    }
+  }
+  async function dismissRestartedTask(version: number) {
+    const previousId = String(route.query.retryJob || '');
+    if (!previousId || restoreFailed.value || version !== stateVersion) return;
+    try {
+      await dismissToolboxJob(previousId);
+      if (version === stateVersion) notifyToolboxTaskChange(user.id, previousId);
+    } catch {
+      if (version === stateVersion) message.warning(t('toolbox.taskContext.restartDismissFailed'));
     }
   }
   let freeOcrRequest: { key: string; id: string } | null = null;
@@ -965,6 +1011,8 @@
           input,
         });
         if (version === stateVersion) {
+          await dismissRestartedTask(version);
+          if (version !== stateVersion) return;
           rememberWorkbenchScroll();
           await router.push(`/toolbox/task/${job.id}`);
         }
@@ -1021,10 +1069,16 @@
       const job = await createToolboxJob({
         quoteId: activeQuote.id,
         clientRequestId: createToolboxClientRequestId('job'),
+        ...(retrySourceWorkspace.value ? { sourceWorkspaceId: retrySourceWorkspace.value } : {}),
       });
       if (version !== stateVersion) return;
-      await loadGrowth(true);
-      if (activeQuote.billingMedium === 'ai_quota') await loadAiQuota({ force: true });
+      await dismissRestartedTask(version);
+      if (version !== stateVersion) return;
+      await Promise.allSettled([
+        loadGrowth(true),
+        ...(activeQuote.billingMedium === 'ai_quota' ? [loadAiQuota({ force: true })] : []),
+      ]);
+      if (version !== stateVersion) return;
       rememberWorkbenchScroll();
       await router.push(`/toolbox/task/${job.id}`);
     } catch (error: any) {
@@ -1046,14 +1100,74 @@
     await nextTick();
     window.requestAnimationFrame(() => pageRef.value?.scrollTo({ top: 0, left: 0, behavior: 'auto' }));
   }
-  watch(toolId, () => {
+  async function restoreInput() {
+    const retryId = String(route.query.retryJob || '');
+    if (!retryId || !tool.value || user.adminContext) return;
+    const version = stateVersion,
+      owner = toolboxRecentUseIdentityKey(user);
+    restoringInput.value = true;
+    restoreFailed.value = false;
+    try {
+      const previous = await fetchToolboxJob(retryId);
+      if (version !== stateVersion || owner !== toolboxRecentUseIdentityKey(user)) return;
+      if (previous.toolId !== toolId.value || previous.status !== 'failed') throw new Error('Cannot restore task');
+      const input = previous.input;
+      question.value = input?.question || '';
+      selectedResources.value = (input?.materials || [])
+        .filter((item) => item.available && ['note', 'bookmark', 'file'].includes(item.type))
+        .map((item) => ({
+          type: item.type as ResourcePickerType,
+          id: item.id,
+          title: item.title || t('toolbox.taskContext.unknownMaterial'),
+        }));
+      restoredSources.value = (input?.materials || [])
+        .filter((item) => item.type === 'document_source' && item.available)
+        .map((item) => ({ id: item.id, title: item.title }));
+      const options = input?.options;
+      if (options?.detailLevel) detailLevel.value = options.detailLevel;
+      if (options?.intent && workflow.value?.intents.includes(options.intent as never))
+        selectedIntent.value = options.intent;
+      if (options?.resultMode === 'table' && options.columns) {
+        comparisonMode.value = 'table';
+        comparisonColumns.value = normalizeComparisonColumns(options.columns);
+      }
+      if (options?.recognitionMode === 'basic') ocrMode.value = 'basic';
+      if (previous.billing.medium !== 'free' && tool.value?.billingMedia.includes(previous.billing.medium))
+        selectedBillingMedium.value = previous.billing.medium;
+      if (previous.sourceWorkspaceId) {
+        const projects = await fetchToolboxWorkspaces().catch(() => []);
+        if (version !== stateVersion || owner !== toolboxRecentUseIdentityKey(user)) return;
+        retrySourceWorkspace.value = projects.some(
+          (project) => project.id === previous.sourceWorkspaceId && ['active', 'paused'].includes(project.status),
+        )
+          ? previous.sourceWorkspaceId
+          : undefined;
+      }
+      restoreMessage.value = t(
+        (input?.materials || []).some((item) => !item.available) || !input
+          ? 'toolbox.taskContext.restorePartial'
+          : 'toolbox.taskContext.restored',
+      );
+      quote.value = null;
+    } catch {
+      if (version === stateVersion) {
+        restoreFailed.value = true;
+        restoreMessage.value = t('toolbox.taskContext.restoreFailed');
+      }
+    } finally {
+      if (version === stateVersion) restoringInput.value = false;
+    }
+  }
+  watch([toolId, () => route.query.retryJob, () => toolboxRecentUseIdentityKey(user)], async () => {
     resetInput();
     void resetPageScroll();
-    void loadTool();
+    await loadTool();
+    await restoreInput();
   });
   watch(
     [
       selectedResources,
+      restoredSources,
       question,
       detailLevel,
       selectedIntent,
@@ -1068,6 +1182,7 @@
   );
   async function initializeWorkbench() {
     await Promise.all([loadTool(), user.role === 'visitor' ? Promise.resolve() : loadGrowth()]);
+    await restoreInput();
     await nextTick();
     window.requestAnimationFrame(() => {
       const restored = restoreToolboxScrollSnapshot({
@@ -1097,6 +1212,15 @@
 </script>
 
 <style scoped lang="less">
+  .toolbox-workbench__restore {
+    margin: var(--ui-space-12, 12px) 0;
+    color: var(--text-secondary);
+    font-size: var(--ui-font-13, 13px);
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--ui-space-12, 12px);
+  }
   .toolbox-ocr-mode-options {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
