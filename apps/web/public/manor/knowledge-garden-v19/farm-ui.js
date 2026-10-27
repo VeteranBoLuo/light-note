@@ -94,9 +94,8 @@ const FarmUI = (() => {
     return `matrix3d(${[a, d, 0, g, b, e, 0, h, 0, 0, 1, 0, c, f, 0, i].map((v) => +v.toFixed(8)).join(",")})`;
   }
   function coverQuad(p) {
-    // PC has a separately measured timber lip; mobile retains its calibrated crop plane.
-    if (p.cover) return p.cover;
-    return p.soil;
+    // Match the same measured inner timber corners as soil; old crop anchors overhang the frame.
+    return p.soilOpening || p.cover || p.soil;
   }
 
   // ---------- 场景 ----------
@@ -523,7 +522,7 @@ const FarmUI = (() => {
     join("");
     showDialog(
       `${c.name} · 第 ${i + 1} 块地`,
-      `${TIER_TEXT[c.tier]} · ${TYPE_TEXT[c.type]}${c.type === "multi" ? ` · 已收 ${p.done} / ${c.harvests} 次` : c.type === "flower" && c.harvests > 1 ? ` · 已剪 ${p.done} / ${c.harvests} 束` : ""}`,
+      `${TIER_TEXT[c.tier]} · ${c.typeLabel || TYPE_TEXT[c.type]}${c.type === "multi" ? ` · 已收 ${p.done} / ${c.harvests} 次` : c.type === "flower" && c.harvests > 1 ? ` · 已剪 ${p.done} / ${c.harvests} 束` : ""}`,
       `<div class="plot-card"><div class="plot-overview"><div class="plot-card-art">${FarmArt.cropPreview(p.crop, M.growthStage(state, i))}</div><div class="plot-status"><small>当前状态</small><strong data-card-clock="${i}">${st === "growing" ? clockTime(M.remaining(state, i)) + " 后成熟" : st === "bloom" ? "盛开中" : "已成熟"}</strong><p>本轮已加速 <b>${p.accel ? shortDuration(p.accel) : "0"}</b> / ${shortDuration(cap)}</p></div></div>${growthStepsHTML(i)}${p.pollinated ? `<p class="plot-pollination-note">${FarmFacilities.beeArt()}${p.pollinationPending ? "已授粉 · 下一轮多收 1 份" : "这株已授过粉"}</p>` : ""}${st === "growing" ? `<div class="plot-section-head"><h3>施肥加速</h3><span>点选肥料，立即用于这块地</span></div><div class="fert-row">${ferts}</div>` : ""}<p class="plot-care-note">${st === "bloom" ? c.sell === null ? "月光兰会一直开着，留作庄园里的稀有风景。" : "花会继续盛开，想换种时可以铲除。" : "每轮最多加速一半时长 · 成熟后不会枯萎"}</p></div>`,
       `<button class="button" data-action="plot-remove" data-plot="${i}">铲除</button><button class="button primary" data-action="close">回到庄园</button>`
     );
@@ -790,8 +789,8 @@ const FarmUI = (() => {
   }
   function tradeContent() {
     const history = M.buybackEntries(state);
-    const row = (r) => `<article class="buyback-row"><div class="buyback-art">${fishArt(r.fish.kind)}</div><div><strong>${FISH[r.fish.kind].name}</strong><small data-buyback-expiry="${r.soldAt + R.buybackHours}">剩余 ${clockTime(Math.max(0, r.soldAt + R.buybackHours - state.now))}</small></div><button class="tile-btn" data-action="shop-buyback" data-sale="${r.id}" ${state.wallet < r.points ? "disabled" : ""}>赎回 · ${r.points} 积分</button></article>`;
-    if (shopMode === "buyback") return `<p class="trade-note">支持赎回的物品在出售后保留 ${R.buybackHours} 小时，过期离柜。原卖出价赎回 · 最多保留最近 ${R.buybackLimit} 笔。</p><div class="buyback-list">${history.map(row).join("") || `<div class="farm-empty buyback-empty">${FarmArt.ui("receipt")}<strong>暂时没有可赎回的物品</strong><p>支持赎回的物品售出后，会在这里暂存。</p></div>`}</div>`;
+    const row = (r) => `<article class="buyback-row"><div class="buyback-art">${fishArt(r.fish.kind)}</div><div><strong>${FISH[r.fish.kind].name}</strong><small data-buyback-expiry="${r.soldAt + R.buybackHours}">剩余 ${clockTime(Math.max(0, r.soldAt + R.buybackHours - state.now))}</small></div><button class="tile-btn" data-action="shop-buyback" data-sale="${r.id}" data-quote="${M.buybackCost(r)}" ${state.wallet < M.buybackCost(r) ? "disabled" : ""}>赎回 · ${M.buybackCost(r)} 积分</button></article>`;
+    if (shopMode === "buyback") return `<p class="trade-note">支持赎回的物品在出售后保留 ${R.buybackHours} 小时，过期离柜。新售出水族赎回加收 ${R.buybackFeePercent}%（向上取整，至少 1 积分），已有记录按原报价 · 最多保留最近 ${R.buybackLimit} 笔。</p><div class="buyback-list">${history.map(row).join("") || `<div class="farm-empty buyback-empty">${FarmArt.ui("receipt")}<strong>暂时没有可赎回的物品</strong><p>支持赎回的物品售出后，会在这里暂存。</p></div>`}</div>`;
     const tabs = `<div class="fish-tabs shop-tabs" aria-label="出售分类">${[["crops", "收获物"], ["fish", "待养水族"]].map(([key, name]) => `<button data-action="shop-sell-tab" data-tab="${key}" class="${shopSellTab === key ? "active" : ""}" aria-pressed="${shopSellTab === key}">${name}</button>`).join("")}</div>`;
     let cards = "";
     if (shopSellTab === "crops") cards = Object.entries(state.crops).filter(([key, n]) => n > 0 && C(key)?.sell != null).map(([key, n]) => `<article class="market-card trade-card"><div class="trade-art">${FarmArt.icon(key)}</div><header><h3>${C(key).name}</h3><span class="market-type">× ${n}</span></header><div class="market-price"><small>出售价格</small><strong>${C(key).sell}</strong><span>积分 / 份</span></div><button class="tile-btn primary" data-action="shop-sell-crop" data-crop="${key}" aria-label="出售${C(key).name}">出售</button></article>`).join("");else
@@ -900,7 +899,7 @@ const FarmUI = (() => {
       d = state.cropDex[k];
     showDialog(
       d ? c.name : "尚未收获",
-      d ? `${TIER_TEXT[c.tier]} · ${TYPE_TEXT[c.type]} · 第 ${d.first} 天第一次收获，共 ${d.count} 次` : c.tier === "rare" ? `获取途径：${RARE_SOURCE[k]}` : `商店有售 · 庄园 Lv.${c.unlock} 解锁`,
+      d ? `${TIER_TEXT[c.tier]} · ${c.typeLabel || TYPE_TEXT[c.type]} · 第 ${d.first} 天第一次收获，共 ${d.count} 次` : c.tier === "rare" ? `获取途径：${RARE_SOURCE[k]}` : `商店有售 · 庄园 Lv.${c.unlock} 解锁`,
       `<div class="fish-detail-art crop-detail-art ${d ? "" : "silhouette"}">${FarmArt.cropCard(k, 4)}</div>${d ? `<div class="detail-grid"><div><small>成熟时间</small><strong>${cycleText(c.first)}</strong></div><div><small>卖出</small><strong>${c.sell === null ? "不可出售" : `${c.sell} 积分 / 份`}</strong></div><div><small>收获经验</small><strong>${c.xp}</strong></div><div><small>种子</small><strong>${c.price === null ? "不可购买" : `${c.price} 积分`}</strong></div></div>${c.fertilizer ? `<div class="info-box">首次 ${cycleText(c.first)}，之后每 ${cycleText(c.every)} 可剪一轮，共 ${c.harvests} 轮。每轮收 1 束${c.name}，另得 1 份${M.FERT[c.fertilizer].name}（缩短 ${shortDuration(M.FERT[c.fertilizer].hours)}）。剪完仍可留在田里观赏。</div>` : ""}` : ""}`,
       `${state.seeds[k] ? `<button class="button primary" data-action="seed-select" data-seed="${k}">去播种</button>` : c.price !== null ? `<button class="button primary" data-action="shop-tab" data-tab="seeds">去商店</button>` : `<button class="button primary" data-action="level">查看成长奖励</button>`}`, false, "", "atlas"
     );
@@ -989,7 +988,7 @@ const FarmUI = (() => {
       case "shop-sell-crop":
         saleDialog(b.dataset.crop, 1, "shop");return true;
       case "shop-buyback":{
-          const fish = await M.buyback(state, +b.dataset.sale, FISH);update();shopDialog();
+          const fish = await M.buyback(state, +b.dataset.sale, FISH, +b.dataset.quote);update();shopDialog();
           toast(fish ? `${FISH[fish.kind].name}已回到待养区` : "未赎回，余额或保留时间已变化");return true;
         }
       case "shop-tab":

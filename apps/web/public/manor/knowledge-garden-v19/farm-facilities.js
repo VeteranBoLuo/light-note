@@ -1,13 +1,19 @@
 /* R18 facilities. All inventory, time and limits belong to GardenModel; this module only renders and dispatches. */
 const FarmFacilities = (() => {
   const BASE = "knowledge-garden-v19/farm/";
-  const keys = ["workshop", "beehive"];
+  const keys = ["workshop", "beehive", "composter"];
   let workshopPane = "manual",workshopOrigin = "scene",basicRecipe = "corn",basicCount = 1;
   let recipe = "fruit",batch = 1,flower = "lavender",target = null,pendingBuild = null,
-    upgradeSession = null,upgradeLevel = null,selectedMaterials = [],pendingUpgrade = null,detailOrigin = "scene";
+    upgradeSession = null,upgradeLevel = null,selectedMaterials = [],pendingUpgrade = null,pendingCompostUpgrade = null,detailOrigin = "scene";
   const config = (key) => M.FACILITIES[key];
   const img = (file, cls = "") => `<img class="${cls}" src="${BASE}${file}" alt="" draggable="false">`;
-  function art(key, sealed = false) {
+  function compostArt(phase="idle",level=1) {
+    const frame=phase==="sealed"?"sealed":`lv${Math.max(1,Math.min(3,level||1))}`;
+    return `<span class="r18-sprite composter-art" data-grade="${level||1}" aria-hidden="true">${img(`composter-${frame}-r68.webp`)}</span>`;
+  }
+  const compostSignature = c => [c.level,c.phase,c.stock,c.residue,...Object.keys(M.FERT).map(key=>c.stored[key]||0)].join("|");
+  function art(key, sealed = false, level = 1) {
+    if(key==="composter")return compostArt(sealed?"sealed":"idle",level);
     const file = (typeof FarmStage !== "undefined" ? FarmStage.cal().facilitySprites?.[key] : null) || (key === "workshop" ? "workshop-states-r22.webp" : "hive-states-r18.webp");
     if (key === "beehive" && file === "hive-states-r53.webp") return `<span class="r18-sprite hive-native-art" data-frame="${sealed ? 1 : 0}" aria-hidden="true">${sealed ? img(file, "hive-sealed-img") : img("hive-built-r33.webp", "hive-built-img")}</span>`;
     return `<span class="r18-sprite${file === "workshop-states-r53.webp" ? " workshop-native-art" : ""}" data-frame="${sealed ? 1 : 0}" aria-hidden="true">${img(file)}</span>`;
@@ -30,7 +36,7 @@ const FarmFacilities = (() => {
     return `<span class="purifier-grade${level ? "" : " purifier-image"}" data-level="${level}" style="--grade-x:${-(level % 2) * 50}%;--grade-y:${-Math.floor(level / 2) * 50}%;--grade-size:${s * 100}%;--grade-left:${(0.5 - (l + r) / 2 * s) * 100}%;--grade-top:${(.89 - b * s) * 100}%"><span class="purifier-cell">${img("purifier-states-r53.webp")}</span></span>`;
   }
   const craftClock = (hours) => {const m = Math.max(1, Math.ceil(hours * 60));return `${Math.floor(m / 60)}小时${m % 60 ? `${m % 60}分` : ""}`;};
-  const visible = (key, d = FarmStage.cal()) => !!d.facilities?.[key] && (!d.area || d.area === (key === "beehive" ? "garden" : "bay"));
+  const visible = (key, d = FarmStage.cal()) => !!d.facilities?.[key] && (!d.area || d.area === (key === "workshop" ? "bay" : "garden"));
   function sceneHTML() {
     return keys.map((key) => `<button id="${key}Spot" class="scene-facility ${key}-fixture" data-action="facility-open" data-facility="${key}" type="button" hidden><span class="fixture-art"></span><span class="fixture-hit" aria-hidden="true"></span><span class="facility-bees" aria-hidden="true"></span><span class="fixture-state"></span></button>`).join("");
   }
@@ -55,9 +61,10 @@ const FarmFacilities = (() => {
       el.classList.toggle("precise-hit", !!hit);
       if (hit) el.style.setProperty("--fixture-hit", FarmStage.hitClip(hit));
       const artwork = el.querySelector(".fixture-art");
-      const signature = `${d.asset}:${owned}`;
+      const compost=key==="composter"?M.composterStatus(state):null;
+      const signature = `${d.asset}:${owned}:${compost?.level||0}:${compost?.stock?"ready":compost?.phase||""}`;
       if (artwork.dataset.signature !== signature) {
-        artwork.innerHTML = FarmArt.html(sceneArt(key, !owned));artwork.dataset.signature = signature;
+        artwork.innerHTML = FarmArt.html(compost?compostArt(!owned?"sealed":compost.stock?"ready":compost.phase,compost.level):sceneArt(key, !owned));artwork.dataset.signature = signature;
       }
       const bees = el.querySelector(".facility-bees");
       if (key === "beehive" && owned && !bees.children.length) bees.innerHTML = Array.from({length:2},()=>beeArt()).join("");
@@ -72,6 +79,9 @@ const FarmFacilities = (() => {
       if (key === "workshop") {
         const status = M.workshopStatus(state);el.dataset.state = status.phase;
         label = status.phase === "ready" ? "成品待领" : status.phase === "crafting" ? craftClock(status.remaining) : def.name;
+      } else if(key==="composter") {
+        el.dataset.state=compost.stock?"ready":compost.phase;
+        label=compost.stock?`${compost.stock} 份肥料可领`:compost.remaining?craftClock(compost.remaining):`残枝 ${compost.residue}/3`;
       } else {
         const status = M.beehiveStatus(state);el.dataset.state = status.usedToday ? "spent" : status.pollen ? "ready" : "empty";
         label = status.usedToday ? "今日已授粉" : status.pollen ? `花粉 ${status.pollen}/6` : "补充花粉";
@@ -90,11 +100,12 @@ const FarmFacilities = (() => {
     }
     if (key === "workshop") {workshopOrigin = origin;workshopPane = M.workshopStatus(state).phase === "idle" || !state.workshop ? "manual" : "targeted";}
     if (!state[key] || key === "purifier") return detailDialog(key, origin);
-    if (key === "workshop") workshopDialog();else beehiveDialog();
+    if (key === "workshop") workshopDialog();else if(key==="composter")composterDialog(origin);else beehiveDialog();
   }
   function detailDialog(key, origin = detailOrigin) {
     if (![...keys, "purifier"].includes(key)) return;
     detailOrigin = origin;
+    if(key==="composter")return composterDialog(origin);
     const water = key === "purifier",p = water ? M.purifierStatus(state) : null,owned = water ? p.owned : !!state[key];
     const def = water ? { name: "海水过滤器", cost: R.purifierCost, gardenLevel: 8 } : config(key);
     const rows = key === "workshop" ? [["clock", "制作时间", "2 小时 / 批"], ["crate", "每批产出", "1–3 份"], ["coin", "建造价格", `${def.cost} 积分`], ["build", "建造限制", "限建 1 台"]] : key === "beehive" ? [["pollen", "每日授粉", "1 次 / 天"], ["crate", "花粉容量", "最多 6 份"], ["coin", "建造价格", `${def.cost} 积分`], ["sprout", "收获加成", "下一轮 +1 份"]] : [["water", "每日产水", `${p.daily || 6} 滴`], ["coin", "建造价格", `${def.cost} 积分`], ["build", "建造限制", "限建 1 台"]];
@@ -110,27 +121,53 @@ const FarmFacilities = (() => {
   }
   function focusSite(key) {
     closeDialog(false);
-    if (typeof setManorArea === "function") setManorArea(key === "beehive" ? "garden" : "bay");
+    if (typeof setManorArea === "function") setManorArea(key === "workshop" ? "bay" : "garden");
     document.getElementById(`${key}Spot`)?.focus({ preventScroll: true });
   }
   function cards() {
     const lv = M.level(state);
     const detail = (key) => `<button class="tile-btn facility-details" data-action="facility-detail" data-facility="${key}" data-origin="shop">设施详情</button>`;
     const card = (key) => {
+      if(key==="composter")return composterCard();
       const def = config(key),owned = !!state[key],status = key === "workshop" ? M.workshopStatus(state) : M.beehiveStatus(state);
       const metric = key === "workshop" ? `<b>${FarmArt.ui("clock")}2 小时 / 批</b><span>每批 1–3 份</span>` : `<b>${FarmArt.ui("pollen")}每天授粉 1 次</b><span>花粉最多 6 份</span>`;
       const stateText = !owned ? lv < def.gardenLevel ? `Lv.${def.gardenLevel} 解锁` : "待建造" : key === "workshop" ? status.phase === "ready" ? "成品待领取" : status.phase === "crafting" ? `还需 ${craftClock(status.remaining)}` : "已建成" : `花粉 ${status.pollen}/6`;
-      return `<article class="game-facility-card" data-facility-card="${key}"><header><h3>${def.name}</h3><span>${owned ? "已建成" : "限建 1 台"}</span></header><div class="facility-card-art">${art(key, !owned)}</div><div class="facility-card-metric">${metric}</div><p>${key === "workshop" ? "作物＋普通鱼饵，制作定向鱼饵" : "花束补粉 · 下一轮多收 1 份"}</p><span class="facility-card-status">${FarmArt.ui(owned ? "house" : "lock")}${stateText}${key === "beehive" && owned ? `<span class="card-pollen-track"><i style="width:${status.pollen / 6 * 100}%"></i></span>` : ""}</span><div class="market-price">${owned ? '<small>永久拥有</small>' : `${FarmArt.ui("coin")}<strong>${def.cost}</strong><span>积分</span>`}</div><div class="facility-card-actions">${owned ? `<button class="tile-btn primary" data-action="facility-open" data-origin="shop" data-facility="${key}">${key === "workshop" ? "使用工坊" : "使用蜂箱"}</button>` : ""}${detail(key)}</div></article>`;
+      return `<article class="game-facility-card" data-facility-card="${key}"><header><h3>${def.name}</h3><span>${owned ? "已建成" : "限建 1 台"}</span></header><div class="facility-card-art">${art(key)}</div><div class="facility-card-metric">${metric}</div><p>${key === "workshop" ? "作物＋普通鱼饵，制作定向鱼饵" : "花束补粉 · 下一轮多收 1 份"}</p><span class="facility-card-status">${FarmArt.ui(owned ? "house" : "lock")}${stateText}${key === "beehive" && owned ? `<span class="card-pollen-track"><i style="width:${status.pollen / 6 * 100}%"></i></span>` : ""}</span><div class="market-price">${owned ? '<small>永久拥有</small>' : `${FarmArt.ui("coin")}<strong>${def.cost}</strong><span>积分</span>`}</div><div class="facility-card-actions">${owned ? `<button class="tile-btn primary" data-action="facility-open" data-origin="shop" data-facility="${key}">${key === "workshop" ? "使用工坊" : "使用蜂箱"}</button>` : ""}${detail(key)}</div></article>`;
     };
     const p = M.purifierStatus(state),next = R.purifierLevels[p.level];
-    return keys.map(card).join("") + `<article class="game-facility-card" data-facility-card="purifier"><header><h3>海水过滤器</h3><span>${p.owned ? `Lv.${p.level}` : "限建 1 台"}</span></header><div class="facility-card-art">${purifierArt(p.level)}</div><div class="facility-card-metric"><b>${FarmArt.ui("water")}每日 ${p.daily || R.purifierWater} 滴</b><span>清水收进水桶</span></div><p>清水封闭储存，点击收进水桶</p><span class="facility-card-status">${p.owned ? p.remaining ? `还需 ${craftClock(p.remaining)}` : next ? `可升级为每日 ${next.water} 滴` : "已升满级" : lv < 8 ? "Lv.8 解锁" : "待建造"}</span><div class="market-price">${p.owned ? '<small>永久拥有</small>' : `${FarmArt.ui("coin")}<strong>${R.purifierCost}</strong><span>积分</span>`}</div><div class="facility-card-actions">${p.owned ? '<button class="tile-btn primary" data-action="purifier-focus">去收水</button>' : ""}${detail("purifier")}</div></article>`;
+    return keys.map(card).join("") + `<article class="game-facility-card" data-facility-card="purifier"><header><h3>海水过滤器</h3><span>${p.owned ? `Lv.${p.level}` : "限建 1 台"}</span></header><div class="facility-card-art">${purifierArt(p.level || 1)}</div><div class="facility-card-metric"><b>${FarmArt.ui("water")}每日 ${p.daily || R.purifierWater} 滴</b><span>清水收进水桶</span></div><p>清水封闭储存，点击收进水桶</p><span class="facility-card-status">${p.owned ? p.remaining ? `还需 ${craftClock(p.remaining)}` : next ? `可升级为每日 ${next.water} 滴` : "已升满级" : lv < 8 ? "Lv.8 解锁" : "待建造"}</span><div class="market-price">${p.owned ? '<small>永久拥有</small>' : `${FarmArt.ui("coin")}<strong>${R.purifierCost}</strong><span>积分</span>`}</div><div class="facility-card-actions">${p.owned ? '<button class="tile-btn primary" data-action="purifier-focus">去收水</button>' : ""}${detail("purifier")}</div></article>`;
+  }
+  function composterCard() {
+    const def=config("composter"),c=M.composterStatus(state),f=M.FERT[c.fertilizer];
+    const label=!c.owned?M.level(state)<def.gardenLevel?`Lv.${def.gardenLevel} 解锁`:"待建造":c.stock?`${c.stock} 份肥料可领`:c.remaining?`还需 ${craftClock(c.remaining)}`:`残枝 ${c.residue}/3`;
+    return `<article class="game-facility-card" data-facility-card="composter"><header><h3>${def.name}</h3><span>${c.owned?`Lv.${c.level}`:"限建 1 台"}</span></header><div class="facility-card-art">${compostArt("idle",c.level)}</div><div class="facility-card-metric"><b>${FarmArt.ui("sprout")}${f.name}</b><span>催熟 −${f.hours} 小时</span></div><p>3 份残枝换 1 份肥料 · ${c.hours} 小时 / 份 · 暂存 ${c.storage} 份</p><span class="facility-card-status">${FarmArt.ui(c.owned?"house":"lock")}${label}</span><div class="market-price">${c.owned?"<small>永久拥有 · 可用积分提升品质</small>":`${FarmArt.ui("coin")}<strong>${def.cost}</strong><span>积分</span>`}</div><div class="facility-card-actions">${c.owned?'<button class="tile-btn primary" data-action="facility-open" data-origin="shop" data-facility="composter">使用堆肥箱</button>':""}<button class="tile-btn facility-details" data-action="facility-detail" data-facility="composter" data-origin="shop">设施详情</button></div></article>`;
+  }
+  function compostTiers(level) {
+    return `<div class="purifier-tier-row compost-tier-row">${M.COMPOST_RULES.levels.map((tier,i)=>{const f=M.FERT[tier.fertilizer];return `<div class="${level===i+1?"current":""}">${compostArt("idle",i+1)}<b>Lv.${i+1}</b><span>${f.name}</span><span>催熟 −${f.hours} 小时</span></div>`;}).join("")}</div>`;
+  }
+  function composterDialog(origin=detailOrigin) {
+    detailOrigin=origin;
+    const c=M.composterStatus(state),def=config("composter"),rules=M.COMPOST_RULES,f=M.FERT[c.fertilizer];
+    const label=!c.owned?`待建造 · Lv.${def.gardenLevel} 解锁`:`Lv.${c.level} · ${c.stock>=c.storage?"肥料已满 · 领取后继续":c.remaining?`堆肥中 · 还需 ${craftClock(c.remaining)}`:c.stock?"肥料已堆好":"等待采收残枝"}`;
+    let primary=c.owned?`<button class="button primary" data-action="compost-collect" ${c.stock?"":"disabled"}>${c.stock?`领取 ${c.stock} 份肥料`:"暂无可领肥料"}</button>`:origin==="scene"?'<button class="button primary" data-action="facility-shop">前往商店</button>':`<button class="button primary" data-action="facility-build" data-facility="composter" ${M.level(state)<def.gardenLevel||state.wallet<def.cost?"disabled":""}>建造 · ${def.cost} 积分</button>`;
+    if(c.owned&&rules.levels[c.level])primary+='<button class="button" data-action="compost-upgrade">查看升级</button>';
+    const stored=Object.entries(c.stored).filter(([,n])=>n>0).map(([key,n])=>`${M.FERT[key].name} ×${n}`).join("、");
+    showDialog("堆肥箱","把采收后的残枝，留给下一轮生长。",`<div class="facility-detail-overview"><div class="facility-detail-hero"><div class="facility-detail-art">${compostArt(!c.owned?"sealed":c.stock?"ready":c.phase,c.level)}</div><span class="facility-detail-state">${label}</span></div><div><p class="facility-detail-description">建成后，每株作物完成全部采收会留下 1 份残枝；连续结果与剪花作物在最后一次采收后留下，提前铲除不获得。凑齐 ${rules.residuePerBatch} 份自动开始堆肥，每 ${c.hours} 小时产 1 份。</p><dl class="facility-detail-facts"><div><dt>${FarmArt.ui("sprout")}产出肥料</dt><dd>${f.name} · 催熟 −${f.hours} 小时</dd></div><div><dt>${FarmArt.ui("crate")}暂存肥料</dt><dd>${c.stock} / ${c.storage} 份</dd></div><div><dt>${FarmArt.ui("sprout")}待用残枝</dt><dd>${c.residue} 份</dd></div><div><dt>${FarmArt.ui("coin")}建造价格</dt><dd>${def.cost} 积分</dd></div></dl>${stored?`<p class="facility-hint">已堆好：${stored}。升级保留这些肥料的原品质。</p>`:""}<section class="facility-recipe-panel"><h4>采收后自动循环</h4><div class="detail-recipe composter-recipe"><span>${img("composter-residue-r64.webp", "farm-icon")}<small>${rules.residuePerBatch} 份残枝</small></span><b>→</b><span>${FarmArt.fertilizer(c.fertilizer)}<small>1 份${f.name}</small></span></div><p class="facility-hint">${f.name}缩短生长 ${f.hours} 小时；肥料存满后暂停，领取后继续。</p>${c.remaining?`<p class="compost-clock" data-compost-clock>还需 ${clockTime(c.remaining)}</p>`:""}</section><section class="facility-recipe-panel"><h4>${c.level===rules.levels.length?"已升至最高品质":"升级后，产出更高品质肥料"}</h4>${compostTiers(c.level)}</section></div></div>`,`${origin==="shop"?'<button class="button" data-action="facility-shop">返回商店</button>':'<button class="button" data-action="close">回到庄园</button>'}${primary}`,false,"facility-detail-dialog");
+    $("#dialog").dataset.facility="composter";$("#dialog").dataset.compostSignature=compostSignature(c);
+  }
+  function compostUpgradeDialog() {
+    const c=M.composterStatus(state),tier=M.COMPOST_RULES.levels[c.level];
+    if(!c.owned||!tier)return composterDialog();
+    const plan={level:c.level+1,cost:tier.cost},locked=M.level(state)<tier.gardenLevel,short=state.wallet<tier.cost,f=M.FERT[c.fertilizer],next=M.FERT[tier.fertilizer];
+    pendingCompostUpgrade={session:state,plan};
+    showDialog(`堆肥箱升级 Lv.${plan.level}`,"升级品质，让每份肥料更有用。",`${compostTiers(plan.level)}<dl class="facility-detail-facts"><div><dt>${FarmArt.ui("sprout")}肥料品质</dt><dd>${f.name} → ${next.name}</dd></div><div><dt>${FarmArt.ui("clock")}催熟效果</dt><dd>−${f.hours} → −${next.hours} 小时</dd></div></dl><div class="facility-build-conditions"><span class="${locked?"unmet":"met"}">庄园 Lv.${tier.gardenLevel} · 当前 Lv.${M.level(state)}</span><span class="${short?"unmet":"met"}">${tier.cost} 积分 · 当前 ${state.wallet}</span></div><p class="facility-hint">每 ${c.hours} 小时一份、暂存 ${c.storage} 份保持不变；已堆好的肥料保留原品质，在制批次保持原截止时间。</p>`,`<button class="button" data-action="compost-back">返回堆肥箱</button><button class="button primary" data-action="compost-upgrade-confirm" ${locked||short?"disabled":""}>确认升级 · ${tier.cost} 积分</button>`,false,"composter-upgrade-dialog");
   }
   function buildDialog(key) {
     const def = config(key);if (!def || state[key]) return;
     const locked = M.level(state) < def.gardenLevel,short = Math.max(0, def.cost - state.wallet);
     pendingBuild = { key, session: state };
     showDialog(`建造${def.name}`, "每种限建一台，建成后永久拥有。",
-    `<div class="facility-build-preview">${art(key)}<p>${key === "workshop" ? "用小番茄或生菜和普通鱼饵，制作更易遇见指定类别的鱼饵。" : "放入薰衣草或向日葵补充花粉，选择生长中的作物授粉。"}</p></div><div class="facility-build-conditions"><span class="${locked ? "unmet" : "met"}">${locked ? "◇" : "✓"} 庄园 Lv.${def.gardenLevel} · 当前 Lv.${M.level(state)}</span><span class="${short ? "unmet" : "met"}">${short ? "◇" : "✓"} ${def.cost} 积分 · 当前 ${state.wallet}${short ? `，还差 ${short}` : ""}</span></div>`,
+    `<div class="facility-build-preview">${art(key)}<p>${key === "composter" ? "建成后，每株作物完成全部采收会留下 1 份残枝。凑齐 3 份自动堆肥，12 小时后得到生态肥，最多暂存 2 份。" : key === "workshop" ? "用小番茄或生菜和普通鱼饵，制作更易遇见指定类别的鱼饵。" : `放入${Object.keys(M.FACILITY_RULES.flowerPollen).map(k=>M.CROPS[k].name).join("、")}补充花粉，选择生长中的作物授粉。`}</p></div><div class="facility-build-conditions"><span class="${locked ? "unmet" : "met"}">${locked ? "◇" : "✓"} 庄园 Lv.${def.gardenLevel} · 当前 Lv.${M.level(state)}</span><span class="${short ? "unmet" : "met"}">${short ? "◇" : "✓"} ${def.cost} 积分 · 当前 ${state.wallet}${short ? `，还差 ${short}` : ""}</span></div>`,
     `<button class="button" data-action="facility-shop">返回商店</button><button class="button primary" data-action="facility-build-confirm" ${locked || short ? "disabled" : ""}>${art(key)}建造 · ${def.cost} 积分</button>`, false, "facility-build-dialog");
   }
   const workshopTabs = () => `<div class="workshop-navigation"><div class="workshop-tabs" aria-label="工坊制作分类">${[["manual", "基础手作", "bait"], ["targeted", "定向研制", "build"]].map(([key, label, icon]) => `<button data-action="workshop-pane" data-pane="${key}" aria-pressed="${workshopPane === key}" class="${workshopPane === key ? "selected" : ""}">${FarmArt.ui(icon)}${label}</button>`).join("")}</div><button class="workshop-detail-link" data-action="workshop-detail">${FarmArt.ui("house")}设施详情</button></div>`;
@@ -180,7 +217,7 @@ const FarmFacilities = (() => {
     const ready = !b.usedToday && b.pollen > 0 && target !== null;
     const choices = targets.map((i) => {const p = state.plots[i];return `<button class="pollination-target ${target === i ? "selected" : ""}" data-action="hive-target" data-plot="${i}" aria-pressed="${target === i}"><span class="pollination-crop">${FarmArt.cropPreview(p.crop, M.growthStage(state, i))}</span><strong>${M.CROPS[p.crop].name} · 第${i + 1}块地</strong><small>${target === i ? "✓ 已选择 · " : ""}生长中</small></button>`;}).join("");
     showDialog("花园蜂箱", "花束变花粉，为下一次收获添一份。",
-    `<div class="beehive-hero"><div class="hive-illustration">${art("beehive")}</div><div>${pollenTray(b.pollen)}<p class="hive-daily">${b.usedToday ? "✓ 今日已授粉" : "今日可授粉 1 次"}</p><button class="tile-btn" data-action="hive-refill">${FarmArt.icon("lavender")}补充花粉</button></div></div><div class="facility-section-title">选择作物</div>${choices ? `<div class="pollination-targets">${choices}</div>` : '<div class="facility-empty"><strong>暂时没有可授粉的作物</strong><p>小番茄、草莓、茄子、彩椒和蓝莓，在浇水生长后都可选择。</p><button class="tile-btn" data-action="facility-garden">回菜园看看</button></div>'}<div class="pollination-benefit"><span class="pollen-token" aria-hidden="true"></span><b>下一轮多收 1 份</b><span>每株仅一次</span></div><p class="facility-hint">${b.usedToday ? "今天的授粉已完成，明天再来。" : !b.pollen ? "先放入花束补充花粉，再选择作物。" : "每次消耗 1 份花粉，不额外增加经验。"}</p>`,
+    `<div class="beehive-hero"><div class="hive-illustration">${art("beehive")}</div><div>${pollenTray(b.pollen)}<p class="hive-daily">${b.usedToday ? "✓ 今日已授粉" : "今日可授粉 1 次"}</p><button class="tile-btn" data-action="hive-refill">${FarmArt.icon("lavender")}补充花粉</button></div></div><div class="facility-section-title">选择作物</div>${choices ? `<div class="pollination-targets">${choices}</div>` : `<div class="facility-empty"><strong>暂时没有可授粉的作物</strong><p>${M.FACILITY_RULES.pollinationCrops.map(k=>M.CROPS[k].name).join("、")}，在浇水生长后都可选择。</p><button class="tile-btn" data-action="facility-garden">回菜园看看</button></div>`}<div class="pollination-benefit"><span class="pollen-token" aria-hidden="true"></span><b>下一轮多收 1 份</b><span>每株仅一次</span></div><p class="facility-hint">${b.usedToday ? "今天的授粉已完成，明天再来。" : !b.pollen ? "先放入花束补充花粉，再选择作物。" : "每次消耗 1 份花粉，不额外增加经验。"}</p>`,
     `<button class="button" data-action="facility-focus" data-facility="beehive">回到菜园</button><button class="button primary" data-action="hive-pollinate" data-plot="${target ?? ""}" data-planted="${target !== null ? state.plots[target].planted : ""}" data-crop="${target !== null ? state.plots[target].crop : ""}" ${ready ? "" : "disabled"}>${beeArt()}${b.usedToday ? "今日已授粉" : target !== null ? `给${M.CROPS[state.plots[target].crop].name}授粉` : "暂无可选作物"}</button>`, false, "beehive-dialog");
     $("#dialog").dataset.hiveSignature = beeSignature();
   }
@@ -225,6 +262,11 @@ const FarmFacilities = (() => {
         if (bar) {bar.querySelector("i").style.width = progress * 100 + "%";bar.setAttribute("aria-valuenow", String(Math.round(progress * 100)));}
       }
     }
+    if(dialog.dataset.family==="facility-detail-dialog"&&dialog.dataset.facility==="composter") {
+      const c=M.composterStatus(state),signature=compostSignature(c);
+      if(dialog.dataset.compostSignature!==signature)return composterDialog();
+      const clock=dialog.querySelector("[data-compost-clock]");if(clock)clock.textContent=`还需 ${clockTime(c.remaining)}`;
+    }
     if (dialog.dataset.family === "beehive-dialog" && dialog.dataset.hiveSignature !== beeSignature()) beehiveDialog();
     if (dialog.dataset.family === "hive-refill-dialog") {
       const b = M.beehiveStatus(state),sig = `${b.pollen}|${Object.keys(M.FACILITY_RULES.flowerPollen).map((k) => state.crops[k] || 0)}`;
@@ -234,6 +276,7 @@ const FarmFacilities = (() => {
   function back() {
     const family = $("#dialog").dataset.family;
     if (family === "workshop-dialog" && workshopOrigin !== "scene") {returnFromWorkshop();return true;}
+    if (family === "composter-upgrade-dialog") {composterDialog();return true;}
     if (family === "hive-refill-dialog") {beehiveDialog();return true;}
     if (family === "facility-detail-dialog") {if (detailOrigin === "workshop") workshopDialog();else if (detailOrigin === "shop") FarmUI.shopDialog("facilities");else closeDialog();return true;}
     if (family === "facility-build-dialog" || family === "purifier-upgrade-dialog") {FarmUI.shopDialog("facilities");return true;}
@@ -266,6 +309,19 @@ const FarmFacilities = (() => {
           if (!ok) {FarmUI.shopDialog("facilities");toast("未建造，积分或解锁状态已变化");break;}
           focusSite(pending.key);const el = document.getElementById(`${pending.key}Spot`);el?.classList.add("just-built");
           setTimeout(() => el?.classList.remove("just-built"), 800);toast(`${config(pending.key).name}已建成 · 点击使用`);break;
+        }
+      case "compost-upgrade":compostUpgradeDialog();break;
+      case "compost-back":pendingCompostUpgrade=null;composterDialog();break;
+      case "compost-upgrade-confirm":{
+          const pending=pendingCompostUpgrade;pendingCompostUpgrade=null;
+          if(!pending||pending.session!==state||$("#dialog").dataset.family!=="composter-upgrade-dialog")break;
+          button.disabled=true;const ok=await M.upgradeComposter(state,pending.plan);update();composterDialog();
+          toast(ok?`堆肥箱升至 Lv.${M.composterStatus(state).level}`:"未升级，积分或设备状态已变化",{topCenter:true});break;
+        }
+      case "compost-collect":{
+          if($("#dialog").dataset.facility!=="composter")break;
+          button.disabled=true;const count=await M.collectCompost(state);update();composterDialog();
+          toast(count?`肥料 +${count} · 已放入背包`:"肥料状态已变化，请稍后再试");break;
         }
       case "craft-recipe":if (M.BAIT_RECIPES[button.dataset.recipe]) recipe = button.dataset.recipe;workshopDialog();break;
       case "craft-quantity":batch = Math.max(1, Math.min(3, Number(button.dataset.count) || 1));workshopDialog();break;
@@ -313,7 +369,7 @@ const FarmFacilities = (() => {
     // The short flight is behind the dialog; the quiet crop marker remains after returning to the garden.
     GardenFX.flyTo(from, to, beeArt(), { size: 24 });
   }
-  const stateKey = () => [M.workshopStatus(state).phase, M.beehiveStatus(state).pollen, M.beehiveStatus(state).usedToday].join("|");
-  const dismiss = () => {pendingBuild = null;pendingUpgrade = null;};
+  const stateKey = () => [M.workshopStatus(state).phase, M.beehiveStatus(state).pollen, M.beehiveStatus(state).usedToday, compostSignature(M.composterStatus(state))].join("|");
+  const dismiss = () => {pendingBuild = null;pendingUpgrade = null;pendingCompostUpgrade = null;};
   return { art, sceneArt, nativeSceneArt, baitArt, beeArt, purifierArt, sceneHTML, sync, cards, open, handle, back, dismiss, refreshClocks, stateKey };
 })();

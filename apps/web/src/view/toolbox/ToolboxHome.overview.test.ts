@@ -4,6 +4,7 @@ import ts from 'typescript';
 import { computed, ref } from 'vue';
 import { describe, expect, it } from 'vitest';
 import { TOOLBOX_HOME_GROUPS } from '@/config/toolbox';
+import { toolboxTaskReady } from '@/utils/toolboxTaskPresentation';
 
 const source = readFileSync(resolve(process.cwd(), 'src/view/toolbox/ToolboxHome.vue'), 'utf8');
 const script = source.match(/<script setup lang="ts">([\s\S]*?)<\/script>/)![1];
@@ -30,8 +31,9 @@ function overview(data: unknown) {
     'computed',
     'overview',
     't',
+    'toolboxTaskReady',
     `${executable}; return {continueWorkspaces, continueJobs, attentionJob, taskAttentionSummary};`,
-  )(computed, ref(data), (key: string, params: { count: number }) => `${key}:${params.count}`);
+  )(computed, ref(data), (key: string, params: { count: number }) => `${key}:${params.count}`, toolboxTaskReady);
 }
 const job = (id: string, status = 'running', ready = false) => ({
   id,
@@ -60,8 +62,8 @@ describe('工坊概览展示优先级', () => {
         recent: [ready, job('failed', 'failed'), job('saved', 'succeeded')],
       },
     });
-    expect(state.continueJobs.value.map((j: { id: string }) => j.id)).toEqual(['ready', 'failed', 'running']);
-    expect(state.attentionJob.value.id).toBe('ready');
+    expect(state.continueJobs.value.map((j: { id: string }) => j.id)).toEqual(['failed', 'ready', 'running']);
+    expect(state.attentionJob.value.id).toBe('failed');
     expect(state.taskAttentionSummary.value).toBe('toolbox.home.readyTaskCount:1 · toolbox.home.failedTaskCount:1');
   });
   it('仅运行中或空数据时不提供待处理提醒', () => {

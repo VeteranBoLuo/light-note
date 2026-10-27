@@ -158,9 +158,9 @@ const GardenStartup=(()=>{
       return true;
     } catch {fail();return false;}
   }
-  function afterReady(run){
+  function afterReady(run,{idle=true}={}){
     const schedule=()=>{
-      if(typeof requestIdleCallback==='function')requestIdleCallback(run,{timeout:1000});
+      if(idle&&typeof requestIdleCallback==='function')requestIdleCallback(run,{timeout:1000});
       else setTimeout(run,0);
     };
     if(finished)schedule();else if(!failed)deferred.push(schedule);

@@ -54,7 +54,24 @@
     knowledge_action_1: 'growth.quest_knowledge_action_1', knowledge_action_2: 'growth.quest_knowledge_action_2',
   };
   const current = (g: number) => !disposed && g === generation && owner === user.id && user.role === 'root' && !user.adminContext;
-  const control = (action: string) => frame.value?.contentWindow?.postMessage({ type: 'lightnote-manor-control', nonce: nonce.value, action }, location.origin);
+  const control = (action: string, requestId?: number) => frame.value?.contentWindow?.postMessage({ type: 'lightnote-manor-control', nonce: nonce.value, action, requestId }, location.origin);
+  let deliberateLeave = false, navigationSequence = 0;
+  let navigationCheck: { id: number; resolve: (allow: boolean) => void } | null = null;
+  function checkNavigationBack() {
+    navigationCheck?.resolve(false);
+    return new Promise<boolean>(resolve => {
+      const id = ++navigationSequence;
+      // A frozen renderer must not trap the browser in the game. Saved commands stay with the host.
+      const timer = setTimeout(() => finish(true), 1500);
+      const finish = (allow: boolean) => {
+        clearTimeout(timer);
+        if (navigationCheck?.id === id) navigationCheck = null;
+        resolve(allow);
+      };
+      navigationCheck = { id, resolve: finish };
+      control('navigation-back', id);
+    });
+  }
   let balanceRefresh: Promise<unknown> | null = null;
   function refreshSharedBalance(afterPending = false) {
     const account = user.id, previous = afterPending ? balanceRefresh : null;
@@ -106,6 +123,7 @@
   }
   async function initialise() {
     const g = ++generation;
+    navigationCheck?.resolve(false);
     readController.abort(); readController = new AbortController();
     clearTimeout(bootTimer); frameShown.value = false; interactive.value = false;
     releaseMobileOverlayHistory(overlay); overlay = null;
@@ -123,11 +141,11 @@
   }
   async function exit() {
     if (disposed || exiting) return;
-    exiting = true;
+    exiting = true; deliberateLeave = true;
     try {
       await closeCurrentMobileOverlayThen(() => { releaseMobileOverlayHistory(overlay); overlay = null; },
         () => disposed ? undefined : router.replace(returnTo));
-    } finally { exiting = false; }
+    } finally { exiting = false; deliberateLeave = false; }
   }
   async function message(event: MessageEvent) {
     const data = event.data;
@@ -182,12 +200,17 @@
         const index = data.payload?.index;
         if (index !== undefined && (!Number.isInteger(index) || index < 0 || !snapshot?.quests[index])) throw new Error('quest');
         const key = snapshot?.quests[index]?.key;
-        await router.push(key ? resolveDailyQuestRoute(key, bookmark.isMobile) || { path: '/growth', query: { section: key === 'checkin' ? 'overview' : 'tasks' } } : '/growth#growth-daily');
+        deliberateLeave = true;
+        try { await router.push(key ? resolveDailyQuestRoute(key, bookmark.isMobile) || { path: '/growth', query: { section: key === 'checkin' ? 'overview' : 'tasks' } } : '/growth#growth-daily'); }
+        finally { deliberateLeave = false; }
         return;
       }
       // Older cached renderers may still ask the host. Keep them inside the
       // manor too; the current renderer opens its existing local ledger.
       else if (data.action === 'ledger') { control('open-ledger'); }
+      else if (data.action === 'navigation') {
+        if (navigationCheck?.id === data.payload?.requestId) navigationCheck.resolve(data.payload.allow === true);
+      }
       else if (data.action === 'dialog') {
         if (bookmark.isMobile && data.payload?.open && !overlay) overlay = registerMobileOverlayHistory(() => { overlay = null; control('close-dialog'); });
         else if (!data.payload?.open && overlay) { releaseMobileOverlayHistory(overlay); overlay = null; }
@@ -200,14 +223,15 @@
     }
   }
   useMobileTopBar(['knowledgeManor'], { title: () => t('manor.title'), ownTopBar: true, onBack: () => interactive.value ? control('back') : exit() });
-  onBeforeRouteLeave(() => {
+  onBeforeRouteLeave(async () => {
+    if (interactive.value && !failed.value && current(generation) && !deliberateLeave && !await checkNavigationBack()) return false;
     // All exits, including browser back and links to tasks/ledger, refresh the shared balance.
     // These reads must never hold navigation behind a slow or disconnected API.
     if (current(generation)) refreshSharedBalance();
   });
   watch(() => [user.id, user.role, Boolean(user.adminContext)], () => { void initialise(); });
   onMounted(() => { window.addEventListener('message', message); document.addEventListener('visibilitychange', armBootTimer); void initialise(); });
-  onBeforeUnmount(() => { disposed = true; ++generation; readController.abort(); clearTimeout(bootTimer); window.removeEventListener('message', message); document.removeEventListener('visibilitychange', armBootTimer); releaseMobileOverlayHistory(overlay); });
+  onBeforeUnmount(() => { navigationCheck?.resolve(false); disposed = true; ++generation; readController.abort(); clearTimeout(bootTimer); window.removeEventListener('message', message); document.removeEventListener('visibilitychange', armBootTimer); releaseMobileOverlayHistory(overlay); });
 </script>
 
 <style scoped>

@@ -1,7 +1,7 @@
 import './manorPerformanceProbe';
 import { createApp, h, ref } from 'vue';
 import { createPinia, setActivePinia } from 'pinia';
-import { createMemoryHistory, createRouter, RouterView } from 'vue-router';
+import { createMemoryHistory, createWebHashHistory, createRouter, RouterView } from 'vue-router';
 import { createI18n } from 'vue-i18n';
 import { createManor, executeManorCommand, MANOR_VERSION, manorModel as M, MANOR_SPECIES, type ManorContext, type ManorState } from '@lightnote/shared/manor';
 import request from '@/http/request';
@@ -69,6 +69,20 @@ const get = () => {
       if (params.get('scenario') === 'cast-pending') state = executeManorCommand(state, { action: 'beginCast', args: ['bait'] }, ctx(320)).state;
       if (params.get('scenario') === 'guide-fish') { state.guide = null; state.discoveryGuide = 'fish'; state.fish = []; state.fishSlots = Array.from({length:M.RULES.farmSlots},()=>null); }
       if (params.get('scenario') === 'guide-observe') { state.discoveryGuide = 'observe'; state.firstCastDone = true; }
+      if (params.get('scenario') === 'claimed') { state.xp=M.RULES.levels[1]+38;M.claimAllLevelRewards(state); }
+      if (['crops','compost'].includes(params.get('scenario') || '')) {
+        state.xp=M.RULES.levels[19]+40;state.water=60;state.plots=M.create().plots;
+        const keys=['pea','potato','cucumber','rosemary','watermelon','grape','tea'];
+        for(const [i,key] of keys.entries()) {
+          state.seeds[key]=3;M.plant(state,i,key);M.water(state,[i]);
+          state.plots[i].next=state.now-1;state.cropDex[key]={first:1,count:1};
+        }
+      }
+      if (params.get('scenario') === 'fert-ready') (state.fishSlots as Array<{started:number}>)[0].started-=M.RULES.productionHours;
+      if (params.get('scenario') === 'compost') {
+        M.buyFacility(state,'composter');
+        (state.composter as {stock:number}).stock=1;
+      }
       if (params.get('scenario') === 'art') {
         for (const kind of Object.keys(MANOR_SPECIES)) {
           const fish = M.addFish(state, kind);
@@ -128,7 +142,7 @@ const fixtureRoutes = [
   { path: '/home', component: { render: () => h('p', '书签模块已就绪 · 隔离夹具') } },
   { path: '/workbenches', component: { render: () => h('p', '工作台已就绪 · 隔离夹具') } },
 ];
-const router = createRouter({ history: createMemoryHistory(), routes: params.get('shell') === 'true'
+const router = createRouter({ history: params.get('history') === 'browser' ? createWebHashHistory() : createMemoryHistory(), routes: params.get('shell') === 'true'
   ? [{ path: '/', component: AppLayout, children: fixtureRoutes }]
   : fixtureRoutes });
 if (params.get('shell') === 'true') {
@@ -149,6 +163,7 @@ router.beforeEach(() => { stopPrewarm?.(); stopPrewarm = undefined; });
 if (params.get('prewarm') === 'true') router.afterEach(() => {
   if (!mobile && router.currentRoute.value.path !== '/knowledge-manor' && user.role === 'root' && params.get('feature') !== 'off') stopPrewarm = prewarmScheduler?.submit({ groups: ['manor.desktop'], priority: 4 });
 });
+if (params.get('history') === 'browser') await router.push('/bookmarks');
 await router.push(Entry ? '/app' : '/knowledge-manor');
 createApp({ render: () => h('div', { style: { height: '100%', display: 'flex', flexDirection: 'column' } }, [
   params.get('navigation') === 'true' ? h('nav', { 'aria-label': '隔离导航验收' }, [

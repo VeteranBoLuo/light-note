@@ -12,6 +12,23 @@ const load = (name: string) => {
 };
 const habitat = load('garden-habitat.js'), life = load('garden-life.js');
 
+it('麻雀在窗口重排后尚未更新姿态时仍能正常绘制', () => {
+  const critters = load('garden-critters.js');
+  let gradients = 0;
+  const ctx = new Proxy({} as any, {
+    get(_, key) {
+      if (key === 'createRadialGradient' || key === 'createLinearGradient') return (...values: number[]) => {
+        if (!values.every(Number.isFinite)) throw new Error('Invalid gradient coordinates');
+        gradients++;
+        return { addColorStop() {} };
+      };
+      return () => {};
+    },
+  });
+  expect(() => critters.drawSparrow(ctx, { pose: {} })).not.toThrow();
+  expect(gradients).toBeGreaterThan(0);
+});
+
 describe('动物活动区与掉落物避让', () => {
   it.each(['desktop', 'mobileGarden'])('%s 的越界落点投影回石板路，便便按整个兔身占位避让', key => {
     const scene = cal[key], r = scene.rabbitLawn;
@@ -34,14 +51,14 @@ describe('动物活动区与掉落物避让', () => {
   });
 });
 
-it('悬浮微粒缓慢连续漂移，亮度受控并在玻璃轮廓外完全消失', () => {
+it('舱内气泡缓慢上升，并在玻璃轮廓外完全消失', () => {
   const poly = [[0, 0], [1000, 0], [1000, 600], [0, 600]];
-  for (let i = 0; i < 36; i++) {
-    const a = life.moteAt(i, 0, 1000, 600), b = life.moteAt(i, 0.1, 1000, 600);
-    expect(Math.hypot(a.x - b.x, a.y - b.y)).toBeLessThan(1);
-    expect(a.alpha).toBeGreaterThanOrEqual(0.1);
-    expect(a.alpha).toBeLessThanOrEqual(0.22);
-    expect(a.r).toBeLessThanOrEqual(1.3);
+  for (let i = 0; i < 16; i++) {
+    const a = life.bubbleAt(i, 0.2, 1000, 600), b = life.bubbleAt(i, 0.3, 1000, 600);
+    expect(b.y).toBeLessThan(a.y);
+    expect(Math.abs(b.x - a.x)).toBeLessThan(4);
+    expect(a.alpha).toBeGreaterThan(0);
+    expect(a.alpha).toBeLessThanOrEqual(0.48);
     expect(life.edgeAlpha(a.x, a.y, poly, 20)).toBeGreaterThan(0);
   }
   expect(life.edgeAlpha(-10, 200, poly, 20)).toBe(0);

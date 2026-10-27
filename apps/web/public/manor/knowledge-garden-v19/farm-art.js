@@ -2,12 +2,23 @@
    作物格 512 × 512：第 1–5 格为播种、发芽、幼苗、开花/青果、成熟，默认根部锚点 (256, 400)，播种组可按土面居中；第 6 格是收获物图标。 */
 const FarmArt = (() => {
   const BASE = "knowledge-garden-v19/farm/";
+  // New transparent sheets use the same 512px canvas/root anchor. Old paintings
+  // keep their original URLs and alpha; only the added crops select r63 art.
+  const NEW_CROP_BOUNDS = {
+    pea:[[138,308,373,488],[91,248,420,488],[111,188,401,488],[95,148,416,488],[86,138,425,488]],
+    potato:[[129,308,382,488],[115,248,397,488],[80,188,432,488],[61,148,450,488],[61,148,451,488]],
+    cucumber:[[131,308,381,488],[119,248,392,488],[97,188,415,488],[87,148,424,488],[77,138,435,488]],
+    rosemary:[[121,308,391,488],[107,248,404,488],[92,188,420,488],[69,148,442,488],[66,138,445,488]],
+    watermelon:[[129,308,383,488],[123,248,389,488],[79,188,432,488],[69,148,442,488],[66,138,446,488]],
+    grape:[[122,308,390,488],[110,248,402,488],[100,188,412,488],[93,148,419,488],[71,138,440,488]],
+    tea:[[116,308,396,488],[117,248,394,488],[81,188,430,488],[61,157,451,488],[61,138,450,488]],
+  };
   const html = markup => typeof GardenStartup!=="undefined"&&GardenStartup.html?GardenStartup.html(markup):markup;
-  const cropSrc = (key, stage) => `${BASE}crop-${key}-${stage}-r55.webp`;
+  const cropSrc = (key, stage) => `${BASE}crop-${key}-${stage}-${Object.hasOwn(NEW_CROP_BOUNDS,key)?"r63":"r55"}.webp`;
   const img = (src, cls) => html(`<img class="${cls}" src="${src}" alt="" draggable="false" decoding="async">`);
   // 模型的生长阶段（0 播种 … 4 成熟）对应第 1–5 格
   const spriteStage = (growthStage) => Math.max(1, Math.min(5, growthStage + 1));
-  const packet = (key) => img(`${BASE}seed-${key}.webp`, "farm-packet");
+  const packet = (key) => img(`${BASE}seed-${key}${Object.hasOwn(NEW_CROP_BOUNDS,key)?"-r63":""}.webp`, "farm-packet");
   const giftPack = () => img(`${BASE}seed-basic-gift.webp`, "farm-packet");
   const icon = (key) => img(cropSrc(key, 6), "farm-icon");
   const WILDLIFE_IMAGES = {
@@ -53,6 +64,7 @@ const FarmArt = (() => {
   }
   // 各阶段透明素材的可见边界（alpha > 24）。预览按内容居中，场景仍保留原来的根部锚点。
   const PREVIEW_BOUNDS = {
+    ...NEW_CROP_BOUNDS,
     lettuce: [[107, 298, 405, 488], [111, 275, 401, 488], [76, 171, 436, 488], [61, 136, 451, 488], [61, 145, 451, 488]],
     eggplant: [[107, 298, 405, 488], [111, 264, 401, 488], [76, 187, 436, 488], [61, 134, 451, 488], [63, 118, 448, 488]],
     sunflower: [[122, 298, 390, 488], [125, 258, 386, 488], [85, 148, 427, 488], [61, 134, 451, 488], [80, 118, 431, 488]],
@@ -167,7 +179,10 @@ const FarmArt = (() => {
     }, { root, rootMargin: '160px' }) : null;
     cards.forEach(card => {
       if (!card.querySelector('[data-catalog-src],[data-catalog-href]')) return;
-      card.dataset.imageStatus = '加载图片…'; card.setAttribute('aria-busy', 'true');
+      // Keep the original quiet card while the browser paints the image.
+      // Rebuilding cached SVGs still fires load asynchronously; that is not a
+      // new download and must not replay a visible loading overlay.
+      card.setAttribute('aria-busy', 'true');
       if (observer) observer.observe(card);else load(card);
     });
     return () => { observer?.disconnect(); cleanups.forEach(cleanup => cleanup()); };

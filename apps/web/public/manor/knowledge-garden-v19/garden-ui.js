@@ -112,13 +112,17 @@ function toast(text, { topCenter = false, duration } = {}) {
   positionFeedback();
   toastTimer = setTimeout(() => $("#toast").hidden = true, duration || (text.length > 28 ? 3400 : 2200));
 }
-function requestManorExit(button) {
+function confirmManorExit() {
   if (Date.now() > exitArmedUntil) {
     exitArmedUntil = Date.now() + 3000;
-    toast("再次点击退出庄园", { topCenter: true, duration: 3000 });
-    return;
+    toast("再次返回退出庄园", { topCenter: true, duration: 3000 });
+    return false;
   }
   exitArmedUntil = 0;
+  return true;
+}
+function requestManorExit(button) {
+  if (!confirmManorExit()) return;
   if (button) button.disabled = true;
   toast("正在返回轻笺…", { topCenter: true });
   GardenLive.exit().catch(() => { if (button?.isConnected) button.disabled = false; toast("暂时未能返回，请再试一次", { topCenter: true }); });
@@ -129,7 +133,7 @@ function positionFeedback() {
   if (mode && garden) mode.style.top = `${top - garden.getBoundingClientRect().top}px`;
   const dialog = !$("#modal").hidden && $("#dialog");
   const feedback = $("#toast"),mobile = document.documentElement.classList.contains("light-note-mobile-rendering");
-  const density = typeof getComputedStyle === "function" ? parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--d")) || 1 : 1;
+  const density = typeof getComputedStyle === "function" ? parseFloat(getComputedStyle(feedback).getPropertyValue("--d")) || 1 : 1;
   const skyTop = garden ? garden.getBoundingClientRect().top + 16 * density : top;
   if (feedback.dataset.topCenter === "true") {
     feedback.style.top = `${Math.max(12, (hud?.getBoundingClientRect().bottom || 0) + 8 * density)}px`;
@@ -187,7 +191,7 @@ function dockHTML() {
     isMobileView() && FarmStage.cal().area === "garden" ? btn("area-garden", "garden", FarmArt.packet("radish"), "菜园", "当前区域") : "") +
     btn("bag", "bag", dockArt("backpack"), "背包", `种子 ${seeds}${crops ? `，仓库 ${crops}` : ""}${waiting ? `，待养 ${waiting}` : ""}`, "", !!state.rewards.__new) +
     btn("stall", "shop", dockArt("shop"), "商店", "种子和水族用品") + (
-    isMobileView() && FarmStage.cal().area === "garden" ? "" : btn("tank-manage", "farm", dockArt("aquarium"), "养鱼舱", `入住 ${living} / ${R.farmSlots + R.showSlots}${waiting ? `，待养 ${waiting}` : ""}${ready ? `，${ready} 份肥料可领` : ""}`, `${living}/${R.farmSlots + R.showSlots}`, waiting > 0 || ready > 0)) +
+    isMobileView() && FarmStage.cal().area === "garden" ? "" : btn("tank-manage", "farm", dockArt("aquarium"), "养鱼舱", `入住 ${living} / ${R.farmSlots + R.showSlots}${waiting ? `，待养 ${waiting}` : ""}${ready ? `，${ready} 份肥料可领` : ""}`, `${living}/${R.farmSlots + R.showSlots}`, ready > 0)) +
     btn("atlas", "atlas", dockArt("atlas"), "图鉴", `已收集 ${dex} / ${dexAll}${unread ? `，${unread} 个新物种未查看` : ""}`, "", unread > 0) + "</div>");
 
 }
@@ -373,15 +377,20 @@ function render({ keepAreaTravel = false } = {}) {
   if (view === "tree") {
     GardenFX.mountAmbient($(".garden-scene"));
     const sceneElement=$(".garden-scene");
+    GardenAnimals3D.unmount();
+    const enhanceWildlife=()=>{
+      if(sceneElement?.isConnected&&sceneElement===$(".garden-scene"))GardenAnimals3D.mount(sceneElement);
+    };
     const wildlife=()=>{
       if(!sceneElement?.isConnected||sceneElement!==$(".garden-scene"))return;
-      GardenAnimals3D.mount(sceneElement);
-      GardenCritters.mount(sceneElement, { needsSeed: FarmUI.needsBirdSeed, giftPoint: FarmUI.birdGiftScenePoint, deliverSeed: FarmUI.deliverBirdSeed });
+      if(sceneElement.dataset.manorArea==="bay")GardenCritters.unmount();
+      else GardenCritters.mount(sceneElement, { needsSeed: FarmUI.needsBirdSeed, giftPoint: FarmUI.birdGiftScenePoint, deliverSeed: FarmUI.deliverBirdSeed });
       GardenCompanions.mount(sceneElement);
+      if(typeof GardenStartup!=="undefined"&&typeof GardenStartup.afterReady==="function")GardenStartup.afterReady(enhanceWildlife);else enhanceWildlife();
     };
-    // Core art, controls and guide load first. Wildlife never competes with
-    // those downloads or starts for a scene that the player has already left.
-    if(typeof GardenStartup!=="undefined"&&typeof GardenStartup.afterReady==="function")GardenStartup.afterReady(wildlife);else wildlife();
+    // Lightweight, cached visitors appear with the new area. Expensive 3D
+    // enhancement stays idle work, with the existing painted sprites as fallback.
+    if(typeof GardenStartup!=="undefined"&&typeof GardenStartup.afterReady==="function")GardenStartup.afterReady(wildlife,{idle:false});else wildlife();
   } else {
     GardenFX.unmountAmbient();
     GardenCritters.unmount();
@@ -445,6 +454,7 @@ function syncTankManagement() {
   });
   const scrim = $(".production-scrim");
   if (scrim) scrim.hidden = !open || !isMobileView();
+  document.dispatchEvent(new Event("manor-overlay-change"));
 }
 function closeTankManagement(restore = true) {
   const panel = $("#tankProduction");
@@ -876,7 +886,7 @@ async function sellFlow(id, from, reopen) {
   if (["珍稀", "传说"].includes(info.quality)) {
     showDialog(
       `卖出${fishLabel(fish)}？`,
-      `${info.quality}，卖出后得 ${price} 积分，${R.buybackHours} 小时内可花原价赎回。图鉴记录保留。`,
+      `${info.quality}，卖出后得 ${price} 积分，${R.buybackHours} 小时内可花 ${M.buybackPrice(price)} 积分赎回（含手续费）。图鉴记录保留。`,
       `<div class="fish-detail-art">${fishArt(fish.kind)}</div>`,
       `<button class="button" data-action="${back === "shop" ? "shop-mode" : back || "close"}" data-mode="sell">再想想</button><button class="button primary" data-action="sell-confirm" data-fish="${id}" data-from="${back}">确认卖出</button>`
     );
@@ -1097,6 +1107,16 @@ function levelFacilityUnlocks(lv) {
     art:FarmFacilities.purifierArt(tier.level),name:`海水过滤器${tier.level>1?` Lv.${tier.level}`:""}`,
     use:tier.level===1?"解锁海水过滤器的建造资格，每日可收清水。":"解锁设备升级资格，可前往海水过滤器查看材料。"
   });
+  for(const [i,tier] of M.COMPOST_RULES.levels.entries())if(i>0&&tier.gardenLevel===lv)items.push({
+    art:FarmFacilities.art("composter",false,i+1),name:`堆肥箱 Lv.${i+1}`,
+    use:`解锁积分升级，产出${M.FERT[tier.fertilizer].name}；每份缩短生长 ${M.FERT[tier.fertilizer].hours} 小时。`
+  });
+  return items;
+}
+function levelUnlockItems(lv) {
+  const unlocks=M.unlocksAt(lv), items=levelFacilityUnlocks(lv).map(item=>({...item,label:"设备"}));
+  if(unlocks.plots)items.push({label:"开田",art:FarmArt.ui("sprout"),name:`新增 ${unlocks.plots} 块田`,use:"升级自动开放，可以种下更多作物。"});
+  if(unlocks.crops.length)items.push({label:"新种",art:FarmArt.packet(unlocks.crops[0]),name:unlocks.crops.map(key=>M.CROPS[key].name).join("、"),use:"商店上新，可前往购买种子。"});
   return items;
 }
 function levelDialog(selected) {
@@ -1107,19 +1127,19 @@ function levelDialog(selected) {
   const pending = M.pendingLevelRewards(state);
   const available = lv <= info.lv && !claimed(lv);
   const special = lv % 5 === 0;
-  const items = levelRewardItems(lv),unlocks = M.unlocksAt(lv),devices=levelFacilityUnlocks(lv);
-  const unlockText = [unlocks.plots ? `新增 ${unlocks.plots} 块田，可多种些喜欢的作物` : "", unlocks.crops.length ? `商店上新：${unlocks.crops.map((k) => M.CROPS[k].name).join("、")}` : ""].filter(Boolean).join(" · ");
+  const items = levelRewardItems(lv),devices=levelFacilityUnlocks(lv);
+  const newItems=levelUnlockItems(lv);
   const route = Array.from({ length: 5 }, (_, i) => {
-    const n = start + i,ready = n <= info.lv && !claimed(n),device=levelFacilityUnlocks(n)[0];
+    const n = start + i,ready = n <= info.lv && !claimed(n),feature=levelUnlockItems(n)[0];
     const label = claimed(n) ? "已领取" : ready ? "待领取" : "未解锁";
-    return `<button class="level-stop ${device ? "facility-unlock" : ""} ${claimed(n) ? "claimed" : ready ? "unclaimed" : "locked"} ${n % 5 === 0 ? "milestone" : ""} ${ready ? "ready" : ""}" data-action="level-select" data-level="${n}" aria-pressed="${n === lv}" aria-label="Lv.${n}${device ? `，设备解锁：${device.name}` : n % 5 === 0 ? ' 里程碑' : ''}，${label}"><strong>Lv.${n}${device ? '<span class="level-device-label">设备</span>' : ""}</strong><span class="level-stop-art" aria-hidden="true">${device?.art || levelRewardItems(n)[0].art}</span><small>${claimed(n) ? "✓ 已领取" : ready ? "待领取" : "未解锁"}</small>${ready ? '<i aria-hidden="true"></i>' : ""}</button>`;
+    return `<button class="level-stop ${feature ? "has-unlock" : ""} ${claimed(n) ? "claimed" : ready ? "unclaimed" : "locked"} ${n % 5 === 0 ? "milestone" : ""} ${ready ? "ready" : ""}" data-action="level-select" data-level="${n}" aria-pressed="${n === lv}" aria-label="Lv.${n}${feature ? `，${feature.label}解锁：${feature.name}` : n % 5 === 0 ? ' 里程碑' : ''}，${label}"><strong>Lv.${n}</strong><span class="level-unlock-badge">${feature ? feature.label + '<span class="level-unlock-suffix">解锁</span>' : "成长礼"}</span><span class="level-stop-art" aria-hidden="true">${feature?.art || levelRewardItems(n)[0].art}</span><small>${claimed(n) ? "✓ 已领取" : ready ? "待领取" : "未解锁"}</small>${ready ? '<i aria-hidden="true"></i>' : ""}</button>`;
   }).join("");
   const pct = info.next ? Math.min(100, (state.xp - info.at) / (info.next - info.at) * 100) : 100;
   const hero = `<div class="level-hero"><div class="level-medal"><small>Lv.</small><b>${info.lv}</b></div><div class="level-journey"><strong>${info.next ? `下一站 · Lv.${info.lv + 1}` : "庄园满级啦"}</strong><div class="level-xp" role="progressbar" aria-label="本级经验" aria-valuemin="0" aria-valuemax="${info.next ? info.next - info.at : 1}" aria-valuenow="${info.next ? state.xp - info.at : 1}"><i style="width:${pct}%"></i></div><span>${info.next ? `${state.xp - info.at} / ${info.next - info.at} 经验` : "每一次照料，都值得收藏"}</span></div>${pending.length ? `<button class="level-pending" data-action="level-select" data-level="${pending[0]}">待领 ${pending.length} 级<span>去看看 ›</span></button>` : '<span class="level-all-claimed">奖励已收好</span>'}</div>`;
   const status = available ? `<button class="button primary" data-action="level-claim" data-level="${lv}">领取 Lv.${lv} ${special ? "礼包" : "奖励"}</button>` : `<span class="level-claim-state">${claimed(lv) ? "✓ 奖励已领取" : `还差 ${R.levels[lv - 1] - state.xp} 经验解锁`}</span>`;
   showDialog("庄园成长", "每级一份心意，每 5 级一份丰盛礼包。",
-  `<div class="level-route-heading"><button data-action="level-select" data-level="${start - 1}" aria-label="前 5 级" ${start === 1 ? "disabled" : ""}><span aria-hidden="true">‹</span></button><strong>Lv.${start} — Lv.${start + 4}</strong><button data-action="level-select" data-level="${start + 5}" aria-label="后 5 级" ${start + 4 === R.levels.length ? "disabled" : ""}><span aria-hidden="true">›</span></button></div><nav class="level-route" aria-label="等级奖励路线">${route}</nav><section class="level-gift ${special ? "milestone" : ""}" aria-label="Lv.${lv} 奖励详情"><div class="level-gift-heading"><h3>Lv.${lv} · ${lv === 1 ? "初见庄园" : devices.length ? "设备解锁" : special ? "里程碑礼包" : "成长补给"}</h3><span>${special ? "额外加赠" : available ? "可以领取啦" : claimed(lv) ? "已领取" : "升级即得"}</span></div><div class="level-gift-items">${devices.map(device=>`<div class="level-gift-item level-facility-unlock"><span class="level-gift-art" aria-hidden="true">${device.art}</span><div><strong>${device.name}<b>Lv.${lv} 解锁</b></strong><p>${device.use}</p></div></div>`).join("")}${items.map((item) => `<div class="level-gift-item"><span class="level-gift-art" aria-hidden="true">${item.art}</span><div><strong>${item.name}<b>× ${item.count}</b></strong><p>${item.use}</p></div></div>`).join("")}</div>${unlockText ? `<p class="level-unlocks">${unlockText}</p>` : ""}${M.LEVEL_REWARDS[lv].fertilizers ? '<p class="level-gift-note">每轮施肥最多缩短一半生长时间。</p>' : ""}</section>`,
-  `<button class="button level-achievements" data-action="collections">庄园成就</button><div class="level-reward-actions">${pending.length > 1 ? `<button class="button" data-action="level-claim-all">领取全部 ${pending.length} 级</button>` : ""}${status}${claimed(lv) ? `<button class="button primary" data-action="${M.LEVEL_REWARDS[lv].seeds ? "bag" : M.LEVEL_REWARDS[lv].fertilizers ? "fert" : "fishing"}">去${M.LEVEL_REWARDS[lv].seeds ? "播种" : M.LEVEL_REWARDS[lv].fertilizers ? "施肥" : "钓鱼"}</button>` : ""}</div>`, false, "level-dialog");
+  `<div class="level-route-heading"><button data-action="level-select" data-level="${start - 1}" aria-label="前 5 级" ${start === 1 ? "disabled" : ""}><span aria-hidden="true">‹</span></button><strong>Lv.${start} — Lv.${start + 4}</strong><button data-action="level-select" data-level="${start + 5}" aria-label="后 5 级" ${start + 4 === R.levels.length ? "disabled" : ""}><span aria-hidden="true">›</span></button></div><nav class="level-route" aria-label="等级奖励路线">${route}</nav><section class="level-gift ${special ? "milestone" : ""}" aria-label="Lv.${lv} 奖励详情"><div class="level-gift-heading"><h3>Lv.${lv} · ${lv === 1 ? "初见庄园" : devices.length ? "设备解锁" : special ? "里程碑礼包" : "成长补给"}</h3><span>${special ? "额外加赠" : available ? "可以领取啦" : claimed(lv) ? "已领取" : "升级即得"}</span></div><div class="level-gift-items">${newItems.map(item=>`<div class="level-gift-item level-facility-unlock"><span class="level-gift-art" aria-hidden="true">${item.art}</span><div><strong>${item.name}<b>${item.label}解锁</b></strong><p>${item.use}</p></div></div>`).join("")}${items.map((item) => `<div class="level-gift-item"><span class="level-gift-art" aria-hidden="true">${item.art}</span><div><strong>${item.name}<b>× ${item.count}</b></strong><p>${item.use}</p></div></div>`).join("")}</div>${M.LEVEL_REWARDS[lv].fertilizers ? '<p class="level-gift-note">每轮施肥最多缩短一半生长时间。</p>' : ""}</section>`,
+  `<button class="button level-achievements" data-action="collections">庄园成就</button><div class="level-reward-actions">${pending.length > 1 ? `<button class="button" data-action="level-claim-all">领取全部 ${pending.length} 级</button>` : ""}${status}${claimed(lv) ? `<button class="button primary" data-action="${M.LEVEL_REWARDS[lv].seeds ? "bag" : M.LEVEL_REWARDS[lv].fertilizers ? "fert" : "fishing"}">去${M.LEVEL_REWARDS[lv].seeds ? "播种" : M.LEVEL_REWARDS[lv].fertilizers ? "施肥" : "钓鱼"}</button>` : ""}</div>`, false, `level-dialog${claimed(lv) ? " reward-claimed" : ""}`);
   // 进度独立于内容滚动，切换等级不重播弹框入场，也不让标题盖住进度。
   const head = $("#dialog .dialog-head > div");
   head.querySelector(".level-hero")?.remove();
@@ -1151,9 +1171,8 @@ function applyDensity(relayout = true) {
   document.documentElement.classList.contains("force-mobile") ||
   innerWidth <= 700 || innerWidth <= 1100 && innerHeight > innerWidth ||
   new URLSearchParams(location.search).get("renderProfile") === "mobile";
-  // 庄园是固定比例的游戏画布；轻笺页面继续使用用户保存的桌面密度。
-  const d = mobile || view === "tree" ?
-  1 :
+  // Only UI chrome grows on large desktop viewports; calibrated scene geometry stays at --d=1.
+  const d = mobile ? 1 : view === "tree" ? Math.max(1, Math.min(1.5, innerWidth / 1600, innerHeight / 900)) :
   { compact: 0.88, standard: 1, comfortable: 1.12 }[
   $("#densitySelect").value];
 
@@ -1170,7 +1189,8 @@ function applyDensity(relayout = true) {
   };
   if (mobile)
   Object.assign(vals, { pad: 16, space: 14, heading: 20, large: 28 });
-  document.documentElement.style.setProperty("--d", d);
+  document.documentElement.style.setProperty("--d", view === "tree" ? 1 : d);
+  document.documentElement.style.setProperty("--game-ui-d", d);
   Object.entries(vals).forEach(([k, v]) =>
   document.documentElement.style.setProperty("--" + k, v * d + "px")
   );
@@ -1307,12 +1327,12 @@ function init() {
         }
       case "claim-daily-water":{
           const from = b.getBoundingClientRect(),reward = await M.claimDailyWater(state, +b.dataset.index);
-          if (reward) {update();dailyDialog();GardenFX.flyTo(from, $("#waterCount"), toolSprite("water"), { size: 36 });toast(`水滴 +${reward.water} · 已装入水桶`);}
+          if (reward) {update();dailyDialog();GardenFX.flyTo(from, $("#waterCount"), toolSprite("water"), { size: 36 });toast(`水滴 +${reward.water} · 已装入水桶`, {topCenter:true});}
           break;
         }
       case "claim-all-daily-water":{
           const from = b.getBoundingClientRect(),reward = await M.claimAllDailyWater(state);
-          if (reward) {update();dailyDialog();GardenFX.flyTo(from, $("#waterCount"), toolSprite("water"), { size: 36 });toast(`水滴 +${reward.water}${reward.pending ? ` · 余下 ${reward.pending} 滴今日可继续领取` : " · 已装入水桶"}`);}
+          if (reward) {update();dailyDialog();GardenFX.flyTo(from, $("#waterCount"), toolSprite("water"), { size: 36 });toast(`水滴 +${reward.water}${reward.pending ? ` · 余下 ${reward.pending} 滴今日可继续领取` : " · 已装入水桶"}`, {topCenter:true});}
           break;
         }
       case "bait":

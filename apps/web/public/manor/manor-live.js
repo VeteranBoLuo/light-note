@@ -39,6 +39,29 @@ function createManorRefreshInput(doc) {
     waiting.set(id, { resolve, reject });
     window.parent.postMessage({ type: 'lightnote-manor', nonce, id, action, payload }, origin);
   });
+  let overlayOpen = false, overlayQueued = false;
+  const syncOverlay = (force = false) => {
+    if (!ready) return;
+    const next = ['modal', 'tankProduction'].some(id => {
+      const element = document.getElementById(id);
+      return element && !element.hidden;
+    });
+    if (force || next !== overlayOpen) { overlayOpen = next; request('dialog', { open: next }); }
+  };
+  const queueOverlaySync = () => {
+    if (overlayQueued) return;
+    overlayQueued = true;
+    // A panel can hand off to a detail in one click. Publish the final layer,
+    // keeping one host history entry rather than briefly closing/reopening it.
+    Promise.resolve().then(() => { overlayQueued = false; syncOverlay(); });
+  };
+  const backOverlay = () => {
+    if (!document.getElementById('modal').hidden) backFromDialog();
+    else closeTankManagement();
+    // System back has already consumed the host entry. Re-register only if a
+    // nested detail returned to the still-open atlas/panel.
+    syncOverlay(true);
+  };
   const apply = (target, next) => {
     for (const name of Object.keys(target)) if (!(name in next)) delete target[name];
     Object.assign(target, next);
@@ -66,7 +89,7 @@ function createManorRefreshInput(doc) {
   const methods = ['adopt','plant','water','harvest','fertilize','remove','buySeed','sellCrop','sellAllCrops',
     'convertBait','buyBait','buyFry','beginCast','resolveCast','selectBait','sell','release','buyback',
     'place','placeShow','unplace','fillEmptySlots','collect','collectSlot','pickPoop','deliverBirdSeed','pickBirdSeed',
-    'buyPurifier','claimPurifier','buyFacility','upgradePurifier','startCraft','collectCraft','refillPollen',
+    'buyPurifier','claimPurifier','buyFacility','collectCompost','upgradeComposter','upgradePurifier','startCraft','collectCraft','refillPollen',
     'pollinate','claimDailyWater','claimAllDailyWater','claimLevelReward','claimAllLevelRewards','claimCollection',
     'readAtlasEntry'];
   async function start(data) {
@@ -100,12 +123,8 @@ function createManorRefreshInput(doc) {
         if(window.requestIdleCallback)requestIdleCallback(prefetch);else setTimeout(prefetch,0);
       }
       const modal = document.getElementById('modal');
-      let open = !modal.hidden;
-      if (open) request('dialog', { open });
-      new MutationObserver(() => {
-        const next = !modal.hidden;
-        if (next !== open) { open = next; request('dialog', { open }); }
-      }).observe(modal, { attributes: true, attributeFilter: ['hidden'] });
+      syncOverlay();
+      new MutationObserver(queueOverlaySync).observe(modal, { attributes: true, attributeFilter: ['hidden'] });
       resumeCatch().catch(() => {});
     };
     script.onerror = () => {if(typeof GardenStartup!=='undefined')GardenStartup.fail();else request('load-error');};
@@ -141,10 +160,15 @@ function createManorRefreshInput(doc) {
     const data = event.data;
     if (event.source !== window.parent || event.origin !== origin || data?.nonce !== nonce) return;
     if (data?.type === 'lightnote-manor-control' && ready) {
-      if (data.action === 'close-dialog') { backFromDialog(); request('dialog', { open: !document.getElementById('modal').hidden }); }
+      if (data.action === 'close-dialog') backOverlay();
       else if (data.action === 'open-ledger') ledgerDialog();
+      else if (data.action === 'navigation-back') {
+        const allow = !overlayOpen && confirmManorExit();
+        if (overlayOpen) backOverlay();
+        request('navigation', { requestId: data.requestId, allow });
+      }
       else if (data.action === 'back') {
-        if (!document.getElementById('modal').hidden) { backFromDialog(); request('dialog', { open: !document.getElementById('modal').hidden }); } else requestManorExit();
+        if (overlayOpen) backOverlay();else requestManorExit();
       }
       return;
     }
@@ -155,6 +179,7 @@ function createManorRefreshInput(doc) {
     if (data.error) waiter.reject(new Error(data.error));
     else waiter.resolve(data.value);
   });
+  document.addEventListener('manor-overlay-change', queueOverlaySync);
   const readOnlyActions = new Set(['exit', 'close', 'dialog-back', 'atlas', 'atlas-filter', 'fish-detail', 'crop-detail', 'wildlife-detail']);
   document.addEventListener('click', event => {
     const action = event.target.closest('[data-action]');

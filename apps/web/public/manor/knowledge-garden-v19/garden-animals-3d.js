@@ -88,7 +88,10 @@ const GardenAnimals3D=(()=>{
     renderer.setClearColor(0,0);renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.06;
     const world=new THREE.Scene(),camera=new THREE.OrthographicCamera(-1,1,1,-1,.1,5000);camera.position.set(0,0,2000);
     world.add(new THREE.HemisphereLight(0xf8f3e7,0x77734b,1.7));const sun=new THREE.DirectionalLight(0xfff4dc,2.3);sun.position.set(-600,900,1400);world.add(sun);
-    const models=new Map(['rabbit','ladybird'].map(kind=>{const model=build(kind,THREE);world.add(model.root);model.root.visible=false;return [kind,model];}));
+    // The mobile bay has no rabbit. Do not build/read back its fur texture
+    // while the bay's insects and water are entering the screen.
+    const kinds=scene.dataset.manorArea==='bay'?['ladybird']:['rabbit','ladybird'];
+    const models=new Map(kinds.map(kind=>{const model=build(kind,THREE);world.add(model.root);model.root.visible=false;return [kind,model];}));
     let W=0,H=0,last=0,raf=0,available=true;
     function measure(){const r=scene.getBoundingClientRect();W=r.width;H=r.height;renderer.setPixelRatio(Math.min(devicePixelRatio||1,2));renderer.setSize(W,H,false);camera.left=-W/2;camera.right=W/2;camera.top=H/2;camera.bottom=-H/2;camera.updateProjectionMatrix();}
     const ro=new ResizeObserver(measure);ro.observe(scene);measure();

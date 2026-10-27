@@ -618,33 +618,6 @@ html.kbd-nav .dock-btn:focus-visible .dock-disc {
 :root[data-theme="dark"] .butterfly {
   display: none;
 }
-.mote {
-  position: absolute;
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: radial-gradient(circle, #fffbd8, #ffe28a88 50%, transparent 70%);
-  opacity: 0;
-  animation: mote-rise 9s ease-in-out infinite;
-}
-:root[data-theme="dark"] .mote {
-  background: radial-gradient(circle, #f4ffb0, #d8ff7d99 50%, transparent 70%);
-  width: 6px;
-  height: 6px;
-}
-@keyframes mote-rise {
-  0% {
-    transform: translate(0, 0);
-    opacity: 0;
-  }
-  20% {
-    opacity: 0.9;
-  }
-  100% {
-    transform: translate(18px, -90px);
-    opacity: 0;
-  }
-}
 .fall-leaf {
   position: absolute;
   width: 10px;

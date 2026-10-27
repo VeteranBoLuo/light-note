@@ -47,11 +47,14 @@ it('renders custom emoji inside the editable draft and returns to plain text whe
   const pressRight = new MouseEvent('mousedown', { bubbles: true, cancelable: true, clientX: 1 });
   emoji.dispatchEvent(pressRight);
   expect(pressRight.defaultPrevented).toBe(true);
-  expect(window.getSelection()?.anchorOffset).toBe(2);
+  const afterEmoji = emoji.closest('.chat-composer-input__emoji-atom')!.nextSibling;
+  expect(afterEmoji?.textContent).toBe('世界');
+  expect(window.getSelection()?.anchorNode).toBe(afterEmoji);
+  expect(window.getSelection()?.anchorOffset).toBe(0);
   // The later click must not move the caret a second time.
   emoji.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: -1 }));
-  expect(window.getSelection()?.anchorNode).toBe(editor);
-  expect(window.getSelection()?.anchorOffset).toBe(2);
+  expect(window.getSelection()?.anchorNode).toBe(afterEmoji);
+  expect(window.getSelection()?.anchorOffset).toBe(0);
   for (const options of [{ button: 2 }, { shiftKey: true }, { detail: 2 }]) {
     const nativeSelection = new MouseEvent('mousedown', { bubbles: true, cancelable: true, ...options });
     emoji.dispatchEvent(nativeSelection);

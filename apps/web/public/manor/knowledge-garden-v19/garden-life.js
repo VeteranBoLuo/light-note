@@ -1,4 +1,4 @@
-/* 轻量环境叠层：海鸥掠过远海，舱内小气泡与缓慢悬浮的微粒。
+/* 轻量环境叠层：海鸥掠过远海，舱内小气泡。
    所有动效只绘制透明光影/生物，石头、玻璃和背景几何不参与形变。
    隐藏页面、弹框、减少动态时停止绘制。 */
 const GardenLife = (() => {
@@ -17,13 +17,6 @@ const GardenLife = (() => {
     const period = 7 + i % 5, p = (time / period + i * .173) % 1;
     const side = i % 2 ? .85 : .15;
     return {x: width * (side + .065 * Math.sin(i * 2.1 + time * .6)), y: height * (.98 - p * .88), r: Math.max(1.1, Math.min(3, width * .0025)) * (.65 + i % 3 * .2), alpha: Math.sin(p * Math.PI) * .48};
-  }
-  function moteAt(i,time,width,height) {
-    const phase=i*2.399963, drift=time*(.004+i%3*.001);
-    return {x:width*(.08+((i*.618034+drift)%1)*.84),
-      y:height*(.24+((i*.381966)%1)*.62+.018*Math.sin(time*.27+phase)),
-      r:Math.max(.55,Math.min(1.2,width*.0012))*(.65+i%3*.18),
-      alpha:.10+.12*(.5+.5*Math.sin(time*.37+phase))};
   }
   function mount(scene) {
     if (current?.scene === scene) return;
@@ -52,13 +45,6 @@ const GardenLife = (() => {
     function drawWater(t) {
       ctx.setTransform(dpr,0,0,dpr,0,0); ctx.clearRect(0,0,w,h);
       if (!w || !h) return;
-      // Soft suspended points drift with the water; no moving spotlight layer.
-      for(let i=0;i<36;i++) {
-        const p=moteAt(i,t,w,h),alpha=p.alpha*edgeAlpha(p.x,p.y,waterPoly,Math.max(5,w*.018));
-        if(!alpha)continue;
-        ctx.fillStyle=`rgba(225,251,241,${alpha})`;
-        ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,Math.PI*2);ctx.fill();
-      }
       for (let i=0;i<16;i++) {
         const b=bubbleAt(i,t,w,h),alpha=b.alpha*edgeAlpha(b.x,b.y,waterPoly,Math.max(5,w*.018));
         if(!alpha)continue;
@@ -94,6 +80,6 @@ const GardenLife = (() => {
     raf=requestAnimationFrame(frame);
     current={scene,destroy(){cancelAnimationFrame(raf);ro.disconnect();canvas.remove();birds.remove();}};
   }
-  return {mount,bubbleAt,moteAt,edgeAlpha};
+  return {mount,bubbleAt,edgeAlpha};
 })();
 if(typeof module!=='undefined')module.exports=GardenLife;

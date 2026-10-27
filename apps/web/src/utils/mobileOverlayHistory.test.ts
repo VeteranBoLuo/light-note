@@ -35,6 +35,18 @@ describe('mobileOverlayHistory', () => {
     expect(firstState[MOBILE_OVERLAY_HISTORY_STATE_KEY]).toBe(first.id);
   });
 
+  it('刷新遗留的浮层占位不阻断新浮层返回，原路由状态保留', () => {
+    window.history.replaceState({ [MOBILE_OVERLAY_HISTORY_STATE_KEY]: 'before-reload', route: '/knowledge-manor', scroll: 18 }, '', '/');
+    const replace = vi.spyOn(window.history, 'replaceState');
+    const close = vi.fn();
+    registerMobileOverlayHistory(close);
+
+    const pageState = replace.mock.calls[0][0];
+    expect(pageState).toEqual({ route: '/knowledge-manor', scroll: 18 });
+    window.dispatchEvent(new PopStateEvent('popstate', { state: pageState }));
+    expect(close).toHaveBeenCalledOnce();
+  });
+
   it('主动关闭先消费占位，再通过同一个回调关闭界面', () => {
     const close = vi.fn();
     const handle = registerMobileOverlayHistory(close)!;

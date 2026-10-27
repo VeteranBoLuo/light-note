@@ -1,5 +1,5 @@
-/* Knowledge Manor rules, carried forward from the user-approved v219 prototype.
-   Prices, growth cycles, rewards and the shared LightNote points currency are unchanged.
+/* Knowledge Manor deterministic rules and user-approved crop catalog.
+   Existing crop prices, growth cycles, rewards and the shared points currency are preserved.
    Time, random outcomes and mutations are authorised by the server command boundary. */
 const GardenModel = (() => {
   const RULES = Object.freeze({
@@ -45,6 +45,7 @@ const GardenModel = (() => {
     creatureSellRate: 1.5,
     buybackHours: 24,
     buybackLimit: 10,
+    buybackFeePercent: 10,
   });
   // 作物：type once 单次收获 / multi 连续结果 / flower 观赏；first 首次成熟（小时），every 之后每轮间隔；
   // harvests 可收获次数（观赏花为可剪的束数）；price 种子价（null 不可购买）；sell 每份卖价（null 不可出售）
@@ -61,6 +62,13 @@ const GardenModel = (() => {
     sunflower: { name: "向日葵", tier: "advanced", type: "flower", first: 30, every: 18, harvests: 2, price: 12, sell: 9, xp: 18, unlock: 7 },
     pepper: { name: "彩椒", tier: "advanced", type: "multi", first: 28, every: 16, harvests: 4, price: 16, sell: 6, xp: 16, unlock: 10 },
     blueberry: { name: "蓝莓", tier: "advanced", type: "multi", first: 48, every: 24, harvests: 5, price: 24, sell: 8, xp: 18, unlock: 12 },
+    pea: { name: "豌豆", tier: "basic", type: "once", first: 8, every: 0, harvests: 1, price: 4, sell: 6, xp: 12, unlock: 3 },
+    potato: { name: "土豆", tier: "advanced", type: "once", first: 20, every: 0, harvests: 1, price: 6, sell: 9, xp: 18, unlock: 5 },
+    cucumber: { name: "黄瓜", tier: "advanced", type: "multi", first: 16, every: 12, harvests: 4, price: 10, sell: 4, xp: 8, unlock: 7 },
+    rosemary: { name: "迷迭香", tier: "advanced", type: "flower", first: 24, every: 24, harvests: 3, price: 8, sell: 4, xp: 10, unlock: 9 },
+    watermelon: { name: "西瓜", tier: "advanced", type: "once", first: 36, every: 0, harvests: 1, price: 10, sell: 15, xp: 36, unlock: 11 },
+    grape: { name: "葡萄", tier: "advanced", type: "multi", first: 40, every: 20, harvests: 4, price: 20, sell: 8, xp: 18, unlock: 16 },
+    tea: { name: "茶树", tier: "advanced", type: "multi", typeLabel: "连续采摘", first: 60, every: 36, harvests: 4, price: 22, sell: 10, xp: 22, unlock: 20 },
     rainbowcorn: { name: "彩虹玉米", tier: "rare", type: "once", first: 24, every: 0, harvests: 1, price: null, sell: 20, xp: 60, unlock: 1, bait: "rainbowBait" },
     starpumpkin: { name: "星光南瓜", tier: "rare", type: "once", first: 48, every: 0, harvests: 1, price: null, sell: 40, xp: 120, unlock: 1 },
     moonorchid: { name: "月光兰", tier: "rare", type: "flower", first: 72, every: 48, harvests: 3, price: null, sell: 30, xp: 150, fertilizer: "legend", unlock: 1 },
@@ -77,14 +85,21 @@ const GardenModel = (() => {
   const FACILITIES = Object.freeze({
     workshop: Object.freeze({name:"诱饵工坊", cost:180, gardenLevel:6}),
     beehive: Object.freeze({name:"花园蜂箱", cost:160, gardenLevel:6}),
+    composter: Object.freeze({name:"堆肥箱", cost:120, gardenLevel:9}),
   });
+  const COMPOST_LEVELS = Object.freeze([
+    Object.freeze({gardenLevel:FACILITIES.composter.gardenLevel,cost:FACILITIES.composter.cost,hours:12,storage:2,fertilizer:"eco"}),
+    Object.freeze({gardenLevel:14,cost:180,hours:12,storage:2,fertilizer:"nourish"}),
+    Object.freeze({gardenLevel:20,cost:360,hours:12,storage:2,fertilizer:"fertile"}),
+  ]);
+  const COMPOST_RULES = Object.freeze({residuePerBatch:3,hours:COMPOST_LEVELS[0].hours,storage:COMPOST_LEVELS[0].storage,levels:COMPOST_LEVELS});
   const BAIT_RECIPES = Object.freeze({
     fruit: Object.freeze({name:"果香引鱼饵", crop:"tomato", preference:"海水鱼类"}),
     herb: Object.freeze({name:"草木觅贝饵", crop:"lettuce", preference:"海水底栖水族"}),
   });
   const FACILITY_RULES = Object.freeze({craftHours:2, craftMax:3, targetWeight:4, pollenCapacity:6,
-    flowerPollen:Object.freeze({lavender:2, sunflower:6}),
-    pollinationCrops:Object.freeze(["tomato","strawberry","eggplant","pepper","blueberry"])});
+    flowerPollen:Object.freeze({lavender:2, sunflower:6, rosemary:1}),
+    pollinationCrops:Object.freeze(["tomato","strawberry","eggplant","pepper","blueberry","cucumber","grape"])});
   // 每级一次补给，每 5 级加赠里程碑礼包；Lv.1 就是见面礼，不重复发放。
   // 领取不加经验，施肥仍受半轮加速上限约束。
   const LEVEL_REWARDS = Object.freeze({
@@ -294,6 +309,13 @@ const GardenModel = (() => {
       // 只结算下次收获的加成，已授粉标记留在这株作物上，后续轮次不能再授粉。
       p.pollinationPending = false;
       p.done++;
+      if (p.done === c.harvests && s.composter) {
+        // Settle earlier batches before adding a new residue: it cannot fuel past production.
+        const compost=composterProjection(s);
+        if (Number.isSafeInteger(compost.residue+1)) {
+          compost.residue++;s.composter=compost;s.composter=composterProjection(s);
+        }
+      }
       if (c.type === "once") Object.assign(p, emptyPlot(key));
       else if (p.done < c.harvests) {
         p.next = s.now + c.every;
@@ -496,9 +518,49 @@ const GardenModel = (() => {
     if(!facility||!s.adopted||s.casting||s[key]||level(s)<facility.gardenLevel||
       ![s.wallet,s.weekSpent+facility.cost].every(Number.isSafeInteger)||s.wallet<facility.cost)return false;
     spend(s,facility.cost,`建造${facility.name}`);
-    s[key]=key==="workshop"?{purchasedAt:s.now,job:null,nextJobId:1}:{purchasedAt:s.now,pollen:0,lastPollinatedDay:null};
+    s[key]=key==="workshop"?{purchasedAt:s.now,job:null,nextJobId:1}:key==="composter"?{purchasedAt:s.now,level:1,residue:0,stock:0,nextReady:null}:{purchasedAt:s.now,pollen:0,lastPollinatedDay:null};
     diary(s,`${facility.name}建好了`);
     return true;
+  }
+  // Pure projection bounded by the current tier's storage, even after a long absence.
+  function composterProjection(s) {
+    if(!s.composter)return null;
+    const c={...s.composter,level:s.composter.level||1,stockByFertilizer:{...(s.composter.stockByFertilizer||{eco:s.composter.stock})}},tier=COMPOST_LEVELS[c.level-1];
+    while(c.nextReady!==null && c.nextReady<=s.now && c.stock<tier.storage) {
+      const finished=c.nextReady;c.stock++;c.stockByFertilizer[tier.fertilizer]=(c.stockByFertilizer[tier.fertilizer]||0)+1;c.nextReady=null;
+      if(c.stock<tier.storage && c.residue>=COMPOST_RULES.residuePerBatch) {
+        c.residue-=COMPOST_RULES.residuePerBatch;c.nextReady=finished+tier.hours;
+      }
+    }
+    if(c.nextReady===null && c.stock<tier.storage && c.residue>=COMPOST_RULES.residuePerBatch) {
+      c.residue-=COMPOST_RULES.residuePerBatch;c.nextReady=s.now+tier.hours;
+    }
+    return c;
+  }
+  function composterStatus(s) {
+    const c=composterProjection(s);
+    if(!c)return {owned:false,level:0,hours:COMPOST_LEVELS[0].hours,storage:COMPOST_LEVELS[0].storage,fertilizer:COMPOST_LEVELS[0].fertilizer,stored:{},phase:"sealed",residue:0,stock:0,remaining:0};
+    const tier=COMPOST_LEVELS[c.level-1];
+    return {owned:true,level:c.level,hours:tier.hours,storage:tier.storage,fertilizer:tier.fertilizer,stored:{...c.stockByFertilizer},phase:c.stock>=tier.storage?"full":c.nextReady!==null?"working":c.stock?"ready":"idle",
+      residue:c.residue,stock:c.stock,remaining:c.nextReady===null?0:Math.max(0,c.nextReady-s.now)};
+  }
+  function upgradeComposter(s,plan) {
+    const c=composterProjection(s),tier=c&&COMPOST_LEVELS[c.level];
+    if(!s.adopted||s.casting||!tier||plan?.level!==c.level+1||plan?.cost!==tier.cost||level(s)<tier.gardenLevel||
+      ![s.wallet,s.weekSpent+tier.cost].every(Number.isSafeInteger)||s.wallet<tier.cost)return false;
+    // Settle completed batches at the old quality. The active batch keeps its deadline.
+    spend(s,tier.cost,`升级堆肥箱 Lv.${c.level+1}`);c.level++;
+    s.composter=c;s.composter=composterProjection(s);
+    diary(s,`堆肥箱升至 Lv.${c.level}`);
+    return true;
+  }
+  function collectCompost(s) {
+    const c=composterProjection(s);
+    if(!s.adopted||s.casting||!c||!c.stock||Object.entries(c.stockByFertilizer).some(([key,count])=>!Number.isSafeInteger((s.fertilizers[key]||0)+count)))return 0;
+    const count=c.stock;for(const [key,n] of Object.entries(c.stockByFertilizer))if(n)s.fertilizers[key]=(s.fertilizers[key]||0)+n;
+    c.stock=0;c.stockByFertilizer={};s.composter=c;
+    s.composter=composterProjection(s);
+    return count;
   }
   function workshopStatus(s) {
     const job=s.workshop?.job;
@@ -810,15 +872,22 @@ const GardenModel = (() => {
     const [fish] = s.fish.splice(i, 1);
     earn(s, price, `卖出${catalog[fish.kind].name || "一位水族"}`);
     s.nextSaleId ||= 1;
-    s.buybacks=[{id:s.nextSaleId++,fish:{...fish},points:price,soldAt:s.now},...buybackEntries(s)].slice(0,RULES.buybackLimit);
+    s.buybacks=[{id:s.nextSaleId++,fish:{...fish},points:price,buybackPoints:buybackPrice(price),soldAt:s.now},...buybackEntries(s)].slice(0,RULES.buybackLimit);
     return price;
   }
   const buybackEntries=s=>(s.buybacks||[]).filter(r=>Number.isFinite(r.soldAt)&&s.now>=r.soldAt&&s.now-r.soldAt<RULES.buybackHours);
-  function buyback(s,saleId,catalog) {
-    const entry=buybackEntries(s).find(r=>r.id===saleId);
-    if(!entry||!catalog[entry.fish.kind]||s.fish.some(f=>f.id===entry.fish.id)||s.wallet<entry.points||
-      ![entry.points,s.wallet-entry.points,s.weekSpent+entry.points].every(Number.isSafeInteger)||entry.points<=0)return null;
-    spend(s,entry.points,`赎回${catalog[entry.fish.kind].name||"一位水族"}`);
+  function buybackPrice(points) {
+    const result=points+Math.max(1,Math.ceil(points*RULES.buybackFeePercent/100));
+    return Number.isSafeInteger(points)&&points>0&&Number.isSafeInteger(result)?result:0;
+  }
+  const buybackCost=entry=>entry.buybackPoints??entry.points;
+  function buyback(s,saleId,catalog,quotedPoints) {
+    const entry=buybackEntries(s).find(r=>r.id===saleId),cost=entry?buybackCost(entry):0;
+    // Old receipts keep their quote. New fees require a matching displayed quote, including older clients.
+    if(!entry||!catalog[entry.fish.kind]||s.fish.some(f=>f.id===entry.fish.id)||s.wallet<cost||
+      (entry.buybackPoints!==undefined&&quotedPoints===undefined)||(quotedPoints!==undefined&&quotedPoints!==cost)||
+      ![cost,s.wallet-cost,s.weekSpent+cost].every(Number.isSafeInteger)||cost<=0)return null;
+    spend(s,cost,`赎回${catalog[entry.fish.kind].name||"一位水族"}`);
     const fish={...entry.fish};s.fish.push(fish);
     s.buybacks=s.buybacks.filter(r=>r.id!==saleId);
     return fish;
@@ -858,6 +927,7 @@ const GardenModel = (() => {
       firstCompanionPending: null, casting: false, castPending: false, castSource: null,
       fish: [], fishSlots: Array(RULES.farmSlots).fill(null), showSlots: Array(RULES.showSlots).fill(null),
       discoveries: {}, atlasUnread: {}, nextFishId: 1, buybacks: [], nextSaleId: 1,
+      composter: null,
       fertilizers: { rabbit: 0, eco: 0, nourish: 0, fertile: 0, legend: 0 },
       plots: Array.from({ length: RULES.plotCount }, emptyPlot), seeds: {}, crops: {}, cropDex: {}, rewards: {},
       poopDay: null, birdSeedDay: null, birdSeedPickedDay: null, fryDay: null, fryUsed: 0,
@@ -879,7 +949,7 @@ const GardenModel = (() => {
     CROPS,
     RARE,
     FERT,
-    FACILITIES, BAIT_RECIPES, FACILITY_RULES,
+    FACILITIES, BAIT_RECIPES, FACILITY_RULES, COMPOST_RULES,
     LEVEL_REWARDS,
     claimLevelReward,
     pendingLevelRewards,
@@ -920,6 +990,7 @@ const GardenModel = (() => {
     quoteCropSale,
     sellCrop,
     sellAllCrops,
+    buybackPrice, buybackCost,
     buybackEntries,
     buyback,
     convertBait,
@@ -928,7 +999,7 @@ const GardenModel = (() => {
     completeDaily,
     pendingDailyWater, claimDailyWater, claimAllDailyWater, selectBait,
     purifierStatus, buyPurifier, claimPurifier, purifierUpgradePlan, upgradePurifier,
-    buyFacility, workshopStatus, craftQuote, startCraft, collectCraft,
+    buyFacility, composterStatus, upgradeComposter, collectCompost, workshopStatus, craftQuote, startCraft, collectCraft,
     beehiveStatus, refillPollen, pollinationEligible, pollinationTargets, pollinate,
     advance,
     buyBait,
