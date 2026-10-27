@@ -77,3 +77,22 @@ it('copies emoji and real line breaks without exporting the editor caret sentine
   copyInlineEmojiSelection(secondEvent);
   expect(readInlineEmojiClipboard(secondEvent)).toBe(`文字${token}`);
 });
+
+it('omits the leading caret marker but keeps text entered inside its editable anchor', () => {
+  const token = '[[ln-emoji:jian-tuan-v1:gentle-smile]]';
+  const host = document.createElement('div');
+  host.innerHTML = `<span data-composer-caret-anchor="true">\u200b输入</span><img alt="微笑" data-inline-emoji-token="${token}"><br data-composer-caret-sentinel="true">`;
+  document.body.append(host);
+  const range = document.createRange();
+  range.selectNodeContents(host);
+  window.getSelection()?.addRange(range);
+  const values = new Map<string, string>();
+  const event = new Event('copy', { cancelable: true }) as ClipboardEvent;
+  Object.defineProperty(event, 'clipboardData', { value: {
+    setData: (type: string, value: string) => values.set(type, value),
+    getData: (type: string) => values.get(type) || '',
+  } });
+  copyInlineEmojiSelection(event);
+  expect(values.get('text/plain')).toBe('输入[微笑]');
+  expect(readInlineEmojiClipboard(event)).toBe(`输入${token}`);
+});

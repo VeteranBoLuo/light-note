@@ -125,6 +125,9 @@
     node.childNodes.forEach((child) => {
       content += serializeNode(child);
     });
+    if (node instanceof HTMLElement && node.dataset.composerCaretAnchor === 'true') {
+      return content.replace('\u200b', '');
+    }
     if (node instanceof HTMLDivElement || node instanceof HTMLParagraphElement) {
       if (node !== richInput.value && content && !content.endsWith('\n')) content += '\n';
     }
@@ -187,8 +190,45 @@
       caretSentinel.dataset.composerCaretSentinel = 'true';
       fragment.append(caretSentinel);
     }
+    ensureLeadingCarets(fragment);
     ensureTrailingCaret(fragment);
     root.replaceChildren(fragment);
+  }
+
+  function ensureLeadingCarets(root: ParentNode) {
+    // 给行首表情一个真实可编辑文本落点，避免旧 WebView 在非编辑节点边界
+    // 不绘制光标。只剔除标记容器里的一个占位字符，保留输入法写入的正文。
+    root.querySelectorAll<HTMLElement>('[data-composer-caret-anchor="true"]').forEach((anchor) => {
+      if (!anchor.textContent?.includes('\u200b')) anchor.prepend(document.createTextNode('\u200b'));
+    });
+    for (const child of Array.from(root.childNodes)) {
+      if (!(child instanceof HTMLElement) || !child.hasAttribute('data-emoji-atom')) continue;
+      const previous = child.previousSibling;
+      if (previous && !(previous instanceof HTMLBRElement)) continue;
+      const anchor = document.createElement('span');
+      anchor.dataset.composerCaretAnchor = 'true';
+      anchor.append(document.createTextNode('\u200b'));
+      child.before(anchor);
+    }
+  }
+
+  function anchorPoint(anchor: HTMLElement, logicalOffset: number) {
+    const walker = document.createTreeWalker(anchor, NodeFilter.SHOW_TEXT);
+    let remaining = logicalOffset;
+    let skippedMarker = false;
+    while (walker.nextNode()) {
+      const node = walker.currentNode;
+      const text = node.textContent || '';
+      for (let offset = 0; offset <= text.length; offset++) {
+        if (!skippedMarker && text[offset] === '\u200b') {
+          skippedMarker = true;
+          continue;
+        }
+        if (remaining === 0) return { node, offset };
+        if (offset < text.length) remaining--;
+      }
+    }
+    return { node: anchor as Node, offset: anchor.childNodes.length };
   }
 
   function ensureTrailingCaret(root: ParentNode) {
@@ -241,11 +281,18 @@
     for (const [index, child] of children.entries()) {
       const content = serializeNode(child);
       const length = content.length;
+      if (
+        child instanceof HTMLElement &&
+        child.dataset.composerCaretAnchor === 'true' &&
+        requested <= consumed + length
+      ) {
+        return anchorPoint(child, Math.max(0, requested - consumed));
+      }
       if (child.nodeType === Node.TEXT_NODE && requested <= consumed + length) {
         return { node: child, offset: Math.max(0, requested - consumed) };
       }
       if (requested <= consumed) return { node: root, offset: index };
-      if (requested <= consumed + length) return { node: root, offset: index + 1 };
+      if (requested < consumed + length) return { node: root, offset: index + 1 };
       consumed += length;
     }
     return { node: root, offset: children.length };
@@ -424,10 +471,13 @@
       const start = serializeNode(prefix.cloneContents()).length;
       prefix.setEnd(target.endContainer, target.endOffset);
       const end = serializeNode(prefix.cloneContents()).length;
+      // 删除范围只含辅助字符时不改正文，也不让浏览器把空 span 改写成 BR。
+      event.preventDefault();
       if (end > start) {
-        event.preventDefault();
         const value = beforeInputSnapshot.value;
         updateEditorValue(value.slice(0, start) + value.slice(end), { start, end: start });
+      } else {
+        beforeInputSnapshot = null;
       }
     }
   }
@@ -479,7 +529,10 @@
     updateEditorValue(serializeRichContent(), selection);
     // 原生删除末尾文字时 DOM 已与新 value 一致，不会触发重绘；表情和真实
     // 换行后都要恢复落点，保证下一次退格从正确的行开始。
-    if (richInput.value) ensureTrailingCaret(richInput.value);
+    if (richInput.value) {
+      ensureLeadingCarets(richInput.value);
+      ensureTrailingCaret(richInput.value);
+    }
   }
 
   function handleRichKeydown(event: KeyboardEvent) {
@@ -539,6 +592,18 @@
 
   function handleRichSelectionChange(event: Event) {
     lastSelection = getSelectionRange();
+    const selection = window.getSelection();
+    const node = selection?.anchorNode;
+    const element = node instanceof Element ? node : node?.parentElement;
+    // Home/方向键可能停在占位字符前；统一映射到同一逻辑位置的正文侧，
+    // 避免下一次 Delete 只删除辅助字符。输入法合成期间不移动其选区。
+    if (
+      selection?.isCollapsed &&
+      element?.closest('[data-composer-caret-anchor="true"]') &&
+      !(event instanceof KeyboardEvent && event.isComposing)
+    ) {
+      setSelectionRange(lastSelection.start, lastSelection.end);
+    }
     syncRichEmojiSelection();
     emit('select', event);
   }

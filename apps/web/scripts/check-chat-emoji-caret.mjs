@@ -69,6 +69,18 @@ try {
         for (const prefix of ['', '测试']) {
           await reset(prefix + token);
           await clickSide(0, 'left', prefix.length);
+          if (!prefix) {
+            const caret = await page.evaluate(() => {
+              const selection = window.getSelection();
+              const range = selection.getRangeAt(0);
+              return {
+                textNode: range.startContainer.nodeType === Node.TEXT_NODE,
+                height: range.getBoundingClientRect().height,
+              };
+            });
+            assert.equal(caret.textNode, true);
+            assert(caret.height > 0, 'leading caret must have a real text line box');
+          }
           await page.keyboard.insertText('左');
           await checkDraft(prefix + '左' + token);
           await undo();
@@ -102,6 +114,34 @@ try {
           await undo();
           await checkDraft(prefix + token);
         }
+        await reset(token);
+        await clickSide(0, 'left', 0);
+        await page.keyboard.press('Backspace');
+        await checkDraft(token);
+        await clickSide(0, 'left', 0);
+        await editor.screenshot({ path: `/tmp/lightnote-leading-caret-${width}-${theme}-${density}.png`, caret: 'initial' });
+        await page.keyboard.press('Home');
+        await page.keyboard.press('Delete');
+        await checkDraft('');
+        await undo();
+        await checkDraft(token);
+        await clickSide(0, 'left', 0);
+        const cdp = await page.context().newCDPSession(page);
+        await cdp.send('Input.imeSetComposition', { text: '中文', selectionStart: 2, selectionEnd: 2 });
+        await cdp.send('Input.insertText', { text: '中文' });
+        await checkDraft('中文' + token);
+        await page.keyboard.press('Backspace');
+        await checkDraft('中' + token);
+        await undo();
+        await checkDraft('中文' + token);
+        await cdp.detach();
+        await reset('前文\n' + token);
+        await clickSide(0, 'left', 3);
+        assert(await page.evaluate(() => window.getSelection().anchorNode.nodeType === Node.TEXT_NODE));
+        await page.keyboard.insertText('行首');
+        await checkDraft('前文\n行首' + token);
+        await undo();
+        await checkDraft('前文\n' + token);
         await reset(token + '\n字');
         await page.evaluate(() => {
           window.caretFixture.input.focus();
