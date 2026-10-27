@@ -183,7 +183,7 @@ function renderHtml(key, locale, example) {
   if (key === "weekly")
     return page(
       key,
-      head(t("本周工作回顾", "This week in review"), date) +
+      head(t("本周工作回顾", "This week in review"), "{{weekStart}} — {{weekEnd}}") +
         `<div class="ln-note-summary">${p(t(example ? "项目说明完成初稿，资料入口已整理。下周先确认尚未解决的问题。" : "用一两句话概括本周的收获；不需要时可删除。", example ? "The project brief and reference collection are ready. Next week, clarify the remaining questions." : "Summarize the week in a sentence or two; remove this introduction if unnecessary."))}</div>` +
         section(
           t("01 · 本周完成", "01 · Completed this week"),

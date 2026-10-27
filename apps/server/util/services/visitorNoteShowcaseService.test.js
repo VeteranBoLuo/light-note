@@ -102,6 +102,9 @@ describe('visitor note showcase', () => {
           .map((_, node) => doc(node).text())
           .get();
       expect(note.type).toBe('html');
+      expect(note.content).not.toMatch(/\{\{(?:weekStart|weekEnd|date|weekday)\}\}/);
+      if (key === 'daily') expect($('.ln-note-date').first().text()).toBe('2026-10-26 · 星期一');
+      if (key === 'weekly') expect($('.ln-note-date').first().text()).toBe('2026-10-26 — 2026-11-01');
       expect(headings($)).toEqual(headings(source));
       expect($('table').length).toBe(source('table').length);
       expect($('input[type=checkbox]').length).toBe(source('input[type=checkbox]').length);

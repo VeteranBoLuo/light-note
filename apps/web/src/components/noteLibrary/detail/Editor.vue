@@ -6226,6 +6226,7 @@
 
 <style lang="less">
   @import (reference) "@/assets/css/workspace-surfaces.less";
+  @import (reference) "@/assets/css/note-markdown.less";
   /* 搜不到结果时视觉隐藏,但保留 DOM:面板要继续搜索,
      这样从 @test123 退回 @test 能自动重新出现,不必删到只剩 @ */
   .resource-mention-inline-popover.is-empty {
@@ -6976,130 +6977,7 @@
     overflow: auto;
     box-sizing: border-box;
     padding: var(--note-markdown-padding-top, 14px) var(--note-markdown-padding-inline, 16px) clamp(160px, 35vh, 360px);
-    color: var(--text-color);
-    font-family: var(
-      --note-markdown-font-family,
-      ui-monospace,
-      SFMono-Regular,
-      Menlo,
-      Monaco,
-      Consolas,
-      'Courier New',
-      monospace
-    );
-    font-size: var(--note-markdown-font-size, 13px);
-    line-height: var(--note-markdown-line-height, 22px);
-    overflow-wrap: anywhere;
-    word-break: break-word;
-    > :first-child {
-      margin-top: 0;
-    }
-    h1,
-    h2,
-    h3,
-    h4,
-    h5,
-    h6 {
-      margin: 0.6em 0 0.4em;
-    }
-    pre {
-      max-width: 100%;
-      box-sizing: border-box;
-      border: 1px solid var(--card-border-color, #e5e7eb);
-      border-radius: 8px;
-      padding: 10px 12px;
-      overflow: visible;
-      white-space: pre-wrap;
-      overflow-wrap: anywhere;
-      word-break: break-word;
-      code {
-        padding: 0;
-        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Courier New', monospace;
-        font-size: 13px;
-        white-space: inherit;
-        overflow-wrap: inherit;
-        word-break: inherit;
-      }
-    }
-    code {
-      padding: 1px 4px;
-      border-radius: 3px;
-      font-size: 0.9em;
-    }
-    table {
-      border-collapse: collapse;
-      width: 100%;
-      th,
-      td {
-        border: 1px solid var(--card-border-color, #d9d9d9);
-        padding: 6px 10px;
-        overflow-wrap: anywhere;
-        word-break: break-word;
-      }
-    }
-    blockquote {
-      border-left: 3px solid var(--primary-color, #615ced);
-      margin: 0;
-      padding: 4px 12px;
-      color: var(--desc-color, #666);
-      background: var(--common-tag-bg-color, #f9f9f9);
-      border-radius: 0 6px 6px 0;
-    }
-    a:not(.ln-resource-link) {
-      color: var(--note-editor-link-color, var(--info-color, var(--primary-color)));
-      overflow-wrap: anywhere;
-      word-break: break-word;
-      text-decoration-color: currentColor;
-      text-underline-offset: 2px;
-    }
-    img {
-      max-width: 100%;
-      height: auto;
-    }
-    ul,
-    ol {
-      padding-left: 20px;
-    }
-    .note-task-list {
-      padding-left: 0 !important;
-      list-style: none !important;
-      list-style-type: none !important;
-    }
-    .note-task-list-item {
-      list-style: none !important;
-      list-style-type: none !important;
-    }
-    .note-task-list-item::marker {
-      content: '';
-    }
-    .note-todo-checkbox {
-      margin: 0 7px 0 0;
-      vertical-align: middle;
-    }
-    a.ln-resource-link {
-      // inline 的 border 不参与行高计算，标签不会再把同一行文本顶开。
-      display: inline;
-      margin: 0 2px;
-      padding: 0 6px;
-      border: 1px solid color-mix(in srgb, var(--primary-color) 26%, transparent);
-      border-radius: 999px;
-      background: color-mix(in srgb, var(--primary-color) 9%, transparent);
-      color: var(--primary-color);
-      line-height: inherit;
-      text-decoration: none;
-      vertical-align: baseline;
-      cursor: pointer;
-      overflow-wrap: anywhere;
-      -webkit-box-decoration-break: clone;
-      box-decoration-break: clone;
-
-      &[data-ln-resource-state='unavailable'] {
-        border-style: dashed;
-        background: color-mix(in srgb, var(--desc-color) 8%, transparent);
-        color: var(--desc-color);
-        cursor: not-allowed;
-      }
-    }
+    .note-markdown-content();
   }
 
   @media (max-width: 420px) {

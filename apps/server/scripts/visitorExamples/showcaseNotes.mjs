@@ -61,7 +61,9 @@ export function buildShowcaseNotes({ note, mdNote, images }) {
   const sample = (key) =>
     BUILTIN_NOTE_BODIES[key].exampleContent['zh-CN']
       .replaceAll('{{datetime}}', '演示日 14:00')
-      .replaceAll('{{date}}', key === 'weekly' ? '演示第 1 周' : '演示日')
+      .replaceAll('{{date}}', key === 'daily' ? '2026-10-26' : '演示日')
+      .replaceAll('{{weekStart}}', '2026-10-26')
+      .replaceAll('{{weekEnd}}', '2026-11-01')
       .replaceAll('{{weekday}}', '星期一');
   return {
     日报示例: html(
