@@ -1770,6 +1770,20 @@ describe('后台日志组合筛选', () => {
     expect(res.send.mock.calls[0][0].data.total).toBe(100);
   });
 
+  it('API 慢请求窗口不足时，完整范围查询失败不能返回不完整的一页', async () => {
+    query
+      .mockResolvedValueOnce([[{ id: 'nearby-only', request_time: '2026-10-20 10:00:00' }]])
+      .mockResolvedValueOnce([[{ total: 2 }]])
+      .mockRejectedValueOnce(new Error('fixture SQL failure'));
+    const res = mockRes();
+    await getApiLogs(
+      { user: { role: 'root' }, body: { cursor: null, limit: 20, filters: { minDurationMs: 1000 } } },
+      res,
+    );
+    expect(query).toHaveBeenCalledTimes(3);
+    expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ status: 500, data: null, msg: '查询日志失败' }));
+  });
+
   it('API 日志请求体只在打开单条详情后按 ID 读取', async () => {
     query.mockResolvedValueOnce([
       [

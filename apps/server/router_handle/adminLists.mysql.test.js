@@ -243,16 +243,35 @@ describe.skipIf(!socketPath)('后台游标列表 SQL 与索引', () => {
   });
 
   it('API 耗时筛选使用范围索引，计数由覆盖索引完成，翻页结果保持一致', async () => {
-    const body = { cursor: null, limit: 10, filters: { minDurationMs: 1000 } };
+    const body = {
+      cursor: null,
+      limit: 10,
+      filters: { minDurationMs: 1000, startDate: '2026-10-20', endDate: '2026-10-20' },
+    };
     const first = await read(getApiLogs, body);
     expect(first.total).toBe(150);
     expect(first.items[0].id).toBe('api-00299');
-    const [sql, params] = query.mock.calls[0];
+    const [sql, params] = query.mock.calls.find(
+      ([sql]) => !sql.includes('COUNT(*)') && sql.includes('FORCE INDEX (idx_api_logs_duration_time)'),
+    );
     const [plan] = await db.query('EXPLAIN ' + sql, params);
-    expect(plan.find((r) => r.table === 'a').key).toBe('idx_api_logs_duration_time');
-    const oldSql = sql.replace('FROM api_logs a', 'FROM api_logs a FORCE INDEX (idx_api_logs_admin_list)');
-    const [oldRows] = await db.query(oldSql, params);
+    const candidateScan = plan.find((r) => r.select_type === 'DERIVED' && r.table === 'a');
+    expect(candidateScan.key).toBe('idx_api_logs_duration_time');
+    expect(candidateScan.Extra).toContain('Using index');
+    expect(plan.find((r) => r.select_type === 'PRIMARY' && r.table === 'a').key).toBe('PRIMARY');
+    const [oldRows] = await db.query(`SELECT a.id FROM api_logs a FORCE INDEX (idx_api_logs_admin_list)
+      WHERE a.del_flag = '0' AND a.duration_ms >= 1000
+        AND a.user_id NOT IN (SELECT id FROM user WHERE role IN ('root','test'))
+      ORDER BY a.request_time DESC, a.id DESC LIMIT 11`);
     expect(first.items.map((r) => r.id)).toEqual(oldRows.map((r) => r.id).slice(0, 10));
+    const reverseReads = async () =>
+      Number((await db.query("SHOW SESSION STATUS LIKE 'Handler_read_prev'"))[0][0].Value);
+    let before = await reverseReads();
+    await db.query(...query.mock.calls[0]);
+    expect((await reverseReads()) - before).toBeLessThanOrEqual(44);
+    before = await reverseReads();
+    await db.query(sql, params);
+    expect((await reverseReads()) - before).toBe(0);
     const [countSql, countParams] = query.mock.calls[1];
     const [countPlan] = await db.query('EXPLAIN ' + countSql, countParams);
     const countEntry = countPlan.find((r) => r.table === 'a');
@@ -281,6 +300,71 @@ describe.skipIf(!socketPath)('后台游标列表 SQL 与索引', () => {
     });
     expect(trace.total).toBe(1);
     expect(trace.items[0].id).toBe('api-00299');
+  });
+
+  it('低耗时阈值在有界时间窗口取满后直接返回，保留时间排序的快速续页', async () => {
+    const body = { cursor: null, limit: 10, filters: { minDurationMs: 1 } };
+    const first = await read(getApiLogs, body);
+    expect(first.total).toBe(12000);
+    expect(first.items[0].id).toBe('api-23999');
+    expect(query).toHaveBeenCalledTimes(2);
+    expect(
+      query.mock.calls.some(
+        ([sql]) => !sql.includes('COUNT(*)') && sql.includes('FORCE INDEX (idx_api_logs_duration_time)'),
+      ),
+    ).toBe(false);
+    const next = await read(getApiLogs, { ...body, cursor: first.nextCursor });
+    expect(next.items[0].id).toBe('api-23979');
+    expect(next.total).toBeUndefined();
+    expect(query).toHaveBeenCalledTimes(1);
+    const all = await read(getApiLogs, { ...body, filters: { minDurationMs: 1, hideInternal: false } });
+    expect(all.total).toBe(24000);
+    expect(all.items.map((r) => r.id)).toEqual(Array.from({ length: 10 }, (_, n) => `api-${23999 - n}`));
+    expect(query).toHaveBeenCalledTimes(2);
+  });
+
+  it('稀疏耗时结果跨全部游标页无漏项，有界窗口不足或为空时仍查询完整范围', async () => {
+    const [expected] = await db.query(`SELECT a.id FROM api_logs a WHERE a.del_flag='0'
+      AND a.duration_ms>=1000 AND a.user_id NOT IN (SELECT id FROM user WHERE role IN ('root','test'))
+      ORDER BY a.request_time DESC,a.id DESC`);
+    let cursor = null;
+    const seen = [];
+    do {
+      const page = await read(getApiLogs, { cursor, limit: 17, filters: { minDurationMs: 1000 } });
+      seen.push(...page.items.map((r) => r.id));
+      cursor = page.nextCursor;
+      if (!page.hasMore) expect(cursor).toBeNull();
+    } while (cursor);
+    expect(seen).toEqual(expected.map((r) => r.id));
+    const empty = await read(getApiLogs, {
+      cursor: null,
+      limit: 17,
+      filters: { minDurationMs: 1000, endDate: '2026-10-19' },
+    });
+    expect(empty).toMatchObject({ items: [], total: 0, hasMore: false, nextCursor: null });
+  });
+
+  it('下一页的慢请求超出时间窗口时仍能找到，不重复统计且不会提前结束', async () => {
+    const ids = ['api-00102', 'api-10002', 'api-20002'];
+    await db.query('UPDATE api_logs SET duration_ms=5000 WHERE id IN (?)', [ids]);
+    try {
+      let cursor = null;
+      const seen = [];
+      do {
+        const page = await read(getApiLogs, { cursor, limit: 1, filters: { minDurationMs: 5000 } });
+        expect(page.total).toBe(cursor ? undefined : 3);
+        expect(
+          query.mock.calls.some(
+            ([sql]) => !sql.includes('COUNT(*)') && sql.includes('FORCE INDEX (idx_api_logs_duration_time)'),
+          ),
+        ).toBe(true);
+        seen.push(...page.items.map((r) => r.id));
+        cursor = page.nextCursor;
+      } while (cursor);
+      expect(seen).toEqual([...ids].reverse());
+    } finally {
+      await db.query("UPDATE api_logs SET duration_ms=IF(id='api-00102',2000,10) WHERE id IN (?)", [ids]);
+    }
   });
 
   it('耗时索引 Schema 门禁拒绝同名但列序错误的索引', async () => {
