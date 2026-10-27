@@ -1,4 +1,10 @@
-import { ADVICE_FACT_ID, ADVICE_CONTEXT_FACT_IDS, adviceContext, resolveAdvice } from './dailyBriefAdvice.js';
+import {
+  ADVICE_POLICY_VERSION,
+  MIN_SAFE_ADVICE_POLICY_VERSION,
+  adviceContext,
+  adviceModelSignals,
+  resolveAdvice,
+} from './dailyBriefAdvice.js';
 import { randomUUID } from 'node:crypto';
 import { Temporal } from '@js-temporal/polyfill';
 import pool from '../../db/index.js';
@@ -83,6 +89,32 @@ function hydrateBriefNarrative(brief) {
         : section.items,
     })),
   };
+}
+
+// 低于安全展示版本的输出不能作为“上次建议”；只投影缓存，不触发模型或批量回写。
+function currentAdviceProjection(brief) {
+  if (!brief || typeof brief !== 'object') return brief;
+  const safeVersion = (value) =>
+    Number.isInteger(value) && value >= MIN_SAFE_ADVICE_POLICY_VERSION && value <= ADVICE_POLICY_VERSION;
+  const invalidCurrent = Boolean(brief.recommendation) && !safeVersion(brief.advicePolicyVersion);
+  const invalidPrevious =
+    Boolean(brief.lastAdviceResult?.recommendation) && !safeVersion(brief.lastAdviceResult.advicePolicyVersion);
+  if (!invalidCurrent && !invalidPrevious) return brief;
+  const result = { ...brief };
+  if (invalidCurrent) {
+    result.recommendation = '';
+    if (result.adviceStatus === 'ready') result.adviceStatus = 'not_evaluated';
+    for (const key of [
+      'recommendationKind',
+      'recommendationFactIds',
+      'recommendationSources',
+      'adviceKey',
+      'adviceProposal',
+    ])
+      delete result[key];
+  }
+  if (invalidPrevious) delete result.lastAdviceResult;
+  return result;
 }
 
 function sqlDateTime(value) {
@@ -262,23 +294,15 @@ function buildBrief(calendar, facts, narrative = null) {
     insights.push({ id: project.id, factIds: [project.id], text: project.samples[0], sources: project.sources });
   const result = eligible.find((fact) => fact.id === 'workshop_result');
   if (result) {
-    const summary = narrative?.insights?.find((item) => item.factIds.length === 1 && item.factIds[0] === result.id);
     insights.push({
       id: 'workshop_result',
       factIds: [result.id],
-      text: summary
-        ? narrative.narrativeHydrated
-          ? summary.text
-          : renderNarrativeTemplate(summary.text, new Map([[result.id, result]]))
+      text: result.sources?.[0]?.title
+        ? english
+          ? `“${briefTitle(result.sources[0].title)}” is ready and has not been saved.`
+          : `《${briefTitle(result.sources[0].title)}》已生成，尚未保存。`
         : result.samples[0],
       sources: result.sources,
-      ...(result.sources?.[0]?.title
-        ? {
-            context: english
-              ? `“${briefTitle(result.sources[0].title)}” is ready and has not been saved.`
-              : `《${briefTitle(result.sources[0].title)}》已生成，尚未保存。`,
-          }
-        : {}),
     });
   }
   const review = eligible.find((fact) => fact.id === 'organize_ai_pending');
@@ -356,11 +380,12 @@ function buildBrief(calendar, facts, narrative = null) {
       : organizingHeadline
     : activityHeadline;
   const advice = adviceContext(facts, calendar.locale);
+  const onboarding = !advice.signals.length && facts.some((fact) => fact.id === 'onboarding_empty' && fact.count === 1);
   const recommendation =
     narrative?.adviceKey === advice.key
       ? resolveAdvice(
           narrative.adviceProposal,
-          advice.evidence,
+          advice.signals,
           insights.map((item) => item.text),
         )
       : null;
@@ -372,31 +397,32 @@ function buildBrief(calendar, facts, narrative = null) {
     headline,
     // 失败、单次待办、项目、成果、整理各最多一项，不靠截断遗漏后面的类别。
     insights,
-    recommendation: recommendation
+    recommendation: onboarding
       ? english
-        ? `From the excerpt in “${recommendation.source.title}”: “${recommendation.quote}”. ${recommendation.action}`
-        : `《${recommendation.source.title}》的片段提到「${recommendation.quote}」。${recommendation.action}`
-      : '',
-    adviceStatus: !advice.evidence.length
-      ? 'no_evidence'
-      : narrative?.adviceKey === advice.key
-        ? recommendation
-          ? 'ready'
-          : 'no_value'
-        : 'not_evaluated',
-    ...(facts.find((fact) => fact.id === ADVICE_FACT_ID)?.coverage
-      ? { adviceCoverage: facts.find((fact) => fact.id === ADVICE_FACT_ID).coverage }
-      : {}),
+        ? 'Start by collecting a resource, writing a note, or creating a to-do—one small step to get started with Light Note.'
+        : '可以先收集一份资料、写一篇笔记，或新建一条待办，从一件小事开始使用轻笺。'
+      : recommendation?.action || '',
+    advicePolicyVersion: ADVICE_POLICY_VERSION,
+    adviceStatus: onboarding
+      ? 'ready'
+      : !advice.signals.length
+        ? 'no_evidence'
+        : narrative?.adviceKey === advice.key
+          ? recommendation
+            ? 'ready'
+            : 'no_value'
+          : 'not_evaluated',
     ...(narrative?.adviceKey === advice.key && advice.key
       ? { adviceKey: advice.key, adviceProposal: recommendation ? narrative.adviceProposal : null }
       : {}),
     ...(recommendation
       ? {
           recommendationKind: 'ai',
-          recommendationFactIds: [ADVICE_FACT_ID, ...ADVICE_CONTEXT_FACT_IDS],
-          recommendationSources: [recommendation.source],
+          recommendationFactIds: recommendation.factIds,
+          recommendationSources: recommendation.sources,
         }
       : {}),
+    ...(onboarding ? { recommendationKind: 'action', recommendationFactIds: ['onboarding_empty'] } : {}),
     sections: [
       { id: 'today_actions', title: SECTION_TITLES[calendar.locale]?.today_actions || '今日行动', items: todos },
       ...(activity.length || activityMeasured
@@ -442,7 +468,7 @@ function rowStatus({ featureEnabled, preference, calendar, row }) {
       lastErrorCode: null,
     };
   }
-  const parsedBrief = hydrateBriefNarrative(parseJson(row.briefJson ?? row.brief_json, null));
+  const parsedBrief = currentAdviceProjection(hydrateBriefNarrative(parseJson(row.briefJson ?? row.brief_json, null)));
   const staleReadyBrief =
     String(row.status || '') === 'ready' && Number(parsedBrief?.version || 0) < DAILY_BRIEF_VERSION;
   if (staleReadyBrief) {
@@ -483,6 +509,51 @@ async function loadBriefRow(database, userId, date) {
   return rows[0] || null;
 }
 
+// Dismissal is effective even with automatic generation disabled or an older stored brief.
+// This read projection never generates advice or changes billing/history.
+async function hideDismissedBriefTasks(database, userId, row) {
+  const brief = parseJson(row?.briefJson ?? row?.brief_json);
+  const taskIds = (sources = []) =>
+    sources.filter((source) => source.type === 'toolbox_task').map((source) => String(source.id));
+  const ids = [
+    ...new Set([
+      ...(brief?.insights || []).flatMap((item) => taskIds(item.sources)),
+      ...taskIds(brief?.recommendationSources),
+      ...taskIds(brief?.lastAdviceResult?.recommendationSources),
+    ]),
+  ];
+  if (!ids.length) return row;
+  const [hidden] = await database.query(
+    `SELECT id FROM toolbox_jobs WHERE user_id=? AND id IN (${ids.map(() => '?').join(',')})
+      AND COALESCE(JSON_UNQUOTE(JSON_EXTRACT(options_json,'$.homeDismissed')),'false') IN ('true','1')`,
+    [userId, ...ids],
+  );
+  if (!hidden.length) return row;
+  const dismissed = new Set(hidden.map((item) => String(item.id)));
+  const projected = {
+    ...brief,
+    insights: brief.insights.filter(
+      (item) =>
+        !(item.sources || []).some((source) => source.type === 'toolbox_task' && dismissed.has(String(source.id))),
+    ),
+  };
+  if (taskIds(brief.recommendationSources).some((id) => dismissed.has(id))) {
+    projected.recommendation = '';
+    projected.adviceStatus = 'not_evaluated';
+    for (const key of [
+      'recommendationSources',
+      'recommendationFactIds',
+      'recommendationKind',
+      'adviceKey',
+      'adviceProposal',
+    ])
+      delete projected[key];
+  }
+  if (taskIds(brief.lastAdviceResult?.recommendationSources).some((id) => dismissed.has(id)))
+    delete projected.lastAdviceResult;
+  return { ...row, briefJson: projected };
+}
+
 export async function getDailyBrief(
   database = pool,
   { userId, now = new Date(), env = process.env, check = false } = {},
@@ -493,7 +564,7 @@ export async function getDailyBrief(
   const featureEnabled = isDailyBriefFeatureEnabled(env);
   if (!featureEnabled || !preference.enabled)
     return { ...rowStatus({ featureEnabled, preference, calendar, row: null }), autoUpdate: preference.autoUpdate };
-  const row = await loadBriefRow(database, userId, calendar.date);
+  const row = await hideDismissedBriefTasks(database, userId, await loadBriefRow(database, userId, calendar.date));
   const facts =
     check && (row?.status !== 'generating' || Number(row?.leaseExpired || 0))
       ? await (dependencies.compileFacts || compileFacts)(database, userId, calendar)
@@ -532,7 +603,7 @@ async function generateDailyBriefForActiveUser(
   const leaseToken = randomUUID();
   const previousAttempt = parseJson(existing?.factsJson, {});
   const advice = adviceContext(facts, calendar.locale);
-  let previousBrief = parseJson(existing?.briefJson);
+  let previousBrief = currentAdviceProjection(parseJson(existing?.briefJson));
   if (!previousBrief && (advice.key || facts.some((fact) => fact.id === 'workshop_result' && fact.count > 0))) {
     const [previousRows] = await database.query(
       `SELECT brief_json AS briefJson FROM workbench_daily_briefs
@@ -540,22 +611,10 @@ async function generateDailyBriefForActiveUser(
         ORDER BY brief_date DESC LIMIT 1`,
       [userId, calendar.date],
     );
-    previousBrief = parseJson(previousRows[0]?.briefJson);
+    previousBrief = currentAdviceProjection(parseJson(previousRows[0]?.briefJson));
   }
-  const cachedResult =
-    currentSnapshot.factRevisions.workshop_result &&
-    currentSnapshot.factRevisions.workshop_result === previousBrief?.snapshot?.factRevisions?.workshop_result
-      ? previousBrief?.insights?.find((item) => item.id === 'workshop_result')
-      : null;
   const cachedAdvice = Boolean(advice.key && previousBrief?.adviceKey === advice.key);
-  const cachedNarrative =
-    cachedResult || cachedAdvice
-      ? {
-          insights: cachedResult ? [cachedResult] : [],
-          narrativeHydrated: true,
-          ...(cachedAdvice ? { adviceKey: advice.key, adviceProposal: previousBrief.adviceProposal } : {}),
-        }
-      : null;
+  const cachedNarrative = cachedAdvice ? { adviceKey: advice.key, adviceProposal: previousBrief.adviceProposal } : null;
   const interval =
     refresh || needsAdviceResultRecovery(previousBrief)
       ? DAILY_BRIEF_REFRESH_POLICY.manualIntervalMs
@@ -579,12 +638,10 @@ async function generateDailyBriefForActiveUser(
       (Number(previousAttempt.automaticAttempts || 0) < DAILY_BRIEF_REFRESH_POLICY.maxAutomaticAttempts &&
         !quotaBlocked)) &&
     (refresh || !sameFailedAdvice);
-  const modelFacts =
-    modelAllowed && !cachedResult ? selectDailyBriefFacts(facts).filter((fact) => fact.id === 'workshop_result') : [];
-  const modelEvidence = modelAllowed && !cachedAdvice ? advice.evidence : [];
-  const needsModel = Boolean(modelFacts.length || modelEvidence.length);
+  const modelSignals = modelAllowed && !cachedAdvice ? advice.signals : [];
+  const needsModel = Boolean(modelSignals.length);
   const adviceDeferred = Boolean(
-    advice.evidence.length &&
+    advice.signals.length &&
     !cachedAdvice &&
     !modelAllowed &&
     !sameFailedAdvice &&
@@ -631,22 +688,22 @@ async function generateDailyBriefForActiveUser(
   const runSkill = dependencies.executeAiSkill || executeAiSkill;
   let committedBrief = null;
   let deliveryAttempted = false;
-  let adviceFailed = !needsModel && (sameFailedAdvice || (quotaBlocked && advice.evidence.length));
+  let adviceFailed = !needsModel && (sameFailedAdvice || (quotaBlocked && advice.signals.length));
   let adviceFailureReason = adviceFailed ? previousBrief?.adviceFailureReason || 'GENERATION_UNAVAILABLE' : null;
   let adviceFailureCode = adviceFailed ? previousBrief?.adviceFailureCode || existing?.lastErrorCode : null;
   const commitBrief = async (narrative = cachedNarrative) => {
     const brief = {
       ...buildBrief(calendar, facts, narrative),
       snapshot: currentSnapshot,
-      ...(advice.evidence.length && !cachedAdvice && !needsModel && !adviceFailed
+      ...(advice.signals.length && !cachedAdvice && !needsModel && !adviceFailed
         ? { adviceStatus: adviceDeferred ? 'deferred' : 'paused' }
         : {}),
       ...(adviceDeferred ? { adviceDeferred: true } : {}),
-      ...(modelEvidence.length || adviceFailed
+      ...(modelSignals.length || adviceFailed
         ? {
             adviceAttemptKey:
-              adviceFailed && !modelEvidence.length ? previousBrief?.adviceAttemptKey || advice.key : advice.key,
-            adviceAttemptedAt: modelEvidence.length
+              adviceFailed && !modelSignals.length ? previousBrief?.adviceAttemptKey || advice.key : advice.key,
+            adviceAttemptedAt: modelSignals.length
               ? now.toISOString()
               : previousBrief?.adviceAttemptedAt || (lastAttempt ? new Date(lastAttempt).toISOString() : null),
           }
@@ -655,14 +712,29 @@ async function generateDailyBriefForActiveUser(
     };
     // 保留最近一次完成的分析结果，与本轮调度/失败状态分开，刷新或重进页面不会丢失。
     const completed = ['ready', 'no_value', 'no_evidence'];
-    const lastResult = completed.includes(brief.adviceStatus)
+    const candidateResult = completed.includes(brief.adviceStatus)
       ? brief
       : completed.includes(previousBrief?.adviceStatus)
         ? previousBrief
         : previousBrief?.lastAdviceResult;
+    const isFixedGuide = candidateResult?.recommendationFactIds?.includes('onboarding_empty');
+    const lastResult =
+      !isFixedGuide &&
+      (!candidateResult?.recommendation ||
+        ((candidateResult.recommendationFactIds || []).every((id) =>
+          advice.signals.some((signal) => signal.id === id),
+        ) &&
+          (candidateResult.recommendationSources || []).every((source) =>
+            advice.signals.some((signal) =>
+              signal.sources.some((current) => current.type === source.type && current.id === source.id),
+            ),
+          )))
+        ? candidateResult
+        : null;
     if (lastResult) {
       brief.lastAdviceResult = {
         adviceStatus: lastResult.adviceStatus,
+        ...(lastResult.advicePolicyVersion ? { advicePolicyVersion: lastResult.advicePolicyVersion } : {}),
         recommendation: lastResult.recommendation || '',
         ...(lastResult.recommendationKind ? { recommendationKind: lastResult.recommendationKind } : {}),
         ...(lastResult.recommendationFactIds ? { recommendationFactIds: lastResult.recommendationFactIds } : {}),
@@ -670,7 +742,7 @@ async function generateDailyBriefForActiveUser(
       };
     }
     // 有实际判断或明确阻塞后才完成兼容；冷却中的旧记录仍由自动检查接续。
-    if (!needsAdviceResultRecovery(previousBrief) || !needsAdviceResultRecovery(brief) || modelEvidence.length)
+    if (!needsAdviceResultRecovery(previousBrief) || !needsAdviceResultRecovery(brief) || modelSignals.length)
       brief.adviceResultVersion = 1;
     deliveryAttempted = true;
     const [updateResult] = await database.query(
@@ -699,13 +771,7 @@ async function generateDailyBriefForActiveUser(
               date: calendar.date,
               timezone: calendar.timezone,
               locale: calendar.locale,
-              facts: modelFacts.map(({ id, label, route, count, samples }) => ({ id, label, route, count, samples })),
-              ...(modelEvidence.length
-                ? {
-                    evidence: modelEvidence.map(({ key, title, excerpt }) => ({ key, title, excerpt })),
-                    body: buildBrief(calendar, facts, cachedNarrative).insights.map((item) => item.text),
-                  }
-                : {}),
+              signals: adviceModelSignals(modelSignals),
             },
             scope: { resourceRefs: [] },
             client: { locale: calendar.locale, timezone: calendar.timezone, surface: 'desktop_workbench' },
@@ -716,7 +782,7 @@ async function generateDailyBriefForActiveUser(
             internalCaller: 'daily_brief_service',
             commitValidatedResult: async ({ response }) => {
               if (
-                modelEvidence.length &&
+                modelSignals.length &&
                 (!Object.hasOwn(response.result, 'recommendation') || response.result.recommendation === undefined)
               ) {
                 throw Object.assign(new Error('Missing advice decision'), {
@@ -726,14 +792,8 @@ async function generateDailyBriefForActiveUser(
               }
               return commitBrief({
                 ...cachedNarrative,
-                insights: response.result.insights?.length
-                  ? response.result.insights.map((item) => ({
-                      ...item,
-                      text: renderNarrativeTemplate(item.text, new Map(facts.map((fact) => [fact.id, fact]))),
-                    }))
-                  : cachedNarrative?.insights || [],
                 narrativeHydrated: true,
-                ...(modelEvidence.length
+                ...(modelSignals.length
                   ? { adviceKey: advice.key, adviceProposal: response.result.recommendation }
                   : {}),
               });
@@ -743,7 +803,7 @@ async function generateDailyBriefForActiveUser(
       } catch (error) {
         // 模型失败不挡住行动事实；持久化/租约失败仍必须作为失败返回，不能覆盖迟到产物。
         if (deliveryAttempted || String(error?.code || '').startsWith('DAILY_BRIEF_')) throw error;
-        adviceFailed = Boolean(modelEvidence.length);
+        adviceFailed = Boolean(modelSignals.length);
         adviceFailureCode = /^AI_QUOTA_(EXCEEDED|INSUFFICIENT_FOR_REQUEST)$/.test(error?.code || '')
           ? error.code
           : 'AI_ADVICE_GENERATION_FAILED';
@@ -752,10 +812,7 @@ async function generateDailyBriefForActiveUser(
           'ADVICE_SHAPE',
           'ADVICE_DECISION_MISSING',
           'ADVICE_SOURCE_UNKNOWN',
-          'ADVICE_QUOTE_NOT_FOUND',
-          'ADVICE_QUOTE_LENGTH',
           'ADVICE_ACTION_LENGTH',
-          'ADVICE_EVIDENCE_INVALID',
           'ADVICE_NUMBER_UNSUPPORTED',
           'INSIGHTS_SHAPE',
           'FACT_IDS_INVALID',

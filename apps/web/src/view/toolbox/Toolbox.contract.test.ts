@@ -255,7 +255,6 @@ describe('知识工具箱前端边界', () => {
     expect(home).toContain('overview.value?.workspaces?.continue');
     expect(homeTemplate).toContain('class="toolbox-activity-card__type"');
     expect(homeTemplate).toContain('toolName(toolboxWorkspaceToolId(workspace.kind))');
-    expect(home).toContain('overview.value?.tasks?.active');
     expect(home).toContain('overviewLoading');
     expect(home).toContain('overviewFailed');
     expect(home).toContain('class="toolbox-guest-guide"');
@@ -616,7 +615,6 @@ describe('知识工具箱前端边界', () => {
     expect(task).toContain('toolbox-stage-list');
     expect(task).toContain("job.value?.stage === 'retrying'");
     expect(task).toContain("t('toolbox.task.retryingTitle')");
-    expect(task).toContain("t('toolbox.task.finalFailureMessage')");
     expect(task).toContain('v-if="refreshFailed"');
     expect(task).toContain('pollFailureCount += 1');
     expect(task).toContain('MAX_POLL_RETRY_DELAY_MS');

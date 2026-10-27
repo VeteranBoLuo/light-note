@@ -16,12 +16,26 @@ describe('renderNoteTemplate', () => {
     expect(renderNoteTemplate('{{weekday}}', { now, locale: 'en-US' })).toBe('Friday');
   });
 
+  it.each([
+    [new Date(2026, 9, 26), '2026-10-26 — 2026-11-01'],
+    [new Date(2026, 10, 1), '2026-10-26 — 2026-11-01'],
+    [new Date(2021, 0, 1), '2020-12-28 — 2021-01-03'],
+    [new Date(2024, 1, 29), '2024-02-26 — 2024-03-03'],
+    [new Date(2026, 2, 8, 12), '2026-03-02 — 2026-03-08'],
+  ])('按周一至周日生成跨月、跨年和夏令时周范围', (now, expected) => {
+    const before = now.getTime();
+    expect(renderNoteTemplate('{{weekStart}} — {{weekEnd}}', { now })).toBe(expected);
+    expect(now.getTime()).toBe(before);
+  });
+
   it('允许变量内部空格', () => {
     expect(renderNoteTemplate('{{ date }} {{  weekday  }}', { now, locale: 'en-US' })).toBe('2021-01-01 Friday');
   });
 
   it('未知变量保留原文', () => {
-    expect(renderNoteTemplate('负责人：{{owner}}，日期：{{date}}', { now })).toBe('负责人：{{owner}}，日期：2021-01-01');
+    expect(renderNoteTemplate('负责人：{{owner}}，日期：{{date}}', { now })).toBe(
+      '负责人：{{owner}}，日期：2021-01-01',
+    );
   });
 
   it('同一变量多处出现全部替换', () => {

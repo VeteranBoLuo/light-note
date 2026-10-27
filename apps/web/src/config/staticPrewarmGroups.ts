@@ -15,3 +15,14 @@ export const PREWARM_RUNTIME_ENTRIES: Record<string, string> = {
   'route.campaign': 'view/campaign/CampaignPage.vue',
   account: 'view/login/UserAuthModal.vue',
 };
+
+/** Shared ordering across independent producers; smaller values run first. */
+export const PREWARM_PRIORITY = {
+  intent: -1,
+  current: 0,
+  browsing: 1,
+  nearby: 2,
+  detail: 3,
+  extended: 4,
+  decorative: 5,
+} as const;

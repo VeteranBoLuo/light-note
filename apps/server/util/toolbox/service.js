@@ -1,3 +1,4 @@
+import { taskOptions, taskIdentity, taskVisibleSql, hydrateTaskIdentities, readTaskInputs } from './taskIdentity.js';
 import translationSkill from '../aiSkill/skills/translationSkill.js';
 import { createAiSkillExecutionConfig } from '../aiBillingCatalog.js';
 import { loadTranslationResource } from '../aiSkill/resourceEvidence.js';
@@ -11,7 +12,7 @@ import { extractionSchemaReady } from '../extraction/schema.js';
 import { getToolboxTool, TOOLBOX_PRICING_VERSION } from '@lightnote/shared/toolbox-protocol';
 import { createTemporaryDocumentSource } from '../aiDocument/service.js';
 import { validateDocumentDescriptor } from '../aiDocument/parser.js';
-import { resolvePersonalKnowledgeResourceVersions } from '../personalKnowledgeSearch.js';
+import { resolvePersonalKnowledgeResourceMetadata, resolvePersonalKnowledgeResourceVersions } from '../personalKnowledgeSearch.js';
 import { createNote } from '../services/noteService.js';
 import { reserveToolboxPoints, settleToolboxBilling } from './billing.js';
 import {
@@ -112,7 +113,7 @@ function formatJobError(row) {
   return { code, message: storedMessage || '任务处理失败' };
 }
 
-function formatJob(row, { includeArtifactSummary = true } = {}) {
+export function formatJob(row, { includeArtifactSummary = true } = {}) {
   const artifactExpiresAt = row.artifact_expires_at ? new Date(row.artifact_expires_at).getTime() : null;
   const artifactState = !row.artifact_id
     ? 'none'
@@ -132,6 +133,7 @@ function formatJob(row, { includeArtifactSummary = true } = {}) {
   const billingStatus = String(row.billing_status || '');
   const hasSettledRefund = ['partially_settled', 'released', 'refunded'].includes(billingStatus);
   return {
+    ...taskIdentity(row),
     sourceWorkspaceId: parseJson(row.options_json)?.sourceWorkspaceId || null,
     id: row.id,
     toolId: row.tool_id,
@@ -163,11 +165,12 @@ function formatJob(row, { includeArtifactSummary = true } = {}) {
 async function resolveOwnedToolboxInput({ userId, toolId, rawInput, database = pool }) {
   const definition = getToolboxTool(toolId);
   const input = normalizeToolboxInput(toolId, rawInput);
-  const authoritativeRefs = await resolvePersonalKnowledgeResourceVersions({
+  const authoritativeMetadata = await resolvePersonalKnowledgeResourceMetadata({
     userId,
     resourceRefs: input.resourceRefs,
     database,
   });
+  const authoritativeRefs = authoritativeMetadata.map(({ type, id, version }) => ({ type, id, version }));
   if (authoritativeRefs.length !== input.resourceRefs.length) {
     throw toolboxError('TOOLBOX_RESOURCE_UNAVAILABLE', '部分材料不存在、已删除或不属于当前账号', 404);
   }
@@ -182,7 +185,7 @@ async function resolveOwnedToolboxInput({ userId, toolId, rawInput, database = p
   if (input.sourceIds.length) {
     const placeholders = input.sourceIds.map(() => '?').join(',');
     const [rows] = await database.query(
-      `SELECT id, file_type, file_size, status, expires_at
+      `SELECT id, file_name, file_type, file_size, status, expires_at
          FROM ai_document_sources
         WHERE user_id = ? AND id IN (${placeholders})`,
       [userId, ...input.sourceIds],
@@ -275,7 +278,7 @@ async function resolveOwnedToolboxInput({ userId, toolId, rawInput, database = p
   const snapshot = Object.freeze({
     resourceRefs: Object.freeze(authoritativeRefs.map((ref) => Object.freeze({ ...ref }))),
     sourceIds: Object.freeze([...input.sourceIds]),
-    options: translation ? { ...input.options, title: input.options.title || String(translation.title || '').slice(0,200) } : input.options,
+    options: translation ? { ...input.options, title: input.options.title || String(translation.title || '').slice(0,200) } : { ...input.options, taskMaterials: [...authoritativeMetadata.map(({ type, id, title }) => ({ type, id, title: title || '' })), ...sourceRows.map(row => ({ type: 'document_source', id: row.id, title: row.file_name || '' }))] },
     ...(translation ? { translation: { characters: translation.text.length, segments: translation.segments.length, estimatedTokens: createAiSkillExecutionConfig(translationSkill, { input: { text: translation.text, sourceLanguage: input.options.sourceLanguage, targetLanguage: input.options.targetLanguage, instruction: input.options.question || '' }, scope: { resourceRefs: [] } }).reservationTokens, partial: translation.partial, contentHash: toolboxInputDigest(translation.text) } } : {}),
   });
   return {
@@ -635,12 +638,12 @@ export async function listToolboxJobs({ userId, limit = 20, database = pool }) {
             artifact.status AS artifact_status, artifact.expires_at AS artifact_expires_at
        FROM toolbox_jobs job
        LEFT JOIN toolbox_artifacts artifact ON artifact.id = job.artifact_id
-      WHERE job.user_id = ? AND job.tool_id <> 'translation'
+      WHERE job.user_id = ? AND job.tool_id <> 'translation' AND ${taskVisibleSql()}
       ORDER BY job.create_time DESC, job.id DESC
       LIMIT ?`,
     [userId, take],
   );
-  return rows.map((row) => formatJob(row));
+  return (await hydrateTaskIdentities(database, userId, rows)).map((row) => formatJob(row));
 }
 
 // Translation history is independent of the workshop overview and paginated before formatting.
@@ -732,6 +735,7 @@ export async function listToolboxHomeTasks({ userId, database = pool } = {}) {
             job.quoted_points, job.actual_points, job.external_cost_committed,
             job.error_code, job.error_message, job.create_time, job.updated_at,
             job.started_at, job.completed_at, job.artifact_id,
+            JSON_OBJECT('taskMaterials',JSON_EXTRACT(job.options_json,'$.taskMaterials'),'title',JSON_EXTRACT(job.options_json,'$.title'),'question',LEFT(JSON_UNQUOTE(JSON_EXTRACT(job.options_json,'$.question')),120)) AS options_json,
             artifact.artifact_type, artifact.title AS artifact_title,
             artifact.content_type AS artifact_content_type, artifact.artifact_version,
             artifact.status AS artifact_status, artifact.expires_at AS artifact_expires_at
@@ -750,6 +754,15 @@ export async function listToolboxHomeTasks({ userId, database = pool } = {}) {
                job.id DESC
       LIMIT ${HOME_TASK_SCAN_LIMIT}`,
     [ownerId],
+  );
+  const [attentionRows] = await database.query(
+    `SELECT job.*, artifact.artifact_type, artifact.title AS artifact_title,
+            artifact.content_type AS artifact_content_type, artifact.artifact_version,
+            artifact.status AS artifact_status, artifact.expires_at AS artifact_expires_at
+     FROM toolbox_jobs job LEFT JOIN toolbox_artifacts artifact ON artifact.id=job.artifact_id AND artifact.user_id=job.user_id
+     WHERE job.user_id=? AND job.tool_id<>'translation' AND ${taskVisibleSql()}
+       AND (job.status='failed' OR job.save_status='save_failed')
+     ORDER BY job.updated_at DESC,job.id DESC LIMIT 4`, [ownerId],
   );
   const [extractions] = (await extractionSchemaReady(database))
     ? await database.query(
@@ -770,7 +783,9 @@ export async function listToolboxHomeTasks({ userId, database = pool } = {}) {
     canCancel: false,
     extraction: { title: row.title, status: row.status, processed: Number(row.processed), total: Number(row.total) },
   }));
-  const jobs = [...extractionTasks, ...rows.map((row) => formatJob(row))];
+  const hydrated = await hydrateTaskIdentities(database, ownerId, [...rows, ...attentionRows]);
+  const hydratedById = new Map(hydrated.map(row => [row.id, row]));
+  const jobs = [...extractionTasks, ...rows.map(row => formatJob(hydratedById.get(row.id)))];
   const activeJobs = jobs.filter((job) => job.status === 'queued' || job.status === 'processing');
   const activeIds = new Set(activeJobs.map((job) => job.id));
   const readyJobs = jobs.filter(
@@ -789,16 +804,26 @@ export async function listToolboxHomeTasks({ userId, database = pool } = {}) {
         new Date(left.updatedAt || left.createdAt || 0).getTime(),
     )
     .slice(0, HOME_RECENT_TASK_LIMIT);
-  return { active, ready, recent };
+  return { active, ready, recent, attention: attentionRows.map(row => formatJob(hydratedById.get(row.id))) };
 }
 
 export async function getToolboxJob({ userId, jobId, database = pool }) {
   const job = await selectJobWithArtifact(database, userId, String(jobId || '').trim());
   if (!job) throw toolboxError('TOOLBOX_JOB_NOT_FOUND', '任务不存在', 404);
-  return formatJob(job);
+  if (job.tool_id === 'translation' || (job.status !== 'failed' && job.save_status !== 'save_failed')) return formatJob(job);
+  const inputs = await readTaskInputs(database, userId, [job.id]);
+  const options = taskOptions(job.options_json);
+  const original = Array.isArray(options.taskMaterials) ? options.taskMaterials : [];
+  const materials = inputs.map(input => ({ ...input, title: original.find(item => item.type === input.type && item.id === input.id)?.title || input.title }));
+  const enriched = { ...job, options_json: { ...options, taskMaterials: materials } };
+  return { ...formatJob(enriched), input: {
+    question: typeof options.question === 'string' ? options.question : '',
+    materials,
+    options: Object.fromEntries(['intent','detailLevel','resultMode','columns','recognitionMode'].filter(key => options[key] !== undefined).map(key => [key, options[key]])),
+  } };
 }
 
-// Dismissal only removes a finished task from the home queue; receipts and artifacts remain intact.
+// Hide a finished task from user-facing task lists and briefs; retain receipts and artifacts.
 export async function dismissToolboxJob({ userId, jobId, database = pool }) {
   const ownerId = requiredUserId(userId);
   const connection = await database.getConnection();

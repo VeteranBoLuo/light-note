@@ -1,13 +1,6 @@
 <template>
   <Teleport to="body">
-    <!--
-      入场动画用纯 CSS animation,节点增删交回 Vue 核心 patch,不要再包 <TransitionGroup>。
-      原实现用 TransitionGroup 做进出场,但在「手动 render() 挂载 + 自引用 Teleport」这套结构下,
-      它的离场节点永远摘不掉:消息已从 messageState 移除,DOM 节点却留在屏幕上,而且一个卡住的
-      节点会连带后续消息也移除不掉。表现就是提示层层堆积、`duration: 0` 的 loading 永久转圈
-      (笔记导出 PDF 就是这条路径)。已验证与 HMR 无关,`:duration`、去掉 v-show、去掉 Teleport 均无效。
-      代价是没有离场动画 —— 提示消失不需要动画,而"关不掉"是功能缺陷,优先保证它一定消失。
-    -->
+    <!-- 节点增删由 Vue patch 负责，纯 CSS 动画配合 messageState 的延迟移除，避免 Teleport 过渡残留。 -->
     <div class="b-message-container" v-show="messageState.messages.length > 0" aria-live="polite" aria-atomic="false">
       <div
         v-for="msg in messageState.messages"
@@ -16,16 +9,22 @@
         :role="msg.type === 'error' || msg.type === 'warning' ? 'alert' : 'status'"
         @click="dismissOnMobile(msg.id)"
       >
-        <span class="b-message-icon" aria-hidden="true">
-          <SvgIcon :src="messageIcons[msg.type]" size="17" :class="{ 'b-message-spin': msg.type === 'loading' }" />
-        </span>
-        <span class="b-message-content">{{ msg.content }}</span>
+        <div v-if="msg.type === 'loading'" class="b-message-loading-content">
+          <BLoading inline loading :title="msg.content" />
+        </div>
+        <template v-else>
+          <span class="b-message-icon" aria-hidden="true">
+            <SvgIcon :src="messageIcons[msg.type]" size="17" />
+          </span>
+          <span class="b-message-content">{{ msg.content }}</span>
+        </template>
       </div>
     </div>
   </Teleport>
 </template>
 
 <script lang="ts" setup>
+  import BLoading from '../BLoading.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon.ts';
   import { messageState, removeMessage } from './messageState';
@@ -65,7 +64,7 @@
 <style lang="less">
   .b-message-container {
     position: fixed;
-    top: max(14px, env(safe-area-inset-top));
+    top: max(var(--ui-space-14, 14px), env(safe-area-inset-top));
     left: 50%;
     transform: translateX(-50%);
     z-index: 1200;
@@ -82,27 +81,19 @@
     --message-accent: var(--message-info-color, #615ced);
     position: relative;
     width: max-content;
-    min-width: min(var(--ui-layout-280, 280px), calc(100vw - var(--ui-space-24, 24px)));
     max-width: min(var(--ui-layout-520, 520px), calc(100vw - var(--ui-space-24, 24px)));
-    min-height: var(--ui-layout-48, 48px);
+    min-height: var(--ui-control-44, 44px);
     overflow: hidden;
     box-sizing: border-box;
     display: flex;
     align-items: center;
-    gap: var(--ui-space-10, 10px);
-    padding: var(--ui-space-9, 9px) var(--ui-space-14, 14px) var(--ui-space-9, 9px) var(--ui-space-11, 11px);
-    border: 1px solid color-mix(in srgb, var(--message-accent) 18%, var(--card-border-color));
-    border-radius: 12px;
-    background: color-mix(
-      in srgb,
-      var(--message-accent) 4%,
-      var(--message-surface-bg, var(--menu-body-bg-color, #ffffff))
-    );
-    box-shadow:
-      0 18px 48px -24px var(--message-shadow-color),
-      0 5px 16px -10px var(--message-shadow-color);
-    -webkit-backdrop-filter: blur(14px);
-    backdrop-filter: blur(14px);
+    gap: var(--ui-space-9, 9px);
+    padding: var(--ui-space-10, 10px) var(--ui-space-12, 12px);
+    border: 1px solid var(--workspace-border);
+    border-radius: 10px;
+    background: var(--message-surface-bg);
+    box-shadow: 0 var(--ui-space-4, 4px) var(--ui-space-12, 12px) calc(-1 * var(--ui-space-4, 4px))
+      var(--message-shadow-color);
     color: var(--text-color);
     font-size: var(--ui-font-13_5, 13.5px);
     line-height: 1.45;
@@ -110,26 +101,36 @@
     animation: b-message-in 0.24s cubic-bezier(0.34, 1.56, 0.64, 1);
   }
 
-  .b-message-item::before {
-    content: '';
-    position: absolute;
-    inset: 7px auto 7px 0;
-    width: 3px;
-    border-radius: 0 999px 999px 0;
-    background: var(--message-accent);
-  }
-
   .b-message-icon {
-    width: var(--ui-layout-30, 30px);
-    height: var(--ui-layout-30, 30px);
+    width: var(--ui-layout-17, 17px);
+    height: calc(1.45 * var(--ui-font-13_5, 13.5px));
     flex-shrink: 0;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    border-radius: 9px;
+    align-self: flex-start;
     color: var(--message-accent);
-    background: color-mix(in srgb, var(--message-accent) 12%, transparent);
     line-height: 0;
+  }
+
+  .b-message-loading-content {
+    display: flex;
+    min-width: 0;
+  }
+
+  .b-message-loading-content .b-loading-inline {
+    min-height: 0;
+    color: inherit;
+    font: inherit;
+  }
+
+  .b-message-loading-content .b-loading-inline__indicator {
+    flex-shrink: 0;
+  }
+
+  .b-message-loading-content .b-loading-inline__title {
+    min-width: 0;
+    overflow-wrap: anywhere;
   }
 
   .b-message-success {
@@ -153,7 +154,8 @@
     min-width: 0;
     max-width: 100%;
     word-break: break-word;
-    font-weight: 560;
+    white-space: pre-line;
+    font-weight: 400;
   }
 
   /* 进出场都用纯 CSS animation:节点一插入就播入场,标记 is-leaving 就播离场,不依赖 Vue 过渡钩子。
@@ -204,20 +206,6 @@
     pointer-events: none;
   }
 
-  /* Loading spin animation */
-  .b-message-spin {
-    animation: b-message-spin 1s linear infinite;
-  }
-
-  @keyframes b-message-spin {
-    from {
-      transform: rotate(0deg);
-    }
-    to {
-      transform: rotate(360deg);
-    }
-  }
-
   @media (max-width: 600px) {
     /* 移动端使用紧凑 Snackbar，并始终避开底部导航和系统安全区。 */
     .b-message-container {
@@ -248,25 +236,17 @@
 
     .b-message-item {
       width: max-content;
-      min-width: min(var(--ui-layout-180, 180px), calc(100vw - var(--ui-space-24, 24px)));
       max-width: calc(100vw - var(--ui-space-24, 24px));
-      min-height: var(--ui-layout-44, 44px);
+      min-height: var(--ui-control-44, 44px);
       gap: var(--ui-space-8, 8px);
-      padding: var(--ui-space-7, 7px) var(--ui-space-12, 12px) var(--ui-space-7, 7px) var(--ui-space-9, 9px);
-      border-radius: 12px;
+      padding: var(--ui-space-10, 10px) var(--ui-space-12, 12px);
       font-size: var(--ui-font-13, 13px);
       cursor: pointer;
       touch-action: manipulation;
     }
 
-    .b-message-item::before {
-      inset-block: 8px;
-    }
-
     .b-message-icon {
-      width: var(--ui-layout-26, 26px);
-      height: var(--ui-layout-26, 26px);
-      border-radius: 8px;
+      height: calc(1.45 * var(--ui-font-13, 13px));
     }
 
     /* 只保留最新两条，避免连续操作时遮挡大块内容。 */
@@ -291,10 +271,6 @@
 
     .b-message-item.is-leaving {
       animation: b-message-fade-out 0.15s ease forwards;
-    }
-
-    .b-message-spin {
-      animation-duration: 1.8s;
     }
   }
 </style>

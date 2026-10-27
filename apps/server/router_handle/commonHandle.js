@@ -481,44 +481,107 @@ export const getApiLogs = async (req, res) => {
     const listConditions = cursorFilter ? [...conditions, cursorFilter] : conditions;
     const whereClause = listConditions.join(' AND ');
     const take = cursorMode ? pageSize + 1 : pageSize;
+    const coveredDurationFilter = minDurationMs > 0 && !key && !hasMethodFilter && !hasStatusFilter && !requestId;
 
     // 列表不读取 longtext 请求体；请求参数只在点开单条详情时按 ID 懒加载。
     // 首屏列表和总数互不依赖，并行执行，避免两段数据库耗时串行叠加。
-    const listPromise = pool.query(
-      `SELECT a.id, a.user_id, a.url, a.method, a.ip, a.system, a.request_time,
-              a.status_code, a.request_id, a.duration_ms, u.alias, u.email
+    const listColumns = `a.id, a.user_id, a.url, a.method, a.ip, a.system, a.request_time,
+              a.status_code, a.request_id, a.duration_ms, u.alias, u.email`;
+    const listParams = [...baseParams, ...cursorParams, take, ...(cursorMode ? [] : [skip])];
+    const loadList = async () => {
+      // 其他组合筛选由优化器选择请求 ID、状态或时间索引；默认列表仍直接按时间续页。
+      if (!cursorMode || !coveredDurationFilter) {
+        return pool.query(
+          `SELECT ${listColumns}
          FROM api_logs a
          LEFT JOIN user u ON a.user_id = u.id
         WHERE ${whereClause}
         ORDER BY a.request_time DESC, a.id DESC
         LIMIT ?${cursorMode ? '' : ' OFFSET ?'}`,
-      [...baseParams, ...cursorParams, take, ...(cursorMode ? [] : [skip])],
-    );
+          listParams,
+        );
+      }
+
+      // MySQL 5.7 会为 ORDER BY LIMIT 偏选时间索引，稀疏慢请求因此可能回表上万次。
+      // 先检查有界时间窗口，常见的低阈值仍能快速取满一页；不足时再走耗时覆盖索引。
+      // 候选最多检查四批，完整字段只读取最终页；窗口不足时必须回查完整范围。
+      const readPage = (pageSql) => `SELECT ${listColumns}
+        FROM (${pageSql}) page
+        INNER JOIN api_logs a ON a.id = page.id
+        LEFT JOIN user u ON a.user_id = u.id
+        ORDER BY page.request_time DESC, page.id DESC`;
+      const windowWhere = [
+        "a.del_flag = '0'",
+        startDate && 'a.request_time >= ?',
+        endDate && 'a.request_time <= ?',
+        cursorFilter,
+      ]
+        .filter(Boolean)
+        .join(' AND ');
+      const windowParams = [
+        ...(startDate ? [startDate] : []),
+        ...(endDate ? [endDate] : []),
+        ...cursorParams,
+        take * 4,
+      ];
+      const [nearby] = await pool.query(
+        readPage(`SELECT a.id, a.request_time
+          FROM (
+            SELECT a.id, a.user_id, a.duration_ms, a.request_time, a.del_flag
+            FROM api_logs a FORCE INDEX (idx_api_logs_admin_list)
+            WHERE ${windowWhere}
+            ORDER BY a.request_time DESC, a.id DESC LIMIT ?
+          ) a
+          WHERE ${whereClause}
+          ORDER BY a.request_time DESC, a.id DESC LIMIT ?`),
+        [...windowParams, ...baseParams, ...cursorParams, take],
+      );
+      if (nearby.length >= take) return [nearby];
+      return pool.query(
+        readPage(`SELECT a.id, a.request_time
+          FROM api_logs a FORCE INDEX (idx_api_logs_duration_time)
+          WHERE ${whereClause}
+          ORDER BY a.request_time DESC, a.id DESC LIMIT ?`),
+        listParams,
+      );
+    };
+    const listPromise = loadList();
     const shouldCount = !cursorMode || !cursor;
     const hasBusinessFilters = Boolean(
       key || hasMethodFilter || hasStatusFilter || requestId || startDate || endDate || minDurationMs > 0,
     );
     let totalPromise = Promise.resolve(undefined);
     if (shouldCount && !hasBusinessFilters) {
-      // 游标负责后续分页，total 只需首屏计算。默认首屏在同一个 SQL 快照中用两个窄索引计数
-      // 相减，避免为了排除 root/test 对 11 万行日志逐行 LEFT JOIN user，同时保证差值口径一致。
+      // 同一 SQL 快照中：有效总数 -（内部账号全部日志 - 内部账号无效日志）。
+      // 三段都只读覆盖索引；user_time 不含 del_flag，不能沿该索引回表检查删除标记。
       const defaultCountSql = hideInternal
         ? `SELECT
              (SELECT COUNT(*) FROM api_logs active_log FORCE INDEX (idx_api_logs_admin_list)
                WHERE active_log.del_flag = '0')
-             -
-             (SELECT COUNT(*)
+             - (
+               (SELECT COUNT(*)
                 FROM api_logs internal_log FORCE INDEX (idx_api_logs_user_time)
                 INNER JOIN user internal_user ON internal_log.user_id = internal_user.id
-               WHERE internal_log.del_flag = '0' AND internal_user.role IN (${rolePh})) AS total`
+                WHERE internal_user.role IN (${rolePh}))
+               -
+               (SELECT COUNT(*)
+                FROM api_logs inactive_internal_log FORCE INDEX (idx_api_logs_duration_time)
+                WHERE inactive_internal_log.del_flag <> '0'
+                  AND inactive_internal_log.user_id IN (
+                    SELECT internal_user.id FROM user internal_user WHERE internal_user.role IN (${rolePh})
+                  ))
+             ) AS total`
         : `SELECT COUNT(*) AS total FROM api_logs active_log FORCE INDEX (idx_api_logs_admin_list)
             WHERE active_log.del_flag = '0'`;
       totalPromise = pool
-        .query(defaultCountSql, hideInternal ? INTERNAL_ROLES : [])
+        .query(defaultCountSql, hideInternal ? [...INTERNAL_ROLES, ...INTERNAL_ROLES] : [])
         .then(([rows]) => Math.max(0, Number(rows[0]?.total || 0)));
     } else if (shouldCount) {
       // 只有关键词会读取 user 的 alias/email；其他筛选的总数无需关联用户表。
-      const countFrom = key ? 'api_logs a LEFT JOIN user u ON a.user_id = u.id' : 'api_logs a';
+      // 纯耗时筛选强制走覆盖索引，低阈值也不能退回读取整张日志主表。
+      const countFrom = key
+        ? 'api_logs a LEFT JOIN user u ON a.user_id = u.id'
+        : `api_logs a${coveredDurationFilter ? ' FORCE INDEX (idx_api_logs_duration_time)' : ''}`;
       totalPromise = pool
         .query(`SELECT COUNT(*) AS total FROM ${countFrom} WHERE ${conditions.join(' AND ')}`, baseParams)
         .then(([rows]) => Number(rows[0]?.total || 0));
@@ -752,15 +815,17 @@ export const getOperationLogs = async (req, res) => {
       .slice(0, 255);
     const startDate = normalizeAdminLogDate(filters.start_date);
     const endDate = normalizeAdminLogDate(filters.end_date, true);
-    const conditions = [
-      `(u.alias LIKE CONCAT('%', ?, '%')
+    // del_flag 是 VARCHAR；数值比较会使 (del_flag, create_time, id) 索引失效。
+    const conditions = ["o.del_flag = '0'"];
+    const baseParams = [];
+    if (key) {
+      conditions.push(`(u.alias LIKE CONCAT('%', ?, '%')
         OR u.email LIKE CONCAT('%', ?, '%')
         OR o.operation LIKE CONCAT('%', ?, '%')
         OR o.module LIKE CONCAT('%', ?, '%')
-        OR o.ip LIKE CONCAT('%', ?, '%'))`,
-      'o.del_flag = 0',
-    ];
-    const baseParams = [key, key, key, key, key];
+        OR o.ip LIKE CONCAT('%', ?, '%'))`);
+      baseParams.push(key, key, key, key, key);
+    }
     if (hideInternal) {
       conditions.push(`(u.role IS NULL OR u.role NOT IN (${rolePh}))`);
       baseParams.push(...INTERNAL_ROLES);

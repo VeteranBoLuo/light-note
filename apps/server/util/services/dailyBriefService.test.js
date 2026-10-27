@@ -109,7 +109,7 @@ describe('今日简报事实交付', () => {
     const resolved = dailyBriefServiceInternals.buildBrief(calendar, [{ ...review, count: 0 }, pending]);
     expect(resolved.recommendation).toBe('');
   });
-  it('成果背景与摘要分开，复用概括不会重复添加状态；标题按普通文本处理', () => {
+  it('成果只展示名称和未保存状态，不展示正文结论；标题按普通文本处理', () => {
     const facts = [
       {
         id: 'workshop_result',
@@ -120,11 +120,10 @@ describe('今日简报事实交付', () => {
     ];
     const brief = dailyBriefServiceInternals.buildBrief(calendar, facts);
     expect(brief.insights[0]).toMatchObject({
-      context: '《选型 {{workshop_result.count}}》已生成，尚未保存。',
-      text: '有依据的结论。',
+      text: '《选型 {{workshop_result.count}}》已生成，尚未保存。',
     });
     expect(dailyBriefServiceInternals.buildBrief(calendar, facts, brief).insights).toEqual(brief.insights);
-    expect(dailyBriefServiceInternals.buildBrief({ ...calendar, locale: 'en-US' }, facts).insights[0].context).toBe(
+    expect(dailyBriefServiceInternals.buildBrief({ ...calendar, locale: 'en-US' }, facts).insights[0].text).toBe(
       '“选型 {{workshop_result.count}}” is ready and has not been saved.',
     );
   });

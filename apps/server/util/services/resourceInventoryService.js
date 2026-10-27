@@ -266,7 +266,10 @@ export async function countUntaggedResources(db, { userId, resourceType: rawReso
   return (await summarizeUntaggedResources(db, { userId, resourceType: rawResourceType })).total;
 }
 
-export async function summarizeUntaggedResources(db, { userId, resourceType: rawResourceType = 'all' } = {}) {
+export async function summarizeUntaggedResources(
+  db,
+  { userId, resourceType: rawResourceType = 'all', excludeOnboardingSeeds = false } = {},
+) {
   const resourceType = normalizeOrganizableResourceType(rawResourceType);
   const inventory = buildUntaggedInventory({ userId, keyword: '', resourceType });
   const [rows] = await db.query(
@@ -282,8 +285,14 @@ export async function summarizeUntaggedResources(db, { userId, resourceType: raw
          WHERE suppression.user_id = ?
            AND suppression.issue_type = 'untagged.ignore'
            AND suppression.subject_key = CONCAT(inventory.resource_type, ':', inventory.id)
-      )`,
-    [...inventory.params, userId],
+      )
+      ${
+        excludeOnboardingSeeds
+          ? `AND NOT EXISTS(SELECT 1 FROM onboarding_seed_resources seed
+        WHERE seed.user_id=? AND seed.resource_type=inventory.resource_type AND seed.resource_id=inventory.id)`
+          : ''
+      }`,
+    [...inventory.params, userId, ...(excludeOnboardingSeeds ? [userId] : [])],
   );
   return {
     total: Math.max(0, Number(rows[0]?.total || 0)),

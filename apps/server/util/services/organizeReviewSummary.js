@@ -1,6 +1,6 @@
 import { pendingReviewSql, visibleOrganizeRunOrderSql } from './organizeSuggestionAvailability.js';
 
-export async function summarizePendingOrganizeReview(database, userId) {
+export async function summarizePendingOrganizeReview(database, userId, { excludeOnboardingSeeds = false } = {}) {
   const [runs] = await database.query(
     `SELECT id FROM organize_suggestion_runs WHERE user_id=? AND status<>'preview' ORDER BY ${visibleOrganizeRunOrderSql} LIMIT 1`,
     [userId],
@@ -10,7 +10,13 @@ export async function summarizePendingOrganizeReview(database, userId) {
   const from = `FROM organize_suggestions s
     JOIN organize_suggestion_items i ON i.id=s.item_id AND i.user_id=s.user_id AND i.run_id=s.run_id
     JOIN organize_suggestion_runs r ON r.id=s.run_id AND r.user_id=s.user_id
-    WHERE s.user_id=? AND s.run_id=? AND r.status<>'preview' AND ${pendingReviewSql()}`;
+    WHERE s.user_id=? AND s.run_id=? AND r.status<>'preview' AND ${pendingReviewSql()}
+    ${
+      excludeOnboardingSeeds
+        ? `AND NOT EXISTS(SELECT 1 FROM onboarding_seed_resources seed
+      WHERE seed.user_id=i.user_id AND seed.resource_type=i.resource_type AND seed.resource_id=i.resource_id)`
+        : ''
+    }`;
   const [rows] = await database.query(
     `SELECT COUNT(*) total,
     GROUP_CONCAT(DISTINCT i.resource_type ORDER BY i.resource_type) resourceTypes,

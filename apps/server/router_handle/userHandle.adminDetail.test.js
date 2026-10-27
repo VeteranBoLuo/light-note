@@ -191,7 +191,7 @@ describe('后台用户管理增强', () => {
     );
 
     const listCall = query.mock.calls.find(([sql]) => normalized(sql).includes('SELECT u.id, u.alias, u.email'));
-    expect(normalized(listCall[0])).toContain('u.del_flag = 1');
+    expect(normalized(listCall[0])).toContain("u.del_flag = '1'");
     expect(normalized(listCall[0])).toContain('u.role = ?');
     expect(normalized(listCall[0])).toContain('ua.last_active_at IS NULL');
     expect(normalized(listCall[0])).toContain('ug.equipped_frame');
@@ -312,7 +312,7 @@ describe('用户列表总数的活跃表依赖',()=>{
   expect(res.send.mock.calls[0][0].status).toBe(200);
   expect(normalized(query.mock.calls[0][0])).toContain('LEFT JOIN user_activity_daily ua');
   expect(normalized(query.mock.calls[1][0])).not.toContain('user_activity_daily');
-  expect(query.mock.calls[1][1]).toEqual(['root','','','']);
+  expect(query.mock.calls[1][1]).toEqual(['root']);
  });
 });
 

@@ -1121,6 +1121,19 @@ LEFT JOIN information_schema.statistics actual
  AND actual.index_name=expected.ix
 WHERE actual.index_name IS NULL;
 
+-- API 日志最低耗时筛选必须有完整覆盖索引（期望 0 行）。
+SELECT '[api-log-duration] invalid_duration_index' AS check_name,
+  'api_logs.idx_api_logs_duration_time' AS detail
+FROM DUAL
+WHERE NOT EXISTS (
+  SELECT 1 FROM information_schema.statistics
+  WHERE table_schema = DATABASE() AND table_name = 'api_logs'
+    AND index_name = 'idx_api_logs_duration_time'
+  GROUP BY index_name
+  HAVING GROUP_CONCAT(column_name ORDER BY seq_in_index) = 'del_flag,duration_ms,request_time,user_id'
+    AND SUM(sub_part IS NOT NULL) = 0
+);
+
 -- 38) 产品洞察聚合必须走所有者 + 时间索引，避免后台看板扫描业务主表（期望 0 行）
 SELECT '[38] missing_admin_product_insights_index' AS check_name,
   CONCAT(expected.tn, '.', expected.ix) AS detail

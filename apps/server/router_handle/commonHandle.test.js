@@ -1750,7 +1750,7 @@ describe('后台日志组合筛选', () => {
     expect(payload.data.items[0]).not.toHaveProperty('req');
   });
 
-  it('API 日志默认隐藏内部账号时用索引计数相减，并保持精确总数口径', async () => {
+  it('API 日志默认隐藏内部账号时各段统计都走覆盖索引，并保持精确总数口径', async () => {
     query.mockResolvedValueOnce([[]]).mockResolvedValueOnce([[{ total: 100 }]]);
     const res = mockRes();
 
@@ -1765,9 +1765,25 @@ describe('后台日志组合筛选', () => {
     expect(listParams).toEqual(expect.arrayContaining(['root', 'test']));
     expect(String(countSql)).toContain('FORCE INDEX (idx_api_logs_admin_list)');
     expect(String(countSql)).toContain('FORCE INDEX (idx_api_logs_user_time)');
+    expect(String(countSql)).toContain('FORCE INDEX (idx_api_logs_duration_time)');
+    expect(String(countSql)).not.toContain("internal_log.del_flag = '0'");
     expect(String(countSql)).toContain('INNER JOIN user internal_user');
-    expect(countParams).toEqual(['root', 'test']);
+    expect(countParams).toEqual(['root', 'test', 'root', 'test']);
     expect(res.send.mock.calls[0][0].data.total).toBe(100);
+  });
+
+  it('API 慢请求窗口不足时，完整范围查询失败不能返回不完整的一页', async () => {
+    query
+      .mockResolvedValueOnce([[{ id: 'nearby-only', request_time: '2026-10-20 10:00:00' }]])
+      .mockResolvedValueOnce([[{ total: 2 }]])
+      .mockRejectedValueOnce(new Error('fixture SQL failure'));
+    const res = mockRes();
+    await getApiLogs(
+      { user: { role: 'root' }, body: { cursor: null, limit: 20, filters: { minDurationMs: 1000 } } },
+      res,
+    );
+    expect(query).toHaveBeenCalledTimes(3);
+    expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ status: 500, data: null, msg: '查询日志失败' }));
   });
 
   it('API 日志请求体只在打开单条详情后按 ID 读取', async () => {

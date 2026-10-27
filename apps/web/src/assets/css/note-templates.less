@@ -315,6 +315,22 @@
     font-size: 0.8em;
     white-space: nowrap;
   }
+  &.ln-note-layout--daily .ln-note-date,
+  &.ln-note-layout--weekly .ln-note-date {
+    color: var(--text-color);
+    /* ui-density-fixed: 日期信息随正文排版，独立于界面密度。 */
+    font-size: 0.9em;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+  }
+  &.ln-note-layout--weekly .ln-note-head {
+    display: block;
+  }
+  &.ln-note-layout--weekly .ln-note-date {
+    /* ui-density-fixed: 周期与标题的间距随正文缩放。 */
+    margin-top: 0.55em;
+    white-space: normal;
+  }
   .ln-note-block {
     min-width: 0;
     border: 1px solid var(--surface-border-color);

@@ -33,6 +33,8 @@ const EXACT_ERROR_KEYS: Readonly<Record<string, string>> = Object.freeze({
 export function toolboxErrorMessageKey(error: ErrorLike, fallbackKey: string) {
   const code = String(error?.code || '').trim();
   if (EXACT_ERROR_KEYS[code]) return EXACT_ERROR_KEYS[code];
+  if (code.startsWith('AI_SKILL_OUTPUT_') || code.startsWith('AI_SKILL_STRUCTURED_OUTPUT_'))
+    return 'toolbox.taskContext.invalidResult';
   if (code.startsWith('TOOLBOX_INPUT_') || code === 'TOOLBOX_REQUEST_ID_INVALID') {
     return 'toolbox.error.invalidInput';
   }

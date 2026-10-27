@@ -33,7 +33,11 @@
       <div v-show="!mobilePreview" class="new-note-picker__blank">
         <span>{{ t('note.picker.startBlank') }}</span>
         <BButton v-for="mode in modes" :key="mode.type" @click="emit('selectBlank', mode.type)">
-          {{ t(mode.label) }}<small>{{ t(mode.description) }}</small>
+          <SvgIcon class="new-note-picker__mode-icon" :src="mode.icon" size="24" aria-hidden="true" />
+          <span class="new-note-picker__mode-copy"
+            ><strong>{{ t(mode.label) }}</strong
+            ><small>{{ t(mode.description) }}</small></span
+          >
         </BButton>
       </div>
       <template v-if="!blankOnly">
@@ -211,9 +215,24 @@
   let previewHistory: MobileOverlayHistoryHandle | null = null;
   const previewNow = ref(new Date());
   const modes = [
-    { type: 'html' as const, label: 'note.htmlLabel', description: 'note.htmlCompactDesc' },
-    { type: 'markdown' as const, label: 'note.mdLabel', description: 'note.mdCompactDesc' },
-    { type: 'drawing' as const, label: 'note.drawingLabel', description: 'note.drawingCompactDesc' },
+    {
+      type: 'html' as const,
+      label: 'note.htmlLabel',
+      description: 'note.htmlCompactDesc',
+      icon: icon.resource.noteHtml,
+    },
+    {
+      type: 'markdown' as const,
+      label: 'note.mdLabel',
+      description: 'note.mdCompactDesc',
+      icon: icon.resource.noteMarkdown,
+    },
+    {
+      type: 'drawing' as const,
+      label: 'note.drawingLabel',
+      description: 'note.drawingCompactDesc',
+      icon: icon.resource.noteDrawing,
+    },
   ];
   const tabOptions = computed(() => [
     { key: 'builtin', label: t('note.tplBuiltinSection'), badge: props.builtinTemplates.length || undefined },
@@ -383,7 +402,8 @@
     color: var(--text-color);
   }
   .new-note-picker__blank {
-    display: flex;
+    display: grid;
+    grid-template-columns: auto repeat(3, minmax(0, 1fr));
     align-items: center;
     flex: 0 0 auto;
     gap: var(--ui-space-12, 12px);
@@ -395,11 +415,35 @@
     margin-right: var(--ui-space-8, 8px);
   }
   .new-note-picker__blank .b_btn {
+    width: 100%;
+    min-width: 0;
     height: auto;
-    min-height: var(--ui-control-36, 36px);
-    padding: var(--ui-space-7, 7px) var(--ui-space-14, 14px);
-    gap: var(--ui-space-8, 8px);
+    min-height: var(--ui-layout-64, 64px);
+    padding: var(--ui-space-10, 10px) var(--ui-space-14, 14px);
+    gap: var(--ui-space-12, 12px);
+    justify-content: flex-start;
+    text-align: left;
+    white-space: normal;
+    line-height: 1.5;
+    border: 1px solid var(--surface-border-color);
+    background: transparent;
+  }
+  .new-note-picker__blank .b_btn:hover {
+    border-color: var(--primary-color);
     background: var(--workspace-canvas);
+  }
+  .new-note-picker__mode-icon {
+    flex: 0 0 auto;
+    color: var(--workspace-purple-text, var(--primary-color));
+  }
+  .new-note-picker__mode-copy {
+    display: grid;
+    min-width: 0;
+    gap: var(--ui-space-3, 3px);
+  }
+  .new-note-picker__mode-copy strong {
+    font-size: var(--ui-font-13, 13px);
+    font-weight: 600;
   }
   .new-note-picker__blank small {
     color: var(--desc-color);
@@ -606,7 +650,7 @@
     border: 0;
   }
   .is-blank-only .new-note-picker__blank {
-    flex-wrap: wrap;
+    grid-template-columns: 1fr;
     padding: 0;
   }
   .is-blank-only .new-note-picker__blank > span {
@@ -618,22 +662,35 @@
   }
   @media (max-width: 767px) {
     .new-note-picker__blank {
-      flex-wrap: wrap;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
       gap: var(--ui-space-7, 7px);
       padding: var(--ui-space-12, 12px) var(--ui-space-14, 14px);
     }
     .new-note-picker__blank > span {
-      width: 100%;
+      grid-column: 1 / -1;
       margin: 0;
     }
     .new-note-picker__blank .b_btn {
       min-width: 0;
-      flex: 1;
+      flex-direction: column;
+      justify-content: center;
+      text-align: center;
+      gap: var(--ui-space-5, 5px);
       padding-inline: var(--ui-space-5, 5px);
       font-size: var(--ui-font-12, 12px);
     }
     .new-note-picker__blank small {
       display: none;
+    }
+    .is-blank-only .new-note-picker__blank {
+      grid-template-columns: 1fr;
+    }
+    .is-blank-only .new-note-picker__blank .b_btn {
+      flex-direction: row;
+      text-align: left;
+    }
+    .is-blank-only .new-note-picker__blank small {
+      display: block;
     }
     .new-note-picker__tabs {
       margin-inline: var(--ui-space-14, 14px);

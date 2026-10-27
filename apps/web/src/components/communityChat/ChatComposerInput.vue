@@ -125,6 +125,9 @@
     node.childNodes.forEach((child) => {
       content += serializeNode(child);
     });
+    if (node instanceof HTMLElement && node.dataset.composerCaretAnchor === 'true') {
+      return content.replace('\u200b', '');
+    }
     if (node instanceof HTMLDivElement || node instanceof HTMLParagraphElement) {
       if (node !== richInput.value && content && !content.endsWith('\n')) content += '\n';
     }
@@ -187,7 +190,56 @@
       caretSentinel.dataset.composerCaretSentinel = 'true';
       fragment.append(caretSentinel);
     }
+    ensureLeadingCarets(fragment);
+    ensureTrailingCaret(fragment);
     root.replaceChildren(fragment);
+  }
+
+  function ensureLeadingCarets(root: ParentNode) {
+    // 给行首表情一个真实可编辑文本落点，避免旧 WebView 在非编辑节点边界
+    // 不绘制光标。只剔除标记容器里的一个占位字符，保留输入法写入的正文。
+    root.querySelectorAll<HTMLElement>('[data-composer-caret-anchor="true"]').forEach((anchor) => {
+      if (!anchor.textContent?.includes('\u200b')) anchor.prepend(document.createTextNode('\u200b'));
+    });
+    for (const child of Array.from(root.childNodes)) {
+      if (!(child instanceof HTMLElement) || !child.hasAttribute('data-emoji-atom')) continue;
+      const previous = child.previousSibling;
+      if (previous && !(previous instanceof HTMLBRElement)) continue;
+      const anchor = document.createElement('span');
+      anchor.dataset.composerCaretAnchor = 'true';
+      anchor.append(document.createTextNode('\u200b'));
+      child.before(anchor);
+    }
+  }
+
+  function anchorPoint(anchor: HTMLElement, logicalOffset: number) {
+    const walker = document.createTreeWalker(anchor, NodeFilter.SHOW_TEXT);
+    let remaining = logicalOffset;
+    let skippedMarker = false;
+    while (walker.nextNode()) {
+      const node = walker.currentNode;
+      const text = node.textContent || '';
+      for (let offset = 0; offset <= text.length; offset++) {
+        if (!skippedMarker && text[offset] === '\u200b') {
+          skippedMarker = true;
+          continue;
+        }
+        if (remaining === 0) return { node, offset };
+        if (offset < text.length) remaining--;
+      }
+    }
+    return { node: anchor as Node, offset: anchor.childNodes.length };
+  }
+
+  function ensureTrailingCaret(root: ParentNode) {
+    const last = root.lastChild;
+    if (!(last instanceof HTMLElement) || last.dataset.composerCaretSentinel === 'true') return;
+    if (!last.hasAttribute('data-emoji-atom') && !(last instanceof HTMLBRElement)) return;
+    // 末尾不可编辑表情需要后续行内落点，否则 Chromium/WebView 虽有选区却
+    // 不绘制右侧光标。复用不计入正文的 BR，避免隐藏字符影响删除、字数和撤销。
+    const sentinel = document.createElement('br');
+    sentinel.dataset.composerCaretSentinel = 'true';
+    root.append(sentinel);
   }
 
   function removeRichCaretSentinels() {
@@ -229,11 +281,18 @@
     for (const [index, child] of children.entries()) {
       const content = serializeNode(child);
       const length = content.length;
+      if (
+        child instanceof HTMLElement &&
+        child.dataset.composerCaretAnchor === 'true' &&
+        requested <= consumed + length
+      ) {
+        return anchorPoint(child, Math.max(0, requested - consumed));
+      }
       if (child.nodeType === Node.TEXT_NODE && requested <= consumed + length) {
         return { node: child, offset: Math.max(0, requested - consumed) };
       }
       if (requested <= consumed) return { node: root, offset: index };
-      if (requested <= consumed + length) return { node: root, offset: index + 1 };
+      if (requested < consumed + length) return { node: root, offset: index + 1 };
       consumed += length;
     }
     return { node: root, offset: children.length };
@@ -393,6 +452,50 @@
       return;
     }
     beforeInputSnapshot = snapshot();
+    // 使用浏览器给出的删除范围更新逻辑正文，避免原生删除在不可编辑表情/
+    // 空行边界重写 BR 后，把光标挪到上一行。也覆盖移动键盘的 beforeinput。
+    const root = richInput.value;
+    const target = event.getTargetRanges?.()[0];
+    if (
+      root &&
+      event.cancelable &&
+      !event.isComposing &&
+      event.inputType.startsWith('delete') &&
+      target &&
+      root.contains(target.startContainer) &&
+      root.contains(target.endContainer)
+    ) {
+      const prefix = document.createRange();
+      prefix.selectNodeContents(root);
+      prefix.setEnd(target.startContainer, target.startOffset);
+      let start = serializeNode(prefix.cloneContents()).length;
+      prefix.setEnd(target.endContainer, target.endOffset);
+      let end = serializeNode(prefix.cloneContents()).length;
+      // 阻止浏览器直接删除辅助字符后把空 span 改写成 BR。
+      event.preventDefault();
+      if (
+        start === end &&
+        beforeInputSnapshot.start === beforeInputSnapshot.end &&
+        window.getSelection()?.isCollapsed &&
+        ['deleteContentBackward', 'deleteContentForward'].includes(event.inputType)
+      ) {
+        // 原生删除范围若仅覆盖占位字符，跨过它继续删除相邻正文；不能
+        // 让行首退格变成空操作。原生 character 扩展保留组合字符边界。
+        const direction = event.inputType === 'deleteContentBackward' ? 'backward' : 'forward';
+        const selection = window.getSelection();
+        selection?.modify('move', direction, 'character');
+        selection?.modify('extend', direction, 'character');
+        const adjacent = richSelectionRange();
+        if (adjacent) ({ start, end } = adjacent);
+      }
+      if (end > start) {
+        const value = beforeInputSnapshot.value;
+        updateEditorValue(value.slice(0, start) + value.slice(end), { start, end: start });
+      } else {
+        setSelectionRange(beforeInputSnapshot.start, beforeInputSnapshot.end);
+        beforeInputSnapshot = null;
+      }
+    }
   }
 
   function handlePlainValueUpdate(value: unknown) {
@@ -432,9 +535,20 @@
   }
 
   function handleRichInput() {
+    // 原生编辑会消耗原有哨兵，并在删空末尾文字后生成无标记的占位 BR。
+    // 先标记浏览器的末尾 BR 再清理，不能把真实换行后的已标记哨兵清理后
+    // 再判断，否则会把正文的真实换行也吞掉。
+    const last = richInput.value?.lastChild;
+    if (last instanceof HTMLBRElement) last.dataset.composerCaretSentinel = 'true';
     removeRichCaretSentinels();
     const selection = richSelectionRange() || { start: props.value.length, end: props.value.length };
     updateEditorValue(serializeRichContent(), selection);
+    // 原生删除末尾文字时 DOM 已与新 value 一致，不会触发重绘；表情和真实
+    // 换行后都要恢复落点，保证下一次退格从正确的行开始。
+    if (richInput.value) {
+      ensureLeadingCarets(richInput.value);
+      ensureTrailingCaret(richInput.value);
+    }
   }
 
   function handleRichKeydown(event: KeyboardEvent) {
@@ -494,6 +608,33 @@
 
   function handleRichSelectionChange(event: Event) {
     lastSelection = getSelectionRange();
+    const selection = window.getSelection();
+    const node = selection?.anchorNode;
+    const element = node instanceof Element ? node : node?.parentElement;
+    // Home/方向键可能停在占位字符前；统一映射到同一逻辑位置的正文侧，
+    // 避免下一次 Delete 只删除辅助字符。输入法合成期间不移动其选区。
+    if (
+      selection?.isCollapsed &&
+      element?.closest('[data-composer-caret-anchor="true"]') &&
+      !(event instanceof KeyboardEvent && event.isComposing)
+    ) {
+      // 左移到占位字符前时继续跨过它；否则重新归一到字符后会把光标
+      // 困在新行开头。使用原生字符移动，保留换行和 Unicode 字符边界。
+      if (
+        event instanceof KeyboardEvent &&
+        event.key === 'ArrowLeft' &&
+        !event.shiftKey &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.altKey &&
+        node?.nodeType === Node.TEXT_NODE &&
+        node.textContent?.[selection.anchorOffset] === '\u200b'
+      ) {
+        selection.modify('move', 'backward', 'character');
+        lastSelection = getSelectionRange();
+      }
+      setSelectionRange(lastSelection.start, lastSelection.end);
+    }
     syncRichEmojiSelection();
     emit('select', event);
   }
@@ -609,5 +750,4 @@
     pointer-events: auto;
     user-select: none;
   }
-
 </style>

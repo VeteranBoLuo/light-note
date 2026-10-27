@@ -331,7 +331,9 @@
     try {
       const res = await claimWeekly(challenge.key);
       if (res?.status === 200 && res.data?.ok) {
-        message.success(t('growth.weeklyClaimOk', { n: res.data.reward }));
+        message.success(
+          t(Number(res.data.reward) > 0 ? 'growth.weeklyClaimOk' : 'growth.rewardClaimed', { n: res.data.reward }),
+        );
         recordOperation({ module: '成长', operation: `领取每周挑战 ${challenge.key}（+${res.data.reward} 积分）` });
       } else if (res?.data?.msg) {
         message.info(res.data.msg);

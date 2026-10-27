@@ -46,8 +46,8 @@ describe('resolveDailyQuestClaimFeedback', () => {
   it('空结果不抛错，按「无奖励」处理', () => {
     expect(resolveDailyQuestClaimFeedback(null)).toEqual({
       level: 'success',
-      key: 'growth.questClaimOk',
-      params: { n: 0 },
+      key: 'growth.rewardClaimed',
+      params: {},
     });
   });
 });

@@ -1059,13 +1059,20 @@
       if (res?.status === 200 && res.data?.ok) {
         if (res.data.frameId) {
           const frameName = t(`growth.shopItems.${res.data.frameId}.name`);
-          message.success(t('growth.achClaimFrameOk', { n: res.data.reward, name: frameName }));
+          message.success(
+            t(Number(res.data.reward) > 0 ? 'growth.achClaimFrameOk' : 'growth.achClaimFrameOnlyOk', {
+              n: res.data.reward,
+              name: frameName,
+            }),
+          );
           recordOperation({
             module: '成长',
             operation: `领取成就奖励成功-${key}`,
           });
         } else {
-          message.success(t('growth.achClaimOk', { n: res.data.reward }));
+          message.success(
+            t(Number(res.data.reward) > 0 ? 'growth.achClaimOk' : 'growth.rewardClaimed', { n: res.data.reward }),
+          );
           recordOperation({ module: '成长', operation: `领取成就奖励成功-${key}` });
         }
       } else if (res?.data?.reason === 'claimed') {

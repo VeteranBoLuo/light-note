@@ -1,3 +1,4 @@
+import { PREWARM_PRIORITY } from '@/config/staticPrewarmGroups';
 import type { RouteLocationNormalized, RouteLocationRaw, Router } from 'vue-router';
 import { holdForegroundActivity, withForegroundActivity } from '@/http/requestActivity';
 import { scheduleStaticPrewarm } from './staticPrewarm';
@@ -59,7 +60,7 @@ export function prefetchResolvedRoute(router: Router, target: RouteLocationRaw):
       : scene === 'campaign'
         ? 'campaign-hd-top'
         : `${scene}-strip-top`;
-    stopArtworkIntent = scheduleStaticPrewarm({ priority: 1, urls: [publicArtworkUrl(`/brand-scenes/${asset}.webp`)] });
+    stopArtworkIntent = scheduleStaticPrewarm({ priority: PREWARM_PRIORITY.intent, urls: [publicArtworkUrl(`/brand-scenes/${asset}.webp`)] });
   }
   const loaders = router
     .resolve(target)

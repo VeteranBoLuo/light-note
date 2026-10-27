@@ -3,6 +3,7 @@
     <BButton
       v-for="item in MOBILE_RESOURCE_NAVIGATION"
       :key="item.key"
+      v-route-prefetch="item.path"
       class="mobile-resource-tab"
       :class="[`mobile-resource-tab--${item.key}`, { 'mobile-resource-tab--active': activePath === item.path }]"
       :aria-current="activePath === item.path ? 'page' : undefined"
@@ -29,9 +30,11 @@
   } from '@/config/mobileNavigation';
   import { getMobileTopBarBinding } from '@/composables/useMobileTopBar';
   import { useMobileNavigationState } from '@/composables/useMobileNavigationState';
+  import { createRoutePrefetchDirective } from '@/directives/routePrefetch';
 
   const route = useRoute();
   const router = useRouter();
+  const vRoutePrefetch = createRoutePrefetchDirective(router);
   const { t } = useI18n();
   const { saveResourceScroll, scrollCurrentResourceToTop, setLastMobileResourcePath } = useMobileNavigationState();
 

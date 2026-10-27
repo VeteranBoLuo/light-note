@@ -120,6 +120,10 @@ export async function listInboxResources(db, { userId, ...input } = {}) {
   const { type, sort, keyword, paginated, limit, offset, view, includeTotal } = normalizeInboxListOptions(input);
   const where = [`i.user_id = ?`, `i.status = 'pending'`];
   const params = [ownerId];
+  if (input.excludeOnboardingSeeds === true) {
+    where.push(`NOT EXISTS(SELECT 1 FROM onboarding_seed_resources seed
+      WHERE seed.user_id=i.user_id AND seed.resource_type=i.resource_type AND seed.resource_id=i.resource_id)`);
+  }
   if (type !== 'all') {
     where.push('i.resource_type = ?');
     params.push(type);

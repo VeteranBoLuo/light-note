@@ -5,6 +5,7 @@ const knownTokens = new Set(COMMUNITY_CHAT_INLINE_EMOJIS.map((emoji) => emoji.to
 
 function selectionText(node: Node, preserveEmoji: boolean): string {
   if (node.nodeType === Node.TEXT_NODE) return node.textContent || '';
+  if (node instanceof HTMLElement && node.dataset.composerCaretSentinel === 'true') return '';
   if (node instanceof HTMLElement && ['SCRIPT', 'STYLE'].includes(node.tagName)) return '';
   if (node instanceof HTMLImageElement) {
     const token = node.dataset.inlineEmojiToken || '';
@@ -12,6 +13,7 @@ function selectionText(node: Node, preserveEmoji: boolean): string {
   }
   if (node instanceof HTMLBRElement) return '\n';
   const text = Array.from(node.childNodes).map((child) => selectionText(child, preserveEmoji)).join('');
+  if (node instanceof HTMLElement && node.dataset.composerCaretAnchor === 'true') return text.replace('\u200b', '');
   return node instanceof HTMLParagraphElement || node instanceof HTMLDivElement ? `${text}\n` : text;
 }
 

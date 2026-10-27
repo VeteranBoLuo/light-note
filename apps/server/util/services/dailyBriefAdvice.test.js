@@ -1,143 +1,140 @@
 import { expect, it } from 'vitest';
-import { compileAdviceEvidence, resolveAdvice, adviceContext, ADVICE_FACT_ID } from './dailyBriefAdvice.js';
-import { validateDailyBriefInput, validateDailyBriefArguments } from '../aiSkill/skills/routineDailyBriefSkill.js';
+import { adviceContext, adviceModelSignals, resolveAdvice, validateAdviceSignals } from './dailyBriefAdvice.js';
 import { dailyBriefServiceInternals } from './dailyBriefService.js';
-const excerpt = '离线导出目前只保存正文，不包含附件；计划在导出时提示附件需要单独备份，避免资料遗漏。';
-const evidence = compileAdviceEvidence([
-  { resourceType: 'note', resourceId: 'owned', title: '导出方案', summary: `<p>${excerpt}</p>` },
-]);
-const proposal = {
-  sourceKey: 'material_1',
-  quote: '离线导出目前只保存正文，不包含附件',
-  action: '可以在导出验收清单中加入附件备份检查，并核对导出提示是否说明这一限制。',
-};
-
-it('只读取有界真实文本；去除执行内容、排除文件名与绘图；标题不当作正文', () => {
-  expect(evidence).toHaveLength(1);
-  expect(evidence[0].excerpt).toBe(excerpt);
-  expect(
-    compileAdviceEvidence([
-      { resourceType: 'file', resourceId: 'f', title: '工作计划.pdf', summary: excerpt },
-      { resourceType: 'note', resourceId: 'd', title: '绘图', detail: 'drawing', summary: excerpt },
+import { validateDailyBriefInput, validateDailyBriefArguments } from '../aiSkill/skills/routineDailyBriefSkill.js';
+const calendar = { date: '2026-10-27', locale: 'zh-CN', timezone: 'Asia/Shanghai' };
+const samples = [
+  [
+    [
       {
-        resourceType: 'note',
-        resourceId: 'n',
-        title: '有意义的标题',
-        summary: '<script>一段不能成为资料依据的脚本内容</script>你好',
+        id: 'todo_due_today',
+        count: 1,
+        entries: [{ id: 't', title: '提交材料', at: '2026-10-27 16:00', reason: 'due' }],
       },
-    ]),
-  ).toEqual([]);
-  expect(
-    compileAdviceEvidence([
-      { resourceType: 'bookmark', resourceId: 'b', title: '长描述', summary: '真实资料内容'.repeat(300) },
-    ])[0].excerpt,
-  ).toHaveLength(600);
-});
-it('仅凭真实引用生成具体建议，来源由服务器绑定，不重复正文或原文', () => {
-  expect(resolveAdvice(proposal, evidence)).toMatchObject({ source: { id: 'owned', type: 'note' } });
-  expect(resolveAdvice(proposal, evidence, [proposal.action])).toBeNull();
-  expect(resolveAdvice({ ...proposal, action: proposal.quote }, evidence)).toBeNull();
-  expect(resolveAdvice(null, evidence)).toBeNull();
-  for (const invalid of [
-    { ...proposal, sourceKey: 'foreign' },
-    { ...proposal, quote: '原文并未提供这条依据' },
-    { ...proposal, action: '可以用 10 分钟完成导出检查和附件备份。' },
-    { ...proposal, url: 'https://untrusted.test' },
-  ])
-    expect(() => resolveAdvice(invalid, evidence)).toThrow();
-});
-
-it('先过滤再选三项，短正文和已准备文件可入选；格式标签不挤掉正文', () => {
-  const items = [1, 2, 3].map((id) => ({ resourceType: 'file', resourceId: String(id), title: '未解析文件' }));
-  const short = '离线导出不含附件，验收前需要单独备份。';
-  items.push({
-    resourceType: 'note',
-    resourceId: 'short',
-    title: '短笔记',
-    summary: `<p style="${'x'.repeat(1100)}">${short}</p>`,
+    ],
+    ['todo_due_today'],
+    '可以先完成今天到期的待办，再处理没有明确时限的整理事项。',
+  ],
+  [
+    [
+      { id: 'organize_ai_pending', count: 3, resourceTypes: ['bookmark'], kinds: ['title'] },
+      { id: 'organize_pending', count: 9 },
+    ],
+    ['organize_ai_pending', 'organize_pending'],
+    '先审核已经准备好的整理建议，确认可用的改动，再继续处理剩余待整理资料。',
+  ],
+  [
+    [{ id: 'file_created_today', count: 2 }],
+    ['file_created_today'],
+    '可以先确认今天新增文件是否放在合适的位置，避免收集后难以再次找到。',
+  ],
+  [
+    [
+      {
+        id: 'workshop_result',
+        count: 1,
+        samples: ['已生成'],
+        sources: [{ type: 'toolbox_task', id: 'j', title: '研究成果' }],
+      },
+    ],
+    ['workshop_result'],
+    '可先查看并保存尚未保存的工坊成果，留下可继续使用的结果。',
+  ],
+  [
+    [
+      {
+        id: 'workshop_attention',
+        count: 1,
+        samples: ['失败'],
+        sources: [{ type: 'toolbox_task', id: 'f', title: '任务' }],
+      },
+    ],
+    ['workshop_attention'],
+    '可以先查看失败任务的状态与原资料，再决定是否需要重新发起处理。',
+  ],
+  [
+    [
+      {
+        id: 'workshop_due',
+        count: 1,
+        urgency: 'today',
+        dueDate: '2026-10-27',
+        pendingCount: 2,
+        samples: ['到期'],
+        sources: [{ type: 'learning_workspace', id: 'p', title: '学习项目' }],
+      },
+    ],
+    ['workshop_due'],
+    '先进入今天到期的工坊项目，核对未完成的行动，再继续其他整理工作。',
+  ],
+];
+it.each(samples)('由结构化工作状态给出行动，不需要任何资料正文：%j', (facts, factIds, action) => {
+  const context = adviceContext(facts, calendar.locale);
+  const input = validateDailyBriefInput({ ...calendar, signals: adviceModelSignals(context.signals) });
+  const draft = validateDailyBriefArguments({ insights: [], recommendation: { factIds, action } }, input.signals);
+  const brief = dailyBriefServiceInternals.buildBrief(calendar, facts, {
+    adviceKey: context.key,
+    adviceProposal: draft.recommendation,
   });
-  items.push({ resourceType: 'file', resourceId: 'ready', title: '已解析文件', preparedText: excerpt });
-  items.push({ resourceType: 'note', resourceId: 'drawing', title: '画图', detail: 'drawing', summary: excerpt });
-  items.push({ resourceType: 'note', resourceId: 'text', title: '笔记', summary: excerpt });
-  const selected = compileAdviceEvidence(items);
-  expect(selected.map((item) => item.source.id)).toEqual(['short', 'ready', 'text']);
-  expect(selected[0].excerpt).toBe(short);
-  expect(selected.map((item) => item.key)).toEqual(['material_1', 'material_2', 'material_3']);
-  expect(compileAdviceEvidence([{ resourceType: 'bookmark', resourceId: 'url', title: '链接', preparedText: 'https://example.com/only-url' }])).toEqual([]);
+  expect(brief.recommendation).toBe(action);
+  expect(brief.recommendationFactIds).toEqual(factIds);
+  expect(brief.recommendation).not.toContain('片段');
 });
-it('建议专用输入可以没有成果，但无材料、越界输入和伪造引用不能通过工具协议', () => {
-  const input = {
-    date: '2026-10-22',
-    timezone: 'Asia/Shanghai',
-    locale: 'zh-CN',
-    facts: [],
-    evidence: evidence.map(({ key, title, excerpt }) => ({ key, title, excerpt })),
-    body: [],
-  };
-  expect(validateDailyBriefInput(input).facts).toEqual([]);
-  expect(
-    validateDailyBriefArguments({ insights: [], recommendation: proposal }, [], input.evidence).recommendation,
-  ).toEqual(proposal);
-  expect(
-    validateDailyBriefArguments({ insights: [], recommendation: null }, [], input.evidence).recommendation,
-  ).toBeNull();
-  expect(() =>
-    validateDailyBriefArguments(
-      { insights: [], recommendation: { ...proposal, quote: '这个引用根本不存在于资料中' } },
-      [],
-      input.evidence,
-    ),
-  ).toThrow();
-  expect(() => validateDailyBriefInput({ ...input, evidence: [] })).toThrow();
-  expect(() => validateDailyBriefInput({ ...input, evidence })).toThrow(); // 原始对象身份不进入模型
-  expect(() => validateDailyBriefArguments({ insights: [] }, [], input.evidence)).toThrow('必须明确返回');
-  expect(validateDailyBriefArguments({ insights: [] }, [], []).recommendation).toBeUndefined();
-});
-it('建议绑定证据版本、保留片段范围及入口；不泄漏未引用的完整片段', () => {
+it('正文、任意资源标题和结果内容不进入建议上下文，也不触发再次分析', () => {
   const facts = [
-    { id: ADVICE_FACT_ID, evidence },
-    { id: 'organize_pending', count: 1 },
+    { id: 'organize_pending', count: 2, resources: [{ title: '随便写的产品意见', content: '私人正文' }] },
+    {
+      id: 'workshop_result',
+      count: 1,
+      samples: ['私人结论'],
+      sources: [{ type: 'toolbox_task', id: 'j', title: '定位标题' }],
+    },
   ];
-  const { key } = adviceContext(facts, 'zh-CN');
-  const brief = dailyBriefServiceInternals.buildBrief({ date: '2026-10-22', locale: 'zh-CN' }, facts, {
-    adviceKey: key,
-    adviceProposal: proposal,
-  });
-  expect(brief.recommendation).toContain('的片段提到');
-  expect(brief.recommendation).toContain(proposal.action);
-  expect(brief.recommendationSources[0].id).toBe('owned');
-  expect(brief.recommendationKind).toBe('ai');
-  expect(JSON.stringify(brief)).not.toContain(excerpt);
-  expect(adviceContext([...facts, { id: 'file_created_today', count: 2 }], 'zh-CN').key).toBe(key);
-  expect(adviceContext(facts, 'en-US').key).not.toBe(key);
-  expect(
-    dailyBriefServiceInternals.buildBrief({ locale: 'zh-CN' }, [], { adviceKey: key, adviceProposal: proposal })
-      .recommendation,
-  ).toBe('');
+  const before = adviceContext(facts, 'zh-CN');
+  const sent = adviceModelSignals(before.signals);
+  expect(JSON.stringify(sent)).not.toMatch(/私人|随便写|sources|content|samples/);
+  const changed = structuredClone(facts);
+  changed[0].resources = [{ title: '别的随笔', content: '新正文' }];
+  changed[1].samples = ['另一段随意结论'];
+  expect(adviceContext(changed, 'zh-CN').key).toBe(before.key);
+  expect(adviceContext([{ ...facts[0], count: 3 }, facts[1]], 'zh-CN').key).not.toBe(before.key);
+  expect(adviceContext(facts, 'en-US').key).not.toBe(before.key);
 });
-
-it('引用容忍换行和空白排版差异，仍回填原文；改写、拼接和未知来源拒绝', () => {
-  const spaced = [{ ...evidence[0], excerpt: '离线导出目前只保存正文， 不包含附件；请单独备份附件。' }];
-  expect(resolveAdvice(proposal, spaced).quote).toBe('离线导出目前只保存正文， 不包含附件');
-  for (const quote of ['离线导出目前只保存正文……不包含附件', '离线导出不会保存正文，不包含附件'])
-    expect(() => resolveAdvice({ ...proposal, quote }, spaced)).toThrow('ADVICE_QUOTE_NOT_FOUND');
-  expect(() => resolveAdvice({ ...proposal, sourceKey: 'missing' }, spaced)).toThrow('ADVICE_SOURCE_UNKNOWN');
+it('定位仅由服务器绑定，模型无权伪造资源入口；已无事项时不创建判断缓存', () => {
+  const { signals } = adviceContext(samples[0][0], 'zh-CN');
+  expect(adviceModelSignals(signals)[0]).not.toHaveProperty('sources');
+  const proposal = { factIds: ['todo_due_today'], action: '可以先处理今天到期的待办，再处理没有时限的收集事项。' };
+  expect(resolveAdvice(proposal, signals).sources).toEqual([{ type: 'todo', id: 't', title: '提交材料' }]);
+  expect(() => resolveAdvice({ ...proposal, url: 'https://invalid.test' }, signals)).toThrow('ADVICE_SHAPE');
+  expect(adviceContext([{ id: 'organize_pending', count: 0 }], 'zh-CN')).toEqual({ signals: [], key: '' });
 });
-it('中英文通用建议和正文近似重复均不展示', () => {
-  for (const action of [
-    '可以先对这些待整理资料进行整理，确认修改。',
-    'Please review the pending materials and organize the resources.',
+it('反复计数或已有正文不冒充行动；支持真实空判断', () => {
+  const { signals } = adviceContext(samples[1][0], 'zh-CN');
+  const action = '有待审核的整理建议和待整理资料，目前仍然需要处理。';
+  expect(resolveAdvice({ factIds: ['organize_pending'], action }, signals, [action])).toBeNull();
+  expect(resolveAdvice(null, signals)).toBeNull();
+});
+it.each([
+  { factIds: ['foreign'], action: '可以先检查当前状态，再按实际需要处理资料。' },
+  { factIds: ['organize_pending', 'organize_pending'], action: '可以先检查当前状态，再按实际需要处理资料。' },
+  { factIds: ['organize_pending'], action: '可以用 10 分钟完成全部待整理资料的归类。' },
+  { sourceKey: 'material_1', quote: '随便写的资料', action: '可以根据这段资料去实现一个新功能。' },
+])('拒绝未知来源、重复编号、编造耗时和旧正文协议：%j', (proposal) => {
+  const { signals } = adviceContext(samples[1][0], 'zh-CN');
+  expect(() => resolveAdvice(proposal, signals)).toThrow();
+});
+it('信号协议有界且闭合，拒绝把正文偷偷放进输入', () => {
+  const signal = { id: 'organize_pending', label: '待整理', count: 3 };
+  expect(validateAdviceSignals([signal])).toEqual([signal]);
+  for (const value of [
+    [],
+    [signal, signal],
+    [{ ...signal, count: -1 }],
+    [{ ...signal, excerpt: '私人内容' }],
+    [{ ...signal, body: '私人正文' }],
   ])
-    expect(resolveAdvice({ ...proposal, action }, evidence)).toBeNull();
-  expect(resolveAdvice(proposal, evidence, [proposal.action.replace('可以', '建议')])).toBeNull();
-});
-
-it('真实模型回归：数字在同一已读片段中即可，不要求全部出现在短引文；按完整数值拒绝子串碰撞', () => {
-  const materials = [{ ...evidence[0], excerpt: evidence[0].excerpt + '验收覆盖 12 种附件，单个文件限制 510 MB。' }];
-  const action = '可以将 12 种附件的导出检查加入验收清单，同时核对 510 MB 限制的提示。';
-  expect(resolveAdvice({ ...proposal, action }, materials).action).toBe(action);
+    expect(() => validateAdviceSignals(value)).toThrow();
   expect(() =>
-    resolveAdvice({ ...proposal, action: '可以先验证 10 MB 附件的导出行为，再完善验收清单。' }, materials),
-  ).toThrow('ADVICE_NUMBER_UNSUPPORTED');
-  expect(() => resolveAdvice({ ...proposal, action }, evidence)).toThrow('ADVICE_NUMBER_UNSUPPORTED');
+    validateDailyBriefInput({ ...calendar, signals: [signal], evidence: [{ excerpt: '旧内容' }] }),
+  ).toThrow();
 });

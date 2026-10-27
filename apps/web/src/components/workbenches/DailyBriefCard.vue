@@ -80,22 +80,25 @@
         <p>{{ adviceStatusText }}</p>
       </aside>
       <aside v-if="briefRecommendation" class="daily-brief-card__preview-recommendation">
-        <strong>{{
-          t(
-            guestSample
-              ? 'workbench.dailyBrief.sampleSuggestion'
-              : recommendationStale
-                ? 'workbench.dailyBrief.previousRecommendation'
-                : displayedAdvice?.recommendationKind === 'action'
-                  ? 'workbench.dailyBrief.actionRecommendation'
-                  : 'workbench.dailyBrief.aiRecommendation',
-          )
-        }}</strong>
+        <strong>{{ t(recommendationLabelKey) }}</strong>
         <p>{{ briefRecommendation }}</p>
+        <div v-if="showOnboardingActions" class="daily-brief-card__onboarding-actions">
+          <BButton
+            v-for="action in onboardingActions"
+            :key="action.key"
+            type="text"
+            size="small"
+            :disabled="busy"
+            @click="openOnboardingCreate(action.type)"
+          >
+            {{ t(action.label) }}
+            <SvgIcon :src="icon.ai.sourceArrow" size="13" aria-hidden="true" />
+          </BButton>
+        </div>
       </aside>
       <p v-if="displayBrief && errorMessage" class="daily-brief-card__refresh-error" role="alert">{{ errorMessage }}</p>
       <BButton
-        v-if="!displayBrief || briefInsights.length || briefRecommendation"
+        v-if="!displayBrief || briefInsights.length || (briefRecommendation && !isOnboardingAdvice)"
         size="small"
         class="daily-brief-card__view-brief"
         @click="detailsVisible = true"
@@ -324,19 +327,22 @@
           <p>{{ adviceStatusText }}</p>
         </aside>
         <aside v-if="briefRecommendation" class="daily-brief-card__recommendation">
-          <strong>{{
-            t(
-              guestSample
-                ? 'workbench.dailyBrief.sampleSuggestion'
-                : recommendationStale
-                  ? 'workbench.dailyBrief.previousRecommendation'
-                  : displayedAdvice?.recommendationKind === 'action'
-                    ? 'workbench.dailyBrief.actionRecommendation'
-                    : 'workbench.dailyBrief.aiRecommendation',
-            )
-          }}</strong>
+          <strong>{{ t(recommendationLabelKey) }}</strong>
           <div>
             <p>{{ briefRecommendation }}</p>
+            <div v-if="showOnboardingActions" class="daily-brief-card__onboarding-actions">
+              <BButton
+                v-for="action in onboardingActions"
+                :key="action.key"
+                type="text"
+                size="small"
+                :disabled="busy"
+                @click="openOnboardingCreate(action.type)"
+              >
+                {{ t(action.label) }}
+                <SvgIcon :src="icon.ai.sourceArrow" size="13" aria-hidden="true" />
+              </BButton>
+            </div>
             <div v-if="displayedAdvice?.recommendationSources?.length" class="daily-brief-insight__sources">
               <BButton
                 v-for="source in displayedAdvice?.recommendationSources"
@@ -372,12 +378,16 @@
 
 <script setup lang="ts">
   import { computed, defineComponent, ref, watch } from 'vue';
+  import type { ActionCaptureType } from '@/store/inbox';
+  import { closeCurrentMobileOverlayThen } from '@/utils/mobileOverlayHistory';
   import { useMobileLayout } from '@/composables/useMobileLayout';
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
   import { useI18n } from 'vue-i18n';
   import { useRouter } from 'vue-router';
   import type { DailyBrief, DailyBriefInsight } from '@/api/dailyBriefApi';
   import { useVisitorBrief } from '@/composables/useVisitorBrief';
+  import { toolboxTaskChange } from '@/utils/toolboxTaskState';
+  import { useUserStore } from '@/store';
   import { useDailyBrief } from '@/composables/useDailyBrief';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BChip from '@/components/base/BasicComponents/BChip.vue';
@@ -394,6 +404,7 @@
       compact: false,
     },
   );
+  const emit = defineEmits<{ onboardingCreate: [type?: ActionCaptureType] }>();
   defineOptions({ inheritAttrs: false });
   const BriefInline = defineComponent({
     inheritAttrs: false,
@@ -425,6 +436,10 @@
     eligible: () => props.eligible && !guestSample.value,
     ownerKey: () => props.ownerKey,
     passive: () => readOnly.value,
+  });
+  const currentUser = useUserStore();
+  watch(toolboxTaskChange, (change) => {
+    if (change?.owner === currentUser.id && !readOnly.value && !guestSample.value) void refreshAfterChange();
   });
   const readyBrief = computed<DailyBrief | null>(() => (state.value?.brief?.version === 2 ? state.value.brief : null));
   const displayBrief = computed(() => (guestSample.value ? visitorState.value?.brief : readyBrief.value));
@@ -479,6 +494,31 @@
       : undefined,
   );
   const displayedAdvice = computed(() => previousAdvice.value || displayBrief.value);
+  const isOnboardingAdvice = computed(
+    () =>
+      displayedAdvice.value?.recommendationKind === 'action' &&
+      displayedAdvice.value?.recommendationFactIds?.includes('onboarding_empty'),
+  );
+  const showOnboardingActions = computed(
+    () => isOnboardingAdvice.value && props.eligible && !readOnly.value && !guestSample.value,
+  );
+  const onboardingActions = [
+    { key: 'collect', label: 'workbench.dailyBrief.onboardingCollect', type: undefined },
+    { key: 'note', label: 'workbench.dailyBrief.onboardingNote', type: 'note' as ActionCaptureType },
+    { key: 'todo', label: 'workbench.dailyBrief.onboardingTodo', type: 'todo' as ActionCaptureType },
+  ];
+  async function openOnboardingCreate(type?: ActionCaptureType) {
+    if (!showOnboardingActions.value) return;
+    const owner = props.ownerKey;
+    const open = () => {
+      if (owner === props.ownerKey && showOnboardingActions.value) emit('onboardingCreate', type);
+    };
+    if (detailsVisible.value) {
+      await closeCurrentMobileOverlayThen(() => {
+        detailsVisible.value = false;
+      }, open);
+    } else open();
+  }
   const briefRecommendation = computed(() => displayedAdvice.value?.recommendation || '');
   const recommendationStale = computed(
     () =>
@@ -487,6 +527,14 @@
         (!displayBrief.value?.recommendationFactIds?.length ||
           displayBrief.value.recommendationFactIds.some((id) => state.value?.staleFactIds?.includes(id)))),
   );
+  const recommendationLabelKey = computed(() => {
+    if (guestSample.value) return 'workbench.dailyBrief.sampleSuggestion';
+    if (isOnboardingAdvice.value) return 'workbench.dailyBrief.onboardingRecommendation';
+    if (recommendationStale.value) return 'workbench.dailyBrief.previousRecommendation';
+    return displayedAdvice.value?.recommendationKind === 'action'
+      ? 'workbench.dailyBrief.actionRecommendation'
+      : 'workbench.dailyBrief.aiRecommendation';
+  });
   const hasActivitySummary = computed(
     () =>
       !guestSample.value &&
@@ -629,7 +677,7 @@
 
   .daily-brief-card__summary-copy {
     padding: 0 var(--ui-space-13, 13px) var(--ui-space-12, 12px);
-    :deep(.b_btn) {
+    :deep(.daily-brief-card__view-brief) {
       padding: var(--ui-space-2, 2px) 0;
       color: var(--info-color);
       background: transparent;
@@ -640,6 +688,10 @@
     font-size: var(--ui-font-14, 14px);
     line-height: 1.6;
     overflow-wrap: anywhere;
+  }
+
+  .daily-brief-card__onboarding-actions {
+    margin-top: var(--ui-space-8, 8px);
   }
 
   .daily-brief-card__preview-recommendation {
@@ -946,7 +998,8 @@
     }
   }
 
-  .daily-brief-insight__organize-actions {
+  .daily-brief-insight__organize-actions,
+  .daily-brief-card__onboarding-actions {
     display: flex;
     flex-wrap: wrap;
     gap: var(--ui-space-4, 4px) var(--ui-space-12, 12px);

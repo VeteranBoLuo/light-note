@@ -27,8 +27,7 @@ const insights = [
   {
     id: 'workshop_result',
     factIds: ['workshop_result'],
-    context: '《存储工具选型报告》已生成，尚未保存。',
-    text: '资料未完整读取：已读取的两份工具文档都支持本地文件管理，其中一份明确说明了自动清理规则，另一份尚未提供该功能的依据。',
+    text: '《存储工具选型报告》已生成，尚未保存。',
     sources: [{ type: 'toolbox_task', id: 'report', title: '选型报告' }],
   },
   {
@@ -73,7 +72,7 @@ const englishBrief = {
     text: [
       '“Submit the reimbursement documents” is due today at 15:00 and is still pending.',
       'Reading project · Due today · 2026-10-22 · Complete the reading notes',
-      'Partial sources: Both available documents describe local file management. One documents automatic cleanup rules; the other does not provide evidence for that feature. Open the report to check the sources.',
+      '“Storage tools comparison report” is ready and has not been saved.',
       '3 organizing suggestions are ready for review. Covering bookmarks and notes; suggestions include titles and tags.',
       '4 resources await organizing; 510 resources have no tags. Recently collected: “Daily brief improvements” and “Design review screenshot.png”.',
     ][index],
@@ -98,7 +97,7 @@ const cases = [];
 for (const mobile of [false, true])
   for (const theme of ['day', 'night'])
     for (const density of mobile ? ['standard'] : ['small', 'standard', 'large'])
-      for (const mode of ['mixed', 'priority', 'advice', 'advice-stale', 'advice-failed'])
+      for (const mode of ['mixed', 'priority', 'advice', 'advice-stale', 'advice-failed', 'onboarding', 'onboarding-readonly'])
         cases.push({ mobile, theme, density, mode, locale: 'zh-CN' });
 for (const mobile of [false, true])
   for (const theme of ['day', 'night']) {
@@ -113,6 +112,7 @@ for (const mobile of [false, true])
     });
     cases.push({ mobile, theme, density: 'standard', mode: 'priority', locale: 'en-US' });
     cases.push({ mobile, theme, density: 'standard', mode: 'advice', locale: 'en-US' });
+    cases.push({ mobile, theme, density: 'standard', mode: 'onboarding', locale: 'en-US' });
   }
 for (const mobile of [false, true]) {
   cases.push({ mobile, theme: 'day', density: 'standard', mode: 'quiet', locale: 'zh-CN' });
@@ -245,14 +245,20 @@ try {
       selectedBrief = {
         ...localizedBrief,
         recommendation:
-          '《离线导出方案》的片段提到「导出只保存正文，不包含附件」。可以将附件备份检查加入导出验收清单，并核对页面提示是否说明这一限制。',
+          '先完成今天到期的待办，再查看并保存工坊已经生成的成果，之后继续处理整理事项。',
         recommendationKind: 'ai',
-        recommendationFactIds: ['recommendation_evidence'],
-        recommendationSources: [{ type: 'note', id: 'advice-note', title: '离线导出方案' }],
+        recommendationFactIds: ['todo_due_today','workshop_result'],
+        recommendationSources: [{ type: 'toolbox_task', id: 'report', title: '选型报告' }],
       };
     if (mode === 'advice' && locale === 'en-US')
       selectedBrief.recommendation =
-        'From the excerpt in “Offline export notes”: “Exports contain text only; attachments require a separate backup.” Consider adding attachment backup to the export acceptance checklist, and checking that the export screen explains this limitation before the user proceeds.';
+        'Finish the task due today first, then check and save the workshop result before continuing with organizing.';
+    if (mode.startsWith('onboarding')) selectedBrief = {
+      ...localizedBrief, insights: [], sections: [], adviceStatus: 'ready',
+      headline: locale === 'en-US' ? 'No resources added today, and nothing needs special attention.' : '今天暂无新增资源，也没有需要特别关注的事项。',
+      recommendation: locale === 'en-US' ? 'Start by collecting a resource, writing a note, or creating a to-do—one small step to get started with Light Note.' : '可以先收集一份资料、写一篇笔记，或新建一条待办，从一件小事开始使用轻笺。',
+      recommendationKind: 'action', recommendationFactIds: ['onboarding_empty'], recommendationSources: [],
+    };
     if (mode === 'advice-failed') selectedBrief = { ...localizedBrief, adviceStatus: 'failed', recommendation: '' };
     const adviceStates = {
       'advice-empty': 'no_value',
@@ -275,7 +281,7 @@ try {
             stale: mode === 'stale' || mode === 'advice-stale',
             staleFactIds:
               mode === 'advice-stale'
-                ? ['recommendation_evidence']
+                ? ['workshop_result']
                 : mode === 'stale'
                   ? ['todo_due_today', 'organize_pending']
                   : [],
@@ -301,7 +307,7 @@ try {
         });
       },
     );
-    const query = new URLSearchParams({ theme, density, locale, ...(mobile ? { renderProfile: 'mobile' } : {}) });
+    const query = new URLSearchParams({ theme, density, locale, ...(mode === 'onboarding-readonly' ? {preview:'1'} : {}), ...(mobile ? { renderProfile: 'mobile' } : {}) });
     await page.goto(`${origin}/e2e/brief-bookmark-adoption.html?${query}`, {
       waitUntil: 'domcontentloaded',
       timeout: 30000,
@@ -311,7 +317,7 @@ try {
     assert(Math.abs((await card.boundingBox()).width - viewportWidth) < 2, '验收卡片必须使用实际视口宽度');
     await page
       .getByText(
-        ['quiet', 'activity', 'no-new-quiet'].includes(mode) ? data.brief.headline : selectedBrief.insights[0].text,
+        ['quiet', 'activity', 'no-new-quiet', 'onboarding', 'onboarding-readonly'].includes(mode) ? data.brief.headline : selectedBrief.insights[0].text,
         {
           exact: false,
         },
@@ -326,6 +332,28 @@ try {
         .count(),
       selectedBrief.recommendation ? 1 : 0,
     );
+    if (mode.startsWith('onboarding')) {
+      await card.getByText(locale === 'en-US' ? 'Getting started' : '使用引导', { exact: true }).waitFor();
+      await card.getByText(selectedBrief.recommendation, { exact: true }).waitFor();
+      assert.equal(await card.locator('.daily-brief-card__advice-status').count(), 0);
+      const actions = card.locator('.daily-brief-card__onboarding-actions button');
+      assert.equal(await actions.count(), mode === 'onboarding-readonly' ? 0 : 3);
+      if (mode === 'onboarding') {
+        const names = locale === 'en-US' ? ['Collect resources', 'Write a note', 'New to-do'] : ['收集资料', '写笔记', '新建待办'];
+        for (const [index, type] of ['bookmark', 'note', 'todo'].entries()) {
+          await card.getByRole('button', {name:names[index], exact:true}).click();
+          await page.locator(`.capture-workspace.is-${type}`).waitFor();
+          if (mobile) {
+            await page.waitForFunction(() => Boolean(history.state?.__lnMobileOverlayId));
+            await page.evaluate(() => history.back());
+          } else await page.keyboard.press('Escape');
+          await page.locator('.capture-workspace').waitFor({state:'hidden'});
+          await card.getByRole('button', {name:names[index], exact:true}).waitFor();
+        }
+      }
+
+      assert.equal(await card.getByText(locale === 'en-US' ? 'AI suggestion' : 'AI 建议', {exact:true}).count(), 0);
+    }
     if (mode === 'restored') {
       await page.getByText(selectedBrief.headline, { exact: true }).waitFor();
       await page.getByText('处理建议', { exact: true }).waitFor();
@@ -340,7 +368,7 @@ try {
         selectedBrief.insights[0].text,
         '移动摘要直接显示失败提醒',
       );
-    if (['quiet', 'activity', 'no-new-quiet'].includes(mode)) {
+    if (['quiet', 'activity', 'no-new-quiet', 'onboarding', 'onboarding-readonly'].includes(mode)) {
       assert.equal(await page.locator('.daily-brief-insight').count(), 0);
       assert.equal(await page.locator('.daily-brief-card__view-brief').count(), 0);
     } else {
@@ -493,7 +521,7 @@ try {
     if (adviceStates[mode]) {
       const hints = {
         'advice-empty': '暂无需要补充的建议',
-        'advice-unreadable': '暂无可分析的资料正文。',
+        'advice-unreadable': '当前没有需要补充行动建议的事项。',
         'advice-deferred': '暂无需要补充的建议',
       };
       await page.locator('.daily-brief-card__advice-status').getByText(hints[mode], { exact: true }).first().waitFor();
@@ -506,11 +534,11 @@ try {
     if (mode === 'advice' || mode === 'advice-stale') {
       const advice = page.locator('.daily-brief-card__recommendation');
       assert((await advice.textContent()).includes(selectedBrief.recommendation));
-      const source = advice.getByRole('button', { name: '离线导出方案', exact: true });
+      const source = advice.getByRole('button', { name: '选型报告', exact: true });
       assert.equal(await source.isDisabled(), mode === 'advice-stale');
       if (mode === 'advice') {
         await source.click();
-        await page.waitForFunction(() => document.documentElement.dataset.briefNavigation?.includes('advice-note'));
+        await page.waitForFunction(() => document.documentElement.dataset.briefNavigation=== '/toolbox/task/report');
       }
     }
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1), false);

@@ -52,6 +52,7 @@
             Boolean(user.visitorWorkspace || user.role === 'visitor' || user.adminContext?.subjectRole === 'visitor')
           "
           :read-only="growthReadOnly"
+          @onboarding-create="openQuickCapture"
         />
       </div>
 
@@ -1123,7 +1124,11 @@
   watch(
     () => inbox.captureRevision,
     () => {
-      void Promise.allSettled([fetchWorkbenchSummary({ silent: true }), organizer.loadSummary({ silent: true })]);
+      void Promise.allSettled([
+        fetchWorkbenchSummary({ silent: true }),
+        organizer.loadSummary({ silent: true }),
+        dailyBriefCardRef.value?.refresh(),
+      ]);
     },
   );
 
