@@ -12,13 +12,13 @@ function db(results = [], projects = [], attention = []) {
 }
 describe('workshop brief facts', () => {
   it('returns empty facts without manufacturing conclusions', async () => {
-    const database = db([{ content: '# 标题\n\n短句' }]);
+    const database = db();
     const facts = await compileWorkshopBriefFacts(database, 'owner', calendar);
     expect(facts.every((fact) => fact.count === 0)).toBe(true);
     expect(database.query.mock.calls[0][1][0]).toBe('owner');
     expect(database.query.mock.calls[1][1][4]).toBe('owner');
   });
-  it('keeps coverage limitations and opens the original task, with stable versions', async () => {
+  it('uses unsaved status and opens the original task without interpreting result content', async () => {
     const result = {
       id: 'artifact',
       job_id: 'job',
@@ -28,7 +28,8 @@ describe('workshop brief facts', () => {
       coverage_json: { complete: false },
     };
     const [fact] = await compileWorkshopBriefFacts(db([result]), 'owner', calendar);
-    expect(fact.samples[0]).toContain('资料未完整读取');
+    expect(fact.samples[0]).toBe('工坊成果已生成，尚未保存。');
+    expect(fact.samples[0]).not.toContain('所选资料');
     expect(fact.route).toBe('/toolbox/task/job');
     const [changed] = await compileWorkshopBriefFacts(db([{ ...result, artifact_version: 2 }]), 'owner', calendar);
     expect(changed.revision).not.toBe(fact.revision);
@@ -76,20 +77,12 @@ describe('workshop brief facts', () => {
     );
     expect(quiet[1].count).toBe(0);
   });
-  it('长成果摘录尽量保留完整句子，无法完整截取时明确省略', async () => {
-    const sentence = '这是基于所选资料得出的完整结论，后续应回到原成果核对每一项具体依据。';
-    const artifact = {
-      id: 'a',
-      job_id: 'j',
-      content: `## 结论\n${sentence}${'更多材料内容'.repeat(50)}`,
-      coverage_json: { complete: false },
-    };
-    const facts = await compileWorkshopBriefFacts(db([artifact]), 'owner', calendar);
-    expect(facts[0].samples).toEqual([`资料未完整读取：${sentence}`]);
-    artifact.content = `## 结论\n${'详细结论'.repeat(100)}`;
-    const unbroken = (await compileWorkshopBriefFacts(db([artifact]), 'owner', calendar))[0].samples[0];
-    expect(unbroken.length).toBeLessThanOrEqual(120);
-    expect(unbroken.endsWith('…')).toBe(true);
+  it('成果正文完全不查询、不读取，任意正文不会改变工作流建议依据', async () => {
+    const database = db([{ id:'a',job_id:'j',title:'成果',artifact_version:1,content:'随便写的内容' }]);
+    const facts = await compileWorkshopBriefFacts(database,'owner',calendar);
+    expect(database.query.mock.calls[0][0]).not.toMatch(/a\.content|coverage_json/);
+    expect(facts[0]).toMatchObject({count:1,samples:['工坊成果已生成，尚未保存。']});
+    expect(JSON.stringify(facts)).not.toContain('随便写');
   });
   it.each(['failed', 'save_failed'])('未移除的 %s 任务保留准确状态和原任务入口', async (status) => {
     const row = {

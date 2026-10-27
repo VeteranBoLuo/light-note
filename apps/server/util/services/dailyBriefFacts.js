@@ -1,10 +1,8 @@
-import { compileAdviceEvidence, ADVICE_FACT_ID } from './dailyBriefAdvice.js';
 import { summarizePendingOrganizeReview } from './organizeReviewSummary.js';
 import { compileWorkshopBriefFacts } from './dailyBriefWorkshop.js';
 import { compileBriefTodoFacts } from './dailyBriefTodoFacts.js';
 import { listInboxResources } from '../resourceInbox.js';
 import { summarizeUntaggedResources } from './resourceInventoryService.js';
-import { loadPreparedResourceExcerpts } from '../aiSkill/resourceEvidence.js';
 
 export const DAILY_BRIEF_FACT_DEFINITIONS = Object.freeze([
   ['todo_overdue', '单次待办重点（逾期）', 'One-time task focus (overdue)', '/inbox?tab=todo'],
@@ -61,19 +59,12 @@ export async function compileDailyBriefFacts(database, userId, calendar) {
   const [todos, review, pending, untagged, workshop, activity] = await Promise.all([
     compileBriefTodoFacts(database, userId, calendar, DAILY_BRIEF_FACT_DEFINITIONS.slice(0, 3)),
     summarizePendingOrganizeReview(database, userId),
-    listInboxResources(database, { userId, limit: 20, view: 'summary', includeCounts: false }),
+    listInboxResources(database, { userId, limit: 2, view: 'summary', includeCounts: false }),
     summarizeUntaggedResources(database, { userId }),
     compileWorkshopBriefFacts(database, userId, calendar),
     compileBriefActivityFacts(database, userId, calendar),
   ]);
   const organize = [review, pending, untagged];
-  const candidates = (pending.items || []).filter((item) => ['note', 'bookmark', 'file'].includes(item.resourceType));
-  const materials = await loadPreparedResourceExcerpts({
-    database,
-    userId,
-    refs: candidates.map((item) => ({ type: item.resourceType, id: item.resourceId })),
-  });
-  const evidence = compileAdviceEvidence(materials);
   return [
     ...todos,
     ...DAILY_BRIEF_FACT_DEFINITIONS.slice(3).map(([id, zh, en, route], index) => ({
@@ -87,7 +78,7 @@ export async function compileDailyBriefFacts(database, userId, calendar) {
         ? { resourceTypes: review.resourceTypes || [], kinds: review.kinds || [] }
         : id === 'organize_pending'
           ? {
-              // 正文区仅保留最近两项的标题与类型；有界建议材料单独编译。
+              // 正文区仅保留最近两项的标题与类型，不读取资料详情。
               resources: (pending.items || [])
                 .slice(0, 2)
                 .filter(
@@ -104,15 +95,5 @@ export async function compileDailyBriefFacts(database, userId, calendar) {
     })),
     ...workshop,
     ...activity,
-    {
-      id: ADVICE_FACT_ID,
-      evidence,
-      coverage: {
-        candidates: candidates.length,
-        readable: materials.filter((item) => item.preparedText?.length >= 8).length,
-        selected: evidence.length,
-        hasMoreCandidates: Boolean(pending.nextCursor),
-      },
-    },
   ];
 }

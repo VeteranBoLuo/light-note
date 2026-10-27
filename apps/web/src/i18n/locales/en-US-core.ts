@@ -5784,7 +5784,7 @@ export default {
       currentHint: 'Checked — this brief matches your current data.',
       adviceUpdateFailed: 'Suggestion update failed. Previous result retained.',
       adviceNoValue: 'No additional suggestions needed.',
-      adviceNoEvidence: 'No readable text available for analysis.',
+      adviceNoEvidence: 'No current work needs an additional suggested action.',
       adviceNotEvaluated: 'AI suggestion not yet analyzed.',
       adviceDeferred: 'AI suggestion awaiting analysis.',
       advicePaused: 'Automatic analysis limit reached. Refresh manually.',

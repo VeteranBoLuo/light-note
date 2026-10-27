@@ -5467,7 +5467,7 @@ export default {
       currentHint: '已检查，简报与当前资料一致。',
       adviceUpdateFailed: '本次建议更新未成功，保留上次结果。',
       adviceNoValue: '暂无需要补充的建议',
-      adviceNoEvidence: '暂无可分析的资料正文。',
+      adviceNoEvidence: '当前没有需要补充行动建议的事项。',
       adviceNotEvaluated: 'AI 建议尚未分析。',
       adviceDeferred: 'AI 建议等待分析。',
       advicePaused: '今日自动分析已达上限，可手动刷新。',

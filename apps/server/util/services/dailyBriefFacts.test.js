@@ -52,7 +52,7 @@ it('从真实读模型接入所有整理来源；十月十六日的有效建议�
   const facts = await compileDailyBriefFacts(db, 'owner', calendar);
   expect(sources.inbox).toHaveBeenCalledWith(db, {
     userId: 'owner',
-    limit: 20,
+    limit: 2,
     view: 'summary',
     includeCounts: false,
   });
@@ -100,7 +100,10 @@ it('所有待处理来源为空时保持安静，查询失败不能伪装成没�
   await expect(compileDailyBriefFacts(database(), 'owner', calendar)).rejects.toThrow('inbox unavailable');
 });
 
-it('材料正文读取失败不能变成无可读资料或空建议', async () => {
-  sources.materials.mockRejectedValue(new Error('material read failed'));
-  await expect(compileDailyBriefFacts(database(), 'owner', calendar)).rejects.toThrow('material read failed');
+it('行动建议编译不读取资料正文，详情读取器不可用也不影响工作台事实', async () => {
+  sources.materials.mockRejectedValue(new Error('must not read content'));
+  const facts = await compileDailyBriefFacts(database(), 'owner', calendar);
+  expect(sources.materials).not.toHaveBeenCalled();
+  expect(facts.some(fact => fact.id === 'organize_pending' && fact.count === 4)).toBe(true);
+  expect(JSON.stringify(facts)).not.toContain('不应被扩写');
 });

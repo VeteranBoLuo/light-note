@@ -28,7 +28,13 @@ function fixture() {
   const options = () => ({ userId: 'user-1', req: {}, now });
   const database = {
     query: vi.fn(async (sql, params) => {
-      if (sql.includes('SELECT id FROM toolbox_jobs')) return [params.slice(1).filter(id => dismissed.has(id)).map(id => ({id}))];
+      if (sql.includes('SELECT id FROM toolbox_jobs'))
+        return [
+          params
+            .slice(1)
+            .filter((id) => dismissed.has(id))
+            .map((id) => ({ id })),
+        ];
       if (sql.startsWith('SELECT preferences')) return [[{ preferences }]];
       if (sql.includes('brief_date < ?')) {
         const priorDate = [...rows.keys()]
@@ -74,11 +80,12 @@ function fixture() {
   const compileFacts = vi.fn(async () => structuredClone(facts));
   const executeAiSkill = vi.fn(async (request, _req, deps) => {
     validateDailyBriefInput(request.input);
-    expect(request.input.facts.some((fact) => 'revision' in fact)).toBe(false);
+    expect(request.input).not.toHaveProperty('evidence');
     await deps.commitValidatedResult({
       response: {
         result: {
-          insights: [{ factIds: ['workshop_result'], text: '{{workshop_result.sample}}' }],
+          insights: [],
+          recommendation: null,
         },
       },
     });
@@ -125,579 +132,202 @@ function fixture() {
   };
 }
 
-describe('今日简报的自动维护', () => {
-  it('旧缓存补齐零新增状态，新增和待办完成后在单一概览中切换', async () => {
+describe('工作台行动建议的生成与复用', () => {
+  it('没有需要行动的状态时仅交付事实，不调用模型', async () => {
     const f = fixture();
-    await f.ensure();
-    for (const type of ['bookmark', 'note', 'file']) f.change(`${type}_created_today`, { count: 0, samples: [] });
-    expect(await f.get()).toMatchObject({ stale: true, shouldGenerate: true });
-    expect((await f.ensure()).brief.headline).toBe('今天暂无新增资源');
-    f.change('file_created_today', { count: 1 });
-    expect((await f.ensure()).brief.headline).toBe('今天新增 1 个文件');
-    f.change('file_created_today', { count: 0 });
     f.change('todo_due_today', { count: 0, entries: [] });
-    expect((await f.ensure()).brief).toMatchObject({
-      headline: '今天暂无新增资源，也没有需要特别关注的事项。',
-      insights: [],
-      recommendation: '',
-    });
+    expect((await f.ensure()).brief.adviceStatus).toBe('no_evidence');
     expect(f.executeAiSkill).not.toHaveBeenCalled();
   });
-  it('旧缓存补回被成果遮蔽的失败，解决后移除；前后均复用成果概括', async () => {
+  it('待办、整理、新增和工坊进入同一次判断，没有正文与隐藏详情查询', async () => {
     const f = fixture();
+    f.change('organize_pending', { count: 7, resources: [{ title: '随便写的反馈', content: '不能外发' }] });
+    f.change('file_created_today', { count: 2 });
     f.addResult();
-    f.change('workshop_attention', {
-      count: 1,
-      samples: ['工坊成果保存失败：资料摘要'],
-      sources: [{ type: 'toolbox_task', id: 'failed-job', title: '资料摘要' }],
-      revision: 'failed',
+    f.executeAiSkill.mockImplementation(async (request, _req, deps) => {
+      validateDailyBriefInput(request.input);
+      expect(request.input.signals.map((s) => s.id)).toEqual(
+        expect.arrayContaining(['todo_due_today', 'organize_pending', 'file_created_today', 'workshop_result']),
+      );
+      expect(JSON.stringify(request.input)).not.toMatch(/不能外发|随便写|资料未完整读取|excerpt|evidence/);
+      await deps.commitValidatedResult({
+        response: {
+          result: {
+            insights: [],
+            recommendation: {
+              factIds: ['todo_due_today', 'workshop_result'],
+              action: '先完成今天到期的待办，再查看并保存工坊已经生成的成果。',
+            },
+          },
+        },
+      });
     });
-    const initial = await f.ensure();
-    const row = f.rows.get('2026-09-05');
-    const cached = JSON.parse(row.briefJson);
-    cached.snapshot.fingerprint = 'before-independent-failure';
-    cached.insights = cached.insights.filter((item) => item.id !== 'workshop_attention');
-    cached.recommendation = '';
-    row.briefJson = JSON.stringify(cached);
-    expect(await f.get()).toMatchObject({ stale: true, shouldGenerate: true });
-    const updated = await f.ensure();
-    expect(updated.brief.insights.map((item) => item.id)).toEqual(['workshop_attention', 'todo_a', 'workshop_result']);
-    expect(updated.brief.insights.find((item) => item.id === 'workshop_result')).toEqual(
-      initial.brief.insights.find((item) => item.id === 'workshop_result'),
-    );
-    expect(updated.brief.recommendationFactIds).toBeUndefined();
-    f.change('workshop_attention', { count: 0, samples: [], sources: [], revision: '' });
-    expect(await f.get()).toMatchObject({ stale: true, staleFactIds: ['workshop_attention'] });
-    const resolved = await f.ensure();
-    expect(resolved.brief.insights.map((item) => item.id)).toEqual(['todo_a', 'workshop_result']);
-    expect(resolved.brief.recommendation).toBe('');
-    expect(f.executeAiSkill).toHaveBeenCalledTimes(1);
-  });
-  it('旧简报补回今日新增，只有行动状态时不拼接建议', async () => {
-    const f = fixture();
-    const before = await f.ensure();
-    f.change('file_created_today', { count: 1, samples: [] });
-    f.change('organize_ai_pending', { count: 3 });
-    expect(await f.get()).toMatchObject({ stale: true, shouldGenerate: true, brief: before.brief });
-    const updated = await f.ensure();
-    expect(updated.brief.headline).toBe('今天新增 1 个文件，仍有整理建议待审核');
-    expect(updated.brief.recommendationKind).toBeUndefined();
-    expect(updated.brief.recommendationFactIds).toBeUndefined();
-    f.change('file_created_today', { count: 0 });
-    f.change('organize_ai_pending', { count: 0 });
-    const resolved = await f.ensure();
-    expect(resolved.brief).toMatchObject({ headline: '', recommendation: '' });
-    expect(resolved.brief.sections.some((section) => section.id === 'new_content')).toBe(false);
-    expect(resolved.brief.insights).toHaveLength(1);
-    expect(f.executeAiSkill).not.toHaveBeenCalled();
-  });
-  it('旧展示版本补齐成果状态，复用原有概括且不重复调用模型', async () => {
-    const f = fixture();
-    f.addResult();
-    await f.ensure();
-    const row = f.rows.get('2026-09-05');
-    const cached = JSON.parse(row.briefJson);
-    cached.snapshot.fingerprint = 'previous-presentation-version';
-    delete cached.insights.find((item) => item.id === 'workshop_result').context;
-    row.briefJson = JSON.stringify(cached);
-    expect(await f.get()).toMatchObject({ stale: true, shouldGenerate: true });
-    const updated = await f.ensure();
-    const result = updated.brief.insights.find((item) => item.id === 'workshop_result');
-    expect(result.context).toBe('《报告》已生成，尚未保存。');
-    expect(result.text).toBe(cached.insights.find((item) => item.id === 'workshop_result').text);
-    expect(f.executeAiSkill).toHaveBeenCalledTimes(1);
-  });
-  it('检查只读；并发生成单次待办简报，不调用模型、不占用自动模型预算', async () => {
-    const f = fixture();
-    expect(await f.get()).toMatchObject({ status: 'not_generated', shouldGenerate: true });
-    expect(f.rows.size).toBe(0);
-    await Promise.all([f.ensure(), f.ensure(), f.ensure()]);
-    const state = await f.get();
-    expect(state).toMatchObject({
-      status: 'ready',
-      stale: false,
-      shouldGenerate: false,
-      brief: { generatedBy: 'facts', recommendation: '' },
-    });
-    expect(state.brief.insights).toHaveLength(1);
-    expect(state.brief.insights[0]).toMatchObject({
-      text: '「报销材料」需要在今天 15:00 前完成，目前仍待处理。',
-      sources: [{ type: 'todo', id: 'a' }],
-    });
-    expect(f.executeAiSkill).not.toHaveBeenCalled();
-    expect(JSON.parse(f.rows.get('2026-09-05').factsJson).automaticAttempts).toBe(0);
-  });
-  it('单次待办完成后立即更新为空，不受模型冷却或旧额度错误影响', async () => {
-    const f = fixture();
-    await f.ensure();
-    f.rows.get('2026-09-05').lastErrorCode = 'AI_QUOTA_INSUFFICIENT_FOR_REQUEST';
-    f.change('todo_due_today', { count: 0, entries: [] });
-    expect(await f.get()).toMatchObject({ stale: true, shouldGenerate: true });
     const state = await f.ensure();
-    expect(state).toMatchObject({
-      stale: false,
-      brief: { headline: '今天暂无需特别关注的事项', insights: [], recommendation: '' },
-    });
-    expect(f.executeAiSkill).not.toHaveBeenCalled();
-  });
-  it('旧版只有待办的缓存可补回资源与较早整理建议，处理完成后及时移除，不调用模型', async () => {
-    const f = fixture();
+    expect(state.brief.adviceStatus).toBe('ready');
+    expect(state.brief.recommendationSources).toHaveLength(2);
+    await f.get();
     await f.ensure();
-    const row = f.rows.get('2026-09-05');
-    const cached = JSON.parse(row.briefJson);
-    delete cached.snapshot.factRevisions.organize_pending;
-    delete cached.snapshot.factRevisions.organize_untagged;
-    row.briefJson = JSON.stringify(cached);
+    await f.refresh();
+    expect(f.executeAiSkill).toHaveBeenCalledTimes(1);
+  });
+  it('明确空判断也缓存；资源内容变化不重复调用，状态变化才重新判断', async () => {
+    const f = fixture();
+    f.change('organize_pending', { count: 3, resources: [{ title: '随笔' }] });
+    await f.ensure();
+    f.change('organize_pending', { resources: [{ title: '随便写的别的东西' }] });
+    await f.ensure();
+    expect(f.executeAiSkill).toHaveBeenCalledTimes(1);
     f.change('organize_pending', { count: 4 });
-    f.change('organize_untagged', { count: 510 });
-    f.change('organize_ai_pending', { count: 3, recent: false });
-    expect(await f.get()).toMatchObject({ stale: true, shouldGenerate: true });
-    const state = await f.ensure();
-    expect(state.brief.insights.map((item) => item.id)).toEqual(['todo_a', 'organize_summary']);
-    f.change('organize_pending', { count: 0 });
-    f.change('organize_untagged', { count: 0 });
-    f.change('organize_ai_pending', { count: 0 });
-    expect((await f.ensure()).brief.insights.map((item) => item.id)).toEqual(['todo_a']);
-    expect(f.executeAiSkill).not.toHaveBeenCalled();
+    const wait = await f.ensure();
+    expect(wait.brief.adviceStatus).toBe('deferred');
+    expect(wait.brief.lastAdviceResult.adviceStatus).toBe('no_value');
+    f.advance(11 * 60000);
+    await f.ensure();
+    expect(f.executeAiSkill).toHaveBeenCalledTimes(2);
   });
-  it('同数量对象编辑或替换立即刷新，保留之前快照直至围栏交付', async () => {
+  it('查询保持只读；自动关闭仍检查事实并保留明确待判断状态', async () => {
     const f = fixture();
-    const before = await f.ensure();
-    f.change('todo_due_today', {
-      revision: 'b',
-      entries: [{ id: 'new', title: '更新后的任务', at: '2026-09-05 19:00', reason: 'due' }],
-    });
-    expect(await f.get()).toMatchObject({ stale: true, staleFactIds: ['todo_due_today'], brief: before.brief });
-    expect(await f.ensure()).toMatchObject({
-      stale: false,
-      brief: { insights: [{ text: '「更新后的任务」需要在今天 19:00 前完成，目前仍待处理。' }] },
-    });
-  });
-  it('自动关闭保持手动入口，总开关关闭不读取事实或生成', async () => {
-    const f = fixture();
+    await f.ensure();
     f.preferences.dailyBriefAutoUpdate = false;
-    expect(await f.ensure()).toMatchObject({ pauseReason: 'manual', shouldGenerate: false });
-    expect(await f.refresh()).toMatchObject({ status: 'ready' });
-    const count = f.deps.compileFacts.mock.calls.length;
-    f.preferences.dailyBrief = false;
-    expect(await f.refresh()).toMatchObject({ status: 'disabled' });
-    expect(f.deps.compileFacts).toHaveBeenCalledTimes(count);
-  });
-  it('模型只收到有结论的新成果；待办变化复用成果概括，不重复调用模型', async () => {
-    const f = fixture();
-    f.addResult();
+    f.change('organize_pending', { count: 3 });
+    f.database.query.mockClear();
+    const state = await f.get();
+    expect(state.shouldGenerate).toBe(false);
+    expect(state.stale).toBe(true);
+    expect(f.database.query.mock.calls.every(([sql]) => sql.trim().startsWith('SELECT'))).toBe(true);
     await f.ensure();
     expect(f.executeAiSkill).toHaveBeenCalledTimes(1);
-    expect(f.executeAiSkill.mock.calls[0][0]).toMatchObject({
-      skillVersion: 2,
-      input: { locale: 'zh-CN', facts: [{ id: 'workshop_result' }] },
-    });
-    expect(f.executeAiSkill.mock.calls[0][0].input.facts).toHaveLength(1);
-    f.advance(20 * 60_000);
-    f.change('todo_due_today', { count: 0, entries: [] });
-    const state = await f.ensure();
-    expect(state.brief.insights).toHaveLength(1);
-    expect(state.brief.insights[0].text).toContain('资料未完整读取');
+  });
+  it('并发请求在同一账号生命周期屏障内合并，缓存判断不重复计费', async () => {
+    const f = fixture();
+    await Promise.all([f.ensure(), f.ensure(), f.refresh()]);
     expect(f.executeAiSkill).toHaveBeenCalledTimes(1);
   });
-  it.each(['PROVIDER_FAILED', 'AI_QUOTA_INSUFFICIENT_FOR_REQUEST', 'AI_SKILL_DAILY_BRIEF_OUTPUT_INVALID'])(
-    '模型失败 %s 不挡住真实行动与原成果结论',
+  it.each(['PROVIDER_FAILED', 'AI_QUOTA_EXCEEDED', 'AI_QUOTA_INSUFFICIENT_FOR_REQUEST'])(
+    '失败保留状态，普通检查不自动重放：%s',
     async (code) => {
       const f = fixture();
-      f.addResult();
-      f.executeAiSkill.mockRejectedValueOnce(Object.assign(new Error('mock'), { code }));
-      const state = await f.ensure();
-      expect(state).toMatchObject({ status: 'ready', brief: { generatedBy: 'facts', recommendation: '' } });
-      expect(state.brief.insights).toHaveLength(2);
-      expect(state.brief.insights[1].text).toContain('资料未完整读取');
+      f.executeAiSkill.mockRejectedValue(Object.assign(new Error('unavailable'), { code }));
+      expect((await f.ensure()).brief.adviceStatus).toBe('failed');
+      f.advance(20 * 60000);
       await f.ensure();
+      await f.get();
       expect(f.executeAiSkill).toHaveBeenCalledTimes(1);
+      f.executeAiSkill.mockImplementation(async (_r, _q, d) =>
+        d.commitValidatedResult({ response: { result: { insights: [], recommendation: null } } }),
+      );
+      expect((await f.refresh()).brief.adviceStatus).toBe('no_value');
+      expect(f.executeAiSkill).toHaveBeenCalledTimes(2);
     },
   );
-  it('模型预算耗尽仍交付新行动事实，跨账号自然日不沿用预算', async () => {
+  it('模型漏掉判断不能当作无建议，持久化失败不能降级成成功', async () => {
+    const f = fixture();
+    f.executeAiSkill.mockImplementation(async (_r, _q, d) =>
+      d.commitValidatedResult({ response: { result: { insights: [] } } }),
+    );
+    expect((await f.ensure()).brief).toMatchObject({
+      adviceStatus: 'failed',
+      adviceFailureReason: 'ADVICE_DECISION_MISSING',
+    });
+    const broken = fixture();
+    broken.executeAiSkill.mockResolvedValue({ result: { recommendation: null } });
+    await expect(broken.ensure()).rejects.toMatchObject({ code: 'DAILY_BRIEF_DELIVERY_NOT_COMMITTED' });
+  });
+  it('内容建议旧缓存不能作为上次行动建议继续展示，读取不改写历史', async () => {
     const f = fixture();
     await f.ensure();
     const row = f.rows.get('2026-09-05');
-    row.factsJson = JSON.stringify({
-      ...JSON.parse(row.factsJson),
-      automaticAttempts: DAILY_BRIEF_REFRESH_POLICY.maxAutomaticAttempts,
-    });
-    f.addResult();
-    f.change('todo_due_today', { count: 0, entries: [] });
-    expect(await f.ensure()).toMatchObject({ status: 'ready', brief: { generatedBy: 'facts' } });
-    expect(f.executeAiSkill).not.toHaveBeenCalled();
-    f.advance(24 * 60 * 60_000);
-    f.change('workshop_result', { revision: 'new-day-result' });
-    await f.ensure();
-    expect(f.rows.size).toBe(2);
-    expect(f.executeAiSkill).toHaveBeenCalledTimes(1);
-  });
-  it('同一成果跨天仍复用概括，不因日期切换再次消耗额度', async () => {
-    const f = fixture();
-    f.addResult();
-    await f.ensure();
-    f.advance(24 * 60 * 60_000);
-    await f.ensure();
-    expect(f.rows.size).toBe(2);
-    expect(f.executeAiSkill).toHaveBeenCalledTimes(1);
-  });
-  it('持久化结果未知时不通过降级再写一次', async () => {
-    const f = fixture();
-    f.addResult();
-    const query = f.database.query.getMockImplementation();
-    f.database.query.mockImplementation(async (sql, params) => {
-      if (sql.includes("SET status = 'ready'"))
-        throw Object.assign(new Error('database failure'), { code: 'ECONNRESET' });
-      return query(sql, params);
-    });
-    await expect(f.ensure()).rejects.toMatchObject({ code: 'ECONNRESET' });
-    expect(f.database.query.mock.calls.filter(([sql]) => sql.includes("SET status = 'ready'"))).toHaveLength(1);
-  });
-  it('模型等待期间发生变化，交付保留真实截止时间并标为待更新', async () => {
-    const f = fixture();
-    f.addResult();
-    const original = f.executeAiSkill.getMockImplementation();
-    f.executeAiSkill.mockImplementationOnce(async (...args) => {
-      f.change('todo_due_today', { count: 0, entries: [] });
-      await original(...args);
-    });
-    expect(await f.ensure()).toMatchObject({
-      status: 'ready',
-      stale: true,
-      dataAsOf: '2026-09-05T02:00:00.000Z',
-      brief: { insights: [{ id: 'todo_a' }, { id: 'workshop_result' }] },
-    });
-  });
-  it('围栏交付失败不会降级覆盖另一个租约的产物', async () => {
-    const f = fixture();
-    f.addResult();
-    const original = f.executeAiSkill.getMockImplementation();
-    f.executeAiSkill.mockImplementationOnce(async (...args) => {
-      f.rows.get('2026-09-05').leaseToken = 'other';
-      await original(...args);
-    });
-    await expect(f.ensure()).rejects.toMatchObject({ code: 'DAILY_BRIEF_LEASE_LOST' });
-    expect(f.rows.get('2026-09-05').briefJson).toBeUndefined();
-  });
-  it('未过期租约不重复编译，过期租约通过写入口恢复', async () => {
-    const f = fixture();
-    f.rows.set('2026-09-05', { status: 'generating', leaseExpired: 0 });
-    expect(await f.ensure()).toMatchObject({ status: 'generating' });
-    expect(f.deps.compileFacts).not.toHaveBeenCalled();
-    f.rows.get('2026-09-05').leaseExpired = 1;
-    expect(await f.get()).toMatchObject({ status: 'failed', shouldGenerate: true });
-    expect(await f.ensure()).toMatchObject({ status: 'ready' });
-  });
-});
-
-describe('真实资料建议的生成与复用', () => {
-  const evidence = [
-    {
-      key: 'material_1',
-      title: '导出方案',
-      excerpt: '离线导出目前只保存正文，不包含附件；导出页面需要说明附件备份方式。',
-      source: { type: 'note', id: 'owned', title: '导出方案' },
-    },
-  ];
-  const proposal = {
-    sourceKey: 'material_1',
-    quote: '离线导出目前只保存正文，不包含附件',
-    action: '可以将附件备份检查加入导出验收清单，并核对导出页面是否清楚说明这一限制。',
-  };
-  for (const recommendation of [proposal, null])
-    it(`真实材料支持独立建议，${recommendation ? '有效' : '空'}判断跨刷新与跨日复用，改内容才重算`, async () => {
-      const f = fixture();
-      f.change('recommendation_evidence', { evidence });
-      f.executeAiSkill.mockImplementation(async (request, _req, deps) => {
-        validateDailyBriefInput(request.input);
-        expect(request.input.facts).toEqual([]);
-        expect(request.input.evidence[0]).not.toHaveProperty('source');
-        await deps.commitValidatedResult({ response: { result: { insights: [], recommendation } } });
-      });
-      const first = await f.ensure();
-      expect(Boolean(first.brief.recommendation)).toBe(Boolean(recommendation));
-      expect(first.brief.adviceKey).toBeTruthy();
-      f.change('file_created_today', { count: 1 });
-      await f.ensure();
-      await f.refresh();
-      expect(f.executeAiSkill).toHaveBeenCalledTimes(1);
-      f.advance(24 * 60 * 60 * 1000);
-      await f.ensure();
-      expect(f.executeAiSkill).toHaveBeenCalledTimes(1);
-      f.change('recommendation_evidence', {
-        evidence: [{ ...evidence[0], excerpt: evidence[0].excerpt + '补充新的验收背景。' }],
-      });
-      expect(await f.get()).toMatchObject({ stale: true, staleFactIds: ['recommendation_evidence'] });
-      await f.ensure();
-      expect(f.executeAiSkill).toHaveBeenCalledTimes(2);
-      f.change('recommendation_evidence', { evidence: [] });
-      expect((await f.ensure()).brief.recommendation).toBe('');
-      expect(f.executeAiSkill).toHaveBeenCalledTimes(2);
-    });
-  it('材料变化使旧建议退出当前判断，等待与失败保留上次展示结果', async () => {
-    const f = fixture();
-    f.change('recommendation_evidence', { evidence });
-    f.executeAiSkill.mockImplementation(async (_request, _req, deps) =>
-      deps.commitValidatedResult({ response: { result: { insights: [], recommendation: proposal } } }),
-    );
-    await f.ensure();
-    f.change('recommendation_evidence', {
-      evidence: [{ ...evidence[0], excerpt: '新资料内容与之前完全不同，不能沿用旧导出限制的处理建议。' }],
-    });
-    const waiting = await f.ensure();
-    expect(waiting.brief.recommendation).toBe('');
-    expect(waiting.brief.lastAdviceResult.recommendation).toContain(proposal.action);
-    expect(f.executeAiSkill).toHaveBeenCalledTimes(1);
-    f.advance(11 * 60000);
-    expect(await f.get()).toMatchObject({ shouldGenerate: true });
-    f.executeAiSkill.mockRejectedValue(Object.assign(new Error('unavailable'), { code: 'PROVIDER_FAILED' }));
-    const state = await f.ensure();
-    expect(state.status).toBe('ready');
-    expect(state.brief.recommendation).toBe('');
-    expect(state.brief.lastAdviceResult.recommendation).toContain(proposal.action);
-    expect(state.brief.insights.map((item) => item.id)).toContain('todo_a');
-    expect((await f.get()).shouldGenerate).toBe(false); // Provider 失败不自动重放
-  });
-  it.each(['current', 'previous'])('策略失效的%s建议只读时立即隐藏，冷却与失败不再带回旧内容', async (place) => {
-    const f = fixture();
-    f.change('recommendation_evidence', { evidence });
-    f.executeAiSkill.mockImplementation(async (_request, _req, deps) =>
-      deps.commitValidatedResult({ response: { result: { insights: [], recommendation: proposal } } }),
-    );
-    await f.ensure();
-    const row = f.rows.get('2026-09-05');
-    const legacy = JSON.parse(row.briefJson);
-    legacy.advicePolicyVersion = MIN_SAFE_ADVICE_POLICY_VERSION - 1;
-    delete legacy.lastAdviceResult.advicePolicyVersion;
-    if (place === 'previous') {
-      legacy.adviceStatus = 'failed';
-      legacy.recommendation = '';
-    }
-    row.briefJson = JSON.stringify(legacy);
+    const old = JSON.parse(row.briefJson);
+    old.recommendation = '旧的资料内容建议';
+    old.adviceStatus = 'ready';
+    old.advicePolicyVersion = MIN_SAFE_ADVICE_POLICY_VERSION - 1;
+    old.lastAdviceResult = {
+      recommendation: old.recommendation,
+      adviceStatus: 'ready',
+      advicePolicyVersion: old.advicePolicyVersion,
+    };
+    row.briefJson = JSON.stringify(old);
+    const before = row.briefJson;
     f.preferences.dailyBriefAutoUpdate = false;
-    f.database.query.mockClear();
     const state = await f.get();
     expect(state.brief.recommendation).toBe('');
     expect(state.brief.lastAdviceResult).toBeUndefined();
-    expect(state.brief.adviceStatus).toBe(place === 'current' ? 'not_evaluated' : 'failed');
-    expect(f.database.query.mock.calls.every(([sql]) => sql.trim().startsWith('SELECT'))).toBe(true);
-    expect(f.executeAiSkill).toHaveBeenCalledTimes(1);
-    expect(row.briefJson).toBe(JSON.stringify(legacy));
-    f.preferences.dailyBriefAutoUpdate = true;
-    // 模拟旧策略的输入键，当前策略不得复用旧判断。
-    legacy.adviceKey = 'previous-policy';
-    legacy.snapshot.fingerprint = 'previous-policy';
-    row.briefJson = JSON.stringify(legacy);
-    const waiting = await f.ensure();
-    expect(waiting.brief.recommendation).toBe('');
-    expect(waiting.brief.lastAdviceResult?.recommendation).toBeFalsy();
-    expect(f.executeAiSkill).toHaveBeenCalledTimes(1);
-    f.advance(11 * 60000);
-    f.executeAiSkill.mockRejectedValue(Object.assign(new Error('unavailable'), { code: 'PROVIDER_FAILED' }));
-    const failed = await f.ensure();
-    expect(failed.brief.recommendation).toBe('');
-    expect(failed.brief.lastAdviceResult?.recommendation).toBeFalsy();
+    expect(row.briefJson).toBe(before);
   });
-  it('放宽判断策略时仍保留上一安全版本的正常建议，不因冷却或失败再次清空', async () => {
+  it('正常上次行动建议在新状态等待与失败期间保留', async () => {
     const f = fixture();
-    f.change('recommendation_evidence', { evidence });
-    f.executeAiSkill.mockImplementation(async (_request, _req, deps) =>
-      deps.commitValidatedResult({ response: { result: { insights: [], recommendation: proposal } } }),
+    const action = '先完成今天到期的待办，再安排没有明确时限的其他整理。';
+    f.executeAiSkill.mockImplementation(async (_r, _q, d) =>
+      d.commitValidatedResult({
+        response: { result: { insights: [], recommendation: { factIds: ['todo_due_today'], action } } },
+      }),
     );
     await f.ensure();
-    const row = f.rows.get('2026-09-05');
-    const older = JSON.parse(row.briefJson);
-    older.advicePolicyVersion = MIN_SAFE_ADVICE_POLICY_VERSION;
-    older.lastAdviceResult.advicePolicyVersion = MIN_SAFE_ADVICE_POLICY_VERSION;
-    older.adviceKey = 'previous-safe-policy';
-    older.snapshot.fingerprint = 'previous-safe-policy';
-    row.briefJson = JSON.stringify(older);
-    expect((await f.get()).brief.recommendation).toContain(proposal.action);
-    const waiting = await f.ensure();
-    expect(waiting.brief.lastAdviceResult.recommendation).toContain(proposal.action);
-    expect(waiting.brief.lastAdviceResult.advicePolicyVersion).toBe(MIN_SAFE_ADVICE_POLICY_VERSION);
-    expect(f.executeAiSkill).toHaveBeenCalledTimes(1);
+    f.change('organize_pending', { count: 8 });
+    expect((await f.ensure()).brief.lastAdviceResult.recommendation).toBe(action);
     f.advance(11 * 60000);
-    f.executeAiSkill.mockRejectedValue(Object.assign(new Error('unavailable'), { code: 'PROVIDER_FAILED' }));
-    const failed = await f.ensure();
-    expect(failed.brief.lastAdviceResult.recommendation).toContain(proposal.action);
-    expect((await f.get()).brief.lastAdviceResult.recommendation).toContain(proposal.action);
+    f.executeAiSkill.mockRejectedValue(new Error('unavailable'));
+    expect((await f.ensure()).brief.lastAdviceResult.recommendation).toBe(action);
   });
-});
-
-it('建议失败明确标记，自动检查不重复调用；冷却后手动重试可恢复为空建议', async () => {
-  const f = fixture();
-  f.change('recommendation_evidence', {
-    evidence: [
-      {
-        key: 'material_1',
-        title: '资料',
-        excerpt: '导出目前只包含正文，附件需要单独备份，请核对导出页面的提示说明。',
-        source: { type: 'note', id: 'note', title: '资料' },
-      },
-    ],
-  });
-  f.executeAiSkill.mockRejectedValue(
-    Object.assign(new Error('invalid output'), { code: 'AI_SKILL_DAILY_BRIEF_OUTPUT_INVALID' }),
-  );
-  expect((await f.ensure()).brief.adviceStatus).toBe('failed');
-  expect((await f.get()).shouldGenerate).toBe(false);
-  await f.refresh();
-  expect(f.executeAiSkill).toHaveBeenCalledTimes(1);
-  f.advance(31000);
-  f.executeAiSkill.mockImplementation(async (_request, _req, deps) =>
-    deps.commitValidatedResult({ response: { result: { insights: [], recommendation: null } } }),
-  );
-  const state = await f.refresh();
-  expect(state.brief.adviceStatus).toBe('no_value');
-  expect(state.brief.adviceKey).toBeTruthy();
-  expect(state.brief.recommendation).toBe('');
-  expect(f.executeAiSkill).toHaveBeenCalledTimes(2);
-});
-
-const retryEvidence = [
-  {
-    key: 'material_1',
-    title: '导出方案',
-    excerpt: '导出目前只包含正文，附件需要单独备份，请核对导出页面的提示说明。',
-    source: { type: 'note', id: 'note', title: '导出方案' },
-  },
-];
-
-it.each(['PROVIDER_FAILED', 'AI_QUOTA_INSUFFICIENT_FOR_REQUEST', 'AI_QUOTA_EXCEEDED'])(
-  '失败 %s 经普通事实刷新、冷却、跨日仍保留，不自动重放；手动重试才恢复',
-  async (code) => {
+  it('移除工坊提醒后旧简报立即隐藏，读路径不调用模型', async () => {
     const f = fixture();
-    f.change('recommendation_evidence', { evidence: retryEvidence });
-    f.executeAiSkill.mockRejectedValue(Object.assign(new Error('failed'), { code }));
-    const first = await f.ensure();
-    expect(first.brief.adviceStatus).toBe('failed');
-    const failureKey = first.brief.adviceAttemptKey;
-    for (const duration of [1000, 11 * 60000, 24 * 60 * 60000]) {
-      f.advance(duration);
-      f.change('file_created_today', { count: duration });
-      const state = await f.ensure();
-      expect(state.brief).toMatchObject({ adviceStatus: 'failed', adviceAttemptKey: failureKey });
-      expect(state.brief.adviceDeferred).toBeUndefined();
-      expect((await f.get()).shouldGenerate).toBe(false);
-      expect(f.executeAiSkill).toHaveBeenCalledTimes(1);
-    }
-    f.executeAiSkill.mockImplementation(async (_request, _req, deps) =>
-      deps.commitValidatedResult({ response: { result: { insights: [], recommendation: null } } }),
+    f.change('workshop_attention', {
+      count: 1,
+      samples: ['失败'],
+      sources: [{ type: 'toolbox_task', id: 'failed', title: '任务' }],
+    });
+    await f.ensure();
+    f.dismissed.add('failed');
+    const state = await f.get();
+    expect(state.brief.insights.some((i) => i.id === 'workshop_attention')).toBe(false);
+    expect(f.executeAiSkill).toHaveBeenCalledTimes(1);
+  });
+  it('租约丢失和数据库交付异常不能写成空判断或成功', async () => {
+    const f = fixture();
+    const original = f.database.query;
+    f.database.query = vi.fn(async (sql, params) =>
+      sql.includes("SET status = 'ready'") ? [{ affectedRows: 0 }] : original(sql, params),
     );
-    const recovered = await f.refresh();
-    expect(recovered.brief.adviceStatus).toBe('no_value');
-    expect(recovered.brief.adviceFailureCode).toBeUndefined();
-    expect(f.executeAiSkill).toHaveBeenCalledTimes(2);
-  },
-);
-
-it('漏返回建议判断视为失败，不写入空建议缓存', async () => {
-  const f = fixture();
-  f.change('recommendation_evidence', { evidence: retryEvidence });
-  f.executeAiSkill.mockImplementation(async (_request, _req, deps) =>
-    deps.commitValidatedResult({ response: { result: { insights: [] } } }),
-  );
-  const state = await f.ensure();
-  expect(state.brief).toMatchObject({ adviceStatus: 'failed', adviceFailureReason: 'ADVICE_DECISION_MISSING' });
-  expect(state.brief.adviceKey).toBeUndefined();
-});
-
-it('无可读材料、冷却等待和明确无价值有不同状态', async () => {
-  const f = fixture();
-  expect((await f.ensure()).brief.adviceStatus).toBe('no_evidence');
-  f.change('recommendation_evidence', { evidence: retryEvidence });
-  f.executeAiSkill.mockImplementation(async (_request, _req, deps) =>
-    deps.commitValidatedResult({ response: { result: { insights: [], recommendation: null } } }),
-  );
-  expect((await f.ensure()).brief.adviceStatus).toBe('no_value');
-  f.change('recommendation_evidence', {
-    evidence: [{ ...retryEvidence[0], excerpt: retryEvidence[0].excerpt + '新资料。' }],
+    await expect(f.ensure()).rejects.toMatchObject({ code: 'DAILY_BRIEF_LEASE_LOST' });
   });
-  const deferred = await f.ensure();
-  expect(deferred.brief.adviceStatus).toBe('deferred');
-  expect(deferred.brief.lastAdviceResult).toMatchObject({ adviceStatus: 'no_value', recommendation: '' });
-  expect((await f.get()).brief.lastAdviceResult).toEqual(deferred.brief.lastAdviceResult);
-  f.advance(11 * 60000);
-  expect((await f.ensure()).brief.adviceStatus).toBe('no_value');
-});
-
-it('交付后的事实复核失败，不标为已确认最新', async () => {
-  const f = fixture();
-  const original = f.deps.compileFacts.getMockImplementation();
-  f.deps.compileFacts.mockImplementationOnce(original).mockRejectedValueOnce(new Error('read failed'));
-  const state = await f.ensure();
-  expect(state.status).toBe('ready');
-  expect(state.stale).toBe(true);
-  expect(state.checkedAt).toBeNull();
-  expect(state.staleFactIds).toContain('todo_due_today');
-});
-
-it('更新失败保存上次完成结果，后续重试完成替换结果', async () => {
-  const f = fixture();
-  f.change('recommendation_evidence', { evidence: retryEvidence });
-  f.executeAiSkill.mockImplementation(async (_request, _req, deps) =>
-    deps.commitValidatedResult({ response: { result: { insights: [], recommendation: null } } }),
-  );
-  expect((await f.ensure()).brief.lastAdviceResult.adviceStatus).toBe('no_value');
-  f.change('recommendation_evidence', {
-    evidence: [{ ...retryEvidence[0], excerpt: retryEvidence[0].excerpt + '新版。' }],
+  it('自动判断沿用每日次数与冷却上限，达到预算后不继续调用', async () => {
+    const f = fixture();
+    for (let index = 0; index < DAILY_BRIEF_REFRESH_POLICY.maxAutomaticAttempts; index++) {
+      f.change('organize_pending', { count: index + 1 });
+      await f.ensure();
+      f.advance(11 * 60000);
+    }
+    expect(f.executeAiSkill).toHaveBeenCalledTimes(24);
+    f.change('organize_pending', { count: 100 });
+    const stopped = await f.ensure();
+    expect(stopped.brief.adviceStatus).toBe('paused');
+    expect(f.executeAiSkill).toHaveBeenCalledTimes(24);
   });
-  f.advance(11 * 60000);
-  f.executeAiSkill.mockRejectedValue(new Error('provider unavailable'));
-  const failed = await f.ensure();
-  expect(failed.brief.adviceStatus).toBe('failed');
-  expect(failed.brief.lastAdviceResult).toMatchObject({ adviceStatus: 'no_value', recommendation: '' });
-  expect((await f.get()).brief.lastAdviceResult).toEqual(failed.brief.lastAdviceResult);
-});
-
-it.each([false, true])('旧等待记录自动恢复，无需手动刷新，Provider 失败=%s', async (providerFailed) => {
-  const f = fixture();
-  f.change('recommendation_evidence', { evidence: retryEvidence });
-  f.executeAiSkill.mockImplementation(async (_request, _req, deps) =>
-    deps.commitValidatedResult({ response: { result: { insights: [], recommendation: null } } }),
-  );
-  await f.ensure();
-  const row = f.rows.get('2026-09-05');
-  const legacy = JSON.parse(row.briefJson);
-  delete legacy.lastAdviceResult;
-  delete legacy.adviceResultVersion;
-  delete legacy.adviceKey;
-  delete legacy.adviceProposal;
-  legacy.adviceStatus = 'deferred';
-  legacy.adviceDeferred = true;
-  row.briefJson = JSON.stringify(legacy);
-  expect((await f.get()).shouldGenerate).toBe(false);
-  f.advance(31000);
-  expect((await f.get()).shouldGenerate).toBe(true);
-  if (providerFailed) f.executeAiSkill.mockRejectedValue(new Error('provider unavailable'));
-  const restored = await f.ensure();
-  expect(restored.brief.adviceStatus).toBe(providerFailed ? 'failed' : 'no_value');
-  expect(restored.brief.adviceResultVersion).toBe(1);
-  expect(restored.brief.lastAdviceResult?.adviceStatus).toBe(providerFailed ? undefined : 'no_value');
-  // 重新创建调用依赖、仅从持久化行读取，结果不依赖服务进程内存。
-  const reloaded = await getDailyBrief(
-    f.database,
-    { userId: 'user-1', now: new Date('2026-09-05T02:01:00Z'), req: {}, check: true },
-    { ...f.deps },
-  );
-  expect(reloaded.brief.adviceStatus).toBe(restored.brief.adviceStatus);
-  f.advance(11 * 60000);
-  await f.ensure();
-  expect(f.executeAiSkill).toHaveBeenCalledTimes(2);
-});
-
-it('移除提醒后过滤已生成简报，即使自动更新关闭也不调用模型或写缓存', async () => {
-  const f = fixture();
-  f.change('workshop_attention', { count: 1, samples: ['工坊任务处理失败：旧任务'], sources: [{type:'toolbox_task',id:'old-failure',title:'旧任务'}], revision:'failed' });
-  const generated = await f.ensure();
-  expect(generated.brief.insights.some(item => item.id==='workshop_attention')).toBe(true);
-  const stored = f.rows.get('2026-09-05').briefJson;
-  f.preferences.dailyBriefAutoUpdate = false; f.dismissed.add('old-failure');
-  f.database.query.mockClear();
-  const response = await f.get();
-  expect(response.brief.insights.some(item => item.id==='workshop_attention')).toBe(false);
-  expect(f.executeAiSkill).not.toHaveBeenCalled();
-  expect(f.rows.get('2026-09-05').briefJson).toBe(stored);
-  expect(f.database.query.mock.calls.every(([sql]) => !/INSERT|UPDATE /u.test(sql))).toBe(true);
+  it('移除提醒时同时清除基于该任务的行动建议和上次建议，等待期间不能复活', async () => {
+    const f = fixture();
+    f.change('workshop_attention', {
+      count: 1,
+      samples: ['失败'],
+      sources: [{ type: 'toolbox_task', id: 'failed', title: '任务' }],
+    });
+    f.executeAiSkill.mockImplementation(async (_r, _q, d) =>
+      d.commitValidatedResult({
+        response: {
+          result: {
+            insights: [],
+            recommendation: {
+              factIds: ['workshop_attention'],
+              action: '先查看失败任务的状态与原资料，再决定后续如何处理。',
+            },
+          },
+        },
+      }),
+    );
+    await f.ensure();
+    f.dismissed.add('failed');
+    expect((await f.get()).brief.recommendation).toBe('');
+    f.change('workshop_attention', { count: 0, samples: [], sources: [] });
+    const state = await f.ensure();
+    expect(state.brief.lastAdviceResult?.recommendation).toBeFalsy();
+  });
 });

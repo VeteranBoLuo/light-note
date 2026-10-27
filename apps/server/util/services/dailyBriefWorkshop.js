@@ -7,26 +7,13 @@ export const WORKSHOP_BRIEF_DEFINITIONS = Object.freeze([
   ['workshop_next_step', '项目下一步', 'Project next step'],
   ['workshop_due', '项目到期提醒', 'Project due dates'],
 ]);
-const json = (value) => {
-  try {
-    return typeof value === 'string' ? JSON.parse(value) : value;
-  } catch {
-    return null;
-  }
-};
 const clean = (value) =>
   String(value || '')
     .replace(/\s+/gu, ' ')
     .trim();
-function conciseExcerpt(value, limit = 120) {
-  if (value.length <= limit) return value;
-  const prefix = value.slice(0, limit - 1);
-  const end = [...prefix.matchAll(/[。！？]|[.!?](?=\s)/gu)].at(-1)?.index;
-  return end >= 23 ? prefix.slice(0, end + 1) : `${prefix.trimEnd()}…`;
-}
 export async function compileWorkshopBriefFacts(database, userId, calendar, { projectIds = null } = {}) {
   const [results] = await database.query(
-    `SELECT a.id, a.job_id, a.title, a.artifact_version, LEFT(a.content, 3000) AS content, a.coverage_json
+    `SELECT a.id, a.job_id, a.title, a.artifact_version
     FROM toolbox_artifacts a JOIN toolbox_jobs j ON j.id = a.job_id AND j.user_id = a.user_id
     WHERE a.user_id = ? AND a.status = 'ready' AND a.expires_at > NOW() AND j.save_status = 'unsaved'
       AND j.status IN ('succeeded','partial_succeeded') AND ${taskVisibleSql('j')}
@@ -80,29 +67,15 @@ export async function compileWorkshopBriefFacts(database, userId, calendar, { pr
     ORDER BY j.updated_at DESC,j.id DESC LIMIT 1`,
     [userId],
   );
-  const result = results
-    .map((row) => {
-      let inConclusion = false;
-      const conclusion = String(row.content || '')
-        .split('\n')
-        .map(clean)
-        .find((line) => {
-          if (/^#{1,3}\s/u.test(line)) {
-            inConclusion = /结论|摘要|总结|summary|conclusion/iu.test(line);
-            return false;
-          }
-          return inConclusion && line.length >= 24 && !/^(>|```|\|)/u.test(line);
-        });
-      if (!conclusion) return null;
-      const partial = json(row.coverage_json)?.complete !== true;
-      return {
-        row,
-        sample: conciseExcerpt(
-          `${partial ? (calendar.locale === 'en-US' ? 'Partial sources: ' : '资料未完整读取：') : ''}${conclusion}`,
-        ),
-      };
-    })
-    .find(Boolean);
+  const result = results[0]
+    ? {
+        row: results[0],
+        sample:
+          calendar.locale === 'en-US'
+            ? 'A workshop result is ready and has not been saved.'
+            : '工坊成果已生成，尚未保存。',
+      }
+    : null;
   const due = selectWorkshopDue(projects, calendar.date);
   const next = projects.find(
     (row) => row.id !== due?.id && Number(row.pending) > 0 && /\p{L}/u.test(clean(row.next_step)),
@@ -141,6 +114,7 @@ export async function compileWorkshopBriefFacts(database, userId, calendar, { pr
       samples: sample ? [sample] : [],
       sources: source ? [source] : [],
       ...(index === 2 && row ? { urgency: row.urgency, dueDate: row.dueDate } : {}),
+      ...(index !== 0 && row ? { pendingCount: Number(row.pending) || 0 } : {}),
       revision: row
         ? createHash('sha256')
             .update(JSON.stringify([row.id, row.artifact_version, row.board_version, row.pending, sample]))
@@ -148,10 +122,26 @@ export async function compileWorkshopBriefFacts(database, userId, calendar, { pr
         : '',
     };
   });
-  const failed = (await hydrateTaskIdentities(database,userId,attention))[0];
+  const failed = (await hydrateTaskIdentities(database, userId, attention))[0];
   const identity = failed ? taskIdentity(failed) : null;
-  const fallback = calendar.locale === 'en-US' ? 'Workshop task' : ({ material_to_note: '资料转笔记', research_brief: '研究简报', source_comparison: '多资料对照', study_kit: '学习套件', concept_map: '概念图谱', idea_to_draft: '灵感成稿', ocr_to_text: '文字识别' }[failed?.tool_id] || '工坊任务');
-  const title = clean(identity?.title || (failed ? `${fallback} · ${String(failed.updated_at instanceof Date ? failed.updated_at.toISOString() : failed.updated_at || '').slice(0,10)}` : '')).slice(0,80);
+  const fallback =
+    calendar.locale === 'en-US'
+      ? 'Workshop task'
+      : {
+          material_to_note: '资料转笔记',
+          research_brief: '研究简报',
+          source_comparison: '多资料对照',
+          study_kit: '学习套件',
+          concept_map: '概念图谱',
+          idea_to_draft: '灵感成稿',
+          ocr_to_text: '文字识别',
+        }[failed?.tool_id] || '工坊任务';
+  const title = clean(
+    identity?.title ||
+      (failed
+        ? `${fallback} · ${String(failed.updated_at instanceof Date ? failed.updated_at.toISOString() : failed.updated_at || '').slice(0, 10)}`
+        : ''),
+  ).slice(0, 80);
   const reason = failed
     ? calendar.locale === 'en-US'
       ? failed.save_status === 'save_failed'
