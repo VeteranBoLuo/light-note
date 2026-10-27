@@ -97,6 +97,8 @@ AI 管理员入参摘要启用前显式应用加法迁移 `apps/server/migration
 
 云文件置顶启用前需显式应用加法迁移 `apps/server/migrations/20260922_file_pin.sql`，再通过 `check:schema`；应用启动不自动建表。回滚 API 可保留新增字段与索引，文件原件和预览 Worker 不受影响。
 
+API 日志的最低耗时筛选依赖 `20261027_api_log_duration_index.sql`。发布前须取得该加法索引迁移授权，显式运行 `pnpm --filter server migrate:api-log-duration-index`，再通过 Schema 门禁；应用启动不建索引。迁移只添加覆盖索引，不修改历史日志，要求在线 DDL；不能在线执行时失败关闭，不回退锁表复制。回滚代码可保留该索引。
+
 所有后端发布在目标环境重启前运行：
 
 ```bash
