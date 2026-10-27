@@ -12,7 +12,7 @@ afterEach(() => { document.body.innerHTML = ''; document.documentElement.classNa
 it.each([
   // Measured clear wood inside the front lip, excluding the bucket, stool and posts.
   ['desktop', [620, 1245, 725, 1323], [1280, 1470, 1920]],
-  ['mobileBay', [778, 420, 836, 465], [320, 390, 480]],
+  ['mobileBay', [778, 410, 836, 453], [320, 390, 480]],
 ] as const)('%s keeps the whole mount on the deck when resizing and aiming', (profile, wood, widths) => {
   const scene = cal[profile], g = stageModule.exports.pierGeometry(scene);
   const u = 1000 / (g.box[2] - g.box[0]);
@@ -33,7 +33,7 @@ it.each([
     const pose = mount.getAttribute('transform')!;
     const [x, y, sx, sy] = pose.match(/-?\d+(?:\.\d+)?(?:e[+-]?\d+)?/g)!.map(Number);
     // Entire plate, including its lower front face, must contact real deck wood.
-    for (const [px, py] of [[-17, -2], [5, -9], [18, -3], [-5, 9], [-17, 2], [18, 2]]) {
+    for (const [px, py] of [[-17.5, -2.5], [5, -9.5], [18.5, -3], [-5, 9.5], [-17.5, 2], [18.5, 2]]) {
       const nativeX = g.box[0] + (x + px * sx) * svgScale / sceneScale;
       const nativeY = g.box[1] + (y + py * sy) * svgScale / sceneScale;
       expect(nativeX).toBeGreaterThan(wood[0]); expect(nativeX).toBeLessThan(wood[2]);

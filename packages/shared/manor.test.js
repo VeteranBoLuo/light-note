@@ -183,11 +183,214 @@ describe('正式庄园沿用确认玩法与轻笺积分', () => {
     }
     expect(s).toEqual(before);
   });
-  it('111 种水族、15 种作物及设备定价保持确认版本', () => {
+  it('111 种水族、22 种作物及设备定价保持确认版本', () => {
     expect(Object.keys(F)).toHaveLength(111);
-    expect(Object.keys(M.CROPS)).toHaveLength(15);
+    expect(Object.keys(M.CROPS)).toHaveLength(22);
     expect(M.FACILITIES.workshop.cost).toBe(180);
     expect(M.FACILITIES.beehive.cost).toBe(160);
     expect(M.RULES.purifierLevels.map(p => p.cost)).toEqual([240, 180, 360]);
+  });
+});
+
+describe('新增作物沿用服务端购买、生长、续收和积分结算', () => {
+  it.each([
+    ['pea',3,8,2],['potato',5,20,3],['cucumber',7,52,6],['rosemary',9,72,4],
+    ['watermelon',11,36,5],['grape',16,100,12],['tea',20,168,18],
+  ])('%s 从购买到完整收获出售，刷新不换种、不跳过生长，净收益符合定位', (key, unlock, totalHours, net) => {
+    let s=adopted(),hours=0;
+    const start=context().now.getTime();
+    const ctx=()=>{
+      const now=new Date(start+hours*3_600_000);
+      return context({points:s.wallet,now,calendar:{...context().calendar,
+        dayKey:new Date(now.getTime()+8*3_600_000).toISOString().slice(0,10).replaceAll('-','')}});
+    };
+    s.xp=M.RULES.levels[unlock-2];
+    expect(command(s,'buySeed',[key,1],ctx()).result).toBe(false);
+    expect(s.wallet).toBe(60);
+    s.xp=M.RULES.levels[unlock-1];
+    s=command(s,'buySeed',[key,1],ctx()).state;
+    expect(s.seeds[key]).toBe(1);
+    s=command(s,'plant',[0,key],ctx()).state;
+    expect(M.plotState(s,0)).toBe('dry');
+    s=command(s,'water',[[0]],ctx()).state;
+    expect(M.plotState(s,0)).toBe('growing');
+    hours=1/60;
+    s=projectManor(s,ctx());
+    expect(s.plots[0].crop).toBe(key);expect(M.plotState(s,0)).toBe('growing');
+    expect(command(s,'harvest',[[0]],ctx()).result).toEqual([]);
+    const c=M.CROPS[key];
+    for(let round=0;round<c.harvests;round++) {
+      hours=c.first+round*c.every;
+      const result=command(s,'harvest',[[0]],ctx());s=result.state;
+      expect(result.result).toEqual([expect.objectContaining({key,quantity:1})]);
+      if(round<c.harvests-1){expect(s.plots[0].crop).toBe(key);expect(M.plotState(s,0)).toBe('growing');}
+    }
+    expect(hours).toBe(totalHours);expect(s.crops[key]).toBe(c.harvests);
+    expect(M.plotState(s,0)).toBe(c.type==='flower'?'bloom':'empty');
+    expect(command(s,'harvest',[[0]],ctx()).result).toEqual([]);
+    const sold=command(s,'sellCrop',[key],ctx());
+    expect(sold.pointsDelta).toBe(c.sell*c.harvests);
+    expect(sold.state.wallet).toBe(60+net);expect(sold.state.crops[key]).toBe(0);
+  });
+
+  it('迷迭香能补一份花粉，黄瓜与葡萄沿用每株一次的授粉限制', () => {
+    const s=adopted();s.guide=null;s.xp=M.RULES.levels[19];s.wallet=1000;
+    expect(M.buyFacility(s,'beehive')).toBe(true);
+    s.crops.rosemary=2;
+    expect(M.refillPollen(s,'rosemary')).toBe(1);expect(s.crops.rosemary).toBe(1);
+    for(const [i,key] of ['cucumber','grape'].entries()) {
+      s.seeds[key]=1;M.plant(s,i,key);M.water(s,[i]);
+      expect(M.pollinationEligible(s,i)).toBe(true);
+    }
+    expect(M.pollinate(s,0)).toBeTruthy();expect(M.pollinationEligible(s,0)).toBe(false);
+    expect(M.pollinate(s,0)).toBe(false);
+  });
+});
+
+describe('堆肥箱把完整采收残枝用于下一轮种植', () => {
+  const built = () => {
+    const s=adopted();s.xp=M.RULES.levels[8];s.wallet=320;
+    expect(M.buyFacility(s,'composter')).toBe(true);return s;
+  };
+  const reap = (s,key,i=0) => {
+    s.seeds[key]=(s.seeds[key]||0)+1;s.water=60;
+    expect(M.plant(s,i,key)).toBe(true);M.water(s,[i]);
+    s.now=s.plots[i].next;return M.harvest(s,[i]);
+  };
+  it('Lv.9 消费原积分建造一次，旧存档没有隐式残枝库存', () => {
+    const s=adopted();s.wallet=320;s.xp=M.RULES.levels[7];
+    expect(command(s,'buyFacility',['composter']).result).toBe(false);
+    s.xp=M.RULES.levels[8];const result=command(s,'buyFacility',['composter']);
+    expect(result.pointsDelta).toBe(-120);
+    expect(result.state.composter).toEqual({purchasedAt:s.now,level:1,residue:0,stock:0,nextReady:null});
+    expect(command(result.state,'buyFacility',['composter']).pointsDelta).toBe(0);
+    delete s.composter;reap(s,'radish');expect(s.composter).toBeUndefined();
+  });
+  it('三株完整采收自动开始，投影只读，12 小时后领取不重复发放', () => {
+    const s=built();for(let i=0;i<3;i++)reap(s,'radish');
+    expect(M.composterStatus(s)).toMatchObject({residue:0,stock:0,phase:'working',remaining:12});
+    const original=structuredClone(s.composter);s.now+=12;
+    expect(M.composterStatus(s)).toMatchObject({stock:1,phase:'ready'});
+    expect(s.composter).toEqual(original);
+    expect(M.collectCompost(s)).toBe(1);expect(s.fertilizers.eco).toBe(1);
+    expect(M.collectCompost(s)).toBe(0);expect(s.fertilizers.eco).toBe(1);
+  });
+  it.each(['cucumber','lavender'])('%s 只在最后一次采收留下残枝，增产和铲除不额外发放', key => {
+    const s=built();s.xp=M.RULES.levels[19];reap(s,key);
+    for(let n=1;n<M.CROPS[key].harvests;n++) {
+      expect(M.composterStatus(s).residue).toBe(0);
+      s.now=s.plots[0].next;M.harvest(s,[0]);
+    }
+    expect(M.composterStatus(s).residue).toBe(1);
+    M.harvest(s,[0]);expect(M.composterStatus(s).residue).toBe(1);
+    if(s.plots[0].crop)M.remove(s,0);
+    s.seeds.radish=1;M.plant(s,0,'radish');M.remove(s,0);
+    expect(M.composterStatus(s).residue).toBe(1);
+  });
+  it('离线期间最多暂存两份，满仓暂停；领取后从当前时间继续', () => {
+    const s=built();s.composter={purchasedAt:0,residue:6,stock:0,nextReady:12};s.now=100;
+    expect(M.composterStatus(s)).toMatchObject({phase:'full',stock:2,residue:3,remaining:0});
+    expect(M.collectCompost(s)).toBe(2);
+    expect(M.composterStatus(s)).toMatchObject({phase:'working',stock:0,residue:0,remaining:12});
+    s.now=111;expect(M.collectCompost(s)).toBe(0);s.now=112;expect(M.collectCompost(s)).toBe(1);
+  });
+  it('新采收的残枝不能追溯补足过去的批次，未完工和非法参数不领取', () => {
+    const s=built();s.composter={purchasedAt:0,residue:2,stock:0,nextReady:12};s.now=100;
+    reap(s,'radish');expect(M.composterStatus(s)).toMatchObject({stock:1,residue:0,remaining:12});
+    expect(()=>command(s,'collectCompost',[999])).toThrow();
+    const ready=built();ready.composter.stock=1;const result=command(ready,'collectCompost');
+    expect(result.result).toBe(1);expect(result.pointsDelta).toBe(0);expect(result.state.fertilizers.eco).toBe(1);
+    expect(command(result.state,'collectCompost').result).toBe(0);
+    const empty=built();expect(command(empty,'collectCompost').pointsDelta).toBe(0);
+    expect(command(empty,'collectCompost').result).toBe(0);
+  });
+  it('旧箱按一级读取而不改存档；升级受等级、报价、余额和当前箱体限制', () => {
+    const s=built();delete s.composter.level;const old=structuredClone(s.composter);
+    expect(M.composterStatus(s)).toMatchObject({level:1,hours:12,storage:2});
+    expect(s.composter).toEqual(old);
+    const plan={level:2,cost:180};
+    expect(command(s,'upgradeComposter',[plan]).result).toBe(false);
+    s.xp=M.RULES.levels[19];s.wallet=179;
+    expect(command(s,'upgradeComposter',[plan]).pointsDelta).toBe(0);
+    s.wallet=1000;
+    expect(command(s,'upgradeComposter',[{...plan,cost:1}]).result).toBe(false);
+    expect(command(s,'upgradeComposter',[{level:3,cost:360}]).result).toBe(false);
+    s.casting=true;expect(M.upgradeComposter(s,plan)).toBe(false);s.casting=false;
+    const missing=structuredClone(s);missing.composter=null;
+    expect(command(missing,'upgradeComposter',[plan]).result).toBe(false);
+    expect(()=>command(s,'upgradeComposter',[{level:2,cost:NaN}])).toThrow();
+    expect(()=>command(s,'upgradeComposter',[])).toThrow();
+  });
+  it('升级消费同一积分，旧报价不能连续升级；满级不重复扣费', () => {
+    const s=built();s.xp=M.RULES.levels[19];s.wallet=1000;
+    const second=command(s,'upgradeComposter',[{level:2,cost:180}]);
+    expect(second.pointsDelta).toBe(-180);
+    expect(M.composterStatus(second.state)).toMatchObject({level:2,hours:12,storage:2,fertilizer:'nourish'});
+    expect(command(second.state,'upgradeComposter',[{level:2,cost:180}]).pointsDelta).toBe(0);
+    const third=command(second.state,'upgradeComposter',[{level:3,cost:360}]);
+    expect(third.pointsDelta).toBe(-360);
+    expect(M.composterStatus(third.state)).toMatchObject({level:3,hours:12,storage:2,fertilizer:'fertile'});
+    expect(command(third.state,'upgradeComposter',[{level:3,cost:360}]).pointsDelta).toBe(0);
+  });
+  it('升级只提高品质，库存保留原品质，在制批次保持截止时间', () => {
+    const s=built();s.xp=M.RULES.levels[19];s.wallet=1000;s.now=100;
+    s.composter={level:1,purchasedAt:0,residue:2,stock:1,nextReady:106};
+    expect(M.upgradeComposter(s,{level:2,cost:180})).toBe(true);
+    expect(s.composter).toMatchObject({level:2,residue:2,stock:1,nextReady:106,stockByFertilizer:{eco:1}});
+    s.now=105.99;expect(M.composterStatus(s).stock).toBe(1);
+    s.now=106;expect(M.collectCompost(s)).toBe(2);
+    expect(s.fertilizers.eco).toBe(1);expect(s.fertilizers.nourish).toBe(1);
+    expect(M.collectCompost(s)).toBe(0);expect(s.composter.residue).toBe(2);
+  });
+  it('升级不增产、不扩仓，离线已完成批次不追溯升质', () => {
+    const s=built();s.xp=M.RULES.levels[19];s.wallet=1000;s.now=100;
+    s.composter={purchasedAt:0,residue:30,stock:0,nextReady:12};
+    expect(M.upgradeComposter(s,{level:2,cost:180})).toBe(true);
+    expect(M.composterStatus(s)).toMatchObject({level:2,stock:2,phase:'full',stored:{eco:2}});
+    s.now=1000;expect(M.composterStatus(s)).toMatchObject({stock:2,phase:'full'});
+    expect(M.collectCompost(s)).toBe(2);expect(s.fertilizers.eco).toBe(2);
+    expect(M.composterStatus(s).remaining).toBe(12);
+    s.now=1012;expect(M.collectCompost(s)).toBe(1);
+    expect(s.fertilizers.nourish).toBe(1);
+  });
+  it('三级产出丰沃肥，仍为三份残枝、12 小时一份，混合库存原子领取', () => {
+    const s=built();s.xp=M.RULES.levels[19];s.wallet=1000;s.now=100;
+    M.upgradeComposter(s,{level:2,cost:180});M.upgradeComposter(s,{level:3,cost:360});
+    s.composter.residue=0;s.composter.nextReady=112;s.now=112;
+    expect(M.composterStatus(s)).toMatchObject({fertilizer:'fertile',stored:{fertile:1}});
+    expect(M.collectCompost(s)).toBe(1);expect(s.fertilizers.fertile).toBe(1);
+    s.composter.stock=2;s.composter.stockByFertilizer={eco:1,nourish:1};
+    s.fertilizers.nourish=Number.MAX_SAFE_INTEGER;
+    const before=structuredClone(s);
+    expect(M.collectCompost(s)).toBe(0);expect(s).toEqual(before);
+  });
+
+});
+
+describe('水族赎回按出售时的明确报价结算', () => {
+  const sold = () => {
+    const s=adopted();M.addFish(s,'blue');s.firstCompanionPending=null;
+    const price=M.sell(s,s.fish[0].id,F);return {s,price,receipt:s.buybacks[0]};
+  };
+  it('加收 10% 向上取整且至少 1 积分，消费真实积分并恢复原个体', () => {
+    for(const [price,cost] of [[2,3],[5,6],[12,14],[30,33]])expect(M.buybackPrice(price)).toBe(cost);
+    const {s,price,receipt}=sold(),cost=M.buybackPrice(price);
+    expect(receipt.buybackPoints).toBe(cost);
+    const result=command(s,'buyback',[receipt.id,cost]);
+    expect(result.pointsDelta).toBe(-cost);expect(result.state.fish[0].id).toBe(receipt.fish.id);
+    expect(command(result.state,'buyback',[receipt.id,cost]).pointsDelta).toBe(0);
+  });
+  it('旧客户端缺报价、错误报价、余额不足和超时均不扣分不恢复', () => {
+    const {s,receipt}=sold();
+    for(const args of [[receipt.id],[receipt.id,receipt.points]]) {
+      const r=command(s,'buyback',args);expect(r.result).toBeNull();expect(r.pointsDelta).toBe(0);
+    }
+    expect(command(s,'buyback',[receipt.id,receipt.buybackPoints],context({points:receipt.buybackPoints-1})).result).toBeNull();
+    s.now+=M.RULES.buybackHours;expect(M.buyback(s,receipt.id,F,receipt.buybackPoints)).toBeNull();
+  });
+  it('历史出售记录维持原价，旧的单参数请求仍兼容', () => {
+    const {s,receipt}=sold();delete receipt.buybackPoints;
+    expect(M.buybackCost(receipt)).toBe(receipt.points);
+    expect(command(s,'buyback',[receipt.id]).pointsDelta).toBe(-receipt.points);
   });
 });

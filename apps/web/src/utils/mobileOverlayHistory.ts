@@ -50,7 +50,14 @@ function transitionInFlight() {
 function activateEntry(entry: MobileOverlayHistoryEntry) {
   if (entry.state !== 'pending') return false;
   try {
-    const currentState = window.history.state && typeof window.history.state === 'object' ? window.history.state : {};
+    const currentState = window.history.state && typeof window.history.state === 'object' ? { ...window.history.state } : {};
+    // Reloading while a layer is open preserves its history marker but not the
+    // in-memory entry. Make that orphan the normal page before pushing a new
+    // layer, otherwise Back lands on an unknown marker and cannot close it.
+    if (!entries.length && readOverlayId(currentState)) {
+      delete currentState[MOBILE_OVERLAY_HISTORY_STATE_KEY];
+      window.history.replaceState(currentState, '', window.location.href);
+    }
     window.history.pushState(
       { ...currentState, [MOBILE_OVERLAY_HISTORY_STATE_KEY]: entry.id },
       '',

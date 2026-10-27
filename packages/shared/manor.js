@@ -152,7 +152,7 @@ const commandCatalog = Object.freeze({
   selectBait(s, a) { if (a.length !== 1 || typeof a[0] !== 'string') invalid(); return model.selectBait(s, a[0]); },
   sell(s, a) { if (a.length !== 1) invalid(); return model.sell(s, integer(a[0], 1), MANOR_SPECIES); },
   release(s, a) { if (a.length !== 1) invalid(); return model.release(s, integer(a[0], 1), MANOR_SPECIES); },
-  buyback(s, a) { if (a.length !== 1) invalid(); return model.buyback(s, integer(a[0], 1), MANOR_SPECIES); },
+  buyback(s, a) { if (a.length < 1 || a.length > 2) invalid(); return model.buyback(s, integer(a[0], 1), MANOR_SPECIES, a.length === 2 ? integer(a[1], 1) : undefined); },
   place(s, a) { if (a.length !== 2) invalid(); return model.place(s, integer(a[0], 1), integer(a[1], 0, 5), MANOR_SPECIES); },
   placeShow(s, a) { if (a.length !== 2) invalid(); return model.placeShow(s, integer(a[0], 1), integer(a[1], 0, 2), MANOR_SPECIES); },
   unplace(s, a) { if (a.length !== 1) invalid(); return model.unplace(s, integer(a[0], 1), MANOR_SPECIES); },
@@ -172,6 +172,12 @@ const commandCatalog = Object.freeze({
     plan.ids.forEach(n => integer(n, 1));
     integer(plan.level, 2, 3); integer(plan.cost, 1);
     return model.upgradePurifier(s, { level: plan.level, cost: plan.cost, ids: plan.ids }, MANOR_SPECIES);
+  },
+  collectCompost(s, a) { emptyArgs(a); return model.collectCompost(s); },
+  upgradeComposter(s, a) {
+    if(a.length!==1||!a[0]||typeof a[0]!== 'object'||Array.isArray(a[0]))invalid();
+    const plan={level:integer(a[0].level,2,3),cost:integer(a[0].cost,1)};
+    return model.upgradeComposter(s,plan);
   },
   startCraft(s, a) { if (a.length !== 2) invalid(); return model.startCraft(s, key(a[0], model.BAIT_RECIPES), integer(a[1], 1, 3)); },
   collectCraft(s, a) { if (a.length !== 1) invalid(); return model.collectCraft(s, integer(a[0], 1)); },

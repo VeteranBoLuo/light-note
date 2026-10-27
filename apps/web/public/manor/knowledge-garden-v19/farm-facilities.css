@@ -5,7 +5,6 @@
 .scene-facility {position:absolute;z-index:9;min-width:calc(44px * var(--d));min-height:calc(44px * var(--d));padding:0;border:0;border-radius:0;background:transparent;box-shadow:none;cursor:pointer;-webkit-tap-highlight-color:transparent;}
 .scene-facility[hidden] {display:none;}
 .scene-facility .fixture-art {position:absolute;inset:0;pointer-events:none;}
-.scene-facility:hover .fixture-art {filter:brightness(1.06);}
 .scene-facility:active {transform:none;}
 .scene-facility:focus-visible {outline:calc(2px * var(--d)) solid #fff7c2;outline-offset:calc(3px * var(--d));}
 .fixture-state {position:absolute;left:50%;bottom:2%;translate:-50% 0;min-width:max-content;padding:calc(3px * var(--d)) calc(7px * var(--d));border:calc(1px * var(--d)) solid #b18c52;border-radius:calc(6px * var(--d));background:#fff4d9;color:#72512c;font-size:calc(11px * var(--d));font-weight:700;line-height:1.5;pointer-events:none;}
@@ -39,10 +38,10 @@
 .facility-build-conditions {display:flex;flex-direction:column;gap:calc(7px * var(--d));margin-top:calc(16px * var(--d));padding:calc(12px * var(--d));background:#f4e6c6;border:calc(1px * var(--d)) solid #e0c58e;border-radius:calc(9px * var(--d));font-size:calc(13px * var(--d));line-height:1.6;}
 .facility-build-conditions .met {color:#537d39;}
 .facility-build-conditions .unmet {color:#9b5d29;}
-#modal :is(.facility-build-dialog,.workshop-dialog,.beehive-dialog,.hive-refill-dialog,.purifier-upgrade-dialog) .dialog-foot .button {display:inline-flex;align-items:center;justify-content:center;gap:calc(6px * var(--d));}
+#modal :is(.facility-build-dialog,.workshop-dialog,.beehive-dialog,.hive-refill-dialog,.purifier-upgrade-dialog,.composter-upgrade-dialog) .dialog-foot .button {display:inline-flex;align-items:center;justify-content:center;gap:calc(6px * var(--d));}
 #modal :is(.facility-build-dialog,.workshop-dialog,.beehive-dialog,.hive-refill-dialog) .dialog-foot :is(.r18-sprite,.farm-icon,.bee-art) {flex:none;width:calc(27px * var(--d));height:calc(27px * var(--d));object-fit:contain;}
-#modal .facility-build-dialog {height:auto;max-height:calc(100vh - 72px * var(--d));}
-#modal :is(.workshop-dialog,.beehive-dialog,.hive-refill-dialog,.purifier-upgrade-dialog) {width:min(calc(760px * var(--d)),calc(100vw - 40px * var(--d)));}
+#modal :is(.facility-build-dialog,.composter-upgrade-dialog) {height:auto;max-height:calc(100vh - 72px * var(--d));}
+#modal :is(.workshop-dialog,.beehive-dialog,.hive-refill-dialog,.purifier-upgrade-dialog,.composter-upgrade-dialog) {width:min(calc(760px * var(--d)),calc(100vw - 40px * var(--d)));}
 .workshop-hero {display:grid;grid-template-columns:1fr 1.5fr;align-items:center;gap:calc(15px * var(--d));}
 .workshop-illustration {height:calc(132px * var(--d));}
 .recipe-choices {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:calc(10px * var(--d));}
@@ -133,12 +132,12 @@
 .light-note-mobile-rendering .game-facility-card > :is(.market-price,.tile-btn,.facility-card-actions) {grid-column:1 / -1;}
 .light-note-mobile-rendering .game-facility-card .tile-btn {min-height:calc(44px * var(--d));}
 .light-note-mobile-rendering .facility-card-actions > button {flex:1;}
-.light-note-mobile-rendering #modal :is(.workshop-dialog,.beehive-dialog,.hive-refill-dialog,.purifier-upgrade-dialog) {width:calc(100vw - 28px * var(--d));}
-.light-note-mobile-rendering #modal :is(.workshop-dialog,.beehive-dialog,.hive-refill-dialog,.facility-build-dialog,.purifier-upgrade-dialog) .dialog-head {padding:calc(16px * var(--d)) calc(12px * var(--d)) calc(6px * var(--d));}
-.light-note-mobile-rendering #modal :is(.workshop-dialog,.beehive-dialog,.hive-refill-dialog,.facility-build-dialog,.purifier-upgrade-dialog) .dialog-head p {margin:calc(8px * var(--d)) 0 0;font-size:calc(11px * var(--d));line-height:1.5;}
-.light-note-mobile-rendering #modal :is(.workshop-dialog,.beehive-dialog,.hive-refill-dialog,.facility-build-dialog,.purifier-upgrade-dialog) .dialog-body {padding:calc(10px * var(--d)) calc(12px * var(--d));}
-.light-note-mobile-rendering #modal :is(.workshop-dialog,.beehive-dialog,.hive-refill-dialog,.facility-build-dialog,.purifier-upgrade-dialog) .dialog-foot {gap:calc(8px * var(--d));padding:calc(10px * var(--d)) calc(12px * var(--d));}
-.light-note-mobile-rendering #modal :is(.workshop-dialog,.beehive-dialog,.hive-refill-dialog,.facility-build-dialog,.purifier-upgrade-dialog) .dialog-foot .button {min-width:0;min-height:calc(44px * var(--d));padding:calc(7px * var(--d)) calc(10px * var(--d));font-size:calc(12px * var(--d));}
+.light-note-mobile-rendering #modal :is(.workshop-dialog,.beehive-dialog,.hive-refill-dialog,.purifier-upgrade-dialog,.composter-upgrade-dialog) {width:calc(100vw - 28px * var(--d));}
+.light-note-mobile-rendering #modal :is(.workshop-dialog,.beehive-dialog,.hive-refill-dialog,.facility-build-dialog,.purifier-upgrade-dialog,.composter-upgrade-dialog) .dialog-head {padding:calc(16px * var(--d)) calc(12px * var(--d)) calc(6px * var(--d));}
+.light-note-mobile-rendering #modal :is(.workshop-dialog,.beehive-dialog,.hive-refill-dialog,.facility-build-dialog,.purifier-upgrade-dialog,.composter-upgrade-dialog) .dialog-head p {margin:calc(8px * var(--d)) 0 0;font-size:calc(11px * var(--d));line-height:1.5;}
+.light-note-mobile-rendering #modal :is(.workshop-dialog,.beehive-dialog,.hive-refill-dialog,.facility-build-dialog,.purifier-upgrade-dialog,.composter-upgrade-dialog) .dialog-body {padding:calc(10px * var(--d)) calc(12px * var(--d));}
+.light-note-mobile-rendering #modal :is(.workshop-dialog,.beehive-dialog,.hive-refill-dialog,.facility-build-dialog,.purifier-upgrade-dialog,.composter-upgrade-dialog) .dialog-foot {gap:calc(8px * var(--d));padding:calc(10px * var(--d)) calc(12px * var(--d));}
+.light-note-mobile-rendering #modal :is(.workshop-dialog,.beehive-dialog,.hive-refill-dialog,.facility-build-dialog,.purifier-upgrade-dialog,.composter-upgrade-dialog) .dialog-foot .button {min-width:0;min-height:calc(44px * var(--d));padding:calc(7px * var(--d)) calc(10px * var(--d));font-size:calc(12px * var(--d));}
 .light-note-mobile-rendering .workshop-hero {grid-template-columns:1fr;gap:calc(4px * var(--d));}
 .light-note-mobile-rendering .workshop-illustration {justify-self:center;width:calc(160px * var(--d));height:calc(150px * var(--d));}
 .light-note-mobile-rendering .recipe-choices {gap:calc(7px * var(--d));}
@@ -175,3 +174,10 @@
   .light-note-mobile-rendering .facility-build-preview > .r18-sprite {width:calc(170px * var(--d));height:calc(150px * var(--d));}
 }
 @media (prefers-reduced-motion:reduce) {.facility-bees .bee-art,.scene-facility.just-built .fixture-art {animation:none;}}
+
+/* The composter uses single-frame art; existing machines retain their native sprites. */
+.r18-sprite.composter-art > img {position:static;width:100%;height:100%;object-fit:contain;transform:none;}
+.compost-tier-row .composter-art {width:calc(68px * var(--d));height:calc(68px * var(--d));max-width:100%;}
+.compost-clock {color:#52773b;font-weight:700;font-size:calc(14px * var(--d));}
+
+.composter-recipe .fert-sack {width:calc(37px * var(--d));height:calc(37px * var(--d));}

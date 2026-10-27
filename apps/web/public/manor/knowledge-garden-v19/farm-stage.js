@@ -150,7 +150,7 @@ const FarmStage = (() => {
     if (!scene?.isConnected) return;
     const r=scene.getBoundingClientRect(),button=scene.querySelector('[data-dock="farm"]');
     const b=button?.getBoundingClientRect(),dock=scene.querySelector(":scope > .game-dock")?.getBoundingClientRect();
-    const density=Number.parseFloat(getComputedStyle(scene).getPropertyValue("--d"))||1;
+    const density=Number.parseFloat(getComputedStyle(scene.querySelector("#tankProduction") || scene.querySelector("#gameHud") || scene).getPropertyValue("--d"))||1;
     const pose=managementPose(r.width,r.height,b?{left:b.left-r.left,right:b.right-r.left,bottom:b.bottom-r.top}:null,{mobile:profile()==="mobile",dockTop:dock?dock.top-r.top:r.height,density});
     for(const [key,value] of Object.entries(pose))scene.style.setProperty(`--production-${key.replace(/[A-Z]/g,c=>"-"+c.toLowerCase())}`,value===null?"auto":value+"px");
   }
@@ -170,6 +170,20 @@ const FarmStage = (() => {
     return [top.length ? Math.min(...top) : null, bottom.length ? Math.max(...bottom) : null];
   }
 
+  // Align the original picture with the visible dock edge, not the viewport behind it.
+  // This keeps the clear upper scenery below the HUD instead of exposing blurred bleed.
+  function mobileFrame(d,width,height,chrome,rects=keepRects(d,true)) {
+    const sw=d.safe[2],sh=d.image[1]-d.safe[1];
+    const ct=chrome.hud?.bottom||0,cb=chrome.dock?.top??height;
+    let s=width/sw;
+    for(let pass=0;pass<2;pass++) {
+      const [kt,kb]=keepSpan(rects,chrome,s,(width-sw*s)/2);
+      if(kt!==null&&kb!==null&&(kb-kt)*s>cb-ct)s=(cb-ct)/(kb-kt);
+    }
+    const ox=(width-sw*s)/2,[kt,kb]=keepSpan(rects,chrome,s,ox);
+    const lower=kt===null?-Infinity:ct-kt*s,upper=kb===null?Infinity:cb-kb*s;
+    return {s,ox,oy:Math.max(lower,Math.min(cb-sh*s,upper))};
+  }
   function layout() {
     if (!scene || !scene.isConnected) return;
     const d = cal(),
@@ -180,25 +194,11 @@ const FarmStage = (() => {
     const purifier=scene.querySelector("#purifierSpot"),hasPurifier=!!purifier&&!purifier.hidden;
     const rects = keepRects(d,hasPurifier),
       chrome = chromeOf(r);
-    const ct = chrome.hud ? chrome.hud.bottom : 0,
-      cb = chrome.dock ? chrome.dock.top : r.height;
-    // 双场景手机优先铺满宽度，允许裁去装饰性的天空 / 前景；必须可见区域仍由 keepRects 约束。
+    const ct=chrome.hud?.bottom||0;
     const desktop=!d.area?desktopFrame(d,r.width,r.height,chrome.headers):null;
+    const frame=desktop||mobileFrame(d,r.width,r.height,chrome,rects),s=frame.s;
     scene.style.setProperty("--farm-min-height",desktop?desktop.minimumHeight+"px":"0px");
-    let s = r.width / sw;
-    for (let pass = 0; d.area&&pass < 2; pass++) {
-      const [kt, kb] = keepSpan(rects, chrome, s, (r.width - sw * s) / 2);
-      if (kt !== null && kb !== null && (kb - kt) * s > cb - ct) s = (cb - ct) / (kb - kt);
-    }
-    const [kt, kb] = keepSpan(rects, chrome, s, (r.width - sw * s) / 2);
-    let oy = (r.height - sh * s) / 2;
-    if (kb !== null && oy + kb * s > cb) oy = cb - kb * s;
-    else if (kt !== null && oy + kt * s < ct) oy = ct - kt * s;
-    // 手机底图较矮时优先让前景接到底部；PC 的富余高度放在天空。
-    const imgBottom = oy + (d.image[1] - sy) * s;
-    if (imgBottom < r.height) oy += Math.max(0, Math.min(r.height - imgBottom, kb === null ? Infinity : cb - (oy + kb * s)));
-    if(desktop)oy=desktop.oy;
-    view = { s, ox: desktop?0:(r.width - sw * s) / 2, oy, profile: profile(), d, W: r.width, H: r.height };
+    view = { s, ox:frame.ox, oy:frame.oy, profile: profile(), d, W: r.width, H: r.height };
     const stage = scene.querySelector(".scene-stage");
     stage.style.width = sw + "px";
     stage.style.height = sh + "px";
@@ -298,6 +298,6 @@ const FarmStage = (() => {
   }
   const pier = () => view?.pier || null;
   const scale = () => view?.s || 1;
-  return { sourceSet, birdStops, purifierSite, fixturePose, fixtureBounds, hitClip, pierGeometry, desktopFrame, skyBleedPose, managementPose, positionManagement, mount, layout, habitat, pier, scale, setArea:next=>{area=next==="bay"?"bay":"garden";}, toScene: (x, y) => (view ? toScene(x, y) : [x, y]), cal, profile };
+  return { sourceSet, birdStops, purifierSite, fixturePose, fixtureBounds, hitClip, pierGeometry, desktopFrame, skyBleedPose, managementPose, positionManagement, mobileFrame, mount, layout, habitat, pier, scale, setArea:next=>{area=next==="bay"?"bay":"garden";}, toScene: (x, y) => (view ? toScene(x, y) : [x, y]), cal, profile };
 })();
 if (typeof module !== "undefined") module.exports = FarmStage;

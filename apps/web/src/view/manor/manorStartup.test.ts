@@ -11,7 +11,7 @@ function deferred() {
   });
   return { promise, resolve };
 }
-function setup(mounted = true, asset?: { path: string; fetcher: typeof fetch; bay?: boolean }) {
+function setup(mounted = true, asset?: { path: string; fetcher: typeof fetch; bay?: boolean }, idle?: ReturnType<typeof vi.fn>) {
   document.body.innerHTML =
     '<div id="app"><section class="garden-scene"><span id="paint"></span></section></div><div id="modal"></div>';
   if(asset){
@@ -38,7 +38,7 @@ function setup(mounted = true, asset?: { path: string; fetcher: typeof fetch; ba
   const postMessage = vi.fn(),
     mark = vi.fn(),
     module = {
-      exports: {} as { ready: () => Promise<boolean>; mounted: () => void; track: (p: Promise<void>) => void; afterReady: (run: () => void) => void; assetsReady: Promise<boolean>; html: (markup: string) => string; prepareArea: (area: string, background?: boolean) => Promise<boolean> },
+      exports: {} as { ready: () => Promise<boolean>; mounted: () => void; track: (p: Promise<void>) => void; afterReady: (run: () => void, options?: {idle?: boolean}) => void; assetsReady: Promise<boolean>; html: (markup: string) => string; prepareArea: (area: string, background?: boolean) => Promise<boolean> },
     };
   let blobId=0;
   runInNewContext(source, {
@@ -58,6 +58,7 @@ function setup(mounted = true, asset?: { path: string; fetcher: typeof fetch; ba
     clearTimeout,
     performance: { mark, now: () => 123 },
     requestAnimationFrame: (fn: () => void) => setTimeout(fn, 0),
+    requestIdleCallback: idle,
     getComputedStyle: (node: Element) => ({
       backgroundImage: node.id === 'paint' ? `url("${asset?.path || 'http://localhost/paint.webp'}")` : 'none',
       maskImage: 'none',
@@ -129,6 +130,17 @@ describe('庄园真实启动进度', () => {
     expect(await ready).toBe(false);
     await vi.advanceTimersByTimeAsync(1000);
     expect(wildlife).not.toHaveBeenCalled();
+  });
+  it('区域的轻量动物不等待繁忙内核的 idle，3D 增强仍留在空闲队列', async () => {
+    const idle=vi.fn(),startup=setup(true,undefined,idle),visitors=vi.fn(),enhancement=vi.fn();
+    startup.afterReady(visitors,{idle:false});startup.afterReady(enhancement);
+    const ready=startup.ready();
+    startup.loaded[0].onload();startup.decoded.resolve();await vi.advanceTimersByTimeAsync(10);
+    expect(await ready).toBe(true);expect(visitors).toHaveBeenCalledOnce();
+    expect(enhancement).not.toHaveBeenCalled();expect(idle).toHaveBeenCalledWith(enhancement,{timeout:1000});
+    const nextArea=vi.fn();startup.afterReady(nextArea,{idle:false});await vi.advanceTimersByTimeAsync(1);
+    expect(nextArea).toHaveBeenCalledOnce();expect(idle).toHaveBeenCalledTimes(1);
+    idle.mock.calls[0][0]();expect(enhancement).toHaveBeenCalledOnce();
   });
   it('八秒不会放行未下载的场景；下载、解码和准备任务全部完成才可交互', async () => {
     const startup = setup(),

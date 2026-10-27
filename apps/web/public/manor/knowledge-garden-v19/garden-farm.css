@@ -3,19 +3,10 @@
 
 /* ---------- 舞台与背景 ---------- */
 html #app .garden-play .seaside-courtyard.farm-staged {
-  /* 平板、矮屏等底图盖不满的比例：同一张图模糊放大垫底，不拉伸 */
-  background: #2f86b8;
+  /* Decorative fill behind the HUD/dock stays sharp; the scene itself keeps its calibrated scale. */
+  background: #2f86b8 var(--farm-fill, none) center / cover no-repeat;
   /* 码头点击框会伸出场景：用 clip 而不是 hidden，键盘聚焦或 scrollIntoView 时场景不会被滚动错位 */
   overflow: clip;
-}
-html #app .garden-play .seaside-courtyard.farm-staged::before {
-  content: "";
-  position: absolute;
-  inset: -24px;
-  z-index: 0;
-  background: var(--farm-fill, none) center / cover no-repeat;
-  filter: blur(14px) saturate(1.05);
-  pointer-events: none;
 }
 html #app .garden-play .farm-staged .scene-stage {
   position: absolute;
@@ -39,8 +30,8 @@ html #app .garden-play .seaside-courtyard.farm-staged .scene-stage .environment-
 html #app .garden-play .seaside-courtyard.farm-staged .scene-stage .environment-motion {
   z-index: 1;
 }
-/* 底图四边渐隐，盖不满时和模糊留边之间没有硬接缝；边缘本是出血，平常在窗口外 */
-html #app .garden-play .seaside-courtyard.farm-staged .scene-stage :is(.garden-backdrop, .environment-motion) {
+/* Preserve the desktop sky blend; phone scene edges stay opaque and sharp. */
+html:not(.light-note-mobile-rendering) #app .garden-play .seaside-courtyard.farm-staged .scene-stage :is(.garden-backdrop, .environment-motion) {
   -webkit-mask-image: linear-gradient(to bottom, transparent, #000 3% 97%, transparent), linear-gradient(to right, transparent, #000 3% 97%, transparent);
   -webkit-mask-composite: source-in;
   mask-image: linear-gradient(to bottom, transparent, #000 3% 97%, transparent), linear-gradient(to right, transparent, #000 3% 97%, transparent);
@@ -1069,7 +1060,8 @@ html.kbd-nav .scene-gift:focus-visible::after { opacity: 1; }
 .level-stop[aria-pressed="true"] { outline: 2px solid #6b973d; outline-offset: 1px; background: #edf4d7; color: #43652c; }
 .level-stop.ready i { position: absolute; right: calc(6px * var(--d)); top: calc(6px * var(--d)); width: calc(7px * var(--d)); height: calc(7px * var(--d)); border-radius: 50%; background: #699b3c; border: 1px solid #fff8df; }
 .level-stop-art { display: block; width: calc(42px * var(--d)); height: calc(42px * var(--d)); }
-.level-device-label { display: inline-block; margin-left: calc(3px * var(--d)); color: #895c20; font-size: max(10px,calc(10px * var(--d))); }
+.level-unlock-badge { border: 1px solid transparent; border-radius: calc(5px * var(--d)); padding: 0 calc(4px * var(--d)); color: #796444; font-size: max(10px,calc(10px * var(--d))); line-height: 1.5; white-space: nowrap; }
+.level-stop.has-unlock .level-unlock-badge { border-color: #cfac61; background: #fff1c9; color: #78511e; font-weight: 700; }
 .level-gift-item.level-facility-unlock { border-color: #d0ac65; background: #fff4cf; }
 .level-stop-art > .r18-sprite,.level-gift-art > .r18-sprite,.level-stop-art > .purifier-grade,.level-gift-art > .purifier-grade { display: block; position: relative; width: 100%; height: 100%; }
 .level-stop-art img,.level-gift-art img { display: block; width: 100%; height: 100%; object-fit: contain; }
@@ -1096,6 +1088,11 @@ html.kbd-nav .scene-gift:focus-visible::after { opacity: 1; }
 .light-note-mobile-rendering .level-reward-actions {flex:1;gap:8px;}
 .light-note-mobile-rendering .level-reward-actions .button {flex:1;}
 .light-note-mobile-rendering .level-achievements {flex-basis:100%;order:2;}
+html.light-note-mobile-rendering #modal .level-dialog .dialog-foot {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-items:stretch;}
+html.light-note-mobile-rendering #modal .level-dialog .level-reward-actions {display:contents;}
+html.light-note-mobile-rendering #modal .level-dialog .level-claim-state {grid-column:1/-1;order:-1;text-align:center;}
+html.light-note-mobile-rendering #modal .level-dialog [data-action="level-claim-all"] {grid-column:1/-1;order:-2;}
+html.light-note-mobile-rendering #modal .level-dialog .level-achievements {order:0;}
 .light-note-mobile-rendering .level-hero { gap: 10px; padding: 10px; }
 .light-note-mobile-rendering .level-medal { width: 46px; height: 46px; }
 .light-note-mobile-rendering .level-pending { padding: 6px; }
@@ -1103,6 +1100,7 @@ html.kbd-nav .scene-gift:focus-visible::after { opacity: 1; }
 .light-note-mobile-rendering .level-route-heading { margin-block: 0 6px; }
 .light-note-mobile-rendering .level-route-heading button { width: 44px; height: 44px; }
 .light-note-mobile-rendering .level-stop { padding: 6px 2px; }
+.light-note-mobile-rendering .level-unlock-suffix {display:none;}
 .light-note-mobile-rendering .level-stop-art { width: 34px; height: 34px; }
 .light-note-mobile-rendering .level-gift { padding: 10px; margin-top: 12px; }
 .light-note-mobile-rendering .level-gift-heading h3 { font-size: 15px; }
@@ -1438,8 +1436,8 @@ html.light-note-mobile-rendering #app .garden-play .seaside-courtyard .tank-capt
 .level-stop.claimed .level-stop-art { opacity: .65; }
 .level-stop.locked { background: #eae7df; border-color: #c7c0b2; color: #7e786b; }
 .level-stop.locked .level-stop-art { filter: grayscale(.85); opacity: .52; }
-.level-stop.locked::after { content: ""; position: absolute; right: calc(7px * var(--d)); top: calc(10px * var(--d)); width: calc(8px * var(--d)); height: calc(7px * var(--d)); border: 2px solid #8c8679; border-radius: 2px; }
-.level-stop.locked::before { content: ""; position: absolute; right: calc(9px * var(--d)); top: calc(5px * var(--d)); width: calc(4px * var(--d)); height: calc(7px * var(--d)); border: 2px solid #8c8679; border-radius: 4px 4px 0 0; }
+.level-stop.locked::after { content: ""; position: absolute; right: calc(7px * var(--d)); top: calc(58px * var(--d)); width: calc(8px * var(--d)); height: calc(7px * var(--d)); border: 2px solid #8c8679; border-radius: 2px; }
+.level-stop.locked::before { content: ""; position: absolute; right: calc(9px * var(--d)); top: calc(53px * var(--d)); width: calc(4px * var(--d)); height: calc(7px * var(--d)); border: 2px solid #8c8679; border-radius: 4px 4px 0 0; }
 .level-stop.ready { background: #fff3c6; border: 2px solid #b9913e; color: #765024; }
 .level-stop[aria-pressed="true"] { outline: 2px solid #638b35; outline-offset: 2px; }
 .guide-pointer,.guide-short { display: none; }
@@ -1967,10 +1965,10 @@ html.light-note-mobile-rendering [data-manor-area="garden"] [data-dock="garden"]
 html.light-note-mobile-rendering .game-hud .hud-reset {position:absolute;right:0;top:54px;width:44px;height:44px;padding:8px;}
 
 /* The art responds, while the chest hit target stays still during a click. */
-.bait-chest-art {transition:transform .16s ease-out;}
+.bait-chest-art {transition:margin-top .12s ease-out;}
 #app .bait-chest:active {transform:none;}
 @media (hover:hover) and (pointer:fine) {
-  #app .bait-chest:hover .bait-chest-art {transform:translateY(calc(1px / var(--stage-s,1)));}
+  #app .bait-chest:is(:hover,:active,:focus-visible) .bait-chest-art {margin-top:calc(1px / var(--stage-s,1));}
 }
 @media (prefers-reduced-motion:reduce) {.bait-chest-art {transition:none;}}
 

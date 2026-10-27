@@ -26,6 +26,7 @@ it('SVG 与作物只在接近视口时挂载原画，加载中仍可点击，抠
   const open = vi.fn(); cards[0].addEventListener('click', open);
   expect(root.querySelector('image')?.hasAttribute('href')).toBe(false);
   expect(root.querySelector('img')?.hasAttribute('src')).toBe(false);
+  expect(cards[0].dataset.imageStatus).toBeUndefined();
   cards[0].click(); expect(open).toHaveBeenCalledOnce();
   enter(0);
   const image = root.querySelector('image')!;
@@ -45,8 +46,21 @@ it('单张图片失败保留可点击的占位，关闭面板释放观察和图�
   expect(cards[0].disabled).toBe(false);
   enter(1); stop();
   root.querySelector('img')!.dispatchEvent(new Event('load'));
-  expect(cards[1].dataset.imageStatus).toBe('加载图片…');
+  expect(cards[1].dataset.imageStatus).toBeUndefined();
   expect(disconnect).toHaveBeenCalledOnce();
+});
+
+it('首次和重复打开都保留原卡面，不因缓存图片的异步 load 重播文字占位', () => {
+  for (let visit = 0; visit < 2; visit++) {
+    const { root, cards, enter, stop } = setup();
+    expect(root.querySelector('[data-image-status]')).toBeNull();
+    enter(0);
+    expect(cards[0].getAttribute('aria-busy')).toBe('true');
+    expect(cards[0].dataset.imageStatus).toBeUndefined();
+    root.querySelector('image')!.dispatchEvent(new Event('load'));
+    expect(cards[0].dataset.imageStatus).toBe('');
+    stop();
+  }
 });
 
 it('不支持 IntersectionObserver 时仍能显示图鉴全部图片', () => {

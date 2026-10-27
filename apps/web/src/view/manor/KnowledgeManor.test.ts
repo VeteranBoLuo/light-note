@@ -105,6 +105,8 @@ describe('庄园加载与主站导航', () => {
   ])('任务 %s 的去完成复用每日任务目的地 %s', async (key, destination) => {
     mocks.read.mockResolvedValue({ quests: [{ key, done: false }], state: {}, revision: 0, version: 'fixture' } as never);
     const router = await mount(), frame = document.querySelector('iframe')!;
+    window.dispatchEvent(new MessageEvent('message', { source: frame.contentWindow, origin: location.origin, data: { type: 'lightnote-manor', nonce: new URL(frame.src).searchParams.get('bridge'), id: 1, action: 'ready' } }));
+    await flush();
     const arrived = new Promise<void>(resolve => {
       const stop = router.afterEach(to => { if (to.fullPath === destination) { stop(); resolve(); } });
     });
@@ -123,6 +125,40 @@ describe('庄园加载与主站导航', () => {
     await flush();
     expect(router.currentRoute.value.path).toBe('/knowledge-manor');
     expect(reply).toHaveBeenCalledWith(expect.objectContaining({ id: 11, error: 'manor.actionFailed' }), location.origin);
+  });
+
+  it('场景路由回退由同一游戏确认状态裁决，保留真实目标并拒绝伪造回复', async () => {
+    const router = await mount(), frame = document.querySelector('iframe')!, nonce = new URL(frame.src).searchParams.get('bridge');
+    const send = async (action: string, payload = {}, token = nonce) => {
+      window.dispatchEvent(new MessageEvent('message', { source: frame.contentWindow, origin: location.origin,
+        data: { type: 'lightnote-manor', nonce: token, id: 33, action, payload } }));
+      await flush();
+    };
+    await send('ready');
+    const bridge = vi.spyOn(frame.contentWindow!, 'postMessage');
+    const first = router.push('/bookmarks'); await flush();
+    const check = bridge.mock.calls.find(([v]) => v.action === 'navigation-back')![0];
+    await send('navigation', { requestId: check.requestId, allow: true }, 'other-frame');
+    expect(router.currentRoute.value.path).toBe('/knowledge-manor');
+    await send('navigation', { requestId: check.requestId, allow: false }); await first;
+    expect(router.currentRoute.value.path).toBe('/knowledge-manor');
+    bridge.mockClear();
+    const second = router.push('/bookmarks'); await flush();
+    const next = bridge.mock.calls.find(([v]) => v.action === 'navigation-back')![0];
+    await send('navigation', { requestId: check.requestId, allow: true });
+    expect(router.currentRoute.value.path).toBe('/knowledge-manor');
+    await send('navigation', { requestId: next.requestId, allow: true }); await second;
+    expect(router.currentRoute.value.path).toBe('/bookmarks');
+  });
+
+  it('就绪场景桥接失联时允许离开，避免浏览器被卡死场景困住', async () => {
+    const router = await mount(), frame = document.querySelector('iframe')!, nonce = new URL(frame.src).searchParams.get('bridge');
+    window.dispatchEvent(new MessageEvent('message', { source: frame.contentWindow, origin: location.origin,
+      data: { type: 'lightnote-manor', nonce, id: 1, action: 'ready' } }));
+    await flush();
+    const leaving = router.push('/bookmarks'); await flush();
+    await vi.advanceTimersByTimeAsync(1500); await leaving;
+    expect(router.currentRoute.value.path).toBe('/bookmarks');
   });
 
   it('重置测试使用独立存档，命令不写正式 API，恢复后重新读取正式存档', async () => {

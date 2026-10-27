@@ -287,7 +287,7 @@ const GardenFX = (() => {
     }, reduced() ? 1200 : 1700);
   }
 
-  // 环境氛围：云、蝴蝶、光点、落叶、蜻蜓
+  // 环境氛围：云、蝴蝶、落叶、蜻蜓
   function mountAmbient(scene) {
     unmountAmbient();
     if (!scene || reduced()) return;
@@ -296,8 +296,7 @@ const GardenFX = (() => {
     el.setAttribute("aria-hidden", "true");
     el.innerHTML =
       [0, 1, 2].map((i) => `<span class="cloud c${i}"></span>`).join("") +
-      [0, 1].map((i) => `<span class="butterfly b${i}"><span class="bf-body"><span class="wing l"></span><span class="wing r"></span></span></span>`).join("") +
-      Array.from({ length: 10 }, (_, i) => `<span class="mote" style="left:${8 + ((i * 37) % 80)}%;top:${38 + ((i * 23) % 45)}%;animation-delay:-${i * 1.3}s"></span>`).join("");
+      [0, 1].map((i) => `<span class="butterfly b${i}"><span class="bf-body"><span class="wing l"></span><span class="wing r"></span></span></span>`).join("");
     scene.prepend(el);
     let timer = 0;
     const dropLeaf = () => {

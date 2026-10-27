@@ -1,4 +1,4 @@
-/* Shared manor game presentation. The standalone manor keeps --d=1 in all product density modes. */
+/* Shared manor game presentation. Scene geometry keeps --d=1; UI chrome has a separate readability scale. */
 #app .garden-play :focus, #app .garden-play :focus-visible, #app .garden-play :focus-visible *, #modal button:focus-visible *, #modal button:focus, #modal button:focus-visible { outline:none !important; }
 #modal .level-stop[aria-pressed="true"] {outline:none;border-color:#638b35;box-shadow:none;background:#e8f0c6;color:#47642f;}
 #app .garden-play .garden-backdrop {filter:none;}
@@ -365,15 +365,12 @@ html.light-note-mobile-rendering #modal .fish-detail-art {height:clamp(calc(120p
 
 /* Visual feedback leaves calibrated fixture hit areas and perspective matrices fixed. */
 .garden-scene :is(.scene-facility,.scene-purifier):is(:hover,:active) {transform:none;filter:none;}
-.scene-facility .fixture-art,.scene-purifier .purifier-art {transition:translate .16s ease,filter .16s ease;}
+/* Layout offset repaints the original artwork; fractional transforms/filters rasterized it softly on hover. */
+.scene-facility .fixture-art,.scene-purifier .purifier-art {transition:margin-top .12s ease;}
 @media (hover:hover) and (pointer:fine) {
-  .scene-facility:hover .fixture-art {translate:0 calc(.75px * var(--d));filter:brightness(1.07);}
-  .scene-purifier:hover .purifier-art {translate:-50% calc(.75px * var(--d));filter:brightness(1.07);}
+  .scene-facility:hover .fixture-art,.scene-purifier:hover .purifier-art {margin-top:1px;filter:none;}
 }
-.scene-facility:focus-visible .fixture-art {translate:0 calc(.75px * var(--d));filter:brightness(1.07);}
-.scene-purifier:focus-visible .purifier-art {translate:-50% calc(.75px * var(--d));filter:brightness(1.07);}
-.scene-facility:active .fixture-art {translate:0 calc(.75px * var(--d));filter:brightness(1.02);}
-.scene-purifier:active .purifier-art {translate:-50% calc(.75px * var(--d));filter:brightness(1.02);}
+.scene-facility:is(:focus-visible,:active) .fixture-art,.scene-purifier:is(:focus-visible,:active) .purifier-art {margin-top:1px;filter:none;}
 @media (prefers-reduced-motion:reduce) {
   .scene-facility .fixture-art,.scene-purifier .purifier-art {transition:none;}
 }
@@ -437,3 +434,6 @@ html.light-note-mobile-rendering #modal .fish-detail-art {height:clamp(calc(120p
 }
 .garden-booting #shell,
 .garden-booting #modal { visibility: hidden; }
+
+/* UI chrome uses viewport readability sizing without changing scene, crop or wildlife coordinates. */
+#gameHud,#modal,#tankProduction,#toast,.game-tooltip {--d:var(--game-ui-d,1);}

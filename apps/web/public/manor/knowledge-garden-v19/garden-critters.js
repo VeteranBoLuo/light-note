@@ -69,7 +69,7 @@ const GardenCritters = (() => {
 
   // 麻雀：hop 小跳、peck 啄食、flap 扑翅（飞行时）
   function drawSparrow(ctx, b) {
-    const { lift, peck, flap, flying } = b.pose;
+    const { lift = 0, peck = 0, flap = 0, flying = false } = b.pose;
     shadow(ctx, 0.36 * (flying ? 0.5 : 1), flying ? 0.25 : 0.8);
     ctx.save();
     ctx.translate(0, -lift);

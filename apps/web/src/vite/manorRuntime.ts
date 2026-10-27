@@ -14,7 +14,7 @@ const firstScreenArt = (scene: PreloadScene) => [
   'farm/bed-dry-r55.webp', 'farm/bed-wet-soil-r55.webp',
   'incoming/farm-r2/sprites/icon-sprout.webp', 'incoming/farm-r2/sprites/hand-open.webp',
   ...['backpack', 'shop', 'atlas'].map(key => `incoming/dock-r3/${key}.webp`),
-  ...(scene.area === 'bay' ? [] : ['farm/hive-states-r53.webp']),
+  ...(scene.area === 'bay' ? [] : ['farm/hive-states-r53.webp', 'farm/composter-sealed-r68.webp', 'farm/composter-lv1-r68.webp']),
   ...(scene.area === 'garden' ? [] : [
     'farm/purifier-states-r53.webp', 'farm/purifier-plinth-r53.webp',
     'farm/workshop-states-r53.webp', 'incoming/dock-r3/aquarium.webp',
@@ -119,6 +119,8 @@ export default function manorRuntime(): Plugin {
     const catalog = [...new Set([
       ...[...`${fishArt}${cropArt}`.matchAll(/\b(?:src|href)="(knowledge-garden-v19\/[^"]+)"/g)].map(([, file]) => `/manor/${file}`),
       '/manor/knowledge-garden-v19/farm/wildlife-rabbit-action-3-r14.webp',
+      '/manor/knowledge-garden-v19/farm/composter-residue-r64.webp',
+      ...['lv1','lv2','lv3','sealed'].map(frame=>`/manor/knowledge-garden-v19/farm/composter-${frame}-r68.webp`),
     ])];
     return JSON.stringify({
       catalog,
