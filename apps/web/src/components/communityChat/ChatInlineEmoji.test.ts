@@ -263,7 +263,8 @@ describe('community chat inline emoji', () => {
     await nextTick();
     const richInput = host.querySelector<HTMLElement>('.chat-composer-input__rich');
     expect(richInput?.textContent).toBe(plainValue.replaceAll('\n', ''));
-    expect(richInput?.querySelectorAll('br')).toHaveLength(2);
+    expect(richInput?.querySelectorAll('br:not([data-composer-caret-sentinel="true"])')).toHaveLength(2);
+    expect(richInput?.querySelectorAll('[data-composer-caret-sentinel="true"]')).toHaveLength(1);
     expect(richInput?.scrollHeight).toBe(88);
     expect(richInput?.style.height).toBe('88px');
   });

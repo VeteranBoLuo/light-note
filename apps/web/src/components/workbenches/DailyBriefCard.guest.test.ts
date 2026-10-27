@@ -30,8 +30,12 @@ vi.mock('@/components/base/BasicComponents/BModal/BModal.vue', () => ({
         props.visible ? slots.default?.() : null,
   },
 }));
+vi.mock('@/store', () => ({ useUserStore: () => ({ id: 'owner' }) }));
 vi.mock('@/utils/openBookmark', () => ({ openBookmarkUrl: mocks.open }));
-vi.mock('vue-router', () => ({ useRouter: () => ({ push: mocks.push }) }));
+vi.mock('vue-router', async (importOriginal) => ({
+  ...await importOriginal<typeof import('vue-router')>(),
+  useRouter: () => ({ push: mocks.push }),
+}));
 let cleanup: (() => void) | undefined;
 afterEach(() => {
   cleanup?.();
@@ -553,7 +557,7 @@ it('旧缓存尚未更新时也最多展示一条待办，保留其他报告', a
 
 it.each([
   ['no_value', '暂无需要补充的建议'],
-  ['no_evidence', '暂无可分析的资料正文。'],
+  ['no_evidence', '当前没有需要补充行动建议的事项。'],
   ['deferred', 'AI 建议等待分析。'],
   ['failed', 'AI 建议生成失败'],
 ])('手动检查区分建议状态 %s，状态位于底部 AI 建议区', async (adviceStatus, hint) => {
@@ -583,7 +587,7 @@ it('自动更新等待分析时说明原因，无需先点刷新，显示底部�
 
 it.each([
   ['no_value', '暂无需要补充的建议', 'No additional suggestions needed.'],
-  ['no_evidence', '暂无可分析的资料正文。', 'No readable text available for analysis.'],
+  ['no_evidence', '当前没有需要补充行动建议的事项。', 'No current work needs an additional suggested action.'],
   ['deferred', 'AI 建议等待分析。', 'AI suggestion awaiting analysis.'],
   ['not_evaluated', 'AI 建议尚未分析。', 'AI suggestion not yet analyzed.'],
   ['paused', '今日自动分析已达上限，可手动刷新。', 'Automatic analysis limit reached. Refresh manually.'],
