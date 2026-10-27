@@ -86,11 +86,13 @@
           <BButton
             v-for="action in onboardingActions"
             :key="action.key"
+            type="text"
             size="small"
             :disabled="busy"
             @click="openOnboardingCreate(action.type)"
           >
             {{ t(action.label) }}
+            <SvgIcon :src="icon.ai.sourceArrow" size="13" aria-hidden="true" />
           </BButton>
         </div>
       </aside>
@@ -332,11 +334,13 @@
               <BButton
                 v-for="action in onboardingActions"
                 :key="action.key"
+                type="text"
                 size="small"
                 :disabled="busy"
                 @click="openOnboardingCreate(action.type)"
               >
                 {{ t(action.label) }}
+                <SvgIcon :src="icon.ai.sourceArrow" size="13" aria-hidden="true" />
               </BButton>
             </div>
             <div v-if="displayedAdvice?.recommendationSources?.length" class="daily-brief-insight__sources">
@@ -687,9 +691,6 @@
   }
 
   .daily-brief-card__onboarding-actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--ui-space-8, 8px);
     margin-top: var(--ui-space-8, 8px);
   }
 
@@ -997,7 +998,8 @@
     }
   }
 
-  .daily-brief-insight__organize-actions {
+  .daily-brief-insight__organize-actions,
+  .daily-brief-card__onboarding-actions {
     display: flex;
     flex-wrap: wrap;
     gap: var(--ui-space-4, 4px) var(--ui-space-12, 12px);
