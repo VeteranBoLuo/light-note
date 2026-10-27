@@ -35,6 +35,7 @@
           Boolean(user.visitorWorkspace || user.role === 'visitor' || user.adminContext?.subjectRole === 'visitor')
         "
         :read-only="growthReadOnly"
+        @onboarding-create="openOnboardingCapture"
       />
     </div>
 
@@ -423,6 +424,11 @@
     });
   }
 
+  function openOnboardingCapture(type?: ActionCaptureType) {
+    if (type) runCapture({ type });
+    else openGenericCapture();
+  }
+
   function runCapture(action: { type: ActionCaptureType | null }) {
     if (blockGuestWrite('today-capture', t('inbox.guestPrompt'))) return;
     if (!action.type) return;
@@ -484,7 +490,11 @@
       // 让捕获前的在途快照失效，不能复用旧请求而漏掉刚添加的资源。
       todayRequestId += 1;
       currentTodayRequest = null;
-      void Promise.allSettled([loadToday(), organizer.loadSummary({ silent: true })]);
+      void Promise.allSettled([
+        loadToday(),
+        organizer.loadSummary({ silent: true }),
+        dailyBriefCardRef.value?.refresh(),
+      ]);
     },
   );
 

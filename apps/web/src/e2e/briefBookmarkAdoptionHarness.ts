@@ -1,8 +1,9 @@
-import { createApp, h, ref } from 'vue';
+import { createApp, defineAsyncComponent, h, ref } from 'vue';
 import { createPinia } from 'pinia';
 import { createI18n } from 'vue-i18n';
 import { createMemoryHistory, createRouter } from 'vue-router';
-import { bookmarkStore, useUserStore } from '@/store';
+import { bookmarkStore, inboxStore, useUserStore } from '@/store';
+import type { ActionCaptureType } from '@/store/inbox';
 import DailyBriefCard from '@/components/workbenches/DailyBriefCard.vue';
 import { useUserActivity } from '@/composables/useUserActivity';
 import { densityCssVariables, resolveUiDensity } from '@/config/uiDensity';
@@ -22,6 +23,8 @@ for (const [key, value] of Object.entries(densityCssVariables(resolveUiDensity(p
   document.documentElement.style.setProperty(key, value);
 const pinia = createPinia();
 const user = useUserStore(pinia);
+const inbox = inboxStore(pinia);
+const QuickCaptureModal = defineAsyncComponent(() => import('@/components/inbox/QuickCaptureModal.vue'));
 const isolated = params.get('scenario') === 'release';
 const owner = ref('brief-fixture');
 let refreshed = false;
@@ -103,7 +106,18 @@ const app = createApp({
         ownerKey: owner.value,
         compact: mobile,
         readOnly: Boolean(user.adminContext),
+        onOnboardingCreate: (type?: ActionCaptureType) => inbox.openQuickCapture(type),
       });
+    const capture = () =>
+      inbox.quickCaptureVisible
+        ? h(QuickCaptureModal, {
+            visible: inbox.quickCaptureVisible,
+            'onUpdate:visible': (value: boolean) => {
+              inbox.quickCaptureVisible = value;
+            },
+            onCaptured: () => inbox.notifyCaptured(),
+          })
+        : null;
     return () =>
       isolated
         ? h('main', [
@@ -119,8 +133,9 @@ const app = createApp({
               () => '切换验收账号',
             ),
             card(),
+            capture(),
           ])
-        : card();
+        : [card(), capture()];
   },
 });
 app

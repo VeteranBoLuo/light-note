@@ -82,6 +82,17 @@
       <aside v-if="briefRecommendation" class="daily-brief-card__preview-recommendation">
         <strong>{{ t(recommendationLabelKey) }}</strong>
         <p>{{ briefRecommendation }}</p>
+        <div v-if="showOnboardingActions" class="daily-brief-card__onboarding-actions">
+          <BButton
+            v-for="action in onboardingActions"
+            :key="action.key"
+            size="small"
+            :disabled="busy"
+            @click="openOnboardingCreate(action.type)"
+          >
+            {{ t(action.label) }}
+          </BButton>
+        </div>
       </aside>
       <p v-if="displayBrief && errorMessage" class="daily-brief-card__refresh-error" role="alert">{{ errorMessage }}</p>
       <BButton
@@ -317,6 +328,17 @@
           <strong>{{ t(recommendationLabelKey) }}</strong>
           <div>
             <p>{{ briefRecommendation }}</p>
+            <div v-if="showOnboardingActions" class="daily-brief-card__onboarding-actions">
+              <BButton
+                v-for="action in onboardingActions"
+                :key="action.key"
+                size="small"
+                :disabled="busy"
+                @click="openOnboardingCreate(action.type)"
+              >
+                {{ t(action.label) }}
+              </BButton>
+            </div>
             <div v-if="displayedAdvice?.recommendationSources?.length" class="daily-brief-insight__sources">
               <BButton
                 v-for="source in displayedAdvice?.recommendationSources"
@@ -352,6 +374,8 @@
 
 <script setup lang="ts">
   import { computed, defineComponent, ref, watch } from 'vue';
+  import type { ActionCaptureType } from '@/store/inbox';
+  import { closeCurrentMobileOverlayThen } from '@/utils/mobileOverlayHistory';
   import { useMobileLayout } from '@/composables/useMobileLayout';
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
   import { useI18n } from 'vue-i18n';
@@ -376,6 +400,7 @@
       compact: false,
     },
   );
+  const emit = defineEmits<{ onboardingCreate: [type?: ActionCaptureType] }>();
   defineOptions({ inheritAttrs: false });
   const BriefInline = defineComponent({
     inheritAttrs: false,
@@ -470,6 +495,26 @@
       displayedAdvice.value?.recommendationKind === 'action' &&
       displayedAdvice.value?.recommendationFactIds?.includes('onboarding_empty'),
   );
+  const showOnboardingActions = computed(
+    () => isOnboardingAdvice.value && props.eligible && !readOnly.value && !guestSample.value,
+  );
+  const onboardingActions = [
+    { key: 'collect', label: 'workbench.dailyBrief.onboardingCollect', type: undefined },
+    { key: 'note', label: 'workbench.dailyBrief.onboardingNote', type: 'note' as ActionCaptureType },
+    { key: 'todo', label: 'workbench.dailyBrief.onboardingTodo', type: 'todo' as ActionCaptureType },
+  ];
+  async function openOnboardingCreate(type?: ActionCaptureType) {
+    if (!showOnboardingActions.value) return;
+    const owner = props.ownerKey;
+    const open = () => {
+      if (owner === props.ownerKey && showOnboardingActions.value) emit('onboardingCreate', type);
+    };
+    if (detailsVisible.value) {
+      await closeCurrentMobileOverlayThen(() => {
+        detailsVisible.value = false;
+      }, open);
+    } else open();
+  }
   const briefRecommendation = computed(() => displayedAdvice.value?.recommendation || '');
   const recommendationStale = computed(
     () =>
@@ -628,7 +673,7 @@
 
   .daily-brief-card__summary-copy {
     padding: 0 var(--ui-space-13, 13px) var(--ui-space-12, 12px);
-    :deep(.b_btn) {
+    :deep(.daily-brief-card__view-brief) {
       padding: var(--ui-space-2, 2px) 0;
       color: var(--info-color);
       background: transparent;
@@ -639,6 +684,13 @@
     font-size: var(--ui-font-14, 14px);
     line-height: 1.6;
     overflow-wrap: anywhere;
+  }
+
+  .daily-brief-card__onboarding-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--ui-space-8, 8px);
+    margin-top: var(--ui-space-8, 8px);
   }
 
   .daily-brief-card__preview-recommendation {

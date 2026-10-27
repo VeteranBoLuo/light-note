@@ -97,7 +97,7 @@ const cases = [];
 for (const mobile of [false, true])
   for (const theme of ['day', 'night'])
     for (const density of mobile ? ['standard'] : ['small', 'standard', 'large'])
-      for (const mode of ['mixed', 'priority', 'advice', 'advice-stale', 'advice-failed', 'onboarding'])
+      for (const mode of ['mixed', 'priority', 'advice', 'advice-stale', 'advice-failed', 'onboarding', 'onboarding-readonly'])
         cases.push({ mobile, theme, density, mode, locale: 'zh-CN' });
 for (const mobile of [false, true])
   for (const theme of ['day', 'night']) {
@@ -253,7 +253,7 @@ try {
     if (mode === 'advice' && locale === 'en-US')
       selectedBrief.recommendation =
         'Finish the task due today first, then check and save the workshop result before continuing with organizing.';
-    if (mode === 'onboarding') selectedBrief = {
+    if (mode.startsWith('onboarding')) selectedBrief = {
       ...localizedBrief, insights: [], sections: [], adviceStatus: 'ready',
       headline: locale === 'en-US' ? 'No resources added today, and nothing needs special attention.' : '今天暂无新增资源，也没有需要特别关注的事项。',
       recommendation: locale === 'en-US' ? 'Start by collecting a resource, writing a note, or creating a to-do—one small step to get started with Light Note.' : '可以先收集一份资料、写一篇笔记，或新建一条待办，从一件小事开始使用轻笺。',
@@ -307,7 +307,7 @@ try {
         });
       },
     );
-    const query = new URLSearchParams({ theme, density, locale, ...(mobile ? { renderProfile: 'mobile' } : {}) });
+    const query = new URLSearchParams({ theme, density, locale, ...(mode === 'onboarding-readonly' ? {preview:'1'} : {}), ...(mobile ? { renderProfile: 'mobile' } : {}) });
     await page.goto(`${origin}/e2e/brief-bookmark-adoption.html?${query}`, {
       waitUntil: 'domcontentloaded',
       timeout: 30000,
@@ -317,7 +317,7 @@ try {
     assert(Math.abs((await card.boundingBox()).width - viewportWidth) < 2, '验收卡片必须使用实际视口宽度');
     await page
       .getByText(
-        ['quiet', 'activity', 'no-new-quiet', 'onboarding'].includes(mode) ? data.brief.headline : selectedBrief.insights[0].text,
+        ['quiet', 'activity', 'no-new-quiet', 'onboarding', 'onboarding-readonly'].includes(mode) ? data.brief.headline : selectedBrief.insights[0].text,
         {
           exact: false,
         },
@@ -332,10 +332,26 @@ try {
         .count(),
       selectedBrief.recommendation ? 1 : 0,
     );
-    if (mode === 'onboarding') {
+    if (mode.startsWith('onboarding')) {
       await card.getByText(locale === 'en-US' ? 'Getting started' : '使用引导', { exact: true }).waitFor();
       await card.getByText(selectedBrief.recommendation, { exact: true }).waitFor();
       assert.equal(await card.locator('.daily-brief-card__advice-status').count(), 0);
+      const actions = card.locator('.daily-brief-card__onboarding-actions button');
+      assert.equal(await actions.count(), mode === 'onboarding-readonly' ? 0 : 3);
+      if (mode === 'onboarding') {
+        const names = locale === 'en-US' ? ['Collect resources', 'Write a note', 'New to-do'] : ['收集资料', '写笔记', '新建待办'];
+        for (const [index, type] of ['bookmark', 'note', 'todo'].entries()) {
+          await card.getByRole('button', {name:names[index], exact:true}).click();
+          await page.locator(`.capture-workspace.is-${type}`).waitFor();
+          if (mobile) {
+            await page.waitForFunction(() => Boolean(history.state?.__lnMobileOverlayId));
+            await page.evaluate(() => history.back());
+          } else await page.keyboard.press('Escape');
+          await page.locator('.capture-workspace').waitFor({state:'hidden'});
+          await card.getByRole('button', {name:names[index], exact:true}).waitFor();
+        }
+      }
+
       assert.equal(await card.getByText(locale === 'en-US' ? 'AI suggestion' : 'AI 建议', {exact:true}).count(), 0);
     }
     if (mode === 'restored') {
@@ -352,7 +368,7 @@ try {
         selectedBrief.insights[0].text,
         '移动摘要直接显示失败提醒',
       );
-    if (['quiet', 'activity', 'no-new-quiet', 'onboarding'].includes(mode)) {
+    if (['quiet', 'activity', 'no-new-quiet', 'onboarding', 'onboarding-readonly'].includes(mode)) {
       assert.equal(await page.locator('.daily-brief-insight').count(), 0);
       assert.equal(await page.locator('.daily-brief-card__view-brief').count(), 0);
     } else {
