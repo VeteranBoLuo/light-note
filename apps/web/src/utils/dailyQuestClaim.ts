@@ -30,7 +30,8 @@ export function resolveDailyQuestClaimFeedback(
   // 兼容只有积分实际入账的策略/边界结果，避免报「经验 +0」。
   if (exp <= 0 && points > 0) return { level: 'success', key: 'growth.questClaimOkPointsOnly', params: { p: points } };
   if (points > 0) return { level: 'success', key: 'growth.questClaimOkPts', params: { n: exp, p: points } };
-  return { level: 'success', key: 'growth.questClaimOk', params: { n: exp } };
+  if (exp > 0) return { level: 'success', key: 'growth.questClaimOk', params: { n: exp } };
+  return { level: 'success', key: 'growth.rewardClaimed', params: {} };
 }
 
 /** 操作日志文案(三处入口只有 module 不同,文案本身共用)。 */

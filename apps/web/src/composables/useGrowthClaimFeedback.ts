@@ -37,21 +37,25 @@ export function useGrowthClaimFeedback(claimable: Readonly<Ref<GrowthClaimable |
     const receiptBreakdown = resolveClaimedBreakdown(result.receipts);
     const claimedBreakdown = growthClaimBreakdownTotal(receiptBreakdown) > 0 ? receiptBreakdown : fallback;
     const sources = formatSources(claimedBreakdown);
-    const rewards = {
-      exp: Number(result.exp || 0),
-      points: Number(result.points || 0),
-      frames: Array.isArray(result.frames) ? result.frames.length : 0,
-    };
-    if (sources) {
-      return t(rewards.frames ? 'growth.claimAllSuccessBySourceWithFrames' : 'growth.claimAllSuccessBySource', {
-        sources,
-        ...rewards,
-      });
+    const rewards: string[] = [];
+    for (const [kind, value] of [
+      ['exp', Number(result.exp || 0)],
+      ['points', Number(result.points || 0)],
+      ['frames', Array.isArray(result.frames) ? result.frames.length : 0],
+    ] as const) {
+      if (Number.isFinite(value) && value > 0) rewards.push(t(`growth.claimRewards.${kind}`, { n: value }));
     }
-    return t(rewards.frames ? 'growth.claimAllSuccessWithFrames' : 'growth.claimAllSuccess', {
-      n: Number(result.claimed || 0),
-      ...rewards,
-    });
+    const entries = growthClaimBreakdownEntries(claimedBreakdown);
+    const single = entries.length === 1 && entries[0].count === 1;
+    const summary = single
+      ? t(`growth.claimSingleSources.${entries[0].source}`)
+      : sources
+        ? t('growth.claimAllSuccessBySource', { sources })
+        : t('growth.claimAllSuccess', { n: Number(result.claimed || 0) });
+    const rewardText = rewards.join(t('growth.claimRewardSeparator'));
+    if (!rewardText) return summary;
+    // 批量领取把来源和奖励分行，窄屏不会把最后一个奖励数值挤成孤行。
+    return single ? [summary, rewardText].join(t('growth.claimRewardSeparator')) : `${summary}\n${rewardText}`;
   }
 
   return {
