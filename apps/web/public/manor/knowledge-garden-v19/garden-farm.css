@@ -1968,7 +1968,8 @@ html.light-note-mobile-rendering .game-hud .hud-reset {position:absolute;right:0
 .bait-chest-art {transition:margin-top .12s ease-out;}
 #app .bait-chest:active {transform:none;}
 @media (hover:hover) and (pointer:fine) {
-  #app .bait-chest:is(:hover,:active,:focus-visible) .bait-chest-art {margin-top:calc(1px / var(--stage-s,1));}
+  /* ui-density-fixed: convert one screen pixel of artwork feedback to stage units. */
+  #app .bait-chest:is(:hover,:active) .bait-chest-art {margin-top:calc(1px / var(--stage-s,1));}
 }
 @media (prefers-reduced-motion:reduce) {.bait-chest-art {transition:none;}}
 

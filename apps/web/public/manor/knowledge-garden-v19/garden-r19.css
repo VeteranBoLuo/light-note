@@ -370,7 +370,8 @@ html.light-note-mobile-rendering #modal .fish-detail-art {height:clamp(calc(120p
 @media (hover:hover) and (pointer:fine) {
   .scene-facility:hover .fixture-art,.scene-purifier:hover .purifier-art {margin-top:1px;filter:none;}
 }
-.scene-facility:is(:focus-visible,:active) .fixture-art,.scene-purifier:is(:focus-visible,:active) .purifier-art {margin-top:1px;filter:none;}
+/* ui-density-fixed: one-pixel press feedback on the artwork; restored focus must not press it. */
+.scene-facility:active .fixture-art,.scene-purifier:active .purifier-art {margin-top:1px;filter:none;}
 @media (prefers-reduced-motion:reduce) {
   .scene-facility .fixture-art,.scene-purifier .purifier-art {transition:none;}
 }
