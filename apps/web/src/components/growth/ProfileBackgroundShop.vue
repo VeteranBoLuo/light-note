@@ -115,7 +115,10 @@
   import Alert from '@/components/base/BasicComponents/BModal/Alert';
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
 
-  const props = withDefaults(defineProps<{ readOnly?: boolean; focus?: string }>(), { readOnly: false, focus: '' });
+  const props = withDefaults(defineProps<{ readOnly?: boolean; scrollTarget?: string }>(), {
+    readOnly: false,
+    scrollTarget: '',
+  });
   const emit = defineEmits<{ purchased: [] }>();
   const { t } = useI18n();
   const user = useUserStore();
@@ -240,13 +243,19 @@
     }
   }
   watch(
-    [() => props.focus, () => backgrounds.value.length],
+    [() => props.scrollTarget, () => backgrounds.value.length],
     async () => {
-      if (props.focus !== 'background') return;
+      if (props.scrollTarget !== 'background') return;
       await nextTick();
-      if (!section.value || disposed) return;
+      if (props.scrollTarget !== 'background' || !section.value || disposed) return;
       const container = findVerticalScrollContainer(section.value, document.documentElement);
-      if (container) scrollIntoContainer(container, section.value, 0, 'auto');
+      if (container) {
+        const tabs = container.querySelector<HTMLElement>('.growth-section-tabs');
+        const offset = tabs
+          ? tabs.getBoundingClientRect().height + (parseFloat(getComputedStyle(container).paddingTop) || 0)
+          : 0;
+        scrollIntoContainer(container, section.value, offset, 'auto');
+      }
     },
     { immediate: true },
   );

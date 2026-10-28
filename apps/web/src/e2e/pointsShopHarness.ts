@@ -56,10 +56,11 @@ const fixture: Shop = {
   equippedTitle: null,
   equippedFrame: null,
   equippedBackground: null,
-  protectCards: 2,
+  protectCards: state === 'no-cards' ? 0 : 2,
   purchaseEnabled: state !== 'maintenance',
   isVisitor: state === 'visitor',
   items: [
+    utility('makeup_card', '补签卡', 600, 'makeup_card', ''),
     utility('ai_pack_small', 'AI 轻量加油包', 240, 'ai_pack', '+30 万 tokens · 永久有效'),
     utility('ai_pack', 'AI 加油包', 420, 'ai_pack', '+60 万 tokens · 永久有效'),
     utility('storage_128', '扩容包 128MB', 500, 'storage', '云空间永久 +128MB', 1),
@@ -84,7 +85,8 @@ const growth = () => ({
   name: '探花',
   exp: 5000,
   streak: 7,
-  protectCards: 2,
+  protectCards: fixture.protectCards,
+  makeupDays: [new Date(Date.now() - 86400000).toLocaleDateString('sv-SE').replaceAll('-', '')],
   checkedInToday: true,
   levelStartExp: 4000,
   nextLevelExp: 6000,
@@ -164,11 +166,42 @@ request.defaults.adapter = async (config) => {
     } else data = { ok: false };
   } else if (path.endsWith('/growth/me')) data = growth();
   else if (path.endsWith('/growth/dashboard'))
-    data = { stats: {}, achievements: [], quests: [], timeline: [], questBonus: {}, streakMilestones: [] };
+    data = {
+      stats: {
+        joinDays: 720,
+        totalCheckins: 103,
+        maxStreak: 83,
+        weekExp: 585,
+        bookmarkCount: 263,
+        noteCount: 83,
+        fileCount: 1608,
+        tagCount: 48,
+        completedTodoCount: 44,
+        organizedResourceCount: 177,
+        checkinDays: [],
+      },
+      achievements: [],
+      quests: [],
+      timeline: [],
+      questBonus: {},
+      streakMilestones: [],
+    };
+  else if (path.endsWith('/growth/heatmap'))
+    data = {
+      year: new Date().getFullYear(),
+      availableYears: [new Date().getFullYear()],
+      days: [],
+      summary: { activeDays: 0, longestStreak: 0, weekCount: 0 },
+      timezone: 'Asia/Shanghai',
+    };
   else if (path.endsWith('/growth/preferences')) data = { lowPressureMode: state === 'low-pressure' };
   else if (path.endsWith('/growth/lottery')) data = { freeRemaining: 0 };
   else if (path.endsWith('/growth/ranks')) data = [];
-  else if (path.endsWith('/growth/inventory')) data = { items: [], assets: { points: fixture.points } };
+  else if (path.endsWith('/growth/inventory'))
+    data = {
+      items: [{ id: 'makeup_card', qty: fixture.protectCards, name: '补签卡', desc: '', action: 'makeup' }],
+      assets: { points: fixture.points, aiBonusTokens: 1200000, storageBonusMb: 4096 },
+    };
   return { config, status: 200, statusText: 'OK', headers: {}, data: { status, data } };
 };
 const pinia = createPinia();
@@ -211,6 +244,6 @@ app
     }),
   );
 globalDirect(app);
-await router.push('/growth?section=rewards&reward=shop');
+await router.push(params.get('entry') || '/growth?section=rewards&reward=shop');
 await router.isReady();
 app.mount('#app');

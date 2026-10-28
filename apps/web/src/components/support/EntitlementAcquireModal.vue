@@ -107,7 +107,8 @@
     begin('enter_points');
     navigate({
       path: '/growth',
-      query: { section: 'rewards', reward: 'shop', focus: props.asset },
+      query: { section: 'rewards', reward: 'shop' },
+      hash: `#shop-${props.asset}`,
     });
   }
 

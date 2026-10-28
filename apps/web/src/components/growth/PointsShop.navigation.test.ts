@@ -24,6 +24,11 @@ vi.mock('./PointsGoal.vue', () => ({
   },
 }));
 import PointsShop from './PointsShop.vue';
+import { scrollIntoContainer } from '@/utils/scrolling';
+vi.mock('@/utils/scrolling', () => ({
+  findVerticalScrollContainer: () => document.documentElement,
+  scrollIntoContainer: vi.fn(),
+}));
 let app: ReturnType<typeof createApp>;
 let host: HTMLDivElement;
 async function flush() {
@@ -68,6 +73,7 @@ beforeEach(() => {
     vi.fn(() => ({ matches: false })),
   );
   Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', { configurable: true, value: vi.fn() });
+  vi.mocked(scrollIntoContainer).mockClear();
   state.target = 'storage_2g';
   state.model = {
     shop: ref({
@@ -97,19 +103,29 @@ function locate() {
   [...host.querySelectorAll('button')].find((button) => button.textContent === '定位目标')!.click();
 }
 describe('积分目标商品定位', () => {
-  it.each(['storage', 'ai', 'unknown'])('分类深链 %s 只滚动到对应资产，不触发购买', async (focus) => {
-    state.model.shop.value.items.push(item('ai_pack_small'));
-    await mount({ focus });
-    const focused = [...host.querySelectorAll<HTMLElement>('.ps-item.is-focused')];
-    const expectedId = focus === 'storage' ? 'storage_2g' : focus === 'ai' ? 'ai_pack_small' : null;
-    expect(focused.map((element) => element.dataset.shopItemId)).toEqual(expectedId ? [expectedId] : []);
-    expect(HTMLElement.prototype.scrollIntoView).toHaveBeenCalledTimes(expectedId ? 1 : 0);
-    if (expectedId) expect(vi.mocked(HTMLElement.prototype.scrollIntoView).mock.instances[0]).toBe(focused[0]);
-    expect(state.model.buyItem).not.toHaveBeenCalled();
-  });
+  it.each(['storage', 'ai', 'makeup_card', 'unknown', ''])(
+    '锚点 %s 只滚动到对应资产，不高亮或触发购买',
+    async (scrollTarget) => {
+      state.model.shop.value.items.push(item('ai_pack_small'), item('makeup_card'));
+      await mount({ scrollTarget });
+      const expectedId =
+        scrollTarget === 'storage'
+          ? 'storage_2g'
+          : scrollTarget === 'ai'
+            ? 'ai_pack_small'
+            : scrollTarget === 'makeup_card'
+              ? 'makeup_card'
+              : null;
+      expect(scrollIntoContainer).toHaveBeenCalledTimes(expectedId ? 1 : 0);
+      if (expectedId) expect(vi.mocked(scrollIntoContainer).mock.calls[0][1].dataset.shopItemId).toBe(expectedId);
+      expect(host.querySelector('.is-focused')).toBeNull();
+      expect(document.activeElement?.hasAttribute('data-shop-item-id')).toBe(false);
+      expect(state.model.buyItem).not.toHaveBeenCalled();
+    },
+  );
 
   it('资源商店使用可访问的导航链接，保留当前资产分类', async () => {
-    await mount({ focus: 'storage' });
+    await mount({ scrollTarget: 'storage' });
     expect(host.querySelector<HTMLAnchorElement>('.ps-store-bridge__action')?.getAttribute('href')).toBe(
       '/store?category=storage',
     );
@@ -119,7 +135,8 @@ describe('积分目标商品定位', () => {
     await mount();
     locate();
     await flush();
-    expect((document.activeElement as HTMLElement).dataset.shopItemId).toBe('storage_2g');
+    expect(vi.mocked(scrollIntoContainer).mock.calls.at(-1)?.[1].dataset.shopItemId).toBe('storage_2g');
+    expect(document.activeElement?.hasAttribute('data-shop-item-id')).toBe(false);
     expect(state.model.buyItem).not.toHaveBeenCalled();
   });
   it('头像框目标被筛选隐藏时，恢复全部并定位精确商品', async () => {
@@ -133,7 +150,8 @@ describe('积分目标商品定位', () => {
     state.target = 'frame_rose';
     locate();
     await flush();
-    expect((document.activeElement as HTMLElement).dataset.shopItemId).toBe('frame_rose');
+    expect(vi.mocked(scrollIntoContainer).mock.calls.at(-1)?.[1].dataset.shopItemId).toBe('frame_rose');
+    expect(document.activeElement?.hasAttribute('data-shop-item-id')).toBe(false);
     expect(state.model.buyItem).not.toHaveBeenCalled();
   });
   it('个人背景目标也使用同一定位入口', async () => {
@@ -142,14 +160,15 @@ describe('积分目标商品定位', () => {
     state.model.shop.value.items.push(item('background_mountains'));
     locate();
     await flush();
-    expect((document.activeElement as HTMLElement).dataset.shopItemId).toBe('background_mountains');
+    expect(vi.mocked(scrollIntoContainer).mock.calls.at(-1)?.[1].dataset.shopItemId).toBe('background_mountains');
+    expect(document.activeElement?.hasAttribute('data-shop-item-id')).toBe(false);
     expect(state.model.buyItem).not.toHaveBeenCalled();
   });
   it('管理员只读上下文不会执行目标定位处理', async () => {
     await mount({ readOnly: true });
     locate();
     await flush();
-    expect((document.activeElement as HTMLElement).dataset.shopItemId).not.toBe('storage_2g');
+    expect(scrollIntoContainer).not.toHaveBeenCalled();
     expect(state.model.buyItem).not.toHaveBeenCalled();
   });
 });

@@ -124,9 +124,11 @@
 
       <!-- 补签卡:展示张数和获取说明;补签操作在下方日历 -->
       <div class="gc-protect">
-        <span class="gc-protect-info"
+        <RouterLink
+          class="gc-protect-info"
+          :to="{ path: '/growth', query: { section: 'rewards', reward: 'inventory' } }"
           ><SvgIcon :src="icon.growth.checkin" size="14" /> {{ t('growth.protectCard') }} ×
-          {{ g.protectCards || 0 }}</span
+          {{ g.protectCards || 0 }}</RouterLink
         >
         <span class="gc-protect-hint">{{ t('growth.protectCardHint') }}</span>
       </div>
@@ -146,6 +148,7 @@
       <!-- 所有用户共用顶部签到日历，避免普通用户再多一张独立卡片。 -->
       <SigninCalendar
         v-if="showCalendar"
+        id="growth-checkin"
         class="gc-calendar"
         wide
         :checkin-days="stats?.checkinDays || []"
@@ -176,6 +179,7 @@
 <script setup lang="ts">
   import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
+  import { RouterLink } from 'vue-router';
   import { useGrowth } from '@/composables/useGrowth.ts';
   import RankLadder from '@/components/growth/RankLadder.vue';
   import LevelUpOverlay from '@/components/growth/LevelUpOverlay.vue';
@@ -626,6 +630,15 @@
     align-items: center;
     gap: var(--ui-space-4, 4px);
     font-weight: 600;
+    color: var(--workspace-purple-text);
+    text-decoration: none;
+  }
+  .gc-protect-info:hover {
+    text-decoration: underline;
+  }
+  .gc-protect-info:focus-visible {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 2px;
   }
   .gc-protect-btn {
     margin-left: auto;

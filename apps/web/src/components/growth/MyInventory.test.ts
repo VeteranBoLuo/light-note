@@ -127,12 +127,20 @@ describe('背包内容整合与操作边界', () => {
     const { host, router, click } = await mount();
     await click('去兑换', '.inv-item button');
     await vi.waitFor(() => {
-      expect(router.currentRoute.value.query).toEqual({ section: 'rewards', reward: 'shop', focus: 'makeup_card' });
+      expect(router.currentRoute.value.query).toEqual({ section: 'rewards', reward: 'shop' });
     });
     const makeup = [...host.querySelectorAll<HTMLButtonElement>('.inv-item button')].find(
       (button) => button.textContent?.trim() === '补签',
     )!;
     expect(makeup.disabled).toBe(qty === 0);
+    expect(router.currentRoute.value.hash).toBe('#shop-makeup_card');
+    expect(mocks.state.useProtectCard).not.toHaveBeenCalled();
+  });
+  it('补签入口跳转到签到日历，由用户选择日期后再使用卡片', async () => {
+    const { router, click } = await mount();
+    await click('补签', '.inv-item button');
+    await vi.waitFor(() => expect(router.currentRoute.value.hash).toBe('#growth-checkin'));
+    expect(router.currentRoute.value.query).toEqual({ section: 'overview' });
     expect(mocks.state.useProtectCard).not.toHaveBeenCalled();
   });
   it('直达积分页签时延迟挂载获得记录，页头仍能打开同一个记录视图', async () => {

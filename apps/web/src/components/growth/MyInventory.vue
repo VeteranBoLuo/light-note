@@ -94,7 +94,6 @@
               {{ t('growth.assetExchange') }}
             </BButton>
             <BButton
-              :loading="makingUp"
               :disabled="readOnly || it.qty < 1 || !canMakeup"
               :title="
                 readOnly ? t('growth.adminContextActionUnavailable') : !canMakeup ? t('growth.itemMakeupHint') : ''
@@ -126,7 +125,6 @@
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
-  import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import { recordOperation } from '@/api/commonApi.ts';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon.ts';
@@ -164,8 +162,7 @@
     records.value?.open();
   }
   const readOnly = computed(() => props.readOnly);
-  const { inventory, inventoryLoading, inventoryError, growth, loadInventory, loadDashboard, useItem, useProtectCard } =
-    useGrowth();
+  const { inventory, inventoryError, growth, loadInventory, useItem } = useGrowth();
   const inv = inventory;
   const bookmark = bookmarkStore();
   const records = ref<InstanceType<typeof LotteryRecords> | null>(null);
@@ -175,11 +172,14 @@
   const canMakeup = computed(() => !!makeupDate.value);
 
   const usingId = ref<string | null>(null);
-  const makingUp = ref(false);
 
-  function goToExchange(focus?: string) {
+  function goToExchange(target?: string) {
     if (readOnly.value) return;
-    void router.push({ path: '/growth', query: { section: 'rewards', reward: 'shop', ...(focus ? { focus } : {}) } });
+    void router.push({
+      path: '/growth',
+      query: { section: 'rewards', reward: 'shop' },
+      hash: target ? `#shop-${target}` : '',
+    });
   }
 
   function goToStore(category: 'ai' | 'storage') {
@@ -224,35 +224,8 @@
   }
 
   function onMakeup() {
-    const date = makeupDate.value;
-    if (readOnly.value || makingUp.value || !date) return;
-    Alert.alert({
-      title: t('growth.protectCardConfirmTitle'),
-      content: t('growth.protectCardConfirmContent', { date: formatDate(date) }),
-      onOk: () => performMakeup(date),
-    });
-  }
-
-  async function performMakeup(date: string) {
-    if (readOnly.value) return;
-    makingUp.value = true;
-    try {
-      const res = await useProtectCard(date);
-      if (res?.status === 200 && res.data?.ok) {
-        message.success(t('growth.protectCardOk', { n: res.data.streak }));
-        recordOperation({ module: '成长', operation: '使用补签卡' });
-        await loadDashboard(); // 同步签到日历的逐日高亮与统计
-      } else {
-        message.info(t('growth.protectCardFail'));
-      }
-    } finally {
-      makingUp.value = false;
-    }
-  }
-
-  function formatDate(key: string) {
-    const date = new Date(Number(key.slice(0, 4)), Number(key.slice(4, 6)) - 1, Number(key.slice(6, 8)));
-    return date.toLocaleDateString(locale.value, { year: 'numeric', month: 'long', day: 'numeric' });
+    if (readOnly.value || !canMakeup.value) return;
+    void router.push({ path: '/growth', query: { section: 'overview' }, hash: '#growth-checkin' });
   }
 
   onMounted(loadInventory);

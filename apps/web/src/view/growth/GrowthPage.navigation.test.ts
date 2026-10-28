@@ -62,8 +62,8 @@ vi.mock('@/components/growth/GrowthTimeline.vue', () => ({ default: { render: ()
 vi.mock('@/components/growth/MilestoneLadder.vue', () => ({ default: { render: () => null } }));
 vi.mock('@/components/growth/PointsShop.vue', () => ({
   default: {
-    props: ['focus'],
-    setup: (props: { focus?: string }) => () => h('h2', { 'data-focus': props.focus }, '兑换测试页'),
+    props: ['scrollTarget'],
+    setup: (props: { scrollTarget?: string }) => () => h('h2', { 'data-target': props.scrollTarget }, '兑换测试页'),
   },
 }));
 vi.mock('@/components/growth/LotteryDraw.vue', () => ({ default: { render: () => h('h2', '抽奖测试页') } }));
@@ -183,35 +183,37 @@ describe('成长中心路由导航', () => {
     });
     expect(host.querySelector('.growth-main h2')?.textContent).toBe('背包测试页');
   });
-  it.each(
-    [false, true].flatMap((mobile) => ['makeup_card', 'ai', 'storage'].map((targetFocus) => ({ mobile, targetFocus }))),
-  )('离开兑换后清除 $targetFocus 定位，再次明确跳转仍可定位：移动端 $mobile', async ({ mobile, targetFocus }) => {
-    Object.assign(mocks.bookmark, { isDesktop: !mobile, isMobile: mobile, isCompactLayout: mobile });
-    const { host, router, click } = await mount(
-      `/growth?section=rewards&reward=shop&focus=${targetFocus}&renderProfile=${mobile ? 'mobile' : 'desktop'}`,
-    );
-    const focus = () => host.querySelector('.growth-main h2')?.getAttribute('data-focus');
-    const selectShop = async () => {
-      if (mobile && router.currentRoute.value.query.section !== 'rewards') {
-        click('奖励', 'tab');
+  it.each([false, true].flatMap((mobile) => ['makeup_card', 'ai', 'storage'].map((target) => ({ mobile, target }))))(
+    '离开兑换后清除 $target 定位，再次明确跳转仍可定位：移动端 $mobile',
+    async ({ mobile, target }) => {
+      Object.assign(mocks.bookmark, { isDesktop: !mobile, isMobile: mobile, isCompactLayout: mobile });
+      const { host, router, click } = await mount(
+        `/growth?section=rewards&reward=shop&renderProfile=${mobile ? 'mobile' : 'desktop'}#shop-${target}`,
+      );
+      const scrollTarget = () => host.querySelector('.growth-main h2')?.getAttribute('data-target');
+      const selectShop = async () => {
+        if (mobile && router.currentRoute.value.query.section !== 'rewards') {
+          click('奖励', 'tab');
+          await settle();
+        }
+        click('兑换', mobile ? 'tab' : 'button');
         await settle();
+      };
+      expect(scrollTarget()).toBe(target);
+      for (const destination of ['任务', '成就', '背包', '抽奖']) {
+        click(destination, mobile ? 'tab' : 'button');
+        await settle();
+        expect(router.currentRoute.value.query.focus).toBeUndefined();
+        expect(router.currentRoute.value.hash).toBe('');
+        expect(router.currentRoute.value.query.renderProfile).toBe(mobile ? 'mobile' : 'desktop');
+        await selectShop();
+        expect(scrollTarget()).toBe('');
+        await router.push({ query: router.currentRoute.value.query, hash: `#shop-${target}` });
+        await settle();
+        expect(scrollTarget()).toBe(target);
       }
-      click('兑换', mobile ? 'tab' : 'button');
-      await settle();
-    };
-    expect(focus()).toBe(targetFocus);
-    for (const destination of ['任务', '成就', '背包', '抽奖']) {
-      click(destination, mobile ? 'tab' : 'button');
-      await settle();
-      expect(router.currentRoute.value.query.focus).toBeUndefined();
-      expect(router.currentRoute.value.query.renderProfile).toBe(mobile ? 'mobile' : 'desktop');
-      await selectShop();
-      expect(focus()).toBe('');
-      await router.push({ query: { ...router.currentRoute.value.query, focus: targetFocus } });
-      await settle();
-      expect(focus()).toBe(targetFocus);
-    }
-  });
+    },
+  );
   it('移动端一级和二级页签最终落在所选抽奖，返回仍到来源页', async () => {
     Object.assign(mocks.bookmark, { isDesktop: false, isMobile: true, isCompactLayout: true });
     const { host, router, click } = await mount();

@@ -193,7 +193,7 @@
             </section>
 
             <section v-if="useWideDesktopLayout" id="growth-heatmap" class="growth-panel growth-knowledge-panel">
-              <header class="growth-panel-heading">
+              <header id="growth-checkin" class="growth-panel-heading">
                 <div>
                   <h2>{{ t('growth.knowledgeCheckinTitle') }}</h2>
                   <p>{{ t('growth.knowledgeCheckinSubtitle') }}</p>
@@ -426,7 +426,7 @@
               <PointsShop
                 v-else-if="activeRewardSection === 'shop'"
                 :read-only="isAdminContext"
-                :focus="String(route.query.focus || '')"
+                :scroll-target="route.hash.startsWith('#shop-') ? route.hash.slice(6) : ''"
                 :show-goal="pointsCenterEnabled"
               />
               <LotteryDraw v-else :read-only="isAdminContext" @focus-draw="scrollLotteryToPreferredPosition(true)" />
@@ -477,7 +477,11 @@
   import { useUiDensity } from '@/composables/useUiDensity';
   import { resolveDailyQuestClaimFeedback } from '@/utils/dailyQuestClaim';
   import { resolveDailyQuestRoute, resolveGrowthActionRoute } from '@/utils/growthNavigation';
-  import { scrollIntoContainer, scrollNearestHorizontallyIntoContainer } from '@/utils/scrolling';
+  import {
+    findVerticalScrollContainer,
+    scrollIntoContainer,
+    scrollNearestHorizontallyIntoContainer,
+  } from '@/utils/scrolling';
   import {
     inventoryPointsRoute,
     inventoryTabFromQuery,
@@ -665,7 +669,7 @@
   function sectionForHash(hash: string): GrowthSection | null {
     if (hash === '#growth-tasks') return 'tasks';
     if (hash === '#growth-weekly') return 'tasks';
-    if (hash === '#growth-heatmap') return 'overview';
+    if (hash === '#growth-checkin' || hash === '#growth-heatmap') return 'overview';
     if (hash === '#growth-recap') return growthV2Enabled.value ? 'overview' : 'achievements';
     return null;
   }
@@ -683,6 +687,25 @@
     if (route.hash === '#growth-weekly') taskView.value = 'weekly';
     if (route.hash === '#growth-tasks') taskView.value = 'onboarding';
     await nextTick();
+    if (route.hash !== hash) return;
+    if (hash === '#growth-checkin') {
+      const target = document.getElementById(targetId);
+      if (target) {
+        const container = findVerticalScrollContainer(
+          target,
+          useWideDesktopLayout.value ? growthMainRef.value : growthPageRef.value,
+        );
+        if (container)
+          scrollIntoContainer(
+            container,
+            target,
+            (container.querySelector<HTMLElement>('.growth-section-tabs')?.getBoundingClientRect().height || 0) +
+              (parseFloat(getComputedStyle(container).paddingTop) || 0),
+            window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+          );
+      }
+      return;
+    }
     document
       .getElementById(targetId)
       ?.scrollIntoView({ behavior: 'smooth', block: route.hash === '#growth-weekly' ? 'end' : 'start' });
@@ -793,8 +816,8 @@
       query: {
         ...route.query,
         section,
-        // 定位只属于本次兑换浏览，离开后不能随分区参数带回。
-        focus: section === 'rewards' && reward === 'shop' ? route.query.focus : undefined,
+        // 清理旧版兑换高亮参数；当前入口使用滚动锚点。
+        focus: undefined,
         ...(section === 'rewards'
           ? {
               reward,
@@ -802,7 +825,11 @@
             }
           : {}),
       },
-      hash: sectionForHash(route.hash) === section ? route.hash : '',
+      hash:
+        sectionForHash(route.hash) === section ||
+        (section === 'rewards' && reward === 'shop' && route.hash.startsWith('#shop-'))
+          ? route.hash
+          : '',
     });
   }
 
@@ -1032,10 +1059,7 @@
 
   // 工作台「查看全部成长任务」会带 hash；已在成长页时再进一次不会重挂载（router-view key 固定），
   // 所以同页 hash 变化要单独响应。
-  watch(
-    () => route.hash,
-    () => scrollToHash(),
-  );
+  watch([() => route.hash, () => Boolean(growth.value), useWideDesktopLayout], () => scrollToHash());
 
   watch(
     () => route.query.reward,

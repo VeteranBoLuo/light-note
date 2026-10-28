@@ -67,7 +67,8 @@ describe('永久权益统一获取入口', () => {
     actions[1]?.click();
     expect(mocks.push).toHaveBeenNthCalledWith(1, {
       path: '/growth',
-      query: { section: 'rewards', reward: 'shop', focus: 'ai' },
+      query: { section: 'rewards', reward: 'shop' },
+      hash: '#shop-ai',
     });
     expect(mocks.push).toHaveBeenNthCalledWith(2, { path: '/store', query: { category: 'ai' } });
     expect(mocks.closeCurrentMobileOverlayThen).toHaveBeenCalledTimes(2);
@@ -79,7 +80,8 @@ describe('永久权益统一获取入口', () => {
     actions[1]?.click();
     expect(mocks.push).toHaveBeenNthCalledWith(1, {
       path: '/growth',
-      query: { section: 'rewards', reward: 'shop', focus: 'storage' },
+      query: { section: 'rewards', reward: 'shop' },
+      hash: '#shop-storage',
     });
     expect(mocks.push).toHaveBeenNthCalledWith(2, { path: '/store', query: { category: 'storage' } });
   });

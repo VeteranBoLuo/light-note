@@ -44,7 +44,7 @@
         :level="shop?.level"
         :purchase-enabled="shop?.purchaseEnabled"
         :mobile="bookmark.isMobile"
-        @redeem="focusGoalItem"
+        @redeem="scrollToGoalItem"
       />
 
       <!-- 实用道具 -->
@@ -54,7 +54,6 @@
           v-for="it in consumables"
           :key="it.id"
           class="ps-item ps-consumable-item"
-          :class="{ 'is-focused': isFocused(it) }"
           :data-shop-item-id="it.id"
           tabindex="-1"
         >
@@ -90,7 +89,7 @@
       </div>
 
       <!-- 个人背景与头像框装扮 -->
-      <ProfileBackgroundShop :read-only="readOnly" :focus="focus" @purchased="goalRefreshKey++" />
+      <ProfileBackgroundShop :read-only="readOnly" :scroll-target="scrollTarget" @purchased="goalRefreshKey++" />
 
       <div v-if="frames.length" class="ps-frame-toolbar">
         <div class="ps-section-title">{{ t('growth.shopSectionFrame') }}</div>
@@ -232,9 +231,9 @@
   const { t, te, locale } = useI18n();
   const { dimension } = useUiDensity();
   const router = useRouter();
-  const props = withDefaults(defineProps<{ readOnly?: boolean; focus?: string; showGoal?: boolean }>(), {
+  const props = withDefaults(defineProps<{ readOnly?: boolean; scrollTarget?: string; showGoal?: boolean }>(), {
     readOnly: false,
-    focus: '',
+    scrollTarget: '',
     showGoal: false,
   });
   const goalRefreshKey = ref(0);
@@ -264,7 +263,7 @@
 
   const storeDestination = computed(() => ({
     path: '/store',
-    query: { category: ['ai', 'storage'].includes(props.focus) ? props.focus : 'ai' },
+    query: { category: ['ai', 'storage'].includes(props.scrollTarget) ? props.scrollTarget : 'ai' },
   }));
 
   function formatPoints(value: number | null | undefined) {
@@ -281,12 +280,6 @@
     if (it.id.startsWith('ai_pack')) return 'ai';
     if (it.id.startsWith('storage_')) return 'storage';
     return '';
-  }
-
-  function isFocused(it: ShopItem) {
-    return props.focus === 'makeup_card'
-      ? it.id === 'makeup_card'
-      : ['ai', 'storage'].includes(props.focus) && itemAsset(it) === props.focus;
   }
 
   function hasPurchaseLimit(it: ShopItem) {
@@ -317,13 +310,14 @@
     return hasPurchaseLimit(it) ? t('growth.shopBuyConfirmLimited', params) : t('growth.shopBuyConfirm', params);
   }
 
-  async function focusRequestedAsset() {
-    if (!['ai', 'storage', 'makeup_card'].includes(props.focus)) return;
+  async function scrollToRequestedAsset() {
+    const requested = props.scrollTarget;
+    if (!requested) return;
+    const item = consumables.value.find((it) => it.id === requested || itemAsset(it) === requested);
+    if (!item) return;
     await nextTick();
-    shopRoot.value?.querySelector<HTMLElement>('.ps-item.is-focused')?.scrollIntoView({
-      behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
-      block: 'center',
-    });
+    if (props.scrollTarget !== requested) return;
+    scrollToItem(item.id);
   }
 
   // 名称/描述优先取 i18n(双语),缺失键则回退后端返回的中文名(单一经济事实源仍在后端)
@@ -372,21 +366,30 @@
       : frames.value.filter((it) => it.rarity === activeFrameFilter.value),
   );
 
-  async function focusGoalItem(itemId: string) {
+  async function scrollToGoalItem(itemId: string) {
     if (readOnly.value) return;
     const item = [...(shop.value?.items || []), ...frames.value].find((candidate) => candidate.id === itemId);
     if (!item) return;
     if (frames.value.some((frame) => frame.id === itemId)) activeFrameFilter.value = 'all';
     await nextTick();
+    scrollToItem(itemId);
+  }
+
+  function scrollToItem(itemId: string) {
     const target = Array.from(shopRoot.value?.querySelectorAll<HTMLElement>('[data-shop-item-id]') || []).find(
       (element) => element.dataset.shopItemId === itemId,
     );
     if (!target) return;
-    target.focus({ preventScroll: true });
     const container = findVerticalScrollContainer(target, document.scrollingElement as HTMLElement | null);
     if (container) {
       const behavior = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth';
-      scrollIntoContainer(container, target, dimension(16, 'space'), behavior);
+      const tabs = container.querySelector<HTMLElement>('.growth-section-tabs');
+      const offset = tabs
+        ? tabs.getBoundingClientRect().height +
+          (parseFloat(getComputedStyle(container).paddingTop) || 0) +
+          dimension(16, 'space')
+        : dimension(16, 'space');
+      scrollIntoContainer(container, target, offset, behavior);
     }
   }
 
@@ -571,12 +574,12 @@
 
   onMounted(async () => {
     await loadShop();
-    await focusRequestedAsset();
+    await scrollToRequestedAsset();
   });
 
   watch(
-    () => props.focus,
-    () => void focusRequestedAsset(),
+    () => props.scrollTarget,
+    () => void scrollToRequestedAsset(),
   );
 </script>
 
@@ -585,20 +588,6 @@
     display: flex;
     flex-direction: column;
     gap: var(--ui-space-14, 14px);
-  }
-  .ps-item.is-focused {
-    border-color: var(--primary-color);
-    outline: 2px solid var(--focus-ring-color, var(--primary-color));
-    outline-offset: 2px;
-  }
-  .ps :deep([data-shop-item-id]:focus) {
-    outline: 2px solid var(--primary-color);
-    outline-offset: 2px;
-  }
-  html.light-note-mobile-rendering .ps-item.is-focused {
-    border-color: var(--primary-color);
-    outline-color: var(--primary-color);
-    box-shadow: none;
   }
   .ps-state {
     min-height: var(--ui-layout-180, 180px);
