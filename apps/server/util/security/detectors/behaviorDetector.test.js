@@ -178,6 +178,8 @@ describe('公开 SEO 页面行为检测', () => {
 });
 
 describe('404 扫描行为检测', () => {
+  afterEach(() => vi.useRealTimers());
+
   it('已匹配业务路由的资源缺失不进入扫描器窗口', () => {
     const context = {
       method: 'GET',
@@ -207,5 +209,29 @@ describe('404 扫描行为检测', () => {
         evidenceMessage: '同一 IP 5 分钟内产生 21 次 404',
       }),
     ]);
+  });
+
+  it('旧404陆续过期、计数持续等于阈值加一时不会重复告警，窗口恢复后可再次告警', () => {
+    vi.useFakeTimers();
+    const context = {
+      method: 'GET',
+      path: '/unknown-probe',
+      sourceIp: 'sustained-404-window-test',
+      routeMatched: false,
+    };
+    const events = [];
+    // 每15秒一次使5分钟滑窗稳定保持21次，不能把每次21都视作首次越线。
+    for (let index = 0; index < 50; index++) {
+      events.push(...detectResponseBehavior(context, 404));
+      vi.advanceTimersByTime(15_000);
+    }
+    expect(events).toEqual([expect.objectContaining({ ruleCode: 'SCANNER_404_PATTERN' })]);
+
+    vi.advanceTimersByTime(5 * 60 * 1000 + 1);
+    const nextWindow = [];
+    for (let index = 0; index < SECURITY_CONFIG.scanner404FiveMinutes + 1; index++) {
+      nextWindow.push(...detectResponseBehavior(context, 404));
+    }
+    expect(nextWindow).toEqual([expect.objectContaining({ ruleCode: 'SCANNER_404_PATTERN' })]);
   });
 });

@@ -39,12 +39,17 @@ function getTransport(url) {
   throw new Error('INVALID_FAVICON_API_BASE_URL');
 }
 
-function requestFaviconApi(url, { maxBytes = MAX_FAVICON_API_RESPONSE_BYTES } = {}) {
+function requestFaviconApi(
+  url,
+  { maxBytes = MAX_FAVICON_API_RESPONSE_BYTES, timeoutMs = FAVICON_API_TIMEOUT_MS } = {},
+) {
   return new Promise((resolve) => {
     let settled = false;
+    let timer;
     const finish = (value) => {
       if (settled) return;
       settled = true;
+      clearTimeout(timer);
       resolve(value);
     };
 
@@ -54,7 +59,7 @@ function requestFaviconApi(url, { maxBytes = MAX_FAVICON_API_RESPONSE_BYTES } = 
     } catch {
       finish({
         ok: false,
-        errorCode: 'INTERNAL_ERROR',
+        errorCode: 'SERVICE_PROTOCOL_ERROR',
         retryable: true,
         durationMs: 0,
       });
@@ -73,7 +78,7 @@ function requestFaviconApi(url, { maxBytes = MAX_FAVICON_API_RESPONSE_BYTES } = 
           finish({
             ok: false,
             statusCode: response.statusCode,
-            errorCode: 'UPSTREAM_ERROR',
+            errorCode: 'SERVICE_PROTOCOL_ERROR',
             retryable: true,
             durationMs: Date.now() - start,
           });
@@ -94,7 +99,7 @@ function requestFaviconApi(url, { maxBytes = MAX_FAVICON_API_RESPONSE_BYTES } = 
         finish({
           ok: false,
           statusCode: response.statusCode,
-          errorCode: 'UPSTREAM_ERROR',
+          errorCode: 'SERVICE_UNAVAILABLE',
           retryable: true,
           durationMs: Date.now() - start,
         });
@@ -104,20 +109,21 @@ function requestFaviconApi(url, { maxBytes = MAX_FAVICON_API_RESPONSE_BYTES } = 
     request.on('error', () => {
       finish({
         ok: false,
-        errorCode: 'UPSTREAM_ERROR',
+        errorCode: 'SERVICE_UNAVAILABLE',
         retryable: true,
         durationMs: Date.now() - start,
       });
     });
-    request.setTimeout(FAVICON_API_TIMEOUT_MS, () => {
+    // Bound the whole request, including agent queueing and a slowly streamed body.
+    timer = setTimeout(() => {
       request.destroy();
       finish({
         ok: false,
-        errorCode: 'UPSTREAM_TIMEOUT',
+        errorCode: 'SERVICE_TIMEOUT',
         retryable: true,
         durationMs: Date.now() - start,
       });
-    });
+    }, timeoutMs);
   });
 }
 
@@ -127,12 +133,13 @@ function requestFaviconApi(url, { maxBytes = MAX_FAVICON_API_RESPONSE_BYTES } = 
  * @param {string} domainOrUrl - 需要获取图标的域名或完整 URL
  * @returns {Promise<{ok:boolean, buffer?:Buffer, contentType?:string, sourceType?:string, errorCode?:string, retryable?:boolean, durationMs?:number}>}
  */
-export async function fetchFaviconFromApi(domainOrUrl) {
+export async function fetchFaviconFromApi(domainOrUrl, { baseUrl = FAVICON_API_BASE_URL, timeoutMs } = {}) {
   const response = await requestFaviconApi(
-    buildFaviconApiUrl('', FAVICON_API_BASE_URL, {
+    buildFaviconApiUrl('', baseUrl, {
       url: domainOrUrl,
       preview: 1,
     }),
+    { timeoutMs },
   );
   if (!response.ok) return response;
 
@@ -140,7 +147,7 @@ export async function fetchFaviconFromApi(domainOrUrl) {
   const xCache = response.headers?.['x-favicon-cache'] || '';
   const xSourceType = response.headers?.['x-favicon-source-type'] || '';
   const xDuration = response.headers?.['x-favicon-duration-ms'] || '';
-  if (response.statusCode === 200 && contentType.startsWith('image/')) {
+  if (response.statusCode === 200 && contentType.startsWith('image/') && response.buffer.length > 0) {
     return {
       ok: true,
       buffer: response.buffer,
@@ -154,18 +161,20 @@ export async function fetchFaviconFromApi(domainOrUrl) {
 
   try {
     const body = JSON.parse(response.buffer.toString('utf8'));
+    const supported = isRetryableError(body.code) || isPermanentError(body.code);
+    if (!supported || response.statusCode < 400) throw new Error('Invalid favicon service response');
     return {
       ok: false,
       statusCode: response.statusCode,
-      errorCode: body.code || 'INTERNAL_ERROR',
-      retryable: body.retryable !== false,
+      errorCode: body.code,
+      retryable: isRetryableError(body.code),
       durationMs: response.durationMs,
     };
   } catch {
     return {
       ok: false,
       statusCode: response.statusCode,
-      errorCode: 'UPSTREAM_ERROR',
+      errorCode: 'SERVICE_PROTOCOL_ERROR',
       retryable: true,
       durationMs: response.durationMs,
     };
@@ -209,7 +218,16 @@ export function normalizeOrigin(rawUrl) {
  * 判断 favicon-api 返回的错误码是否可重试
  */
 export function isRetryableError(errorCode) {
-  const retryableCodes = ['DNS_ERROR', 'UPSTREAM_TIMEOUT', 'UPSTREAM_ERROR', 'QUEUE_FULL', 'INTERNAL_ERROR'];
+  const retryableCodes = [
+    'DNS_ERROR',
+    'UPSTREAM_TIMEOUT',
+    'UPSTREAM_ERROR',
+    'QUEUE_FULL',
+    'INTERNAL_ERROR',
+    'SERVICE_UNAVAILABLE',
+    'SERVICE_TIMEOUT',
+    'SERVICE_PROTOCOL_ERROR',
+  ];
   return retryableCodes.includes(errorCode);
 }
 
@@ -217,6 +235,12 @@ export function isRetryableError(errorCode) {
  * 判断 favicon-api 返回的错误码是否永久性（不值得重试）
  */
 export function isPermanentError(errorCode) {
-  const permanentCodes = ['INVALID_URL', 'PRIVATE_ADDRESS'];
+  const permanentCodes = ['INVALID_URL', 'PRIVATE_ADDRESS', 'ICON_NOT_FOUND'];
   return permanentCodes.includes(errorCode);
+}
+
+// Exhausting remote discovery means “temporarily no icon”, not a broken Worker.
+// Preserve the error code and allow the existing explicit not_found retry path.
+export function isExternalFaviconError(errorCode) {
+  return ['DNS_ERROR', 'UPSTREAM_TIMEOUT', 'UPSTREAM_ERROR'].includes(errorCode);
 }

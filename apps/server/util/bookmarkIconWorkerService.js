@@ -7,7 +7,13 @@
 
 import { createHash } from 'crypto';
 import pool from '../db/index.js';
-import { fetchFaviconFromApi, normalizeOrigin, isRetryableError } from './bookmarkIconClient.js';
+import {
+  fetchFaviconFromApi,
+  normalizeOrigin,
+  isRetryableError,
+  isPermanentError,
+  isExternalFaviconError,
+} from './bookmarkIconClient.js';
 import { cleanupBookmarkIconFiles, cleanupPreviousBookmarkIcon, saveIconToDisk } from './bookmarkIconService.js';
 
 const MAX_ATTEMPTS = parseInt(process.env.BOOKMARK_ICON_MAX_ATTEMPTS || '4', 10);
@@ -322,14 +328,25 @@ export async function updateTaskResult(task, fetchResult, workerId) {
   const nextAttempt = attempts + 1;
 
   if (!isRetryableError(errorCode)) {
-    // 不可重试——标记终态
-    await terminalJob(id, bookmark_id, user_id, url_hash, 'not_found', errorCode, nextAttempt, workerId);
+    // Only explicit discovery/security results are normal “not found” outcomes.
+    // An unknown service error must remain visible for operator investigation.
+    await terminalJob(
+      id,
+      bookmark_id,
+      user_id,
+      url_hash,
+      isPermanentError(errorCode) ? 'not_found' : 'failed',
+      errorCode,
+      nextAttempt,
+      workerId,
+    );
     return;
   }
 
   // retryable
   if (nextAttempt >= MAX_ATTEMPTS) {
-    await terminalJob(id, bookmark_id, user_id, url_hash, 'failed', errorCode, nextAttempt, workerId);
+    const status = isExternalFaviconError(errorCode) ? 'not_found' : 'failed';
+    await terminalJob(id, bookmark_id, user_id, url_hash, status, errorCode, nextAttempt, workerId);
     return;
   }
 

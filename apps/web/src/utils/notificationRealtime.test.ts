@@ -109,6 +109,60 @@ describe('foreground notification runtime', () => {
     vi.restoreAllMocks();
   });
 
+  it.each([404, 405, 501])('stops reconnecting an unsupported stream (HTTP %s) while retaining polling', async (status) => {
+    const fetchMock = vi.fn(async () => new Response(null, { status }));
+    vi.stubGlobal('fetch', fetchMock);
+    const onChange = vi.fn();
+    stop = createNotificationRealtime({ onChange });
+    await vi.advanceTimersByTimeAsync(300);
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(onChange).toHaveBeenCalledOnce();
+
+    for (let index = 0; index < 3; index++) {
+      await vi.advanceTimersByTimeAsync(120_000);
+      window.dispatchEvent(new Event('online'));
+      document.dispatchEvent(new Event('visibilitychange'));
+      await vi.advanceTimersByTimeAsync(300);
+    }
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(onChange.mock.calls.length).toBeGreaterThanOrEqual(4);
+
+    Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' });
+    document.dispatchEvent(new Event('visibilitychange'));
+    const callsBeforeHidden = onChange.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(onChange).toHaveBeenCalledTimes(callsBeforeHidden);
+    Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' });
+    document.dispatchEvent(new Event('visibilitychange'));
+    await vi.advanceTimersByTimeAsync(300);
+    expect(onChange).toHaveBeenCalledTimes(callsBeforeHidden + 1);
+    expect(fetchMock).toHaveBeenCalledOnce();
+
+    stop();
+    expect(vi.getTimerCount()).toBe(0);
+    // A new account/runtime (or a reloaded page) may use an updated backend.
+    stop = createNotificationRealtime({ onChange });
+    await vi.advanceTimersByTimeAsync(300);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([429, 500, 502, 503])('retries transient HTTP %s failures and recovers the stream', async (status) => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(null, { status }))
+      .mockResolvedValueOnce(new Response(new ReadableStream(), { headers: { 'content-type': 'text/event-stream' } }));
+    vi.stubGlobal('fetch', fetchMock);
+    vi.spyOn(Math, 'random').mockReturnValue(0);
+    stop = createNotificationRealtime({ onChange: vi.fn() });
+    try {
+      await vi.advanceTimersByTimeAsync(2_000);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.restoreAllMocks();
+    }
+  });
+
   it('uses polling only for preview contexts without attempting a stream', async () => {
     const read = vi.fn(),
       onChange = vi.fn();
