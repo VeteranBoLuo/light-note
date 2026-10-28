@@ -218,6 +218,7 @@ async function run(config) {
         '--safebrowsing-disable-auto-update',
       ],
     });
+    if (config.runtimeProbe === true) return { ok: true, uid: process.getuid?.() ?? null };
     currentStage = 'context_create';
     const context = await browser.newContext({
       acceptDownloads: false,

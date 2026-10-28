@@ -6,12 +6,13 @@
  */
 
 import { accessSync, constants as fsConstants, existsSync } from 'node:fs';
-import { chown, mkdtemp, rm } from 'node:fs/promises';
+import { chmod, chown, mkdir, mkdtemp, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { validatePublicWebUrl } from './webUrlSafety.js';
+import { prepareWebPageRendererRuntime } from './webPageRendererRuntime.js';
 
 const RUNNER_PATH = fileURLToPath(new URL('./webPageRendererRunner.js', import.meta.url));
 const DEFAULT_TIMEOUT_MS = 18_000;
@@ -173,7 +174,14 @@ function sanitizedChildEnvironment(home) {
 
 export async function renderWebPage(
   rawUrl,
-  { signal, timeout = DEFAULT_TIMEOUT_MS, bodyLimit = 2_000, maxRequests = 80, profile = 'desktop' } = {},
+  {
+    signal,
+    timeout = DEFAULT_TIMEOUT_MS,
+    bodyLimit = 2_000,
+    maxRequests = 80,
+    profile = 'desktop',
+    runtimeProbe = false,
+  } = {},
 ) {
   if (signal?.aborted) throw abortError();
   if (!enabledByEnvironment()) return { ok: false, reason: 'RENDERER_DISABLED' };
@@ -190,13 +198,24 @@ export async function renderWebPage(
 
   const identity = rendererIdentity();
   const renderTimeout = boundedInteger(timeout, DEFAULT_TIMEOUT_MS, 3_000, MAX_TIMEOUT_MS);
+  let temporaryRoot = '';
   let temporaryHome = '';
   let child;
   try {
-    temporaryHome = await mkdtemp(path.join(os.tmpdir(), 'light-note-web-render-'));
-    if (identity.uid !== undefined) await chown(temporaryHome, identity.uid, identity.gid);
-    child = spawn(process.execPath, [RUNNER_PATH], {
-      cwd: path.dirname(RUNNER_PATH),
+    temporaryRoot = await mkdtemp(path.join(os.tmpdir(), 'light-note-web-render-'));
+    temporaryHome = temporaryRoot;
+    let runnerPath = RUNNER_PATH;
+    if (identity.uid !== undefined) {
+      runnerPath = await prepareWebPageRendererRuntime(temporaryRoot);
+      temporaryHome = path.join(temporaryRoot, 'home');
+      await mkdir(temporaryHome, { mode: 0o700 });
+      await chown(temporaryHome, identity.uid, identity.gid);
+      // 只允许穿越父目录；不改变后端部署目录、凭据或依赖的原始权限。
+      await chmod(temporaryRoot, 0o711);
+    }
+    if (signal?.aborted) throw abortError();
+    child = spawn(process.execPath, [runnerPath], {
+      cwd: temporaryHome,
       detached: process.platform !== 'win32',
       env: sanitizedChildEnvironment(temporaryHome),
       stdio: ['pipe', 'pipe', 'pipe'],
@@ -272,14 +291,18 @@ export async function renderWebPage(
           maxRequests: boundedInteger(maxRequests, 80, 10, 150),
           profile: profile === 'mobile' ? 'mobile' : 'desktop',
           diagnostics: process.env.WEB_PAGE_RENDERER_DIAGNOSTICS === '1',
+          runtimeProbe: runtimeProbe === true,
         }),
       );
     });
     return result;
+  } catch (error) {
+    if (signal?.aborted || error?.name === 'AbortError') throw error;
+    return { ok: false, reason: 'RENDERER_FAILED', stage: 'runtime_prepare', childCode: String(error?.code || '') };
   } finally {
     terminateProcessGroup(child, 'SIGTERM');
-    if (temporaryHome && existsSync(temporaryHome)) {
-      await rm(temporaryHome, { recursive: true, force: true }).catch(() => {});
+    if (temporaryRoot && existsSync(temporaryRoot)) {
+      await rm(temporaryRoot, { recursive: true, force: true }).catch(() => {});
     }
     release();
   }

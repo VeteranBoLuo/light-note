@@ -1,5 +1,5 @@
 import 'playwright-core';
-import { getWebPageRendererRuntimeState } from '../util/webPageRenderer.js';
+import { getWebPageRendererRuntimeState, renderWebPage } from '../util/webPageRenderer.js';
 
 const state = getWebPageRendererRuntimeState();
 if (!state.enabled) {
@@ -14,6 +14,15 @@ if (!state.executablePath) {
 }
 if (typeof process.getuid === 'function' && process.getuid() === 0 && !state.identity.uid) {
   console.error('[web-renderer-check] root backend must configure a non-root renderer uid/gid');
+  process.exit(1);
+}
+const probe = await renderWebPage('https://example.com/', { runtimeProbe: true, timeout: 10_000 });
+if (!probe.ok || probe.uid === 0 || (state.identity.uid !== undefined && probe.uid !== state.identity.uid)) {
+  console.error(
+    '[web-renderer-check] low-privilege browser startup failed reason=%s stage=%s',
+    probe.reason || 'INSECURE_IDENTITY',
+    probe.stage || 'unknown',
+  );
   process.exit(1);
 }
 console.log(
