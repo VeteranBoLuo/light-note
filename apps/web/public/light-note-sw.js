@@ -34,6 +34,16 @@ self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
 
   const requestUrl = new URL(event.request.url);
+  if (
+    requestUrl.origin === self.location.origin &&
+    requestUrl.pathname.startsWith('/manor/') &&
+    event.request.mode !== 'navigate'
+  ) {
+    // Forward public manor subresources explicitly. In WebKit, falling through
+    // a controlling fetch handler can bypass the HTTP cache on iframe reloads.
+    event.respondWith(fetch(event.request));
+    return;
+  }
   if (requestUrl.origin === self.location.origin && OFFLINE_STATIC_PATHS.has(requestUrl.pathname)) {
     event.respondWith(
       (async () => {

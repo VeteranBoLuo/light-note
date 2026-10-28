@@ -385,6 +385,12 @@
 
 ## 浏览器扩展与构建
 
+### 庄园素材在 Service Worker 中显式转发
+
+**约束：** 同源 `/manor/` 静态子资源通过 `event.respondWith(fetch(event.request))` 显式转发，保留原 Request 的缓存与凭据模式。Safari 的受控 iframe 在 fetch 事件直接返回、未调用 `respondWith` 时可能绕过 HTTP 缓存，即使响应带长期缓存头也会重复下载。页面导航、离线图标和私有 API 保持各自处理边界，不把账号响应放入素材缓存。
+
+**验收：** 在真实 Safari 且 Service Worker 已控制页面的环境中，覆盖首次加载、再次入场与整页刷新，核对实际图片传输字节；无 Service Worker 的独立页或仅检查缓存头不能替代验收。回归 Chrome、导航预加载、离线图标和推送通知。
+
 ### Side Panel 权限与页面草稿绑定当前实例
 
 **约束：** `activeTab` 是一次性用户手势授权，固定 Side Panel 不能长期依赖它；需要持续读取时使用明确 host 权限或要求用户重新触发。持久草稿按窗口/标签页实例隔离，不能复用另一页面的标题和 URL。跨异步边界前完成必须依赖点击手势的 `sidePanel.open()`。（原 LN-PIT-169、172、174）
