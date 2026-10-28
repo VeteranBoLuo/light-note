@@ -227,6 +227,51 @@ describe('今日简报前台调度', () => {
     expect(manual).toHaveBeenCalledTimes(1);
     expect(model.state.value).toMatchObject({ pauseReason: 'quota', brief: { headline: '上一版' } });
   });
+  it('后台检查期间的手动更新排队执行，同批点击只发一次手动请求', async () => {
+    let release!: (value: any) => void;
+    const failed = { ...initial(), brief: { ...initial().brief!, adviceStatus: 'failed' as const } };
+    get.mockResolvedValue(ok(failed));
+    const { model } = mount();
+    await settle();
+    get.mockReturnValueOnce(
+      new Promise((resolve) => {
+        release = resolve;
+      }) as any,
+    );
+    const background = model.refresh();
+    expect(model.loading.value || model.updating.value).toBe(false);
+    const first = model.update();
+    const second = model.update();
+    expect(second).toBe(first);
+    expect(manual).not.toHaveBeenCalled();
+    release(ok(failed));
+    await Promise.all([background, first]);
+    expect(manual).toHaveBeenCalledTimes(1);
+    expect(model.state.value?.brief?.adviceStatus).not.toBe('failed');
+  });
+  it.each(['owner', 'hidden', 'unmount', 'passive'])('排队手动更新不会越过目标或生命周期变化：%s', async (change) => {
+    let release!: (value: any) => void;
+    const { model, ownerKey, passive } = mount();
+    await settle();
+    get.mockReturnValueOnce(
+      new Promise((resolve) => {
+        release = resolve;
+      }) as any,
+    );
+    void model.refresh();
+    const pending = model.update();
+    if (change === 'owner') ownerKey.value = 'user-2';
+    if (change === 'hidden') visibility('hidden');
+    if (change === 'passive') passive.value = true;
+    if (change === 'unmount') {
+      dispose?.();
+      dispose = undefined;
+    }
+    await nextTick();
+    release(ok(initial()));
+    await pending;
+    expect(manual).not.toHaveBeenCalled();
+  });
 
   it('手动检查无变化时明确反馈已最新，后台检查与过期结果不冒充已最新', async () => {
     const { model } = mount();

@@ -1,6 +1,7 @@
 import {
   ADVICE_POLICY_VERSION,
   MIN_SAFE_ADVICE_POLICY_VERSION,
+  DAILY_BRIEF_OUTPUT_ERROR_CODES,
   adviceContext,
   adviceModelSignals,
   resolveAdvice,
@@ -177,6 +178,16 @@ export async function updateDailyBriefPreference(database = pool, userId, enable
 }
 
 const compileFacts = compileDailyBriefFacts;
+function validAdviceProposal(proposal, signals) {
+  if (proposal === undefined) return false;
+  try {
+    resolveAdvice(proposal, signals);
+    return true;
+  } catch (error) {
+    if (!Object.hasOwn(DAILY_BRIEF_OUTPUT_ERROR_CODES, error.message)) throw error;
+    return false;
+  }
+}
 const BRIEF_RESOURCE_NAMES = {
   bookmark: ['书签', 'bookmarks'],
   note: ['笔记', 'notes'],
@@ -613,7 +624,20 @@ async function generateDailyBriefForActiveUser(
     );
     previousBrief = currentAdviceProjection(parseJson(previousRows[0]?.briefJson));
   }
-  const cachedAdvice = Boolean(advice.key && previousBrief?.adviceKey === advice.key);
+  const cacheKeyMatches = Boolean(advice.key && previousBrief?.adviceKey === advice.key);
+  const cachedAdvice = cacheKeyMatches && validAdviceProposal(previousBrief.adviceProposal, advice.signals);
+  if (cacheKeyMatches && !cachedAdvice) {
+    previousBrief = { ...previousBrief, recommendation: '', adviceStatus: 'not_evaluated' };
+    for (const key of [
+      'adviceKey',
+      'adviceProposal',
+      'recommendationKind',
+      'recommendationFactIds',
+      'recommendationSources',
+      'lastAdviceResult',
+    ])
+      delete previousBrief[key];
+  }
   const cachedNarrative = cachedAdvice ? { adviceKey: advice.key, adviceProposal: previousBrief.adviceProposal } : null;
   const interval =
     refresh || needsAdviceResultRecovery(previousBrief)
@@ -721,8 +745,9 @@ async function generateDailyBriefForActiveUser(
     const lastResult =
       !isFixedGuide &&
       (!candidateResult?.recommendation ||
-        ((candidateResult.recommendationFactIds || []).every((id) =>
-          advice.signals.some((signal) => signal.id === id),
+        (validAdviceProposal(
+          { factIds: candidateResult.recommendationFactIds, action: candidateResult.recommendation },
+          advice.signals,
         ) &&
           (candidateResult.recommendationSources || []).every((source) =>
             advice.signals.some((signal) =>
@@ -786,7 +811,7 @@ async function generateDailyBriefForActiveUser(
                 (!Object.hasOwn(response.result, 'recommendation') || response.result.recommendation === undefined)
               ) {
                 throw Object.assign(new Error('Missing advice decision'), {
-                  code: 'AI_SKILL_DAILY_BRIEF_OUTPUT_INVALID',
+                  code: DAILY_BRIEF_OUTPUT_ERROR_CODES.ADVICE_DECISION_MISSING,
                   details: { reason: 'ADVICE_DECISION_MISSING' },
                 });
               }
@@ -804,9 +829,11 @@ async function generateDailyBriefForActiveUser(
         // 模型失败不挡住行动事实；持久化/租约失败仍必须作为失败返回，不能覆盖迟到产物。
         if (deliveryAttempted || String(error?.code || '').startsWith('DAILY_BRIEF_')) throw error;
         adviceFailed = Boolean(modelSignals.length);
-        adviceFailureCode = /^AI_QUOTA_(EXCEEDED|INSUFFICIENT_FOR_REQUEST)$/.test(error?.code || '')
-          ? error.code
-          : 'AI_ADVICE_GENERATION_FAILED';
+        adviceFailureCode =
+          /^AI_QUOTA_(EXCEEDED|INSUFFICIENT_FOR_REQUEST)$/.test(error?.code || '') ||
+          Object.values(DAILY_BRIEF_OUTPUT_ERROR_CODES).includes(error?.code)
+            ? error.code
+            : 'AI_ADVICE_GENERATION_FAILED';
         const reason = error?.details?.reason;
         adviceFailureReason = [
           'ADVICE_SHAPE',

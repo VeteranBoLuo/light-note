@@ -97,7 +97,19 @@ const cases = [];
 for (const mobile of [false, true])
   for (const theme of ['day', 'night'])
     for (const density of mobile ? ['standard'] : ['small', 'standard', 'large'])
-      for (const mode of ['mixed', 'priority', 'advice', 'advice-stale', 'advice-failed', 'onboarding', 'onboarding-readonly'])
+      for (const mode of [
+        'mixed',
+        'priority',
+        'advice',
+        'advice-stale',
+        'advice-failed',
+        'advice-retry',
+        'advice-quota-exhausted',
+        'advice-quota-insufficient',
+        'advice-quota-readonly',
+        'onboarding',
+        'onboarding-readonly',
+      ])
         cases.push({ mobile, theme, density, mode, locale: 'zh-CN' });
 for (const mobile of [false, true])
   for (const theme of ['day', 'night']) {
@@ -113,6 +125,8 @@ for (const mobile of [false, true])
     cases.push({ mobile, theme, density: 'standard', mode: 'priority', locale: 'en-US' });
     cases.push({ mobile, theme, density: 'standard', mode: 'advice', locale: 'en-US' });
     cases.push({ mobile, theme, density: 'standard', mode: 'onboarding', locale: 'en-US' });
+    for (const mode of ['advice-quota-exhausted', 'advice-quota-insufficient', 'advice-quota-readonly'])
+      cases.push({ mobile, theme, density: 'standard', mode, locale: 'en-US' });
   }
 for (const mobile of [false, true]) {
   cases.push({ mobile, theme: 'day', density: 'standard', mode: 'quiet', locale: 'zh-CN' });
@@ -244,29 +258,57 @@ try {
     if (mode === 'advice' || mode === 'advice-stale')
       selectedBrief = {
         ...localizedBrief,
-        recommendation:
-          '先完成今天到期的待办，再查看并保存工坊已经生成的成果，之后继续处理整理事项。',
+        recommendation: '先完成今天到期的待办，再查看并保存工坊已经生成的成果，之后继续处理整理事项。',
         recommendationKind: 'ai',
-        recommendationFactIds: ['todo_due_today','workshop_result'],
+        recommendationFactIds: ['todo_due_today', 'workshop_result'],
         recommendationSources: [{ type: 'toolbox_task', id: 'report', title: '选型报告' }],
       };
     if (mode === 'advice' && locale === 'en-US')
       selectedBrief.recommendation =
         'Finish the task due today first, then check and save the workshop result before continuing with organizing.';
-    if (mode.startsWith('onboarding')) selectedBrief = {
-      ...localizedBrief, insights: [], sections: [], adviceStatus: 'ready',
-      headline: locale === 'en-US' ? 'No resources added today, and nothing needs special attention.' : '今天暂无新增资源，也没有需要特别关注的事项。',
-      recommendation: locale === 'en-US' ? 'Start by collecting a resource, writing a note, or creating a to-do—one small step to get started with Light Note.' : '可以先收集一份资料、写一篇笔记，或新建一条待办，从一件小事开始使用轻笺。',
-      recommendationKind: 'action', recommendationFactIds: ['onboarding_empty'], recommendationSources: [],
-    };
-    if (mode === 'advice-failed') selectedBrief = { ...localizedBrief, adviceStatus: 'failed', recommendation: '' };
+    if (mode.startsWith('onboarding'))
+      selectedBrief = {
+        ...localizedBrief,
+        insights: [],
+        sections: [],
+        adviceStatus: 'ready',
+        headline:
+          locale === 'en-US'
+            ? 'No resources added today, and nothing needs special attention.'
+            : '今天暂无新增资源，也没有需要特别关注的事项。',
+        recommendation:
+          locale === 'en-US'
+            ? 'Start by collecting a resource, writing a note, or creating a to-do—one small step to get started with Light Note.'
+            : '可以先收集一份资料、写一篇笔记，或新建一条待办，从一件小事开始使用轻笺。',
+        recommendationKind: 'action',
+        recommendationFactIds: ['onboarding_empty'],
+        recommendationSources: [],
+      };
+    if (mode === 'advice-failed' || mode === 'advice-retry')
+      selectedBrief = { ...localizedBrief, adviceStatus: 'failed', recommendation: '' };
+    if (mode.startsWith('advice-quota-'))
+      selectedBrief = {
+        ...localizedBrief,
+        adviceStatus: 'failed',
+        recommendation: '',
+        adviceFailureCode:
+          mode === 'advice-quota-insufficient' ? 'AI_QUOTA_INSUFFICIENT_FOR_REQUEST' : 'AI_QUOTA_EXCEEDED',
+        lastAdviceResult: {
+          adviceStatus: 'ready',
+          recommendation:
+            locale === 'en-US'
+              ? 'Check the saved workshop result before continuing.'
+              : '可以先查看已生成的工坊成果，再继续整理资料。',
+        },
+      };
     const adviceStates = {
       'advice-empty': 'no_value',
       'advice-unreadable': 'no_evidence',
       'advice-deferred': 'deferred',
     };
     if (adviceStates[mode]) selectedBrief = { ...localizedBrief, adviceStatus: adviceStates[mode], recommendation: '' };
-    if (mode === 'advice-deferred' || mode === 'advice-failed') selectedBrief.lastAdviceResult = { adviceStatus: 'no_value', recommendation: '' };
+    if (mode === 'advice-deferred' || mode === 'advice-failed')
+      selectedBrief.lastAdviceResult = { adviceStatus: 'no_value', recommendation: '' };
     const data =
       mode === 'actual'
         ? { ...actualState, shouldGenerate: false }
@@ -290,14 +332,37 @@ try {
             dataAsOf: '2026-10-22T02:00:00Z',
             brief: mode === 'quiet' ? { ...brief, headline: '今天暂无需特别关注的事项', insights: [] } : selectedBrief,
           };
+    let checkReads = 0;
+    let releaseCheck;
+    let backgroundStarted;
+    const backgroundReady = new Promise((resolve) => {
+      backgroundStarted = resolve;
+    });
     await page.route(
       (url) => url.pathname.startsWith('/api/'),
       async (route) => {
         if (
+          mode === 'advice-retry' &&
+          new URL(route.request().url()).searchParams.get('check') === '1' &&
+          ++checkReads === 2
+        ) {
+          await new Promise((resolve) => {
+            releaseCheck = resolve;
+            backgroundStarted();
+          });
+        }
+        if (
           route.request().method() === 'POST' &&
           new URL(route.request().url()).pathname.includes('/workbench/daily-brief/')
-        )
+        ) {
           posts++;
+          if (mode === 'advice-retry')
+            data.brief = {
+              ...data.brief,
+              adviceStatus: 'no_value',
+              lastAdviceResult: { adviceStatus: 'no_value', recommendation: '' },
+            };
+        }
         await route.fulfill({
           json: {
             status: 200,
@@ -307,7 +372,13 @@ try {
         });
       },
     );
-    const query = new URLSearchParams({ theme, density, locale, ...(mode === 'onboarding-readonly' ? {preview:'1'} : {}), ...(mobile ? { renderProfile: 'mobile' } : {}) });
+    const query = new URLSearchParams({
+      theme,
+      density,
+      locale,
+      ...(['onboarding-readonly', 'advice-quota-readonly'].includes(mode) ? { preview: '1' } : {}),
+      ...(mobile ? { renderProfile: 'mobile' } : {}),
+    });
     await page.goto(`${origin}/e2e/brief-bookmark-adoption.html?${query}`, {
       waitUntil: 'domcontentloaded',
       timeout: 30000,
@@ -317,7 +388,9 @@ try {
     assert(Math.abs((await card.boundingBox()).width - viewportWidth) < 2, '验收卡片必须使用实际视口宽度');
     await page
       .getByText(
-        ['quiet', 'activity', 'no-new-quiet', 'onboarding', 'onboarding-readonly'].includes(mode) ? data.brief.headline : selectedBrief.insights[0].text,
+        ['quiet', 'activity', 'no-new-quiet', 'onboarding', 'onboarding-readonly'].includes(mode)
+          ? data.brief.headline
+          : selectedBrief.insights[0].text,
         {
           exact: false,
         },
@@ -330,7 +403,7 @@ try {
           '.daily-brief-card__recommendation:not(.daily-brief-card__advice-status),.daily-brief-card__preview-recommendation:not(.daily-brief-card__advice-status)',
         )
         .count(),
-      selectedBrief.recommendation ? 1 : 0,
+      selectedBrief.recommendation || selectedBrief.lastAdviceResult?.recommendation ? 1 : 0,
     );
     if (mode.startsWith('onboarding')) {
       await card.getByText(locale === 'en-US' ? 'Getting started' : '使用引导', { exact: true }).waitFor();
@@ -339,20 +412,21 @@ try {
       const actions = card.locator('.daily-brief-card__onboarding-actions button');
       assert.equal(await actions.count(), mode === 'onboarding-readonly' ? 0 : 3);
       if (mode === 'onboarding') {
-        const names = locale === 'en-US' ? ['Collect resources', 'Write a note', 'New to-do'] : ['收集资料', '写笔记', '新建待办'];
+        const names =
+          locale === 'en-US' ? ['Collect resources', 'Write a note', 'New to-do'] : ['收集资料', '写笔记', '新建待办'];
         for (const [index, type] of ['bookmark', 'note', 'todo'].entries()) {
-          await card.getByRole('button', {name:names[index], exact:true}).click();
+          await card.getByRole('button', { name: names[index], exact: true }).click();
           await page.locator(`.capture-workspace.is-${type}`).waitFor();
           if (mobile) {
             await page.waitForFunction(() => Boolean(history.state?.__lnMobileOverlayId));
             await page.evaluate(() => history.back());
           } else await page.keyboard.press('Escape');
-          await page.locator('.capture-workspace').waitFor({state:'hidden'});
-          await card.getByRole('button', {name:names[index], exact:true}).waitFor();
+          await page.locator('.capture-workspace').waitFor({ state: 'hidden' });
+          await card.getByRole('button', { name: names[index], exact: true }).waitFor();
         }
       }
 
-      assert.equal(await card.getByText(locale === 'en-US' ? 'AI suggestion' : 'AI 建议', {exact:true}).count(), 0);
+      assert.equal(await card.getByText(locale === 'en-US' ? 'AI suggestion' : 'AI 建议', { exact: true }).count(), 0);
     }
     if (mode === 'restored') {
       await page.getByText(selectedBrief.headline, { exact: true }).waitFor();
@@ -518,6 +592,39 @@ try {
       }
     }
     if (mode === 'advice-failed') await page.getByText('本次建议更新未成功', { exact: false }).first().waitFor();
+    if (mode.startsWith('advice-quota-')) {
+      const exhausted = mode !== 'advice-quota-insufficient';
+      const hint =
+        locale === 'en-US'
+          ? exhausted
+            ? 'Your available AI quota is exhausted.'
+            : 'You still have AI quota, but it is insufficient'
+          : exhausted
+            ? '可用 AI 额度已用完'
+            : '当前仍有 AI 额度，但不足以生成本次 AI 建议';
+      await card.getByText(hint, { exact: false }).waitFor();
+      await card.getByText(selectedBrief.lastAdviceResult.recommendation, { exact: true }).waitFor();
+      const retryHint = locale === 'en-US' ? 'select Update to retry' : '可点击更新重试';
+      assert.equal(await card.getByText(retryHint, { exact: false }).count(), mode === 'advice-quota-readonly' ? 0 : 1);
+    }
+    if (mode === 'advice-retry') {
+      const update = page.getByRole('button', { name: '更新简报', exact: true }).first();
+      await page.waitForFunction(() => !document.querySelector('[aria-label="更新简报"]')?.disabled);
+      await page.waitForTimeout(1100);
+      await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+      await Promise.race([
+        backgroundReady,
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Background check did not start')), 5000)),
+      ]);
+      await update.click();
+      assert.equal(posts, 0);
+      releaseCheck();
+      await page
+        .locator('.daily-brief-card__advice-status')
+        .getByText('暂无需要补充的建议', { exact: true })
+        .first()
+        .waitFor();
+    }
     if (adviceStates[mode]) {
       const hints = {
         'advice-empty': '暂无需要补充的建议',
@@ -526,7 +633,9 @@ try {
       };
       await page.locator('.daily-brief-card__advice-status').getByText(hints[mode], { exact: true }).first().waitFor();
       await Promise.all([
-        page.waitForResponse((response) => response.request().method() === 'POST' && response.url().includes('/workbench/daily-brief/')),
+        page.waitForResponse(
+          (response) => response.request().method() === 'POST' && response.url().includes('/workbench/daily-brief/'),
+        ),
         page.getByRole('button', { name: '更新简报', exact: true }).first().click(),
       ]);
       await page.locator('.daily-brief-card__advice-status').getByText(hints[mode], { exact: true }).first().waitFor();
@@ -538,7 +647,7 @@ try {
       assert.equal(await source.isDisabled(), mode === 'advice-stale');
       if (mode === 'advice') {
         await source.click();
-        await page.waitForFunction(() => document.documentElement.dataset.briefNavigation=== '/toolbox/task/report');
+        await page.waitForFunction(() => document.documentElement.dataset.briefNavigation === '/toolbox/task/report');
       }
     }
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1), false);
@@ -551,7 +660,7 @@ try {
       else await card.screenshot({ path, animations: 'disabled' });
     }
     assert.deepEqual(errors, []);
-    assert.equal(posts, adviceStates[mode] ? 1 : 0);
+    assert.equal(posts, adviceStates[mode] || mode === 'advice-retry' ? 1 : 0);
     checked++;
     if (checked % 8 === 0) console.log(`Daily brief browser cases: ${checked}/${casesToRun.length}`);
     await page.close();

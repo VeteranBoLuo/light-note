@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { ensureDailyBrief, getDailyBrief, refreshDailyBrief } from './dailyBriefService.js';
 import { DAILY_BRIEF_FACT_DEFINITIONS } from './dailyBriefFacts.js';
 import { DAILY_BRIEF_REFRESH_POLICY } from './dailyBriefFreshness.js';
-import { MIN_SAFE_ADVICE_POLICY_VERSION } from './dailyBriefAdvice.js';
+import { MIN_SAFE_ADVICE_POLICY_VERSION, DAILY_BRIEF_OUTPUT_ERROR_CODES } from './dailyBriefAdvice.js';
 import { validateDailyBriefInput } from '../aiSkill/skills/routineDailyBriefSkill.js';
 
 function fixture() {
@@ -133,6 +133,72 @@ function fixture() {
 }
 
 describe('工作台行动建议的生成与复用', () => {
+  it.each([false, true])('无效旧缓存不会阻塞正文更新，冷却后可手动生成：冷却已结束=%s', async (elapsed) => {
+    const f = fixture();
+    f.change('todo_due_today', { count: 0, entries: [] });
+    f.change('organize_pending', { count: 2, resources: [{ id: 'r', type: 'note', title: '旧标题' }] });
+    await f.ensure();
+    const row = f.rows.get('2026-09-05');
+    const old = JSON.parse(row.briefJson);
+    old.adviceStatus = 'ready';
+    old.recommendation = '可以先用１０分钟给新收集的资料确认归类，再处理剩余条目。';
+    old.adviceProposal = { factIds: ['organize_pending'], action: old.recommendation };
+    old.recommendationFactIds = ['organize_pending'];
+    old.lastAdviceResult = {
+      recommendation: old.recommendation,
+      recommendationFactIds: old.recommendationFactIds,
+      adviceStatus: 'ready',
+    };
+    row.briefJson = JSON.stringify(old);
+    f.change('organize_pending', { resources: [{ id: 'r', type: 'note', title: '新标题' }] });
+    if (elapsed) f.advance(20 * 60000);
+    const result = await f.ensure();
+    expect(result.status).toBe('ready');
+    expect(result.brief.recommendation).not.toContain('１０');
+    expect(result.brief.lastAdviceResult?.recommendation || '').not.toContain('１０');
+    expect(result.brief.insights.some((item) => item.text.includes('新标题'))).toBe(true);
+    if (!elapsed) {
+      expect(f.executeAiSkill).toHaveBeenCalledTimes(1);
+      f.advance(31000);
+      expect((await f.refresh()).brief.adviceStatus).toBe('no_value');
+    }
+    expect(f.executeAiSkill).toHaveBeenCalledTimes(2);
+  });
+  it('简报缓存保存稳定子原因，普通检查不重放失败', async () => {
+    const f = fixture();
+    f.executeAiSkill.mockRejectedValue(
+      Object.assign(new Error('private draft omitted'), {
+        code: DAILY_BRIEF_OUTPUT_ERROR_CODES.ADVICE_NUMBER_UNSUPPORTED,
+        details: { reason: 'ADVICE_NUMBER_UNSUPPORTED' },
+      }),
+    );
+    expect((await f.ensure()).brief).toMatchObject({
+      adviceFailureReason: 'ADVICE_NUMBER_UNSUPPORTED',
+      adviceFailureCode: DAILY_BRIEF_OUTPUT_ERROR_CODES.ADVICE_NUMBER_UNSUPPORTED,
+    });
+    f.advance(20 * 60000);
+    await f.ensure();
+    expect(f.executeAiSkill).toHaveBeenCalledTimes(1);
+  });
+  it('状态变化导致缓存键不同，也不回退已无法通过当前校验的旧行动', async () => {
+    const f = fixture();
+    f.change('todo_due_today', { count: 0, entries: [] });
+    f.change('organize_pending', { count: 2 });
+    await f.ensure();
+    const row = f.rows.get('2026-09-05');
+    const old = JSON.parse(row.briefJson);
+    old.adviceStatus = 'ready';
+    old.recommendation = '可以先用１０分钟整理资料，再继续处理今天的其他安排。';
+    old.recommendationFactIds = ['organize_pending'];
+    old.adviceProposal = { factIds: old.recommendationFactIds, action: old.recommendation };
+    row.briefJson = JSON.stringify(old);
+    f.change('organize_pending', { count: 3 });
+    const result = await f.ensure();
+    expect(result.status).toBe('ready');
+    expect(result.brief.recommendation).toBe('');
+    expect(result.brief.lastAdviceResult).toBeUndefined();
+    expect(f.executeAiSkill).toHaveBeenCalledTimes(1);
+  });
   it('全空固定引导反复刷新也不调用模型、不增加自动尝试；有数据后退出且失败不带回引导', async () => {
     const f = fixture();
     f.change('todo_due_today', { count: 0, entries: [] });

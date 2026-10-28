@@ -43,6 +43,8 @@ export interface DailyBrief {
   insights: DailyBriefInsight[];
   recommendation: string;
   adviceStatus?: 'ready' | 'no_value' | 'no_evidence' | 'not_evaluated' | 'deferred' | 'paused' | 'failed';
+  adviceFailureCode?: string;
+  adviceFailureReason?: string;
   lastAdviceResult?: Pick<
     DailyBrief,
     'adviceStatus' | 'recommendation' | 'recommendationKind' | 'recommendationFactIds' | 'recommendationSources'

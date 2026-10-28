@@ -33,7 +33,7 @@ vi.mock('@/components/base/BasicComponents/BModal/BModal.vue', () => ({
 vi.mock('@/store', () => ({ useUserStore: () => ({ id: 'owner' }) }));
 vi.mock('@/utils/openBookmark', () => ({ openBookmarkUrl: mocks.open }));
 vi.mock('vue-router', async (importOriginal) => ({
-  ...await importOriginal<typeof import('vue-router')>(),
+  ...(await importOriginal<typeof import('vue-router')>()),
   useRouter: () => ({ push: mocks.push }),
 }));
 let cleanup: (() => void) | undefined;
@@ -42,8 +42,8 @@ afterEach(() => {
   vi.resetAllMocks();
 });
 
-function mount(locale = 'zh-CN', compact = false, formal = false) {
-  const props = reactive({ eligible: formal, ownerKey: formal ? 'owner' : 'visitor', readOnly: false, compact });
+function mount(locale = 'zh-CN', compact = false, formal = false, readOnly = false) {
+  const props = reactive({ eligible: formal, ownerKey: formal ? 'owner' : 'visitor', readOnly, compact });
   const host = document.createElement('div');
   document.body.append(host);
   const app = createApp({ render: () => h(DailyBriefCard, props) });
@@ -79,6 +79,50 @@ const sample = {
   },
 };
 beforeEach(() => mocks.visitor.mockResolvedValue({ status: 200, data: sample }));
+describe.each(['zh-CN', 'en-US'])('今日简报额度提示：%s', (locale) => {
+  for (const compact of [false, true])
+    for (const readOnly of [false, true]) {
+      it.each(['AI_QUOTA_EXCEEDED', 'AI_QUOTA_INSUFFICIENT_FOR_REQUEST'])(
+        `区分额度用完和本次不足，compact=${compact}, readOnly=${readOnly}: %s`,
+        async (code) => {
+          mocks.get.mockResolvedValue({
+            status: 200,
+            data: {
+              featureEnabled: true,
+              enabled: true,
+              status: 'ready',
+              stale: false,
+              shouldGenerate: false,
+              nextDateAt: '2099-01-01T00:00:00Z',
+              brief: {
+                ...sample.brief,
+                date: '2026-10-28',
+                generatedBy: 'facts',
+                recommendation: '',
+                adviceStatus: 'failed',
+                adviceFailureCode: code,
+                ...(compact
+                  ? { lastAdviceResult: { adviceStatus: 'ready', recommendation: '上一条仍适用的行动建议' } }
+                  : {}),
+              },
+            },
+          });
+          const { host } = mount(locale, compact, true, readOnly);
+          const messages = (locale === 'en-US' ? enUS : zhCN).workbench.dailyBrief;
+          await vi.waitFor(() =>
+            expect(host.textContent).toContain(
+              code === 'AI_QUOTA_EXCEEDED' ? messages.adviceQuotaExceeded : messages.adviceQuotaInsufficient,
+            ),
+          );
+          expect(host.textContent?.includes(messages.adviceQuotaRetry)).toBe(!readOnly);
+          expect(host.textContent).not.toContain(messages.adviceFailed);
+          if (compact) expect(host.textContent).toContain('上一条仍适用的行动建议');
+          expect(mocks.refresh).not.toHaveBeenCalled();
+          expect(mocks.ensure).not.toHaveBeenCalled();
+        },
+      );
+    }
+});
 describe('今日简报游客示例', () => {
   it('compact preview shows the complete recommendation and opens the supporting details', async () => {
     const { host } = mount('zh-CN', true);

@@ -63,13 +63,7 @@
       >
 
       <p v-if="displayBrief?.adviceStatus === 'failed'" class="daily-brief-card__refresh-error" role="status">{{
-        t(
-          previousAdvice
-            ? 'workbench.dailyBrief.adviceUpdateFailed'
-            : readOnly
-              ? 'workbench.dailyBrief.adviceFailedReadOnly'
-              : 'workbench.dailyBrief.adviceFailed',
-        )
+        adviceFailureMessage
       }}</p>
       <aside
         v-if="adviceStatusText"
@@ -310,13 +304,7 @@
         </div>
 
         <p v-if="displayBrief?.adviceStatus === 'failed'" class="daily-brief-card__refresh-error" role="status">{{
-          t(
-            previousAdvice
-              ? 'workbench.dailyBrief.adviceUpdateFailed'
-              : readOnly
-                ? 'workbench.dailyBrief.adviceFailedReadOnly'
-                : 'workbench.dailyBrief.adviceFailed',
-          )
+          adviceFailureMessage
         }}</p>
         <aside
           v-if="adviceStatusText"
@@ -378,6 +366,7 @@
 
 <script setup lang="ts">
   import { computed, defineComponent, ref, watch } from 'vue';
+  import { AI_QUOTA_ERROR_CODES } from '@lightnote/shared/ai-quota-protocol';
   import type { ActionCaptureType } from '@/store/inbox';
   import { closeCurrentMobileOverlayThen } from '@/utils/mobileOverlayHistory';
   import { useMobileLayout } from '@/composables/useMobileLayout';
@@ -494,6 +483,27 @@
       : undefined,
   );
   const displayedAdvice = computed(() => previousAdvice.value || displayBrief.value);
+  const adviceFailureMessage = computed(() => {
+    const code = displayBrief.value?.adviceFailureCode;
+    const quotaKey =
+      code === AI_QUOTA_ERROR_CODES.EXHAUSTED
+        ? 'adviceQuotaExceeded'
+        : code === AI_QUOTA_ERROR_CODES.INSUFFICIENT_FOR_REQUEST
+          ? 'adviceQuotaInsufficient'
+          : null;
+    if (quotaKey)
+      return [
+        t(`workbench.dailyBrief.${quotaKey}`),
+        ...(!readOnly.value ? [t('workbench.dailyBrief.adviceQuotaRetry')] : []),
+      ].join(' ');
+    return t(
+      previousAdvice.value
+        ? 'workbench.dailyBrief.adviceUpdateFailed'
+        : readOnly.value
+          ? 'workbench.dailyBrief.adviceFailedReadOnly'
+          : 'workbench.dailyBrief.adviceFailed',
+    );
+  });
   const isOnboardingAdvice = computed(
     () =>
       displayedAdvice.value?.recommendationKind === 'action' &&

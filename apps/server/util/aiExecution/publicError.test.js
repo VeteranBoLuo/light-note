@@ -1,13 +1,20 @@
 import { describe, expect, it } from 'vitest';
 import { resolvePublicAiExecutionError } from './publicError.js';
+import { DAILY_BRIEF_OUTPUT_ERROR_CODES } from '../services/dailyBriefAdvice.js';
 
 describe('resolvePublicAiExecutionError', () => {
+  it.each(Object.values(DAILY_BRIEF_OUTPUT_ERROR_CODES))('简报子原因可读且不暴露草稿：%s', (code) => {
+    const result = resolvePublicAiExecutionError({
+      code,
+      message: 'PRIVATE_DRAFT',
+      details: { action: 'PRIVATE_DRAFT' },
+    });
+    expect(result).toMatchObject({ code, status: 502 });
+    expect(result.message).toContain('简报建议');
+    expect(JSON.stringify(result)).not.toContain('PRIVATE_DRAFT');
+  });
   it.each([
-    [
-      'AI_QUOTA_EXCEEDED',
-      429,
-      '当前 AI 额度已用完。可前往 AI 用量与计费页补充永久额度，或等待每日额度重置。',
-    ],
+    ['AI_QUOTA_EXCEEDED', 429, '当前 AI 额度已用完。可前往 AI 用量与计费页补充永久额度，或等待每日额度重置。'],
     ['AI_ACCESS_RESTRICTED', 403, '当前账号的 AI 使用权限已被限制'],
     ['AI_RATE_LIMITED', 503, 'AI 服务当前繁忙，本次未生成内容，请稍后重试'],
     ['AI_NETWORK_ERROR', 503, 'AI 服务连接失败，本次未生成内容，请稍后重试'],
@@ -37,8 +44,7 @@ describe('resolvePublicAiExecutionError', () => {
     ).toEqual({
       code: 'AI_QUOTA_INSUFFICIENT_FOR_REQUEST',
       status: 429,
-      message:
-        '本次任务预计最多需要约 26,903 tokens，当前可用约 21,700。请减少处理内容、分段执行或补充额度后重试。',
+      message: '本次任务预计最多需要约 26,903 tokens，当前可用约 21,700。请减少处理内容、分段执行或补充额度后重试。',
       requiredTokens: 26_903,
       availableTokens: 21_700,
     });

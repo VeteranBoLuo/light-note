@@ -3,6 +3,8 @@ import skill, { validateDailyBriefInput, validateDailyBriefArguments } from './r
 import { callStructuredSkillModel } from '../structuredModel.js';
 import { requestAi } from '../../agent/aiGateway.js';
 import { executeAiSkill } from '../runtime.js';
+import { runAiExecution } from '../../aiExecution/service.js';
+import { DAILY_BRIEF_OUTPUT_ERROR_CODES } from '../../services/dailyBriefAdvice.js';
 vi.mock('../../agent/aiGateway.js', () => ({ requestAi: vi.fn() }));
 const signal = { id: 'organize_pending', label: '待整理资料', count: 4 };
 const input = () => ({ date: '2026-10-27', timezone: 'Asia/Shanghai', locale: 'zh-CN', signals: [signal] });
@@ -49,7 +51,7 @@ it.each([true, false])('结构错误只修复一次，修复成功=%s', async (o
     .mockResolvedValueOnce(response(ok ? draft() : bad));
   const operation = callStructuredSkillModel({ ...prepared, modelPolicy: skill.modelPolicy });
   if (ok) await expect(operation).resolves.toMatchObject({ recommendation: { action } });
-  else await expect(operation).rejects.toMatchObject({ code: 'AI_SKILL_DAILY_BRIEF_OUTPUT_INVALID' });
+  else await expect(operation).rejects.toMatchObject({ code: DAILY_BRIEF_OUTPUT_ERROR_CODES.ADVICE_SOURCE_UNKNOWN });
   expect(requestAi).toHaveBeenCalledTimes(2);
   expect(requestAi.mock.calls[1][1].billingScope).toBe('platform');
 });
@@ -58,6 +60,37 @@ it('正常判断只调用一次，不逐来源追加调用或分析', async () =
   vi.mocked(requestAi).mockReset().mockResolvedValueOnce(response(draft()));
   await callStructuredSkillModel({ ...prepared, modelPolicy: skill.modelPolicy });
   expect(requestAi).toHaveBeenCalledTimes(1);
+});
+it.each(['zh-CN', 'en-US'])('数字校验修复包含待修正文案及各状态的允许数字：%s', async (locale) => {
+  const signals = [
+    signal,
+    {
+      id: 'todo_scheduled_today',
+      label: '今日提醒',
+      count: 1,
+      at: '2026-10-28T18:35',
+      timeKind: 'reminder',
+      title: '阅读 10 页',
+    },
+  ];
+  const prepared = await skill.prepare({ input: validateDailyBriefInput({ ...input(), locale, signals }) });
+  const invalid = {
+    insights: [],
+    recommendation: { factIds: [signal.id], action: '可以先花 10 分钟处理待整理资料，再继续今天的其他安排。' },
+  };
+  vi.mocked(requestAi).mockReset().mockResolvedValueOnce(response(invalid)).mockResolvedValueOnce(response(draft()));
+  await expect(callStructuredSkillModel({ ...prepared, modelPolicy: skill.modelPolicy })).resolves.toMatchObject({
+    recommendation: { action },
+  });
+  const feedback = JSON.parse(requestAi.mock.calls[1][0].at(-1).content);
+  expect(feedback).toMatchObject({
+    reason: 'ADVICE_NUMBER_UNSUPPORTED',
+    invalidArguments: invalid,
+    allowedNumbersByFact: { organize_pending: ['4'], todo_scheduled_today: ['1', '2026-10-28', '18:35'] },
+  });
+  expect(Object.values(feedback.allowedNumbersByFact).flat()).not.toContain('10');
+  expect(requestAi).toHaveBeenCalledTimes(2);
+  expect(requestAi.mock.calls[1][1].billingScope).toBe('platform');
 });
 it('真实内部 Skill runtime 保留归属、生命周期与交付钩子', async () => {
   const commitValidatedResult = vi.fn();
@@ -96,4 +129,49 @@ it('真实内部 Skill runtime 保留归属、生命周期与交付钩子', asyn
     result: { recommendation: { action } },
   });
   expect(commitValidatedResult).toHaveBeenCalledOnce();
+});
+it.each([
+  [{ insights: [], recommendation: { factIds: ['foreign'], action } }, 'ADVICE_SOURCE_UNKNOWN'],
+  [
+    { insights: [], recommendation: { factIds: [signal.id], action: '可以先花 10 分钟处理资料，再继续其他安排。' } },
+    'ADVICE_NUMBER_UNSUPPORTED',
+  ],
+  [{ insights: [] }, 'ADVICE_DECISION_MISSING'],
+  [{ insights: [{}], recommendation: null }, 'INSIGHTS_SHAPE'],
+  [{ insights: [], recommendation: { factIds: [], action } }, 'ADVICE_SHAPE'],
+  [{ insights: [], recommendation: { factIds: [signal.id], action: '短' } }, 'ADVICE_ACTION_LENGTH'],
+])('根执行持久记录独立子原因，不保存私人草稿：%s', async (invalid, reason) => {
+  const persistence = Object.fromEntries(
+    [
+      'insertAiExecution',
+      'settleAiExecution',
+      'insertAiProviderSpan',
+      'renewAiExecutionLease',
+      'updateAiExecutionReservation',
+    ].map((name) => [name, vi.fn()]),
+  );
+  const prepared = await skill.prepare({ input: validateDailyBriefInput(input()) });
+  vi.mocked(requestAi).mockReset().mockResolvedValue(response(invalid));
+  await expect(
+    runAiExecution(
+      {
+        billingPolicy: 'user',
+        identity: { id: 'test-user', role: 'user' },
+        skillId: skill.id,
+        taskType: 'skill_routine_daily_brief',
+        persistence,
+      },
+      () => callStructuredSkillModel({ ...prepared, modelPolicy: skill.modelPolicy }),
+    ),
+  ).rejects.toMatchObject({ code: DAILY_BRIEF_OUTPUT_ERROR_CODES[reason] });
+  expect(persistence.settleAiExecution).toHaveBeenCalledOnce();
+  const saved = persistence.settleAiExecution.mock.calls[0][0];
+  expect(saved).toMatchObject({
+    status: 'failed',
+    errorCode: DAILY_BRIEF_OUTPUT_ERROR_CODES[reason],
+    chargedTokens: 0,
+  });
+  expect(saved.errorCode.length).toBeLessThanOrEqual(64);
+  expect(JSON.stringify(saved)).not.toContain(invalid.recommendation?.action || 'PRIVATE_DRAFT_NOT_PRESENT');
+  expect(requestAi).toHaveBeenCalledTimes(2);
 });

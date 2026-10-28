@@ -21,6 +21,8 @@ export function useDailyBrief(options: {
   let activeOwner = '';
   let timer: ReturnType<typeof setTimeout> | undefined;
   let inFlight: Promise<void> | null = null;
+  let inFlightManual = false;
+  let queuedManual: Promise<void> | null = null;
   let pollAttempts = 0;
   let lastCheckAt = 0;
   let disposed = false;
@@ -138,7 +140,22 @@ export function useDailyBrief(options: {
   }
   function refresh(manual = false): Promise<void> {
     if (!eligible() || !visible()) return Promise.resolve();
-    if (inFlight) return inFlight;
+    if (manual && queuedManual) return queuedManual;
+    if (inFlight) {
+      if (!manual || inFlightManual) return inFlight;
+      const sequence = generation;
+      const pending = inFlight
+        .then(() => {
+          if (queuedManual === pending) queuedManual = null;
+          if (sequence === generation && eligible() && visible()) return refresh(true);
+        })
+        .finally(() => {
+          if (queuedManual === pending) queuedManual = null;
+        });
+      queuedManual = pending;
+      return pending;
+    }
+    inFlightManual = manual;
     inFlight = execute(manual, generation);
     return inFlight;
   }
@@ -153,7 +170,8 @@ export function useDailyBrief(options: {
   // focus 是未发 visibilitychange 的 WebView 兜底。与显隐和手动请求合并在途读取。
   useForegroundRefresh({
     refresh: () => refresh(),
-    trailingWake: true, staleMs: 1000,
+    trailingWake: true,
+    staleMs: 1000,
     canRefresh: () => eligible() && Date.now() - lastCheckAt >= 1000,
   });
   document.addEventListener('visibilitychange', handleVisibility);
@@ -165,6 +183,8 @@ export function useDailyBrief(options: {
         clearTimer();
         state.value = null;
         inFlight = null;
+        inFlightManual = false;
+        queuedManual = null;
         loading.value = false;
         updating.value = false;
         errorCode.value = '';

@@ -38,6 +38,15 @@ const PUBLIC_AI_EXECUTION_ERRORS = Object.freeze({
   },
   AI_SKILL_STRUCTURED_OUTPUT_MISSING: { status: 502, message: 'AI 没有返回可用草稿，请重新生成' },
   AI_SKILL_STRUCTURED_OUTPUT_INVALID: { status: 502, message: 'AI 返回的草稿格式未通过校验，请重新生成' },
+  AI_SKILL_DAILY_BRIEF_OUTPUT_INSIGHTS_SHAPE: { status: 502, message: '简报建议返回了不符合协议的正文结构' },
+  AI_SKILL_DAILY_BRIEF_OUTPUT_ADVICE_DECISION_MISSING: { status: 502, message: '简报建议未明确返回行动或空判断' },
+  AI_SKILL_DAILY_BRIEF_OUTPUT_ADVICE_SHAPE: { status: 502, message: '简报建议的行动结构未通过校验' },
+  AI_SKILL_DAILY_BRIEF_OUTPUT_ADVICE_SOURCE_UNKNOWN: { status: 502, message: '简报建议引用了不在当前范围内的状态' },
+  AI_SKILL_DAILY_BRIEF_OUTPUT_ADVICE_ACTION_LENGTH: { status: 502, message: '简报建议的长度或文字格式未通过校验' },
+  AI_SKILL_DAILY_BRIEF_OUTPUT_ADVICE_NUMBER_UNSUPPORTED: {
+    status: 502,
+    message: '简报建议包含当前状态无法支持的数字、日期或时间',
+  },
   BOOKMARK_PAGE_AUTH_REQUIRED: {
     status: 422,
     message: '该网页需要登录后才能查看，轻笺不会使用你的站点账号或 Cookie，请手动填写书签信息',
