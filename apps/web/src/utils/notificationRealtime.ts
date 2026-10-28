@@ -1,5 +1,7 @@
 import { getAdminContextToken } from '@/utils/authStorage';
 
+class NotificationStreamUnsupportedError extends Error {}
+
 /** SSE over fetch keeps session credentials in headers and supports explicit cancellation. */
 export async function readNotificationStream(
   signal: AbortSignal,
@@ -17,6 +19,10 @@ export async function readNotificationStream(
   }
   const response = await fetch('/api/notification/stream', { method: 'POST', headers, credentials: 'include', signal });
   if (!response.ok || !response.body || !response.headers.get('content-type')?.includes('text/event-stream')) {
+    void response.body?.cancel().catch(() => {});
+    if ([404, 405, 501].includes(response.status)) {
+      throw new NotificationStreamUnsupportedError('NOTIFICATION_STREAM_UNSUPPORTED');
+    }
     throw new Error('NOTIFICATION_STREAM_UNAVAILABLE');
   }
   const reader = response.body.getReader();
@@ -52,6 +58,7 @@ export function createNotificationRealtime({
   canStream?: () => boolean;
 }) {
   let stopped = false;
+  let streamUnsupported = false;
   let controller: AbortController | null = null;
   let retryTimer: ReturnType<typeof setTimeout> | undefined;
   let changeTimer: ReturnType<typeof setTimeout> | undefined;
@@ -70,7 +77,7 @@ export function createNotificationRealtime({
     }, Math.max(300, 1000 - (Date.now() - lastChangeAt)));
   };
   const connect = () => {
-    if (stopped || controller || !visible() || !canStream()) return;
+    if (stopped || streamUnsupported || controller || !visible() || !canStream()) return;
     const current = new AbortController();
     controller = current;
     const activity = () => {
@@ -88,12 +95,18 @@ export function createNotificationRealtime({
       },
       activity,
     )
-      .catch(() => {})
+      .catch((error) => {
+        // Older backends may not expose SSE. Keep polling until this runtime is recreated;
+        // repeatedly probing a missing route would otherwise accumulate scanner 404s.
+        if (controller === current && !current.signal.aborted && error instanceof NotificationStreamUnsupportedError) {
+          streamUnsupported = true;
+        }
+      })
       .finally(() => {
         if (controller !== current) return;
         controller = null;
         clearTimeout(timeoutTimer);
-        if (!stopped && visible()) {
+        if (!stopped && !streamUnsupported && visible()) {
           retryTimer = setTimeout(() => {
             retryTimer = undefined;
             connect();
