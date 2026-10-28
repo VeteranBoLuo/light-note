@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { createHash } from 'node:crypto';
 
 const mocks = vi.hoisted(() => ({
   pool: {
@@ -12,10 +13,9 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('../db/index.js', () => ({ default: mocks.pool }));
-vi.mock('./bookmarkIconClient.js', () => ({
+vi.mock('./bookmarkIconClient.js', async (importOriginal) => ({
+  ...(await importOriginal()),
   fetchFaviconFromApi: mocks.fetchFaviconFromApi,
-  normalizeOrigin: vi.fn((value) => new URL(value).origin),
-  isRetryableError: vi.fn(() => false),
 }));
 vi.mock('./bookmarkIconService.js', () => ({
   saveIconToDisk: mocks.saveIconToDisk,
@@ -41,6 +41,46 @@ describe('bookmark icon worker result updates', () => {
     vi.clearAllMocks();
     mocks.cleanupBookmarkIconFiles.mockResolvedValue(undefined);
     mocks.cleanupPreviousBookmarkIcon.mockResolvedValue(undefined);
+  });
+
+  it.each([
+    ['DNS_ERROR', 'not_found'],
+    ['UPSTREAM_TIMEOUT', 'not_found'],
+    ['UPSTREAM_ERROR', 'not_found'],
+    ['INTERNAL_ERROR', 'failed'],
+    ['QUEUE_FULL', 'failed'],
+    ['SERVICE_UNAVAILABLE', 'failed'],
+    ['SERVICE_TIMEOUT', 'failed'],
+    ['SERVICE_PROTOCOL_ERROR', 'failed'],
+    ['UNRECOGNIZED_FAILURE', 'failed'],
+  ])('exhausted %s ends as %s and preserves its original cause', async (errorCode, status) => {
+    const url = 'https://example.com/page';
+    const connection = createConnection();
+    connection.query
+      .mockResolvedValueOnce([[{ id: 9 }]])
+      .mockResolvedValueOnce([[{ url }]])
+      .mockResolvedValue([{ affectedRows: 1 }]);
+    mocks.pool.getConnection.mockResolvedValue(connection);
+    await updateTaskResult(
+      {
+        id: 9,
+        bookmark_id: 'bookmark-1',
+        user_id: 'owner',
+        url_hash: createHash('sha256').update(url).digest('hex'),
+        attempts: 3,
+      },
+      { ok: false, errorCode },
+      'worker-1',
+    );
+    expect(connection.query.mock.calls[3][1]).toEqual([status, 4, errorCode, 9, 'owner', 'worker-1']);
+    expect(connection.commit).toHaveBeenCalledOnce();
+  });
+
+  it('continues bounded retries for a transient target error before exhaustion', async () => {
+    mocks.pool.query.mockResolvedValue([{ affectedRows: 1 }]);
+    await updateTaskResult({ id: 8, user_id: 'owner', attempts: 0 }, { ok: false, errorCode: 'DNS_ERROR' }, 'worker-1');
+    expect(mocks.pool.getConnection).not.toHaveBeenCalled();
+    expect(mocks.pool.query.mock.calls[0][1]).toEqual([1, expect.any(Date), 'DNS_ERROR', 8, 'owner', 'worker-1']);
   });
 
   it('成功写回时用 URL 条件更新书签，并与 job success 在同一事务', async () => {
