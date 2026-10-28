@@ -626,7 +626,9 @@ const FISH_SPRITES = {
 function fishCutoutFilter(id, silhouette) {
   // Match the swimming renderer's alpha floor. Almost-transparent matte pixels
   // around the source artwork must not become a rectangular haze in large cards.
-  return `<filter id="${id}cutout" color-interpolation-filters="sRGB"><feComponentTransfer><feFuncA type="linear" slope="1.06383" intercept="-.06383"/></feComponentTransfer>${silhouette ? '<feColorMatrix type="matrix" values="0 0 0 0 .53 0 0 0 0 .63 0 0 0 0 .60 0 0 0 .65 0"/>' : ''}</filter>`;
+  // Flatten the remaining alpha before tinting. Translucent bodies otherwise
+  // reveal internal rings, highlights and anatomy even with a single RGB color.
+  return `<filter id="${id}cutout" color-interpolation-filters="sRGB"><feComponentTransfer><feFuncA type="linear" slope="1.06383" intercept="-.06383"/></feComponentTransfer>${silhouette ? '<feComponentTransfer><feFuncA type="linear" slope="255"/></feComponentTransfer><feColorMatrix type="matrix" values="0 0 0 0 .53 0 0 0 0 .63 0 0 0 0 .60 0 0 0 .65 0"/>' : ''}</filter>`;
 }
 function fishIllustration(kind, silhouette = false) {
   // 水族使用独立透明贴图，图鉴和舱内立体网格复用同一份原画。

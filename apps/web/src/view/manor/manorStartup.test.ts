@@ -11,7 +11,8 @@ function deferred() {
   });
   return { promise, resolve };
 }
-function setup(mounted = true, asset?: { path: string; fetcher: typeof fetch; bay?: boolean }, idle?: ReturnType<typeof vi.fn>) {
+function setup(mounted = true, asset?: { path: string; fetcher: typeof fetch; bay?: boolean }, idle?: ReturnType<typeof vi.fn>, hostLoader = true, host?: ReturnType<typeof sharedHost>) {
+  document.head.querySelectorAll('[data-manor-test]').forEach(node => node.remove());
   document.body.innerHTML =
     '<div id="app"><section class="garden-scene"><span id="paint"></span></section></div><div id="modal"></div>';
   if(asset){
@@ -36,6 +37,7 @@ function setup(mounted = true, asset?: { path: string; fetcher: typeof fetch; ba
     }
   }
   const postMessage = vi.fn(),
+    win = new EventTarget(),
     mark = vi.fn(),
     module = {
       exports: {} as { ready: () => Promise<boolean>; mounted: () => void; track: (p: Promise<void>) => void; afterReady: (run: () => void, options?: {idle?: boolean}) => void; assetsReady: Promise<boolean>; html: (markup: string) => string; prepareArea: (area: string, background?: boolean) => Promise<boolean> },
@@ -43,9 +45,9 @@ function setup(mounted = true, asset?: { path: string; fetcher: typeof fetch; ba
   let blobId=0;
   runInNewContext(source, {
     document,
-    window: {},
-    parent: { postMessage },
-    location: { search: '?bridge=fixture', origin: 'http://localhost' },
+    window: win,
+    parent: host ? Object.assign(host, { postMessage }) : { postMessage },
+    location: { search: `?bridge=fixture${hostLoader ? '&loader=host' : ''}`, origin: 'http://localhost' },
     URL: class extends URL { static createObjectURL() { return 'blob:http://localhost/critical'+(blobId++||''); } },
     URLSearchParams,
     Image,
@@ -65,7 +67,13 @@ function setup(mounted = true, asset?: { path: string; fetcher: typeof fetch; ba
     }),
   });
   if (mounted) module.exports.mounted();
-  return { ...module.exports, loaded, decoded, postMessage, mark };
+  return { ...module.exports, loaded, decoded, postMessage, mark, leave: () => win.dispatchEvent(new Event('pagehide')) };
+}
+function sharedHost() {
+  let serial=0;
+  return { location:{origin:'http://localhost'}, Map, Object,
+    URL:{createObjectURL:vi.fn(()=>`blob:http://localhost/host-${++serial}`),revokeObjectURL:vi.fn()},
+    __LIGHTNOTE_MANOR_IMAGES_V1__:new Map<string,{url:string;bytes:number;refs:number;used:number}>() };
 }
 describe('庄园真实启动进度', () => {
   beforeEach(() => vi.useFakeTimers());
@@ -78,6 +86,27 @@ describe('庄园真实启动进度', () => {
     document.head.querySelectorAll('[data-manor-test]').forEach((node) => node.remove());
     document.documentElement.style.removeProperty('--manor-test-image');
     delete document.documentElement.dataset.assetBytes;delete document.documentElement.dataset.sceneSource;
+    delete document.documentElement.dataset.cachedAssets;delete document.documentElement.dataset.startupPhase;
+  });
+  it('嵌入时只向宿主报告真实进度，不再显示第二层加载页', async () => {
+    const startup = setup(), water = deferred();
+    startup.track(water.promise);
+    const ready = startup.ready();
+    expect((document.querySelector('.garden-loader') as HTMLElement).style.display).toBe('none');
+    await vi.advanceTimersByTimeAsync(9000);
+    expect(startup.postMessage).not.toHaveBeenCalledWith(expect.objectContaining({ action: 'progress', payload: { percent: 100 } }), expect.anything());
+    startup.loaded[0].onload(); startup.decoded.resolve();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(startup.postMessage).toHaveBeenCalledWith(expect.objectContaining({ action: 'progress', payload: { percent: 33 } }), 'http://localhost');
+    water.resolve(); await vi.advanceTimersByTimeAsync(10);
+    expect(await ready).toBe(true);
+    const messages = startup.postMessage.mock.calls.map(([message]) => message);
+    expect(messages.at(-2)).toMatchObject({ action: 'progress', payload: { percent: 100 } });
+    expect(messages.at(-1)).toMatchObject({ action: 'ready' });
+  });
+  it('未声明统一加载能力的旧宿主保留场景自己的加载页', () => {
+    setup(true, undefined, undefined, false);
+    expect((document.querySelector('.garden-loader') as HTMLElement).style.display).toBe('');
   });
   it('关键贴图只下载一次，CSS、DOM 和就绪检查复用同一个解码资源', async () => {
     const path='http://localhost/manor/paint.webp';
@@ -95,6 +124,61 @@ describe('庄园真实启动进度', () => {
     expect(fetcher).toHaveBeenCalledExactlyOnceWith(path,expect.objectContaining({credentials:'omit',cache:'force-cache'}));
     expect(startup.html(`<img src="${path}">`)).toContain('src="blob:http://localhost/critical"');
     expect(document.documentElement.style.getPropertyValue('--manor-test-image')).toContain('blob:http://localhost/critical');
+  });
+  it('再次进入复用宿主创建的公开素材地址，仍等待图片可用后才推进真实进度', async () => {
+    const host=sharedHost(),path='http://localhost/manor/paint-r1.webp';
+    const fetcher=vi.fn<typeof fetch>().mockImplementation(async()=>new Response(new Uint8Array([1,2]),{headers:{'Content-Type':'image/webp'}}));
+    const first=setup(true,{path,fetcher},undefined,true,host);
+    await vi.advanceTimersByTimeAsync(1);first.loaded[0].onload();first.decoded.resolve();
+    expect(await first.assetsReady).toBe(true);
+    const entry=host.__LIGHTNOTE_MANOR_IMAGES_V1__.get(path)!;
+    expect(Object.getPrototypeOf(entry)).toBeNull();
+    expect(entry.refs).toBe(1);first.leave();expect(entry.refs).toBe(0);
+    const second=setup(true,{path,fetcher},undefined,true,host);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(second.loaded[0].src).toBe(entry.url);
+    expect(document.querySelector('.garden-loader')?.getAttribute('aria-valuenow')).toBe('0');
+    second.loaded[0].onload();second.decoded.resolve();
+    expect(await second.assetsReady).toBe(true);
+    expect(document.documentElement.dataset.cachedAssets).toBe('1');
+    expect(fetcher).toHaveBeenCalledTimes(1);expect(host.URL.createObjectURL).toHaveBeenCalledTimes(1);
+    expect(host.URL.revokeObjectURL).not.toHaveBeenCalled();
+    second.leave();expect(entry.refs).toBe(0);
+  });
+  it('旧缓存解码失败会释放地址，重试重新下载，不永久缓存坏图片', async () => {
+    const host=sharedHost(),path='http://localhost/manor/paint-r1.webp',fetcher=vi.fn<typeof fetch>();
+    host.__LIGHTNOTE_MANOR_IMAGES_V1__.set(path,{url:'blob:http://localhost/broken',bytes:2,refs:0,used:0});
+    const startup=setup(true,{path,fetcher},undefined,true,host);
+    startup.loaded[0].onerror();
+    expect(await startup.assetsReady).toBe(false);
+    expect(host.__LIGHTNOTE_MANOR_IMAGES_V1__.has(path)).toBe(false);
+    expect(host.URL.revokeObjectURL).toHaveBeenCalledWith('blob:http://localhost/broken');
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+  it('素材池按容量淘汰空闲地址，正在使用的场景地址保持有效', async () => {
+    const host=sharedHost(),path='http://localhost/manor/paint-r1.webp';
+    for(let i=0;i<50;i++)host.__LIGHTNOTE_MANOR_IMAGES_V1__.set(`old-${i}`,{url:`blob:old-${i}`,bytes:1024*1024,refs:i===0?1:0,used:i});
+    const fetcher=vi.fn<typeof fetch>().mockResolvedValue(new Response(new Uint8Array([1,2]),{headers:{'Content-Type':'image/webp'}}));
+    const startup=setup(true,{path,fetcher},undefined,true,host);
+    await vi.advanceTimersByTimeAsync(1);startup.loaded[0].onload();startup.decoded.resolve();
+    expect(await startup.assetsReady).toBe(true);
+    const cache=host.__LIGHTNOTE_MANOR_IMAGES_V1__;
+    expect([...cache.values()].reduce((n,e)=>n+e.bytes,0)).toBeLessThanOrEqual(12*1024*1024);
+    expect(cache.size).toBeLessThanOrEqual(48);
+    expect(cache.has('old-0')).toBe(true);expect(cache.has(path)).toBe(true);
+    expect(host.URL.revokeObjectURL).not.toHaveBeenCalledWith('blob:old-0');
+    expect(host.URL.revokeObjectURL).toHaveBeenCalledWith('blob:old-1');
+  });
+  it('无版本图片不进入跨场景素材池，继续使用原有 HTTP 请求路径', async () => {
+    const host=sharedHost(),path='http://localhost/manor/paint.webp';
+    const fetcher=vi.fn<typeof fetch>().mockImplementation(async()=>new Response(new Uint8Array([1,2]),{headers:{'Content-Type':'image/webp'}}));
+    for(let visit=0;visit<2;visit++){
+      const startup=setup(true,{path,fetcher},undefined,true,host);
+      await vi.advanceTimersByTimeAsync(1);startup.loaded[0].onload();startup.decoded.resolve();
+      expect(await startup.assetsReady).toBe(true);startup.leave();
+    }
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(host.__LIGHTNOTE_MANOR_IMAGES_V1__.size).toBe(0);
   });
   it('关键素材清单不得下载 API 或跨域账号数据', async () => {
     const fetcher=vi.fn<typeof fetch>(),startup=setup(true,{path:'http://localhost/api/growth/manor',fetcher});

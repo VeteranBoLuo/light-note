@@ -2,7 +2,7 @@ import model from './manorModel.js';
 import { MANOR_SPECIES } from './manorSpecies.js';
 
 export { model as manorModel, MANOR_SPECIES };
-export const MANOR_VERSION = 'knowledge-manor-v1';
+export const MANOR_VERSION = 'knowledge-manor-v2';
 
 export class ManorError extends Error {
   constructor(code, status = 409) {
@@ -86,8 +86,13 @@ export function createManor({ now, calendar, points }) {
 
 /** Read projection: real time and real task progress; it does not award or persist anything. */
 export function projectManor(saved, { now, calendar, points, dailyDone = [false, false, false], supplyEligibility = {} }) {
-  if (saved.version !== MANOR_VERSION) throw new ManorError('MANOR_VERSION_UNSUPPORTED', 409);
+  if (saved.version !== MANOR_VERSION && saved.version !== 'knowledge-manor-v1') throw new ManorError('MANOR_VERSION_UNSUPPORTED', 409);
   const s = structuredClone(saved);
+  if (s.version !== MANOR_VERSION) {
+    s.version = MANOR_VERSION;
+    s.emptyCastStreak = 0;
+    delete s.castPity;
+  }
   if (!Array.isArray(dailyDone) || dailyDone.length !== 3 || dailyDone.some(x => typeof x !== 'boolean')) invalid();
   integer(points, 0, 2_147_483_647);
   const time = new Date(now).getTime();
@@ -219,12 +224,6 @@ export function executeManorCommand(saved, command, context) {
   const result = commandCatalog[command.action](state, command.args, context);
   if (!Number.isSafeInteger(state.wallet) || state.wallet < 0 || state.wallet > 2_147_483_647) {
     throw new ManorError('MANOR_POINTS_INVALID');
-  }
-  // Exactly the prototype's two-seed daily supply; completion comes from existing growth facts.
-  if (state.adopted && state.dailyDone.every(Boolean) && !Object.hasOwn(state.rewards, `daily-pack:${state.dayKey}`)) {
-    const choices = Object.keys(model.CROPS).filter(k => model.CROPS[k].tier === 'basic' && model.CROPS[k].unlock <= model.level(state));
-    const pick = Math.min(choices.length - 1, Math.floor(context.random() * choices.length));
-    model.grantSeed(state, choices[pick], 2, `daily-pack:${state.dayKey}`);
   }
   rememberDailyUsage(state);
   return { state, result, pointsDelta: state.wallet - context.points };

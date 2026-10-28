@@ -5,7 +5,7 @@
       <BButton @click="initialise">{{ t('common.retry') }}</BButton>
       <BButton v-if="bookmark.isMobile" @click="exit">{{ t('manor.returnToApp') }}</BButton>
     </div>
-    <ManorLoadingState v-else-if="loading || !frameShown" class="knowledge-manor__loading" />
+    <ManorLoadingState v-else-if="loading || !interactive" :progress="progress" class="knowledge-manor__loading" />
     <iframe v-if="!loading && !failed" ref="frame" :key="nonce" :src="frameUrl" :title="t('manor.title')" referrerpolicy="same-origin" @error="failed = true" />
   </main>
 </template>
@@ -32,6 +32,7 @@
   const emit = defineEmits<{ 'manor-immersive-change': [ready: boolean] }>();
   const frame = ref<HTMLIFrameElement | null>(null), nonce = ref(crypto.randomUUID());
   const loading = ref(true), failed = ref(false), frameShown = ref(false), interactive = ref(false);
+  const progress = ref(0);
   // Keep the app navigation available until the scene has its own usable back button.
   watch(() => interactive.value && !failed.value, ready => emit('manor-immersive-change', ready), { immediate: true });
   let readController = new AbortController();
@@ -46,7 +47,7 @@
     && !/^\/(?:knowledge-manor|manor)(?:[/?#]|$)/.test(previous) ? previous : '/app';
   let exiting = false, initialRead: Promise<ManorSnapshot> | null = null;
   useForegroundLoading(() => !interactive.value && !failed.value);
-  const frameUrl = computed(() => `/manor/index.html?bridge=${encodeURIComponent(nonce.value)}${bookmark.isMobile ? '&renderProfile=mobile' : ''}`);
+  const frameUrl = computed(() => `/manor/index.html?bridge=${encodeURIComponent(nonce.value)}&loader=host${bookmark.isMobile ? '&renderProfile=mobile' : ''}`);
   const questKeys: Record<string, string> = {
     checkin: 'growth.quest_checkin', create: 'growth.quest_create', exp30: 'growth.quest_exp30',
     daily_note: 'growth.quest_daily_note', daily_bookmark: 'growth.quest_daily_bookmark', daily_file: 'growth.quest_daily_file',
@@ -125,7 +126,7 @@
     const g = ++generation;
     navigationCheck?.resolve(false);
     readController.abort(); readController = new AbortController();
-    clearTimeout(bootTimer); frameShown.value = false; interactive.value = false;
+    clearTimeout(bootTimer); frameShown.value = false; interactive.value = false; progress.value = 0;
     releaseMobileOverlayHistory(overlay); overlay = null;
     owner = user.id; testSession = null; snapshot = null; nonce.value = crypto.randomUUID(); initialProvided = false;
     loading.value = true; failed.value = false;
@@ -156,7 +157,12 @@
     const target = event.source as Window, token = nonce.value;
     try {
       let value: unknown = null;
-      if (data.action === 'loading') { clearTimeout(bootTimer); frameShown.value = true; interactive.value = false; return; }
+      if (data.action === 'progress') {
+        const percent = data.payload?.percent;
+        if (Number.isInteger(percent) && percent >= 0 && percent <= 100) progress.value = Math.max(progress.value, percent);
+        return;
+      }
+      else if (data.action === 'loading') { clearTimeout(bootTimer); frameShown.value = true; interactive.value = false; return; }
       else if (data.action === 'ready') { clearTimeout(bootTimer); frameShown.value = true; interactive.value = true; return; }
       else if (data.action === 'get') {
         if (initialRead) await initialRead;
@@ -169,7 +175,7 @@
         testSession = data.action === 'reset-test' ? createManorTestSession(snapshot) : null;
         saveManorTestSession(owner, testSession);
         releaseMobileOverlayHistory(overlay); overlay = null;
-        interactive.value = false; frameShown.value = false; initialProvided = true;
+        interactive.value = false; frameShown.value = false; progress.value = 0; initialProvided = true;
         nonce.value = crypto.randomUUID();
         return;
       }

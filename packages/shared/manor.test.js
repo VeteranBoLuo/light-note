@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createManor, executeManorCommand, projectManor, manorModel as M, MANOR_SPECIES as F } from './manor.js';
+import { createManor, executeManorCommand, projectManor, manorModel as M, MANOR_SPECIES as F, MANOR_VERSION } from './manor.js';
 
 const context = (extra = {}) => ({
   now: new Date('2026-10-24T02:00:00Z'), points: 60,
@@ -70,11 +70,20 @@ describe('正式庄园沿用确认玩法与轻笺积分', () => {
     expect(rest.result.water).toBe(3);
     expect(command(rest.state, 'claimDailyWater', [0], ctx).result).toBeNull();
   });
-  it('三项任务完成的两颗基础种子每账号日仅发一次', () => {
+  it('三项任务完成只领取水滴，不自动赠种，也不回收旧赠种或其他补给', () => {
     const ctx = context({ dailyDone: [true, true, true] });
     const s = command(adopted(), 'claimAllDailyWater', [], ctx).state;
-    expect(s.seeds.radish).toBe(5);
-    expect(command(s, 'claimAllDailyWater', [], ctx).state.seeds.radish).toBe(5);
+    expect(s.water).toBe(45);
+    expect(s.seeds).toEqual({radish:3});
+    expect(s.rewards).not.toHaveProperty('daily-pack:20261024');
+    s.seeds.radish=5;s.rewards['daily-pack:20261024']=s.now;
+    const old=command(s,'claimAllDailyWater',[],ctx).state;
+    expect(old.seeds.radish).toBe(5);
+    expect(old.rewards['daily-pack:20261024']).toBe(s.now);
+    const local=M.create();M.adopt(local);
+    for(let i=0;i<3;i++)expect(M.completeDaily(local,i)).toBe(true);
+    expect(M.claimAllDailyWater(local)).toEqual({water:15,pending:0});
+    expect(local.seeds).toEqual({radish:3});
   });
   it('账号跨日清理日额度、跨周清理统计，不改变生长时间或积分', () => {
     const s = adopted(); s.freeUsed = 3; s.dailyWaterClaims = [5, 5, 5]; s.weekEarned = 200;
@@ -233,17 +242,93 @@ describe('新增作物沿用服务端购买、生长、续收和积分结算', (
     expect(sold.state.wallet).toBe(60+net);expect(sold.state.crops[key]).toBe(0);
   });
 
-  it('迷迭香能补一份花粉，黄瓜与葡萄沿用每株一次的授粉限制', () => {
+  it('迷迭香补四份花粉，黄瓜与葡萄沿用每株一次的授粉限制', () => {
     const s=adopted();s.guide=null;s.xp=M.RULES.levels[19];s.wallet=1000;
     expect(M.buyFacility(s,'beehive')).toBe(true);
     s.crops.rosemary=2;
-    expect(M.refillPollen(s,'rosemary')).toBe(1);expect(s.crops.rosemary).toBe(1);
+    expect(M.refillPollen(s,'rosemary')).toBe(4);expect(s.crops.rosemary).toBe(1);
     for(const [i,key] of ['cucumber','grape'].entries()) {
       s.seeds[key]=1;M.plant(s,i,key);M.water(s,[i]);
       expect(M.pollinationEligible(s,i)).toBe(true);
     }
     expect(M.pollinate(s,0)).toBeTruthy();expect(M.pollinationEligible(s,0)).toBe(false);
     expect(M.pollinate(s,0)).toBe(false);
+  });
+});
+
+describe('庄园 v2 保底、花粉与旧存档兼容', () => {
+  const cast=(s,choice='bait',ctx=context({points:s.wallet,random:()=>.999}))=>{
+    const started=command(s,'beginCast',[choice],ctx);
+    expect(started.result).toBeTruthy();
+    return command(started.state,'resolveCast',[started.state.castId],ctx);
+  };
+  it('免费、普通和定向共用四次空竿，第五次成功并清零；基础率与权重保留', () => {
+    let s=adopted();s.firstCastDone=true;s.craftedBait={fruit:1,herb:1};s.bait=1;
+    expect(M.RULES).toMatchObject({success:.25,pityCasts:5,dailyFree:3});
+    expect(M.FACILITY_RULES.targetWeight).toBe(4);
+    for(const [i,choice] of ['bait','bait','bait','fruit','herb'].entries()) {
+      const result=cast(s,choice);s=result.state;
+      expect(Boolean(result.result.fish)).toBe(i===4);
+      expect(s.emptyCastStreak).toBe(i===4?0:i+1);
+      expect(s.castPity).toBeUndefined();
+    }
+    expect(s.craftedBait).toEqual({fruit:0,herb:0});
+    // The pity does not force a low rarity or the first-catch species.
+    expect(F[s.fish[0].kind].quality).toBe('传说');
+    const ordinary=cast(s);
+    expect(ordinary.result.fish).toBeNull();expect(ordinary.state.emptyCastStreak).toBe(1);
+  });
+  it('每日免费次数刷新、时区往返与存档重载不清零或回退空竿进度', () => {
+    let s=adopted();s.firstCastDone=true;
+    for(let i=0;i<3;i++)s=cast(s).state;
+    const a=context({now:new Date('2026-10-25T02:00:00Z'),calendar:{dayKey:'20261025',weekKey:'202643',utcOffsetMinutes:480},random:()=>.999});
+    s=projectManor(JSON.parse(JSON.stringify(s)),a);
+    expect(s).toMatchObject({freeUsed:0,emptyCastStreak:3});
+    s=cast(s,'bait',a).state;expect(s.emptyCastStreak).toBe(4);
+    s.bait=1;
+    const previousDay=context({...a,calendar:{dayKey:'20261024',weekKey:'202643',utcOffsetMinutes:-720}});
+    s=projectManor(s,previousDay);expect(s.emptyCastStreak).toBe(4);
+    expect(cast(s,'bait',previousDay).state.emptyCastStreak).toBe(0);
+  });
+  it('自然上钩、彩虹饵和一次性新手首钓都清零，后续每日首竿没有必得特权', () => {
+    let s=adopted();s.emptyCastStreak=3;
+    const first=cast(s);s=first.state;
+    expect(first.result.firstCatch).toBe(true);expect(s.emptyCastStreak).toBe(0);
+    s=command(s,'place',[first.result.fish.id,0]).state;
+    s=cast(s).state;expect(s.emptyCastStreak).toBe(1);
+    const hit=cast(s,'bait',context({random:()=>.249}));s=hit.state;
+    expect(hit.result.fish).toBeTruthy();expect(s.emptyCastStreak).toBe(0);
+    s.rainbowBait=1;s.emptyCastStreak=2;
+    const rainbow=cast(s,'rainbow');s=rainbow.state;
+    expect(rainbow.result.fish).toBeTruthy();expect(s.emptyCastStreak).toBe(0);
+    const tomorrow=context({now:new Date('2026-10-25T02:00:00Z'),calendar:{dayKey:'20261025',weekKey:'202643',utcOffsetMinutes:480},random:()=>.999});
+    const again=cast(s,'bait',tomorrow);
+    expect(again.result.fish).toBeNull();expect(again.state.emptyCastStreak).toBe(1);
+  });
+  it('旧存档只读投影升级，资产保留；旧进行中的一竿不计新保底', () => {
+    const old=adopted();old.version='knowledge-manor-v1';delete old.emptyCastStreak;
+    old.firstCastDone=true;old.seeds.radish=9;old.rewards['daily-pack:20261024']=old.now;
+    old.beehive={purchasedAt:0,pollen:2,lastPollinatedDay:null};
+    const before=structuredClone(old),projected=projectManor(old,context());
+    expect(projected).toMatchObject({version:MANOR_VERSION,emptyCastStreak:0,seeds:{radish:9},beehive:{pollen:2}});
+    expect(old).toEqual(before);
+    old.casting=true;old.castPending=true;old.castSource='free';old.castId='old-cast';
+    const result=command(old,'resolveCast',['old-cast'],context({random:()=>.999}));
+    expect(result.result.fish).toBeNull();expect(result.state.emptyCastStreak).toBe(0);
+    const modern=cast(result.state);
+    expect(modern.result.fish).toBeNull();expect(modern.state.emptyCastStreak).toBe(1);
+    expect(()=>projectManor({...old,version:'future'},context())).toThrow('MANOR_VERSION_UNSUPPORTED');
+  });
+  it('蜂箱仍160积分，三种配方按3/6/4扣库存，满仓不损耗花束', () => {
+    const s=adopted();s.xp=M.RULES.levels[5];s.wallet=200;
+    expect(M.buyFacility(s,'beehive')).toBe(true);expect(s.wallet).toBe(40);
+    s.crops={lavender:2,sunflower:2,rosemary:2};
+    expect(M.refillPollen(s,'lavender')).toBe(3);expect(s.beehive.pollen).toBe(3);
+    expect(M.refillPollen(s,'rosemary')).toBe(0);expect(s.crops.rosemary).toBe(2);
+    expect(M.refillPollen(s,'lavender')).toBe(3);expect(s.beehive.pollen).toBe(6);
+    expect(M.refillPollen(s,'sunflower')).toBe(0);expect(s.crops.sunflower).toBe(2);
+    s.beehive.pollen=0;expect(M.refillPollen(s,'rosemary')).toBe(4);
+    s.beehive.pollen=0;expect(M.refillPollen(s,'sunflower')).toBe(6);
   });
 });
 

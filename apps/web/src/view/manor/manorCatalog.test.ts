@@ -69,3 +69,27 @@ it('不支持 IntersectionObserver 时仍能显示图鉴全部图片', () => {
   expect(root.querySelector('img')?.getAttribute('src')).toBe('crop.webp');
   stop();
 });
+
+it.each(['clown', 'moonjelly', 'peachjelly'])('%s 未发现时消除半透明内部纹理，已发现时保留原画透明度', kind => {
+  const fishSource = readFileSync(resolve(process.cwd(), 'public/manor/knowledge-garden-v19/fish-art.js'), 'utf8');
+  const render = runInNewContext(`${fishSource};fishArt`) as (key: string, silhouette?: boolean) => string;
+  // Evaluate the emitted SVG alpha pipeline against transparent background and
+  // differently translucent body pixels, rather than assuming opaque artwork.
+  const alpha = (markup: string, input: number) => {
+    document.body.innerHTML = markup;
+    return [...document.querySelector('filter')!.children].reduce((value, primitive) => {
+      if (primitive.localName === 'feComponentTransfer') {
+        const transfer = primitive.querySelector('feFuncA')!;
+        return Math.min(1, Math.max(0, value * Number(transfer.getAttribute('slope') ?? 1) + Number(transfer.getAttribute('intercept') ?? 0)));
+      }
+      const matrix = primitive.getAttribute('values')!.split(/\s+/).map(Number);
+      return Math.min(1, Math.max(0, value * matrix[18] + matrix[19]));
+    }, input);
+  };
+  const missing = render(kind, true), discovered = render(kind);
+  expect(alpha(missing, 0)).toBe(0);
+  expect(alpha(missing, .08)).toBeCloseTo(alpha(missing, .8));
+  expect(alpha(missing, .8)).toBeGreaterThan(0);
+  expect(alpha(discovered, .08)).toBeLessThan(alpha(discovered, .8));
+  expect(alpha(discovered, 0)).toBe(0);
+});

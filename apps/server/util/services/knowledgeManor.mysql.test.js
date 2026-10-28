@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import mysql from 'mysql2/promise';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('../../db/index.js', () => ({ default: {} }));
@@ -9,7 +9,7 @@ import { MANOR_VERSION } from '@lightnote/shared/manor';
 const socketPath = process.env.LIGHTNOTE_TEST_MYSQL_SOCKET;
 const schema = `manor_${randomUUID().replaceAll('-', '')}`;
 describe.skipIf(!socketPath)('庄园真实积分与存档原子结算（隔离 MySQL）', () => {
-  let admin, db, created = false, clock, failReceipt, facts, service, accountCalendar;
+  let admin, db, created = false, clock, failReceipt, facts, service, accountCalendar, roll;
   const input = (revision, action, args = [], requestId = randomUUID()) => ({ revision, action, args, requestId, version: MANOR_VERSION });
   const rows = async table => (await db.query(`SELECT * FROM ${table} ORDER BY user_id`))[0];
   const context = async (conn, owner, now) => {
@@ -38,7 +38,7 @@ describe.skipIf(!socketPath)('庄园真实积分与存档原子结算（隔离 M
   beforeEach(async () => {
     for (const table of ['knowledge_manor_operations', 'knowledge_manors', 'points_log', 'user_growth']) await db.query(`DELETE FROM ${table}`);
     await db.query("INSERT INTO user_growth VALUES ('owner',60),('other',60)");
-    clock = new Date('2026-10-24T02:00:00Z'); facts = [false, false, false]; failReceipt = false;
+    clock = new Date('2026-10-24T02:00:00Z'); facts = [false, false, false]; failReceipt = false; roll = 0;
     accountCalendar = { dayKey:'20261024',weekKey:'202643',utcOffsetMinutes:480 };
     const wrapped = { query: db.query.bind(db), getConnection: async () => {
       const conn = await db.getConnection();
@@ -50,7 +50,7 @@ describe.skipIf(!socketPath)('庄园真实积分与存档原子结算（隔离 M
         },
       };
     } };
-    service = createKnowledgeManorService({ db: wrapped, context, rng: () => 0, now: () => clock });
+    service = createKnowledgeManorService({ db: wrapped, context, rng: () => roll, now: () => clock });
   });
   const adopt = async (owner = 'owner') => service.execute(owner, input(0, 'adopt'));
 
@@ -141,6 +141,65 @@ describe.skipIf(!socketPath)('庄园真实积分与存档原子结算（隔离 M
     const replay = await service.execute('owner', resolve);
     expect(replay.result).toEqual(result.result);
     expect(replay.state.fish).toHaveLength(1);
+  });
+  it('五竿保底随事务持久化，并发重放、刷新与跨日不重复推进', async () => {
+    const initial=await adopt();
+    const state={...initial.state,firstCastDone:true,bait:2};delete state.wallet;
+    await db.query("UPDATE knowledge_manors SET state_json=? WHERE user_id='owner'",[JSON.stringify(state)]);
+    roll=.3;
+    let current=await service.get('owner');
+    for(let i=0;i<5;i++) {
+      const started=await service.execute('owner',input(current.revision,'beginCast',['bait']));
+      const request=input(started.revision,'resolveCast',[started.state.castId]);
+      const results=await Promise.all([service.execute('owner',request),service.execute('owner',request)]);
+      expect(results.filter(r=>r.replayed)).toHaveLength(1);
+      expect(results[0].result).toEqual(results[1].result);
+      current=await service.get('owner');
+      expect(current.state.emptyCastStreak).toBe(i===4?0:i+1);
+      expect(Boolean(results[0].result.fish)).toBe(i===4);
+      if(i===2) {
+        clock=new Date('2026-10-25T02:00:00Z');
+        accountCalendar={dayKey:'20261025',weekKey:'202643',utcOffsetMinutes:480};
+        current=await service.get('owner');
+        expect(current.state).toMatchObject({emptyCastStreak:3,freeUsed:0});
+      }
+    }
+    expect(current.state.fish).toHaveLength(1);
+    expect(current.revision).toBe(11);
+    expect(await rows('knowledge_manor_operations')).toHaveLength(11);
+    expect(await rows('points_log')).toEqual([]);
+  });
+  it('旧版本成功收据仍重放原结果，读取升级不写存档、不补种子或改库存', async () => {
+    const request=input(0,'adopt'),created=await service.execute('owner',request);
+    const old={...created.state,version:'knowledge-manor-v1',seeds:{radish:7}};
+    delete old.emptyCastStreak;delete old.wallet;
+    old.rewards['daily-pack:20261024']=old.now;
+    await db.query("UPDATE knowledge_manors SET state_json=? WHERE user_id='owner'",[JSON.stringify(old)]);
+    const legacy={...request,version:'knowledge-manor-v1'};
+    const hash=createHash('sha256').update(JSON.stringify({version:legacy.version,action:legacy.action,args:legacy.args})).digest('hex');
+    await db.query("UPDATE knowledge_manor_operations SET command_hash=?,model_version='knowledge-manor-v1' WHERE request_id=?",[hash,request.requestId]);
+    facts=[true,true,true];
+    const replay=await service.execute('owner',legacy);
+    expect(replay).toMatchObject({version:MANOR_VERSION,revision:1,replayed:true,result:true,state:{version:MANOR_VERSION,emptyCastStreak:0,seeds:{radish:7}}});
+    const [stored]=(await rows('knowledge_manors'));
+    expect(typeof stored.state_json==='string'?JSON.parse(stored.state_json):stored.state_json).toEqual(old);
+    await expect(service.execute('owner',{...input(1,'claimAllDailyWater'),version:'knowledge-manor-v1'})).rejects.toMatchObject({code:'MANOR_VERSION_UNSUPPORTED'});
+    const claimed=await service.execute('owner',input(1,'claimAllDailyWater'));
+    expect(claimed.state.seeds).toEqual({radish:7});
+    expect(claimed.state.water).toBe(45);
+    expect((await rows('knowledge_manor_operations'))).toHaveLength(2);
+  });
+  it('空竿收据提交失败会回滚进度，同一请求重试只累计一次', async () => {
+    const adopted=await adopt();
+    const state={...adopted.state,firstCastDone:true};delete state.wallet;
+    await db.query("UPDATE knowledge_manors SET state_json=? WHERE user_id='owner'",[JSON.stringify(state)]);
+    const started=await service.execute('owner',input(1,'beginCast',['bait']));
+    const request=input(2,'resolveCast',[started.state.castId]);roll=.9;failReceipt=true;
+    await expect(service.execute('owner',request)).rejects.toThrow('fixture receipt failure');
+    expect((await service.get('owner')).state).toMatchObject({emptyCastStreak:0,castPending:true});
+    failReceipt=false;
+    expect((await service.execute('owner',request)).state.emptyCastStreak).toBe(1);
+    expect((await service.execute('owner',request)).state.emptyCastStreak).toBe(1);
   });
   it('麻雀掉落写入存档，其他操作和刷新不会抹掉礼物，领取每天仅一次', async () => {
     await adopt();

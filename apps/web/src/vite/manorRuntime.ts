@@ -5,6 +5,8 @@ import { runInNewContext } from 'node:vm';
 import { posix } from 'node:path';
 import type { Plugin } from 'vite';
 import icon from '../config/icon';
+import zh from '../i18n/locales/zh-CN-core';
+import en from '../i18n/locales/en-US-core';
 type PreloadScene = { asset: string; area?: string; assetSources?: { asset: string; width: number }[]; water: string; smooth?: string; skyBleed?: { asset: string }; detailTiles?: { asset: string }[] };
 
 // Fixed, visible controls are known before scripts and the account snapshot.
@@ -120,6 +122,7 @@ export default function manorRuntime(): Plugin {
       ...[...`${fishArt}${cropArt}`.matchAll(/\b(?:src|href)="(knowledge-garden-v19\/[^"]+)"/g)].map(([, file]) => `/manor/${file}`),
       '/manor/knowledge-garden-v19/farm/wildlife-rabbit-action-3-r14.webp',
       '/manor/knowledge-garden-v19/farm/composter-residue-r64.webp',
+      '/manor/knowledge-garden-v19/farm/seed-ground-r69.webp',
       ...['lv1','lv2','lv3','sealed'].map(frame=>`/manor/knowledge-garden-v19/farm/composter-${frame}-r68.webp`),
     ])];
     return JSON.stringify({
@@ -135,11 +138,19 @@ export default function manorRuntime(): Plugin {
   };
   return {
     name: 'lightnote-manor-runtime',
-    transformIndexHtml() {
+    transformIndexHtml(html) {
       const css = readFileSync(new URL('../view/manor/manorLoading.css', import.meta.url), 'utf8');
       const loadingIcon = 'data:image/svg+xml,' + encodeURIComponent(icon.manor.entry);
-      return [{ tag: 'style', attrs: { 'data-manor-entry-loading': 'true' }, injectTo: 'head' as const,
-        children: `html.light-note-manor-entry{--manor-loading-icon:url("${loadingIcon}")}\n${css}` }];
+      const escape = (text: string) => text.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
+      const copy = (key: 'loading' | 'loadingHint') => `<span lang="zh-CN">${escape(zh.manor[key])}</span><span lang="en">${escape(en.manor[key])}</span>`;
+      // Vue replaces these root children on mount. The first paint already has
+      // the same 0% cover, even before the route and account modules are ready.
+      const cover = `<section class="manor-entry-loading manor-loading"><div class="manor-loading__card" role="status"><span class="manor-loading__crest" aria-hidden="true"></span><span class="manor-loading__content"><span class="manor-loading__title" id="manor-entry-loading-title">${copy('loading')}</span><span class="manor-loading__static-progress" role="progressbar" aria-labelledby="manor-entry-loading-title" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"></span><span class="manor-loading__detail">0% · ${copy('loadingHint')}</span></span></div></section>`;
+      return {
+        html: html.replace('<div id="app"></div>', `<div id="app">${cover}</div>`),
+        tags: [{ tag: 'style', attrs: { 'data-manor-entry-loading': 'true' }, injectTo: 'head' as const,
+          children: `html.light-note-manor-entry{--manor-loading-icon:url("${loadingIcon}")}\n${css}` }],
+      };
     },
     configureServer(server) {
       for (const file of ['runtime.js', 'runtime.css'])

@@ -1801,7 +1801,6 @@ html:not(.kbd-nav) .catch-reveal :focus-visible {
   height: 100%;
   border-radius: inherit;
   background: linear-gradient(90deg, #7cc062, #4f9a46);
-  transition: width 0.25s ease;
 }
 @keyframes loader-sway {
   50% {

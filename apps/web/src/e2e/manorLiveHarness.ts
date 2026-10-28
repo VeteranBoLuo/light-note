@@ -12,6 +12,7 @@ import zh from '@/i18n/locales/zh-CN';
 import en from '@/i18n/locales/en-US';
 import KnowledgeManor from '@/view/manor/KnowledgeManor.vue';
 import ManorLoadingState from '@/view/manor/ManorLoadingState.vue';
+import BButton from '@/components/base/BasicComponents/BButton.vue';
 import AppLayout from '@/view/index.vue';
 import '@/assets/css/index.less';
 import { createStaticPrewarmScheduler } from '@/utils/staticPrewarm';
@@ -44,7 +45,7 @@ const persist = () => {
 };
 const ctx = (points: number): ManorContext & { random: () => number } => ({
   now: clock, points, calendar: { dayKey: '20261024', weekKey: '202643', utcOffsetMinutes: 480 },
-  dailyDone: [true, true, false], random: () => 0,
+  dailyDone: [true, true, false], random: () => params.get('scenario') === 'fishing-pity' ? .999 : 0,
 });
 const get = () => {
   if (!saves.has(user.id)) {
@@ -70,6 +71,17 @@ const get = () => {
       if (params.get('scenario') === 'guide-fish') { state.guide = null; state.discoveryGuide = 'fish'; state.fish = []; state.fishSlots = Array.from({length:M.RULES.farmSlots},()=>null); }
       if (params.get('scenario') === 'guide-observe') { state.discoveryGuide = 'observe'; state.firstCastDone = true; }
       if (params.get('scenario') === 'claimed') { state.xp=M.RULES.levels[1]+38;M.claimAllLevelRewards(state); }
+      if (params.get('scenario') === 'fishing-pity') { state.firstCastDone=true;state.bait=2; }
+      if (params.get('scenario') === 'pickups') { state.birdSeedDay=M.day(state);state.birdSeedPickedDay=null; }
+      if (params.get('scenario') === 'atlas-empty') {
+        state.discoveries={};state.cropDex={};state.fish=[];state.fishSlots=Array.from({length:M.RULES.farmSlots},()=>null);
+        state.firstCastDone=true;state.firstCompanionPending=null;state.discoveryGuide=null;
+      }
+      if (params.get('scenario') === 'atlas-known') state.cropDex={carrot:{first:1,count:1}};
+      if (params.get('scenario') === 'hive-pollen') {
+        M.buyFacility(state,'beehive');state.crops={lavender:2,sunflower:1,rosemary:2};
+        state.plots[1].next=state.now+6;
+      }
       if (['crops','compost'].includes(params.get('scenario') || '')) {
         state.xp=M.RULES.levels[19]+40;state.water=60;state.plots=M.create().plots;
         const keys=['pea','potato','cucumber','rosemary','watermelon','grape','tea'];
@@ -136,7 +148,7 @@ const Entry = params.get('entry') === 'true' ? (mobile
   : (await import('@/components/home/navigation/RightArea.vue')).default) : null;
 const fixtureRoutes = [
   { path: '/knowledge-manor', name: 'knowledgeManor', component: KnowledgeManor },
-  { path: '/app', component: { render: () => Entry ? h('div', { style: { position:'relative', minHeight:'var(--ui-control-56, 56px)' } }, [h(Entry)]) : h('p', '已返回轻笺 · 隔离夹具') } },
+  { path: '/app', component: { render: () => Entry ? h('div', { style: { position:'relative', minHeight:'var(--ui-control-56, 56px)' } }, [h(Entry)]) : h('section', [h('p', '已返回轻笺 · 隔离夹具'), h(BButton, {onClick:()=>router.push('/knowledge-manor')}, ()=> '进入庄园')]) } },
   { path: '/growth', component: { render: () => h('p', '成长中心 · 隔离夹具') } },
   { path: '/bookmarks', component: { render: () => h('p', '书签模块已就绪 · 隔离夹具') } },
   { path: '/home', component: { render: () => h('p', '书签模块已就绪 · 隔离夹具') } },
@@ -183,7 +195,8 @@ createApp({ render: () => h('div', { style: { height: '100%', display: 'flex', f
       save.state = next.state;save.revision++;persist();
       trace.value = '另一设备已拾取兔子肥料';
     } }, '另一设备拾取兔子肥料') : null,
-  ]), h('div', { style: { flex: '1', minHeight: '0' } }, [h(params.get('loadingPreview') === 'true' ? ManorLoadingState : RouterView)]),
+  ]), h('div', { style: { flex: '1', minHeight: '0' } }, [params.get('loadingPreview') === 'true'
+    ? h(ManorLoadingState, { progress: Number(params.get('loadingProgress') || 0) }) : h(RouterView)]),
 ]) }).use(pinia).use(createI18n({ legacy: false, locale, messages: { 'zh-CN': zh, 'en-US': en } })).use(router).mount('#app');
 if (params.get('prewarm') === 'true') {
   const proof = document.createElement('pre'); proof.id = 'manor-prewarm-proof'; proof.hidden = true; document.body.append(proof);

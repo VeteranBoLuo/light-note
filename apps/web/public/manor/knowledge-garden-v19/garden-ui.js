@@ -238,13 +238,13 @@ function rulesContent() {
   const cropCards = Object.values(M.CROPS).map((c) => `<article class="help-crop"><strong>${c.name}</strong><span>${c.first} 小时${c.sell === null ? "盛开" : "首收"}${c.harvests > 1 ? ` · 每 ${c.every} 小时再收，共 ${c.harvests} 轮` : ""}</span><small>${c.price === null ? "奖励种子" : `种子 ${c.price} 积分 · Lv.${c.unlock}`} · ${c.sell === null ? "长久观赏" : `每份卖 ${c.sell} 积分`}</small></article>`).join("");
   const pages = {
     plant: card("1", "选种子", "点空地选种子；也可以从背包选好，再连续点空地。") + card("2", "浇一次水，安心等成长", `每块地用 ${R.plantWater} 滴水开始生长。此后可以钓鱼、养鱼或离开，作物不会枯萎。`) + card("3", "成熟后点一下收获", "收获放进背包，可留作工坊和蜂箱材料，也可前往商店出售。复收作物会继续生长；花朵采过后仍可观赏。") + `<p class="help-note">开局 4 块田 · Lv.${Object.keys(R.plotsAt).slice(1).join(" / ")} 各开垦 1 块。</p><details class="help-details"><summary>查看作物时长与价格</summary><div class="help-crops">${cropCards}</div></details>`,
-    fish: card("1", "到钓鱼区抛竿", `每天 ${R.dailyFree} 次免费，之后每竿用 1 份鱼饵。普通鱼饵 ${R.baitCost} 积分，也能用玉米换。`) + card("2", "咬钩后收竿", "点钓点收竿，也可以等自动收竿；反应快慢不改变结果。首次固定获得一尾会产肥的珊瑚小丑鱼。") + card("3", "决定新伙伴的去向", "首钓伙伴先放进养鱼舱；之后可以入住、收进背包或卖出。淡水与海水伙伴都能通过垂钓遇见，鱼苗袋还可必得一位淡水伙伴。") + `<details class="help-details"><summary>鱼饵与鱼苗袋</summary><p>普通鱼饵每竿消耗 1 份；彩虹鱼饵可保证上钩。</p><p>淡水鱼苗袋 ${R.fryPrice} 积分，每天最多 ${R.fryDaily} 袋，必得一位淡水生物。</p></details>`,
+    fish: card("1", "到钓鱼区抛竿", `每天 ${R.dailyFree} 次免费，之后每竿用 1 份鱼饵。普通鱼饵 ${R.baitCost} 积分，也能用玉米换。`) + card("2", "咬钩后收竿", `点钓点收竿，也可以等自动收竿；反应快慢不改变结果。新用户仅首次固定获得珊瑚小丑鱼，此后基础上钩率 ${R.success * 100}%。连续空 ${R.pityCasts - 1} 竿后，第 ${R.pityCasts} 竿必得；成功后重新累计，跨日保留。`) + card("3", "决定新伙伴的去向", "首钓伙伴先放进养鱼舱；之后可以入住、收进背包或卖出。淡水与海水伙伴都能通过垂钓遇见，鱼苗袋还可必得一位淡水伙伴。") + `<details class="help-details"><summary>鱼饵与鱼苗袋</summary><p>免费、普通和定向鱼饵共用连续空竿进度。彩虹鱼饵可保证上钩，成功也会清空进度；保底不保证稀有度或新品种。</p><p>淡水鱼苗袋 ${R.fryPrice} 积分，每天最多 ${R.fryDaily} 袋，必得一位淡水生物。</p></details>`,
     tank: card("1", "安排入住", `6 个产肥位住鱼，3 个观赏位住其他水族。产肥鱼每 ${R.productionHours} 小时产 1 份，最多储存 ${R.storageLimit} 份，存满暂停。`) + card("2", "打开养鱼管理", "点菜单或场景中的养鱼舱展开管理面板，查看产肥进度并领取；再点一次即可收起。") + card("3", "把肥料撒在正在长的作物上", "常见 / 稀有 / 珍稀 / 传说鱼分别产 1 / 2 / 3 / 4 小时催熟肥。每轮最多缩短一半生长时间；换鱼会重置该位进度。") + `<p class="help-note">兔子每天留一份有机肥，可催熟 30 分钟；麻雀每天带一颗小萝卜种子。点小路上的礼物拾取，未领取的天数不累积。</p>`,
-    points: card("1", "日常任务补水", `轻笺每日任务每完成 1 项可领取 ${R.dailyWater} 滴水，最多存 ${R.waterCap} 滴。三项都完成，再送 2 颗基础种子。商店可建造一台海水过滤器，随等级每天另收 ${R.purifierWater}–${R.purifierLevels[2].water} 滴水，未领的旧水不跨天累积。`) + card("2", "种子花积分，收获赚积分", "商店出售基础和进阶种子。稀有种子来自等级、连签、挑战、收藏等奖励；收获后的作物和多余水族可卖积分。") + card("3", "按自己的节奏经营", "没有每日、每周积分上限。收益受土地、水滴、生长与产肥时间约束；多照看可以多收一些。玉米也能留着换鱼饵。") + `<p class="help-note">当前 ${state.wallet} 积分 · 具体收支可点顶部积分查看。</p>`,
-    facilities: card("1", "诱饵工坊 · Lv.6", "180 积分建造。每份普通鱼饵加一份小番茄或生菜，分别制作果香引鱼饵或草木觅贝饵，偏向鱼类或底栖水族。每批 1–3 份，用时 2 小时，完成后留在工坊等你收好。") + card("2", "花园蜂箱 · Lv.6", "160 积分建造。薰衣草一束补 2 份花粉，向日葵一束补 6 份，最多存 6 份。每天可选一株浇过水、正在生长的普通复收作物，消耗 1 份花粉，让下一次收获多 1 份；每株仅一次，不额外增加经验。") + card("3", "海水过滤器 · Lv.8", "240 积分建造，每天收 6 滴水。Lv.12 可花 180 积分并消耗 4 只常见海水底栖水族，升为每天 8 滴；Lv.18 再花 360 积分并消耗 2 只稀有海水底栖水族，升为每天 10 滴。材料从待养区手动选择，可混种，图鉴保留。") + '<p class="help-note">每种设施限建一台，未建时封存。制作鱼饵和补充花粉会消耗材料；每天先用免费垂钓次数，之后才消耗选定的鱼饵。</p>',
+    points: card("1", "日常任务补水", `轻笺每日任务每完成 1 项可领取 ${R.dailyWater} 滴水，最多存 ${R.waterCap} 滴。商店可建造一台海水过滤器，随等级每天另收 ${R.purifierWater}–${R.purifierLevels[2].water} 滴水，未领的旧水不跨天累积。`) + card("2", "种子花积分，收获赚积分", "商店出售基础和进阶种子。稀有种子来自等级、连签、挑战、收藏等奖励；收获后的作物和多余水族可卖积分。") + card("3", "按自己的节奏经营", "没有每日、每周积分上限。收益受土地、水滴、生长与产肥时间约束；多照看可以多收一些。玉米也能留着换鱼饵。") + `<p class="help-note">当前 ${state.wallet} 积分 · 具体收支可点顶部积分查看。</p>`,
+    facilities: card("1", "诱饵工坊 · Lv.6", `180 积分建造。每份普通鱼饵加一份小番茄或生菜，分别制作果香引鱼饵或草木觅贝饵，偏向鱼类或底栖水族，基础上钩率仍为 ${R.success * 100}%，参与连续空竿保底。每批 1–3 份，用时 2 小时，完成后留在工坊等你收好。`) + card("2", "花园蜂箱 · Lv.6", `160 积分建造。薰衣草一束补 ${M.FACILITY_RULES.flowerPollen.lavender} 份花粉，向日葵 ${M.FACILITY_RULES.flowerPollen.sunflower} 份，迷迭香 ${M.FACILITY_RULES.flowerPollen.rosemary} 份，最多存 ${M.FACILITY_RULES.pollenCapacity} 份。每天可选一株浇过水、正在生长的普通复收作物，消耗 1 份花粉，让下一次收获多 1 份；每株仅一次，不额外增加经验。`) + card("3", "海水过滤器 · Lv.8", "240 积分建造，每天收 6 滴水。Lv.12 可花 180 积分并消耗 4 只常见海水底栖水族，升为每天 8 滴；Lv.18 再花 360 积分并消耗 2 只稀有海水底栖水族，升为每天 10 滴。材料从待养区手动选择，可混种，图鉴保留。") + '<p class="help-note">每种设施限建一台，未建时封存。制作鱼饵和补充花粉会消耗材料；每天先用免费垂钓次数，之后才消耗选定的鱼饵。</p>',
     collection: card("1", "认识作物和水族", "首次收获作物、发现水族会点亮图鉴，也会增加庄园经验。买种子、浇水和铲除不增加经验。") + card("2", "每升一级都有礼物", "每级一份成长补给，每 5 级一份丰盛礼包。点顶部等级看奖励用途，再去背包使用。") + card("3", "留意庄园的小伙伴", "轻触兔子会回应，点附近草地可以引它跳过去；码头的青蛙也能互动。图鉴的庄园成就还有种子与称号奖励。")
   };
-  return `<nav class="help-tabs" aria-label="玩法分类">${tabs.map(([key, label]) => `<button data-action="help-tab" data-tab="${key}" aria-pressed="${helpTab === key}">${label}</button>`).join("")}</nav><div class="help-content">${pages[helpTab]}</div><p class="help-demo">原型体验 · 不扣减真实积分，重置后恢复示例数据。</p>`;
+  return `<nav class="help-tabs" aria-label="玩法分类">${tabs.map(([key, label]) => `<button data-action="help-tab" data-tab="${key}" aria-pressed="${helpTab === key}">${label}</button>`).join("")}</nav><div class="help-content">${pages[helpTab]}</div><p class="help-demo">${GardenLive.testing ? "测试庄园使用独立积分和库存，可随时返回正式庄园。" : "庄园与轻笺共用积分，购买与出售实时记账。"}</p>`;
 }
 function discoveryStep() {
   const step = state.discoveryGuide === "observe" && state.fishSlots.some((slot) => farmFish(slot)) ? "observe" :
@@ -766,8 +766,10 @@ async function cast(event, choice = null) {
     const caught = result.fish;
     update();
     if (!caught) {
-      GardenFX.miss(pondEl, "空竿", "鱼儿碰了碰鱼饵，又游走了");
-      announce("这次空竿");
+      const misses = state.emptyCastStreak || 0;
+      const hint = misses >= R.pityCasts - 1 ? "下一竿必有收获" : misses ? `已连续空 ${misses} 竿 · 第 ${R.pityCasts} 竿保底` : "鱼儿碰了碰鱼饵，又游走了";
+      GardenFX.miss(pondEl, "空竿", hint);
+      announce(`这次空竿，${hint}`);
       return;
     }
     castAgain = await revealCaught(result, pondEl, { session });

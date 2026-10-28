@@ -23,7 +23,7 @@ import { accountSettingsZh } from './accountSettings';
 import { settingsRefineZh } from './settingsRefine';
 import { notificationMessages } from '@lightnote/shared/notification-presentation';
 export default {
-  manor: { title: '知识庄园', loading: '正在唤醒庄园', loadFailed: '庄园暂时无法打开，请稍后重试', returnToApp: '返回轻笺', actionFailed: '操作未完成，请稍后重试' },
+  manor: { title: '知识庄园', loading: '正在载入庄园', loadingHint: '正在准备场景，请稍候', loadingFinishing: '正在收拾最后的小细节，请稍候', loadingReady: '场景已就绪', loadingWelcome: '庄园准备好了，欢迎回来', loadFailed: '庄园暂时无法打开，请稍后重试', returnToApp: '返回轻笺', actionFailed: '操作未完成，请稍后重试' },
   publicResources: publicResourcesZh,
   profileBackgrounds: profileBackgroundsZh,
   profileAppearance: profileAppearanceZh,

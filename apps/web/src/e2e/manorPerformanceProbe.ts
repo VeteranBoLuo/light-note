@@ -2,7 +2,9 @@
 if (new URLSearchParams(location.search).has('performance')) {
   const output = document.createElement('output');
   output.id = 'manor-performance';
-  output.hidden = true;
+  const visible = new URLSearchParams(location.search).get('performance') === 'visible';
+  output.hidden = !visible;
+  if (visible) output.style.cssText = 'box-sizing:border-box;position:fixed;right:var(--ui-space-12,12px);bottom:var(--ui-space-12,12px);z-index:9999;max-width:calc(100% - 2 * var(--ui-space-12,12px));padding:var(--ui-space-8,8px);font:var(--ui-font-12,12px)/1.5 system-ui;color:#213c2b;background:#fffef0f2;border:1px solid #879d77;border-radius:6px;white-space:pre-line;pointer-events:none';
   document.body.append(output);
   document.addEventListener(
     'load',
@@ -27,7 +29,7 @@ if (new URLSearchParams(location.search).has('performance')) {
       const observer = new Observer((list) =>
         tasks.push(...list.getEntries().map((e) => ({ start: e.startTime, duration: e.duration }))),
       );
-      observer.observe({ type: 'longtask', buffered: true });
+      if (Observer.supportedEntryTypes.includes('longtask')) observer.observe({ type: 'longtask', buffered: true });
       const frames: unknown[] = [];
       const frameObserver = new Observer((list) => frames.push(...list.getEntries().map((entry) => entry.toJSON())));
       if (Observer.supportedEntryTypes.includes('long-animation-frame'))
@@ -47,11 +49,15 @@ if (new URLSearchParams(location.search).has('performance')) {
         const resources = (perf.getEntriesByType('resource') as PerformanceResourceTiming[]).filter((e) =>
           e.name.includes('/manor/'),
         );
-        output.textContent = JSON.stringify({
+        const evidence = {
           elapsed: Math.round(perf.now()),
           revealed: Math.round(revealed),
           painted: Math.round(painted),
           interactive: Math.round(perf.getEntriesByName('manor-interactive')[0]?.startTime || 0),
+          phase: doc.documentElement.dataset.startupPhase,
+          visibility: doc.visibilityState,
+          hostVisibility: document.visibilityState,
+          cachedAssets: Number(doc.documentElement.dataset.cachedAssets || 0),
           inputs,
           resources: resources.map((e) => new URL(e.name).pathname),
           missing,
@@ -80,8 +86,20 @@ if (new URLSearchParams(location.search).has('performance')) {
             height: c.height,
             preparation: c.dataset.preparation,
           })),
-        });
+        };
+        output.dataset.evidence = JSON.stringify(evidence);
+        output.textContent = visible ? `可交互：${evidence.interactive || '准备中'} ms · 素材：${evidence.measures.find(entry => entry.name === 'manor-assets-preparation')?.duration ?? '准备中'} ms · 水面：${evidence.measures.find(entry => entry.name === 'manor-water-preparation')?.duration ?? '准备中'} ms\n资源：${evidence.requests} · 复用：${evidence.cachedAssets} 张 · 网络：${Math.round(evidence.transferBytes / 1024)} KiB\n阶段：${evidence.phase} · 场景 ${evidence.visibility} / 宿主 ${evidence.hostVisibility}` : JSON.stringify(evidence);
       };
+      // Safari may pause iframe frames while its window is occluded. Keep the
+      // final ready evidence even when the bounded periodic sampler has ended.
+      const finalSample = (message: MessageEvent) => {
+        if (message.source !== win || message.origin !== location.origin || message.data?.type !== 'lightnote-manor'
+          || !['ready', 'load-error'].includes(message.data.action)) return;
+        if (frame.isConnected) sample();
+        window.removeEventListener('message', finalSample);
+      };
+      window.addEventListener('message', finalSample);
+      win.addEventListener('pagehide', () => window.removeEventListener('message', finalSample), {once:true});
       sample();
       const timer = setInterval(sample, 250);
       setTimeout(() => {

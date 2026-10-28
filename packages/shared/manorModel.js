@@ -1,5 +1,5 @@
 /* Knowledge Manor deterministic rules and user-approved crop catalog.
-   Existing crop prices, growth cycles, rewards and the shared points currency are preserved.
+   Existing crop prices, growth cycles and the shared points currency are preserved.
    Time, random outcomes and mutations are authorised by the server command boundary. */
 const GardenModel = (() => {
   const RULES = Object.freeze({
@@ -30,9 +30,10 @@ const GardenModel = (() => {
     fryPrice: 24,
     fryDaily: 2,
     dailyFree: 3,
-    // 首钓固定一尾基础产肥鱼；之后每竿独立 25%，没有每日或连续空竿保底。
+    // 新用户仅首次固定一尾基础产肥鱼；此后基础成功率 25%，连续空四竿后第五竿必得。
     firstFish: "clown",
     success: 0.25,
+    pityCasts: 5,
     // 产肥位 6 个，每尾 48 小时产 1 份，最多存 4 份
     farmSlots: 6,
     productionHours: 48,
@@ -74,7 +75,6 @@ const GardenModel = (() => {
     moonorchid: { name: "月光兰", tier: "rare", type: "flower", first: 72, every: 48, harvests: 3, price: null, sell: 30, xp: 150, fertilizer: "legend", unlock: 1 },
   });
   const RARE = Object.keys(CROPS).filter((k) => CROPS[k].tier === "rare");
-  const BASIC = Object.keys(CROPS).filter((k) => CROPS[k].tier === "basic");
   const FERT = {
     rabbit: { name: "兔子便便肥", hours: 0.5 },
     eco: { name: "生态催熟肥", hours: 1 },
@@ -98,7 +98,7 @@ const GardenModel = (() => {
     herb: Object.freeze({name:"草木觅贝饵", crop:"lettuce", preference:"海水底栖水族"}),
   });
   const FACILITY_RULES = Object.freeze({craftHours:2, craftMax:3, targetWeight:4, pollenCapacity:6,
-    flowerPollen:Object.freeze({lavender:2, sunflower:6, rosemary:1}),
+    flowerPollen:Object.freeze({lavender:3, sunflower:6, rosemary:4}),
     pollinationCrops:Object.freeze(["tomato","strawberry","eggplant","pepper","blueberry","cucumber","grape"])});
   // 每级一次补给，每 5 级加赠里程碑礼包；Lv.1 就是见面礼，不重复发放。
   // 领取不加经验，施肥仍受半轮加速上限约束。
@@ -445,18 +445,11 @@ const GardenModel = (() => {
   }
 
   // ---------- 每日任务与时间 ----------
-  // 每完成 1 项可领取 5 滴水；3 项全部完成仍自动送 1 包基础种子（2 颗）
-  function completeDaily(s, index, rng = Math.random) {
+  // 每完成 1 项可领取 5 滴水；任务本身不再附送种子。
+  function completeDaily(s, index) {
     if (!Number.isInteger(index) || index < 0 || index > 2 || s.dailyDone[index]) return false;
     s.dailyDone[index] = true;
-
-    let pack = null;
-    if (s.dailyDone.every(Boolean)) {
-      const pool = BASIC.filter((k) => CROPS[k].unlock <= level(s));
-      pack = pool[Math.min(pool.length - 1, Math.floor(rng() * pool.length))];
-      s.seeds[pack] = (s.seeds[pack] || 0) + 2;
-    }
-    return { pack };
+    return true;
   }
   // 庄园只领取水滴，与轻笺积分领取分开。水桶装不下的部分留待当日领取。
   const pendingDailyWater = s => s.dailyDone.flatMap((done,index) => done && (s.dailyWaterClaims?.[index]||0)<RULES.dailyWater
@@ -694,6 +687,7 @@ const GardenModel = (() => {
     s.casting = true;
     s.castPending = true;
     s.castSource = source;
+    s.castPity = RULES.pityCasts;
     return source;
   }
   function addFish(s, kind) {
@@ -750,7 +744,13 @@ const GardenModel = (() => {
     s.firstCastDone = true;
     const forcedFish = forced && catalog[forced] ? forced : null;
     const sure = s.castSource === "rainbow";
-    const success = firstCatch || forcedFish || (forced !== "empty" && (sure || rng() < RULES.success));
+    // The threshold is captured at cast time. Legacy pending casts have no pity,
+    // and do not count a historical miss towards the new guarantee.
+    const pity = s.castPity || 0;
+    const misses = Number.isInteger(s.emptyCastStreak) ? Math.max(0, s.emptyCastStreak) : 0;
+    const success = firstCatch || forcedFish || (forced !== "empty" && (sure || (pity > 0 && misses >= pity - 1) || rng() < RULES.success));
+    s.emptyCastStreak = success || !pity ? 0 : Math.min(pity - 1, misses + 1);
+    delete s.castPity;
     if (!success) {
       return { fish: null };
     }
@@ -923,7 +923,7 @@ const GardenModel = (() => {
       adopted: false, guide: "welcome", discoveryGuide: null,
       now: 24, xp: 0, water: 0, wallet: 0, bait: 0, rainbowBait: 0,
       craftedBait: { fruit: 0, herb: 0 }, workshop: null, beehive: null,
-      preferredBait: "bait", freeUsed: 0, firstCastDone: false,
+      preferredBait: "bait", freeUsed: 0, firstCastDone: false, emptyCastStreak: 0,
       firstCompanionPending: null, casting: false, castPending: false, castSource: null,
       fish: [], fishSlots: Array(RULES.farmSlots).fill(null), showSlots: Array(RULES.showSlots).fill(null),
       discoveries: {}, atlasUnread: {}, nextFishId: 1, buybacks: [], nextSaleId: 1,

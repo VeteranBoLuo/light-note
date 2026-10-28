@@ -674,8 +674,12 @@ html #app .garden-play .farm-staged .game-dock {
 #modal .crop-grid .atlas-card.rare.discovered {
   border-color: #e9b949;
 }
-#modal .crop-detail-art .crop-card {
-  width: min(100%, calc(240px * var(--d)));
+#modal .crop-detail-art .crop-preview {
+  flex: none;
+  width: auto;
+  max-width: 100%;
+  height: 100%;
+  aspect-ratio: 1;
   margin: 0 auto;
 }
 #modal .guide-pack img,

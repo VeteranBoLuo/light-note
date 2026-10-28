@@ -1,4 +1,4 @@
-export const MANOR_VERSION: 'knowledge-manor-v1';
+export const MANOR_VERSION: 'knowledge-manor-v2';
 export const MANOR_COMMANDS: readonly string[];
 export interface ManorState {
   version: string;
@@ -8,6 +8,7 @@ export interface ManorState {
   guide: string | null;
   water: number;
   xp: number;
+  emptyCastStreak: number;
   seeds: Record<string, number>;
   plots: Array<{ next?: number; [key: string]: unknown }>;
   [key: string]: unknown;

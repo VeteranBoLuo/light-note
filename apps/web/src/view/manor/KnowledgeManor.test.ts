@@ -81,6 +81,45 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 describe('庄园加载与主站导航', () => {
+  it('从 0% 复用同一加载层，真实进度只前进；100% 后仍等待场景可交互', async () => {
+    await mount();
+    const frame = document.querySelector('iframe')!, nonce = new URL(frame.src).searchParams.get('bridge');
+    const cover = document.querySelector('.manor-loading')!;
+    const send = async (action: string, payload = {}, token = nonce, source: Window | null = frame.contentWindow) => {
+      window.dispatchEvent(new MessageEvent('message', { source, origin: location.origin,
+        data: { type: 'lightnote-manor', nonce: token, id: 0, action, payload } }));
+      await flush();
+    };
+    const percent = () => document.querySelector('[role="progressbar"]')?.getAttribute('aria-valuenow');
+    expect(percent()).toBe('0');
+    await send('loading');
+    expect(document.querySelector('.manor-loading')).toBe(cover);
+    await send('progress', { percent: 42 });
+    expect(percent()).toBe('42');
+    expect(document.querySelector<HTMLElement>('.b-progress__bar')?.style.width).toBe('42%');
+    for (const value of [20, -1, 101, 12.5, '70', null]) await send('progress', { percent: value });
+    await send('progress', { percent: 90 }, 'other-frame');
+    await send('progress', { percent: 90 }, nonce, window);
+    expect(percent()).toBe('42');
+    await send('progress', { percent: 100 });
+    expect(document.querySelector('.manor-loading')).toBe(cover);
+    expect(percent()).toBe('100');
+    expect(document.querySelector<HTMLElement>('.b-progress__bar')?.style.width).toBe('100%');
+    expect(document.querySelector('nav')).not.toBeNull();
+    await send('ready');
+    expect(document.querySelector('.manor-loading')).toBeNull();
+    expect(document.querySelector('nav')).toBeNull();
+    await send('load-error');
+    (document.querySelector('[role="alert"] button') as HTMLButtonElement).click();
+    await flush();
+    expect(percent()).toBe('0');
+    expect(document.querySelector('iframe')).not.toBe(frame);
+    // A late completion from the discarded frame cannot finish the new load.
+    await send('progress', { percent: 100 });
+    await send('ready');
+    expect(percent()).toBe('0');
+  });
+
   it('可见场景的被动同步读取正式存档，并拒绝将旧场景意图套用新版本', async () => {
     await mount();
     const frame = document.querySelector('iframe')!, reply = vi.spyOn(frame.contentWindow!, 'postMessage');

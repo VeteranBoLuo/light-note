@@ -49,4 +49,22 @@ describe('Root 独立庄园流程测试',()=>{
     expect(()=>session.execute('buySeed',['radish',1])).toThrow();
     expect(session.snapshot().revision).toBe(0);
   });
+  it('独立测试刷新后继续累计第五竿保底，首钓只一次且不影响正式资产',()=>{
+    const real=formal(),before=structuredClone(real),session=createManorTestSession(real,()=>1000,()=>.999);
+    const cast=(target:ReturnType<typeof createManorTestSession>)=>{
+      const started=target.execute('beginCast',['bait']);
+      return target.execute('resolveCast',[started.state.castId]);
+    };
+    session.execute('adopt',[]);
+    const first=cast(session);session.execute('place',[(first.result as {fish:{id:number}}).fish.id,0]);
+    session.execute('buyBait',[3]);
+    for(let i=0;i<4;i++)expect((cast(session).result as {fish:unknown}).fish).toBeNull();
+    saveManorTestSession('root',session);
+    const restored=readManorTestSession('root',()=>1000,()=>.999)!;
+    expect(restored.snapshot().state.emptyCastStreak).toBe(4);
+    const fifth=cast(restored);
+    expect((fifth.result as {fish:unknown}).fish).toBeTruthy();
+    expect(fifth.state.emptyCastStreak).toBe(0);
+    expect(real).toEqual(before);
+  });
 });

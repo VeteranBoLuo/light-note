@@ -2,20 +2,51 @@
    A timeout is an error, never permission to uncover an unfinished scene. */
 const GardenStartup=(()=>{
   document.documentElement.classList.add('garden-booting');
-  const nonce=new URLSearchParams(location.search).get('bridge');
-  const notify=(action)=>{if(nonce&&parent!==window)parent.postMessage({type:'lightnote-manor',nonce,id:0,action},location.origin);};
+  document.documentElement.dataset.startupPhase='resources';
+  const params=new URLSearchParams(location.search),nonce=params.get('bridge');
+  const embedded=Boolean(nonce&&parent!==window);
+  const notify=(action,payload={})=>{if(embedded)parent.postMessage({type:'lightnote-manor',nonce,id:0,action,payload},location.origin);};
+  // Keep immutable public image URLs in the host document, whose lifetime spans
+  // scene visits. Child-created blob URLs die with the iframe and defeat the
+  // browser's decoded-image cache even when the HTTP response was cached.
+  let sharedImages=null;
+  try {if(embedded&&params.get('loader')==='host'&&parent.location.origin===location.origin)
+    sharedImages=parent.__LIGHTNOTE_MANOR_IMAGES_V1__||=new parent.Map();}catch{}
+  const heldImages=new Map();let cachedAssets=0;
+  function trimSharedImages(){
+    if(!sharedImages)return;
+    let bytes=[...sharedImages.values()].reduce((sum,entry)=>sum+entry.bytes,0);
+    for(const [key,entry]of [...sharedImages].sort((a,b)=>a[1].used-b[1].used)){
+      if(sharedImages.size<=48&&bytes<=12*1024*1024)break;
+      if(!entry.refs){sharedImages.delete(key);parent.URL.revokeObjectURL(entry.url);bytes-=entry.bytes;}
+    }
+  }
+  function holdImage(key,entry){
+    if(heldImages.get(key)!==entry){
+      const previous=heldImages.get(key);if(previous)previous.refs=Math.max(0,previous.refs-1);
+      heldImages.set(key,entry);entry.refs++;
+    }
+    entry.used=Date.now();return entry.url;
+  }
+  window.addEventListener?.('pagehide',event=>{
+    if(event.persisted)return;
+    for(const entry of heldImages.values())entry.refs=Math.max(0,entry.refs-1);
+    heldImages.clear();trimSharedImages();
+  },{once:true});
   const el=document.createElement('div');el.className='garden-loader';
+  // Embedded scenes report progress to the one host cover; standalone previews keep their own.
+  if(embedded&&params.get('loader')==='host')el.style.display='none';
   el.setAttribute('role','progressbar');el.setAttribute('aria-label','正在载入知识庄园');
   el.setAttribute('aria-valuemin','0');el.setAttribute('aria-valuemax','100');
   el.setAttribute('aria-valuenow','0');
-  el.innerHTML='<div class="garden-loader-card"><div class="garden-loader-sprout" aria-hidden="true"></div><p>正在连接庄园</p><div class="garden-loader-bar"><i></i></div><small>等待账号与场景脚本</small></div>';
+  el.innerHTML='<div class="garden-loader-card"><div class="garden-loader-sprout" aria-hidden="true"></div><p>正在载入庄园</p><div class="garden-loader-bar"><i></i></div><small>0% · 正在准备场景，请稍候</small></div>';
   const loadingIcon=JSON.parse(document.getElementById('manor-icon-assets')?.textContent||'{}').loading;
   if(loadingIcon){const crest=document.createElement('img');crest.src=loadingIcon;crest.alt='';el.querySelector('.garden-loader-sprout').append(crest);}
   document.body.append(el);
   const title=el.querySelector('p'),bar=el.querySelector('i'),label=el.querySelector('small');
   const work=[],images=new Map(),assetUrls=new Map(),downloads=new Map(),deferred=[];let finished=false,failed=false,mounted=false,readiness=null,completed=0,total=0,assetDone=0,assetTotal=0,assetBytes=0,assetController=null,boot=null;
   let cancel;const cancelled=new Promise(resolve=>{cancel=resolve;});
-  // Let the host keep its own loading state until this cover has actually painted.
+  // Notify after layout; the embedded host keeps its cover until ready.
   requestAnimationFrame(()=>requestAnimationFrame(()=>notify('loading')));
   function fail(){
     if(finished||failed)return;
@@ -40,13 +71,37 @@ const GardenStartup=(()=>{
       if(original.origin!==location.origin||!original.pathname.startsWith('/manor/'))throw Error('scene asset URL');
       if(!downloads.has(original.href)){
         const task=(async()=>{
+          // Unversioned art stays on the existing HTTP request path. Never
+          // retain API responses, account data, or arbitrary query URLs here.
+          const reusable=sharedImages&&!original.search&&/-r\d+(?:-\d+)?\.(webp|png|svg)$/i.test(original.pathname);
+          const cached=reusable&&sharedImages.get(original.href);
+          if(cached){
+            const objectUrl=holdImage(original.href,cached);assetUrls.set(original.href,objectUrl);
+            try {await image(objectUrl);}catch(error){
+              if(sharedImages.get(original.href)===cached){sharedImages.delete(original.href);parent.URL.revokeObjectURL(objectUrl);}
+              throw error;
+            }
+            if(startup){assetBytes+=cached.bytes;document.documentElement.dataset.assetBytes=String(assetBytes);document.documentElement.dataset.cachedAssets=String(++cachedAssets);}
+            return objectUrl;
+          }
           const response=await fetch(original.href,{signal:assetController.signal,cache:'force-cache',credentials:'omit',priority:descriptor.priority||'auto'});
           if(!response.ok)throw Error('scene asset response');
           const blob=await response.blob();
           if(!blob.type.startsWith('image/'))throw Error('scene asset type');
+          if(assetController.signal.aborted)throw Error('scene cancelled');
           if(startup){assetBytes+=blob.size;document.documentElement.dataset.assetBytes=String(assetBytes);}
-          const objectUrl=URL.createObjectURL(blob);assetUrls.set(original.href,objectUrl);
-          await image(objectUrl);return objectUrl;
+          const objectUrl=reusable?parent.URL.createObjectURL(blob):URL.createObjectURL(blob);
+          if(reusable){
+            // Parent-realm records do not keep a discarded iframe's globals alive.
+            const entry=parent.Object.assign(parent.Object.create(null),{url:objectUrl,bytes:blob.size,refs:0,used:Date.now()});
+            sharedImages.set(original.href,entry);holdImage(original.href,entry);trimSharedImages();
+          }
+          assetUrls.set(original.href,objectUrl);
+          try {await image(objectUrl);}catch(error){
+            if(reusable&&sharedImages.get(original.href)?.url===objectUrl){sharedImages.delete(original.href);parent.URL.revokeObjectURL(objectUrl);}
+            throw error;
+          }
+          return objectUrl;
         })();
         downloads.set(original.href,task);
         task.catch(()=>downloads.delete(original.href));
@@ -61,13 +116,15 @@ const GardenStartup=(()=>{
     }));
   }
   const assetsReady=(async()=>{
+    const started=performance.now();
     const manifest=document.getElementById('manor-boot-images');
     if(!manifest)return true;
     boot=JSON.parse(manifest.textContent);
     const paths=boot[new URLSearchParams(location.search).get('renderProfile')==='mobile'?'mobile':'desktop'];
     assetTotal=paths.length;assetController=new AbortController();tick();
     window.addEventListener?.('pagehide',event=>{if(!event.persisted)assetController.abort();},{once:true});
-    await loadAssets(paths,true);return true;
+    await loadAssets(paths,true);
+    performance.measure?.('manor-assets-preparation',{start:started,end:performance.now()});return true;
   })().catch(()=>{fail();return false;});
   function prepareArea(area,background=false){
     if(area!=='garden'&&area!=='bay')return null;
@@ -77,8 +134,9 @@ const GardenStartup=(()=>{
   function tick(){
     const progress=total?completed/total:0;
     const percent=Math.floor(assetTotal?(assetDone+progress)/(assetTotal+1)*100:100*progress);
-    bar.style.width=percent+'%';label.textContent=`${percent}% · ${percent===100?'庄园准备好了，欢迎回来':percent<70?'正在快马加鞭布置庄园，请稍候':'正在收拾最后的小细节，请稍候'}`;
+    bar.style.width=percent+'%';label.textContent=`${percent}% · ${percent===100?'庄园准备好了，欢迎回来':percent<70?'正在准备场景，请稍候':'正在收拾最后的小细节，请稍候'}`;
     el.setAttribute('aria-valuenow',String(percent));
+    notify('progress',{percent});
   }
   function image(url){
     const path=new URL(assetUrl(url),document.baseURI).href;
@@ -139,17 +197,20 @@ const GardenStartup=(()=>{
       if([...document.querySelectorAll('link[rel="stylesheet"]')].some(link=>!link.sheet))throw Error('scene stylesheet');
       if(assetTotal&&!await assetsReady)return false;
       const tasks=[...sources(),...work];total=tasks.length+1;
-      title.textContent='正在准备场景';tick();
+      document.documentElement.dataset.startupPhase='scene';
+      tick();
       const prepared=Promise.all(tasks.map(task=>Promise.resolve(task).then(()=>{completed++;if(!failed){tick();arm();}}))).then(()=>true);
       if(!await Promise.race([prepared,cancelled]))return false;
       if(failed)return false;
       title.textContent='场景已就绪';
       document.documentElement.classList.remove('garden-booting');
+      document.documentElement.dataset.startupPhase='frame';
       // Layout, decoded art and event handlers must all be ready before exposing the guide.
       await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
       if(failed)return false;
       completed++;tick();finished=true;clearTimeout(timer);document.removeEventListener('visibilitychange',arm);images.clear();work.length=0;
       performance.mark('manor-interactive');
+      document.documentElement.dataset.startupPhase='interactive';
       document.documentElement.dataset.startupMs=String(Math.round(performance.now()));
       notify('ready');
       el.classList.add('leaving');el.style.pointerEvents='none';

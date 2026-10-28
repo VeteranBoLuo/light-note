@@ -23,7 +23,7 @@ import { accountSettingsEn } from './accountSettings';
 import { settingsRefineEn } from './settingsRefine';
 import { notificationMessages } from '@lightnote/shared/notification-presentation';
 export default {
-  manor: { title: 'Knowledge Manor', loading: 'Waking up your manor', loadFailed: 'The manor is unavailable. Please try again.', returnToApp: 'Back to LightNote', actionFailed: 'The action did not complete. Please retry.' },
+  manor: { title: 'Knowledge Manor', loading: 'Loading your manor', loadingHint: 'Preparing your scene, please wait', loadingFinishing: 'Finishing the last details, please wait', loadingReady: 'Scene ready', loadingWelcome: 'Your manor is ready. Welcome back', loadFailed: 'The manor is unavailable. Please try again.', returnToApp: 'Back to LightNote', actionFailed: 'The action did not complete. Please retry.' },
   publicResources: publicResourcesEn,
   profileBackgrounds: profileBackgroundsEn,
   profileAppearance: profileAppearanceEn,

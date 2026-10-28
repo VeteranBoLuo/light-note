@@ -6,6 +6,16 @@ import { describe, expect, it } from 'vitest';
 import manorRuntime from './manorRuntime';
 
 describe('庄园生产入口与经典规则脚本', () => {
+  it('Vue 启动前的首帧已有 0% 进度条，使用同一加载文案', () => {
+    const transform = manorRuntime().transformIndexHtml as Function;
+    const result = transform('<html><head></head><body><div id="app"></div></body></html>');
+    expect(result.html).toContain('class="manor-entry-loading manor-loading"');
+    expect(result.html).toContain('aria-valuenow="0"');
+    expect(result.html).toContain('0% ·');
+    expect(result.html).toContain('正在载入庄园');
+    expect(result.html).toContain('Loading your manor');
+    expect(result.html).not.toContain('唤醒');
+  });
   it('输出可运行的同源经典脚本，所有入口资源按内容失效缓存', () => {
     const assets = new Map<string, string>();
     const plugin = manorRuntime();
@@ -53,6 +63,7 @@ describe('庄园生产入口与经典规则脚本', () => {
     }
     expect(preload.catalog).toContain('/manor/knowledge-garden-v19/farm/crop-radish-5-r55.webp');
     expect(preload.catalog).toContain('/manor/knowledge-garden-v19/courtyard/animal-rabbit-r12.webp');
+    expect(preload.catalog).toContain('/manor/knowledge-garden-v19/farm/seed-ground-r69.webp');
     expect(preload.desktopCritical).not.toEqual(expect.arrayContaining(preload.catalog));
     expect(preload.desktop).toContain('/manor/knowledge-garden-v19/courtyard/pc-scene-r58.webp');
     expect(preload.desktopCritical).toEqual(expect.arrayContaining(['/manor/knowledge-garden-v19/courtyard/pc-scene-r58.webp']));

@@ -71,11 +71,14 @@ const GardenEnvironment = (() => {
       // shape instead of adding expanding circles over the picture.
       float white=smoothstep(.68,.91,dot(color,vec3(.2126,.7152,.0722)));
       color*=1.-white*nativeFoam*clamp(.08-surface.z*.2+dot(slope,vec2(.12,.2)),0.,.14);
-      gl_FragColor=vec4(clamp(color,0.,1.),water*edge);
+      float opacity=water*edge;
+      gl_FragColor=vec4(clamp(color,0.,1.)*opacity,opacity);
     }`;
   function layer(img) {
     const canvas=document.createElement('canvas');canvas.className='environment-motion';canvas.setAttribute('aria-hidden','true');
-    const gl=canvas.getContext('webgl',{alpha:true,antialias:false,premultipliedAlpha:false});
+    // Emit premultiplied color explicitly. WebKit's canvas compositor can leave
+    // bright mask contours when it has to convert straight-alpha framebuffers.
+    const gl=canvas.getContext('webgl',{alpha:true,antialias:false,premultipliedAlpha:true});
     if(!gl)return ()=>{};
     const precision=gl.getShaderPrecisionFormat(gl.FRAGMENT_SHADER,gl.HIGH_FLOAT)?.precision>0?'highp':'mediump';
     const limit=Math.min(4096,gl.getParameter(gl.MAX_RENDERBUFFER_SIZE),...gl.getParameter(gl.MAX_VIEWPORT_DIMS));
