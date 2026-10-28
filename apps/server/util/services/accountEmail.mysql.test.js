@@ -159,9 +159,9 @@ describe.skipIf(!socketPath)('邮箱检查与更换（隔离 MySQL）', () => {
   });
   it('加法 Schema 与只读断言均通过，删除必要索引能够被门禁发现', async () => {
     expect(await accountEmailHealthSchemaReady(db)).toBe(true);
-    const source = (await readFile(new URL('../../migrations/schema-assertions.sql', import.meta.url), 'utf8')).split(
-      '-- Account email health:',
-    )[1];
+    const source = (await readFile(new URL('../../migrations/schema-assertions.sql', import.meta.url), 'utf8'))
+      .split('-- Account email health:')[1]
+      .split('\n-- ')[0];
     const statements = source
       .split('\n')
       .slice(1)
