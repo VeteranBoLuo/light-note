@@ -25,6 +25,12 @@ function createRes() {
 }
 
 describe('adminRoutePolicyMiddleware', () => {
+  it.each(['readonly', 'maintain'])('管理员私有头像拒绝 %s 代管上下文', (mode) => {
+    const next = vi.fn(), res = createRes();
+    adminRoutePolicyMiddleware(createReq('/user/admin/avatar?userId=target', 'GET', mode), res, next);
+    expect(next).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(403);
+  });
   it.each(['readonly', 'maintain'])('更换邮箱全部入口拒绝 %s 代管', (mode) => {
     for (const [method, suffix] of [['GET', 'status'], ['POST', 'request'], ['POST', 'confirm']]) {
       const next = vi.fn(), res = createRes();

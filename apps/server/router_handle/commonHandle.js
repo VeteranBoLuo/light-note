@@ -1550,13 +1550,17 @@ function buildAdminOverviewScope(hideInternal) {
   const irSql = INTERNAL_ROLES.map((role) => `'${role}'`).join(', ');
   const notIntRole = hideInternal ? ` AND role NOT IN (${irSql})` : '';
   const notIntUser = hideInternal ? ` AND user_id NOT IN (SELECT id FROM \`user\` WHERE role IN (${irSql}))` : '';
-  const notIntCreateBy = hideInternal ? ` AND create_by NOT IN (SELECT id FROM \`user\` WHERE role IN (${irSql}))` : '';
+  // 历史 user.id 是 utf8，资料 owner 是 utf8mb4_unicode_ci；转换较小的账号集合，
+  // 避免 MySQL 5.7 为每条资料重新执行内部账号子查询，同时保留 owner 索引。
+  const notIntCreateBy = hideInternal
+    ? ` AND create_by NOT IN (SELECT CONVERT(id USING utf8mb4) COLLATE utf8mb4_unicode_ci FROM \`user\` WHERE role IN (${irSql}))`
+    : '';
   const notIntAiActor = hideInternal
-    ? ` AND (actor_user_id IS NULL OR actor_user_id NOT IN (SELECT id FROM \`user\` WHERE role IN (${irSql})))`
+    ? ` AND (actor_user_id IS NULL OR actor_user_id NOT IN (SELECT CONVERT(id USING utf8mb4) COLLATE utf8mb4_general_ci FROM \`user\` WHERE role IN (${irSql})))`
     : '';
   const activeBookmarkOwner = ` AND EXISTS (
     SELECT 1 FROM \`user\` bookmark_owner
-    WHERE bookmark_owner.id = bookmark.user_id AND bookmark_owner.del_flag = 0
+    WHERE bookmark_owner.id = bookmark.user_id AND bookmark_owner.del_flag = '0'
   )`;
   const notOnboardingBookmark = ` AND NOT EXISTS (
     SELECT 1 FROM onboarding_seed_resources osr
@@ -1584,7 +1588,7 @@ function buildAdminOverviewScope(hideInternal) {
   )`;
   const todoCreationCondition = `${ADMIN_TODO_CREATION_CONDITION}${notOnboardingTodo}
     AND EXISTS (SELECT 1 FROM \`user\` todo_owner
-      WHERE todo_owner.id = todo_items.user_id AND todo_owner.del_flag = 0)`;
+      WHERE todo_owner.id = todo_items.user_id AND todo_owner.del_flag = '0')`;
   const notIntTodoUser = hideInternal
     ? ` AND todo_items.user_id NOT IN (SELECT id FROM \`user\` WHERE role IN (${irSql}))`
     : '';
@@ -1645,7 +1649,7 @@ async function queryAdminOverviewSnapshot({ hideInternal, now = new Date() }) {
                   COALESCE(SUM(create_time >= ?), 0) AS today,
                   0 AS storageMb, 0 AS trashMb, 0 AS trashCount
            FROM \`user\`
-           WHERE del_flag = 0 AND role <> 'visitor'${scope.notIntRole}
+           WHERE del_flag = '0' AND role <> 'visitor'${scope.notIntRole}
            UNION ALL
            SELECT 'bookmark' AS kind,
                   COUNT(*) AS total,
@@ -1659,7 +1663,7 @@ async function queryAdminOverviewSnapshot({ hideInternal, now = new Date() }) {
                   COALESCE(SUM(create_time >= ?), 0) AS today,
                   0 AS storageMb, 0 AS trashMb, 0 AS trashCount
            FROM note
-           WHERE del_flag = 0${scope.notIntCreateBy}${scope.notOnboardingNote}
+           WHERE del_flag = '0'${scope.notIntCreateBy}${scope.notOnboardingNote}
            UNION ALL
            SELECT 'file' AS kind,
                   COALESCE(SUM(del_flag = 0), 0) AS total,
@@ -1802,7 +1806,7 @@ async function queryAdminOverviewTrend({ days, hideInternal, now = new Date() })
       `SELECT d, kind, SUM(c) AS c FROM (
          SELECT DATE_FORMAT(create_time, '%Y-%m-%d') AS d, 'user' AS kind, COUNT(*) AS c
          FROM \`user\`
-         WHERE del_flag = 0 AND role <> 'visitor' AND create_time >= ?${scope.notIntRole}
+         WHERE del_flag = '0' AND role <> 'visitor' AND create_time >= ?${scope.notIntRole}
          GROUP BY d
          UNION ALL
          SELECT DATE_FORMAT(create_time, '%Y-%m-%d') AS d, 'bookmark' AS kind, COUNT(*) AS c
@@ -1812,7 +1816,7 @@ async function queryAdminOverviewTrend({ days, hideInternal, now = new Date() })
          UNION ALL
          SELECT DATE_FORMAT(create_time, '%Y-%m-%d') AS d, 'note' AS kind, COUNT(*) AS c
          FROM note
-         WHERE del_flag = 0 AND create_time >= ?${scope.notIntCreateBy}${scope.notOnboardingNote}
+         WHERE del_flag = '0' AND create_time >= ?${scope.notIntCreateBy}${scope.notOnboardingNote}
          GROUP BY d
          UNION ALL
          SELECT DATE_FORMAT(create_time, '%Y-%m-%d') AS d, 'file' AS kind, COUNT(*) AS c
@@ -1839,7 +1843,7 @@ async function queryAdminOverviewTrend({ days, hideInternal, now = new Date() })
         `SELECT d, kind, SUM(c) AS c FROM (
            SELECT DATE_FORMAT(create_time, '%Y-%m-%d') AS d, 'users' AS kind, COUNT(*) AS c
            FROM \`user\`
-           WHERE del_flag = 0 AND role <> 'visitor'
+           WHERE del_flag = '0' AND role <> 'visitor'
              AND create_time >= ? AND create_time < ? AND TIME(create_time) <= ?${scope.notIntRole}
            GROUP BY d
            UNION ALL
@@ -1851,7 +1855,7 @@ async function queryAdminOverviewTrend({ days, hideInternal, now = new Date() })
            UNION ALL
            SELECT DATE_FORMAT(create_time, '%Y-%m-%d') AS d, 'notes' AS kind, COUNT(*) AS c
            FROM note
-           WHERE del_flag = 0
+           WHERE del_flag = '0'
              AND create_time >= ? AND create_time < ? AND TIME(create_time) <= ?${scope.notIntCreateBy}${scope.notOnboardingNote}
            GROUP BY d
            UNION ALL

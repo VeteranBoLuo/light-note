@@ -87,6 +87,8 @@ router.post('/adminContext/end', userHandle.endAdminContext);
 
 router.post('/getUserList', userHandle.getUserList);
 
+router.get('/admin/avatar', userHandle.getAdminUserAvatar);
+
 router.post('/admin/detail', userHandle.getUserAdminDetail);
 
 router.post('/admin/remark', saveAdminUserRemark);

@@ -123,11 +123,12 @@ export function summarizeApiLogPayload(originalUrl, payload) {
  *
  * 不使用公网 IP 过滤：动态或共享公网 IP 下可能同时存在真实游客，按 IP 排除会误伤。
  */
-export function shouldSkipApiLog(originalUrl) {
+export function shouldSkipApiLog(originalUrl, method) {
   const url = String(originalUrl || '');
   if (/\/(?:toolbox|public)\/forms(?:[/?]|$)/.test(url)) return true;
   if (API_LOG_SKIP_SUBSTRINGS.some((key) => url.includes(key))) return true;
   const path = normalizeApiPath(url);
+  if (method === 'GET' && path === '/user/admin/avatar') return true;
   return (
     PASSIVE_API_PATHS.has(path) ||
     PASSIVE_API_PATH_PATTERNS.some((pattern) => pattern.test(path)) ||

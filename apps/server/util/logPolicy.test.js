@@ -13,6 +13,12 @@ it.each(['/api/user/github', '/api/user/github/bind'])('GitHub 认证日志不�
 });
 
 describe('API 日志跳过策略', () => {
+  it('管理员头像只豁免精确 GET，不豁免写方法和相似路径', () => {
+    expect(shouldSkipApiLog('/api/user/admin/avatar?userId=target', 'GET')).toBe(true);
+    expect(shouldSkipApiLog('/user/admin/avatar', 'GET')).toBe(true);
+    expect(shouldSkipApiLog('/api/user/admin/avatar', 'POST')).toBe(false);
+    expect(shouldSkipApiLog('/api/user/admin/avatar/delete', 'GET')).toBe(false);
+  });
   it.each([
     '/api/json/getConfigByName',
     '/json/getConfigByName?name=%E6%9B%B4%E6%96%B0%E6%97%A5%E5%BF%97',

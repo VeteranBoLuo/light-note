@@ -59,6 +59,7 @@ import { recordServerOperation } from '../util/operationLog.js';
 import { inspectBookmarkUrl } from '../util/bookmarkUrl.js';
 import { exportAiUserData } from '../util/aiUserDataExport.js';
 import { stableAgentErrorCode } from '../util/agent/logSafety.js';
+import { ensureRootRole } from '../util/rootRole.js';
 import { invalidatePersonalKnowledgeCache } from '../util/personalKnowledgeSearch.js';
 import { MAX_NOTE_TREE_DEPTH } from '../util/noteTreeConstants.js';
 import { sanitizePersistedNoteContent } from '../util/noteHtmlSanitizer.js';
@@ -113,8 +114,24 @@ const isActiveIpBan = (ipReputation) => {
 
 // 邮箱作为账号标识时统一去除首尾空白；服务端兜底，避免绕过前端直接写入“看起来相同”的新账号。
 const normalizeEmail = (value) => (typeof value === 'string' ? value.trim() : '');
-// 列表头像允许保留较清晰的内嵌图，但不允许把数 MB 的原图带入 50 条首屏响应。
+// 资料提交与历史列表读取共用的头像上限；大图通过独立的受保护读取展示。
 const MAX_INLINE_AVATAR_BYTES = 1024 * 1024;
+const ADMIN_LIST_INLINE_AVATAR_BYTES = 16 * 1024;
+const INLINE_RASTER_AVATAR = /^data:(image\/(?:png|jpe?g|gif|webp));base64,([a-z0-9+/]+={0,2})$/i;
+
+const adminAvatarVersion = (source) => crypto.createHash('sha256').update(source).digest('hex').slice(0, 16);
+
+function adminListAvatar(userId, source) {
+  if (
+    typeof source !== 'string' ||
+    Buffer.byteLength(source, 'utf8') <= ADMIN_LIST_INLINE_AVATAR_BYTES ||
+    !INLINE_RASTER_AVATAR.test(source)
+  ) {
+    return source;
+  }
+  return `/api/user/admin/avatar?userId=${encodeURIComponent(userId)}&v=${adminAvatarVersion(source)}`;
+}
+
 const ADMIN_USER_ROLES = new Set(['user', 'visitor', 'test', 'root']);
 const ADMIN_USER_STATUSES = new Set(['active', 'banned', 'all']);
 const ADMIN_USER_ACTIVITY_WINDOWS = new Set(['all', 'day1', 'day7', 'day30', 'inactive30']);
@@ -788,8 +805,7 @@ export const getUserList = async (req, res) => {
         ? [cursor.id]
         : [new Date(adminCursorTime(cursor.value)), new Date(adminCursorTime(cursor.value)), cursor.id];
     const take = cursorMode ? pageSize + 1 : pageSize;
-    // 用户列表头像只用于 30px 左右的缩略展示，不能把历史 Base64 原图带进排序接口。
-    // 外部头像地址保留；较大的内嵌头像交给列表使用默认头像，详情接口仍保留完整头像。
+    // 保留已有头像上限；较大的栅格图在组装页面时换成受保护 URL，不阻塞整批列表传输。
     const [[rows], total] = await Promise.all([
       pool.query(
         `SELECT u.id, u.alias, u.email,
@@ -828,6 +844,9 @@ export const getUserList = async (req, res) => {
     ]);
     const hasMore = cursorMode && rows.length > pageSize;
     const page = cursorMode ? rows.slice(0, pageSize) : rows;
+    page.forEach((row) => {
+      row.head_picture = adminListAvatar(row.id, row.head_picture);
+    });
     const ids = page.map((row) => row.id).filter(Boolean);
 
     if (ids.length) {
@@ -842,7 +861,7 @@ export const getUserList = async (req, res) => {
           ids,
         ),
         pool.query(
-          `SELECT create_by AS userId, COUNT(*) AS total FROM note WHERE del_flag = 0 AND create_by IN (${placeholders}) GROUP BY create_by`,
+          `SELECT create_by AS userId, COUNT(*) AS total FROM note WHERE del_flag = '0' AND create_by IN (${placeholders}) GROUP BY create_by`,
           ids,
         ),
         pool.query(
@@ -909,6 +928,44 @@ export const getUserList = async (req, res) => {
         status === 400 ? L(req, '查询游标无效', 'Invalid cursor') : L(req, '用户列表查询失败', 'Failed to query users'),
       ),
     );
+  }
+};
+
+export const getAdminUserAvatar = async (req, res) => {
+  // 每次（包括条件请求）先复核 Root，私有头像不能通过浏览器缓存绕过权限。
+  res.set('Cache-Control', 'private, no-store');
+  // 图片响应使用真实 HTTP 错误状态，避免 JSON 业务错误在 If-None-Match:* 下被转成 304。
+  const rootId = await ensureRootRole(req, { send: (payload) => res.status(payload.status).send(payload) });
+  if (!rootId) return;
+  const userId = typeof req.query?.userId === 'string' ? req.query.userId.trim() : '';
+  if (!userId || userId.length > 255) return res.status(400).end();
+  try {
+    // 管理列表支持停用账号；此处不追加账号状态筛选，避免其头像失效。
+    const [rows] = await pool.query(
+      `SELECT CASE WHEN OCTET_LENGTH(head_picture) <= ? THEN head_picture ELSE NULL END AS head_picture
+       FROM user WHERE id = ? LIMIT 1`,
+      [MAX_INLINE_AVATAR_BYTES, userId],
+    );
+    const source = rows[0]?.head_picture;
+    const match =
+      typeof source === 'string' &&
+      Buffer.byteLength(source, 'utf8') <= MAX_INLINE_AVATAR_BYTES &&
+      INLINE_RASTER_AVATAR.exec(source);
+    if (!match) return res.status(404).end();
+    const body = Buffer.from(match[2], 'base64');
+    if (!body.length) return res.status(404).end();
+    res.set({
+      'Cache-Control': 'private, no-cache',
+      'Content-Type': match[1].toLowerCase().replace('image/jpg', 'image/jpeg'),
+      'X-Content-Type-Options': 'nosniff',
+      ETag: `"${adminAvatarVersion(source)}"`,
+    });
+    res.vary('Cookie');
+    res.vary('X-Session-Id');
+    return res.send(body);
+  } catch (error) {
+    console.error('[admin-avatar] 头像读取失败 code=%s', stableAgentErrorCode(error));
+    return res.status(500).end();
   }
 };
 

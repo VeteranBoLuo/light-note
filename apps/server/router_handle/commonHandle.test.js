@@ -346,7 +346,7 @@ describe('getAdminOverviewSnapshot 首屏快照', () => {
       query.mock.calls.find(([sql]) => String(sql).includes('admin_overview_snapshot_resources'))?.[0],
     );
     expect(resourceSql.match(/onboarding_seed_resources/g)).toHaveLength(3);
-    expect(resourceSql).toContain('bookmark_owner.del_flag = 0');
+    expect(resourceSql).toContain("bookmark_owner.del_flag = '0'");
     expect(resourceSql).toContain("role <> 'visitor'");
     expect(resourceSql).toContain("role NOT IN ('root', 'test')");
     const todoSql = String(query.mock.calls.find(([sql]) => String(sql).includes('FROM todo_items'))?.[0]);

@@ -57,6 +57,7 @@ const suites = {
   'router_handle/workbenchRecentNotes.mysql.test.js': 'Q01_TEST_MYSQL_SOCKET',
   'router_handle/adminRecentTodos.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
   'router_handle/adminLists.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
+  'router_handle/adminOverview.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
   'util/services/managedCloudUpload.concurrent.mysql.test.js': 'Q01_TEST_MYSQL_SOCKET',
   'router_handle/noteLibraryHandle.sort.mysql.test.js': 'API_SORT_MYSQL_SOCKET',
   'util/services/noteTreeService.move.mysql.test.js': 'API_SORT_MYSQL_SOCKET',

@@ -108,7 +108,7 @@ export async function logFunction(req, res, next) {
       return;
     }
     // 跳过无操作审计价值的系统读取接口；游客工作区真实写入始终保留审计。
-    if (shouldSkipApiLog(req.originalUrl) && !isVisitorWorkspaceWrite) {
+    if (shouldSkipApiLog(req.originalUrl, req.method) && !isVisitorWorkspaceWrite) {
       next();
       return;
     }
