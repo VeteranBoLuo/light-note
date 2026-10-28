@@ -4,6 +4,14 @@ const GardenHabitat = (() => {
   const smooth = p => p * p * p * (p * (p * 6 - 15) + 10);
   // 种田舞台挂载后，草地、青蛙落点、蜻蜓范围和鱼的活动区都以标定为准
   const staged = () => (typeof FarmStage !== "undefined" ? FarmStage.habitat() : null);
+  // Layout changes move the camera, not the animals' positions in the picture.
+  function remapPoint(p, from, to) {
+    return {x:to.ox+(p.x-from.ox)*to.sx/from.sx,y:to.oy+(p.y-from.oy)*to.sy/from.sy};
+  }
+  function animalUnit(mobile,w,h) {
+    const f=typeof FarmStage!=="undefined"&&FarmStage.frame();
+    return f ? Math.min(f.sourceWidth,f.sourceHeight*1.6)*f.sx*(mobile?.10:.045) : Math.min(w,h*1.6)*(mobile?.10:.045);
+  }
   function lawn(mobile, w, h, pad = 0) {
     const st = staged();
     if (st) return { ...st.lawn, rx: Math.max(3, st.lawn.rx - pad * 0.4), ry: Math.max(3, st.lawn.ry - pad * 0.12) };
@@ -176,6 +184,6 @@ const GardenHabitat = (() => {
   }
   // 轴向统一单位：高度随像素宽度计算，窄屏不把鱼拉长。
   const bodyPoint=(x,y,px,py,k,w,h,vw=2550)=>[(x+px*k)/vw,(y-100)/850+py*k*w/(vw*h)];
-  return { smooth,lawn,air,birdStops,birdRoute,birdFlight,frogShore,inLawn,onLawn,pickupClear,rabbitHop,water,planes,inside,project,swimField,fieldPoint,fitBody,bodyPoint };
+  return { remapPoint,animalUnit,smooth,lawn,air,birdStops,birdRoute,birdFlight,frogShore,inLawn,onLawn,pickupClear,rabbitHop,water,planes,inside,project,swimField,fieldPoint,fitBody,bodyPoint };
 })();
 if(typeof module!=="undefined") module.exports=GardenHabitat;

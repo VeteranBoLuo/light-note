@@ -71,6 +71,7 @@ const GardenAnimals3D=(()=>{
     return {root,body,shells,wings,legs,...K,kind:'ladybird',yaw:0,opening:0};
   }
   function animate(model,state,dt,T){
+    if(!model.presented){model.yaw=state.face<0?Math.PI:0;model.opening=state.flying?1:0;}
     const target=state.face<0?Math.PI:0,delta=Math.atan2(Math.sin(target-model.yaw),Math.cos(target-model.yaw));model.yaw+=delta*(1-Math.exp(-dt*9));model.root.rotation.set(model.kind==='ladybird'?.42:0,model.yaw,0);
     if(model.kind==='ladybird'){
       model.opening+=((state.flying?1:0)-model.opening)*(1-Math.exp(-dt*11));
@@ -97,9 +98,9 @@ const GardenAnimals3D=(()=>{
     const ro=new ResizeObserver(measure);ro.observe(scene);measure();
     const lost=e=>{e.preventDefault();available=false;canvas.hidden=true;};canvas.addEventListener('webglcontextlost',lost);const restored=()=>{available=true;};canvas.addEventListener('webglcontextrestored',restored);
     function frame(now){raf=requestAnimationFrame(frame);const dt=last?Math.min(.05,(now-last)/1000):0;last=now;const modal=document.getElementById('modal');canvas.hidden=!available||document.hidden||(modal&&!modal.hidden);if(canvas.hidden)return;
-      const debug={};for(const [kind,model]of models){const state=model.state;if(!state)continue;model.root.visible=true;model.root.position.set(state.x-W/2,H/2-state.y,0);model.root.scale.setScalar(state.size);const sk=animate(model,state,dt,THREE);debug[kind]={head:sk.headAngle,feet:sk.legs?.map(l=>l.foot),yaw:model.yaw,opening:sk.opening};}renderer.render(world,camera);canvas.dataset.models=JSON.stringify(debug);
+      const debug={};for(const [kind,model]of models){const state=model.state;if(!state||(kind==='rabbit'&&!model.ready))continue;model.root.visible=true;model.root.position.set(state.x-W/2,H/2-state.y,0);model.root.scale.setScalar(state.size);const sk=animate(model,state,dt,THREE);model.presented=true;debug[kind]={head:sk.headAngle,feet:sk.legs?.map(l=>l.foot),yaw:model.yaw,opening:sk.opening};}renderer.render(world,camera);canvas.dataset.models=JSON.stringify(debug);
     }
-    raf=requestAnimationFrame(frame);current={update(kind,state){if(!available||!models.has(kind))return false;const model=models.get(kind);model.state=state;return model.kind==='ladybird'||model.ready;},destroy(){cancelAnimationFrame(raf);ro.disconnect();canvas.removeEventListener('webglcontextlost',lost);canvas.removeEventListener('webglcontextrestored',restored);for(const model of models.values()){model.dead=true;model.cancelPreparation?.();model.texture?.dispose();model.materials.forEach(m=>{m.userData.texture?.dispose();m.dispose();});model.geometries.forEach(g=>g.dispose());}renderer.dispose();renderer.forceContextLoss();canvas.remove();}};
+    raf=requestAnimationFrame(frame);current={update(kind,state){if(!available||!models.has(kind))return false;const model=models.get(kind);model.state=state;return !!model.presented;},destroy(){cancelAnimationFrame(raf);ro.disconnect();canvas.removeEventListener('webglcontextlost',lost);canvas.removeEventListener('webglcontextrestored',restored);for(const model of models.values()){model.dead=true;model.cancelPreparation?.();model.texture?.dispose();model.materials.forEach(m=>{m.userData.texture?.dispose();m.dispose();});model.geometries.forEach(g=>g.dispose());}renderer.dispose();renderer.forceContextLoss();canvas.remove();}};
   }
   function unmount(){current?.destroy();current=null;}
   return {mount,unmount,update:(kind,state)=>current?.update(kind,state)||false,skeleton,ik,walkFoot,hopFeet,build,animate};

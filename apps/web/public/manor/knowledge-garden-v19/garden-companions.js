@@ -65,7 +65,7 @@ const GardenCompanions = (() => {
     const ctx=canvas.getContext('2d');if(!ctx){canvas.remove();return;}
     const names={butterfly:'凤蝶',ladybird:'瓢虫',dragonfly:'蜻蜓'};
     const visitors=['butterfly','ladybird'].map(kind=>({kind,x:0,y:0,face:1,mode:'idle',age:0,route:null,home:null}));
-    const buttons=new Map();let W=0,H=0,L=30,dpr=1,layout='',raf=0,last=0,clock=0,lastMeasure=0;
+    const buttons=new Map();let W=0,H=0,L=30,dpr=1,layout='',camera=null,raf=0,last=0,clock=0,lastMeasure=0;
     for(const kind of [...visitors.map(a=>a.kind),'dragonfly']) {
       const button=document.createElement('button');button.className='wildlife-hit';button.type='button';button.dataset.companion=kind;
       button.setAttribute('aria-label',`和${names[kind]}互动`);
@@ -75,8 +75,10 @@ const GardenCompanions = (() => {
     for(const key of ['butterflyopen','butterflyperch','ladybird'])sprite(key);
     function measure() {
       const r=scene.getBoundingClientRect(),mobile=document.documentElement.classList.contains('light-note-mobile-rendering');
-      W=r.width;H=r.height;L=Math.min(W,H*1.6)*(mobile?.1:.045);dpr=Math.min(devicePixelRatio||1,2);
+      W=r.width;H=r.height;L=GardenHabitat.animalUnit(mobile,W,H);dpr=Math.min(devicePixelRatio||1,2);
       const staged=typeof FarmStage!=='undefined'&&FarmStage.habitat();
+      const previousCamera=camera;
+      camera=staged?FarmStage.frame():null;
       const origin=staged?FarmStage.toScene(0,0):[0,0];
       const next=`${W}:${H}:${mobile}:${origin}:${staged?FarmStage.scale():1}`;if(next===layout)return;layout=next;
       canvas.width=Math.round(W*dpr);canvas.height=Math.round(H*dpr);
@@ -88,9 +90,17 @@ const GardenCompanions = (() => {
       visitors.forEach((a,i)=>{
         const route=staged?stops[i].map(toPoint):[fallback[i],{x:fallback[i].x+L*.6,y:fallback[i].y}];
         const previous=a.perches,flight=a.route;
-        a.perches=route.map(p=>({x:clamp(p.x,30,W-30),y:clamp(p.y,110,H-100)}));
+        a.perches=staged?route:route.map(p=>({x:clamp(p.x,30,W-30),y:clamp(p.y,110,H-100)}));
         [a.home,a.alt]=a.perches;
         if(!previous)startAtPerch(a);
+        else if(previousCamera&&camera) {
+          Object.assign(a,GardenHabitat.remapPoint(a,previousCamera,camera));
+          if(flight){
+            flight.from=GardenHabitat.remapPoint(flight.from,previousCamera,camera);
+            flight.to=GardenHabitat.remapPoint(flight.to,previousCamera,camera);
+            flight.lift*=camera.sy/previousCamera.sy;
+          }
+        }
         else {
           // Resize remaps the same stop / flight, rather than rerolling entry behavior.
           const index=Math.min(a.perchIndex,a.perches.length-1),to=a.perches[index];
@@ -131,7 +141,8 @@ const GardenCompanions = (() => {
       const hidden=document.hidden||(modal&&!modal.hidden);
       canvas.hidden=hidden;buttons.forEach(b=>{b.hidden=hidden;});
       if(hidden)return;
-      clock+=dt;if(clock-lastMeasure>.5){measure();lastMeasure=clock;}
+      const nextCamera=typeof FarmStage!=='undefined'&&FarmStage.frame();
+      clock+=dt;if(clock-lastMeasure>.5||nextCamera&&(nextCamera.ox!==camera?.ox||nextCamera.oy!==camera?.oy||nextCamera.sx!==camera?.sx||nextCamera.width!==camera?.width||nextCamera.height!==camera?.height||nextCamera.profile!==camera?.profile)){measure();lastMeasure=clock;}
       ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,W,H);
       for(const a of visitors) {
         if(reduced.matches&&a.route)a.route.duration=.001;

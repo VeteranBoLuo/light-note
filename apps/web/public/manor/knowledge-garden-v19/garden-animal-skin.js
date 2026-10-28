@@ -4,7 +4,7 @@ const GardenAnimalSkin=(()=>{
   const clamp=(v,a=0,b=1)=>Math.max(a,Math.min(b,v));
   const smooth=v=>{v=clamp(v);return v*v*(3-2*v);};
   const PROFILES={
-    rabbit:{ground:.944,neck:[.665,.565],headStart:.60,legStart:.66,
+    rabbit:{scale:1.4,ground:.944,neck:[.665,.565],headStart:.60,legStart:.66,
       limbs:[[[.405,.68],[.32,.78],[.325,.845],[.437,.867]],[[.71,.69],[.71,.78],[.72,.855],[.761,.892]],[[.30,.62],[.255,.74],[.195,.855],[.357,.931]],[[.635,.69],[.635,.805],[.64,.895],[.682,.938]]]},
 
   };
@@ -18,7 +18,7 @@ const GardenAnimalSkin=(()=>{
   }
   function closest(p,a,b){const dx=b.x-a.x,dy=b.y-a.y,t=clamp(((p.x-a.x)*dx+(p.y-a.y)*dy)/(dx*dx+dy*dy||1));return {t,d:Math.hypot(p.x-a.x-t*dx,p.y-a.y-t*dy)};}
   function surface(rgba,w,h,kind,nx=96,ny=64){
-    const profile=PROFILES[kind],aspect=h/w,scale=1.4,point=([u,v])=>({x:(u-.5)*scale,y:(profile.ground-v)*scale*aspect});
+    const profile=PROFILES[kind],aspect=h/w,scale=profile.scale,point=([u,v])=>({x:(u-.5)*scale,y:(profile.ground-v)*scale*aspect});
     const limbs=profile.limbs.map((chain,i)=>({far:i<2,part:i%2?'fore':'hind',rest:chain.map(point)}));
     const field=distanceField(rgba,w,h);let max=1;for(const d of field)if(d<1e6)max=Math.max(max,d);
     const count=(nx+1)*(ny+1),positions=new Float32Array(count*6),uv=new Float32Array(count*4),active=new Uint8Array(count),bindings=[],index=[];

@@ -50,7 +50,7 @@ const GardenCritters = (() => {
   function rabbitFrame() {
     if (!rabbitAtlas && typeof Image !== "undefined") {
       rabbitAtlas = new Image();
-      rabbitAtlas.src = "knowledge-garden-v19/courtyard/rabbit-motion.webp";
+      rabbitAtlas.src = "knowledge-garden-v19/courtyard/animal-rabbit-r12.webp";
     }
     return rabbitAtlas;
   }
@@ -63,7 +63,9 @@ const GardenCritters = (() => {
     ctx.save();
     ctx.translate(0, -lift);
     ctx.scale(1, 1 + chew * .006);
-    GardenAnimalPose.draw(ctx,img,{x:0,y:0,w:512,h:512},{x:-.8,y:-1.34,w:1.6,h:1.6},'rabbit',r.skin);
+    // Match the 3D texture's width and foot anchor during asynchronous handover.
+    const {scale,ground}=GardenAnimalSkin.PROFILES.rabbit,h=scale*img.naturalHeight/img.naturalWidth;
+    GardenAnimalPose.draw(ctx,img,{x:0,y:0,w:img.naturalWidth,h:img.naturalHeight},{x:-scale/2,y:-ground*h,w:scale,h},'rabbit',r.skin);
     ctx.restore();
   }
 
@@ -319,10 +321,13 @@ const GardenCritters = (() => {
       blocks = [], birdBlocks = [], calibratedBirds = false,
       pond = null,
       lilies = [],
-      animalsReady = false, measuredProfile = "", calledSpot = null;
+      animalsReady = false, measuredProfile = "", measuredFrame = null, calledSpot = null;
+    const stageFrame = () => typeof FarmStage!=="undefined" ? FarmStage.frame() : null;
+    const sameFrame = (a,b) => a&&b&&a.ox===b.ox&&a.oy===b.oy&&a.sx===b.sx&&a.sy===b.sy&&a.width===b.width&&a.height===b.height&&a.profile===b.profile;
     function measure() {
       const r = scene.getBoundingClientRect();
       const oldW=W, oldH=H, profile=String(compactGarden());
+      const nextFrame=stageFrame()||{ox:0,oy:0,sx:r.width||1,sy:r.height||1,profile};
       dpr = Math.min(2, devicePixelRatio || 1);
       W = r.width;
       H = r.height;
@@ -354,7 +359,9 @@ const GardenCritters = (() => {
             [0.55, 0.62],
           ].map(([u, v]) => ({ x: pond.l + (pond.r - pond.l) * u, y: pond.t + (pond.b - pond.t) * v }))
         : [];
-      if (animalsReady && (W!==oldW || H!==oldH || profile!==measuredProfile)) {
+      if (animalsReady && profile===measuredProfile && !sameFrame(measuredFrame,nextFrame)) {
+        remapAnimals(measuredFrame,nextFrame);
+      } else if (animalsReady && profile!==measuredProfile) {
         calledSpot = null;
         for (const c of [rabbit]) {
           Object.assign(c,GardenHabitat.onLawn({x:c.x*W/Math.max(1,oldW),y:c.y*H/Math.max(1,oldH)},lawn()));
@@ -366,6 +373,7 @@ const GardenCritters = (() => {
         syncFrogHit();
       }
       measuredProfile=profile;
+      measuredFrame=nextFrame;
     }
     measure();
     const ro = new ResizeObserver(measure);
@@ -379,8 +387,11 @@ const GardenCritters = (() => {
       }
       return x < 12 || x > W - 12 || y < H * 0.4 || y > H - 8 || blocks.some((b) => x > b.l - pad && x < b.r + pad && y > b.t - pad && y < b.b + pad);
     };
-    const depth = (y) => clamp(0.62 + (0.55 * (y / H - 0.4)) / 0.5, 0.55, 1.2);
-    const unit = () => Math.min(W, H * 1.6) * (courtyard ? (compactGarden() ? .10 : .045) : .068);
+    const depth = (y) => {
+      const f=stageFrame(),v=f?(y-f.oy)/f.sy/f.sourceHeight:y/H;
+      return clamp(0.62+(0.55*(v-0.4))/0.5,0.55,1.2);
+    };
+    const unit = () => courtyard ? GardenHabitat.animalUnit(compactGarden(),W,H) : Math.min(W,H*1.6)*.068;
     const pickupClear = (p,w,h) => GardenHabitat.pickupClear(p,typeof FarmStage!=="undefined" ? FarmStage.habitat()?.pickups||[] : [],w,h);
     function freeSpot(near, radius, tries = 40) {
       for (let i = 0; i < tries; i++) {
@@ -408,9 +419,7 @@ const GardenCritters = (() => {
       if (!pond) return false;
       if (courtyard) {
         const shore = GardenHabitat.frogShore(compactGarden(), W, H);
-        const perches=shore.perches||[shore.home];
-        frog.perchIndex??=Math.floor(Math.random()*perches.length);
-        const home=perches[frog.perchIndex%perches.length];
+        const home=shore.home;
         Object.assign(frog, home, {home, water:shore.water, face:shore.face, homeFace:shore.face});
         return true;
       }
@@ -430,7 +439,7 @@ const GardenCritters = (() => {
       return true;
     }
     placeFrog();
-    function frogSize() { return Math.max(compactGarden()?34:32,unit()*.55*depth(frog.y)); }
+    function frogSize() { return Math.max(stageFrame()?80*stageFrame().sx:compactGarden()?34:32,unit()*.55*depth(frog.y)); }
     function syncFrogHit() {
       frogHit.hidden = !waterAnimals() || !pond || frog.state !== "sit";
       frogHit.disabled = frogHit.hidden;
@@ -444,6 +453,19 @@ const GardenCritters = (() => {
     const fly = { kind: "dragonfly", x: W * 0.6, y: H * 0.55, vx: 0, vy: 0, heading: 0, state: "hover", timer: 1, target: null, perched: false, pose: {} };
     animalsReady = true;
     const ripples = [];
+    function remapAnimals(from,to) {
+      const seen=new WeakSet();
+      const point=p=>{if(p&&!seen.has(p)){seen.add(p);Object.assign(p,GardenHabitat.remapPoint(p,from,to));}};
+      const endpoints=j=>{if(!j)return;const a=GardenHabitat.remapPoint({x:j.fx,y:j.fy},from,to),b=GardenHabitat.remapPoint({x:j.tx,y:j.ty},from,to);Object.assign(j,{fx:a.x,fy:a.y,tx:b.x,ty:b.y});};
+      const ratio=to.sx/from.sx;
+      point(rabbit);point(rabbit.from);point(rabbit.target);point(calledSpot);
+      for(const b of sparrows){point(b);endpoints(b.fly);if(b.fly){b.fly.bendX*=ratio;b.fly.bendY*=to.sy/from.sy;}}
+      point(frog);point(frog.home);point(frog.water);endpoints(frog.jump);
+      point(fly);point(fly.anchor);point(fly.target);point(fly.lure);point(fly.orbit);
+      if(fly.route){point(fly.route.from);point(fly.route.to);if(fly.route.lift)fly.route.lift*=to.sy/from.sy;}
+      for(const ripple of ripples){point(ripple);ripple.size*=ratio;}
+      syncFrogHit();
+    }
 
     function startHops(target) {
       if (!target) return;
@@ -626,12 +648,12 @@ const GardenCritters = (() => {
       d.reactionLeft=Math.max(0,(d.reactionLeft||0)-dt);
       // 上空活动范围独立于草地；悬停围绕固定锚点，绝不逐帧累加漂移。
       const region = GardenHabitat.air(compactGarden(), W, H);
-      if (!d.anchor || d.layout !== `${W}:${H}`) {
+      if (!d.anchor) {
         // 入场沿既有巡航空域随机分布，后续悬停仍围绕锚点，避免首帧固定演出。
         const angle=Math.random()*TAU,radius=Math.sqrt(Math.random())*.75;
         d.anchor = {x:region.cx+Math.cos(angle)*region.rx*radius,y:region.cy+Math.sin(angle)*region.ry*radius};
-        d.x = d.anchor.x; d.y = d.anchor.y; d.layout = `${W}:${H}`;
-        d.state = "hover"; d.timer = 2+Math.random()*5; d.hoverAge = Math.random()*2;d.heading=Math.random()*TAU;
+        d.x = d.anchor.x; d.y = d.anchor.y;
+        d.state = "hover"; d.timer = 2+Math.random()*5; d.hoverAge = 0;d.heading=Math.random()*TAU;
       }
       if(d.playLeft>0) {
         d.playLeft-=dt;
@@ -755,7 +777,9 @@ const GardenCritters = (() => {
       raf = requestAnimationFrame(frame);
       const dt = last ? Math.min(0.05, (now - last) / 1000) : 0;
       last = now;
-      if (document.hidden || !W) return;
+      if (document.hidden) return;
+      if(stageFrame()&&!sameFrame(measuredFrame,stageFrame()))measure();
+      if(!W)return;
       const t = now / 1000;
       rabbitHit.hidden=!gardenAnimals();
       if(gardenAnimals())updateRabbit(dt, t);

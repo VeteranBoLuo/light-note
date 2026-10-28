@@ -291,13 +291,14 @@ const FarmStage = (() => {
       birdRoutes:d.birdRoutes?.map(route=>route.map(p=>{const [x,y]=toScene(...p);return {x,y};})),
       lawn: { cx: lx, cy: ly, rx: lawn.rx * s, ry: lawn.ry * s, poly:lawn.poly?.map(p=>toScene(...p)) },
       pickups: d.poop ? [{x:toScene(...d.poop)[0],y:toScene(...d.poop)[1],rx:50*s,ry:38*s}] : [],
-      frog: { home: { x: fx, y: fy }, perches:(d.pier.frogPerches||[d.pier.frogRest]).map(p=>{const [x,y]=toScene(...p);return {x,y};}), water: { x: wx, y: wy }, face: wx > fx ? 1 : -1 },
+      frog: { home: { x: fx, y: fy }, water: { x: wx, y: wy }, face: wx > fx ? 1 : -1 },
       air: { cx: view.ox + sw * s * 0.45, cy: view.oy + sh * s * 0.42, rx: sw * s * 0.34, ry: sh * s * 0.22 },
       swim,
     };
   }
   const pier = () => view?.pier || null;
   const scale = () => view?.s || 1;
-  return { sourceSet, birdStops, purifierSite, fixturePose, fixtureBounds, hitClip, pierGeometry, desktopFrame, skyBleedPose, managementPose, positionManagement, mobileFrame, mount, layout, habitat, pier, scale, setArea:next=>{area=next==="bay"?"bay":"garden";}, toScene: (x, y) => (view ? toScene(x, y) : [x, y]), cal, profile };
+  const frame = () => view ? {ox:view.ox,oy:view.oy,sx:view.s,sy:view.s,width:view.W,height:view.H,profile:view.profile,sourceWidth:view.d.safe[2],sourceHeight:view.d.safe[3]} : null;
+  return { frame,sourceSet, birdStops, purifierSite, fixturePose, fixtureBounds, hitClip, pierGeometry, desktopFrame, skyBleedPose, managementPose, positionManagement, mobileFrame, mount, layout, habitat, pier, scale, setArea:next=>{area=next==="bay"?"bay":"garden";}, toScene: (x, y) => (view ? toScene(x, y) : [x, y]), cal, profile };
 })();
 if (typeof module !== "undefined") module.exports = FarmStage;

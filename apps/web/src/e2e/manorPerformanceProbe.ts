@@ -94,3 +94,32 @@ if (new URLSearchParams(location.search).has('performance')) {
     true,
   );
 }
+
+// Capture the first visible animal frames, including the asynchronous 2D/3D
+// handover. This is opt-in fixture evidence, never application telemetry.
+if (new URLSearchParams(location.search).has('animalFrames')) {
+  const output = document.createElement('output');
+  output.id = 'manor-animal-frames'; output.hidden = true; document.body.append(output);
+  document.addEventListener('load', event => {
+    if (!(event.target instanceof HTMLIFrameElement)) return;
+    const frame = event.target, doc = frame.contentDocument, win = frame.contentWindow;
+    if (!doc || !win) return;
+    const samples: unknown[] = [], deadline = win.performance.now() + 30000; let start = 0;
+    const sample = (time: number) => {
+      const animals = doc.querySelector<HTMLCanvasElement>('.critter-layer');
+      const stage = doc.querySelector<HTMLElement>('.scene-stage');
+      if (animals?.dataset.frog && stage) {
+        if (!start) start = time;
+        const transform = stage.style.transform.match(/-?\d*\.?\d+/g)?.map(Number);
+        const read = (value?: string) => value ? JSON.parse(value) : null;
+        samples.push({ time: time - start, transform, frog: read(animals.dataset.frog), rabbit: read(animals.dataset.rabbit),
+          birds: read(animals.dataset.birds), dragonfly: read(animals.dataset.dragonfly),
+          models: read(doc.querySelector<HTMLCanvasElement>('.animal-model-layer')?.dataset.models),
+          visitors: read(doc.querySelector<HTMLCanvasElement>('.companion-layer')?.dataset.visitors) });
+        output.textContent = JSON.stringify(samples);
+      }
+      if ((!start ? time < deadline : time - start < 3000) && samples.length < 180 && frame.isConnected) win.requestAnimationFrame(sample);
+    };
+    win.requestAnimationFrame(sample);
+  }, true);
+}
