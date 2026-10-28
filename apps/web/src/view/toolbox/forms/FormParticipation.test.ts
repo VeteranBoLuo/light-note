@@ -57,3 +57,14 @@ it('已发布设置不可切换', () => {
   expect(model.value.membersOnly).toBeUndefined();
   expect(model.value.reward).toBeUndefined();
 });
+it('长期调查展示不限名额，不展示零预算或空名额输入，原配置可保存', async () => {
+  const { host, model } = mount(true);
+  model.value.membersOnly = true;
+  model.value.reward = { points: 50, maxRecipients: null };
+  await nextTick();
+  expect(host.textContent).toContain('不限奖励名额');
+  expect(host.textContent).not.toContain('最多发放');
+  expect(host.querySelectorAll('input')).toHaveLength(1);
+  expect(host.querySelector('input')?.disabled).toBe(true);
+  expect(validateDefinition(model.value).reward).toEqual({ points: 50, maxRecipients: null });
+});

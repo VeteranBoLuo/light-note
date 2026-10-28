@@ -69,6 +69,16 @@ pnpm preview
 
 ## Schema 与 Worker 门禁
 
+### 新用户来源调查
+
+部署前显式运行 `pnpm --filter server configure:signup-source-survey --install-schema` 安装 `20261028_signup_source_survey.sql`，通过 `check:schema` 后部署支持不限名额契约的 API、Web 和推送 Worker；后端部署脚本在 Schema 门禁前调用相同的结构安装入口。安装只加结构，不修改表单、不设注册边界，也不发送邀请；启动路径只检查结构。
+
+使用 `pnpm --filter server configure:signup-source-survey --form-id=<原调查表单ID>` 只读预览，确认原每人奖励、名额和说明后，获授权加 `--apply` 启用。启用在同一事务取消原表单名额及说明中的对应“前 N 名”措辞，并固定下一完整秒为新用户注册边界；原表单 ID、链接、题目、历史答案、已发积分与收据保持不变。只有已收集中的账号奖励表单或确因名额耗尽自动暂停的表单可启用，人工暂停与已结束表单拒绝。重复执行保留原边界和进度；不能删除状态表来重新启用。此数据调整须有对应授权，不混入结构安装或启动流程。
+
+调度随 API 启动，仅生产运行环境消费；缺结构或未显式启用时不扫描账号。验证覆盖存量账号排除、满 24 小时边界、同秒分页、邮箱／GitHub 共用口径、并发及失败回滚、重启／通知删除去重、历史奖励保留、超过旧名额继续奖励，以及浏览器／华为／原生同步通道排除。暂停自动邀请可设置 `SIGNUP_SOURCE_SURVEY_ENABLED=false`，保留已存边界、进度、答案和奖励。回滚到不识别不限名额契约的版本前须暂停原调查表单，不能将名额改回旧值或清理积分收据。
+
+### 其他领域门禁
+
 知识庄园开放前，显式运行 `pnpm --filter server migrate:knowledge-manor` 安装 `20261024_knowledge_manor.sql` 的存档与幂等操作表，不回填账号或调整资产。部署脚本仅在本轮已授权且显式设置 `LIGHTNOTE_APPLY_KNOWLEDGE_MANOR_MIGRATION=1` 时执行此迁移。`KNOWLEDGE_MANOR_ENABLED` 默认关闭；开启后入口、页面路由和接口仅允许 Root 本人，管理员代管及普通账号均不开放；启动与 Schema 门禁均检查契约。API 和 Web 必须携带同一庄园规则版本，发布前验证与主站积分并发、失败回滚、断网重试、钓鱼刷新恢复及账号隔离；MySQL 5.7 兼容门禁不能用本地 MySQL 8 的结果替代。回退先关闭开关，保留新增表、操作收据与已结算积分，不逆向回收用户资产。
 
 邮箱健康检查启用前显式运行 `pnpm --filter server migrate:account-email-health`，安装 `20261023_account_email_health.sql` 的月度续跑与独立通知去重表，并补齐邮件收件地址查询索引，再通过 `check:schema`。迁移不扫描或修改历史账号，不回填邮箱验证状态。调度随 API 启动，仅生产运行环境消费；结构缺失时跳过新调度，不影响注册登录。API 与前端需同步保留专用更换邮箱协议；回滚保留去重事实，不能恢复个人资料直接修改邮箱。验证码与近期 GitHub 身份证明仅存短时 Redis，不能记录到日志或跨用途复用。

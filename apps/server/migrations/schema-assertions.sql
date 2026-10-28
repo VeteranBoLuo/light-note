@@ -4416,3 +4416,7 @@ SELECT 'account_email_health_index' AS check_name, 'account_email_health_runs.PR
 WHERE NOT EXISTS (SELECT 1 FROM information_schema.statistics WHERE table_schema=DATABASE()
  AND table_name='account_email_health_runs' AND index_name='PRIMARY' GROUP BY index_name
  HAVING GROUP_CONCAT(column_name ORDER BY seq_in_index)='period' AND MAX(non_unique)=0 AND SUM(sub_part IS NOT NULL)=0);
+-- New-user source survey is installed explicitly; activation and data preservation are separate.
+SELECT 'signup_source_survey_schema' AS check_name, 'missing columns' AS detail
+FROM DUAL WHERE (SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE()
+  AND table_name='signup_source_survey' AND column_name IN ('id','form_id','eligible_from','after_create_time','after_user_id'))<>5;

@@ -64,9 +64,10 @@ export function validateDefinition(input) {
       !Number.isInteger(r.points) ||
       r.points < 1 ||
       r.points > FORM_LIMITS.rewardPoints ||
-      !Number.isInteger(r.maxRecipients) ||
-      r.maxRecipients < 1 ||
-      r.maxRecipients > FORM_LIMITS.rewardRecipients
+      (r.maxRecipients !== null &&
+        (!Number.isInteger(r.maxRecipients) ||
+          r.maxRecipients < 1 ||
+          r.maxRecipients > FORM_LIMITS.rewardRecipients))
     )
       fail("奖励积分或名额超出范围");
     reward = { points: r.points, maxRecipients: r.maxRecipients };

@@ -20,8 +20,12 @@ export const notificationMessages = {
     levelUpTitle: "升级到 Lv.{level} · {name}",
     opinionReplyTitle: "你的反馈收到新回复",
     emailHealthTitle: "请检查账号邮箱",
-    emailHealthContent: "账号邮箱 {email} 可能无法接收邮件。请前往账号与安全核对或更换，以便忘记密码时找回账号。正常登录和使用不受影响。",
+    emailHealthContent:
+      "账号邮箱 {email} 可能无法接收邮件。请前往账号与安全核对或更换，以便忘记密码时找回账号。正常登录和使用不受影响。",
     collectionRewardTitle: "「{title}」奖励已到账",
+    signupSurveyTitle: "你是从哪里发现轻笺的？",
+    signupSurveyContent:
+      "邀请你分享最初了解轻笺的渠道，帮助我们找到更多有需要的人。首次成功提交可获得 {points} 积分，自动到账，每个账号仅奖励一次。自愿参与，不影响正常使用。",
     collectionRewardContent:
       "你提交的「{title}」已获得 {points} 积分，奖励已到账。",
     collectionSubmissionTitle: "「{title}」收到新提交",
@@ -67,8 +71,12 @@ export const notificationMessages = {
     levelUpTitle: "Leveled up to Lv.{level} · {name}",
     opinionReplyTitle: "Your feedback got a reply",
     emailHealthTitle: "Check your account email",
-    emailHealthContent: "Your account email {email} may not receive mail. Check or change it in Account & security so you can recover your account if you forget your password. Sign-in and normal use are unaffected.",
+    emailHealthContent:
+      "Your account email {email} may not receive mail. Check or change it in Account & security so you can recover your account if you forget your password. Sign-in and normal use are unaffected.",
     collectionRewardTitle: "Reward credited for “{title}”",
+    signupSurveyTitle: "How did you first hear about Light Note?",
+    signupSurveyContent:
+      "Share where you first heard about Light Note to help us reach more people. Your first successful submission earns {points} points automatically, once per account. Participation is optional.",
     collectionRewardContent:
       "You earned {points} points for submitting “{title}”. The reward is now in your account.",
     collectionSubmissionTitle: "New response to “{title}”",
@@ -147,9 +155,22 @@ export function notificationPresentation(item, locale = "zh-CN") {
       .replace("{level}", String(meta.level || ""))
       .replace("{name}", messages.ranks[meta.level] || meta.name || "");
   if (item.type === "opinion_reply") title = messages.opinionReplyTitle;
+  if (
+    item.type === "signup_source_survey" &&
+    Number.isSafeInteger(meta.points) &&
+    meta.points > 0
+  ) {
+    title = messages.signupSurveyTitle;
+    content = messages.signupSurveyContent.replace(
+      "{points}",
+      String(meta.points),
+    );
+  }
   if (item.type === "email_health") {
     title = messages.emailHealthTitle;
-    content = messages.emailHealthContent.replace("{email}", () => String(meta.maskedEmail || ""));
+    content = messages.emailHealthContent.replace("{email}", () =>
+      String(meta.maskedEmail || ""),
+    );
   }
   if (item.type === "public_resource") {
     title =

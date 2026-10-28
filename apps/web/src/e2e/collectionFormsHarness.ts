@@ -36,7 +36,9 @@ const definition: FormDefinition = {
   submissionPolicy: membersOnly || params.get('policy') === 'replace' ? 'replace' : 'multiple',
   membersOnly,
   notifyOnSubmission: params.has('notifySubmission'),
-  reward: params.has('reward') ? { points: 20, maxRecipients: 100 } : null,
+  reward: params.has('reward')
+    ? { points: params.has('unlimited') ? 50 : 20, maxRecipients: params.has('unlimited') ? null : 100 }
+    : null,
   title: params.get('formTitle') || '轻笺体验反馈',
   description: '帮助我们把轻笺做得更好。请分享你的真实体验，所有回答仅收集者可见。',
   successMessage: '谢谢，你的建议我们已经收到。',
@@ -85,7 +87,7 @@ const forms: any[] = [
     rewardSummary: params.has('reward')
       ? {
           recipients: state === 'full' ? 100 : state === 'draft' ? 0 : 38,
-          totalPoints: state === 'full' ? 2000 : state === 'draft' ? 0 : 760,
+          totalPoints: (state === 'full' ? 100 : state === 'draft' ? 0 : 38) * (definition.reward?.points || 0),
         }
       : undefined,
     total: ['draft', 'emptyResponses'].includes(state) ? 0 : 38,
@@ -125,6 +127,7 @@ const submissions = Array.from({ length: 38 }, (_, i) => ({
     : { q1: ['a', 'b'], q2: 5, q3: '希望移动端的整理操作更方便一些。', q4: 7, q5: '2026-09-30' },
 }));
 const seenRequests: string[] = [];
+const signupSurveyInvitation = { type: 'signup_source_survey', meta: { points: definition.reward?.points || 50 } };
 const notices: NotificationItem[] = params.has('notifications')
   ? [
       {
@@ -136,6 +139,9 @@ const notices: NotificationItem[] = params.has('notifications')
         meta: {},
         isRead: 0,
         createTime: new Date().toISOString(),
+        ...(params.has('unlimited')
+          ? { ...signupSurveyInvitation, ...notificationPresentation(signupSurveyInvitation) }
+          : {}),
       },
     ]
   : [];
@@ -201,7 +207,7 @@ request.defaults.adapter = async (config) => {
         : body.type === 'growth'
           ? ['level_up', 'streak_risk', 'collection_form_reward'].includes(n.type)
           : ['system', 'system_group'].includes(body.type)
-            ? ['system', 'collection_form_submission'].includes(n.type)
+            ? ['system', 'collection_form_submission', 'signup_source_survey'].includes(n.type)
             : n.type === body.type,
     );
     data = url.endsWith('/list')
@@ -383,7 +389,11 @@ window.fetch = async (_input, init) => {
             requiresLogin: !account,
             account,
             reward: definition.reward
-              ? { points: 20, received: rewardReceived, remaining: state === 'full' ? 0 : 62 }
+              ? {
+                  points: definition.reward.points,
+                  received: rewardReceived,
+                  remaining: params.has('unlimited') ? null : state === 'full' ? 0 : 62,
+                }
               : null,
           }
         : {}),

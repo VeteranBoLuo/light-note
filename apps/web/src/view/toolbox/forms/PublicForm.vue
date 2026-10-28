@@ -121,7 +121,7 @@
       mySubmission?: { receipt: string; answers: FormAnswers } | null;
       requiresLogin?: boolean;
       account?: { id: string; alias: string } | null;
-      reward?: { points: number; received: boolean; remaining: number } | null;
+      reward?: { points: number; received: boolean; remaining: number | null } | null;
     }>(),
     loading = ref(true),
     busy = ref(false),

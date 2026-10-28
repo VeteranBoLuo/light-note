@@ -66,6 +66,20 @@ describe('browser push policy', () => {
   });
 });
 describe('transactional notification outbox', () => {
+  it('来源调查邀请在浏览器和华为推送同时启用时也只写站内通知', async () => {
+    for (const [key, value] of Object.entries({
+      ...env,
+      HUAWEI_PUSH_ENABLED: 'true',
+      HUAWEI_PUSH_APP_ID: '123',
+      HUAWEI_PUSH_PROJECT_ID: '456',
+      HUAWEI_PUSH_APP_SECRET: 'test-secret',
+      HUAWEI_PUSH_ORIGIN: 'https://light.test',
+    }))
+      vi.stubEnv(key, value);
+    const conn = { query: vi.fn().mockResolvedValue([{ affectedRows: 1 }]) };
+    await createNotification('user-1', { type: 'signup_source_survey', title: '来源调查' }, conn);
+    expect(conn.query.mock.calls[0][1][0].browser_push_pending).toBe(0);
+  });
   it('writes the marker in the same INSERT and caller transaction; dedup does not enqueue another row', async () => {
     for (const [key, value] of Object.entries(env)) vi.stubEnv(key, value);
     const conn = {

@@ -47,6 +47,15 @@ describe("公开收集共享验证", () => {
       membersOnly: true,
       reward: { points: 20, maxRecipients: 100 },
     });
+    expect(
+      validateDefinition({
+        ...definition,
+        reward: { points: 50, maxRecipients: null },
+      }),
+    ).toMatchObject({
+      membersOnly: true,
+      reward: { points: 50, maxRecipients: null },
+    });
     for (const reward of [
       true,
       [],
@@ -55,6 +64,8 @@ describe("公开收集共享验证", () => {
       { points: 10001, maxRecipients: 1 },
       { points: 1, maxRecipients: 5001 },
       { points: 1, maxRecipients: 0 },
+      { points: 1 },
+      { points: 1, maxRecipients: "unlimited" },
       { points: 1, maxRecipients: 1, userId: "forged" },
     ])
       expect(() => validateDefinition({ ...definition, reward })).toThrow(

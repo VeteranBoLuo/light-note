@@ -7,6 +7,7 @@ export const collectionFormsZh = {
   autoRewardHint: '填完必填项并成功提交后自动到账，每账号仅奖励一次；名额用尽自动暂停收集。',
   rewardPoints: '每人奖励积分',
   rewardRecipients: '奖励名额',
+  unlimitedRewardHint: '不限奖励名额，每个账号首次成功提交后自动到账，修改答案不重复发奖。',
   rewardBudget: '最多发放 {points} 积分。',
   rewardSummary: '已奖励 {count} 个账号，共发放 {points} 积分。',
   participationLocked: '首次发布后填写范围与奖励规则锁定，复制表单后奖励默认关闭。',
@@ -296,6 +297,8 @@ export const collectionFormsEn = {
     'Points arrive after a successful submission with all required answers. Once per account; collection pauses when places run out.',
   rewardPoints: 'Points per participant',
   rewardRecipients: 'Reward places',
+  unlimitedRewardHint:
+    'No recipient limit. Each account earns points on its first successful submission; editing answers does not earn another reward.',
   rewardBudget: 'Up to {points} points in total.',
   rewardSummary: '{count} accounts rewarded, {points} points issued.',
   participationLocked: 'Participation and reward rules lock on first publication. Rewards are off in copied forms.',

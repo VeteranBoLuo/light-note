@@ -12,6 +12,7 @@ import { grantPointsIdempotently } from '../pointsGrantOperations.js';
 import { createNotification } from '../notification.js';
 import { notificationPresentation } from '@lightnote/shared/notification-presentation';
 const rewardRequest = (formId) => `collection-form:${formId}`;
+const rewardFull = (reward, count) => reward && reward.maxRecipients !== null && count >= reward.maxRecipients;
 const sqlDate = (d) => new Date(d).toISOString().slice(0, 23).replace('T', ' ');
 const canonical = (value) =>
   JSON.stringify(value, (_key, v) =>
@@ -88,10 +89,12 @@ export function createFormsService(pool) {
     if (restrictions.length) throw new FormError('收集页面不可用', 404);
     return user;
   }
-  async function specialPermission(db, userId, definition) {
+  async function specialPermission(db, userId, definition, allowUnlimited = false) {
     if (!definition.membersOnly && !definition.reward) return;
     const [owner] = await rows(db, 'SELECT role FROM user WHERE id=?', [userId]);
     if (owner?.role !== 'root') throw new FormError('仅 root 可以配置用户填写与积分奖励', 403);
+    if (definition.reward?.maxRecipients === null && !allowUnlimited)
+      throw new FormError('不限名额仅用于已启用的新用户来源调查', 403);
   }
   async function respondent(db, account, lock = false) {
     if (!account?.id) return null;
@@ -161,7 +164,7 @@ export function createFormsService(pool) {
     );
     if (!form) throw new FormError('表单不存在', 404);
     const result = view(form);
-    if (lock) await specialPermission(db, userId, result.definition);
+    if (lock) await specialPermission(db, userId, result.definition, result.definition.reward?.maxRecipients === null);
     return result;
   }
   async function setTags(db, userId, formId, tagIds = []) {
@@ -246,7 +249,7 @@ export function createFormsService(pool) {
       const definition = validateDefinition(input.definition);
       if (input.definition.notifyOnSubmission === undefined)
         definition.notifyOnSubmission = form.definition.notifyOnSubmission === true;
-      await specialPermission(db, userId, definition);
+      await specialPermission(db, userId, definition, form.definition.reward?.maxRecipients === null);
       if (!form.published) definition.submissionPolicy = 'replace';
       if (form.published && canonical(definition.questions) !== canonical(form.definition.questions))
         throw new FormError('发布后题目已锁定，请复制为新表单', 409);
@@ -301,7 +304,7 @@ export function createFormsService(pool) {
         enabled();
         if (form.definition.submissionPolicy === 'replace' && !form.definition.membersOnly) requireIdentityConfig();
         if (!form.definition.questions.length) throw new FormError('请至少添加一道题');
-        if (form.definition.reward && (await rewardSummary(db, id)).recipients >= form.definition.reward.maxRecipients)
+        if (form.definition.reward && rewardFull(form.definition.reward, (await rewardSummary(db, id)).recipients))
           throw new FormError('奖励名额已用尽，请复制为新表单开展下一次收集', 409);
       }
       await db.query(
@@ -336,7 +339,10 @@ export function createFormsService(pool) {
       ? {
           points: definition.reward.points,
           received: Boolean(await receivedReward(pool, form.id, account?.id)),
-          remaining: Math.max(0, definition.reward.maxRecipients - summary.recipients),
+          remaining:
+            definition.reward.maxRecipients === null
+              ? null
+              : Math.max(0, definition.reward.maxRecipients - summary.recipients),
         }
       : null;
     const publicDefinition = { ...definition };
@@ -388,7 +394,7 @@ export function createFormsService(pool) {
         const exhausted =
           form.status === 'paused' &&
           form.definition.reward &&
-          (await rewardSummary(db, form.id)).recipients >= form.definition.reward.maxRecipients;
+          rewardFull(form.definition.reward, (await rewardSummary(db, form.id)).recipients);
         throw new FormError(
           form.status === 'ended' ? '收集已结束' : exhausted ? '奖励名额已用尽，收集已暂停' : '暂未开放收集',
           409,
@@ -416,7 +422,7 @@ export function createFormsService(pool) {
       let summary = null;
       if (form.definition.reward && !reward) {
         summary = await rewardSummary(db, form.id);
-        if (summary.recipients >= form.definition.reward.maxRecipients)
+        if (rewardFull(form.definition.reward, summary.recipients))
           throw new FormError('奖励名额已用尽，收集已暂停', 409);
       }
       const data =
@@ -499,7 +505,7 @@ export function createFormsService(pool) {
           db,
         );
         reward = { points: form.definition.reward.points, received: true };
-        if (summary.recipients + 1 >= form.definition.reward.maxRecipients)
+        if (rewardFull(form.definition.reward, summary.recipients + 1))
           await db.query(
             "UPDATE collection_forms SET status='paused',version=version+1,updated_at=UTC_TIMESTAMP(3) WHERE id=?",
             [form.id],

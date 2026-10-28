@@ -300,6 +300,7 @@ describe.skipIf(!socketPath)('native notification real SQL', () => {
   it('邮箱检查提醒只留在站内，不进入原生前台通知同步', async () => {
     const { since } = await readNativeNotifications(db, 'alice');
     await add({ type: 'email_health' });
+    await add({ type: 'signup_source_survey' });
     const regular = await add({ type: 'system' });
     expect((await readNativeNotifications(db, 'alice', { since })).items.map((item) => item.id)).toEqual([regular]);
   });

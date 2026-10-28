@@ -15,7 +15,7 @@ export interface FormDefinition {
   notifyOnSubmission?: boolean;
   submissionPolicy?: "multiple" | "replace";
   membersOnly?: boolean;
-  reward?: { points: number; maxRecipients: number } | null;
+  reward?: { points: number; maxRecipients: number | null } | null;
   questions: FormQuestion[];
 }
 export interface OtherChoiceAnswer {

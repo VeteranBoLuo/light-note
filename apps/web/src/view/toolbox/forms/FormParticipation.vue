@@ -16,7 +16,13 @@
     <div class="participation-switch">
       <div
         ><strong id="collection-reward-label">{{ t('collectionForms.autoReward') }}</strong
-        ><p class="collection-muted">{{ t('collectionForms.autoRewardHint') }}</p></div
+        ><p class="collection-muted">{{
+          t(
+            model.reward?.maxRecipients === null
+              ? 'collectionForms.unlimitedRewardHint'
+              : 'collectionForms.autoRewardHint',
+          )
+        }}</p></div
       >
       <BSwitch
         :checked="Boolean(model.reward)"
@@ -37,7 +43,7 @@
           :disabled="locked"
           @update:value="model.reward.points = Number($event)"
       /></label>
-      <label
+      <label v-if="model.reward.maxRecipients !== null"
         >{{ t('collectionForms.rewardRecipients')
         }}<BInput
           type="number"
@@ -48,7 +54,7 @@
           :disabled="locked"
           @update:value="model.reward.maxRecipients = Number($event)"
       /></label>
-      <p class="collection-muted participation-wide">{{
+      <p v-if="model.reward.maxRecipients !== null" class="collection-muted participation-wide">{{
         t('collectionForms.rewardBudget', { points: model.reward.points * model.reward.maxRecipients })
       }}</p>
     </div>

@@ -14,6 +14,7 @@ import { generateGrowthNudges } from './growth.js';
 import { runOrganizeCompletionNotifications } from './services/organizeCompletionNotification.js';
 import { expandPushOutbox, processNextPush } from './browserPushService.js';
 import { browserPushEnabled } from './browserPushPolicy.js';
+import { runSignupSourceSurveyBatch, startSignupSourceSurveyScheduler } from './services/signupSourceSurveyService.js';
 
 const pushEnv = {
   BROWSER_PUSH_ENABLED: 'true',
@@ -43,6 +44,7 @@ describe('notification production isolation', () => {
 
       startTodoReminderScheduler();
       startTodoReminderV2Scheduler();
+      startSignupSourceSurveyScheduler();
       expect(vi.getTimerCount()).toBe(0);
       await processDueTodoReminders();
       await processDueTodoReminderJobs();
@@ -51,6 +53,7 @@ describe('notification production isolation', () => {
       await generateWeeklyReports();
       await generateGrowthNudges();
       await runOrganizeCompletionNotifications('worker');
+      await runSignupSourceSurveyBatch();
       expect(await expandPushOutbox()).toBe(0);
       expect(await processNextPush()).toBeNull();
 

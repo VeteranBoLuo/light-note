@@ -185,3 +185,16 @@ it('邮箱健康提醒按用户语言展示脱敏地址及找回说明', () => {
   expect(en.content).toContain('n***@example.com');
   expect(en.content).not.toContain('stored fallback');
 });
+
+it("来源调查邀请按语言显示发出时的奖励，不显示名额限制", () => {
+  const notice = { type: "signup_source_survey", meta: { points: 50 } };
+  expect(notificationPresentation(notice, "zh-CN")).toMatchObject({
+    title: "你是从哪里发现轻笺的？",
+  });
+  expect(notificationPresentation(notice, "zh-CN").content).toContain(
+    "50 积分",
+  );
+  expect(notificationPresentation(notice, "en-US").content).toContain(
+    "50 points",
+  );
+});

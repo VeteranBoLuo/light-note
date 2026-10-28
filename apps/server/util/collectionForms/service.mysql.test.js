@@ -3,6 +3,11 @@ import { readFile } from 'node:fs/promises';
 import mysql from 'mysql2/promise';
 import { beforeAll, afterAll, beforeEach, describe, it, expect, vi } from 'vitest';
 import { createFormsService } from './service.js';
+import { activateSignupSourceSurvey, runSignupSourceSurveyBatch } from '../services/signupSourceSurveyService.js';
+import {
+  migrateSignupSourceSurveySchema,
+  signupSourceSurveySchemaReady,
+} from '../services/signupSourceSurveySchema.js';
 import { POINTS_GRANT_OPERATIONS_TABLE_SQL } from '../growthCenterSchema.js';
 import { OTHER_OPTION_ID } from '@lightnote/shared/collection-forms';
 const socketPath = process.env.LIGHTNOTE_TEST_MYSQL_SOCKET;
@@ -54,7 +59,7 @@ describe.skipIf(!socketPath)('公开收集 MySQL 原子性和统计', () => {
     });
     service = createFormsService(pool);
     await pool.query(
-      "CREATE TABLE user(id VARCHAR(255) PRIMARY KEY,role VARCHAR(32),del_flag INT,alias VARCHAR(255) NOT NULL DEFAULT '',preferences JSON)",
+      "CREATE TABLE user(id VARCHAR(255) PRIMARY KEY,role VARCHAR(32),del_flag INT,alias VARCHAR(255) NOT NULL DEFAULT '',preferences JSON,create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,KEY idx_user_created_list(del_flag,create_time,id))",
     );
     await pool.query(POINTS_GRANT_OPERATIONS_TABLE_SQL);
     // Exercise the explicit upgrade from the historical receipt table, not just a fresh schema.
@@ -89,6 +94,9 @@ describe.skipIf(!socketPath)('公开收集 MySQL 原子性和统计', () => {
         .split(';')
         .filter((s) => s.trim()))
         await pool.query(sql);
+    await migrateSignupSourceSurveySchema(pool);
+    await migrateSignupSourceSurveySchema(pool);
+    expect(await signupSourceSurveySchemaReady(pool)).toBe(true);
     await pool.query(
       "INSERT INTO user(id,role,del_flag) VALUES ('u','user',0),('other','user',0),('root-owner','root',0),('member','user',0),('another','user',0),('third','test',0),('guest','visitor',0),('disabled','user',1)",
     );
@@ -104,6 +112,7 @@ describe.skipIf(!socketPath)('公开收集 MySQL 原子性和统计', () => {
     await pool.query('DELETE FROM notification');
     await pool.query("UPDATE user SET role='root' WHERE id='root-owner'");
     await pool.query('UPDATE user SET preferences=NULL');
+    await pool.query("DELETE FROM user WHERE id LIKE 'survey-%'");
   });
   afterAll(async () => {
     vi.unstubAllEnvs();
@@ -290,6 +299,184 @@ describe.skipIf(!socketPath)('公开收集 MySQL 原子性和统计', () => {
     answers: { choice: ['a'] },
     expectedAccountId: id,
     ...extra,
+  });
+  const production = { LIGHTNOTE_RUNTIME_ENV: 'production' };
+  it('来源调查结构断言覆盖缺表，结构安装可重复执行', async () => {
+    const source = await readFile(new URL('../../migrations/schema-assertions.sql', import.meta.url), 'utf8');
+    const assertion = source
+      .replace(/^--.*$/gm, '')
+      .split(';')
+      .find((sql) => sql.includes("'signup_source_survey_schema'"));
+    expect(assertion).toBeTruthy();
+    expect((await pool.query(assertion))[0]).toEqual([]);
+    await pool.query('RENAME TABLE signup_source_survey TO signup_source_survey_missing');
+    try {
+      expect(await signupSourceSurveySchemaReady(pool)).toBe(false);
+      expect((await pool.query(assertion))[0]).toHaveLength(1);
+    } finally {
+      await pool.query('RENAME TABLE signup_source_survey_missing TO signup_source_survey');
+    }
+  });
+  async function surveyCohort() {
+    const form = await memberForm({ points: 50, maxRecipients: 50 });
+    await activateSignupSourceSurvey({ db: pool, formId: form.id, apply: true });
+    // Explicit historical clock fixture. Activation itself never backdates this boundary.
+    await pool.query(`UPDATE signup_source_survey SET eligible_from=DATE_SUB(CURRENT_TIMESTAMP,INTERVAL 48 HOUR),
+      after_create_time=DATE_SUB(CURRENT_TIMESTAMP,INTERVAL 48 HOUR),after_user_id=''`);
+    await pool.query('UPDATE user SET create_time=DATE_SUB(CURRENT_TIMESTAMP,INTERVAL 72 HOUR)');
+    return form;
+  }
+  async function surveyUser(id, ageSeconds = 90000, role = 'user', delFlag = 0, preferences = null) {
+    await pool.query(
+      `INSERT INTO user(id,role,del_flag,preferences,create_time)
+      VALUES (?,?,?,?,DATE_SUB(CURRENT_TIMESTAMP,INTERVAL ? SECOND))`,
+      [id, role, delFlag, preferences === null ? null : JSON.stringify(preferences), ageSeconds],
+    );
+  }
+  it('调查启用只改变原表单名额与对应说明，保留历史答案、积分和链接，重跑不重置边界', async () => {
+    const f = await memberForm({ points: 50, maxRecipients: 1 });
+    await service.update('root-owner', f.id, {
+      version: f.version,
+      definition: { ...f.definition, description: '前 1 名完成必填项并成功提交的用户，自动获得 50 积分。' },
+      tagIds: [],
+    });
+    const input = memberInput();
+    const old = await service.submit(f.public_id, input, null, account());
+    expect((await service.get('root-owner', f.id)).status).toBe('paused');
+    const before = (await pool.query('SELECT * FROM points_grant_operations'))[0];
+    const preview = await activateSignupSourceSurvey({ db: pool, formId: f.id });
+    expect(preview).toMatchObject({ active: false, points: 50, previousLimit: 1 });
+    expect((await service.get('root-owner', f.id)).definition.reward.maxRecipients).toBe(1);
+    const active = await activateSignupSourceSurvey({ db: pool, formId: f.id, apply: true });
+    const updated = await service.get('root-owner', f.id);
+    expect(updated.public_id).toBe(f.public_id);
+    expect(updated.status).toBe('collecting');
+    expect(updated.definition.questions).toEqual(f.definition.questions);
+    expect(updated.definition.description).not.toContain('前 1 名');
+    expect(updated.definition.reward).toEqual({ points: 50, maxRecipients: null });
+    expect((await pool.query('SELECT * FROM points_grant_operations'))[0]).toEqual(before);
+    expect((await service.publicForm(f.public_id, null, account())).reward).toMatchObject({
+      remaining: null,
+      received: true,
+    });
+    expect(await service.submit(f.public_id, input, null, account())).toEqual(old);
+    await service.submit(f.public_id, memberInput('member', { answers: { choice: ['b'] } }), null, account());
+    await service.submit(f.public_id, memberInput('another'), null, account('another'));
+    expect((await service.responses('root-owner', f.id)).total).toBe(2);
+    expect((await service.get('root-owner', f.id)).status).toBe('collecting');
+    expect((await pool.query('SELECT delta FROM points_log ORDER BY id'))[0].map((r) => r.delta)).toEqual([50, 50]);
+    expect((await activateSignupSourceSurvey({ db: pool, formId: f.id, apply: true })).eligibleFrom).toBe(
+      active.eligibleFrom,
+    );
+    const latest = await service.get('root-owner', f.id);
+    await service.update('root-owner', f.id, {
+      version: latest.version,
+      definition: { ...latest.definition, title: '来源调查' },
+      tagIds: [],
+    });
+  });
+  it('原有注册账号永不补发；默认启用边界只指向未来，预览不建立边界', async () => {
+    const f = await memberForm({ points: 50, maxRecipients: 50 });
+    await activateSignupSourceSurvey({ db: pool, formId: f.id });
+    expect((await pool.query('SELECT * FROM signup_source_survey'))[0]).toHaveLength(0);
+    await activateSignupSourceSurvey({ db: pool, formId: f.id, apply: true });
+    const [[clock]] = await pool.query('SELECT UNIX_TIMESTAMP(CURRENT_TIMESTAMP) AS now');
+    const [[config]] = await pool.query('SELECT UNIX_TIMESTAMP(eligible_from) AS eligible FROM signup_source_survey');
+    expect(Number(config.eligible)).toBeGreaterThanOrEqual(Number(clock.now));
+    expect(await runSignupSourceSurveyBatch({ db: pool, env: production })).toMatchObject({ checked: 0, notified: 0 });
+  });
+  it('满24小时发送，未满不发送，同秒注册分页不漏；重启、已读、删除都不重发', async () => {
+    const f = await surveyCohort();
+    await surveyUser('survey-a', 86400);
+    await surveyUser('survey-b', 86400);
+    await surveyUser('survey-too-soon', 86370);
+    await surveyUser('survey-old', 259200);
+    expect(await runSignupSourceSurveyBatch({ db: pool, env: production, batchSize: 1 })).toMatchObject({
+      checked: 1,
+      notified: 1,
+    });
+    expect(await runSignupSourceSurveyBatch({ db: pool, env: production, batchSize: 1 })).toMatchObject({
+      checked: 1,
+      notified: 1,
+    });
+    const [notices] = await pool.query("SELECT * FROM notification WHERE type='signup_source_survey' ORDER BY user_id");
+    expect(notices.map((n) => n.user_id)).toEqual(['survey-a', 'survey-b']);
+    expect(
+      notices.every((n) => n.link === `/f/${f.public_id}` && n.browser_push_pending === 0 && n.source_id === f.id),
+    ).toBe(true);
+    await pool.query("UPDATE notification SET is_read=1,del_flag=1 WHERE user_id='survey-a'");
+    await pool.query("DELETE FROM notification WHERE user_id='survey-b'");
+    expect(await runSignupSourceSurveyBatch({ db: pool, env: production })).toMatchObject({ checked: 0, notified: 0 });
+  });
+  it('跳过已回答、已领过奖、内部账号、游客、停用、受限和关闭站内通知的账号', async () => {
+    const f = await surveyCohort();
+    for (const id of ['survey-answered', 'survey-awarded', 'survey-blocked', 'survey-valid']) await surveyUser(id);
+    await surveyUser('survey-root', 90000, 'root');
+    await surveyUser('survey-test', 90000, 'test');
+    await surveyUser('survey-visitor', 90000, 'visitor');
+    await surveyUser('survey-disabled', 90000, 'user', 1);
+    await surveyUser('survey-optout', 90000, 'user', 0, { notificationsInApp: false });
+    for (const id of ['survey-answered', 'survey-awarded'])
+      await service.submit(f.public_id, memberInput(id), null, account(id));
+    await pool.query("DELETE FROM collection_submissions WHERE respondent_user_id='survey-awarded'");
+    await pool.query("INSERT INTO security_account_restrictions VALUES ('survey-blocked','full_lock','active',NULL)");
+    expect(await runSignupSourceSurveyBatch({ db: pool, env: production })).toMatchObject({ notified: 1 });
+    expect((await pool.query("SELECT user_id FROM notification WHERE type='signup_source_survey'"))[0]).toEqual([
+      { user_id: 'survey-valid' },
+    ]);
+  });
+  it('通知失败回滚进度，下次恢复；并发调度只发送一次', async () => {
+    await surveyCohort();
+    await surveyUser('survey-retry');
+    const [[before]] = await pool.query(
+      'SELECT UNIX_TIMESTAMP(after_create_time) AS t,after_user_id FROM signup_source_survey',
+    );
+    await expect(
+      runSignupSourceSurveyBatch({
+        db: pool,
+        env: production,
+        notify: async () => {
+          throw new Error('test-failure');
+        },
+      }),
+    ).rejects.toThrow('test-failure');
+    expect(
+      (await pool.query('SELECT UNIX_TIMESTAMP(after_create_time) AS t,after_user_id FROM signup_source_survey'))[0][0],
+    ).toEqual(before);
+    const results = await Promise.all(
+      Array.from({ length: 4 }, () => runSignupSourceSurveyBatch({ db: pool, env: production })),
+    );
+    expect(results.reduce((sum, r) => sum + r.notified, 0)).toBe(1);
+    expect((await pool.query("SELECT * FROM notification WHERE type='signup_source_survey'"))[0]).toHaveLength(1);
+  });
+  it('本地运行不领取；表单关闭期间不消费进度，恢复后继续', async () => {
+    const f = await surveyCohort();
+    await surveyUser('survey-pause');
+    await expect(
+      runSignupSourceSurveyBatch({
+        db: pool,
+        env: { LIGHTNOTE_RUNTIME_ENV: 'local', ALLOW_REMOTE_DATABASE_WRITES: 'true' },
+      }),
+    ).resolves.toMatchObject({ disabled: true });
+    await expect(
+      runSignupSourceSurveyBatch({ db: pool, env: { ...production, SIGNUP_SOURCE_SURVEY_ENABLED: 'false' } }),
+    ).resolves.toMatchObject({ disabled: true });
+    const current = await service.get('root-owner', f.id);
+    await service.action('root-owner', f.id, { action: 'pause', version: current.version });
+    expect(await runSignupSourceSurveyBatch({ db: pool, env: production })).toMatchObject({ checked: 0, notified: 0 });
+    const paused = await service.get('root-owner', f.id);
+    await service.action('root-owner', f.id, { action: 'resume', version: paused.version });
+    expect(await runSignupSourceSurveyBatch({ db: pool, env: production })).toMatchObject({ checked: 1, notified: 1 });
+  });
+  it('普通管理接口不能为其他表单新增不限名额奖励，人工暂停不被启用脚本擅自恢复', async () => {
+    await expect(memberForm({ points: 50, maxRecipients: null })).rejects.toMatchObject({ status: 403 });
+    const f = await memberForm();
+    await service.action('root-owner', f.id, { action: 'pause', version: f.version });
+    await expect(activateSignupSourceSurvey({ db: pool, formId: f.id, apply: true })).rejects.toMatchObject({
+      code: 'SURVEY_MANUALLY_PAUSED',
+    });
+    expect((await pool.query('SELECT * FROM signup_source_survey'))[0]).toHaveLength(0);
+    expect((await service.get('root-owner', f.id)).definition.reward.maxRecipients).toBe(100);
   });
   it('账号表单分别通知创建者和获奖用户，更新答案不重复提醒或发奖', async () => {
     const f = await memberForm();

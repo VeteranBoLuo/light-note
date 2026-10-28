@@ -1,3 +1,4 @@
+import { startSignupSourceSurveyScheduler } from './util/services/signupSourceSurveyService.js';
 import { startPublicResourceReviewScheduler } from './util/publicResources/reviewWorker.js';
 import { startPublicResourceEventScheduler } from './util/publicResources/notifications.js';
 import { startCommunityReviewScheduler } from './util/communityFeed/reviewWorker.js';
@@ -316,6 +317,7 @@ if (getTodoPlanFeatureState().schedulerEnabled) {
 }
 startEmailDeliveryLogCleanupScheduler();
 startAccountEmailHealthScheduler();
+startSignupSourceSurveyScheduler();
 
 // 启动 Express 服务器
 // 全局兜底:fire-and-forget 漏 catch 或深层依赖异常时留痕,避免 Node 默认行为下无声崩溃(进程守护由 PM2 负责)。

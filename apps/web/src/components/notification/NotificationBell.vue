@@ -243,7 +243,7 @@
   const pageSize = 20;
 
   const WIDE_NOTIFICATION_GROUPS = Object.freeze({
-    system: ['system', 'collection_form_submission'],
+    system: ['system', 'collection_form_submission', 'signup_source_survey'],
     growth: ['level_up', 'streak_risk', 'collection_form_reward'],
     ai_routine: ['daily_brief', 'ai_routine'],
   });

@@ -87,6 +87,8 @@ ssh -i "$KEY" "$HOST" "cd '$REMOTE' && '$REMOTE_NODE' scripts/ensurePublicResour
 
 echo "🔎  显式安装邮箱健康加法结构与邮件查询索引…"
 ssh -i "$KEY" "$HOST" "cd '$REMOTE' && '$REMOTE_NODE' scripts/ensureAccountEmailHealthSchema.js"
+echo "🔎  显式安装新用户来源调查结构（不启用、不发通知）…"
+ssh -i "$KEY" "$HOST" "cd '$REMOTE' && '$REMOTE_NODE' scripts/configureSignupSourceSurvey.js --install-schema"
 
 echo "🔎  执行只读 Schema 发布门禁…"
 ssh -i "$KEY" "$HOST" "cd '$REMOTE' && '$REMOTE_NODE' scripts/checkSchemaAssertions.js"

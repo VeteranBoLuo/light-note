@@ -29,7 +29,7 @@ const EMAIL_STATUSES = ['sending', 'accepted', 'failed', 'unknown'];
 const COMMUNITY_CHAT_EXCLUDED_SQL =
   "type <> 'community_chat' AND COALESCE(source_type, '') <> 'community_chat_message'";
 const NOTIFICATION_TYPE_GROUPS = Object.freeze({
-  system: Object.freeze(['system', 'collection_form_submission']),
+  system: Object.freeze(['system', 'collection_form_submission', 'signup_source_survey']),
   growth: Object.freeze(['level_up', 'streak_risk', 'collection_form_reward']),
   ai_routine: Object.freeze(['daily_brief', 'ai_routine']),
 });
