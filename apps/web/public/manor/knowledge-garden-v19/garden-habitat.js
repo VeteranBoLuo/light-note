@@ -2,6 +2,13 @@
 const GardenHabitat = (() => {
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
   const smooth = p => p * p * p * (p * (p * 6 - 15) + 10);
+  // Only backing pixels change: CSS positions and calibrated animal sizes stay fixed.
+  // Bound 3x phones and explicitly constrained layers; desktop keeps its current sampling.
+  function rasterScale(width,height,dpr=1,mobile=false,limit=mobile?4096:Infinity) {
+    const w=Math.max(1,width),h=Math.max(1,height);
+    const pixelLimit=Number.isFinite(limit)?Math.sqrt(8294400/(w*h)):Infinity;
+    return Math.min(Math.max(1,dpr),mobile?3:2,limit/w,limit/h,pixelLimit);
+  }
   // 种田舞台挂载后，草地、青蛙落点、蜻蜓范围和鱼的活动区都以标定为准
   const staged = () => (typeof FarmStage !== "undefined" ? FarmStage.habitat() : null);
   // Layout changes move the camera, not the animals' positions in the picture.
@@ -184,6 +191,6 @@ const GardenHabitat = (() => {
   }
   // 轴向统一单位：高度随像素宽度计算，窄屏不把鱼拉长。
   const bodyPoint=(x,y,px,py,k,w,h,vw=2550)=>[(x+px*k)/vw,(y-100)/850+py*k*w/(vw*h)];
-  return { remapPoint,animalUnit,smooth,lawn,air,birdStops,birdRoute,birdFlight,frogShore,inLawn,onLawn,pickupClear,rabbitHop,water,planes,inside,project,swimField,fieldPoint,fitBody,bodyPoint };
+  return { rasterScale,remapPoint,animalUnit,smooth,lawn,air,birdStops,birdRoute,birdFlight,frogShore,inLawn,onLawn,pickupClear,rabbitHop,water,planes,inside,project,swimField,fieldPoint,fitBody,bodyPoint };
 })();
 if(typeof module!=="undefined") module.exports=GardenHabitat;

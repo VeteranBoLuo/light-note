@@ -819,7 +819,8 @@ const FishMotion = (() => {
       const dt = last ? Math.min(0.05, (now - last) / 1000) : 0;
       last = now;
       if (!ready || !visible || document.hidden) return;
-      const width = Math.min(2048, Math.round(art.clientWidth * Math.min(devicePixelRatio, 2)));
+      const ratio=GardenHabitat.rasterScale(art.clientWidth,art.clientHeight,devicePixelRatio||1,document.documentElement.classList.contains('light-note-mobile-rendering'));
+      const width = Math.min(2048, Math.round(art.clientWidth * ratio));
       const height = Math.round(art.clientHeight ? art.clientHeight * (width / art.clientWidth) : (width * 850) / VW);
       const resized = canvas.width !== width || canvas.height !== height;
       if (resized) {

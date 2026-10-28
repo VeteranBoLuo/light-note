@@ -1968,14 +1968,8 @@ html.light-note-mobile-rendering [data-manor-area="garden"] [data-dock="garden"]
 /* ui-density-fixed: mobile-only testing control sits below the existing top row. */
 html.light-note-mobile-rendering .game-hud .hud-reset {position:absolute;right:0;top:54px;width:44px;height:44px;padding:8px;}
 
-/* The art responds, while the chest hit target stays still during a click. */
-.bait-chest-art {transition:margin-top .12s ease-out;}
+/* The calibrated chest artwork and hit target stay fixed during interaction. */
 #app .bait-chest:active {transform:none;}
-@media (hover:hover) and (pointer:fine) {
-  /* ui-density-fixed: convert one screen pixel of artwork feedback to stage units. */
-  #app .bait-chest:is(:hover,:active) .bait-chest-art {margin-top:calc(1px / var(--stage-s,1));}
-}
-@media (prefers-reduced-motion:reduce) {.bait-chest-art {transition:none;}}
 
 /* Image preparation never intercepts atlas navigation. */
 .atlas-card[data-image-status]:not([data-image-status=""])::after { content: attr(data-image-status); position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none; background: #fff9eb; color: #8b734e; font-size: calc(13px * var(--d)); }

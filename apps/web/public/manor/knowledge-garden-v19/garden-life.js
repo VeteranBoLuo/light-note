@@ -35,7 +35,7 @@ const GardenLife = (() => {
     let raf = 0, last = 0, age = 0, w = 0, h = 0, sw = 0, sh = 0, dpr = 1, waterPoly=[];
     const measure = () => {
       w = tank.clientWidth; h = tank.clientHeight; sw = scene.clientWidth; sh = scene.clientHeight;
-      dpr = Math.min(2, devicePixelRatio || 1);
+      dpr = GardenHabitat.rasterScale(sw,sh,devicePixelRatio||1,document.documentElement.classList.contains('light-note-mobile-rendering'));
       for (const [el, cw, ch] of [[canvas,w,h],[birds,sw,sh]]) {
         el.width = Math.max(1, Math.round(cw * dpr)); el.height = Math.max(1, Math.round(ch * dpr));
       }

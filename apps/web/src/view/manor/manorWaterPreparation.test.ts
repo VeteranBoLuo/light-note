@@ -45,10 +45,17 @@ describe('预生成庄园水面',()=>{
       expect(mask.pixel(x*mask.width/scene.image[0],y*mask.height/scene.image[1])[0]).toBe(0);
   });
   it('高分屏按真实显示尺寸渲染，波场连续推进而不是整体反向移动或扩散圆环',()=>{
-    const module={exports:{} as {renderSize:(w:number,h:number,dpr:number)=>{width:number;height:number};swellField:(n:number,rng:()=>number)=>{update:(t:number)=>Float32Array}}};
-    runInNewContext(readFileSync(new URL('garden-environment-r53.js',root),'utf8'),{module});
+    const module={exports:{} as {renderSize:(w:number,h:number,dpr:number,limit?:number,mobile?:boolean)=>{width:number;height:number};swellField:(n:number,rng:()=>number)=>{update:(t:number)=>Float32Array}}};
+    const GardenHabitat=runInNewContext(`${readFileSync(new URL('garden-habitat.js',root),'utf8')};GardenHabitat`);
+    runInNewContext(readFileSync(new URL('garden-environment-r53.js',root),'utf8'),{module,GardenHabitat});
     const water=module.exports;
+    expect(GardenHabitat.rasterScale(2560,1440,2,false)).toBe(2);
     expect(water.renderSize(1470,700,2)).toEqual({width:2940,height:1400});
+    expect(water.renderSize(390,780,3,4096,true)).toEqual({width:1170,height:2340});
+    expect(water.renderSize(390,780,3)).toEqual({width:780,height:1560});
+    const large=water.renderSize(1600,2400,3,4096,true);
+    expect(large.width*large.height).toBeLessThanOrEqual(8294400);
+    expect(Math.max(large.width,large.height)).toBeLessThanOrEqual(4096);
     const waves=water.swellField(10,()=>.5),a=[...waves.update(0)],b=[...waves.update(.1)],c=[...waves.update(.2)];
     for(let i=0;i<10;i++){expect(b[i*4+3]).toBeGreaterThan(a[i*4+3]);expect(c[i*4+3]-b[i*4+3]).toBeCloseTo(b[i*4+3]-a[i*4+3],5);}
   });

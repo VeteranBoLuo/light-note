@@ -186,6 +186,8 @@ html:not(.light-note-mobile-rendering) .hud-garden-badge > .game-icon {width:100
 .facility-detail-facts dt {display:flex;align-items:center;gap:calc(5px * var(--d));}
 .facility-detail-facts .game-icon {width:calc(23px * var(--d));height:calc(23px * var(--d));}
 .facility-recipe-panel {border:1px solid #e1c58c;border-radius:calc(10px * var(--d));background:#fff3d5;padding:calc(9px * var(--d));}
+/* ui-density-fixed: independent manor dialog spacing follows the game's --d scale. */
+.facility-recipe-panel + .facility-recipe-panel {margin-top:calc(10px * var(--d));}
 .facility-recipe-panel h4 {margin:0 0 calc(7px * var(--d));font-size:calc(12px * var(--d));color:#846332;}
 .detail-recipe {display:flex;align-items:center;justify-content:space-around;gap:calc(4px * var(--d));margin:calc(6px * var(--d)) 0;}
 .detail-recipe > span {display:grid;justify-items:center;gap:calc(4px * var(--d));min-width:0;}
@@ -365,16 +367,6 @@ html.light-note-mobile-rendering #modal .fish-detail-art {height:clamp(calc(120p
 
 /* Visual feedback leaves calibrated fixture hit areas and perspective matrices fixed. */
 .garden-scene :is(.scene-facility,.scene-purifier):is(:hover,:active) {transform:none;filter:none;}
-/* Layout offset repaints the original artwork; fractional transforms/filters rasterized it softly on hover. */
-.scene-facility .fixture-art,.scene-purifier .purifier-art {transition:margin-top .12s ease;}
-@media (hover:hover) and (pointer:fine) {
-  .scene-facility:hover .fixture-art,.scene-purifier:hover .purifier-art {margin-top:1px;filter:none;}
-}
-/* ui-density-fixed: one-pixel press feedback on the artwork; restored focus must not press it. */
-.scene-facility:active .fixture-art,.scene-purifier:active .purifier-art {margin-top:1px;filter:none;}
-@media (prefers-reduced-motion:reduce) {
-  .scene-facility .fixture-art,.scene-purifier .purifier-art {transition:none;}
-}
 
 /* Loose dry pellets appear on the ground; collected fertilizer keeps its inventory sack. */
 .rabbit-droppings {position:relative;display:block;width:calc(34px * var(--d));height:calc(25px * var(--d));filter:drop-shadow(0 calc(2px * var(--d)) calc(1px * var(--d)) #48250c55);}

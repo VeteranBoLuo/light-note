@@ -94,7 +94,7 @@ const GardenAnimals3D=(()=>{
     const kinds=scene.dataset.manorArea==='bay'?['ladybird']:['rabbit','ladybird'];
     const models=new Map(kinds.map(kind=>{const model=build(kind,THREE);world.add(model.root);model.root.visible=false;return [kind,model];}));
     let W=0,H=0,last=0,raf=0,available=true;
-    function measure(){const r=scene.getBoundingClientRect();W=r.width;H=r.height;renderer.setPixelRatio(Math.min(devicePixelRatio||1,2));renderer.setSize(W,H,false);camera.left=-W/2;camera.right=W/2;camera.top=H/2;camera.bottom=-H/2;camera.updateProjectionMatrix();}
+    function measure(){const r=scene.getBoundingClientRect();W=r.width;H=r.height;renderer.setPixelRatio(GardenHabitat.rasterScale(W,H,devicePixelRatio||1,document.documentElement.classList.contains('light-note-mobile-rendering')));renderer.setSize(W,H,false);camera.left=-W/2;camera.right=W/2;camera.top=H/2;camera.bottom=-H/2;camera.updateProjectionMatrix();}
     const ro=new ResizeObserver(measure);ro.observe(scene);measure();
     const lost=e=>{e.preventDefault();available=false;canvas.hidden=true;};canvas.addEventListener('webglcontextlost',lost);const restored=()=>{available=true;};canvas.addEventListener('webglcontextrestored',restored);
     function frame(now){raf=requestAnimationFrame(frame);const dt=last?Math.min(.05,(now-last)/1000):0;last=now;const modal=document.getElementById('modal');canvas.hidden=!available||document.hidden||(modal&&!modal.hidden);if(canvas.hidden)return;

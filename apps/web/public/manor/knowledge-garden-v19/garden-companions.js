@@ -75,13 +75,14 @@ const GardenCompanions = (() => {
     for(const key of ['butterflyopen','butterflyperch','ladybird'])sprite(key);
     function measure() {
       const r=scene.getBoundingClientRect(),mobile=document.documentElement.classList.contains('light-note-mobile-rendering');
-      W=r.width;H=r.height;L=GardenHabitat.animalUnit(mobile,W,H);dpr=Math.min(devicePixelRatio||1,2);
+      W=r.width;H=r.height;L=GardenHabitat.animalUnit(mobile,W,H);dpr=GardenHabitat.rasterScale(W,H,devicePixelRatio||1,mobile);
       const staged=typeof FarmStage!=='undefined'&&FarmStage.habitat();
       const previousCamera=camera;
       camera=staged?FarmStage.frame():null;
       const origin=staged?FarmStage.toScene(0,0):[0,0];
-      const next=`${W}:${H}:${mobile}:${origin}:${staged?FarmStage.scale():1}`;if(next===layout)return;layout=next;
+      const next=`${W}:${H}:${mobile}:${dpr}:${origin}:${staged?FarmStage.scale():1}`;if(next===layout)return;layout=next;
       canvas.width=Math.round(W*dpr);canvas.height=Math.round(H*dpr);
+      ctx.imageSmoothingQuality='high';
       const lawn=GardenHabitat.lawn(mobile,W,H);
       // 两只昆虫分落左右花丛，避免点击区压住兔子或场景物件。
       const stops=visitorStops(mobile,scene.dataset.manorArea,staged?FarmStage.cal():null);

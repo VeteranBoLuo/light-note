@@ -3,9 +3,9 @@
 const GardenEnvironment = (() => {
   let current=null;
   // 匹配高分屏，统一限制总像素和 GPU 尺寸，避免大屏糊成低分辨率画布。
-  function renderSize(width,height,dpr=1,limit=4096) {
+  function renderSize(width,height,dpr=1,limit=4096,mobile=false) {
     const w=Math.max(1,width),h=Math.max(1,height);
-    const scale=Math.min(Math.max(1,dpr),2,limit/w,limit/h,Math.sqrt(8294400/(w*h)));
+    const scale=GardenHabitat.rasterScale(w,h,dpr,mobile,limit);
     return {width:Math.max(1,Math.floor(w*scale)),height:Math.max(1,Math.floor(h*scale))};
   }
   // Open wave fronts share a gentle prevailing direction. Their different lengths,
@@ -167,7 +167,7 @@ const GardenEnvironment = (() => {
       raf=requestAnimationFrame(draw);
       if(dead || !ready || !visible || document.hidden || now-last<33)return;
       const display=img.getBoundingClientRect();
-      const {width:w,height:h}=renderSize(display.width,display.height,devicePixelRatio,limit);
+      const {width:w,height:h}=renderSize(display.width,display.height,devicePixelRatio,limit,document.documentElement.classList.contains('light-note-mobile-rendering'));
       if(reduced.matches){canvas.hidden=true;return;}
       if(img.currentSrc!==uploaded){
         canvas.hidden=true;

@@ -328,11 +328,12 @@ const GardenCritters = (() => {
       const r = scene.getBoundingClientRect();
       const oldW=W, oldH=H, profile=String(compactGarden());
       const nextFrame=stageFrame()||{ox:0,oy:0,sx:r.width||1,sy:r.height||1,profile};
-      dpr = Math.min(2, devicePixelRatio || 1);
       W = r.width;
       H = r.height;
+      dpr = GardenHabitat.rasterScale(W,H,devicePixelRatio||1,compactGarden());
       if (canvas.width !== Math.round(W * dpr)) canvas.width = Math.round(W * dpr);
       if (canvas.height !== Math.round(H * dpr)) canvas.height = Math.round(H * dpr);
+      ctx.imageSmoothingQuality='high';
       const rel = (el, pad = 0) => {
         if (!el) return null;
         const b = el.getBoundingClientRect();

@@ -6,7 +6,7 @@
   >
     <BTooltip v-if="growth?.features?.manor && !user.adminContext && user.role === 'root'" :title="t('manor.title')">
       <BButton class="workshop-entry-btn" :aria-label="t('manor.title')" @click="manorRouter.push('/knowledge-manor')">
-        <SvgIcon size="26" :src="icon.manor.entry" />
+        <SvgIcon size="30" :src="icon.manor.entry" />
       </BButton>
     </BTooltip>
     <GlobalSearch />
