@@ -14,6 +14,19 @@ const ensureColumn = async (tableName, columnName, definition) => {
   }
 };
 
+const readColumnType = async (tableName, columnName) => {
+  const [rows] = await pool.query(
+    `SELECT COLUMN_TYPE AS columnType
+     FROM INFORMATION_SCHEMA.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?
+     LIMIT 1`,
+    [tableName, columnName],
+  );
+  return String(rows[0]?.columnType || '').toLowerCase();
+};
+
+const HANDLED_STATUS_TYPE = "enum('unhandled','processed','false_positive','authorized_test')";
+
 const ensureIndex = async (tableName, indexName, definition) => {
   const [rows] = await pool.query(
     `SELECT INDEX_NAME
@@ -67,19 +80,22 @@ const ensureSecurityEventSchema = async () => {
   await ensureColumn('security_event_evidence', 'exception_ids', 'exception_ids JSON AFTER policy_version');
   await ensureIndex('security_events', 'idx_security_event_cluster', '(cluster_key)');
   await ensureIndex('security_events', 'idx_security_event_review', '(workflow_status, disposition, created_at)');
-  await pool.query(`
-    ALTER TABLE security_events
-    MODIFY handled_status ENUM('unhandled','processed','confirmed','false_positive','authorized_test','ignored','resolved') DEFAULT 'unhandled'
-  `);
-  await pool.query(`
-    UPDATE security_events
-    SET handled_status = 'processed'
-    WHERE handled_status IN ('confirmed','resolved','ignored')
-  `);
-  await pool.query(`
-    ALTER TABLE security_events
-    MODIFY handled_status ENUM('unhandled','processed','false_positive','authorized_test') DEFAULT 'unhandled'
-  `);
+  // 旧状态收敛只在旧枚举仍存在时执行：改动枚举取值会整表复制重建，不能在每次启动和部署时重复。
+  if ((await readColumnType('security_events', 'handled_status')) !== HANDLED_STATUS_TYPE) {
+    await pool.query(`
+      ALTER TABLE security_events
+      MODIFY handled_status ENUM('unhandled','processed','confirmed','false_positive','authorized_test','ignored','resolved') DEFAULT 'unhandled'
+    `);
+    await pool.query(`
+      UPDATE security_events
+      SET handled_status = 'processed'
+      WHERE handled_status IN ('confirmed','resolved','ignored')
+    `);
+    await pool.query(`
+      ALTER TABLE security_events
+      MODIFY handled_status ENUM('unhandled','processed','false_positive','authorized_test') DEFAULT 'unhandled'
+    `);
+  }
   await pool.query(`
     UPDATE security_events
     SET workflow_status = CASE WHEN handled_status = 'unhandled' THEN 'new' ELSE 'resolved' END,
