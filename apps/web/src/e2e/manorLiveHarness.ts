@@ -23,7 +23,7 @@ const params = new URLSearchParams(location.search), pinia = createPinia();
 if (params.get('prewarm') === 'true') performance.setResourceTimingBufferSize(3000);
 setActivePinia(pinia);
 const user = useUserStore(pinia), bookmark = bookmarkStore(pinia);
-user.$patch({ id: 'manor-fixture-a', role: params.get('role') === 'visitor' ? 'visitor' : params.get('role') === 'user' ? 'user' : 'root', adminContext: null });
+user.$patch({ id: 'manor-fixture-a', role: params.get('role') === 'visitor' ? 'visitor' : params.get('role') === 'user' ? 'user' : params.get('role') === 'test' ? 'test' : 'root', adminContext: null });
 bookmark.screenWidth = innerWidth;
 const mobile = params.get('renderProfile') === 'mobile' || bookmark.isMobile;
 // Prewarm proof requires a production build, which supplies the entry-bound manifest.
@@ -153,7 +153,7 @@ request.defaults.adapter = async config => {
       if (loseResponse) { loseResponse = false; throw { code: 'ERR_NETWORK', config, message: 'Network Error' }; }
     }
   } else if (path.endsWith('/manor')) data = { status: 200, data: snapshot() };
-  else if (path.endsWith('/me')) data = { status: 200, data: { level: 1, points: get().state.wallet, features: { manor: params.get('feature') !== 'off' && user.role === 'root' } } };
+  else if (path.endsWith('/me')) data = { status: 200, data: { level: 1, points: get().state.wallet, features: { manor: params.get('feature') !== 'off' && ['root', 'test'].includes(user.role) } } };
   else if (path.endsWith('/inventory')) data = { status: 200, data: { assets: { points: get().state.wallet }, items: [] } };
   else data = { status: 200, data: {} };
   return { data, status: 200, statusText: 'OK', headers: {}, config };

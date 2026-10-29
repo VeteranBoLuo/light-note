@@ -85,6 +85,15 @@
 .beehive-dialog .facility-hint {margin-top:calc(7px * var(--d));}
 
 html:not(.light-note-mobile-rendering) .hud-identity {position:relative;width:calc(254px * var(--d));padding:calc(8px * var(--d)) calc(12px * var(--d));border:calc(3px * var(--d)) solid #e2b56c;border-radius:calc(13px * var(--d));background:repeating-linear-gradient(1deg,#b47a43 0,#b47a43 5px,#bd8850 6px,#c18d54 11px);box-shadow:inset 0 0 0 2px #f3d497,0 4px #85582f,0 6px 14px #43371d40;}
+/* Wrap whole HUD groups before the identity plaque or resource labels can shrink. */
+html:not(.light-note-mobile-rendering) .farm-staged .hud-identity {flex-shrink:0;}
+html:not(.light-note-mobile-rendering) #app .garden-play .farm-staged .game-hud {flex-wrap:wrap;justify-content:flex-end;}
+html:not(.light-note-mobile-rendering) #app .garden-play .farm-staged .game-hud.has-test-control {
+  /* ui-density-fixed: reserve the existing independent game HUD's test icon and gap. */
+  padding-right:calc(56px * var(--d));
+}
+html:not(.light-note-mobile-rendering) .farm-staged .game-hud.has-test-control .hud-reset {position:absolute;top:0;right:0;}
+html:not(.light-note-mobile-rendering) .farm-staged .res-pill {white-space:nowrap;}
 html:not(.light-note-mobile-rendering) .hud-stage {position:relative;display:grid;grid-template-columns:calc(48px * var(--d)) minmax(0,1fr);grid-template-rows:auto auto;align-items:center;column-gap:calc(10px * var(--d));row-gap:calc(4px * var(--d));width:100%;}
 html:not(.light-note-mobile-rendering) .hud-stage:is(:hover,:active) {transform:none;filter:none;}
 html:not(.light-note-mobile-rendering) .hud-stage-name {display:contents;font-size:calc(17px * var(--d));color:#fff7df;text-shadow:0 1px #6b4124;white-space:nowrap;}
@@ -262,7 +271,7 @@ html:not(.light-note-mobile-rendering) .farm-staged .farm-destinations .dock-btn
 html:not(.light-note-mobile-rendering) .farm-staged .game-dock .dock-title {display:none;}
 html:not(.light-note-mobile-rendering) .farm-staged .game-dock .dock-disc {width:calc(32px * var(--d));height:calc(32px * var(--d));border:0;box-shadow:none;background:none;border-radius:calc(8px * var(--d));}
 html:not(.light-note-mobile-rendering) .farm-staged .game-dock .dock-chip {right:calc(-3px * var(--d));bottom:calc(-2px * var(--d));height:auto;min-width:0;padding:0 calc(3px * var(--d));font-size:calc(9px * var(--d));line-height:1.3;}
-html:not(.light-note-mobile-rendering) #app .garden-play .hud-right {margin-left:0;}
+html:not(.light-note-mobile-rendering) #app .garden-play .hud-right {margin-left:0;flex:0 0 auto;flex-wrap:wrap;max-width:100%;}
 html:not(.light-note-mobile-rendering) .farm-staged :is(.hud-resources,.util-btn,.hud-back) {box-sizing:border-box;height:calc(44px * var(--d));min-height:calc(44px * var(--d));}
 html:not(.light-note-mobile-rendering) .farm-staged .hud-resources {display:flex;align-items:center;}
 html:not(.light-note-mobile-rendering) .farm-staged .util-btn.round {width:calc(44px * var(--d));}
