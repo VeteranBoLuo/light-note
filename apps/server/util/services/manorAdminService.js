@@ -12,6 +12,17 @@ import { getGrowthCalendarContext } from '../growthPreferences.js';
 import { beginAdminAction, finishAdminAction } from '../adminActionExecution.js';
 import { INTERNAL_ROLES } from '../internalRoles.js';
 import { readManorPoints } from './manorPointsRead.js';
+import { manorAudience } from './knowledgeManorAccess.js';
+
+/**
+ * 账号收入偏高提示阈值（滚动 7 天净额，积分）。
+ * 依据：按现行规则模拟的理论最优约 370 积分/周，超过 400 说明可能存在规则漏洞或异常，
+ * 需要人工排查。这只是后台提示，不限制玩家收入。
+ */
+export const MANOR_EARNER_FLAG_NET = 400;
+/** 账号收入固定统计最近 7×24 小时，不跟随页面的 7/30 天范围选择。 */
+export const MANOR_EARNER_WINDOW_DAYS = 7;
+const MANOR_EARNER_LIMIT = 10;
 
 const parsed = (v) => (typeof v === 'string' ? JSON.parse(v) : v);
 const validId = (value) => {
@@ -41,6 +52,33 @@ const users = (hide) =>
   `u.del_flag=0 AND u.role IN ('user','test','root')${hide ? ` AND u.role NOT IN (${INTERNAL_ROLES.map(() => '?').join(',')})` : ''}`;
 const userParams = (hide) => (hide ? [...INTERNAL_ROLES] : []);
 const timed = (sql) => sql.replace(/^SELECT /, 'SELECT /*+ MAX_EXECUTION_TIME(5000) */ ');
+const beijingTime = (date) => new Date(date.getTime() + 28_800_000).toISOString().slice(0, 19).replace('T', ' ');
+
+/** Range on created_at keeps the scan on idx_manor_ops_time (created_at,user_id,request_id). */
+export function manorEarnersQuery({ since, hideInternal }) {
+  return {
+    sql: timed(`SELECT o.user_id AS userId,u.alias,
+      SUM(CASE WHEN o.points_delta>0 THEN o.points_delta ELSE 0 END) AS income,
+      SUM(CASE WHEN o.points_delta<0 THEN -o.points_delta ELSE 0 END) AS spent,
+      SUM(o.points_delta) AS net
+      FROM knowledge_manor_operations o JOIN user u ON u.id=o.user_id
+      WHERE o.created_at>=? AND o.points_delta<>0 AND ${users(hideInternal)}
+      GROUP BY o.user_id,u.alias ORDER BY net DESC,o.user_id ASC LIMIT ?`),
+    params: [since, ...userParams(hideInternal), MANOR_EARNER_LIMIT],
+  };
+}
+export const summarizeManorEarners = (rows) =>
+  rows.map((r) => {
+    const net = Number(r.net);
+    return {
+      userId: r.userId,
+      alias: r.alias,
+      income: Number(r.income),
+      spent: Number(r.spent),
+      net,
+      flagged: net > MANOR_EARNER_FLAG_NET,
+    };
+  });
 
 export function createManorAdminService({
   db = pool,
@@ -68,6 +106,7 @@ export function createManorAdminService({
     return {
       ...(await readManorRuntime(conn)),
       deploymentEnabled: process.env.KNOWLEDGE_MANOR_ENABLED === 'true',
+      audience: manorAudience(),
       rules: {
         version: MANOR_VERSION,
         dailyWater: M.RULES.dailyWater * 3 + M.RULES.dailyWaterBonus,
@@ -204,11 +243,22 @@ export function createManorAdminService({
             return counts;
           })
         : null;
+      const earners = await section('earners', async () => {
+        const since = beijingTime(new Date(now().getTime() - MANOR_EARNER_WINDOW_DAYS * 86_400_000));
+        const { sql, params } = manorEarnersQuery({ since, hideInternal: range.hideInternal });
+        const [rows] = await conn.query(sql, params);
+        return {
+          windowDays: MANOR_EARNER_WINDOW_DAYS,
+          since,
+          threshold: MANOR_EARNER_FLAG_NET,
+          items: summarizeManorEarners(rows),
+        };
+      });
       const recent = await section(
         'recent',
         async () => (await operations({ ...input, limit: 5, resourceOnly: true }, conn)).items,
       );
-      return { range, runtime, opened, finances, activity, recent, failures };
+      return { range, runtime, opened, finances, activity, earners, recent, failures };
     });
   }
   async function players(input = {}) {

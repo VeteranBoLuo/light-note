@@ -55,6 +55,41 @@
         <small>{{ a('overlap') }}</small>
       </section>
     </div>
+    <section class="manor-panel manor-earners">
+      <h3>{{ a('earners', { days: data.earners?.windowDays ?? 7 }) }}</h3>
+      <p v-if="data.earners" class="manor-muted manor-earners-hint">{{
+        a('earnersHint', { days: data.earners.windowDays, threshold: number(data.earners.threshold) })
+      }}</p>
+      <div v-if="data.earners?.items.length" class="manor-earner-list">
+        <BButton
+          v-for="item in data.earners.items"
+          :key="item.userId"
+          class="manor-earner-row"
+          :class="{ 'is-flagged': item.flagged }"
+          @click="$emit('player', item.userId)"
+        >
+          <span class="manor-earner-account"
+            ><strong>{{ item.alias || item.userId }}</strong
+            ><BChip v-if="item.flagged" tone="pending" class="manor-earner-flag"
+              ><SvgIcon :src="icon.message.warning" size="12" aria-hidden="true" />{{ a('earnerFlagged') }}</BChip
+            ></span
+          >
+          <span class="manor-earner-amount"
+            ><small>{{ a('earnerIncome') }}</small
+            ><b>{{ metricAmount(item.income) }}</b></span
+          >
+          <span class="manor-earner-amount"
+            ><small>{{ a('earnerSpent') }}</small
+            ><b>{{ metricAmount(-item.spent) }}</b></span
+          >
+          <span class="manor-earner-amount is-net"
+            ><small>{{ a('earnerNet') }}</small
+            ><b>{{ metricAmount(item.net) }}</b></span
+          >
+        </BButton>
+      </div>
+      <p v-else>{{ data.earners === null ? a('failed') : a('empty') }}</p>
+    </section>
     <section class="manor-panel"
       ><div class="manor-section-title"
         ><h3>{{ a('recent') }}</h3
@@ -89,9 +124,12 @@
   import { computed } from 'vue';
   import type { ManorOverview as Overview, ManorOperation } from '@/api/manorAdminApi';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import BChip from '@/components/base/BasicComponents/BChip.vue';
+  import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
+  import icon from '@/config/icon';
   import { useManorAdminFormat } from './manorAdminFormat';
   const props = defineProps<{ data: Overview }>();
-  defineEmits<{ records: []; operation: [item: ManorOperation] }>();
+  defineEmits<{ records: []; operation: [item: ManorOperation]; player: [userId: string] }>();
   const { a, number, signed, time, action, resource } = useManorAdminFormat();
   const covered = computed(() => Boolean(props.data.runtime.coverageStartedAt));
   const partial = computed(
@@ -101,6 +139,7 @@
         new Date(props.data.range.start.replace(' ', 'T') + '+08:00').getTime(),
   );
   const max = computed(() => Math.max(1, ...(props.data.finances?.trend.flatMap((d) => [d.issued, d.spent]) || [])));
+  // 已知的零值显示 0；“—”只留给不可用的数据。
   const metricAmount = (value: number) => (value === 0 ? number(0) : signed(value));
   const metrics = computed(() => [
     { label: a('opened'), value: number(props.data.opened), hint: a('openedHint'), tone: '' },

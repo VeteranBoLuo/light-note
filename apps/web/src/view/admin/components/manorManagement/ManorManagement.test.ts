@@ -212,6 +212,55 @@ describe('庄园管理按目标与修订展示真实结果', () => {
     const active = [...root.querySelectorAll('article')].find((el) => el.textContent?.includes('有操作人数'));
     expect(active?.querySelector('strong')?.textContent).toBe('—');
   });
+  it('账号收入卡用描边、图标与文字标记偏高账号，点击行打开同一玩家详情入口', async () => {
+    await mount();
+    const card = root.querySelector('.manor-earners')!;
+    expect(card.querySelector('h3')?.textContent).toBe('账号收入 · 近 7 天');
+    const rows = [...card.querySelectorAll<HTMLButtonElement>('.manor-earner-row')];
+    expect(rows).toHaveLength(6);
+    const flagged = rows.filter((row) => row.classList.contains('is-flagged'));
+    expect(flagged.map((row) => row.querySelector('strong')?.textContent)).toEqual([
+      '薄荷',
+      '一位昵称特别长、用来检查换行与截断的庄园示例玩家',
+    ]);
+    for (const row of flagged) {
+      expect(row.textContent).toContain('明显偏高，建议排查');
+      // SvgIcon 以遮罩元素渲染，图标位于胶囊文字之前。
+      expect(row.querySelector('.manor-earner-flag .b-chip__content')?.firstElementChild).toBeTruthy();
+    }
+    const boundary = rows.find((row) => row.querySelector('strong')?.textContent === '春风')!;
+    expect(boundary.classList.contains('is-flagged')).toBe(false);
+    expect(boundary.textContent).not.toContain('明显偏高');
+    const zeroIncome = rows.find((row) => row.querySelector('strong')?.textContent === '晴川')!;
+    expect(zeroIncome.querySelector('.manor-earner-amount b')?.textContent).toBe('0');
+    flagged[0].click();
+    await vi.waitFor(() => expect(api.player).toHaveBeenCalledOnce());
+    await flush();
+    expect(api.player).toHaveBeenCalledWith('u_demo_002', expect.any(AbortSignal));
+    expect(root.textContent).toContain('薄荷的庄园');
+  });
+  it('账号收入为空显示暂无记录，查询失败显示未完成而非空', async () => {
+    const report = fixture.overview();
+    api.overview.mockResolvedValueOnce({ ...report, earners: { ...report.earners!, items: [] } });
+    await mount();
+    expect(root.querySelector('.manor-earners')?.textContent).toContain('暂无记录');
+    app?.unmount();
+    document.body.innerHTML = '';
+    api.overview.mockResolvedValueOnce({ ...report, earners: null, failures: ['earners'] });
+    await mount();
+    const card = root.querySelector('.manor-earners')!;
+    expect(card.textContent).toContain('请求未完成，请重试');
+    expect(card.textContent).not.toContain('暂无记录');
+    expect(root.textContent).toContain('部分统计来源暂不可用');
+  });
+  it('运行设置显示开放范围', async () => {
+    await mount('settings');
+    expect(root.textContent).toContain('开放范围内部账号');
+    fixture.runtime.audience = 'all';
+    button('刷新').click();
+    await flush();
+    expect(root.textContent).toContain('开放范围全部账号');
+  });
   it('已知的零积分收支显示为零，与不可用分开', async () => {
     api.overview.mockResolvedValueOnce({ ...fixture.overview(), finances: { issued: 0, spent: 0, trend: [] } });
     await mount();

@@ -5,7 +5,7 @@ vi.mock('../../db/index.js', () => ({ default: {} }));
 import { migrateKnowledgeManorSchema } from './knowledgeManorSchema.js';
 import { migrateKnowledgeManorAdminSchema, knowledgeManorAdminSchemaReady } from './knowledgeManorAdminSchema.js';
 import { createKnowledgeManorService } from './knowledgeManorService.js';
-import { createManorAdminService } from './manorAdminService.js';
+import { createManorAdminService, manorEarnersQuery } from './manorAdminService.js';
 import { MANOR_VERSION } from '@lightnote/shared/manor';
 
 const socketPath = process.env.LIGHTNOTE_TEST_MYSQL_SOCKET;
@@ -188,6 +188,70 @@ describe.skipIf(!socketPath)('庄园后台只读、维护并发与统计（隔�
     await expect(admin.operations({ limit: 1, cursor: first.nextCursor, userId: 'root' })).rejects.toMatchObject({
       code: 'MANOR_ADMIN_CURSOR_INVALID',
     });
+  });
+  const receipt = (userId, delta, at) =>
+    db.query(
+      `INSERT INTO knowledge_manor_operations (user_id,request_id,command_hash,model_version,revision,result_json,points_delta,created_at)
+      VALUES (?,?,?,?,1,'{}',?,?)`,
+      [userId, randomUUID(), 'f'.repeat(64), MANOR_VERSION, delta, at],
+    );
+  it('账号收入按滚动 7 天汇总收支与净额，400 不标记、401 标记，默认排除内部与停用账号', async () => {
+    await db.query("INSERT INTO user VALUES ('b','薄荷','user',0),('c','松果','user',0),('t','测试号','test',0)");
+    // 时钟为北京时间 10-29 10:00，窗口起点 10-22 10:00（含）。
+    await receipt('a', 300, '2026-10-28 12:00:00');
+    await receipt('a', 100, '2026-10-22 10:00:00');
+    await receipt('a', 21, '2026-10-25 09:00:00');
+    await receipt('a', -20, '2026-10-27 08:00:00');
+    await receipt('a', 500, '2026-10-22 09:59:59');
+    await receipt('b', 400, '2026-10-26 20:00:00');
+    await receipt('b', 0, '2026-10-26 21:00:00');
+    await receipt('c', -30, '2026-10-28 08:00:00');
+    await receipt('empty', 0, '2026-10-28 08:00:00');
+    await receipt('root', 900, '2026-10-28 08:00:00');
+    await receipt('t', 50, '2026-10-28 08:00:00');
+    await receipt('disabled', 999, '2026-10-28 08:00:00');
+    const report = await admin.overview({ days: 30 });
+    expect(report.failures).toEqual([]);
+    expect(report.earners).toMatchObject({ windowDays: 7, since: '2026-10-22 10:00:00', threshold: 400 });
+    expect(report.earners.items).toEqual([
+      { userId: 'a', alias: '春风', income: 421, spent: 20, net: 401, flagged: true },
+      { userId: 'b', alias: '薄荷', income: 400, spent: 0, net: 400, flagged: false },
+      { userId: 'c', alias: '松果', income: 0, spent: 30, net: -30, flagged: false },
+    ]);
+    const all = (await admin.overview({ hideInternal: false })).earners.items;
+    expect(all.map((r) => [r.userId, r.flagged])).toEqual([
+      ['root', true],
+      ['a', true],
+      ['b', false],
+      ['t', false],
+      ['c', false],
+    ]);
+    const { sql, params } = manorEarnersQuery({ since: '2026-10-22 10:00:00', hideInternal: true });
+    const [plan] = await db.query(`EXPLAIN ${sql}`, params);
+    expect(plan.find((r) => r.table === 'o').possible_keys).toMatch(/idx_manor_ops_time/);
+  });
+  it('账号收入空数据返回空列表，最多返回净额最高的 10 个账号', async () => {
+    expect((await admin.overview()).earners.items).toEqual([]);
+    for (let i = 1; i <= 12; i++) {
+      await db.query("INSERT INTO user VALUES (?,?,'user',0)", [`e${i}`, `玩家${i}`]);
+      await receipt(`e${i}`, i * 10, '2026-10-28 08:00:00');
+    }
+    const items = (await admin.overview()).earners.items;
+    expect(items).toHaveLength(10);
+    expect(items[0]).toMatchObject({ userId: 'e12', net: 120 });
+    expect(items.at(-1)).toMatchObject({ userId: 'e3', net: 30 });
+  });
+  it('运行状态返回开放范围', async () => {
+    const previous = process.env.KNOWLEDGE_MANOR_AUDIENCE;
+    try {
+      delete process.env.KNOWLEDGE_MANOR_AUDIENCE;
+      expect((await admin.status()).audience).toBe('internal');
+      process.env.KNOWLEDGE_MANOR_AUDIENCE = 'all';
+      expect((await admin.overview()).runtime.audience).toBe('all');
+    } finally {
+      if (previous === undefined) delete process.env.KNOWLEDGE_MANOR_AUDIENCE;
+      else process.env.KNOWLEDGE_MANOR_AUDIENCE = previous;
+    }
   });
   it('维护切换等待已获准事务完成，返回后不能穿透执行新动作', async () => {
     await game.execute('a', request(0, 'adopt'));

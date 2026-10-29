@@ -26,7 +26,7 @@
     ><header id="label"></header><iframe id="scene" title="庄园管理移动端隔离预览"></iframe
     ><script>
       const params = new URLSearchParams(location.search);
-      const width = [320, 390, 430].includes(Number(params.get('width'))) ? Number(params.get('width')) : 390;
+      const width = [320, 375, 390, 430].includes(Number(params.get('width'))) ? Number(params.get('width')) : 390;
       const frame = document.getElementById('scene');
       // ui-density-fixed: disposable CSS viewport geometry, not a product control size.
       frame.style.width = width + 'px';

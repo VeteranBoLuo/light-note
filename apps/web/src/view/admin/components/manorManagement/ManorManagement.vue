@@ -39,6 +39,7 @@
       :data="overview"
       @records="changeTab('operations')"
       @operation="selectedOperation = $event"
+      @player="openPlayer"
     />
     <template v-else-if="tab === 'players' || tab === 'operations'">
       <div class="manor-search">
@@ -139,6 +140,15 @@
           ><div
             ><dt>{{ a('deployment') }}</dt
             ><dd>{{ runtime.deploymentEnabled ? a('enabled') : a('disabled') }}</dd></div
+          ><div
+            ><dt>{{ a('audience') }}</dt
+            ><dd>{{
+              runtime.audience === 'all'
+                ? a('audienceAll')
+                : runtime.audience === 'internal'
+                  ? a('audienceInternal')
+                  : '—'
+            }}</dd></div
           ></dl
         >
         <p class="manor-muted">{{ a('deploymentHint') }}</p>

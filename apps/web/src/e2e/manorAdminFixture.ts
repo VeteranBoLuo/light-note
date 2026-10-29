@@ -1,5 +1,12 @@
 import { createManor, executeManorCommand, manorModel as M, MANOR_VERSION } from '@lightnote/shared/manor';
-import type { ManorRuntime, ManorOperation, ManorPlayer, ManorPlayerRow, ManorOverview } from '@/api/manorAdminApi';
+import type {
+  ManorRuntime,
+  ManorOperation,
+  ManorPlayer,
+  ManorPlayerRow,
+  ManorOverview,
+  ManorEarner,
+} from '@/api/manorAdminApi';
 
 export function createManorAdminFixture() {
   const runtime: ManorRuntime = {
@@ -7,12 +14,13 @@ export function createManorAdminFixture() {
     message: '庄园正在维护，已有进度会保留，请稍后再来。',
     revision: 1,
     deploymentEnabled: true,
+    audience: 'internal',
     updatedAt: '2026-10-29T06:30:00Z',
     updatedBy: 'root_fixture',
     coverageStartedAt: '2026-10-23T00:00:00+08:00',
     rules: { version: MANOR_VERSION, dailyWater: 20, freeCasts: 3, pityCasts: 5, targetWeight: 4 },
   };
-  const names = ['春风', '薄荷', '松果', '远山', '晴川', '小满'];
+  const names = ['春风', '薄荷', '松果', '远山', '晴川', '小满', '一位昵称特别长、用来检查换行与截断的庄园示例玩家'];
   const players: ManorPlayerRow[] = Array.from({ length: 86 }, (_, i) => ({
     userId: `u_demo_${String(i + 1).padStart(3, '0')}`,
     alias: names[i] || `示例玩家 ${i + 1}`,
@@ -37,6 +45,22 @@ export function createManorAdminFixture() {
     revision: p.revision,
     version: MANOR_VERSION,
     createdAt: p.updatedAt,
+  }));
+  // 含阈值两侧（401 标记、400 不标记）、零收入与净额为负的账号。
+  const earners: ManorEarner[] = [
+    { index: 1, income: 620, spent: 140 },
+    { index: 6, income: 421, spent: 20 },
+    { index: 0, income: 400, spent: 0 },
+    { index: 3, income: 260, spent: 75 },
+    { index: 2, income: 180, spent: 160 },
+    { index: 4, income: 0, spent: 30 },
+  ].map(({ index, income, spent }) => ({
+    userId: players[index].userId,
+    alias: players[index].alias,
+    income,
+    spent,
+    net: income - spent,
+    flagged: income - spent > 400,
   }));
   function player(id: string): ManorPlayer {
     const row = players.find((p) => p.userId === id) || players[0];
@@ -111,6 +135,7 @@ export function createManorAdminFixture() {
         })),
       },
       activity: { all: 28, plant: 22, fish: 19, resource: 24 },
+      earners: { windowDays: 7, since: '2026-10-22 14:35:00', threshold: 400, items: structuredClone(earners) },
       recent: ops.slice(0, 5),
       failures: [],
     };

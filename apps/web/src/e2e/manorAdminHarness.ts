@@ -34,6 +34,7 @@ const data = createManorAdminFixture(),
 let failOnce = true;
 if (scenario === 'maintenance') data.runtime.mode = 'maintenance';
 if (scenario === 'legacy') data.runtime.coverageStartedAt = null;
+if (params.get('audience') === 'all') data.runtime.audience = 'all';
 request.defaults.adapter = async (config) => {
   const path = new URL(config.url || '', 'http://fixture.invalid').pathname;
   if (Number(params.get('delay')) > 0)
@@ -73,10 +74,12 @@ request.defaults.adapter = async (config) => {
         report.activity = { all: 0, plant: 0, fish: 0, resource: 0 };
         report.recent = [];
         report.finances = { issued: 0, spent: 0, trend: [] };
+        report.earners = { ...report.earners!, items: [] };
       }
       if (scenario === 'partial') {
         report.finances = null;
-        report.failures = ['finances'];
+        report.earners = null;
+        report.failures = ['finances', 'earners'];
       }
       value = report;
     } else if (path.endsWith('/players')) {

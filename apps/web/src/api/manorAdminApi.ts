@@ -5,6 +5,8 @@ export interface ManorRuntime {
   message: string;
   revision: number;
   deploymentEnabled: boolean;
+  /** internal：仅 Root 与 test；all：全部登录账号。由部署环境决定。 */
+  audience: 'internal' | 'all';
   updatedAt?: string;
   updatedBy?: string | null;
   coverageStartedAt: string | null;
@@ -43,12 +45,28 @@ export interface ManorPlayer {
   plots?: Array<{ crop: string | null; status: string; remaining?: number | null }>;
   facilities?: Record<string, any>;
 }
+export interface ManorEarner {
+  userId: string;
+  alias: string | null;
+  income: number;
+  spent: number;
+  net: number;
+  flagged: boolean;
+}
+export interface ManorEarners {
+  /** 固定滚动窗口天数，不跟随总览的范围选择。 */
+  windowDays: number;
+  since: string;
+  threshold: number;
+  items: ManorEarner[];
+}
 export interface ManorOverview {
   range: { days: number; start: string; end: string; hideInternal: boolean };
   runtime: ManorRuntime;
   opened: number | null;
   finances: { issued: number; spent: number; trend: Array<{ day: string; issued: number; spent: number }> } | null;
   activity: Record<string, number> | null;
+  earners: ManorEarners | null;
   recent: ManorOperation[] | null;
   failures: string[];
 }
