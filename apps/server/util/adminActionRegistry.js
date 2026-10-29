@@ -10,6 +10,7 @@ const ADMIN_ACTION_DEFINITIONS = Object.freeze(
     ['user.delete', 'user', 'critical', true],
     ['user.restore', 'user', 'high', true],
     ['growth.adjust', 'user_growth', 'high', true],
+    ['manor.runtime_update', 'manor_runtime', 'high', true],
     ['growth.grant_points', 'points', 'high', true],
     ['growth.points_correction', 'points', 'high', true],
     ['growth.points_campaign_create', 'points_campaign', 'medium', true],

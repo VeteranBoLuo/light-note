@@ -13,6 +13,7 @@
           <BSelect
             v-model:value="roleFilter"
             :options="roleOptions"
+            :placeholder="t('adminUserManagement.filters.allRoles')"
             :aria-label="t('adminUserManagement.filters.role')"
             @change="reloadForFilter"
           />
@@ -57,7 +58,7 @@
           :overscan="5"
           :loading="loading"
           :loading-text="t('common.loading')"
-          :has-more="hasMore"
+          :has-more="hasMore && !failed"
           @load-more="loadMore"
         >
           <template #default="{ item: record }">
@@ -124,7 +125,13 @@
             </MobileListRow>
           </template>
         </BVirtualList>
-        <p v-else-if="!loading" class="mobile-user-empty">{{ t('adminUserManagement.mobile.empty') }}</p>
+        <p v-else-if="!loading && !failed" class="mobile-user-empty">{{ t('adminUserManagement.mobile.empty') }}</p>
+        <div v-if="failed" class="mobile-user-retry" role="alert"
+          ><span>{{ t('common.requestFailedDescription') }}</span
+          ><BButton size="small" @click="userList.length ? loadMore() : reloadUsers()">{{
+            t('common.retry')
+          }}</BButton></div
+        >
       </div>
     </div>
 
@@ -202,6 +209,7 @@
     items: userList,
     total,
     loading,
+    failed,
     hasMore,
     loadMore,
     searchValue,
@@ -487,5 +495,15 @@
     .mobile-user-filters__grid {
       grid-template-columns: 1fr;
     }
+  }
+  .mobile-user-retry {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: var(--ui-space-8, 8px);
+    padding: var(--ui-space-12, 12px);
+    color: var(--desc-color);
+    font-size: var(--ui-font-13, 13px);
   }
 </style>

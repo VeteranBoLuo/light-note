@@ -1,5 +1,6 @@
 import pool from '../db/index.js';
 import { INTERNAL_ROLES } from './internalRoles.js';
+import { readManorPoints } from './services/manorPointsRead.js';
 import { enrichPointsLogRow, getActiveShopItems } from './points.js';
 import { getEconomyRuntime } from './pointsEconomyCatalog.js';
 import { resolveAchievements, STREAK_MILESTONES } from './growth.js';
@@ -406,11 +407,13 @@ export async function getPointsGovernanceOverview(input = {}, { db = pool } = {}
     freeRandomShare: percent(numeric(summary, 'freeRandomIssued'), recurringIssued),
     operationsShare: percent(numeric(summary, 'operationsIssued'), issued),
   };
+  const manor = await readManorPoints(db,{start:range.startDate,end:range.endExclusive,hideInternal,policyVersion}).catch(()=>null);
   return {
     enabled: true,
     range,
     filters: { policyVersion, hideInternal },
     metrics,
+    manor:manor ? {issued:manor.issued,spent:manor.spent,net:manor.issued-manor.spent} : null,
     warnings: healthWarnings(metrics),
     balanceDistribution: {
       accounts: numeric(circulation, 'accounts'),

@@ -267,6 +267,8 @@
     return [
       { label: '总产出', value: `+${format(metrics.issued)}`, hint: '时间窗内所有正向流水', tone: 'is-up' },
       { label: '总消耗', value: `-${format(metrics.spent)}`, hint: '时间窗内所有负向流水', tone: 'is-down' },
+      {label:t('manorAdmin.issued'),value:data.value?.manor ? `+${format(data.value.manor.issued)}` : '—',hint:t('manorAdmin.issuedHint'),tone:'is-up'},
+      {label:t('manorAdmin.spent'),value:data.value?.manor ? `−${format(data.value.manor.spent)}` : '—',hint:t('manorAdmin.net',{value:data.value?.manor?.net??'—'}),tone:'is-down'},
       {
         label: '净发行',
         value: format(metrics.netIssued),

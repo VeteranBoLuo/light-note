@@ -1,4 +1,4 @@
-export const MANOR_VERSION: 'knowledge-manor-v2';
+export const MANOR_VERSION: 'knowledge-manor-v3';
 export const MANOR_COMMANDS: readonly string[];
 export interface ManorState {
   version: string;
@@ -20,6 +20,7 @@ export interface ManorSnapshot {
   quests: Array<{ key: string; done: boolean; [key: string]: unknown }>;
   result?: unknown;
   replayed?: boolean;
+  runtime?: { mode: 'open' | 'maintenance'; message: string; revision: number };
 }
 export interface ManorCommand {
   requestId: string;

@@ -38,6 +38,7 @@
                   :aria-current="activeId === item.id ? 'page' : undefined"
                   @click="go(item)"
                 >
+                  <svg-icon class="admin-nav__item-icon" size="16" :src="itemIcon(item, entry.icon)" />
                   <span class="admin-nav__item-text">{{ item.title }}</span>
                   <!-- 角标只在有待处理时出现：常态是 0，长期挂个灰 0 会让真的有事时反而不显眼 -->
                   <span v-if="item.badge" class="admin-nav__badge" :title="item.badgeHint">
@@ -100,6 +101,7 @@
       adminGovernanceTitle: t('adminGovernance.title'),
       communityModerationTitle: t('communityChatModerationAdmin.navTitle'),
       supportManagementTitle: t('adminSupport.title'),
+      manorManagementTitle: t('manorAdmin.title'),
     }),
   );
 
@@ -108,6 +110,27 @@
 
   function go(item: AdminNavItem) {
     router.push(adminNavTarget(item));
+  }
+
+  function itemIcon(item: AdminNavItem, fallback: string) {
+    const icons: Record<string, string> = {
+      userMg: icon.navigation.user,
+      userOpinion: icon.userCenter.menu.feedback,
+      operationLog: icon.userCenter.operationLog,
+      adminAudit: icon.infrastructure.security,
+      apiLog: icon.infrastructure.logs,
+      logCleanup: icon.userCenter.menu.trash,
+      logExclude: icon.infrastructure.logs,
+      agentLog: icon.ai.ask,
+      knowledgeBase: icon.userCenter.menu.help,
+      productInsights: icon.growth.rank,
+      conversion: icon.growth.rank,
+      pointsOps: icon.growth.coin,
+      notificationCenter: icon.settings.notification,
+      adminGovernance: icon.userCenter.settingsGear,
+      resourceGovernance: icon.resource.file,
+    };
+    return icons[item.id] || fallback;
   }
 
   /**
@@ -153,18 +176,21 @@
 
   .admin-container {
     display: flex;
-    gap: var(--ui-space-10, 10px);
-    padding: var(--ui-space-20, 20px);
+    gap: 0;
+    padding: 0;
     box-sizing: border-box;
     height: 100%; /* 子路由根被内联固定高度;这里撑满,让内容区在框内滚动而非被裁 */
   }
 
   .admin-nav {
-    width: var(--ui-layout-200, 200px);
-    flex: 0 0 var(--ui-layout-200, 200px);
+    width: var(--ui-layout-220, 220px);
+    flex: 0 0 var(--ui-layout-220, 220px);
     min-height: 0;
     overflow-y: auto;
-    padding: var(--ui-space-4, 4px) 0;
+    padding: var(--ui-space-16, 16px) var(--ui-space-10, 10px);
+    box-sizing: border-box;
+    border-right: 1px solid var(--surface-border-color);
+    background: var(--background-color);
   }
 
   .admin-nav__groups,
@@ -194,7 +220,7 @@
   .admin-nav__group-title {
     display: flex;
     align-items: center;
-    gap: var(--ui-space-6, 6px);
+    gap: var(--ui-space-8, 8px);
     margin: 0 0 var(--ui-space-4, 4px);
     padding: 0 var(--ui-space-8, 8px);
     font-size: var(--ui-font-11, 11px);
@@ -216,15 +242,15 @@
     justify-content: flex-start;
     gap: var(--ui-space-6, 6px);
     width: 100%;
-    padding: var(--ui-space-5, 5px) var(--ui-space-10, 10px) var(--ui-space-5, 5px) var(--ui-space-26, 26px); /* 左缩进对齐分组标题的文字起点，让层级一眼可见 */
+    padding: var(--ui-space-6, 6px) var(--ui-space-10, 10px);
     height: auto;
-    min-height: var(--ui-control-30, 30px);
+    min-height: var(--ui-control-34, 34px);
     line-height: 1.3;
-    border: none;
+    border: 1px solid transparent;
     border-radius: 8px;
     background: none;
     font: inherit;
-    font-size: var(--ui-font-12_5, 12.5px);
+    font-size: var(--ui-font-13, 13px);
     text-align: left;
     color: var(--text-color);
     cursor: pointer;
@@ -235,6 +261,8 @@
 
     &.is-active {
       background: var(--category-item-ba-color);
+      border-color: var(--primary-color);
+      color: var(--primary-color);
       font-weight: 600;
     }
   }
@@ -293,7 +321,7 @@
 
   .admin-view-panel {
     flex: 1 1 0;
-    width: calc(100% - var(--ui-layout-200, 200px) - var(--ui-space-10, 10px));
+    width: calc(100% - var(--ui-layout-220, 220px));
     min-width: 0; /* 子路由中的宽表格/网格不得以 min-content 撑宽整个后台 */
     min-height: 0; /* flex 子项允许收缩,配合 overflow 才能滚 */
     overflow-x: hidden;

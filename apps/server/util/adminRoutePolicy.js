@@ -13,6 +13,11 @@ export const ADMIN_POLICIES = Object.freeze({
 });
 
 const routePolicies = new Map();
+declare(ADMIN_POLICIES.ADMIN_ONLY, 'manor_admin', [
+  ['GET','/growth/admin/manor/status'],['GET','/growth/admin/manor/overview'],
+  ['GET','/growth/admin/manor/players'],['GET','/growth/admin/manor/players/:userId'],
+  ['GET','/growth/admin/manor/operations'],['POST','/growth/admin/manor/runtime'],
+]);
 
 // Manor actions always use the real account and its shared points balance.
 declare(ADMIN_POLICIES.ACCOUNT_WRITE, 'manor', [

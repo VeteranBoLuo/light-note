@@ -62,6 +62,7 @@ import { ensureAiBonusWalletSchema } from './util/aiBonusWalletSchema.js';
 import { ensureToolboxSchema } from './util/toolboxSchema.js';
 import { ensureDailyBriefSchema } from './util/dailyBriefSchema.js';
 import { knowledgeManorSchemaReady } from './util/services/knowledgeManorSchema.js';
+import { knowledgeManorAdminSchemaReady } from './util/services/knowledgeManorAdminSchema.js';
 
 import dotenv from 'dotenv';
 import path from 'path';
@@ -138,7 +139,7 @@ try {
   await assertPointsEconomyActivationReady();
   await ensureGrowthTaskSchema();
   await ensureGrowthCenterSchema();
-  if (process.env.KNOWLEDGE_MANOR_ENABLED === 'true' && !(await knowledgeManorSchemaReady(pool))) {
+  if (process.env.KNOWLEDGE_MANOR_ENABLED === 'true' && (!(await knowledgeManorSchemaReady(pool)) || !(await knowledgeManorAdminSchemaReady(pool)))) {
     throw new Error('KNOWLEDGE_MANOR_SCHEMA_MISSING');
   }
   await ensureDailyReviewSchema();

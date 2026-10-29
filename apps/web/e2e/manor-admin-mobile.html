@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="zh-CN"
+  ><head
+    ><meta charset="UTF-8" /><meta name="viewport" content="width=device-width,initial-scale=1" /><title
+      >庄园管理移动视口验收</title
+    >
+    <style>
+      body {
+        margin: 0;
+        display: grid;
+        justify-content: center;
+        background: #eceef3;
+      }
+      header {
+        font: 14px sans-serif;
+        padding: 12px;
+        color: #515563;
+      }
+      iframe {
+        border: 0;
+        max-width: 100vw;
+      }
+    </style></head
+  >
+  <body
+    ><header id="label"></header><iframe id="scene" title="庄园管理移动端隔离预览"></iframe
+    ><script>
+      const params = new URLSearchParams(location.search);
+      const width = [320, 390, 430].includes(Number(params.get('width'))) ? Number(params.get('width')) : 390;
+      const frame = document.getElementById('scene');
+      // ui-density-fixed: disposable CSS viewport geometry, not a product control size.
+      frame.style.width = width + 'px';
+      frame.style.height = '844px';
+      params.set('renderProfile', 'mobile');
+      frame.src = '/e2e/manor-admin.html?' + params.toString();
+      document.getElementById('label').textContent = '庄园管理 · 移动端隔离预览 · ' + width + 'px（示例数据）';
+    </script></body
+  ></html
+>

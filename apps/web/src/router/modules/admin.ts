@@ -138,6 +138,10 @@ const adminRouter: RouteRecordRaw[] = [
         component: () => import('@/view/admin/components/pointsOps/PointsOps.vue'),
       },
       {
+        path:'manorManagement',
+        component:()=>import('@/view/admin/components/manorManagement/ManorManagement.vue'),
+      },
+      {
         path: 'adminGovernance',
         component: () => import('@/view/admin/components/adminGovernance/AdminGovernance.vue'),
       },
@@ -147,6 +151,11 @@ const adminRouter: RouteRecordRaw[] = [
     path: 'overview',
     meta: MOBILE_ADMIN_META,
     component: () => import('@/view/admin/components/overview/AdminOverview.vue'),
+  },
+  {
+    path:'manorManagement',
+    meta:MOBILE_ADMIN_META,
+    component:()=>import('@/view/admin/components/manorManagement/ManorManagement.vue'),
   },
   {
     path: 'actionCenter',

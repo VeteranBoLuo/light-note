@@ -228,13 +228,13 @@
   @import '@/assets/css/admin-breakpoints.less';
   .growth-trend {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
     gap: var(--ui-space-14, 14px);
   }
 
   .growth-trend__panel {
     min-width: 0;
-    padding: var(--ui-space-14, 14px);
+    padding: var(--ui-space-12, 12px);
     border: 1px solid var(--card-border-color);
     border-radius: 12px;
     background: var(--card-background);
@@ -246,6 +246,7 @@
     justify-content: space-between;
     gap: var(--ui-space-12, 12px);
     flex-wrap: wrap;
+    line-height: 1.4;
     margin-bottom: var(--ui-space-12, 12px);
   }
 
@@ -303,7 +304,7 @@
   .growth-trend__chart {
     display: flex;
     gap: var(--ui-space-8, 8px);
-    height: var(--ui-layout-150, 150px);
+    height: var(--ui-layout-140, 140px);
   }
 
   .growth-trend__axis {

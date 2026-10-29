@@ -99,6 +99,7 @@
       adminGovernanceTitle: t('adminGovernance.title'),
       communityModerationTitle: t('communityChatModerationAdmin.navTitle'),
       supportManagementTitle: t('adminSupport.title'),
+      manorManagementTitle:t('manorAdmin.title'),
     }),
   );
 

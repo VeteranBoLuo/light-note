@@ -24,6 +24,8 @@ const LOTTERY_LABELS: Record<string, string> = {
 };
 
 const REASON_LABELS: Record<string, string> = {
+  manor_sale:'庄园出售',
+  manor_cost:'庄园购买与建设',
   checkin: '每日签到',
   quest: '每日任务',
   streak_milestone: '连签里程碑',

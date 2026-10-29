@@ -504,7 +504,7 @@ const FarmUI = (() => {
   function waterShortDialog() {
     showDialog(
       "水滴不够了",
-      `完成轻笺里的每日任务，每项可领取 ${R.dailyWater} 滴水。`,
+      `每日任务每项可领取 ${R.dailyWater} 滴水，全部完成再领 ${R.dailyWaterBonus} 滴。`,
       `<div class="care-preview">${toolSprite("water")}<div><strong>${state.water} <small>/ ${R.waterCap} 滴</small></strong><p>播种后浇一次水，每块地 ${R.plantWater} 滴</p></div></div><div class="info-box">没浇水的种子会一直留在地里等你，不会损失。</div>`,
       `<button class="button primary" data-action="daily">每日任务</button>`
     );
@@ -725,7 +725,7 @@ const FarmUI = (() => {
       if (previous) body += `<div class="replant-row"><span class="replant-art">${FarmArt.packet(previous)}</span><div><strong>上次种了${C(previous).name}</strong><small>背包还有 ${state.seeds[previous]} 颗 · 种后照常浇水</small></div><button class="tile-btn" data-action="plant-seed" data-plot="${target}" data-seed="${previous}">再种一颗</button></div>`;
       body += keys.length ?
       `<div class="seed-grid seed-choice-grid">${keys.map((k) => seedTile(k, target)).join("")}</div>` :
-      `<section class="inventory-empty"><div class="empty-art">${FarmArt.giftPack()}</div><h3>给这片土地挑一颗种子吧</h3><p>背包暂时空了。去商店挑选，或完成每日任务领取种子。</p><div><button class="tile-btn primary" data-action="shop-tab" data-tab="seeds">去商店</button><button class="tile-btn" data-action="daily">查看每日任务</button></div></section>`;
+      `<section class="inventory-empty"><div class="empty-art">${FarmArt.giftPack()}</div><h3>给这片土地挑一颗种子吧</h3><p>背包暂时空了。去商店挑选，或从成长奖励和庄园成就获取种子。</p><div><button class="tile-btn primary" data-action="shop-tab" data-tab="seeds">去商店</button><button class="tile-btn" data-action="daily">查看每日任务</button></div></section>`;
       if (target !== null) body += `<div class="seed-care-strip"><span>${toolSprite("water")}<span>每块地 <b>${R.plantWater}</b> 滴 · 现有 <b>${state.water}</b> 滴</span></span><small>${state.water < R.plantWater ? "完成每日任务补水后再浇灌" : "成熟后随时收获，不会枯萎"}</small></div>`;
     } else if (tab === "crops") {
       const keys = Object.keys(M.CROPS).filter((k) => state.crops[k] > 0);
@@ -761,7 +761,10 @@ const FarmUI = (() => {
     panelNavigation(`bag:${bagTarget ?? "all"}:${tab}`, [".bag-tabs"], "bag");
   }
   function refreshInventory() {
-    if (!$("#modal").hidden && $("#dialog").dataset.family === "inventory-dialog") bagDialog(bagTab, bagTarget);
+    if (!$("#modal").hidden && $("#dialog").dataset.family === "inventory-dialog") {
+      if(bagTarget!==null&&M.plotState(state,bagTarget)!=="empty") {closeDialog();return;}
+      bagDialog(bagTab, bagTarget);
+    }
   }
   function shopDialog(tab) {
     if (tab === "seeds" || tab === "aquatic" || tab === "facilities") {shopTab = tab;shopMode = "buy";}
@@ -908,8 +911,8 @@ const FarmUI = (() => {
   // ---------- 兔子便便与奖励演示 ----------
   function birdGiftPoint() {
     const d = cal(),mobile = FarmStage.profile() === "mobile";
-    // 手机礼物落在水舱下方广场，和兔子、批量操作条分开。
-    if (mobile) return d.area ? [682, 1495] : d.birdGift;
+    // 手机礼物落在右侧台阶左边的完整石板上，和兔子、肥料分开。
+    if (mobile) return d.area ? [565, 1495] : d.birdGift;
     return [d.plots[5].center[0], Math.max(...d.plots.map((p) => p.hitRect[1] + p.hitRect[3])) + 75];
   }
   function birdGiftScenePoint() {const [x, y] = FarmStage.toScene(...birdGiftPoint());return { x, y };}

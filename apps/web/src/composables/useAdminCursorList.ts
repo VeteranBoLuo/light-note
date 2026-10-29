@@ -19,7 +19,11 @@ interface LoadOptions {
 }
 
 interface AdminCursorListOptions<T> {
-  request: (cursor: string | null, limit: number, options: import('@/http/request').RequestOptions) => Promise<CursorResponse<T>>;
+  request: (
+    cursor: string | null,
+    limit: number,
+    options: import('@/http/request').RequestOptions,
+  ) => Promise<CursorResponse<T>>;
   limit?: number;
   itemKey?: keyof T | ((item: T) => unknown);
   mapItems?: (items: T[]) => T[];
@@ -30,6 +34,7 @@ export function useAdminCursorList<T>(options: AdminCursorListOptions<T>) {
   const items = ref<T[]>([]) as Ref<T[]>;
   const total = ref(0);
   const loading = ref(false);
+  const failed = ref(false);
   const hasMore = ref(true);
   const nextCursor = ref<string | null>(null);
   const limit = Math.min(100, Math.max(1, Math.trunc(options.limit || 50)));
@@ -50,6 +55,7 @@ export function useAdminCursorList<T>(options: AdminCursorListOptions<T>) {
       hasMore.value = true;
     }
     const seq = requestSeq;
+    failed.value = false;
     const cursor = reset ? null : nextCursor.value;
     loading.value = true;
     try {
@@ -72,6 +78,7 @@ export function useAdminCursorList<T>(options: AdminCursorListOptions<T>) {
       return true;
     } catch (error: any) {
       if (seq !== requestSeq) return false;
+      failed.value = true;
       options.onError?.(error?.message || '列表加载失败', Boolean(loadOptions.silent));
       return false;
     } finally {
@@ -90,5 +97,5 @@ export function useAdminCursorList<T>(options: AdminCursorListOptions<T>) {
 
   onBeforeUnmount(cancel);
 
-  return { items, total, loading, hasMore, nextCursor, loadMore: () => load(), reload, cancel };
+  return { items, total, loading, failed, hasMore, nextCursor, loadMore: () => load(), reload, cancel };
 }

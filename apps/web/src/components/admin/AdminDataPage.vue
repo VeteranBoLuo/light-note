@@ -1,5 +1,9 @@
 <template>
-  <div class="admin-data-page" :class="{ 'is-scroll-layout': layout === 'scroll' }">
+  <div
+    ref="pageRef"
+    class="admin-data-page"
+    :class="{ 'is-scroll-layout': layout === 'scroll', 'is-workspace': appearance === 'workspace' }"
+  >
     <section class="admin-data-page__surface">
       <header class="admin-data-page__header">
         <div class="admin-data-page__title-block">
@@ -50,7 +54,7 @@
         <p v-if="toolbarHint" class="admin-data-page__toolbar-hint">{{ toolbarHint }}</p>
       </div>
 
-      <div class="admin-data-page__table" :data-layout="layout">
+      <div ref="contentRef" class="admin-data-page__table" :data-layout="layout">
         <slot />
       </div>
     </section>
@@ -58,6 +62,8 @@
 </template>
 
 <script lang="ts" setup>
+  import { computed, ref } from 'vue';
+  import { useDensityScrollAnchor } from '@/composables/useDensityScrollAnchor';
   import { useI18n } from 'vue-i18n';
   import router from '@/router';
   import icon from '@/config/icon.ts';
@@ -72,6 +78,8 @@
       subtitle?: string;
       toolbarHint?: string;
       summaryCount?: number;
+      /** 白底工作区布局，按页接入；不改变既有数据页与通用表格。 */
+      appearance?: 'default' | 'workspace';
       /** 移动端返回的落点。默认回后台菜单；嵌在别的外壳里的页面可以改。 */
       backTo?: string;
       /**
@@ -86,6 +94,11 @@
   );
 
   const bookmark = bookmarkStore();
+  const pageRef = ref<HTMLElement | null>(null);
+  const contentRef = ref<HTMLElement | null>(null);
+  useDensityScrollAnchor(
+    computed(() => (props.layout === 'scroll' ? (bookmark.isMobile ? pageRef.value : contentRef.value) : null)),
+  );
   const { t } = useI18n();
 
   function goBack() {
@@ -95,6 +108,7 @@
 
 <style lang="less" scoped>
   @import '@/assets/css/admin-mixins.less';
+  @import '@/assets/css/admin-breakpoints.less';
 
   .admin-data-page {
     width: 100%;
@@ -287,6 +301,62 @@
     }
   }
 
+  .admin-data-page.is-workspace {
+    .admin-data-page__surface {
+      border-radius: 0;
+      box-shadow: none;
+      gap: var(--ui-space-16, 16px);
+    }
+
+    .admin-data-page__eyebrow,
+    .admin-data-page__subtitle,
+    .admin-data-page__summary {
+      color: var(--desc-color);
+    }
+
+    .admin-data-page__title {
+      font-size: var(--ui-font-26, 26px);
+      font-weight: 650;
+    }
+
+    .admin-data-page__subtitle {
+      margin-top: var(--ui-space-6, 6px);
+      font-size: var(--ui-font-13, 13px);
+    }
+
+    .admin-data-page__toolbar-row {
+      flex-wrap: wrap;
+    }
+
+    .admin-data-page__toolbar-main {
+      flex: 1 1 100%;
+      flex-wrap: wrap;
+      padding: var(--ui-space-12, 12px);
+      border: 1px solid var(--surface-border-color);
+      border-radius: 10px;
+      box-sizing: border-box;
+    }
+
+    .admin-data-page__summary {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: var(--ui-space-8, 8px);
+    }
+  }
+
+  @media (max-width: @admin-bp-mobile) {
+    .admin-data-page.is-workspace .admin-data-page__title {
+      font-size: var(--ui-font-20, 20px);
+    }
+    .admin-data-page.is-workspace .admin-data-page__toolbar-main {
+      padding: var(--ui-space-8, 8px);
+      gap: var(--ui-space-8, 8px);
+    }
+  }
+
   @media (max-width: 960px) {
     .admin-data-page {
       padding-bottom: 0;
@@ -394,6 +464,43 @@
 
     .admin-data-page.is-scroll-layout .admin-data-page__table {
       overflow: visible;
+    }
+  }
+  @media (min-width: @admin-bp-mobile) {
+    .admin-data-page.is-workspace {
+      overflow: hidden;
+      .admin-data-page__surface {
+        height: 100%;
+        min-height: 0;
+        padding: var(--ui-space-12, 12px) var(--ui-space-20, 20px) var(--ui-space-20, 20px);
+        overflow: hidden;
+      }
+      .admin-data-page__heading-row {
+        min-height: 0;
+        flex-direction: row;
+        align-items: flex-end;
+        justify-content: space-between;
+      }
+      .admin-data-page__heading-copy {
+        min-height: 0;
+        padding: 0;
+        justify-content: flex-start;
+        text-align: left;
+        display: block;
+      }
+      .admin-data-page__title {
+        font-size: var(--ui-font-26, 26px);
+      }
+      .admin-data-page__eyebrow,
+      .admin-data-page__subtitle {
+        display: block;
+      }
+      .admin-data-page__actions {
+        width: auto;
+      }
+      .admin-data-page__table[data-layout='scroll'] {
+        overflow-y: auto;
+      }
     }
   }
 </style>

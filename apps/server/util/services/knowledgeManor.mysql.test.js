@@ -4,7 +4,8 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 vi.mock('../../db/index.js', () => ({ default: {} }));
 import { createKnowledgeManorService } from './knowledgeManorService.js';
 import { knowledgeManorSchemaReady, migrateKnowledgeManorSchema } from './knowledgeManorSchema.js';
-import { MANOR_VERSION } from '@lightnote/shared/manor';
+import { migrateKnowledgeManorAdminSchema } from './knowledgeManorAdminSchema.js';
+import { MANOR_VERSION, manorModel as M, MANOR_SPECIES as F } from '@lightnote/shared/manor';
 
 const socketPath = process.env.LIGHTNOTE_TEST_MYSQL_SOCKET;
 const schema = `manor_${randomUUID().replaceAll('-', '')}`;
@@ -29,6 +30,8 @@ describe.skipIf(!socketPath)('庄园真实积分与存档原子结算（隔离 M
       reason VARCHAR(32), ref VARCHAR(64), policy_version VARCHAR(32), meta JSON, KEY owner_reason_ref(user_id,reason,ref)) ENGINE=InnoDB`);
     await migrateKnowledgeManorSchema(db);
     await migrateKnowledgeManorSchema(db);
+    await migrateKnowledgeManorAdminSchema(db);
+    await migrateKnowledgeManorAdminSchema(db);
   });
   afterAll(async () => {
     await db?.end();
@@ -95,6 +98,27 @@ describe.skipIf(!socketPath)('庄园真实积分与存档原子结算（隔离 M
     expect(results.filter(r => r.status === 'fulfilled')).toHaveLength(1);
     expect(results.find(r => r.status === 'rejected').reason.code).toBe('MANOR_REVISION_CONFLICT');
     expect((await service.get('owner')).state).toMatchObject({ wallet: 40, seeds: { radish: 13 } });
+  });
+  it.each([
+    {name:'麻雀种子',action:'pickBirdSeed',args:[],prepare:s=>M.deliverBirdSeed(s),check:s=>expect(s.seeds.radish).toBe(4)},
+    {name:'兔子肥料',action:'pickPoop',args:[],prepare:()=>{},check:s=>expect(s.fertilizers.rabbit).toBe(1)},
+    {name:'播种',action:'plant',args:[0,'radish'],prepare:()=>{},check:s=>{expect(s.seeds.radish).toBe(2);expect(s.plots[0].crop).toBe('radish');}},
+    {name:'采摘',action:'harvest',args:[[0]],prepare:s=>{M.plant(s,0,'radish');M.water(s,[0]);s.plots[0].next=s.now-1;},check:s=>expect(s.crops.radish).toBe(1)},
+    {name:'施肥',action:'fertilize',args:[0,'rabbit'],prepare:s=>{s.seeds.carrot=1;expect(M.plant(s,0,'carrot')).toBe(true);M.water(s,[0]);s.fertilizers.rabbit=1;},check:s=>{expect(s.fertilizers.rabbit).toBe(0);expect(s.plots[0].accel).toBe(0.5);}},
+    {name:'养鱼收肥',action:'collect',args:[],prepare:s=>{M.addFish(s,'clown');M.place(s,1,0,F);s.fishSlots[0].started-=M.RULES.productionHours;},check:s=>expect(s.fertilizers[F.clown.fertilizer]).toBe(1)},
+  ])('多端同时$name只结算一次；旧意图拒绝、原收据重放、重新点击均不重复发放',async({action,args,prepare,check})=>{
+    const initial=await adopt(),state=structuredClone(initial.state);state.guide=null;state.xp=M.RULES.levels[7];
+    prepare(state);delete state.wallet;
+    await db.query("UPDATE knowledge_manors SET state_json=? WHERE user_id='owner'",[JSON.stringify(state)]);
+    const requests=[input(1,action,args),input(1,action,args)];
+    const results=await Promise.allSettled(requests.map(r=>service.execute('owner',r)));
+    expect(results.filter(r=>r.status==='fulfilled')).toHaveLength(1);
+    expect(results.find(r=>r.status==='rejected').reason).toMatchObject({code:'MANOR_REVISION_CONFLICT'});
+    const winner=results.findIndex(r=>r.status==='fulfilled'),after=(await service.get('owner')).state;
+    check(after);
+    expect(await service.execute('owner',requests[winner])).toMatchObject({replayed:true,state:after});
+    expect((await service.execute('owner',input(2,action,args))).state).toEqual(after);
+    expect(await rows('points_log')).toEqual([]);
   });
   it('请求号不能换商品或伪造账号；不同账号同号不互相干扰', async () => {
     const request = input(0, 'adopt');
@@ -186,8 +210,37 @@ describe.skipIf(!socketPath)('庄园真实积分与存档原子结算（隔离 M
     await expect(service.execute('owner',{...input(1,'claimAllDailyWater'),version:'knowledge-manor-v1'})).rejects.toMatchObject({code:'MANOR_VERSION_UNSUPPORTED'});
     const claimed=await service.execute('owner',input(1,'claimAllDailyWater'));
     expect(claimed.state.seeds).toEqual({radish:7});
-    expect(claimed.state.water).toBe(45);
+    expect(claimed.state.water).toBe(50);
     expect((await rows('knowledge_manor_operations'))).toHaveLength(2);
+  });
+  it('v2 当天已领十五滴只补五滴，并发和重试不重复发放或变更主站积分', async () => {
+    const adopted=await adopt(),old={...adopted.state,version:'knowledge-manor-v2',water:35,dailyWaterClaims:[5,5,5],emptyCastStreak:3};
+    delete old.dailyWaterBonusClaimed;delete old.wallet;
+    await db.query("UPDATE knowledge_manors SET state_json=? WHERE user_id='owner'",[JSON.stringify(old)]);
+    facts=[true,true,true];
+    expect((await service.get('owner')).state).toMatchObject({version:MANOR_VERSION,dailyWaterBonusClaimed:0,emptyCastStreak:3});
+    const [row]=await rows('knowledge_manors');
+    expect(typeof row.state_json==='string'?JSON.parse(row.state_json):row.state_json).toEqual(old);
+    await expect(service.execute('owner',{...input(1,'claimDailyWaterBonus'),version:'knowledge-manor-v2'})).rejects.toMatchObject({code:'MANOR_VERSION_UNSUPPORTED'});
+    const requests=[input(1,'claimDailyWaterBonus'),input(1,'claimAllDailyWater')];
+    const results=await Promise.allSettled(requests.map(r=>service.execute('owner',r)));
+    expect(results.filter(r=>r.status==='fulfilled')).toHaveLength(1);
+    expect(results.find(r=>r.status==='rejected').reason).toMatchObject({code:'MANOR_REVISION_CONFLICT'});
+    const winner=results.findIndex(r=>r.status==='fulfilled');
+    expect(results[winner].value).toMatchObject({result:{water:5},state:{water:40,dailyWaterBonusClaimed:5,emptyCastStreak:3}});
+    expect(await service.execute('owner',requests[winner])).toMatchObject({replayed:true,result:{water:5},state:{water:40}});
+    expect((await service.execute('owner',input(2,'claimDailyWaterBonus'))).result).toBeNull();
+    expect((await rows('user_growth')).find(r=>r.user_id==='owner').points).toBe(60);
+    expect(await rows('points_log')).toEqual([]);
+  });
+  it('全完成水滴与收据同事务，提交失败后重试可正常领取一次', async () => {
+    await adopt();facts=[true,true,true];
+    const request=input(1,'claimDailyWaterBonus');failReceipt=true;
+    await expect(service.execute('owner',request)).rejects.toThrow('fixture receipt failure');
+    expect(await service.get('owner')).toMatchObject({revision:1,state:{water:30,dailyWaterBonusClaimed:0}});
+    failReceipt=false;
+    expect(await service.execute('owner',request)).toMatchObject({revision:2,result:{water:5},state:{water:35,dailyWaterBonusClaimed:5}});
+    expect(await service.execute('owner',request)).toMatchObject({replayed:true,state:{water:35,dailyWaterBonusClaimed:5}});
   });
   it('空竿收据提交失败会回滚进度，同一请求重试只累计一次', async () => {
     const adopted=await adopt();

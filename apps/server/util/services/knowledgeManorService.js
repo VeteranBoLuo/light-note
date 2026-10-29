@@ -5,6 +5,8 @@ import { getGrowth, getDailyQuestState, lockGrowthAccount } from '../growth.js';
 import { earnPoints } from '../points.js';
 import { getGrowthCalendarContext } from '../growthPreferences.js';
 import { getWeeklyChallenges } from '../weeklyChallenge.js';
+import { readManorRuntime, allowManorCommand } from './knowledgeManorRuntime.js';
+import { summarizeManorOperation } from './knowledgeManorOperation.js';
 
 const random = () => randomInt(0, 0x1_0000_0000) / 0x1_0000_0000;
 const parsed = value => typeof value === 'string' ? JSON.parse(value) : value;
@@ -40,7 +42,7 @@ function checkRequest(input) {
 }
 
 /** The account growth lock serializes manor points with shop, lottery and growth rewards. */
-export function createKnowledgeManorService({ db = pool, context = accountContext, rng = random, lockAccount = lockGrowthAccount, creditPoints = earnPoints, now = () => new Date() } = {}) {
+export function createKnowledgeManorService({ db = pool, context = accountContext, rng = random, lockAccount = lockGrowthAccount, creditPoints = earnPoints, now = () => new Date(), runtimeReader = readManorRuntime } = {}) {
   async function readState(connection, userId, ctx) {
     const [[row]] = await connection.query('SELECT revision,state_json FROM knowledge_manors WHERE user_id=?', [userId]);
     const state = row ? parsed(row.state_json) : createManor(ctx);
@@ -52,7 +54,7 @@ export function createKnowledgeManorService({ db = pool, context = accountContex
       // Read points and inventory from one snapshot while purchases may be committing.
       await conn.beginTransaction();
       const ctx = await context(conn, userId, now());
-      const value = { version: MANOR_VERSION, ...(await readState(conn, userId, ctx)), quests: ctx.quests || [] };
+      const value = { version: MANOR_VERSION, ...(await readState(conn, userId, ctx)), quests: ctx.quests || [], runtime:await runtimeReader(conn) };
       await conn.commit();
       return value;
     } catch (error) {
@@ -72,11 +74,13 @@ export function createKnowledgeManorService({ db = pool, context = accountContex
       if (receipt) {
         if (receipt.command_hash !== digest) throw new ManorError('MANOR_REQUEST_CONFLICT');
         const current = await readState(conn, userId, ctx);
+        const runtime = await runtimeReader(conn);
         await conn.commit();
-        return { version: MANOR_VERSION, ...current, result: parsed(receipt.result_json).result, replayed: true, quests: ctx.quests || [] };
+        return { version: MANOR_VERSION, ...current, result: parsed(receipt.result_json).result, replayed: true, quests: ctx.quests || [], runtime };
       }
       // Recover a prior receipt before checking new-version gates or revision.
       if (input.version !== MANOR_VERSION) throw new ManorError('MANOR_VERSION_UNSUPPORTED');
+      const runtime = await allowManorCommand(conn,input.action);
       const current = await readState(conn, userId, ctx);
       if (current.revision !== input.revision) throw new ManorError('MANOR_REVISION_CONFLICT');
       const next = executeManorCommand(current.state, input, { ...ctx, random: rng });
@@ -97,9 +101,10 @@ export function createKnowledgeManorService({ db = pool, context = accountContex
       delete stored.wallet; // user_growth.points remains the only balance.
       await conn.query(`INSERT INTO knowledge_manors (user_id,revision,state_json) VALUES (?, ?, ?)
         ON DUPLICATE KEY UPDATE revision=VALUES(revision),state_json=VALUES(state_json)`, [userId, revision, JSON.stringify(stored)]);
-      await conn.query('INSERT INTO knowledge_manor_operations (user_id,request_id,command_hash,model_version,revision,result_json,points_delta) VALUES (?, ?, ?, ?, ?, ?, ?)', [userId, input.requestId, digest, MANOR_VERSION, revision, JSON.stringify({ result: next.result ?? null }), next.pointsDelta]);
+      const summary = summarizeManorOperation(current.state,next.state,input.action,next.result);
+      await conn.query('INSERT INTO knowledge_manor_operations (user_id,request_id,command_hash,model_version,revision,result_json,points_delta,action,effectful,resource_delta_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', [userId, input.requestId, digest, MANOR_VERSION, revision, JSON.stringify({ result: next.result ?? null }), next.pointsDelta,input.action,summary.effectful ? 1 : 0,JSON.stringify(summary.deltas)]);
       await conn.commit();
-      return { version: MANOR_VERSION, revision, state: next.state, result: next.result, replayed: false, quests: ctx.quests || [] };
+      return { version: MANOR_VERSION, revision, state: next.state, result: next.result, replayed: false, quests: ctx.quests || [],runtime };
     } catch (error) {
       await conn.rollback();
       throw error;

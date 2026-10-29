@@ -2,7 +2,7 @@ import model from './manorModel.js';
 import { MANOR_SPECIES } from './manorSpecies.js';
 
 export { model as manorModel, MANOR_SPECIES };
-export const MANOR_VERSION = 'knowledge-manor-v2';
+export const MANOR_VERSION = 'knowledge-manor-v3';
 
 export class ManorError extends Error {
   constructor(code, status = 409) {
@@ -43,6 +43,7 @@ function rememberDailyUsage(s) {
   (s.dailyUsage ||= {})[s.dayKey] = {
     freeUsed: s.freeUsed,
     waterClaims: [...s.dailyWaterClaims],
+    waterBonusClaimed: s.dailyWaterBonusClaimed || 0,
     poopPicked: s.poopDay === day,
     birdDelivered: s.birdSeedDay === day,
     birdPicked: s.birdSeedPickedDay === day,
@@ -55,6 +56,7 @@ function restoreDailyUsage(s, dayKey) {
   const usage = s.dailyUsage?.[dayKey];
   s.freeUsed = usage?.freeUsed || 0;
   s.dailyWaterClaims = usage ? [...usage.waterClaims] : [0, 0, 0];
+  s.dailyWaterBonusClaimed = usage?.waterBonusClaimed || 0;
   s.poopDay = usage?.poopPicked ? s.calendarDay : null;
   s.birdSeedDay = usage?.birdDelivered ? s.calendarDay : null;
   s.birdSeedPickedDay = usage?.birdPicked ? s.calendarDay : null;
@@ -86,13 +88,14 @@ export function createManor({ now, calendar, points }) {
 
 /** Read projection: real time and real task progress; it does not award or persist anything. */
 export function projectManor(saved, { now, calendar, points, dailyDone = [false, false, false], supplyEligibility = {} }) {
-  if (saved.version !== MANOR_VERSION && saved.version !== 'knowledge-manor-v1') throw new ManorError('MANOR_VERSION_UNSUPPORTED', 409);
+  if (![MANOR_VERSION, 'knowledge-manor-v2', 'knowledge-manor-v1'].includes(saved.version)) throw new ManorError('MANOR_VERSION_UNSUPPORTED', 409);
   const s = structuredClone(saved);
-  if (s.version !== MANOR_VERSION) {
-    s.version = MANOR_VERSION;
+  if (s.version === 'knowledge-manor-v1') {
     s.emptyCastStreak = 0;
     delete s.castPity;
   }
+  s.version = MANOR_VERSION;
+  s.dailyWaterBonusClaimed ||= 0;
   if (!Array.isArray(dailyDone) || dailyDone.length !== 3 || dailyDone.some(x => typeof x !== 'boolean')) invalid();
   integer(points, 0, 2_147_483_647);
   const time = new Date(now).getTime();
@@ -189,6 +192,7 @@ const commandCatalog = Object.freeze({
   refillPollen(s, a) { if (a.length !== 1) invalid(); return model.refillPollen(s, key(a[0], model.FACILITY_RULES.flowerPollen)); },
   pollinate(s, a) { if (a.length !== 1) invalid(); return model.pollinate(s, integer(a[0], 0, 7)); },
   claimDailyWater(s, a) { if (a.length !== 1) invalid(); return model.claimDailyWater(s, integer(a[0], 0, 2)); },
+  claimDailyWaterBonus(s, a) { emptyArgs(a); return model.claimDailyWaterBonus(s); },
   claimAllDailyWater(s, a) { emptyArgs(a); return model.claimAllDailyWater(s); },
   claimLevelReward(s, a) { if (a.length !== 1) invalid(); return model.claimLevelReward(s, integer(a[0], 1, 30)); },
   claimAllLevelRewards(s, a) { emptyArgs(a); return model.claimAllLevelRewards(s); },

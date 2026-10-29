@@ -19,7 +19,7 @@ describe('庄园沿用真实成长进度', () => {
       if(sql.includes('FROM knowledge_manors')) return [[]];
       throw new Error('Unexpected SQL');
     } };
-    return createKnowledgeManorService({ db:{ getConnection:async()=>conn }, now:()=>new Date('2026-10-24T02:00:00Z') }).get('owner');
+    return createKnowledgeManorService({ db:{ getConnection:async()=>conn },runtimeReader:async()=>({mode:'open',message:'',revision:0}), now:()=>new Date('2026-10-24T02:00:00Z') }).get('owner');
   };
   it('连签已达 7 天即符合种子条件，不要求先领取另一项奖励', async () => {
     facts.growth.streak=7;

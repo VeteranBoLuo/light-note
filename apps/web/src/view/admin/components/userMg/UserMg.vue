@@ -1,10 +1,10 @@
 <template>
   <AdminDataPage
     class="usermg-page"
-    eyebrow="Admin / Users"
+    appearance="workspace"
+    :eyebrow="`ADMIN / ${t('adminUserManagement.title')}`"
     :title="t('adminUserManagement.title')"
-    :subtitle="t('adminUserManagement.subtitle')"
-    :toolbar-hint="t('adminUserManagement.toolbarHint')"
+    :subtitle="t('adminWorkspace.usersSubtitle')"
     :summary-count="total"
   >
     <template #toolbar>
@@ -22,6 +22,7 @@
         v-model:value="roleFilter"
         class="usermg-filter"
         :options="roleOptions"
+        :placeholder="t('adminUserManagement.filters.allRoles')"
         :aria-label="t('adminUserManagement.filters.role')"
         @change="() => resetList()"
       />
@@ -39,9 +40,15 @@
         :aria-label="t('adminUserManagement.filters.activity')"
         @change="() => resetList()"
       />
+      <BButton type="text" @click="resetFilters">{{ t('adminUserManagement.filters.reset') }}</BButton>
     </template>
+    <template #summary
+      ><span>{{ t('adminWorkspace.userCount', { count: total.toLocaleString() }) }}</span
+      ><span>{{ t('adminWorkspace.userHint') }}</span></template
+    >
 
     <BTable
+      v-if="userList.length || loading"
       ref="tableRef"
       fill
       virtual
@@ -49,7 +56,7 @@
       :columns="userColumns"
       :row-clickable="true"
       :loading="loading"
-      :has-more="hasMore"
+      :has-more="hasMore && !failed"
       :remote-sort="true"
       :row-height="48"
       :sort="sortState"
@@ -71,12 +78,28 @@
               />
               <svg-icon v-else :src="record.headPicture || icon.navigation.user" :size="36" />
             </span>
-            <small>{{ t('adminUserManagement.levelShort', { level: record.level || 1 }) }}</small>
+            <span class="usermg-identity"
+              ><strong :title="record.alias || record.email">{{ record.alias || record.email || '—' }}</strong
+              ><span
+                ><small
+                  >{{ t('adminUserManagement.levelShort', { level: record.level || 1 }) }} ·
+                  {{ userRoleLabel(record.role) }}</small
+                ><BChip :tone="Number(record.delFlag) === 1 ? 'danger' : 'success'">{{
+                  t(
+                    Number(record.delFlag) === 1
+                      ? 'adminUserManagement.detail.statusBanned'
+                      : 'adminUserManagement.detail.statusActive',
+                  )
+                }}</BChip></span
+              ></span
+            >
           </span>
         </template>
         <template v-else-if="column.key === 'browser'">
           <BTooltip :title="formatAdminDeviceLabel(record.userAgent, t('common.unknown'))">
-            <span class="usermg-browser">{{ formatAdminUserAgent(record.userAgent, '-').browser }}</span>
+            <span class="usermg-browser">{{
+              formatAdminUserAgent(record.userAgent, '-').browser.replace(/\s[\d.]+$/, '')
+            }}</span>
           </BTooltip>
         </template>
         <template v-else-if="column.key === 'adminRemark'">
@@ -84,7 +107,12 @@
             {{ record.adminRemark || '-' }}
           </span>
         </template>
-        <template v-else-if="column.key === 'lastActiveTime' && !record.lastActiveTime">-</template>
+        <template v-else-if="column.key === 'lastActiveTime' || column.key === 'createTime'">
+          <span v-if="record[column.key]" class="usermg-time"
+            ><span>{{ userDate(record[column.key]) }}</span
+            ><small>{{ userTime(record[column.key]) }}</small></span
+          ><span v-else>—</span>
+        </template>
         <template v-else-if="column.key === 'operation'">
           <!--
             五个操作平铺时这一列又挤又难扫。只把最常用的「预览用户」留在外面
@@ -95,13 +123,15 @@
             <!-- 行本身可点击（打开用户详情），所以每个操作入口都要 @click.stop -->
             <BTooltip :title="t('guest.userPreviewEntry')">
               <BButton
-                class="usermg-icon-btn dom-hover"
+                class="usermg-preview-btn"
+                type="text"
+                size="small"
                 :aria-label="`${t('guest.userPreviewEntry')}：${record.alias || record.email || record.id}`"
                 :loading="previewOpeningUserId === String(record.id)"
                 :disabled="Boolean(previewOpeningUserId)"
                 @click.stop="loginAsUser(record)"
               >
-                <svg-icon :src="icon.navigation.user" size="16" />
+                <svg-icon :src="icon.garden.view" size="16" />{{ t('adminWorkspace.preview') }}
               </BButton>
             </BTooltip>
             <!--
@@ -112,7 +142,8 @@
               <BDropdown trigger="click" align="right" :menu-options="moreOptions(record)">
                 <BTooltip :title="t('common.more')">
                   <BButton
-                    class="usermg-icon-btn dom-hover"
+                    class="usermg-icon-btn"
+                    icon-only
                     :aria-label="`${t('common.more')}：${record.alias || record.email || record.id}`"
                   >
                     <svg-icon :src="icon.common.more" size="16" />
@@ -124,6 +155,15 @@
         </template>
       </template>
     </BTable>
+    <div v-else class="usermg-empty" :role="failed ? 'alert' : 'status'">
+      <p>{{ failed ? t('common.requestFailedDescription') : t('adminWorkspace.emptyUsers') }}</p
+      ><BButton v-if="failed" size="small" @click="reloadUsers()">{{ t('common.retry') }}</BButton>
+    </div>
+    <div v-if="userList.length" class="usermg-footer"
+      ><span>{{ userList.length.toLocaleString() }} / {{ total.toLocaleString() }}</span
+      ><BButton v-if="failed" size="small" @click="loadMore">{{ t('common.retry') }}</BButton
+      ><span v-else-if="!hasMore">{{ t('adminWorkspace.noMore') }}</span></div
+    >
   </AdminDataPage>
 
   <User360Modal
@@ -164,6 +204,9 @@
 
 <script lang="ts" setup>
   import { computed, ref } from 'vue';
+  import { parseAdminDateTime, ADMIN_DEFAULT_TIME_ZONE } from '@/utils/adminDateTime';
+  import { adminWorkspaceMessages } from '@/i18n/locales/adminWorkspace';
+  import BChip from '@/components/base/BasicComponents/BChip.vue';
   import { useUiDensity } from '@/composables/useUiDensity';
   import { useI18n } from 'vue-i18n';
   import icon from '@/config/icon.ts';
@@ -187,7 +230,7 @@
   import { useAdminUserManagementList, useAdminUserOperations } from './useAdminUserManagement.ts';
   import { formatAdminDeviceLabel, formatAdminUserAgent } from './userAgentFormat.ts';
 
-  const { t } = useI18n();
+  const { t, locale } = useI18n({ messages: adminWorkspaceMessages, missingWarn: false, fallbackWarn: false });
   const { dimension } = useUiDensity();
   const tableRef = ref<InstanceType<typeof BTable> | null>(null);
   const {
@@ -195,6 +238,7 @@
     total,
     loading,
     hasMore,
+    failed,
     loadMore,
     searchValue,
     roleFilter,
@@ -206,6 +250,7 @@
     activityOptions,
     handleSearch,
     reloadUsers,
+    resetFilters,
     onSortChange,
   } = useAdminUserManagementList({ t, scrollToTop: () => tableRef.value?.scrollToTop() });
   const resetList = reloadUsers;
@@ -238,25 +283,62 @@
 
   const userColumns = computed(() => [
     {
-      title: t('adminUserManagement.columns.avatar'),
+      title: t('adminOperationLog.columns.user'),
       key: 'headPicture',
-      width: 'var(--ui-layout-88, 88px)',
+      width: 'var(--ui-layout-200, 200px)',
       overflowVisible: true,
     },
-    { title: t('adminUserManagement.columns.alias'), key: 'alias', width: 'var(--ui-layout-150, 150px)' },
-    { title: t('adminUserManagement.remarkColumn'), key: 'adminRemark', width: 'var(--ui-layout-150, 150px)' },
-    { title: t('adminUserManagement.email'), key: 'email', width: '1fr' },
-    { title: 'IP', key: 'ip', width: 'var(--ui-layout-150, 150px)' },
-    { title: t('adminUserManagement.columns.browser'), key: 'browser', width: 'var(--ui-layout-125, 125px)' },
+    { title: t('adminUserManagement.remarkColumn'), key: 'adminRemark', width: 'var(--ui-layout-100, 100px)' },
+    { title: t('adminUserManagement.email'), key: 'email', width: 'minmax(var(--ui-layout-180, 180px), 1fr)' },
+    { title: 'IP', key: 'ip', width: 'var(--ui-layout-125, 125px)' },
+    { title: t('adminUserManagement.columns.browser'), key: 'browser', width: 'var(--ui-layout-88, 88px)' },
     {
       title: t('adminUserManagement.columns.lastActive'),
       key: 'lastActiveTime',
-      width: '1fr',
+      width: 'var(--ui-layout-120, 120px)',
       sortable: true,
     },
-    { title: t('adminUserManagement.columns.createdAt'), key: 'createTime', width: '1fr', sortable: true },
-    { title: t('adminUserManagement.columns.actions'), key: 'operation', width: 'var(--ui-layout-100, 100px)' },
+    {
+      title: t('adminUserManagement.columns.createdAt'),
+      key: 'createTime',
+      width: 'var(--ui-layout-120, 120px)',
+      sortable: true,
+    },
+    { title: t('adminUserManagement.columns.actions'), key: 'operation', width: 'var(--ui-layout-120, 120px)' },
   ]);
+
+  const dateFormatter = computed(
+    () =>
+      new Intl.DateTimeFormat(locale.value, {
+        timeZone: ADMIN_DEFAULT_TIME_ZONE,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+      }),
+  );
+  const timeFormatter = computed(
+    () =>
+      new Intl.DateTimeFormat(locale.value, {
+        timeZone: ADMIN_DEFAULT_TIME_ZONE,
+        hour: '2-digit',
+        minute: '2-digit',
+        hourCycle: 'h23',
+      }),
+  );
+  const userDate = (value: unknown) => {
+    const date = parseAdminDateTime(value);
+    return date ? dateFormatter.value.format(date) : '—';
+  };
+  const userTime = (value: unknown) => {
+    const date = parseAdminDateTime(value);
+    return date ? timeFormatter.value.format(date) : '—';
+  };
+
+  function userRoleLabel(role: string) {
+    return ['user', 'visitor', 'test', 'root'].includes(role)
+      ? t(`adminUserManagement.detail.roles.${role}`)
+      : t('common.unknown');
+  }
 
   function onRowClick(record: any) {
     openDetail(record);
@@ -307,10 +389,11 @@
 <style lang="less" scoped>
   @import '@/assets/css/admin-mixins.less';
   .usermg-page {
-    font-size: var(--ui-font-16, 16px);
+    font-size: var(--ui-font-13, 13px);
   }
   .log-search-input {
-    flex: 1;
+    flex: 1 1 var(--ui-layout-240, 240px);
+    min-width: 0;
   }
 
   .usermg-filter {
@@ -375,7 +458,9 @@
   }
 
   .usermg-avatar-cell {
-    display: inline-flex;
+    display: flex;
+    width: 100%;
+    min-width: 0;
     align-items: center;
     gap: var(--ui-space-7, 7px);
   }
@@ -415,17 +500,71 @@
     object-fit: cover;
   }
 
-  /* 图标形态的操作按钮：重置浏览器默认外观，保持原来「一个图标」的观感 */
-  .usermg-icon-btn {
-    .admin-focus-ring(6px);
-
-    display: inline-flex;
+  .usermg-time {
+    display: flex;
+    flex-direction: column;
+    gap: var(--ui-space-3, 3px);
+  }
+  .usermg-time small {
+    font-size: var(--ui-font-11, 11px);
+    color: var(--desc-color);
+  }
+  .usermg-identity {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-width: 0;
+    gap: var(--ui-space-3, 3px);
+  }
+  .usermg-identity > strong {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: var(--ui-font-13, 13px);
+  }
+  .usermg-identity > span {
+    display: flex;
     align-items: center;
-    padding: var(--ui-space-2, 2px);
-    border: none;
+    gap: var(--ui-space-6, 6px);
+  }
+  .usermg-identity small {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .usermg-preview-btn.b_btn {
+    height: var(--ui-control-28, 28px);
+    gap: var(--ui-space-5, 5px);
+  }
+  .usermg-icon-btn.b_btn {
+    .admin-focus-ring(6px);
+    width: var(--ui-control-28, 28px);
+    height: var(--ui-control-28, 28px);
+    padding: var(--ui-space-4, 4px);
+    border: 0;
+    background: transparent;
     border-radius: 6px;
-    background: none;
-    color: inherit;
-    cursor: pointer;
+  }
+  .usermg-icon-btn.b_btn:hover {
+    background: var(--category-item-ba-color);
+  }
+  .usermg-empty {
+    display: flex;
+    flex: 1;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    color: var(--desc-color);
+    gap: var(--ui-space-8, 8px);
+  }
+  .usermg-footer {
+    flex: none;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--ui-space-12, 12px);
+    padding: var(--ui-space-8, 8px) 0;
+    color: var(--desc-color);
+    font-size: var(--ui-font-12, 12px);
   }
 </style>

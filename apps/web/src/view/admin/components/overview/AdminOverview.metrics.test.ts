@@ -1,80 +1,160 @@
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createApp, h, nextTick } from 'vue';
+import AdminOverview from './AdminOverview.vue';
 
-const source = readFileSync(resolve(process.cwd(), 'src/view/admin/components/overview/AdminOverview.vue'), 'utf8');
-const template = source.slice(0, source.indexOf('<script'));
+const mocks = vi.hoisted(() => ({ snapshot: vi.fn(), post: vi.fn(), push: vi.fn() }));
+vi.mock('@/api/adminOverview', () => ({ getAdminOverviewSnapshot: mocks.snapshot }));
+vi.mock('@/http/request.ts', () => ({ apiBasePost: mocks.post }));
+vi.mock('@/router', () => ({ default: { push: mocks.push } }));
+vi.mock('@/store', () => ({ bookmarkStore: () => ({ isMobile: false, isTablet: false }) }));
+vi.mock('vue-i18n', () => ({
+  useI18n: () => ({
+    t: (key: string, values?: Record<string, unknown>) => key + (values ? ':' + JSON.stringify(values) : ''),
+  }),
+}));
+vi.mock('@/components/base/SvgIcon/src/SvgIcon.vue', () => ({ default: { render: () => h('span') } }));
+vi.mock('@/components/admin/AdminDataPage.vue', () => ({
+  default: {
+    setup:
+      (_: unknown, { slots }: any) =>
+      () =>
+        h('main', [slots.actions?.(), slots.default?.()]),
+  },
+}));
+vi.mock('@/components/base/BasicComponents/BTooltip.vue', () => ({
+  default: {
+    props: ['title'],
+    setup:
+      (_: unknown, { slots }: any) =>
+      () =>
+        slots.default?.(),
+  },
+}));
+vi.mock('./AdminGrowthTrendCard.vue', () => ({ default: { render: () => h('div') } }));
+vi.mock('./AdminActiveUsersDrawer.vue', () => ({
+  default: {
+    props: ['open'],
+    setup: (props: any) => () => h('output', { 'data-active-detail': '' }, String(props.open)),
+  },
+}));
+vi.mock('./AdminRecentAdditions.vue', () => ({
+  default: {
+    props: ['filter'],
+    setup: (props: any) => () => h('output', { 'data-recent-filter': '' }, JSON.stringify(props.filter)),
+  },
+}));
 
-describe('后台运营总览指标去重', () => {
-  it('首屏只请求核心快照，核心落屏后再并发加载趋势与最近新增', () => {
-    expect(source).toContain('getAdminOverviewSnapshot(hideInternalValue, { force })');
-    expect(source).not.toContain("apiBasePost('/api/common/getAdminOverview',");
-    expect(source).toMatch(
-      /data\.value = \{[\s\S]*?\.\.\.response\.data[\s\S]*?void loadTrend\(\);[\s\S]*?void loadRecent\(\);/u,
+const snapshot = () => ({
+  users: { today: 12, total: 1286 },
+  active: { available: true, today: 64 },
+  resources: {
+    bookmarkToday: 52,
+    noteToday: 24,
+    fileToday: 10,
+    bookmarkTotal: 1000,
+    noteTotal: 200,
+    fileTotal: 86,
+    storageMb: 4096,
+    trashMb: 126,
+    trashCount: 8,
+  },
+  todos: { total: 3120, createdToday: 24, pending: 68, dueToday: 12, overdue: 3, completedToday: 18 },
+  ai: { todayCount: 26, todayTokens: 32800 },
+  system: { apiToday: 4218, apiBusinessErrorsToday: 8, apiInvalidRequestsToday: 5, apiServerErrorsToday: 0 },
+  pending: { opinion: 3, security: 1 },
+  generatedAt: '2026-10-29 14:32',
+});
+let cleanup: (() => void) | undefined;
+async function settle() {
+  for (let i = 0; i < 12; i++) {
+    await Promise.resolve();
+    await nextTick();
+  }
+}
+async function mount() {
+  const host = document.createElement('div');
+  document.body.append(host);
+  const app = createApp(AdminOverview);
+  app.mount(host);
+  cleanup = () => {
+    app.unmount();
+    host.remove();
+  };
+  await settle();
+  return host;
+}
+const button = (host: HTMLElement, label: string) =>
+  [...host.querySelectorAll('button')].find((node) => node.textContent?.includes(label))!;
+
+beforeEach(() => {
+  mocks.snapshot.mockResolvedValue({ status: 200, data: snapshot() });
+  mocks.post.mockImplementation(async (url: string) => ({
+    status: 200,
+    data: url.endsWith('Trend')
+      ? { days: 7, granularity: 'day', trend: [] }
+      : { items: [], total: 0, hasMore: false, nextCursor: null },
+  }));
+});
+afterEach(() => {
+  cleanup?.();
+  vi.clearAllMocks();
+});
+
+describe('后台总览的真实指标与下钻', () => {
+  it('首屏按真实数据展示活跃与资源汇总，并继续读取趋势和最近新增', async () => {
+    const host = await mount();
+    expect(button(host, 'adminWorkspace.active').textContent).toContain('64');
+    expect(button(host, 'adminWorkspace.resources').textContent).toContain('86');
+    expect(button(host, 'adminWorkspace.users').textContent).toContain('12');
+    expect(button(host, 'adminWorkspace.todos').textContent).toContain('24');
+    const resourceTotals = [...host.querySelectorAll('.ov-resource-breakdown strong')].map((node) => node.textContent);
+    expect(resourceTotals).toEqual(['1,000', '200', '86']);
+    const resourceToday = [...host.querySelectorAll('.ov-resource-breakdown small')].map((node) => node.textContent);
+    expect(resourceToday).toEqual([
+      'adminWorkspace.todayAdded:{"count":"52"}',
+      'adminWorkspace.todayAdded:{"count":"24"}',
+      'adminWorkspace.todayAdded:{"count":"10"}',
+    ]);
+    expect(mocks.snapshot).toHaveBeenCalledWith(true, { force: false });
+    expect(mocks.post).toHaveBeenCalledWith('/api/common/getAdminOverviewTrend', { days: 7, hideInternal: true });
+    expect(mocks.post.mock.calls.filter(([url]) => url.endsWith('Recent'))).toHaveLength(2);
+    button(host, 'adminActivity.view').click();
+    await settle();
+    expect(host.querySelector('[data-active-detail]')?.textContent).toBe('true');
+  });
+  it('资源分项仍能下钻今日明细，筛选与请求一致', async () => {
+    const host = await mount();
+    button(host, 'navigation.bookmark').click();
+    await settle();
+    expect(host.querySelector('[data-recent-filter]')?.textContent).toBe(
+      JSON.stringify({ period: 'today', type: 'bookmark' }),
     );
-    expect(template).toContain("t('adminOverview.loading')");
-    expect(template).toContain("t('adminOverview.loadFailed')");
-    expect(template).toContain("t('adminOverview.trendLoadFailed')");
-    expect(template).toContain('<BLoading');
+    expect(
+      mocks.post.mock.calls.some(
+        ([url, body]) =>
+          url.endsWith('Recent') && body.period === 'today' && body.type === 'bookmark' && body.target === 'resource',
+      ),
+    ).toBe(true);
   });
-
-  it('把系统运行和待办健康合并为一组有行动价值的指标', () => {
-    expect(template).toContain('运行与待办健康');
-    expect(template).not.toContain('>今日运行 ');
-    expect(template).not.toContain('>待办运行 ');
-
-    const healthSection = template.match(
-      /运行与待办健康[\s\S]*?<ul[^>]*class="admin-stats ov-health-stats">([\s\S]*?)<\/ul>/u,
-    )?.[1];
-    expect(healthSection).toBeTruthy();
-    expect(healthSection?.match(/class="admin-stat-card/g)).toHaveLength(6);
-
-    for (const label of ['活跃用户', 'AI 模型动作', 'API 请求', '当前未完成', '当前逾期', '今日完成']) {
-      expect(healthSection).toContain(`>${label}<`);
-    }
-    expect(healthSection).not.toContain('待办总量');
-    expect(healthSection).not.toContain('今日新增');
+  it('活跃统计不可用时显示未知和不可用原因，不把缺失数据显示成零', async () => {
+    mocks.snapshot.mockResolvedValue({
+      status: 200,
+      data: { ...snapshot(), active: { available: false, today: null } },
+    });
+    const host = await mount();
+    const active = button(host, 'adminWorkspace.active');
+    expect(active.textContent).toContain('—');
+    expect(active.textContent).toContain('adminActivity.unavailable');
   });
-
-  it('新增、到期、逾期和完成指标在总览模板中各展示一次', () => {
-    expect(template.match(/>新增待办</gu)).toHaveLength(1);
-    expect(template.match(/>今日到期 /gu)).toHaveLength(1);
-    expect(template.match(/>当前逾期</gu)).toHaveLength(1);
-    expect(template.match(/>今日完成</gu)).toHaveLength(1);
-    expect(template).toMatch(/新增待办[\s\S]*?todos\.createdToday[\s\S]*?累计 \{\{ n\(data\.todos\.total\) \}\}/u);
-  });
-
-  it('今日用户和资源指标复用最近新增明细完成筛选下钻', () => {
-    for (const type of ['user', 'resource', 'bookmark', 'note', 'file']) {
-      expect(template).toContain(`@click="drillDownTodayRecent('${type}')"`);
-    }
-    expect(template.match(/@click="drillDownTodayRecent\('/gu)).toHaveLength(5);
-    expect(template).toContain('ref="recentAnchor"');
-    expect(template).toContain(':filter="recentFilter"');
-    expect(template).toContain(':filtered-total="recentFilteredTotal"');
-    expect(template).toContain('@filter-change="changeRecentFilter"');
-    expect(source).toContain('findVerticalScrollContainer(target, fallbackContainer)');
-    expect(source).toContain('scrollIntoContainer(container, target, 8');
-  });
-
-  it('今日卡片显示同一时刻基线，显著波动只生成用户和资源两类运营提示', () => {
-    for (const metric of ['users', 'resources', 'bookmarks', 'notes', 'files', 'todos', 'activeUsers', 'aiCalls']) {
-      expect(template).toContain(`baselineText('${metric}')`);
-    }
-    expect(template).toContain("t('adminOverview.activeUserHint')");
-    expect(template).toContain('v-for="insight in todayInsights"');
-    expect(source).toContain('buildAdminTodayInsights');
-    expect(source).toContain("files: 'file'");
-    expect(template).toContain('@click="openInsight(insight)"');
-    expect(template).toContain("t('adminOverview.sameTimeCutoff'");
-    expect(source).toContain("go('conversion')");
-    expect(source).toContain("drillDownTodayRecent(insight.focus ? insightRecentType[insight.focus] : 'resource')");
-  });
-
-  it('真实待处理事项保留直接处理入口，并复用统一待处理中心', () => {
-    expect(template).toContain("go('userOpinion')");
-    expect(template).toContain('goToSecurityEvents');
-    expect(template).toContain("go('actionCenter')");
-    expect(template).toContain("t('adminOverview.openActionCenter')");
+  it('刷新失败保留已有指标并允许重试', async () => {
+    const host = await mount();
+    mocks.snapshot.mockRejectedValueOnce(new Error('offline'));
+    button(host, 'common.refresh').click();
+    await settle();
+    expect(button(host, 'adminWorkspace.active').textContent).toContain('64');
+    expect(host.textContent).toContain('adminOverview.refreshFailed');
+    button(host, 'adminOverview.retry').click();
+    await settle();
+    expect(host.textContent).not.toContain('adminOverview.refreshFailed');
   });
 });

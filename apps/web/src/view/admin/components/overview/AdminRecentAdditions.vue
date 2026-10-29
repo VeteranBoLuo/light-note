@@ -353,7 +353,7 @@
 
 <style lang="less" scoped>
   .admin-recent {
-    margin-top: var(--ui-space-20, 20px);
+    margin-top: 0;
   }
 
   .admin-recent__heading {

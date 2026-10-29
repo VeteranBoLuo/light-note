@@ -24,10 +24,10 @@ vi.mock('@/composables/useGrowth', () => ({
 vi.mock('@/composables/useMobileTopBar', () => ({ useMobileTopBar: () => {} }));
 vi.mock('@/components/home/navigation/Navigation.vue', () => ({ default: { render: () => h('nav', { 'aria-label': '轻笺导航' }, '轻笺导航') } }));
 vi.mock('vue-i18n', () => ({ useI18n: () => ({ t: (key: string) => key }) }));
-vi.mock('@/utils/manorPending', () => ({
+vi.mock('@/utils/manorPending', async importOriginal => ({
+  ...await importOriginal<typeof import('@/utils/manorPending')>(),
   readPendingManorCommand: mocks.pending,
   savePendingManorCommand: mocks.save,
-  isUncertainManorResult: () => false,
 }));
 vi.mock('@/utils/mobileOverlayHistory', () => ({
   closeCurrentMobileOverlayThen: async (close: () => void, next: () => unknown) => { close(); return next(); },
@@ -81,6 +81,23 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 describe('庄园加载与主站导航', () => {
+  it('维护说明以纯文本展示，场景就绪前不覆盖加载层',async()=>{
+    mocks.read.mockResolvedValueOnce({quests:[],state:{},revision:0,version:'fixture',runtime:{mode:'maintenance',message:'<b>测试维护</b>',revision:1}} as never);
+    await mount();
+    expect(document.querySelector('.knowledge-manor__maintenance')).toBeNull();
+    const frame=document.querySelector('iframe')!;
+    window.dispatchEvent(new MessageEvent('message',{source:frame.contentWindow,origin:location.origin,data:{type:'lightnote-manor',nonce:new URL(frame.src).searchParams.get('bridge'),id:1,action:'ready'}}));
+    await flush();
+    const notice=document.querySelector('.knowledge-manor__maintenance');
+    expect(notice?.textContent).toBe('<b>测试维护</b>');
+    expect(notice?.querySelector('b')).toBeNull();
+  });
+  it('服务端规则与当前页面不兼容时明确要求刷新页面',async()=>{
+    mocks.read.mockRejectedValueOnce({code:'MANOR_VERSION_UNSUPPORTED',status:409});
+    await mount();
+    expect(document.querySelector('[role="alert"]')?.textContent).toContain('manor.updateRequired');
+    expect(document.querySelector('[role="alert"] button')?.textContent).toBe('common.refresh');
+  });
   it('从 0% 复用同一加载层，真实进度只前进；100% 后仍等待场景可交互', async () => {
     await mount();
     const frame = document.querySelector('iframe')!, nonce = new URL(frame.src).searchParams.get('bridge');
@@ -135,7 +152,98 @@ describe('庄园加载与主站导航', () => {
     expect(reply).toHaveBeenLastCalledWith(expect.objectContaining({ value: expect.objectContaining({ revision: 2, state: { fert: { rabbit: 1 } } }) }), location.origin);
     await send(3, 'command', { action: 'pickPoop', args: [], revision: 0 });
     expect(mocks.command).not.toHaveBeenCalled();
-    expect(reply).toHaveBeenLastCalledWith(expect.objectContaining({ id: 3, error: 'manor.actionFailed' }), location.origin);
+    expect(reply).toHaveBeenLastCalledWith(expect.objectContaining({ id: 3, error: 'manor.stateChanged', errorCode: 'MANOR_REVISION_CONFLICT', value: expect.objectContaining({revision:2}) }), location.origin);
+  });
+  it.each([true,false])('服务端拒绝旧操作后同步状态并区分同步成功与失败：%s', async synced => {
+    await mount();
+    const frame=document.querySelector('iframe')!,reply=vi.spyOn(frame.contentWindow!,'postMessage');
+    mocks.command.mockRejectedValueOnce({status:409,code:'MANOR_REVISION_CONFLICT'});
+    if(synced)mocks.read.mockResolvedValueOnce({quests:[],state:{water:25},revision:2,version:'fixture'} as never);
+    else mocks.read.mockRejectedValueOnce({code:'NETWORK_ERROR'});
+    window.dispatchEvent(new MessageEvent('message',{source:frame.contentWindow,origin:location.origin,data:{type:'lightnote-manor',nonce:new URL(frame.src).searchParams.get('bridge'),id:4,action:'command',payload:{action:'pickPoop',args:[],revision:0}}}));
+    await flush();await flush();
+    expect(mocks.command).toHaveBeenCalledTimes(1);
+    expect(mocks.save).toHaveBeenCalledWith('root-fixture',null);
+    const result=reply.mock.calls.at(-1)![0];
+    expect(result).toMatchObject({error:synced?'manor.stateChanged':'manor.stateChangedRetry',errorCode:'MANOR_REVISION_CONFLICT'});
+    if(synced)expect(result.value).toMatchObject({revision:2,state:{water:25}});
+    else expect(result).not.toHaveProperty('value');
+  });
+  it('刷新页面恢复已被其他端拒绝的待结算请求，继续进入庄园并提示同步', async () => {
+    mocks.pending.mockReturnValue({requestId:'recover-old-intent',revision:0,version:'fixture',action:'pickPoop',args:[]});
+    mocks.command.mockRejectedValueOnce({status:409,code:'MANOR_REVISION_CONFLICT'});
+    mocks.read.mockResolvedValueOnce({quests:[],state:{water:25},revision:2,version:'fixture'} as never);
+    await mount();
+    expect(document.querySelector('[role="alert"]')).toBeNull();
+    const frame=document.querySelector('iframe')!,reply=vi.spyOn(frame.contentWindow!,'postMessage');
+    window.dispatchEvent(new MessageEvent('message',{source:frame.contentWindow,origin:location.origin,data:{type:'lightnote-manor',nonce:new URL(frame.src).searchParams.get('bridge'),id:5,action:'get'}}));
+    await flush();
+    expect(reply).toHaveBeenLastCalledWith(expect.objectContaining({value:expect.objectContaining({revision:2,notice:'manor.stateChanged'})}),location.origin);
+    expect(mocks.command).toHaveBeenCalledTimes(1);
+  });
+  it('限流后按重试时间等待，恢复仍使用原收据',async()=>{
+    await mount();
+    const frame=document.querySelector('iframe')!,reply=vi.spyOn(frame.contentWindow!,'postMessage');
+    const send=async(id:number,action:string,payload={})=>{
+      window.dispatchEvent(new MessageEvent('message',{source:frame.contentWindow,origin:location.origin,data:{type:'lightnote-manor',nonce:new URL(frame.src).searchParams.get('bridge'),id,action,payload}}));
+      await flush();await flush();
+    };
+    mocks.command.mockRejectedValueOnce({status:429,retryAfter:10});
+    await send(1,'command',{action:'pickPoop',args:[],revision:0});
+    expect(mocks.command).toHaveBeenCalledTimes(1);
+    const request=mocks.command.mock.calls[0][0];
+    await send(2,'get',{background:true});
+    expect(mocks.command).toHaveBeenCalledTimes(1);
+    expect(reply).toHaveBeenLastCalledWith(expect.objectContaining({errorCode:'MANOR_RATE_LIMITED'}),location.origin);
+    vi.setSystemTime(Date.now()+10_000);
+    mocks.command.mockResolvedValueOnce({quests:[],state:{},revision:1,version:'fixture',result:true});
+    await send(3,'get',{background:true});
+    expect(mocks.command).toHaveBeenCalledTimes(2);
+    expect(mocks.command.mock.calls[1][0]).toBe(request);
+  });
+  it('未知网络结果只重试原收据，并发校准共用同一次核对', async () => {
+    await mount();
+    let resolve!: (value:unknown)=>void;
+    mocks.command.mockRejectedValueOnce({code:'NETWORK_ERROR'}).mockImplementationOnce(()=>new Promise(r=>{resolve=r;}));
+    mocks.read.mockResolvedValue({quests:[],state:{water:35},revision:1,version:'fixture'} as never);
+    const frame=document.querySelector('iframe')!,reply=vi.spyOn(frame.contentWindow!,'postMessage');
+    const send=(id:number,action:string,payload={})=>window.dispatchEvent(new MessageEvent('message',{source:frame.contentWindow,origin:location.origin,data:{type:'lightnote-manor',nonce:new URL(frame.src).searchParams.get('bridge'),id,action,payload}}));
+    send(6,'command',{action:'claimDailyWaterBonus',args:[],revision:0});await flush();
+    send(7,'get');await flush();
+    expect(mocks.command).toHaveBeenCalledTimes(2);
+    expect(mocks.command.mock.calls[0][0]).toBe(mocks.command.mock.calls[1][0]);
+    resolve({quests:[],state:{water:35},revision:1,version:'fixture',result:{water:5}});await flush();await flush();
+    expect(mocks.command).toHaveBeenCalledTimes(2);
+    expect(reply).toHaveBeenCalledWith(expect.objectContaining({id:6,value:expect.objectContaining({result:{water:5}})}),location.origin);
+    expect(reply).toHaveBeenCalledWith(expect.objectContaining({id:7,value:expect.objectContaining({revision:1})}),location.origin);
+  });
+  it('成功回包规则已升级时保留原收据，刷新代码后才能确认结果',async()=>{
+    await mount();
+    mocks.command.mockRejectedValueOnce({code:'MANOR_VERSION_UNSUPPORTED',status:409,receiptUnconfirmed:true})
+      .mockRejectedValueOnce({code:'MANOR_VERSION_UNSUPPORTED',status:409,receiptUnconfirmed:true});
+    const frame=document.querySelector('iframe')!,reply=vi.spyOn(frame.contentWindow!,'postMessage');
+    window.dispatchEvent(new MessageEvent('message',{source:frame.contentWindow,origin:location.origin,data:{type:'lightnote-manor',nonce:new URL(frame.src).searchParams.get('bridge'),id:8,action:'command',payload:{action:'buySeed',args:['radish',1],revision:0}}}));
+    await flush();await flush();
+    expect(mocks.command).toHaveBeenCalledTimes(2);
+    expect(mocks.save).toHaveBeenCalledWith('root-fixture',expect.objectContaining({action:'buySeed'}));
+    expect(mocks.save).not.toHaveBeenCalledWith('root-fixture',null);
+    expect(reply).toHaveBeenLastCalledWith(expect.objectContaining({error:'manor.updateRequired',errorCode:'MANOR_VERSION_UNSUPPORTED'}),location.origin);
+  });
+  it('新操作前先恢复旧收据；不同意图不会在恢复后被自动执行',async()=>{
+    await mount();
+    mocks.command.mockRejectedValueOnce({code:'NETWORK_ERROR'}).mockRejectedValueOnce({code:'NETWORK_ERROR'})
+      .mockResolvedValueOnce({quests:[],state:{},revision:1,version:'fixture',result:true});
+    const frame=document.querySelector('iframe')!,reply=vi.spyOn(frame.contentWindow!,'postMessage');
+    const send=async(id:number,action:string,args:unknown[])=>{
+      window.dispatchEvent(new MessageEvent('message',{source:frame.contentWindow,origin:location.origin,data:{type:'lightnote-manor',nonce:new URL(frame.src).searchParams.get('bridge'),id,action:'command',payload:{action,args,revision:0}}}));
+      await flush();await flush();
+    };
+    await send(9,'buySeed',['radish',1]);
+    expect(reply).toHaveBeenLastCalledWith(expect.objectContaining({errorCode:'MANOR_RESULT_UNCERTAIN'}),location.origin);
+    await send(10,'sellAllCrops',[]);
+    expect(mocks.command).toHaveBeenCalledTimes(3);
+    expect(mocks.command.mock.calls.every(([command])=>command.action==='buySeed')).toBe(true);
+    expect(reply).toHaveBeenLastCalledWith(expect.objectContaining({error:'manor.actionRecovered',value:expect.objectContaining({revision:1})}),location.origin);
   });
   it.each([
     ['daily_note', '/noteLibrary'], ['daily_bookmark', '/home'], ['daily_file', '/cloudSpace'],

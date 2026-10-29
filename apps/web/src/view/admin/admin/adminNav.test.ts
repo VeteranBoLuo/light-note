@@ -13,6 +13,7 @@ import adminRouter from '@/router/modules/admin';
  * 与 securityCenter.ts 的 /securityCenterMobile；专业诊断深链不计入常驻菜单。
  */
 const MOBILE_ROUTES = new Set([
+  '/manorManagement',
   '/overview',
   '/actionCenter',
   '/apiLog',
@@ -94,8 +95,9 @@ describe('后台导航菜单', () => {
     expect(ids).toEqual(
       expect.arrayContaining(['knowledgeBase', 'notificationCenter', 'securityCenter', 'serverManagement']),
     );
-    expect(ids).toHaveLength(21);
-    expect(new Set(ids).size).toBe(21);
+    expect(ids).toContain('manorManagement');
+    expect(ids).toHaveLength(22);
+    expect(new Set(ids).size).toBe(22);
     expect(ids.at(-1)).toBe('serverManagement');
   });
 

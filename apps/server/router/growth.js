@@ -1,11 +1,19 @@
 import express from 'express';
 import * as growthHandle from '../router_handle/growthHandle.js';
 import { getKnowledgeManor, runKnowledgeManorCommand } from '../router_handle/knowledgeManorHandle.js';
+import * as manorAdmin from '../router_handle/manorAdminHandle.js';
+import { manorReadLimit, manorCommandLimit, manorAdminWriteLimit } from '../util/manorRateLimit.js';
 
 const router = express.Router();
 
-router.get('/manor', getKnowledgeManor);
-router.post('/manor/commands', runKnowledgeManorCommand);
+router.get('/manor', manorReadLimit, getKnowledgeManor);
+router.post('/manor/commands', manorCommandLimit, runKnowledgeManorCommand);
+router.get('/admin/manor/status', manorReadLimit, manorAdmin.getManorAdminStatus);
+router.get('/admin/manor/overview', manorReadLimit, manorAdmin.getManorAdminOverview);
+router.get('/admin/manor/players', manorReadLimit, manorAdmin.getManorAdminPlayers);
+router.get('/admin/manor/players/:userId', manorReadLimit, manorAdmin.getManorAdminPlayer);
+router.get('/admin/manor/operations', manorReadLimit, manorAdmin.getManorAdminOperations);
+router.post('/admin/manor/runtime', manorAdminWriteLimit, manorAdmin.updateManorAdminRuntime);
 
 router.get('/me', growthHandle.getMyGrowth);
 router.get('/dashboard', growthHandle.getDashboard);

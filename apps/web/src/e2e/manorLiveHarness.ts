@@ -36,7 +36,7 @@ applyUiDensity(params.get('density') === 'compact' ? 'small' : params.get('densi
 const locale = params.get('locale') === 'en-US' ? 'en-US' : 'zh-CN'; setLocale(locale);
 const account = ref(user.id), balance = ref(60), requests = ref(0);
 const trace = ref('');
-let clock = new Date('2026-10-24T02:00:00Z'), loseResponse = false;
+let clock = new Date('2026-10-24T02:00:00Z'), loseResponse = false, concurrentNext = false;
 const saves = new Map<string, { state: ManorState; revision: number; receipts: Map<string, { result: unknown; hash: string }> }>();
 const fixtureKey = () => `manor-fixture:${params.get('scenario') || 'garden'}:${user.id}`;
 const persist = () => {
@@ -45,7 +45,7 @@ const persist = () => {
 };
 const ctx = (points: number): ManorContext & { random: () => number } => ({
   now: clock, points, calendar: { dayKey: '20261024', weekKey: '202643', utcOffsetMinutes: 480 },
-  dailyDone: [true, true, false], random: () => params.get('scenario') === 'fishing-pity' ? .999 : 0,
+  dailyDone: [true, true, params.get('scenario')?.startsWith('daily-bonus') || false], random: () => params.get('scenario') === 'fishing-pity' ? .999 : 0,
 });
 const get = () => {
   if (!saves.has(user.id)) {
@@ -73,6 +73,14 @@ const get = () => {
       if (params.get('scenario') === 'claimed') { state.xp=M.RULES.levels[1]+38;M.claimAllLevelRewards(state); }
       if (params.get('scenario') === 'fishing-pity') { state.firstCastDone=true;state.bait=2; }
       if (params.get('scenario') === 'pickups') { state.birdSeedDay=M.day(state);state.birdSeedPickedDay=null; }
+      if (params.get('scenario') === 'sync') {state.birdSeedDay=M.day(state);state.birdSeedPickedDay=null;(state.fertilizers as Record<string,number>).rabbit=1;}
+      if (params.get('scenario')?.startsWith('daily-bonus-')) {
+        state.dailyWaterClaims=[5,5,5];
+        if (params.get('scenario') === 'daily-bonus-legacy') {state.water=35;state.version='knowledge-manor-v2';delete state.dailyWaterBonusClaimed;}
+        if (params.get('scenario') === 'daily-bonus-full') state.water=60;
+        if (params.get('scenario') === 'daily-bonus-partial') state.water=58;
+        if (params.get('scenario') === 'daily-bonus-claimed') {state.dailyDone=[true,true,true];M.claimDailyWaterBonus(state);}
+      }
       if (params.get('scenario') === 'atlas-empty') {
         state.discoveries={};state.cropDex={};state.fish=[];state.fishSlots=Array.from({length:M.RULES.farmSlots},()=>null);
         state.firstCastDone=true;state.firstCompanionPending=null;state.discoveryGuide=null;
@@ -110,8 +118,9 @@ const get = () => {
 };
 const snapshot = (result?: unknown) => {
   const save = get(); balance.value = save.state.wallet;
-  return { version: MANOR_VERSION, revision: save.revision, state: structuredClone(save.state), result,
-    quests: [{ key: 'checkin', done: true }, { key: 'daily_note', done: true }, { key: 'daily_bookmark', done: false }] };
+  return { version: params.get('serverVersion') || MANOR_VERSION, revision: save.revision, state: structuredClone(save.state), result,
+    runtime: {mode:params.get('maintenance')==='1'?'maintenance':'open',message:'庄园维护中，已有进度与资源保留。',revision:1},
+    quests: ['checkin','daily_note','daily_bookmark'].map((key,index)=>({key,done:ctx(balance.value).dailyDone![index]})) };
 };
 request.defaults.adapter = async config => {
   requests.value++;
@@ -128,7 +137,13 @@ request.defaults.adapter = async config => {
     const body = typeof config.data === 'string' ? JSON.parse(config.data) : config.data;
     trace.value = `command:${body.action}`;
     const save = get(), prior = save.receipts.get(body.requestId), hash = JSON.stringify([body.action, body.args]);
+    if(concurrentNext&&!prior) {
+      concurrentNext=false;
+      save.state=executeManorCommand(save.state,{action:'pickPoop',args:[]},ctx(save.state.wallet)).state;
+      save.revision++;persist();
+    }
     if (prior) data = prior.hash === hash ? { status: 200, data: { ...snapshot(prior.result), replayed: true } } : { status: 409, data: { code: 'MANOR_REQUEST_CONFLICT' } };
+    else if(params.get('maintenance')==='1'&&body.action!=='resolveCast')data={status:423,data:{code:'MANOR_MAINTENANCE'}};
     else if (body.revision !== save.revision) data = { status: 409, data: { code: 'MANOR_REVISION_CONFLICT' } };
     else {
       const next = executeManorCommand(save.state, body, ctx(save.state.wallet));
@@ -187,6 +202,7 @@ createApp({ render: () => h('div', { style: { height: '100%', display: 'flex', f
     h('span', `${trace.value} · casting:${String(get().state.casting)} · first:${String(get().state.firstCompanionPending)} · guide:${String(get().state.discoveryGuide)}`),
     h('button', { onClick: () => { user.$patch({ id: user.id.endsWith('a') ? 'manor-fixture-b' : 'manor-fixture-a' }); account.value = user.id; } }, '切换账号'),
     h('button', { onClick: () => { loseResponse = true; } }, '下次回包丢失'),
+    params.get('sync') === 'true' ? h('button', { onClick: () => {concurrentNext=true;} }, '下一操作模拟并发') : null,
     params.get('sync') === 'true' ? h('button', { onClick: () => {
       // Another device updates the fixture's server save; the scene receives
       // nothing until its normal authenticated GET calibration.
@@ -195,6 +211,14 @@ createApp({ render: () => h('div', { style: { height: '100%', display: 'flex', f
       save.state = next.state;save.revision++;persist();
       trace.value = '另一设备已拾取兔子肥料';
     } }, '另一设备拾取兔子肥料') : null,
+    params.get('sync') === 'true' ? h('button', { onClick: () => {
+      const save=get();save.state=executeManorCommand(save.state,{action:'pickBirdSeed',args:[]},ctx(save.state.wallet)).state;
+      save.revision++;persist();trace.value='另一设备已拾取种子';
+    } }, '另一设备拾取种子') : null,
+    params.get('sync') === 'true' ? h('button', { onClick: () => {
+      const save=get();save.state=executeManorCommand(save.state,{action:'buySeed',args:['radish',1]},ctx(save.state.wallet)).state;
+      save.revision++;persist();trace.value='另一设备已购买种子';
+    } }, '另一设备购买种子') : null,
   ]), h('div', { style: { flex: '1', minHeight: '0' } }, [params.get('loadingPreview') === 'true'
     ? h(ManorLoadingState, { progress: Number(params.get('loadingProgress') || 0) }) : h(RouterView)]),
 ]) }).use(pinia).use(createI18n({ legacy: false, locale, messages: { 'zh-CN': zh, 'en-US': en } })).use(router).mount('#app');

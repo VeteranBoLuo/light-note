@@ -52,6 +52,11 @@ if [ "${LIGHTNOTE_APPLY_KNOWLEDGE_MANOR_MIGRATION:-0}" = "1" ]; then
   ssh -i "$KEY" "$HOST" "cd '$REMOTE' && '$REMOTE_NODE' scripts/ensureKnowledgeManorSchema.js"
 fi
 
+if [ "${LIGHTNOTE_APPLY_KNOWLEDGE_MANOR_ADMIN_MIGRATION:-0}" = "1" ]; then
+  echo "🗃  安装已授权的庄园后台加法结构（保留存档、积分和历史收据）…"
+  ssh -i "$KEY" "$HOST" "cd '$REMOTE' && '$REMOTE_NODE' scripts/ensureKnowledgeManorAdminSchema.js"
+fi
+
 echo "🔎  预检安全中心 V2 历史控制迁移影响范围（仅聚合数量）…"
 ssh -i "$KEY" "$HOST" "cd '$REMOTE' && '$REMOTE_NODE' scripts/preflightSecurityV2Migration.js"
 

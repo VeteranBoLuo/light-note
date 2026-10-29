@@ -312,7 +312,8 @@
 </template>
 
 <script setup lang="ts">
-  import { computed, nextTick, onMounted, ref } from 'vue';
+  import { computed, nextTick, onMounted, ref,watch } from 'vue';
+  import {useRoute} from 'vue-router';
   import { useI18n } from 'vue-i18n';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
@@ -482,21 +483,24 @@
     selectUser(user);
   }
 
+  let queryGeneration=0;
   async function queryUser() {
     if (!selectedUser.value?.userId) return;
+    const generation=++queryGeneration,userId=selectedUser.value.userId;
     querying.value = true;
     try {
       const res = await growthApi.adminUserPoints(selectedUser.value.userId, {
         days: userWindowDays.value,
         logCategory: userLogCategory.value,
       });
+      if (generation!==queryGeneration || selectedUser.value?.userId!==userId)return;
       if (res.status === 200) {
         detail.value = res.data;
         if (res.data?.user) selectedUser.value = { ...selectedUser.value, ...res.data.user };
         if (!res.data?.balance) message.info('该账号无成长数据');
       }
     } finally {
-      querying.value = false;
+      if(generation===queryGeneration)querying.value = false;
     }
   }
 
@@ -605,6 +609,10 @@
     cards: Number(detail.value?.balance?.cards || 0) + parseAdjustment(form.value.cards),
   }));
 
+  const pointsRoute=useRoute();
+  watch(()=>pointsRoute?.query.userId,value=>{
+    if(typeof value==='string'&&value.length>0&&value.length<=64)openUser360({userId:value,alias:'',email:''});
+  },{immediate:true});
   onMounted(loadOverview);
 </script>
 

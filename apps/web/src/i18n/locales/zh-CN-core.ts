@@ -22,8 +22,22 @@ import { imagePreviewZh } from './imagePreview';
 import { accountSettingsZh } from './accountSettings';
 import { settingsRefineZh } from './settingsRefine';
 import { notificationMessages } from '@lightnote/shared/notification-presentation';
+import { manorAdminZh } from './manorAdmin';
 export default {
-  manor: { title: '知识庄园', loading: '正在载入庄园', loadingHint: '正在准备场景，请稍候', loadingFinishing: '正在收拾最后的小细节，请稍候', loadingReady: '场景已就绪', loadingWelcome: '庄园准备好了，欢迎回来', loadFailed: '庄园暂时无法打开，请稍后重试', returnToApp: '返回轻笺', actionFailed: '操作未完成，请稍后重试' },
+  manorAdmin:manorAdminZh,
+  manor: {
+    title: '知识庄园', loading: '正在载入庄园', loadingHint: '正在准备场景，请稍候', loadingFinishing: '正在收拾最后的小细节，请稍候', loadingReady: '场景已就绪', loadingWelcome: '庄园准备好了，欢迎回来', loadFailed: '庄园暂时无法打开，请稍后重试', returnToApp: '返回轻笺', actionFailed: '操作未完成，请稍后重试',
+    stateChanged: '庄园状态已变化，已同步最新数据，请重新操作',
+    stateChangedRetry: '庄园状态已变化，暂未能同步，请联网后重试',
+    actionUncertain: '暂未确认操作结果，恢复连接后会核对，请勿重复操作',
+    actionRecovered: '上一次操作已确认并同步，请检查后重新操作',
+    offline: '当前网络不可用，恢复连接后会自动同步',
+    panelUpdated: '庄园数据已更新，请重新打开操作面板',
+    castSync: '正在同步垂钓结果，请稍后再操作',
+    updateRequired: '庄园规则已更新，请刷新页面后继续',
+    maintenance:'庄园维护中，新操作暂时暂停，已有进度会保留',
+    rateLimited:'操作较频繁，请稍后重试；待确认结果会保留',
+  },
   publicResources: publicResourcesZh,
   profileBackgrounds: profileBackgroundsZh,
   profileAppearance: profileAppearanceZh,

@@ -22,8 +22,22 @@ import { imagePreviewEn } from './imagePreview';
 import { accountSettingsEn } from './accountSettings';
 import { settingsRefineEn } from './settingsRefine';
 import { notificationMessages } from '@lightnote/shared/notification-presentation';
+import { manorAdminEn } from './manorAdmin';
 export default {
-  manor: { title: 'Knowledge Manor', loading: 'Loading your manor', loadingHint: 'Preparing your scene, please wait', loadingFinishing: 'Finishing the last details, please wait', loadingReady: 'Scene ready', loadingWelcome: 'Your manor is ready. Welcome back', loadFailed: 'The manor is unavailable. Please try again.', returnToApp: 'Back to LightNote', actionFailed: 'The action did not complete. Please retry.' },
+  manorAdmin:manorAdminEn,
+  manor: {
+    title: 'Knowledge Manor', loading: 'Loading your manor', loadingHint: 'Preparing your scene, please wait', loadingFinishing: 'Finishing the last details, please wait', loadingReady: 'Scene ready', loadingWelcome: 'Your manor is ready. Welcome back', loadFailed: 'The manor is unavailable. Please try again.', returnToApp: 'Back to LightNote', actionFailed: 'The action did not complete. Please retry.',
+    stateChanged: 'The manor changed. The latest state is synced; please try your action again.',
+    stateChangedRetry: 'The manor changed but could not sync. Reconnect and try again.',
+    actionUncertain: 'The result is not confirmed yet. It will be checked after reconnecting; do not repeat the action.',
+    actionRecovered: 'Your previous action is confirmed and synced. Check the result before trying another action.',
+    offline: 'You are offline. The manor will sync after reconnecting.',
+    panelUpdated: 'The manor data changed. Please reopen the action panel.',
+    castSync: 'Syncing the fishing result. Please wait before trying another action.',
+    updateRequired: 'The manor rules have changed. Refresh the page to continue.',
+    maintenance:'The manor is under maintenance. New actions are paused and your progress is preserved.',
+    rateLimited:'Too many actions. Please retry later; unconfirmed results are retained.',
+  },
   publicResources: publicResourcesEn,
   profileBackgrounds: profileBackgroundsEn,
   profileAppearance: profileAppearanceEn,

@@ -233,11 +233,13 @@ describe('C5 积分治理时间窗与只读模拟器', () => {
             lastActiveTime: '2026-08-14 12:00:00',
           },
         ],
-      ]);
+      ])
+      .mockResolvedValueOnce([[{day:'2026-08-14',issued:12,spent:8}]]);
 
     const result = await getPointsGovernanceOverview({ presetDays: 28 }, { db: { query } });
 
-    expect(query).toHaveBeenCalledTimes(6);
+    expect(query).toHaveBeenCalledTimes(7);
+    expect(result.manor).toEqual({issued:12,spent:8,net:4});
     const leaderboardSql = String(query.mock.calls[5][0]);
     expect(leaderboardSql).toContain('u.role NOT IN (?,?)');
     expect(leaderboardSql).toContain('u.del_flag = 0');

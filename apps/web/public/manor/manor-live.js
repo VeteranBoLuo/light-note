@@ -34,6 +34,16 @@ function createManorRefreshInput(doc) {
   const waiting = new Map();
   const origin = location.origin;
   const refreshInput = createManorRefreshInput(document);
+  const copy = key => snapshot?.copy?.[key] || ({
+    actionFailed:'操作未完成，请稍后重试',offline:'当前网络不可用，恢复连接后会自动同步',
+    castSync:'正在同步垂钓结果，请稍后再操作'
+  })[key];
+  const actionError = (message, code, value) => Object.assign(new Error(message), {manor:true,code,snapshot:value});
+  const presentingCatch = () => typeof fishingPhase !== 'undefined' && fishingPhase !== 'idle' || !!document.querySelector('.catch-reveal');
+  const paintSync = () => {
+    update();
+    if(typeof refreshSynchronizedView==='function')refreshSynchronizedView();else FarmUI.refreshInventory();
+  };
   const request = (action, payload = {}) => new Promise((resolve, reject) => {
     const id = ++sequence;
     waiting.set(id, { resolve, reject });
@@ -68,6 +78,7 @@ function createManorRefreshInput(doc) {
   };
   const send = (target, action, args) => {
     if (busy) return Promise.reject(new Error('庄园操作正在处理中'));
+    if(navigator.onLine===false)return Promise.reject(actionError(copy('offline'),'MANOR_OFFLINE'));
     busy = true;
     document.documentElement.setAttribute('aria-busy', 'true');
     // Preserve the revision that the user actually saw, even if a background
@@ -75,7 +86,15 @@ function createManorRefreshInput(doc) {
     const revision = snapshot.revision;
     activeCommand = (async () => {
       if (refreshing) await refreshing;
-      const next = await request('command', { action, args, revision });
+      let next;
+      try { next = await request('command', { action, args, revision }); }
+      catch(error) {
+        if(error.snapshot) {
+          await refreshInput.waitForRelease();
+          snapshot=error.snapshot;syncedAt=performance.now();apply(target,snapshot.state);paintSync();error.synced=true;
+        }
+        throw error;
+      }
       snapshot = next; syncedAt = performance.now();
       apply(target, next.state);
       return next.result;
@@ -90,7 +109,7 @@ function createManorRefreshInput(doc) {
     'convertBait','buyBait','buyFry','beginCast','resolveCast','selectBait','sell','release','buyback',
     'place','placeShow','unplace','fillEmptySlots','collect','collectSlot','pickPoop','deliverBirdSeed','pickBirdSeed',
     'buyPurifier','claimPurifier','buyFacility','collectCompost','upgradeComposter','upgradePurifier','startCraft','collectCraft','refillPollen',
-    'pollinate','claimDailyWater','claimAllDailyWater','claimLevelReward','claimAllLevelRewards','claimCollection',
+    'pollinate','claimDailyWater','claimDailyWaterBonus','claimAllDailyWater','claimLevelReward','claimAllLevelRewards','claimCollection',
     'readAtlasEntry'];
   async function start(data) {
     snapshot = data; syncedAt = performance.now();
@@ -118,6 +137,7 @@ function createManorRefreshInput(doc) {
     script.onload = async () => {
       if(typeof GardenStartup!=='undefined'&&!await GardenStartup.ready())return;
       ready = true;
+      if(snapshot.notice)toast(snapshot.notice,{topCenter:true});
       if(FarmStage.profile()==='mobile') {
         const prefetch=()=>GardenArea.prepare(FarmStage.cal().area==='bay'?FARM_CAL.mobileGarden:FARM_CAL.mobileBay,true);
         if(window.requestIdleCallback)requestIdleCallback(prefetch);else setTimeout(prefetch,0);
@@ -176,7 +196,7 @@ function createManorRefreshInput(doc) {
     const waiter = waiting.get(data.id);
     if (!waiter) return;
     waiting.delete(data.id);
-    if (data.error) waiter.reject(new Error(data.error));
+    if (data.error) waiter.reject(actionError(data.error,data.errorCode,data.value));
     else waiter.resolve(data.value);
   });
   document.addEventListener('manor-overlay-change', queueOverlaySync);
@@ -185,30 +205,40 @@ function createManorRefreshInput(doc) {
     const action = event.target.closest('[data-action]');
     if (busy && action && !readOnlyActions.has(action.dataset.action)) {
       event.preventDefault(); event.stopImmediatePropagation();
+    } else if(ready && action && state.casting && !presentingCatch() && !readOnlyActions.has(action.dataset.action)) {
+      event.preventDefault();event.stopImmediatePropagation();
+      toast(copy('castSync'),{topCenter:true});
+      refresh()?.then(()=>resumeCatch()).catch(error=>toast(error.manor?error.message:copy('actionFailed'),{topCenter:true}));
     }
   }, true);
   window.addEventListener('unhandledrejection', event => {
+    if(!event.reason?.manor)return;
     event.preventDefault();
     if (ready) {
-      toast('操作未完成，请稍后重试');
-      closeDialog();
-      refresh(true)?.then(() => resumeCatch()).catch(() => {});
+      const error=event.reason;
+      toast(error.message||copy('actionFailed'),{topCenter:true});
+      if(!error.synced&&error.code!=='MANOR_VERSION_UNSUPPORTED'&&error.code!=='MANOR_OFFLINE')
+        refresh()?.then(() => resumeCatch()).catch(() => {});
     }
   });
   const contentKey = value => JSON.stringify({ revision: value.revision, quests: value.quests,
     state: Object.fromEntries(Object.entries(value.state).filter(([key]) => key !== 'now')) });
-  const refresh = (recover = false, background = false) => {
-    if (!ready || document.hidden || navigator.onLine === false || busy || state.casting && !recover || refreshing) return;
+  const refresh = (background = false) => {
+    if (!ready || document.hidden || navigator.onLine === false || busy || presentingCatch()) return;
+    if(refreshing)return refreshing;
     refreshing = request('get', { background }).then(async next => {
       await refreshInput.waitForRelease();
+      if(next.revision<snapshot.revision)return;
       const changed = contentKey(snapshot) !== contentKey(next);
       snapshot = next; syncedAt = performance.now(); apply(state, next.state);
-      if (changed) { update(); FarmUI.refreshInventory(); }else refreshClocks();
+      if (changed) paintSync();else refreshClocks();
+      if(next.notice)toast(next.notice,{topCenter:true});
     }).finally(() => { refreshing = null; });
     return refreshing;
   };
   document.addEventListener('visibilitychange', () => { refresh()?.catch(() => {}); });
   window.addEventListener('focus', () => { refresh()?.catch(() => {}); });
+  window.addEventListener('online', () => { refresh()?.then(()=>resumeCatch()).catch(() => {}); });
   // Only a visible formal scene calibrates across devices. Test saves stay
   // isolated; passive reads yield to foreground work in the shared scheduler.
   setInterval(() => {
@@ -220,7 +250,7 @@ function createManorRefreshInput(doc) {
       : null;
     const parts = day && Object.fromEntries(day);
     const key = parts ? `${parts.year}${parts.month}${parts.day}` : new Date(now + value.calendarOffsetMinutes * 60000).toISOString().slice(0,10).replaceAll('-', '');
-    if (key !== value.dayKey || !snapshot.testing) refresh(false, true)?.catch(() => {});
+    if (key !== value.dayKey || !snapshot.testing) refresh(true)?.catch(() => {});
   }, 10000);
   request('get').then(start).catch(() => request('load-error'));
 })();

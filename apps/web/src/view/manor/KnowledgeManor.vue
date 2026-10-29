@@ -1,8 +1,9 @@
 <template>
   <main class="knowledge-manor">
+    <div v-if="maintenanceNotice && interactive" class="knowledge-manor__maintenance" role="status">{{ maintenanceNotice }}</div>
     <div v-if="failed" class="knowledge-manor__state" role="alert">
-      <p>{{ t('manor.loadFailed') }}</p>
-      <BButton @click="initialise">{{ t('common.retry') }}</BButton>
+      <p>{{ t(versionMismatch ? 'manor.updateRequired' : 'manor.loadFailed') }}</p>
+      <BButton @click="versionMismatch ? reloadPage() : initialise()">{{ t(versionMismatch ? 'common.refresh' : 'common.retry') }}</BButton>
       <BButton v-if="bookmark.isMobile" @click="exit">{{ t('manor.returnToApp') }}</BButton>
     </div>
     <ManorLoadingState v-else-if="loading || !interactive" :progress="progress" class="knowledge-manor__loading" />
@@ -32,12 +33,17 @@
   const emit = defineEmits<{ 'manor-immersive-change': [ready: boolean] }>();
   const frame = ref<HTMLIFrameElement | null>(null), nonce = ref(crypto.randomUUID());
   const loading = ref(true), failed = ref(false), frameShown = ref(false), interactive = ref(false);
+  const versionMismatch = ref(false);
+  const maintenanceNotice = ref('');
+  const reloadPage = () => window.location.reload();
   const progress = ref(0);
   // Keep the app navigation available until the scene has its own usable back button.
   watch(() => interactive.value && !failed.value, ready => emit('manor-immersive-change', ready), { immediate: true });
   let readController = new AbortController();
   let bootTimer: ReturnType<typeof setTimeout> | undefined;
-  let snapshot: ManorSnapshot | null = null, pending: ManorCommand | null = null;
+  let snapshot: (ManorSnapshot & {notice?: string}) | null = null, pending: ManorCommand | null = null;
+  let pendingRetryAt = 0;
+  let settlement: { request: ManorCommand; generation: number; promise: Promise<void> } | null = null;
   let owner = '', generation = 0, disposed = false, commanding = false, initialProvided = false;
   let testSession: ReturnType<typeof createManorTestSession> | null = null;
   let overlay: MobileOverlayHistoryHandle | null = null;
@@ -81,40 +87,56 @@
     }).catch(() => {});
   }
 
-  function decorated(value: ManorSnapshot): ManorSnapshot & {testing: boolean} {
-    return { ...value, testing: Boolean(testSession), quests: value.quests.map(q => ({ ...q, label: t(questKeys[q.key] || 'growth.questUnknown') })) };
+  function decorated(value: ManorSnapshot & {notice?: string}): ManorSnapshot & {testing: boolean; copy: Record<string, string>; notice?: string} {
+    maintenanceNotice.value = !testSession && value.runtime?.mode === 'maintenance' ? value.runtime.message || t('manor.maintenance') : '';
+    return { ...value, testing: Boolean(testSession), copy: Object.fromEntries(['actionFailed','offline','panelUpdated','castSync'].map(key => [key,t(`manor.${key}`)])), quests: value.quests.map(q => ({ ...q, label: t(questKeys[q.key] || 'growth.questUnknown') })) };
   }
-  async function settlePending(g: number) {
-    if (!pending) return;
+  const conflict = (error: unknown) => ['MANOR_REVISION_CONFLICT','MANOR_CAST_PENDING'].includes(String((error as {code?: string})?.code));
+  function settlePending(g: number): Promise<void> {
+    if (!pending) return Promise.resolve();
+    if (Date.now() < pendingRetryAt) return Promise.reject({status:429,code:'MANOR_RATE_LIMITED'});
+    if (settlement?.request === pending && settlement.generation === g) return settlement.promise;
     const request = pending, requestOwner = owner;
-    for (let attempt = 0; attempt < 2; attempt++) {
-      try {
-        const result = await runManorCommand(request);
-        if (!current(g)) {
-          // Leaving must not wait for a purchase. Once its receipt arrives,
-          // refresh the same account's shared balance without touching a new scene.
-          if (user.id === requestOwner && user.role === 'root' && !user.adminContext) refreshSharedBalance(true);
-          throw new Error('stale');
+    const flight = { request, generation: g, promise: Promise.resolve() };
+    settlement = flight;
+    flight.promise = executePending().finally(() => { if (settlement === flight) settlement = null; });
+    return flight.promise;
+    async function executePending() {
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          const result = await runManorCommand(request);
+          if (!current(g)) {
+            // Leaving must not wait for a purchase. Once its receipt arrives,
+            // refresh the same account's shared balance without touching a new scene.
+            if (user.id === requestOwner && user.role === 'root' && !user.adminContext) refreshSharedBalance(true);
+            throw new Error('stale');
+          }
+          snapshot = result;
+          pendingRetryAt = 0;
+          pending = null; savePendingManorCommand(owner, null);
+          return;
+        } catch (error) {
+          if (!current(g)) throw error;
+          const uncertain = isUncertainManorResult(error);
+          const limited = (error as {status?:number})?.status === 429;
+          if (limited) pendingRetryAt = Date.now() + Math.max(1,Math.min(300,Number((error as {retryAfter?:number})?.retryAfter)||60))*1000;
+          if (!uncertain) { pending = null; savePendingManorCommand(owner, null); }
+          // One bounded recovery uses the identical receipt key, never a second purchase.
+          if (uncertain && !limited && attempt === 0) continue;
+          throw error;
         }
-        snapshot = result;
-        pending = null; savePendingManorCommand(owner, null);
-        return;
-      } catch (error) {
-        if (!current(g)) throw error;
-        const uncertain = isUncertainManorResult(error);
-        if (!uncertain) { pending = null; savePendingManorCommand(owner, null); }
-        // One bounded recovery uses the identical receipt key, never a second purchase.
-        if (uncertain && attempt === 0) continue;
-        throw error;
       }
     }
   }
   async function refresh(g: number, background = false) {
-    await settlePending(g);
+    let notice: string | undefined = pending ? t('manor.actionRecovered') : undefined;
+    try { await settlePending(g); }
+    catch (error) { if (!conflict(error)) throw error; notice = t('manor.stateChanged'); }
     const result = await getManor(readController.signal, background);
     if (!current(g)) throw new Error('stale');
-    snapshot = result;
-    return decorated(result);
+    if(snapshot&&result.revision<snapshot.revision)return decorated(snapshot);
+    snapshot = { ...result, ...(notice ? {notice} : {}) };
+    return decorated(snapshot);
   }
   function armBootTimer() {
     clearTimeout(bootTimer);
@@ -129,7 +151,8 @@
     clearTimeout(bootTimer); frameShown.value = false; interactive.value = false; progress.value = 0;
     releaseMobileOverlayHistory(overlay); overlay = null;
     owner = user.id; testSession = null; snapshot = null; nonce.value = crypto.randomUUID(); initialProvided = false;
-    loading.value = true; failed.value = false;
+    pendingRetryAt = 0;
+    loading.value = true; failed.value = false; versionMismatch.value = false;
     pending = owner ? readPendingManorCommand(owner) : null;
     if (!owner || user.role !== 'root' || user.adminContext) { loading.value = false; failed.value = true; return; }
     testSession = readManorTestSession(owner);
@@ -137,7 +160,7 @@
     loading.value = false;
     const read = refresh(g); initialRead = read;
     try { await read; if (current(g)) armBootTimer(); }
-    catch { if (g === generation) failed.value = true; }
+    catch (error) { if (g === generation) { failed.value = true; versionMismatch.value = (error as {code?: string})?.code === 'MANOR_VERSION_UNSUPPORTED'; } }
     finally { if (initialRead === read) initialRead = null; }
   }
   async function exit() {
@@ -181,7 +204,7 @@
       }
       else if (data.action === 'command') {
         if (commanding || !snapshot || !MANOR_COMMANDS.includes(data.payload?.action) || !Array.isArray(data.payload?.args)) throw new Error('command');
-        if (data.payload.revision !== undefined && data.payload.revision !== (testSession ? testSession.snapshot().revision : snapshot.revision)) throw new Error('stale revision');
+        if (data.payload.revision !== undefined && data.payload.revision !== (testSession ? testSession.snapshot().revision : snapshot.revision)) throw { code: 'MANOR_REVISION_CONFLICT' };
         commanding = true;
         try {
           if (testSession) {
@@ -192,7 +215,7 @@
           if (pending) {
             const prior = pending;
             await settlePending(g);
-            if (prior.action !== data.payload.action || JSON.stringify(prior.args) !== JSON.stringify(data.payload.args)) throw new Error('Previous action recovered');
+            if (prior.action !== data.payload.action || JSON.stringify(prior.args) !== JSON.stringify(data.payload.args)) throw { code: 'MANOR_ACTION_RECOVERED' };
           } else {
             pending = { requestId: crypto.randomUUID(), revision: snapshot.revision, version: snapshot.version, action: data.payload.action, args: data.payload.args };
             savePendingManorCommand(owner, pending);
@@ -223,9 +246,28 @@
       } else if (data.action === 'load-error') failed.value = true;
       else throw new Error('unknown');
       if (current(g)) target.postMessage({ type: 'lightnote-manor-reply', nonce: token, id: data.id, value }, location.origin);
-    } catch {
+    } catch (error) {
       // The scene shows one error, with no API internals or duplicated global toast.
-      if (current(g)) target.postMessage({ type: 'lightnote-manor-reply', nonce: token, id: data.id, error: t('manor.actionFailed') }, location.origin);
+      let code = 'MANOR_ACTION_FAILED', text = t('manor.actionFailed');
+      let value: ReturnType<typeof decorated> | undefined;
+      if ((error as {code?: string})?.code === 'MANOR_MAINTENANCE') {
+        code='MANOR_MAINTENANCE';text=t('manor.maintenance');
+        try {value=await refresh(g);} catch {maintenanceNotice.value=text;}
+      } else if ((error as {status?:number})?.status === 429 || (error as {code?:string})?.code==='MANOR_RATE_LIMITED') {
+        code='MANOR_RATE_LIMITED';text=t('manor.rateLimited');
+      } else if (conflict(error)) {
+        code = 'MANOR_REVISION_CONFLICT'; text = t('manor.stateChangedRetry');
+        try { value = testSession ? decorated(testSession.snapshot()) : await refresh(g); text = t('manor.stateChanged'); }
+        catch { /* Keep the original conflict when the follow-up read is unavailable. */ }
+      } else if ((error as {code?: string})?.code === 'MANOR_ACTION_RECOVERED') {
+        code = 'MANOR_ACTION_RECOVERED'; text = t('manor.actionRecovered');
+        if (snapshot) value = decorated(snapshot);
+      } else if ((error as {code?: string})?.code === 'MANOR_VERSION_UNSUPPORTED') {
+        code = 'MANOR_VERSION_UNSUPPORTED'; text = t('manor.updateRequired');
+      } else if (isUncertainManorResult(error)) {
+        code = 'MANOR_RESULT_UNCERTAIN'; text = t('manor.actionUncertain');
+      }
+      if (current(g)) target.postMessage({ type: 'lightnote-manor-reply', nonce: token, id: data.id, error: text, errorCode: code, ...(value ? {value} : {}) }, location.origin);
     }
   }
   useMobileTopBar(['knowledgeManor'], { title: () => t('manor.title'), ownTopBar: true, onBack: () => interactive.value ? control('back') : exit() });
@@ -242,6 +284,7 @@
 
 <style scoped>
   .knowledge-manor { position: relative; width: 100%; height: 100%; min-height: 0; overflow: hidden; }
+  .knowledge-manor__maintenance {position:absolute;left:5%;right:5%;bottom:var(--ui-layout-90,90px);z-index:1;padding:var(--ui-space-12,12px);border:1px solid var(--warning-color);border-radius:8px;background:var(--background-color);color:var(--text-color);font-size:var(--ui-font-14,14px);pointer-events:none;text-align:center;}
   .knowledge-manor iframe { display: block; width: 100%; height: 100%; border: 0; }
   .knowledge-manor__state { position: absolute; inset: 0; z-index: 1; display: grid; place-content: center; justify-items: center; gap: var(--ui-space-12, 12px); color: var(--text-color); background: var(--background-color); }
   .knowledge-manor__loading { position: absolute; inset: 0; z-index: 1; }

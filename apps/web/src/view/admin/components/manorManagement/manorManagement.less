@@ -1,0 +1,330 @@
+.manor-management {
+  --manor-line: var(--surface-border-color);
+  color: var(--text-color);
+  .manor-toolbar,
+  .manor-filters,
+  .manor-search,
+  .manor-actions,
+  .manor-pagination,
+  .manor-section-title {
+    display: flex;
+    align-items: center;
+    gap: var(--ui-space-12, 12px);
+    flex-wrap: wrap;
+  }
+  .manor-toolbar,
+  .manor-section-title {
+    justify-content: space-between;
+  }
+  .manor-filters label {
+    display: flex;
+    align-items: center;
+    gap: var(--ui-space-8, 8px);
+    color: var(--desc-color);
+  }
+  .manor-search {
+    margin-block: var(--ui-space-12, 12px);
+  }
+  .manor-search > .input-container {
+    flex: 1;
+    min-width: var(--ui-layout-180, 180px);
+    max-width: var(--ui-layout-360, 360px);
+  }
+  .manor-search > .b-select,
+  .manor-filters > .b-select {
+    min-width: var(--ui-layout-150, 150px);
+  }
+  .manor-overview {
+    display: grid;
+    gap: var(--ui-space-16, 16px);
+  }
+  .manor-metrics {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: var(--ui-space-12, 12px);
+  }
+  .manor-panel {
+    padding: var(--ui-space-18, 18px);
+    border: 1px solid var(--manor-line);
+    border-radius: 12px;
+    background: var(--background-color);
+    min-width: 0;
+  }
+  .manor-panel h3 {
+    margin: 0 0 var(--ui-space-12, 12px);
+    font-size: var(--ui-font-16, 16px);
+  }
+  .manor-metrics article {
+    display: grid;
+    gap: var(--ui-space-8, 8px);
+  }
+  .manor-metrics strong {
+    font-size: var(--ui-font-28, 28px);
+    line-height: 1.2;
+  }
+  .manor-metrics span,
+  .manor-metrics small,
+  .manor-muted,
+  .manor-panel > small {
+    color: var(--desc-color);
+  }
+  .manor-positive {
+    color: var(--success-color);
+  }
+  .manor-negative {
+    color: var(--error-color);
+  }
+  .manor-overview-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+    gap: var(--ui-space-16, 16px);
+  }
+  .manor-chart-legend {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--ui-space-12, 12px);
+    color: var(--desc-color);
+    font-size: var(--ui-font-12, 12px);
+  }
+  .manor-issued {
+    color: var(--primary-color);
+  }
+  .manor-chart {
+    display: flex;
+    gap: var(--ui-space-8, 8px);
+    align-items: stretch;
+    height: var(--ui-layout-200, 200px);
+    margin-top: var(--ui-space-12, 12px);
+    overflow-x: auto;
+  }
+  .manor-chart-day {
+    flex: 1;
+    min-width: var(--ui-layout-24, 24px);
+    display: flex;
+    flex-direction: column;
+    gap: var(--ui-space-8, 8px);
+    text-align: center;
+    font-size: var(--ui-font-11, 11px);
+  }
+  .manor-bars {
+    flex: 1;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    gap: var(--ui-space-4, 4px);
+    border-bottom: 1px solid var(--manor-line);
+  }
+  .manor-bars i {
+    width: 35%;
+    min-height: 0;
+    background: var(--desc-color);
+    opacity: 0.5;
+  }
+  .manor-bars .is-issued {
+    background: var(--primary-color);
+    opacity: 1;
+  }
+  .manor-trend-values {
+    margin-top: var(--ui-space-12, 12px);
+    font-size: var(--ui-font-12, 12px);
+    color: var(--desc-color);
+  }
+  .manor-participation {
+    margin-block: var(--ui-space-20, 20px);
+  }
+  .manor-participation > div:first-child {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--ui-space-8, 8px);
+  }
+  .manor-progress {
+    height: var(--ui-layout-8, 8px);
+    margin-top: var(--ui-space-8, 8px);
+    background: var(--surface-panel-bg);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .manor-progress i {
+    display: block;
+    height: 100%;
+    background: var(--primary-color);
+  }
+  .manor-recent-list {
+    display: grid;
+    margin-top: var(--ui-space-12, 12px);
+  }
+  .manor-recent-row.b_btn {
+    width: 100%;
+    height: auto;
+    display: grid;
+    grid-template-columns: var(--ui-layout-140, 140px) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 2fr) var(
+        --ui-layout-80,
+        80px
+      );
+    gap: var(--ui-space-12, 12px);
+    padding: var(--ui-space-12, 12px);
+    text-align: left;
+    white-space: normal;
+    border-radius: 0;
+    border-width: 0 0 1px;
+    border-color: var(--manor-line);
+  }
+  .manor-resource-summary {
+    overflow-wrap: anywhere;
+  }
+  .manor-settings-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+    gap: var(--ui-space-20, 20px);
+  }
+  .manor-field {
+    display: grid;
+    gap: var(--ui-space-8, 8px);
+    margin-block: var(--ui-space-20, 20px);
+  }
+  .manor-admin-notice {
+    padding: var(--ui-space-12, 12px);
+    border: 1px solid var(--warning-color);
+    border-radius: 8px;
+    color: var(--text-color);
+  }
+  .manor-user-id {
+    display: block;
+    overflow-wrap: anywhere;
+    color: var(--desc-color);
+    font-size: var(--ui-font-12, 12px);
+  }
+  .manor-pagination {
+    justify-content: center;
+    margin-block: var(--ui-space-16, 16px);
+  }
+  .manor-mobile-list {
+    display: grid;
+    gap: var(--ui-space-12, 12px);
+  }
+  &.is-mobile {
+    .manor-metrics {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .manor-overview-grid,
+    .manor-settings-grid {
+      grid-template-columns: 1fr;
+    }
+    .manor-panel {
+      padding: var(--ui-space-14, 14px);
+    }
+    .manor-toolbar > .tab-container {
+      width: 100%;
+      gap: var(--ui-space-8, 8px);
+      overflow-x: auto;
+    }
+    .manor-toolbar .tab {
+      flex: 1 0 auto;
+      white-space: nowrap;
+    }
+    .manor-recent-row.b_btn {
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+    }
+    .manor-recent-row > span:first-child {
+      grid-column: 1/-1;
+      color: var(--desc-color);
+      font-size: var(--ui-font-12, 12px);
+    }
+    .manor-resource-summary {
+      grid-column: 1/3;
+    }
+  }
+}
+/* Details teleport outside the page, so every detail rule remains under a domain root. */
+.manor-player-detail,
+.manor-operation-detail {
+  color: var(--text-color);
+}
+.manor-info-list {
+  margin-block: var(--ui-space-16, 16px);
+}
+.manor-info-list > div {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--ui-space-16, 16px);
+  padding-block: var(--ui-space-12, 12px);
+  border-bottom: 1px solid var(--surface-border-color);
+}
+.manor-info-list dt {
+  color: var(--desc-color);
+}
+.manor-info-list dd {
+  margin: 0;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+.manor-player-detail .manor-muted {
+  color: var(--desc-color);
+  font-size: var(--ui-font-12, 12px);
+}
+.manor-player-detail .manor-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--ui-space-12, 12px);
+}
+.manor-player-detail .manor-panel {
+  padding: var(--ui-space-12, 12px);
+  border: 1px solid var(--surface-border-color);
+  border-radius: 8px;
+  display: grid;
+  gap: var(--ui-space-8, 8px);
+  min-width: 0;
+}
+.manor-player-detail .manor-metrics strong {
+  font-size: var(--ui-font-22, 22px);
+}
+.manor-player-detail .manor-plot-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--ui-space-8, 8px);
+}
+.manor-player-detail .manor-plot-grid .manor-panel {
+  align-content: start;
+}
+.manor-player-detail .manor-detail-section {
+  margin-top: var(--ui-space-20, 20px);
+}
+.manor-player-detail h3 {
+  font-size: var(--ui-font-16, 16px);
+}
+.manor-player-detail .manor-inventory {
+  display: flex;
+  gap: var(--ui-space-8, 8px);
+  flex-wrap: wrap;
+}
+.manor-inventory > span {
+  padding: var(--ui-space-6, 6px) var(--ui-space-8, 8px);
+  border: 1px solid var(--surface-border-color);
+  border-radius: 6px;
+  font-size: var(--ui-font-13, 13px);
+}
+.manor-player-detail .manor-actions {
+  display: flex;
+  gap: var(--ui-space-8, 8px);
+  flex-wrap: wrap;
+  margin-top: var(--ui-space-12, 12px);
+}
+.manor-receipt {
+  display: block;
+  overflow-wrap: anywhere;
+  font-size: var(--ui-font-12, 12px);
+}
+.manor-machine-summary {
+  display: block;
+  margin-top: var(--ui-space-4, 4px);
+  color: var(--desc-color);
+  font-size: var(--ui-font-12, 12px);
+}
+.manor-operation-detail .manor-actions {
+  display: flex;
+  gap: var(--ui-space-12, 12px);
+  flex-wrap: wrap;
+}
+.manor-operation-detail .manor-muted {
+  color: var(--desc-color);
+}

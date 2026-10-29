@@ -44,6 +44,7 @@ export type AdminNavInput = {
   adminGovernanceTitle: string;
   communityModerationTitle: string;
   supportManagementTitle: string;
+  manorManagementTitle?: string;
 };
 
 /** 跨外壳入口：这些是独立顶级路由，路径不能按 /admin/{id} 拼 */
@@ -75,6 +76,7 @@ export function buildAdminNav({
   adminGovernanceTitle,
   communityModerationTitle,
   supportManagementTitle,
+  manorManagementTitle = '庄园管理',
 }: AdminNavInput): AdminNavEntry[] {
   return [
     {
@@ -139,6 +141,7 @@ export function buildAdminNav({
         { id: 'conversion', title: '转化漏斗' },
         { id: 'supportManagement', title: supportManagementTitle },
         { id: 'pointsOps', title: '积分运营' },
+        { id: 'manorManagement', title: manorManagementTitle },
         {
           id: 'communityChatModeration',
           title: communityModerationTitle,
@@ -215,6 +218,7 @@ export function adminNavTarget(item: AdminNavItem): string {
  * - serverManagement：移动个人中心已有独立入口，手机后台不重复展示。
  */
 const MOBILE_PATHS: Record<string, string> = {
+  manorManagement:'/manorManagement',
   overview: '/overview',
   actionCenter: '/actionCenter',
   userMg: '/userMg',

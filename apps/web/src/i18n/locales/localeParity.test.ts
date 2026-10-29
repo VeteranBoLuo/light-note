@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { createI18n } from 'vue-i18n';
 import enUS from './en-US';
 import zhCN from './zh-CN';
+import { adminWorkspaceMessages } from './adminWorkspace';
 
 function leafKeys(value: unknown, prefix = ''): string[] {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return prefix ? [prefix] : [];
@@ -11,6 +12,9 @@ function leafKeys(value: unknown, prefix = ''): string[] {
 }
 
 describe('locale key parity', () => {
+  it('keeps the scoped admin workspace messages symmetric', () => {
+    expect(leafKeys(adminWorkspaceMessages['en-US']).sort()).toEqual(leafKeys(adminWorkspaceMessages['zh-CN']).sort());
+  });
   it('keeps Chinese and English translation leaf keys symmetric', () => {
     expect(leafKeys(enUS).sort()).toEqual(leafKeys(zhCN).sort());
   });

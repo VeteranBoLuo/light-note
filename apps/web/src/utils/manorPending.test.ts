@@ -22,8 +22,11 @@ describe('庄园未确认结算的安全恢复', () => {
   it('仅网络或服务器未知结果保留重放，已明确拒绝的请求可以重新读取状态', () => {
     for (const code of ['OFFLINE', 'REQUEST_TIMEOUT', 'NETWORK_ERROR', 'ECONNRESET']) expect(isUncertainManorResult({ code })).toBe(true);
     expect(isUncertainManorResult({ status: 500 })).toBe(true);
+    expect(isUncertainManorResult({ status: 429 })).toBe(true);
     expect(isUncertainManorResult({ status: 409, code: 'MANOR_REVISION_CONFLICT' })).toBe(false);
     expect(isUncertainManorResult({ status: 403 })).toBe(false);
+    expect(isUncertainManorResult({status:409,code:'MANOR_VERSION_UNSUPPORTED',receiptUnconfirmed:true})).toBe(true);
+    expect(isUncertainManorResult({status:409,code:'MANOR_VERSION_UNSUPPORTED'})).toBe(false);
   });
   it('存储不可用时不影响当前会话内存状态', () => {
     const blocked = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('blocked'); });

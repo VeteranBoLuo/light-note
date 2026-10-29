@@ -280,6 +280,7 @@
 
   // 路由映射表
   const phoneReplaceMap = {
+    '/admin/manorManagement':'/manorManagement',
     '/admin/overview': '/overview',
     '/admin/actionCenter': '/actionCenter',
     '/admin/adminAudit': '/adminAudit',
@@ -310,6 +311,7 @@
     '/trash': '/ptrash',
   };
   const deskReplaceMap = {
+    '/manorManagement':'/admin/manorManagement',
     '/overview': '/admin/overview',
     '/actionCenter': '/admin/actionCenter',
     '/adminAudit': '/admin/adminAudit',

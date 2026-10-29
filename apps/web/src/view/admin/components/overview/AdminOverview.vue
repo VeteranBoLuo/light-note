@@ -1,286 +1,231 @@
 <template>
-  <AdminDataPage eyebrow="Admin / 总览" title="数据总览" :subtitle="pageSubtitle" layout="scroll">
+  <AdminDataPage appearance="workspace" :title="t('adminWorkspace.overview')" layout="scroll">
     <template #actions>
-      <label class="ov-hide-internal">
-        <BSwitch
-          v-model:checked="hideInternal"
-          :disabled="loading"
-          @change="changeOverviewScope"
-        />隐藏内部账号（管理员/测试）
-      </label>
-      <BButton size="small" :loading="loading" @click="refreshOverview">刷新</BButton>
+      <label class="ov-hide-internal"
+        ><BSwitch v-model:checked="hideInternal" :disabled="loading" @change="changeOverviewScope" />{{
+          t('adminWorkspace.hideInternal')
+        }}</label
+      >
+      <BTooltip :title="overviewContext">
+        <BButton size="small" :loading="loading" :aria-description="overviewContext" @click="refreshOverview"
+          ><SvgIcon :src="icon.infrastructure.refresh" size="16" />{{ t('common.refresh') }}</BButton
+        >
+      </BTooltip>
     </template>
-
-    <BLoading v-if="loading && !data" inline loading class="ov-loading" :title="t('adminOverview.loading')" />
-    <div v-if="loadError" class="ov-load-error" role="alert">
-      <span>{{ data ? t('adminOverview.refreshFailed') : t('adminOverview.loadFailed') }}</span>
-      <BButton size="small" @click="refreshOverview">{{ t('adminOverview.retry') }}</BButton>
-    </div>
-
-    <section v-if="data" class="ov-today" aria-labelledby="ov-today-title">
-      <header class="ov-today__header">
-        <div>
-          <h3 id="ov-today-title">今日运营</h3>
-          <p>
-            北京时间自然日 · 主值为今日新增，辅助值为全站累计 ·
-            {{ hideInternal ? '不含内部账号与新手种子资源' : '包含内部账号，仍不含新手种子资源' }}
-            <span v-if="sameTimeCutoff"> · {{ t('adminOverview.sameTimeCutoff', { time: sameTimeCutoff }) }}</span>
-          </p>
-        </div>
-        <div class="ov-today__capacity" aria-label="全站容量">
-          <span class="ov-today__capacity-item">
-            <span class="ov-today__capacity-label">全站存储</span>
-            <strong class="ov-today__capacity-value">{{ mb(data.resources.storageMb) }}</strong>
-            <span class="ov-today__capacity-hint">云盘文件占用</span>
-          </span>
-          <span class="ov-today__capacity-item" :class="{ 'is-warning': Number(data.resources.trashCount || 0) > 0 }">
-            <span class="ov-today__capacity-label">回收站待清理</span>
-            <strong class="ov-today__capacity-value">{{ mb(data.resources.trashMb) }}</strong>
-            <span class="ov-today__capacity-hint">{{ n(data.resources.trashCount) }} 个文件</span>
-          </span>
-        </div>
-      </header>
-      <ul class="admin-stats ov-today__stats">
-        <li class="admin-stat-card ov-today__stat-card">
+    <BLoading v-if="loading && !data" inline loading :title="t('adminOverview.loading')" />
+    <div v-if="loadError" class="ov-load-error" role="alert"
+      ><span>{{ data ? t('adminOverview.refreshFailed') : t('adminOverview.loadFailed') }}</span
+      ><BButton size="small" @click="refreshOverview">{{ t('adminOverview.retry') }}</BButton></div
+    >
+    <template v-if="data">
+      <ul class="ov-metrics">
+        <li class="ov-metric">
           <BButton
-            block
-            class="ov-today__stat-action"
-            :aria-label="t('adminOverviewRecent.viewMetricDetails', { metric: '新增用户' })"
+            class="ov-metric__action"
+            :aria-label="t('adminActivity.view')"
+            :title="t('adminOverview.activeUserHint')"
+            @click="activeDrawerOpen = true"
+          >
+            <SvgIcon class="ov-metric__icon" :src="icon.navigation.user" size="20" />
+            <span class="ov-metric__label">{{ t('adminWorkspace.active') }}</span
+            ><strong class="ov-metric__value">{{
+              data.active?.available === false ? '—' : n(data.active?.today)
+            }}</strong>
+            <span class="ov-metric__hint">{{ baselineText('activeUsers') || t('adminActivity.noBaseline') }}</span>
+            <span v-if="data.active?.available === false" class="ov-metric__hint">{{
+              t('adminActivity.unavailable')
+            }}</span
+            ><span v-else-if="data.active?.partialToday" class="ov-metric__hint">{{ t('adminActivity.partial') }}</span>
+            <span class="ov-metric__link">{{ t('adminActivity.view') }} →</span>
+          </BButton>
+        </li>
+        <li class="ov-metric">
+          <BButton
+            class="ov-metric__action"
+            :aria-label="t('adminOverviewRecent.viewMetricDetails', { metric: t('adminWorkspace.users') })"
             @click="drillDownTodayRecent('user')"
           >
-            <span class="admin-stat-label">新增用户</span>
-            <strong class="admin-stat-value">{{ n(data.users.today) }}</strong>
-            <span class="admin-stat-hint">累计 {{ n(data.users.total) }}</span>
-            <span v-if="baselineText('users')" class="ov-today__baseline">{{ baselineText('users') }}</span>
-            <span class="ov-today__stat-link">{{ t('adminOverviewRecent.viewTodayDetails') }}</span>
+            <SvgIcon class="ov-metric__icon" :src="icon.navigation.user" size="20" /><span class="ov-metric__label">{{
+              t('adminWorkspace.users')
+            }}</span
+            ><strong class="ov-metric__value">{{ n(data.users.today) }}</strong
+            ><span class="ov-metric__hint">{{ t('adminWorkspace.cumulative', { count: n(data.users.total) }) }}</span
+            ><span v-if="baselineText('users')" class="ov-metric__hint">{{ baselineText('users') }}</span
+            ><span class="ov-metric__link">{{ t('adminOverviewRecent.viewTodayDetails') }} →</span>
           </BButton>
         </li>
-        <li class="admin-stat-card ov-today__stat-card">
+        <li class="ov-metric ov-metric--resources">
           <BButton
-            block
-            class="ov-today__stat-action"
-            :aria-label="t('adminOverviewRecent.viewMetricDetails', { metric: '新增资源' })"
+            class="ov-metric__action"
+            :aria-label="t('adminOverviewRecent.viewMetricDetails', { metric: t('adminWorkspace.resources') })"
+            :title="baselineText('resources')"
             @click="drillDownTodayRecent('resource')"
           >
-            <span class="admin-stat-label">新增资源</span>
-            <strong class="admin-stat-value">{{ n(todayResourceTotal) }}</strong>
-            <span class="admin-stat-hint">累计 {{ n(totalResourceTotal) }}</span>
-            <span v-if="baselineText('resources')" class="ov-today__baseline">{{ baselineText('resources') }}</span>
-            <span class="ov-today__stat-link">{{ t('adminOverviewRecent.viewTodayDetails') }}</span>
+            <SvgIcon class="ov-metric__icon" :src="icon.resource.file" size="20" /><span class="ov-metric__label"
+              >{{ t('adminWorkspace.resources') }} →</span
+            ><span class="ov-metric__headline"
+              ><strong class="ov-metric__value">{{ n(todayResourceTotal) }}</strong
+              ><span class="ov-metric__hint">{{
+                t('adminWorkspace.cumulative', { count: n(totalResourceTotal) })
+              }}</span></span
+            >
           </BButton>
+          <div class="ov-resource-breakdown">
+            <BTooltip
+              v-for="item in resourceMetrics"
+              :key="item.type"
+              :title="`${t('adminWorkspace.cumulative', { count: n(item.total) })}${baselineText(item.metric) ? ' · ' + baselineText(item.metric) : ''}`"
+              ><BButton
+                class="ov-resource-breakdown__row"
+                type="text"
+                size="small"
+                :aria-label="t('adminOverviewRecent.viewMetricDetails', { metric: item.label })"
+                @click="drillDownTodayRecent(item.type)"
+                ><span class="ov-resource-breakdown__label">{{ item.label }}</span
+                ><span class="ov-resource-breakdown__counts"
+                  ><strong>{{ n(item.total) }}</strong
+                  ><small>{{ t('adminWorkspace.todayAdded', { count: n(item.today) }) }}</small></span
+                ></BButton
+              ></BTooltip
+            >
+          </div>
         </li>
-        <li class="admin-stat-card ov-today__stat-card">
+        <li class="ov-metric">
           <BButton
-            block
-            class="ov-today__stat-action"
-            :aria-label="t('adminOverviewRecent.viewMetricDetails', { metric: '新增书签' })"
-            @click="drillDownTodayRecent('bookmark')"
+            class="ov-metric__action"
+            :aria-label="t('adminOverviewRecent.viewMetricDetails', { metric: t('adminWorkspace.todos') })"
+            @click="drillDownTodayRecent('todo')"
+            ><SvgIcon class="ov-metric__icon" :src="icon.todoWorkspace.checkSquare" size="20" /><span
+              class="ov-metric__label"
+              >{{ t('adminWorkspace.todos') }}</span
+            ><strong class="ov-metric__value">{{ n(data.todos.createdToday) }}</strong
+            ><span class="ov-metric__hint">{{ t('adminWorkspace.cumulative', { count: n(data.todos.total) }) }}</span
+            ><span v-if="baselineText('todos')" class="ov-metric__hint">{{ baselineText('todos') }}</span
+            ><span class="ov-metric__link">{{ t('adminOverviewRecent.viewTodayDetails') }} →</span></BButton
           >
-            <span class="admin-stat-label">新增书签</span>
-            <strong class="admin-stat-value">{{ n(data.resources.bookmarkToday) }}</strong>
-            <span class="admin-stat-hint">累计 {{ n(data.resources.bookmarkTotal) }}</span>
-            <span v-if="baselineText('bookmarks')" class="ov-today__baseline">{{ baselineText('bookmarks') }}</span>
-            <span class="ov-today__stat-link">{{ t('adminOverviewRecent.viewTodayDetails') }}</span>
-          </BButton>
-        </li>
-        <li class="admin-stat-card ov-today__stat-card">
-          <BButton
-            block
-            class="ov-today__stat-action"
-            :aria-label="t('adminOverviewRecent.viewMetricDetails', { metric: '新增笔记' })"
-            @click="drillDownTodayRecent('note')"
-          >
-            <span class="admin-stat-label">新增笔记</span>
-            <strong class="admin-stat-value">{{ n(data.resources.noteToday) }}</strong>
-            <span class="admin-stat-hint">累计 {{ n(data.resources.noteTotal) }}</span>
-            <span v-if="baselineText('notes')" class="ov-today__baseline">{{ baselineText('notes') }}</span>
-            <span class="ov-today__stat-link">{{ t('adminOverviewRecent.viewTodayDetails') }}</span>
-          </BButton>
-        </li>
-        <li class="admin-stat-card ov-today__stat-card">
-          <BButton
-            block
-            class="ov-today__stat-action"
-            :aria-label="t('adminOverviewRecent.viewMetricDetails', { metric: '新增文件' })"
-            @click="drillDownTodayRecent('file')"
-          >
-            <span class="admin-stat-label">新增文件</span>
-            <strong class="admin-stat-value">{{ n(data.resources.fileToday) }}</strong>
-            <span class="admin-stat-hint">累计 {{ n(data.resources.fileTotal) }}</span>
-            <span v-if="baselineText('files')" class="ov-today__baseline">{{ baselineText('files') }}</span>
-            <span class="ov-today__stat-link">{{ t('adminOverviewRecent.viewTodayDetails') }}</span>
-          </BButton>
-        </li>
-        <li class="admin-stat-card">
-          <span class="admin-stat-label">新增待办</span>
-          <strong class="admin-stat-value">{{ n(data.todos.createdToday) }}</strong>
-          <span class="admin-stat-hint">累计 {{ n(data.todos.total) }}</span>
-          <span v-if="baselineText('todos')" class="ov-today__baseline">{{ baselineText('todos') }}</span>
         </li>
       </ul>
-    </section>
-
-    <section v-if="todayInsights.length" class="ov-insights" aria-labelledby="ov-insights-title">
-      <strong id="ov-insights-title" class="ov-insights__title">{{ t('adminOverview.insightTitle') }}</strong>
-      <ul class="ov-insights__list">
-        <li
-          v-for="insight in todayInsights"
-          :key="insight.metric"
-          class="ov-insights__item"
-          :class="{ 'is-down': insight.direction === 'down' }"
-        >
-          <span>{{ insightText(insight) }}</span>
-          <BButton size="small" class="ov-insights__action" @click="openInsight(insight)">
-            {{
-              insight.metric === 'users' ? t('adminOverview.viewConversion') : t('adminOverviewRecent.viewTodayDetails')
-            }}
-          </BButton>
-        </li>
-      </ul>
-    </section>
-
-    <!-- 待办提示:有待处理事项时高亮 -->
-    <div v-if="data && pendingTotal > 0" class="ov-todo">
-      <SvgIcon class="ov-todo-icon" :src="icon.settings.notification" size="16" aria-hidden="true" />
-      <span class="ov-todo-text">待处理事项</span>
-      <BButton
-        v-if="data.pending.opinion > 0"
-        size="small"
-        class="ov-todo-chip"
-        role="button"
-        tabindex="0"
-        @click="go('userOpinion')"
-        @keydown.enter.prevent="go('userOpinion')"
-        @keydown.space.prevent="go('userOpinion')"
-      >
-        待回复反馈 {{ data.pending.opinion }} 条
-      </BButton>
-      <BButton
-        v-if="data.pending.security > 0"
-        size="small"
-        class="ov-todo-chip danger"
-        role="button"
-        tabindex="0"
-        @click="goToSecurityEvents"
-        @keydown.enter.prevent="goToSecurityEvents"
-        @keydown.space.prevent="goToSecurityEvents"
-      >
-        未处理高危安全事件 {{ data.pending.security }} 起
-      </BButton>
-      <BButton size="small" class="ov-todo-center" @click="go('actionCenter')">
-        {{ t('adminOverview.openActionCenter') }}
-      </BButton>
-    </div>
-
-    <p v-if="data" class="ov-section-title">
-      运行与待办健康 <span class="ov-section-tip">系统运行、事项积压与完成情况</span>
-    </p>
-    <ul v-if="data" class="admin-stats ov-health-stats">
-      <li class="admin-stat-card ov-today__stat-card">
+      <div v-if="pendingTotal > 0" class="ov-attention">
+        <SvgIcon :src="icon.settings.notification" size="18" /><strong>{{ t('adminWorkspace.pending') }}</strong>
+        <BButton v-if="data.pending.opinion > 0" type="text" size="small" @click="go('userOpinion')">{{
+          t('adminWorkspace.opinions', { count: data.pending.opinion })
+        }}</BButton>
         <BButton
-          block
-          class="ov-today__stat-action"
-          :aria-label="t('adminActivity.view')"
-          @click="activeDrawerOpen = true"
+          v-if="data.pending.security > 0"
+          type="text"
+          size="small"
+          class="ov-danger"
+          @click="goToSecurityEvents"
+          >{{ t('adminWorkspace.security', { count: data.pending.security }) }}</BButton
         >
-          <span class="admin-stat-label">活跃用户</span>
-          <strong class="admin-stat-value">{{ n(data?.active.today) }}</strong>
-          <span class="admin-stat-hint">{{ t('adminOverview.activeUserHint') }}</span>
-          <span class="ov-today__baseline">{{ baselineText('activeUsers') || t('adminActivity.noBaseline') }}</span>
-          <span v-if="data.active?.available === false" class="admin-stat-hint">{{
-            t('adminActivity.unavailable')
-          }}</span>
-          <span v-else-if="data.active?.partialToday" class="admin-stat-hint">{{ t('adminActivity.partial') }}</span>
-          <span class="ov-today__stat-link">{{ t('adminActivity.view') }}</span>
-        </BButton>
-      </li>
-      <li class="admin-stat-card">
-        <span class="admin-stat-label">AI 模型动作</span>
-        <strong class="admin-stat-value">{{ n(data?.ai.todayCount) }}</strong>
-        <span class="admin-stat-hint">Token {{ n(data?.ai.todayTokens) }}</span>
-        <span v-if="baselineText('aiCalls')" class="ov-today__baseline">{{ baselineText('aiCalls') }}</span>
-      </li>
-      <li class="admin-stat-card">
-        <span class="admin-stat-label">API 请求</span>
-        <strong class="admin-stat-value">{{ n(data?.system.apiToday) }}</strong>
-        <span class="admin-stat-hint ov-api-health">
-          <span :class="{ 'ov-warn': (data?.system.apiBusinessErrorsToday || 0) > 0 }"
-            >业务 4xx {{ n(data?.system.apiBusinessErrorsToday) }}</span
-          >
-          <span :class="{ 'ov-muted-warn': (data?.system.apiInvalidRequestsToday || 0) > 0 }"
-            >无效访问 {{ n(data?.system.apiInvalidRequestsToday) }}</span
-          >
-          <span :class="{ 'ov-err': (data?.system.apiServerErrorsToday || 0) > 0 }"
-            >服务 5xx {{ n(data?.system.apiServerErrorsToday) }}</span
-          >
-        </span>
-      </li>
-      <li class="admin-stat-card">
-        <span class="admin-stat-label">当前未完成</span>
-        <strong class="admin-stat-value">{{ n(data?.todos.pending) }}</strong>
-        <span class="admin-stat-hint">今日到期 {{ n(data?.todos.dueToday) }}</span>
-      </li>
-      <li class="admin-stat-card" :class="{ 'ov-todo-overdue': (data?.todos?.overdue || 0) > 0 }">
-        <span class="admin-stat-label">当前逾期</span>
-        <strong class="admin-stat-value" :class="{ 'ov-err': (data?.todos?.overdue || 0) > 0 }">
-          {{ n(data?.todos?.overdue) }}
-        </strong>
-        <span class="admin-stat-hint" :class="{ 'ov-err': (data?.todos?.overdue || 0) > 0 }">
-          {{ data ? ((data.todos.overdue || 0) > 0 ? '需优先处理' : '暂无逾期') : '—' }}
-        </span>
-      </li>
-      <li class="admin-stat-card">
-        <span class="admin-stat-label">今日完成</span>
-        <strong class="admin-stat-value">{{ n(data?.todos.completedToday) }}</strong>
-        <span class="admin-stat-hint">北京时间自然日</span>
-      </li>
-    </ul>
-
-    <div v-if="data" class="ov-trend-head">
-      <p class="ov-section-title">近 {{ trendDays }} 天新增趋势</p>
-      <div class="ov-trend-control">
-        <BLoading
-          v-if="trendLoading"
-          inline
-          loading
-          class="ov-trend-loading"
-          :title="t('adminOverview.trendLoading')"
-        />
-        <span v-else-if="trendError" class="ov-trend-error" role="alert">
-          {{ t('adminOverview.trendLoadFailed') }}
-          <BButton size="small" @click="loadTrend">{{ t('adminOverview.retryTrend') }}</BButton>
-        </span>
-        <BTabs v-model:active-tab="trendDays" :options="trendOptions" variant="segment" @change="loadTrend" />
+        <BButton type="text" size="small" class="ov-attention__all" @click="go('actionCenter')"
+          >{{ t('adminOverview.openActionCenter') }} →</BButton
+        >
       </div>
-    </div>
-    <AdminGrowthTrendCard
-      v-if="data"
-      :trend="data.trend"
-      :period-days="Number(trendDays)"
-      :granularity="data.trendPeriod?.granularity || 'day'"
-    />
-    <div v-if="data" ref="recentAnchor" class="ov-recent-anchor">
-      <AdminRecentAdditions
-        :data="recentData"
-        :loading="recentLoading"
-        :resource-loading="resourceRecent.loading.value"
-        :user-loading="userRecent.loading.value"
-        :resource-has-more="resourceRecent.hasMore.value"
-        :user-has-more="userRecent.hasMore.value"
-        :resource-error="resourceRecentError"
-        :user-error="userRecentError"
-        :stacked="bookmark.isMobile || bookmark.isTablet"
-        :mobile="bookmark.isMobile"
-        :filter="recentFilter"
-        :filtered-total="recentFilteredTotal"
-        @retry-resource="retryResourceRecent"
-        @retry-user="retryUserRecent"
-        @load-more-resource="loadMoreResourceRecent"
-        @load-more-user="loadMoreUserRecent"
-        @view-users="go('userMg')"
-        @filter-change="changeRecentFilter"
+      <div class="ov-section-heading"
+        ><h3>{{ t('adminWorkspace.trends') }}</h3
+        ><div class="ov-trend-control"
+          ><BLoading v-if="trendLoading" inline loading :title="t('adminOverview.trendLoading')" /><span
+            v-else-if="trendError"
+            class="ov-danger"
+            role="alert"
+            >{{ t('adminOverview.trendLoadFailed')
+            }}<BButton size="small" @click="loadTrend">{{ t('adminOverview.retryTrend') }}</BButton></span
+          ><BSelect
+            v-model:value="trendDays"
+            class="ov-period"
+            :options="trendOptions"
+            :aria-label="t('adminWorkspace.trends')"
+            @change="loadTrend" /></div
+      ></div>
+      <AdminGrowthTrendCard
+        :trend="data.trend"
+        :period-days="Number(trendDays)"
+        :granularity="data.trendPeriod?.granularity || 'day'"
       />
-    </div>
+      <section class="ov-runtime" :aria-label="t('adminWorkspace.runtime')">
+        <h3>{{ t('adminWorkspace.runtime') }}</h3>
+        <div class="ov-runtime__grid">
+          <div class="ov-runtime__item"
+            ><SvgIcon :src="icon.growth.ai" size="20" /><div
+              ><span>{{ t('adminWorkspace.ai') }}</span
+              ><strong>{{ n(data.ai.todayCount) }}</strong
+              ><small>Token {{ n(data.ai.todayTokens) }}</small
+              ><small v-if="baselineText('aiCalls')">{{ baselineText('aiCalls') }}</small></div
+            ></div
+          >
+          <div class="ov-runtime__item"
+            ><SvgIcon :src="icon.userCenter.log" size="20" /><div
+              ><span>{{ t('adminWorkspace.api') }}</span
+              ><strong>{{ n(data.system.apiToday) }}</strong
+              ><small class="ov-api-health"
+                ><span :class="{ 'ov-warning': data.system.apiBusinessErrorsToday > 0 }">{{
+                  t('adminWorkspace.businessErrors', { count: n(data.system.apiBusinessErrorsToday) })
+                }}</span
+                ><span>{{
+                  t('adminWorkspace.invalidRequests', { count: n(data.system.apiInvalidRequestsToday) })
+                }}</span
+                ><span :class="{ 'ov-danger': data.system.apiServerErrorsToday > 0 }">{{
+                  t('adminWorkspace.serverErrors', { count: n(data.system.apiServerErrorsToday) })
+                }}</span></small
+              ></div
+            ></div
+          >
+          <div class="ov-runtime__item"
+            ><SvgIcon :src="icon.todoWorkspace.checkSquare" size="20" /><div
+              ><span>{{ t('adminWorkspace.todoHealth') }}</span
+              ><strong>{{ t('adminWorkspace.unfinished', { count: n(data.todos.pending) }) }}</strong
+              ><small
+                >{{ t('adminWorkspace.due', { count: n(data.todos.dueToday) }) }} ·
+                <span :class="{ 'ov-danger': data.todos.overdue > 0 }">{{
+                  t('adminWorkspace.overdue', { count: n(data.todos.overdue) })
+                }}</span>
+                · {{ t('adminWorkspace.completed', { count: n(data.todos.completedToday) }) }}</small
+              ></div
+            ></div
+          >
+          <div class="ov-runtime__item"
+            ><SvgIcon :src="icon.growth.storage" size="20" /><div
+              ><span>{{ t('adminWorkspace.storage') }}</span
+              ><strong>{{ t('adminWorkspace.used', { size: mb(data.resources.storageMb) }) }}</strong
+              ><small>{{
+                t('adminWorkspace.trash', { size: mb(data.resources.trashMb), count: n(data.resources.trashCount) })
+              }}</small></div
+            ></div
+          >
+        </div>
+      </section>
+      <section v-if="todayInsights.length" class="ov-insights" :aria-label="t('adminOverview.insightTitle')"
+        ><strong>{{ t('adminOverview.insightTitle') }}</strong
+        ><div v-for="insight in todayInsights" :key="insight.metric" class="ov-insight"
+          ><span>{{ insightText(insight) }}</span
+          ><BButton type="text" size="small" @click="openInsight(insight)">{{
+            insight.metric === 'users' ? t('adminOverview.viewConversion') : t('adminOverviewRecent.viewTodayDetails')
+          }}</BButton></div
+        ></section
+      >
+      <div ref="recentAnchor" class="ov-recent-anchor"
+        ><AdminRecentAdditions
+          :data="recentData"
+          :loading="recentLoading"
+          :resource-loading="resourceRecent.loading.value"
+          :user-loading="userRecent.loading.value"
+          :resource-has-more="resourceRecent.hasMore.value"
+          :user-has-more="userRecent.hasMore.value"
+          :resource-error="resourceRecentError"
+          :user-error="userRecentError"
+          :stacked="bookmark.isMobile || bookmark.isTablet"
+          :mobile="bookmark.isMobile"
+          :filter="recentFilter"
+          :filtered-total="recentFilteredTotal"
+          @retry-resource="retryResourceRecent"
+          @retry-user="retryUserRecent"
+          @load-more-resource="loadMoreResourceRecent"
+          @load-more-user="loadMoreUserRecent"
+          @view-users="go('userMg')"
+          @filter-change="changeRecentFilter"
+      /></div>
+    </template>
     <AdminActiveUsersDrawer
       :open="activeDrawerOpen"
       :hide-internal="hideInternal"
@@ -322,13 +267,15 @@
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import BSwitch from '@/components/base/BasicComponents/BSwitch.vue';
-  import BTabs from '@/components/base/BasicComponents/BTabs.vue';
+  import BSelect from '@/components/base/BasicComponents/BSelect.vue';
+  import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
+  import { adminWorkspaceMessages } from '@/i18n/locales/adminWorkspace';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon';
   import { findVerticalScrollContainer, scrollIntoContainer } from '@/utils/scrolling';
 
   const bookmark = bookmarkStore();
-  const { t } = useI18n();
+  const { t } = useI18n({ messages: adminWorkspaceMessages, missingWarn: false, fallbackWarn: false });
   const data = ref<any>(null);
   const hideInternal = ref(true);
   const activeDrawerOpen = ref(false);
@@ -353,12 +300,12 @@
   const recentFilter = ref<AdminRecentFilter>({ period: 'recent', type: 'all' });
   const recentAnchor = ref<HTMLElement | null>(null);
   const trendDays = ref('7');
-  const trendOptions = [
-    { key: '7', label: '近 7 天' },
-    { key: '15', label: '近 15 天' },
-    { key: '30', label: '近 30 天' },
-    { key: '90', label: '近 90 天' },
-  ];
+  const trendOptions = computed(() => [
+    { value: '7', label: t('adminWorkspace.days', { count: 7 }) },
+    { value: '15', label: t('adminWorkspace.days', { count: 15 }) },
+    { value: '30', label: t('adminWorkspace.days', { count: 30 }) },
+    { value: '90', label: t('adminWorkspace.days', { count: 90 }) },
+  ]);
   const trendCache = new Map<string, any>();
   let snapshotRequestSequence = 0;
   let trendRequestSequence = 0;
@@ -367,14 +314,23 @@
   let resourceRecentLoadMode: 'initial' | 'append' = 'initial';
   let userRecentLoadMode: 'initial' | 'append' = 'initial';
 
-  function requestRecentPage<T>(target: AdminRecentTarget, cursor: string | null, limit: number, options: import('@/http/request').RequestOptions) {
-    return apiBasePost('/api/common/getAdminOverviewRecent', {
-      hideInternal: hideInternal.value,
-      ...recentFilter.value,
-      target,
-      cursor,
-      limit,
-    }, options) as Promise<{ status?: number | boolean; msg?: string; data?: AdminRecentPage<T> }>;
+  function requestRecentPage<T>(
+    target: AdminRecentTarget,
+    cursor: string | null,
+    limit: number,
+    options: import('@/http/request').RequestOptions,
+  ) {
+    return apiBasePost(
+      '/api/common/getAdminOverviewRecent',
+      {
+        hideInternal: hideInternal.value,
+        ...recentFilter.value,
+        target,
+        cursor,
+        limit,
+      },
+      options,
+    ) as Promise<{ status?: number | boolean; msg?: string; data?: AdminRecentPage<T> }>;
   }
 
   const resourceRecent = useAdminCursorList<AdminRecentResource>({
@@ -424,6 +380,16 @@
     const baseline = data.value?.todayBaseline as AdminTodayBaseline | undefined;
     return baseline?.available && baseline.mode === 'same_elapsed_time' ? baseline.cutoffTime : '';
   });
+  const overviewContext = computed(() =>
+    [
+      t('adminWorkspace.scope'),
+      t(hideInternal.value ? 'adminWorkspace.exclude' : 'adminWorkspace.include'),
+      data.value?.generatedAt ? t('adminWorkspace.updated', { time: data.value.generatedAt }) : '',
+      sameTimeCutoff.value ? t('adminOverview.sameTimeCutoff', { time: sameTimeCutoff.value }) : '',
+    ]
+      .filter(Boolean)
+      .join(' · '),
+  );
   const todayInsights = computed(() =>
     data.value
       ? buildAdminTodayInsights(
@@ -465,9 +431,29 @@
     }
   });
 
-  const pageSubtitle = computed(() =>
-    data.value ? `今日运营、系统健康与趋势 · 更新于 ${data.value.generatedAt}` : '今日运营、系统健康与趋势',
-  );
+  const resourceMetrics = computed(() => [
+    {
+      type: 'bookmark' as const,
+      metric: 'bookmarks' as const,
+      label: t('navigation.bookmark'),
+      today: data.value?.resources.bookmarkToday,
+      total: data.value?.resources.bookmarkTotal,
+    },
+    {
+      type: 'note' as const,
+      metric: 'notes' as const,
+      label: t('navigation.note'),
+      today: data.value?.resources.noteToday,
+      total: data.value?.resources.noteTotal,
+    },
+    {
+      type: 'file' as const,
+      metric: 'files' as const,
+      label: t('adminWorkspace.file'),
+      today: data.value?.resources.fileToday,
+      total: data.value?.resources.fileTotal,
+    },
+  ]);
 
   const n = (v: any) => (v == null ? '—' : Number(v).toLocaleString());
   const mb = (v: any) => {
@@ -699,380 +685,279 @@
 </script>
 
 <style lang="less" scoped>
-  @import '@/assets/css/admin-manage.less';
-
+  @import '@/assets/css/admin-breakpoints.less';
   .ov-hide-internal {
     display: inline-flex;
     align-items: center;
-    gap: var(--ui-space-6, 6px);
-    color: var(--text-color);
+    gap: var(--ui-space-8, 8px);
     font-size: var(--ui-font-13, 13px);
-    white-space: nowrap;
-    cursor: pointer;
+    color: var(--text-color);
   }
-
-  .ov-today {
+  .ov-metrics {
     display: grid;
-    gap: var(--ui-space-10, 10px);
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: var(--ui-space-12, 12px);
+    margin: 0;
+    padding: 0;
+    list-style: none;
   }
-  .ov-today__header {
+  .ov-metric {
+    position: relative;
+    min-width: 0;
+    border: 1px solid var(--surface-border-color);
+    border-radius: 10px;
+    background: var(--card-background);
+  }
+  .ov-metric__action.b_btn {
+    width: 100%;
+    height: auto;
+    min-height: var(--ui-layout-140, 140px);
     display: flex;
+    flex-direction: column;
     align-items: flex-start;
+    justify-content: flex-start;
+    gap: var(--ui-space-5, 5px);
+    padding: var(--ui-space-16, 16px);
+    border: 0;
+    border-radius: 10px;
+    background: transparent;
+    color: var(--text-color);
+    text-align: left;
+    white-space: normal;
+    line-height: 1.4;
+  }
+  .ov-metric--resources .ov-metric__action.b_btn {
+    min-height: 0;
+    padding-bottom: var(--ui-space-8, 8px);
+  }
+  .ov-metric:not(.ov-metric--resources) .ov-metric__action.b_btn {
+    height: 100%;
+  }
+  .ov-metric__action.b_btn:hover {
+    background: var(--surface-card-hover-bg);
+  }
+  .ov-metric__icon {
+    position: absolute;
+    top: var(--ui-space-16, 16px);
+    right: var(--ui-space-16, 16px);
+    color: var(--primary-color);
+  }
+  .ov-metric__label {
+    padding-right: var(--ui-space-24, 24px);
+    font-size: var(--ui-font-13, 13px);
+  }
+  .ov-metric__value {
+    font-size: var(--ui-font-30, 30px);
+    line-height: 1.2;
+    font-variant-numeric: tabular-nums;
+  }
+  .ov-metric__headline {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: var(--ui-space-4, 4px) var(--ui-space-8, 8px);
+  }
+  .ov-metric__hint {
+    color: var(--desc-color);
+    font-size: var(--ui-font-12, 12px);
+    line-height: 1.5;
+  }
+  .ov-metric__link {
+    margin-top: auto;
+    color: var(--primary-color);
+    font-size: var(--ui-font-12, 12px);
+  }
+  .ov-resource-breakdown {
+    display: flex;
+    flex-direction: column;
+    gap: var(--ui-space-2, 2px);
+    padding: 0 var(--ui-space-12, 12px) var(--ui-space-12, 12px);
+  }
+  .ov-resource-breakdown__row.b_btn {
+    width: 100%;
+    height: auto;
+    min-height: var(--ui-control-28, 28px);
+    justify-content: space-between;
+    gap: var(--ui-space-8, 8px);
+    padding: var(--ui-space-4, 4px);
+    white-space: normal;
+    text-align: left;
+    line-height: 1.4;
+  }
+  .ov-resource-breakdown__label {
+    flex: none;
+    white-space: nowrap;
+    color: var(--desc-color);
+    font-size: var(--ui-font-12, 12px);
+  }
+  .ov-resource-breakdown__counts {
+    display: inline-flex;
+    flex: 1;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: var(--ui-space-2, 2px) var(--ui-space-8, 8px);
+    min-width: 0;
+    font-variant-numeric: tabular-nums;
+  }
+  .ov-resource-breakdown__counts strong {
+    color: var(--text-color);
+    font-size: var(--ui-font-14, 14px);
+    font-weight: 600;
+  }
+  .ov-resource-breakdown__counts small {
+    color: var(--primary-color);
+    font-size: var(--ui-font-11, 11px);
+  }
+  .ov-attention {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--ui-space-8, 8px);
+    padding: var(--ui-space-8, 8px) var(--ui-space-14, 14px);
+    border: 1px solid var(--surface-border-color);
+    border-radius: 8px;
+    font-size: var(--ui-font-13, 13px);
+    color: var(--text-color);
+  }
+  .ov-attention > .svg-icon {
+    color: var(--warning-color);
+  }
+  .ov-attention__all {
+    margin-left: auto;
+  }
+  .ov-section-heading {
+    display: flex;
+    align-items: center;
     justify-content: space-between;
     gap: var(--ui-space-12, 12px);
   }
-  .ov-today__header h3,
-  .ov-today__header p {
+  .ov-section-heading h3,
+  .ov-runtime h3 {
     margin: 0;
-  }
-  .ov-today__header h3 {
     color: var(--text-color);
-    font-size: var(--ui-font-15, 15px);
+    font-size: var(--ui-font-17, 17px);
   }
-  .ov-today__header p {
-    margin-top: var(--ui-space-3, 3px);
-    color: var(--sub-text-color);
-    font-size: var(--ui-font-11, 11px);
-  }
-  .ov-today__capacity {
-    display: grid;
-    flex: 0 1 var(--ui-layout-340, 340px);
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  .ov-trend-control {
+    display: flex;
+    align-items: center;
     gap: var(--ui-space-8, 8px);
-    width: min(100%, var(--ui-layout-340, 340px));
   }
-  .ov-today__capacity-item {
-    display: grid;
-    min-width: 0;
-    gap: var(--ui-space-2, 2px);
-    padding: var(--ui-space-8, 8px) var(--ui-space-10, 10px);
-    border: 1px solid var(--card-border-color);
+  .ov-period {
+    width: var(--ui-layout-140, 140px);
+  }
+  .ov-runtime {
+    padding: var(--ui-space-14, 14px);
+    border: 1px solid var(--surface-border-color);
     border-radius: 10px;
     background: var(--card-background);
-
-    &.is-warning {
-      border-color: var(--warning-color);
-    }
   }
-  .ov-today__capacity-label,
-  .ov-today__capacity-hint {
-    overflow-wrap: anywhere;
-    color: var(--sub-text-color);
-    font-size: var(--ui-font-10, 10px);
+  .ov-runtime__grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: var(--ui-space-16, 16px);
+    margin-top: var(--ui-space-12, 12px);
   }
-  .ov-today__capacity-value {
-    overflow-wrap: anywhere;
-    color: var(--text-color);
-    font-size: var(--ui-font-14, 14px);
-    line-height: 1.25;
-  }
-  .ov-today__capacity-item.is-warning .ov-today__capacity-hint {
-    color: var(--warning-color);
-    font-weight: 600;
-  }
-  .ov-today__stat-card {
-    padding: 0;
-  }
-  .ov-today__stat-action.b_btn {
-    width: 100%;
-    height: 100%;
-    min-height: var(--ui-layout-118, 118px);
+  .ov-runtime__item {
+    display: flex;
     align-items: flex-start;
-    justify-content: flex-start;
-    flex-direction: column;
-    padding: var(--ui-space-12, 12px) var(--ui-space-14, 14px);
-    border-radius: 11px;
-    background: transparent;
-    color: var(--text-color);
-    line-height: 1.35;
-    text-align: left;
-    white-space: normal;
-
-    &:hover {
-      background: var(--hover-background);
-    }
-  }
-  .ov-today__stat-link {
-    margin-top: auto;
-    padding-top: var(--ui-space-7, 7px);
+    min-width: 0;
+    gap: var(--ui-space-10, 10px);
     color: var(--primary-color);
-    font-size: var(--ui-font-11, 11px);
-    font-weight: 600;
   }
-  .ov-today__baseline {
-    display: block;
-    margin-top: var(--ui-space-4, 4px);
+  .ov-runtime__item > div {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    gap: var(--ui-space-5, 5px);
+    color: var(--text-color);
+  }
+  .ov-runtime__item span {
+    font-size: var(--ui-font-12, 12px);
+  }
+  .ov-runtime__item strong {
+    font-size: var(--ui-font-21, 21px);
+    font-variant-numeric: tabular-nums;
     overflow-wrap: anywhere;
+  }
+  .ov-runtime__item small {
     color: var(--desc-color);
-    font-size: var(--ui-font-10, 10px);
-    line-height: 1.35;
+    font-size: var(--ui-font-11, 11px);
+    line-height: 1.6;
   }
-  .ov-today__stats,
-  .ov-health-stats {
-    grid-template-columns: repeat(6, minmax(0, 1fr));
+  .ov-api-health {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--ui-space-4, 4px) var(--ui-space-8, 8px);
   }
-
-  .ov-loading {
-    margin: 0;
-    font-size: var(--ui-font-13, 13px);
-    color: var(--desc-color);
+  .ov-danger {
+    color: var(--danger-color) !important;
   }
-
+  .ov-warning {
+    color: var(--warning-color);
+  }
   .ov-load-error {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: var(--ui-space-12, 12px);
-    padding: var(--ui-space-10, 10px) var(--ui-space-12, 12px);
+    padding: var(--ui-space-12, 12px);
     border: 1px solid var(--danger-color);
-    border-radius: 10px;
-    background: var(--card-background);
+    border-radius: 8px;
     color: var(--danger-color);
-    font-size: var(--ui-font-12, 12px);
-    font-weight: 600;
   }
-
-  /* 内容较多:整面板纵向滚动、KPI 卡按自然高度排布(同 ConversionFunnel 的做法) */
-  .admin-panel {
-    overflow-y: auto;
-  }
-  .admin-stats {
-    flex: none;
-  }
-
-  .ov-section-title {
-    display: flex;
-    align-items: baseline;
-    gap: var(--ui-space-8, 8px);
-    margin: var(--ui-space-20, 20px) 0 var(--ui-space-10, 10px);
-    font-size: var(--ui-font-13, 13px);
-    font-weight: 600;
-    color: var(--text-color);
-  }
-  .ov-section-title:first-of-type {
-    margin-top: var(--ui-space-10, 10px);
-  }
-  .ov-section-tip {
-    font-size: var(--ui-font-11, 11px);
-    font-weight: 400;
-    color: var(--sub-text-color, #888);
-  }
-
-  .ov-todo {
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: var(--ui-space-8, 8px);
-    margin-top: var(--ui-space-12, 12px);
-    padding: var(--ui-space-10, 10px) var(--ui-space-14, 14px);
-    border-radius: 10px;
-    background: color-mix(in srgb, var(--warning-color) 12%, var(--background-color));
-    border: 1px solid color-mix(in srgb, var(--warning-color) 35%, transparent);
-    font-size: var(--ui-font-13, 13px);
-    color: var(--text-color);
-  }
-  .ov-todo-icon {
-    color: #d97706;
-  }
-  .ov-todo-text {
-    font-weight: 600;
-  }
-  .ov-todo-chip {
-    min-height: var(--ui-layout-26, 26px);
-    height: auto !important;
-    padding: var(--ui-space-4, 4px) var(--ui-space-10, 10px) !important;
-    border: 0;
-    border-radius: 999px;
-    background: color-mix(in srgb, var(--warning-color) 22%, transparent);
-    color: var(--text-color);
-    font-size: var(--ui-font-12_5, 12.5px);
-    line-height: 1.35 !important;
-    cursor: pointer;
-    transition:
-      background 0.16s ease,
-      box-shadow 0.16s ease,
-      transform 0.16s ease;
-
-    &:hover,
-    &:focus-visible {
-      outline: none;
-      transform: translateY(-1px);
-      box-shadow: 0 3px 8px color-mix(in srgb, var(--warning-color) 18%, transparent);
-    }
-  }
-  .ov-todo-chip.danger {
-    background: color-mix(in srgb, var(--danger-color) 20%, transparent);
-
-    &:hover,
-    &:focus-visible {
-      background: color-mix(in srgb, var(--danger-color) 28%, transparent);
-      box-shadow: 0 3px 8px color-mix(in srgb, var(--danger-color) 18%, transparent);
-    }
-  }
-
-  .ov-todo-center.b_btn {
-    margin-left: auto;
-    border-color: var(--warning-color);
-    background: var(--card-background);
-    color: var(--text-color);
-  }
-
   .ov-insights {
-    display: flex;
-    align-items: flex-start;
-    gap: var(--ui-space-12, 12px);
-    margin-top: var(--ui-space-12, 12px);
-    padding: var(--ui-space-10, 10px) var(--ui-space-12, 12px);
-    border: 1px solid var(--card-border-color);
-    border-left: 3px solid var(--primary-color);
-    border-radius: 10px;
-    background: var(--card-background);
-    color: var(--text-color);
-  }
-  .ov-insights__title {
-    flex: none;
-    padding-top: var(--ui-space-5, 5px);
-    font-size: var(--ui-font-12, 12px);
-  }
-  .ov-insights__list {
     display: grid;
-    flex: 1;
     gap: var(--ui-space-6, 6px);
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
-  .ov-insights__item {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--ui-space-10, 10px);
-    min-width: 0;
     color: var(--text-color);
-    font-size: var(--ui-font-11, 11px);
-    line-height: 1.45;
+    font-size: var(--ui-font-12, 12px);
   }
-  .ov-insights__item.is-down {
-    color: var(--warning-color);
-    font-weight: 600;
-  }
-  .ov-insights__action.b_btn {
-    flex: none;
-    color: var(--primary-color);
-  }
-
-  .ov-err {
-    color: var(--danger-color) !important;
-    font-weight: 600;
-  }
-
-  .ov-todo-overdue {
-    border-color: var(--danger-color);
-  }
-
-  .ov-trend-head {
+  .ov-insight {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: var(--ui-space-12, 12px);
-    margin-top: var(--ui-space-20, 20px);
-
-    .ov-section-title {
-      margin: 0;
-    }
   }
-
-  .ov-trend-control {
-    display: flex;
-    align-items: center;
-    gap: var(--ui-space-10, 10px);
-  }
-
-  .ov-trend-loading {
-    color: var(--desc-color);
-    font-size: var(--ui-font-12, 12px);
-  }
-
-  .ov-trend-error {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--ui-space-6, 6px);
-    color: var(--danger-color);
-    font-size: var(--ui-font-12, 12px);
-    font-weight: 600;
-  }
-
   .ov-recent-anchor {
     min-width: 0;
   }
-
-  @media (max-width: 720px) {
-    .ov-today__stats,
-    .ov-health-stats {
+  @media (max-width: @admin-bp-desktop) {
+    .ov-metrics,
+    .ov-runtime__grid {
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
-    .ov-today__header {
-      align-items: stretch;
-      flex-direction: column;
+  }
+  @media (max-width: @admin-bp-mobile) {
+    .ov-metrics {
+      gap: var(--ui-space-8, 8px);
     }
-    .ov-today__capacity {
-      flex-basis: auto;
-      width: 100%;
+    .ov-metric__action.b_btn {
+      padding: var(--ui-space-12, 12px);
     }
-    .ov-insights,
-    .ov-insights__item {
-      align-items: stretch;
-      flex-direction: column;
+    .ov-metric__icon {
+      display: none;
     }
-    .ov-insights__title {
-      padding-top: 0;
+    .ov-metric__label {
+      padding-right: 0;
     }
-    .ov-insights__action.b_btn,
-    .ov-todo-center.b_btn {
-      align-self: flex-start;
-      margin-left: 0;
+    .ov-runtime__grid {
+      grid-template-columns: 1fr;
     }
-    .ov-trend-head {
+    .ov-runtime__item > div {
+      flex: 1;
+    }
+    .ov-runtime__item strong {
+      font-size: var(--ui-font-18, 18px);
+    }
+    .ov-section-heading,
+    .ov-insight {
       align-items: flex-start;
-      flex-direction: column;
-    }
-
-    .ov-trend-control {
-      width: 100%;
-      justify-content: space-between;
       flex-wrap: wrap;
     }
-
-    .ov-load-error {
-      align-items: flex-start;
-      flex-direction: column;
+    .ov-trend-control {
+      flex-wrap: wrap;
     }
-  }
-
-  @media (min-width: 721px) and (max-width: 1024px) {
-    .ov-today__stats,
-    .ov-health-stats {
-      grid-template-columns: repeat(3, minmax(0, 1fr));
+    .ov-attention__all {
+      margin-left: 0;
     }
-  }
-
-  .ov-api-health {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--ui-space-3, 3px) var(--ui-space-10, 10px);
-    line-height: 1.45;
-  }
-  .ov-warn {
-    color: var(--warning-color);
-    font-weight: 600;
-  }
-  .ov-muted-warn {
-    color: var(--desc-color);
-    font-weight: 600;
-  }
-
-  html.light-note-mobile-rendering .ov-todo,
-  html.light-note-mobile-rendering .ov-insights {
-    box-shadow: none;
   }
 </style>

@@ -81,6 +81,8 @@ pnpm preview
 
 知识庄园开放前，显式运行 `pnpm --filter server migrate:knowledge-manor` 安装 `20261024_knowledge_manor.sql` 的存档与幂等操作表，不回填账号或调整资产。部署脚本仅在本轮已授权且显式设置 `LIGHTNOTE_APPLY_KNOWLEDGE_MANOR_MIGRATION=1` 时执行此迁移。`KNOWLEDGE_MANOR_ENABLED` 默认关闭；开启后入口、页面路由和接口仅允许 Root 本人，管理员代管及普通账号均不开放；启动与 Schema 门禁均检查契约。API 和 Web 必须携带同一庄园规则版本，发布前验证与主站积分并发、失败回滚、断网重试、钓鱼刷新恢复及账号隔离；MySQL 5.7 兼容门禁不能用本地 MySQL 8 的结果替代。回退先关闭开关，保留新增表、操作收据与已结算积分，不逆向回收用户资产。
 
+庄园后台启用前显式运行 `pnpm --filter server migrate:knowledge-manor-admin`，增加操作摘要列、查询索引和运行状态表，不回填历史类型或调整玩家资产。部署脚本只在已授权且设置 `LIGHTNOTE_APPLY_KNOWLEDGE_MANOR_ADMIN_MIGRATION=1` 时安装；`--check` 只读验证，启动路径不执行安装。API 与后台验证通过后，再显式运行 `pnpm --filter server migrate:knowledge-manor-admin --start-observation` 登记统计覆盖边界；结构安装本身不证明新采集已经运行。验证维护切换与新操作并发、已有收据恢复、已有钓鱼结算、审计失败回滚及普通账号的独立限流。回退保留摘要、收据和审计；不识别维护模式的旧 API 必须配合关闭部署开关，已产生 v3 存档时不能直接回退到不识别 v3 的规则版本。
+
 邮箱健康检查启用前显式运行 `pnpm --filter server migrate:account-email-health`，安装 `20261023_account_email_health.sql` 的月度续跑与独立通知去重表，并补齐邮件收件地址查询索引，再通过 `check:schema`。迁移不扫描或修改历史账号，不回填邮箱验证状态。调度随 API 启动，仅生产运行环境消费；结构缺失时跳过新调度，不影响注册登录。API 与前端需同步保留专用更换邮箱协议；回滚保留去重事实，不能恢复个人资料直接修改邮箱。验证码与近期 GitHub 身份证明仅存短时 Redis，不能记录到日志或跨用途复用。
 
 站内公开资源启用前显式运行 `pnpm --filter server migrate:public-resources-schema`，安装加法迁移 `20261021_public_resources.sql`（包括副本来源表），通过 `check:schema` 与 MySQL 5.7 事务门禁，再部署同版本 API 和前端。帮助内容通过独立 `20261021_public_resources_help.sql` 幂等更新。`PUBLIC_RESOURCES_ENABLED`、`PUBLIC_RESOURCES_SUBMISSIONS_ENABLED`、`PUBLIC_RESOURCES_AI_ENABLED` 均默认关闭；首期即使开放资源与投稿，也保持 AI 预审关闭，用户显示“提交审核”，Root 终审、通知及失效任务收尾继续运行。AI 预算由 `PUBLIC_RESOURCES_AI_DAILY_BUDGET_TOKENS` 控制，关闭 Kernel 同时降级入口文案。新表缺失仅关闭新域，不能影响个人搜索和原资源删除。

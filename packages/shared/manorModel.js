@@ -3,8 +3,9 @@
    Time, random outcomes and mutations are authorised by the server command boundary. */
 const GardenModel = (() => {
   const RULES = Object.freeze({
-    // 三项任务每天共 15 滴；海水过滤器随等级另产 6 / 8 / 10 滴。每块地浇水 5 滴。
+    // 每项 5 滴，全完成再奖 5 滴；过滤器另产 6 / 8 / 10 滴。每块地浇水 5 滴。
     dailyWater: 5,
+    dailyWaterBonus: 5,
     waterCap: 60,
     purifierCost: 240,
     purifierWater: 6,
@@ -445,23 +446,31 @@ const GardenModel = (() => {
   }
 
   // ---------- 每日任务与时间 ----------
-  // 每完成 1 项可领取 5 滴水；任务本身不再附送种子。
+  // 每完成 1 项可领取 5 滴水，三项全完成额外 5 滴；不附送种子。
   function completeDaily(s, index) {
     if (!Number.isInteger(index) || index < 0 || index > 2 || s.dailyDone[index]) return false;
     s.dailyDone[index] = true;
     return true;
   }
   // 庄园只领取水滴，与轻笺积分领取分开。水桶装不下的部分留待当日领取。
-  const pendingDailyWater = s => s.dailyDone.flatMap((done,index) => done && (s.dailyWaterClaims?.[index]||0)<RULES.dailyWater
-    ? [{index,water:RULES.dailyWater-(s.dailyWaterClaims?.[index]||0)}] : []);
+  function pendingDailyWater(s) {
+    const rewards=s.dailyDone.flatMap((done,index) => done && (s.dailyWaterClaims?.[index]||0)<RULES.dailyWater
+      ? [{index,water:RULES.dailyWater-(s.dailyWaterClaims?.[index]||0)}] : []);
+    const bonus=RULES.dailyWaterBonus-(s.dailyWaterBonusClaimed||0);
+    if(s.dailyDone.length===3&&s.dailyDone.every(Boolean)&&bonus>0)rewards.push({index:"bonus",water:bonus});
+    return rewards;
+  }
   function claimDailyWater(s,index) {
     const reward=pendingDailyWater(s).find(r=>r.index===index);
     if(!s.adopted||!reward)return null;
     const water=Math.min(reward.water,Math.max(0,RULES.waterCap-s.water));
     if(!water)return null;
-    s.dailyWaterClaims ||= [0,0,0];s.dailyWaterClaims[index]+=water;s.water+=water;
+    if(index==="bonus")s.dailyWaterBonusClaimed=(s.dailyWaterBonusClaimed||0)+water;
+    else {s.dailyWaterClaims ||= [0,0,0];s.dailyWaterClaims[index]+=water;}
+    s.water+=water;
     return {water};
   }
+  const claimDailyWaterBonus = s => claimDailyWater(s,"bonus");
   function claimAllDailyWater(s) {
     let water=0;
     for(const reward of pendingDailyWater(s)) water+=claimDailyWater(s,reward.index)?.water||0;
@@ -475,6 +484,7 @@ const GardenModel = (() => {
       s.freeUsed = 0;
       s.dailyDone = [false, false, false];
       s.dailyWaterClaims = [0,0,0];
+      s.dailyWaterBonusClaimed = 0;
       if (Math.floor(day(s) / 7) !== Math.floor(oldDay / 7)) {
         s.weekEarned = 0;
         s.weekSpent = 0;
@@ -931,7 +941,7 @@ const GardenModel = (() => {
       fertilizers: { rabbit: 0, eco: 0, nourish: 0, fertile: 0, legend: 0 },
       plots: Array.from({ length: RULES.plotCount }, emptyPlot), seeds: {}, crops: {}, cropDex: {}, rewards: {},
       poopDay: null, birdSeedDay: null, birdSeedPickedDay: null, fryDay: null, fryUsed: 0,
-      dailyDone: [false, false, false], dailyWaterClaims: [0, 0, 0], purifier: null,
+      dailyDone: [false, false, false], dailyWaterClaims: [0, 0, 0], dailyWaterBonusClaimed: 0, purifier: null,
       weekEarned: 0, weekSpent: 0, ledger: [], memories: [],
     };
   }
@@ -997,7 +1007,7 @@ const GardenModel = (() => {
     create,
     adopt,
     completeDaily,
-    pendingDailyWater, claimDailyWater, claimAllDailyWater, selectBait,
+    pendingDailyWater, claimDailyWater, claimDailyWaterBonus, claimAllDailyWater, selectBait,
     purifierStatus, buyPurifier, claimPurifier, purifierUpgradePlan, upgradePurifier,
     buyFacility, composterStatus, upgradeComposter, collectCompost, workshopStatus, craftQuote, startCraft, collectCraft,
     beehiveStatus, refillPollen, pollinationEligible, pollinationTargets, pollinate,
