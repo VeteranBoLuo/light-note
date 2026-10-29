@@ -1,85 +1,121 @@
 <template>
-  <main class="infra-module-page">
-    <div class="infra-module-content">
-      <InfraModuleHeader
+  <InfraPage>
+    <template #header
+      ><InfraModuleHeader
+        :mobile-title="t('serverManagement.modules.events')"
         :title="t('serverManagement.eventsPage.title')"
-        :subtitle="t('serverManagement.eventsPage.subtitle')"
-        :icon-src="icon.infrastructure.events"
         :cadence="t('serverManagement.eventsPage.cadence')"
         :loading="refreshing"
         :refresh-label="t('common.refresh')"
         @refresh="refresh"
+    /></template>
+    <div class="events-toolbar">
+      <BInput v-model:value="keyword" clearable :placeholder="t('serverManagement.workspace.auditSearch')"
+        ><template #prefix><SvgIcon :src="icon.navigation.search" size="15" /></template
+      ></BInput>
+      <BSelect
+        v-model:value="outcome"
+        :options="outcomeOptions"
+        :aria-label="t('serverManagement.eventsPage.outcomeFilterLabel')"
       />
-      <BLoading v-if="initialLoading" inline :loading="true" :title="t('serverManagement.eventsPage.loading')" />
-      <div v-else-if="error && !data" class="infra-state-card">
-        <SvgIcon :src="icon.message.warning" size="24" /><div
-          ><strong>{{ t('serverManagement.snapshotUnavailable') }}</strong
-          ><p>{{ error }}</p></div
-        >
-        <BButton type="primary" @click="refresh">{{ t('serverManagement.retry') }}</BButton>
-      </div>
-      <template v-else>
-        <div v-if="error" class="infra-stale-warning" role="status"
-          ><SvgIcon :src="icon.message.warning" size="16" />{{ t('serverManagement.staleSnapshot') }}</div
-        >
-        <section class="events-summary">
-          <BCard v-for="item in summaryCards" :key="item.key">
-            <span>{{ item.label }}</span
-            ><strong :class="`is-${item.key}`">{{ item.value }}</strong>
-          </BCard>
-        </section>
-        <BCard :title="t('serverManagement.eventsPage.auditTitle')">
-          <template #extra>
-            <div class="events-toolbar">
-              <BInput
-                v-model:value="keyword"
-                clearable
-                :placeholder="t('serverManagement.eventsPage.searchPlaceholder')"
-              >
-                <template #prefix><SvgIcon :src="icon.navigation.search" size="15" /></template>
-              </BInput>
-              <BSelect
-                class="events-filter"
-                :value="outcome"
-                :options="outcomeOptions"
-                :aria-label="t('serverManagement.eventsPage.outcomeFilterLabel')"
-                @change="outcome = String($event)"
-              />
-              <BButton size="small" :disabled="!filteredItems.length" @click="exportItems">
-                <SvgIcon :src="icon.infrastructure.export" size="14" />{{ t('serverManagement.eventsPage.export') }}
-              </BButton>
-            </div>
-          </template>
-          <p class="events-count">{{
-            t('serverManagement.eventsPage.visibleCount', {
-              visible: filteredItems.length,
-              total: data?.items.length || 0,
-            })
-          }}</p>
-          <div v-if="!filteredItems.length" class="events-empty">{{ t('serverManagement.eventsPage.empty') }}</div>
-          <ol v-else class="events-timeline">
-            <li v-for="item in filteredItems" :key="item.id">
-              <span class="events-timeline__marker" :class="`is-${item.outcome}`" aria-hidden="true"></span>
-              <div class="events-timeline__content">
-                <div
-                  ><strong>{{ actionLabel(item.action) }}</strong
-                  ><BChip :tone="outcomeTone(item.outcome)">{{ outcomeLabel(item.outcome) }}</BChip></div
-                >
-                <p>{{ item.reason || t('serverManagement.eventsPage.noReason') }}</p>
-                <small>{{ targetLabel(item) }} · {{ formatTime(item.createTime) }}</small>
-              </div>
-            </li>
-          </ol>
-        </BCard>
-      </template>
+      <BDateTimePicker
+        v-model:value="startDate"
+        v-model:end-value="endDate"
+        mode="range"
+        :show-time="false"
+        :placeholder="t('serverManagement.workspace.dateRange')"
+      />
+      <BButton @click="reset">{{ t('serverManagement.workspace.resetFilters') }}</BButton>
+      <BButton :disabled="refreshing || !data?.items.length || keyword.trim() !== appliedKeyword" @click="exportItems"
+        ><SvgIcon :src="icon.infrastructure.export" size="14" />{{
+          t('serverManagement.workspace.exportPage')
+        }}</BButton
+      >
     </div>
-  </main>
+    <div class="events-summary" :aria-busy="refreshing"
+      ><span>{{ t('serverManagement.workspace.currentFilter') }}</span
+      ><span v-for="key in ['total', 'succeeded', 'failed', 'denied', 'intent']" :key="key"
+        >{{ key === 'total' ? t('serverManagement.eventsPage.summary.total') : outcomeLabel(key) }}
+        <strong>{{ data?.filteredSummary[key === 'intent' ? 'intents' : key] ?? '—' }}</strong></span
+      ></div
+    >
+    <BLoading v-if="refreshing && !data" inline :loading="true" :title="t('serverManagement.eventsPage.loading')" />
+    <div v-if="error" class="events-error" role="status"
+      ><SvgIcon :src="icon.message.warning" size="18" />{{
+        data ? t('serverManagement.staleSnapshot') : t('serverManagement.snapshotUnavailable')
+      }}
+      · {{ error }}<BButton size="small" @click="refresh">{{ t('serverManagement.retry') }}</BButton></div
+    >
+    <BCard v-if="data">
+      <div v-if="!data.items.length" class="events-empty"
+        ><SvgIcon :src="icon.infrastructure.events" size="28" /><strong>{{
+          t('serverManagement.workspace.auditEmpty')
+        }}</strong
+        ><BButton type="text" @click="reset">{{ t('serverManagement.workspace.resetFilters') }}</BButton></div
+      >
+      <template v-else>
+        <div v-if="bookmark.isMobile" class="events-mobile"
+          ><article v-for="item in data.items" :key="item.id"
+            ><header
+              ><strong>{{ actionLabel(item.action) }}</strong
+              ><BChip :tone="outcomeTone(item.outcome)">{{ outcomeLabel(item.outcome) }}</BChip></header
+            ><p>{{ targetLabel(item) }}</p
+            ><p>{{ item.reason || t('serverManagement.eventsPage.noReason') }}</p
+            ><footer
+              ><time>{{ formatTime(item.createTime) }}</time
+              ><BButton type="text" size="small" @click="detail = item">{{ t('common.detail') }}</BButton></footer
+            ></article
+          ></div
+        >
+        <BTable v-else :data="data.items" :columns="columns" row-key="id" :loading="refreshing"
+          ><template #bodyCell="{ column, record }">
+            <template v-if="column.key === 'time'">{{ formatTime(record.createTime) }}</template>
+            <template v-else-if="column.key === 'action'">{{ actionLabel(record.action) }}</template>
+            <template v-else-if="column.key === 'target'">{{ targetLabel(record) }}</template>
+            <BChip v-else-if="column.key === 'outcome'" :tone="outcomeTone(record.outcome)">{{
+              outcomeLabel(record.outcome)
+            }}</BChip>
+            <span class="events-reason" v-else-if="column.key === 'reason'">{{
+              record.reason || t('serverManagement.eventsPage.noReason')
+            }}</span>
+            <BButton v-else-if="column.key === 'detail'" type="text" size="small" @click="detail = record">{{
+              t('common.detail')
+            }}</BButton>
+          </template></BTable
+        >
+      </template>
+      <BPagination
+        :current="currentPage"
+        :page-size="pageSize"
+        :total="data.total"
+        @page-change="currentPage = $event"
+        @size-change="
+          pageSize = $event;
+          currentPage = 1;
+        "
+      />
+    </BCard>
+    <BModal
+      :visible="Boolean(detail)"
+      :title="t('common.detail')"
+      :show-footer="false"
+      width="min(var(--ui-layout-680, 680px), 94vw)"
+      fullscreen-mobile
+      @update:visible="!$event && (detail = null)"
+    >
+      <dl v-if="detail" class="events-detail"
+        ><div v-for="field in detailFields" :key="field.label"
+          ><dt>{{ field.label }}</dt
+          ><dd>{{ field.value || '—' }}</dd></div
+        ></dl
+      >
+    </BModal>
+  </InfraPage>
 </template>
-
 <script setup lang="ts">
-  import { computed, ref } from 'vue';
+  import { computed, onBeforeUnmount, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import { getAdminOperationAudits } from '@/api/commonApi';
+  import { bookmarkStore } from '@/store';
   import icon from '@/config/icon';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
@@ -88,79 +124,92 @@
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import BSelect from '@/components/base/BasicComponents/BSelect.vue';
+  import BTable from '@/components/base/BasicComponents/BTable/BTable.vue';
+  import BPagination from '@/components/base/BasicComponents/BPagination.vue';
+  import BDateTimePicker from '@/components/base/BasicComponents/BDateTimePicker.vue';
+  import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
+  import InfraPage from './InfraPage.vue';
   import InfraModuleHeader from './InfraModuleHeader.vue';
-  import { useInfraSnapshot } from './useInfraSnapshot';
+  import { useInfraAuditList, type InfraAuditItem } from './useInfraAuditList';
+  import { formatAdminDateTime } from '@/utils/adminDateTime';
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
   import { copyTextToClipboard } from '@/utils/clipboard';
   import { buildExportFileName, deliverGeneratedFile } from '@/utils/fileDelivery';
-
-  interface AuditItem {
-    id: string;
-    action: string;
-    targetType?: string | null;
-    targetId?: string | null;
-    outcome: string;
-    reason?: string | null;
-    createTime: string;
-  }
-  interface AuditSnapshot {
-    items: AuditItem[];
-  }
   const { t, locale } = useI18n();
-  async function loadAudits() {
-    const response: any = await getAdminOperationAudits({
-      currentPage: 1,
-      pageSize: 100,
-      action: 'all',
-      actionScope: 'infra',
-      outcome: 'all',
-      keyword: '',
-    });
-    if (response?.status !== 200) throw new Error(response?.msg || t('serverManagement.eventsPage.loadFailed'));
-    const items = Array.isArray(response.data?.items) ? response.data.items : [];
-    return { data: { items } as AuditSnapshot };
-  }
-  const { data, initialLoading, refreshing, error, refresh } = useInfraSnapshot(loadAudits, 30_000);
-  const outcome = ref('all');
+  const bookmark = bookmarkStore();
   const keyword = ref('');
-  const outcomeOptions = computed(() => [
-    { value: 'all', label: t('serverManagement.eventsPage.filters.all') },
-    { value: 'succeeded', label: t('serverManagement.eventsPage.filters.succeeded') },
-    { value: 'failed', label: t('serverManagement.eventsPage.filters.failed') },
-    { value: 'intent', label: t('serverManagement.eventsPage.filters.intent') },
+  const appliedKeyword = ref('');
+  const outcome = ref('all');
+  const startDate = ref('');
+  const endDate = ref('');
+  const currentPage = ref(1);
+  const pageSize = ref(20);
+  const detail = ref<InfraAuditItem | null>(null);
+  let debounce: ReturnType<typeof setTimeout> | undefined;
+  watch(keyword, (value) => {
+    clearTimeout(debounce);
+    debounce = setTimeout(() => {
+      appliedKeyword.value = value.trim();
+      currentPage.value = 1;
+    }, 300);
+  });
+  onBeforeUnmount(() => clearTimeout(debounce));
+  watch([outcome, startDate, endDate], () => (currentPage.value = 1), { flush: 'sync' });
+  const query = computed(() => ({
+    currentPage: currentPage.value,
+    pageSize: pageSize.value,
+    keyword: appliedKeyword.value,
+    outcome: outcome.value,
+    startDate: startDate.value,
+    endDate: endDate.value,
+  }));
+  const { data, refreshing, error, refresh } = useInfraAuditList(query);
+  watch(data, (value) => {
+    if (value && currentPage.value > Math.max(1, Math.ceil(value.total / pageSize.value)))
+      currentPage.value = Math.max(1, Math.ceil(value.total / pageSize.value));
+  });
+  const outcomeOptions = computed(() =>
+    ['all', 'succeeded', 'failed', 'denied', 'intent'].map((value) => ({
+      value,
+      label: value === 'all' ? t('serverManagement.eventsPage.filters.all') : outcomeLabel(value),
+    })),
+  );
+  const columns = computed(() => [
+    {
+      key: 'time',
+      title: t('serverManagement.eventsPage.exportHeaders.time'),
+      width: 'var(--ui-layout-180,180px)',
+      ellipsis: false,
+    },
+    {
+      key: 'action',
+      title: t('serverManagement.eventsPage.exportHeaders.action'),
+      width: 'var(--ui-layout-150,150px)',
+      ellipsis: false,
+    },
+    {
+      key: 'target',
+      title: t('serverManagement.eventsPage.exportHeaders.target'),
+      width: 'minmax(var(--ui-layout-160,160px),1fr)',
+      ellipsis: false,
+    },
+    {
+      key: 'outcome',
+      title: t('serverManagement.eventsPage.exportHeaders.outcome'),
+      width: 'var(--ui-layout-90,90px)',
+      ellipsis: false,
+    },
+    {
+      key: 'reason',
+      title: t('serverManagement.eventsPage.exportHeaders.reason'),
+      width: 'minmax(var(--ui-layout-240,240px),1fr)',
+      ellipsis: false,
+    },
+    { key: 'detail', title: t('common.detail'), width: 'var(--ui-layout-80,80px)', ellipsis: false },
   ]);
-  const filteredItems = computed(() => {
-    const normalizedKeyword = keyword.value.trim().toLocaleLowerCase(locale.value);
-    return (data.value?.items || []).filter((item) => {
-      const matchesOutcome = outcome.value === 'all' || item.outcome === outcome.value;
-      const haystack =
-        `${actionLabel(item.action)} ${item.action} ${targetLabel(item)} ${item.reason || ''}`.toLocaleLowerCase(
-          locale.value,
-        );
-      return matchesOutcome && (!normalizedKeyword || haystack.includes(normalizedKeyword));
-    });
-  });
-  const summaryCards = computed(() => {
-    const items = data.value?.items || [];
-    return [
-      {
-        key: 'succeeded',
-        label: t('serverManagement.eventsPage.summary.succeeded'),
-        value: items.filter((item) => item.outcome === 'succeeded').length,
-      },
-      {
-        key: 'failed',
-        label: t('serverManagement.eventsPage.summary.failed'),
-        value: items.filter((item) => item.outcome === 'failed').length,
-      },
-      {
-        key: 'intent',
-        label: t('serverManagement.eventsPage.summary.intent'),
-        value: items.filter((item) => item.outcome === 'intent').length,
-      },
-      { key: 'total', label: t('serverManagement.eventsPage.summary.total'), value: items.length },
-    ];
-  });
+  function formatTime(value: string) {
+    return formatAdminDateTime(value, locale.value);
+  }
   function actionLabel(action: string) {
     return action === 'infra.nginx_reload'
       ? t('serverManagement.reloadNginx')
@@ -176,20 +225,57 @@
   function outcomeTone(value: string): 'success' | 'danger' | 'pending' | 'neutral' {
     return value === 'succeeded'
       ? 'success'
-      : value === 'failed'
+      : value === 'failed' || value === 'denied'
         ? 'danger'
         : value === 'intent'
           ? 'pending'
           : 'neutral';
   }
-  function targetLabel(item: AuditItem) {
-    return [item.targetType, item.targetId].filter(Boolean).join(' / ') || '—';
+  function targetLabel(item: InfraAuditItem) {
+    const key = `serverManagement.serviceNames.${item.targetId}`;
+    return item.targetId &&
+      [
+        'lightnote-api',
+        'lightnote-document-worker',
+        'lightnote-bookmark-icon-worker',
+        'lightnote-resource-governance-worker',
+        'nginx',
+        'mysql',
+        'redis',
+      ].includes(item.targetId)
+      ? t(key)
+      : [item.targetType, item.targetId].filter(Boolean).join(' / ') || '—';
   }
-  function formatTime(value: string) {
-    const date = new Date(String(value).replace(' ', 'T'));
-    return Number.isFinite(date.getTime()) ? date.toLocaleString(locale.value, { hour12: false }) : value;
+  const detailFields = computed(() =>
+    detail.value
+      ? Object.entries({
+          [t('serverManagement.eventsPage.exportHeaders.time')]: formatTime(detail.value.createTime),
+          [t('serverManagement.eventsPage.exportHeaders.action')]: actionLabel(detail.value.action),
+          [t('serverManagement.eventsPage.exportHeaders.target')]: targetLabel(detail.value),
+          [t('serverManagement.eventsPage.exportHeaders.outcome')]: outcomeLabel(detail.value.outcome),
+          [t('serverManagement.eventsPage.exportHeaders.reason')]: detail.value.reason,
+          [t('serverManagement.workspace.actor')]: detail.value.actorAlias || detail.value.actorUserId,
+          'Audit ID': detail.value.id,
+          'Request ID': detail.value.requestId,
+          IP: detail.value.ipMasked,
+          [t('serverManagement.workspace.rawEvidence')]: JSON.stringify(detail.value.metadata || {}, null, 2),
+        }).map(([label, value]) => ({ label, value }))
+      : [],
+  );
+  function reset() {
+    clearTimeout(debounce);
+    keyword.value = '';
+    appliedKeyword.value = '';
+    outcome.value = 'all';
+    startDate.value = '';
+    endDate.value = '';
+    currentPage.value = 1;
   }
   function auditText() {
+    const cell = (value: unknown) =>
+      String(value ?? '')
+        .replace(/[\t\r\n]+/g, ' ')
+        .replace(/^[=+@-]/, "'$&");
     return [
       [
         t('serverManagement.eventsPage.exportHeaders.time'),
@@ -197,196 +283,137 @@
         t('serverManagement.eventsPage.exportHeaders.action'),
         t('serverManagement.eventsPage.exportHeaders.target'),
         t('serverManagement.eventsPage.exportHeaders.reason'),
-      ].join('\t'),
-      ...filteredItems.value.map(
-        (item) =>
-          `${formatTime(item.createTime)}\t${outcomeLabel(item.outcome)}\t${actionLabel(item.action)}\t${targetLabel(item)}\t${item.reason || t('serverManagement.eventsPage.noReason')}`,
-      ),
-    ].join('\n');
+      ],
+      ...(data.value?.items || []).map((item) => [
+        formatTime(item.createTime),
+        outcomeLabel(item.outcome),
+        actionLabel(item.action),
+        targetLabel(item),
+        item.reason,
+      ]),
+    ]
+      .map((row) => row.map(cell).join('\t'))
+      .join('\n');
   }
   async function exportItems() {
+    if (!data.value || refreshing.value) return;
+    const content = auditText();
     try {
       const result = await deliverGeneratedFile({
-        content: auditText(),
-        fileName: buildExportFileName('lightnote-server-operation-audit', 'lightnote-server-operation-audit', 'tsv'),
+        content,
+        fileName: buildExportFileName(
+          'lightnote-server-audit-page',
+          `lightnote-server-audit-page-${currentPage.value}`,
+          'tsv',
+        ),
         mimeType: 'text/tab-separated-values',
         preferShare: true,
       });
       if (result === 'unavailable') {
-        const copied = await copyTextToClipboard(auditText());
+        const copied = await copyTextToClipboard(content);
         copied
           ? message.warning(t('serverManagement.eventsPage.exportUnavailable'))
           : message.error(t('serverManagement.eventsPage.exportFailed'));
-      } else if (result !== 'cancelled') {
-        message.success(t('serverManagement.eventsPage.exported'));
-      }
+      } else if (result !== 'cancelled') message.success(t('serverManagement.eventsPage.exported'));
     } catch {
       message.error(t('serverManagement.eventsPage.exportFailed'));
     }
   }
 </script>
-
 <style scoped lang="less">
-  .infra-module-page {
-    height: 100%;
-    overflow-y: auto;
-    background: var(--background-color);
-    color: var(--text-color);
+  .events-reason {
+    white-space: normal;
+    overflow-wrap: anywhere;
+    line-height: 1.5;
   }
-  .infra-module-content {
-    width: min(var(--ui-layout-1320, 1320px), calc(100% - var(--ui-layout-48, 48px)));
-    margin: 0 auto;
-    padding: var(--ui-space-28, 28px) 0 var(--ui-space-48, 48px);
-    display: grid;
-    gap: var(--ui-space-18, 18px);
-  }
-  .infra-state-card {
-    min-height: var(--ui-layout-150, 150px);
-    display: flex;
-    align-items: center;
-    gap: var(--ui-space-14, 14px);
-    padding: var(--ui-space-18, 18px);
-    border: 1px solid var(--surface-border-color);
-    border-radius: 12px;
-    background: var(--card-background);
-  }
-  .infra-state-card div {
-    flex: 1;
-  }
-  .infra-state-card p {
-    margin: var(--ui-space-5, 5px) 0 0;
-    color: var(--desc-color);
-  }
-  .infra-stale-warning {
-    display: flex;
-    align-items: center;
-    gap: var(--ui-space-8, 8px);
-    padding: var(--ui-space-10, 10px) var(--ui-space-12, 12px);
-    border: 1px solid var(--warning-color, #ad6800);
-    border-radius: 10px;
-    color: var(--warning-color, #ad6800);
-    background: var(--card-background);
-  }
-  .events-filter {
-    width: var(--ui-layout-130, 130px);
-  }
-  .events-summary {
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: var(--ui-space-12, 12px);
-  }
-  .events-summary :deep(.b-card) {
-    display: grid;
-    gap: var(--ui-space-8, 8px);
-  }
-  .events-summary span,
-  .events-count {
-    color: var(--desc-color);
-    font-size: var(--ui-font-12, 12px);
-  }
-  .events-summary strong {
-    font-size: var(--ui-font-24, 24px);
-  }
-  .events-summary strong.is-failed {
-    color: var(--error-color, #d14343);
-  }
-  .events-summary strong.is-succeeded {
-    color: var(--success-color, #27965b);
-  }
+
   .events-toolbar {
     display: grid;
-    grid-template-columns: minmax(var(--ui-layout-180, 180px), var(--ui-layout-280, 280px)) var(--ui-layout-130, 130px) auto;
-    gap: var(--ui-space-8, 8px);
-  }
-  .events-count {
-    margin: 0 0 var(--ui-space-12, 12px);
-    text-align: right;
-  }
-  .events-timeline {
-    display: grid;
-    gap: 0;
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
-  .events-timeline li {
-    position: relative;
-    display: grid;
-    grid-template-columns: 16px minmax(0, 1fr);
+    grid-template-columns:
+      minmax(var(--ui-layout-200, 200px), 1fr) var(--ui-layout-140, 140px) var(--ui-layout-260, 260px)
+      auto auto;
     gap: var(--ui-space-10, 10px);
-    padding-bottom: var(--ui-space-18, 18px);
+    align-items: center;
   }
-  .events-timeline li:not(:last-child)::before {
-    content: '';
-    position: absolute;
-    left: 5px;
-    top: 13px;
-    bottom: 0;
-    width: 1px;
-    background: var(--surface-divider-color);
-  }
-  .events-timeline__marker {
-    z-index: 1;
-    width: 11px;
-    height: 11px;
-    margin-top: var(--ui-space-4, 4px);
-    border: 2px solid var(--card-background);
-    border-radius: 50%;
-    background: var(--desc-color);
-  }
-  .events-timeline__marker.is-succeeded {
-    background: var(--success-color, #27965b);
-  }
-  .events-timeline__marker.is-failed {
-    background: var(--error-color, #d14343);
-  }
-  .events-timeline__marker.is-intent {
-    background: var(--warning-color, #ad6800);
-  }
-  .events-timeline__content {
-    min-width: 0;
-  }
-  .events-timeline__content > div {
+  .events-summary {
     display: flex;
     align-items: center;
-    gap: var(--ui-space-8, 8px);
-  }
-  .events-timeline p {
-    margin: var(--ui-space-6, 6px) 0;
-    color: var(--text-color);
+    gap: var(--ui-space-24, 24px);
+    flex-wrap: wrap;
+    color: var(--desc-color);
     font-size: var(--ui-font-13, 13px);
   }
-  .events-timeline small {
+  .events-summary strong {
+    color: var(--text-color);
+    font-variant-numeric: tabular-nums;
+  }
+  .events-error {
+    display: flex;
+    align-items: center;
+    gap: var(--ui-space-10, 10px);
+    padding: var(--ui-space-14, 14px);
+    border: 1px solid var(--warning-color);
+    border-radius: 12px;
+    color: var(--warning-color);
+  }
+  .events-empty {
+    min-height: var(--ui-layout-240, 240px);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--ui-space-12, 12px);
+    color: var(--desc-color);
+  }
+  .events-mobile article {
+    padding: var(--ui-space-16, 16px) 0;
+    border-bottom: 1px solid var(--surface-divider-color);
+  }
+  .events-mobile header,
+  .events-mobile footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--ui-space-10, 10px);
+  }
+  .events-mobile p,
+  .events-mobile time {
+    color: var(--desc-color);
+    font-size: var(--ui-font-12, 12px);
+    overflow-wrap: anywhere;
+  }
+  .events-detail {
+    display: grid;
+    gap: var(--ui-space-16, 16px);
+    margin: 0;
+  }
+  .events-detail dt {
     color: var(--desc-color);
     font-size: var(--ui-font-12, 12px);
   }
-  .events-empty {
-    min-height: var(--ui-layout-110, 110px);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--desc-color);
+  .events-detail dd {
+    margin: var(--ui-space-6, 6px) 0 0;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    font-size: var(--ui-font-14, 14px);
   }
-  @media (max-width: 760px) {
-    .infra-module-content {
-      width: calc(100% - 24px);
-      padding: 18px 0 32px;
-      gap: 14px;
-    }
-    .events-summary {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
+  @media (max-width: 1199px) {
     .events-toolbar {
       grid-template-columns: 1fr 1fr;
     }
     .events-toolbar > :first-child {
-      grid-column: 1 / 3;
+      grid-column: 1/-1;
     }
-    .events-filter {
-      width: 100%;
+  }
+  @media (max-width: 767px) {
+    .events-toolbar {
+      gap: var(--ui-space-8, 8px);
     }
-    .events-count {
-      text-align: left;
+    .events-toolbar > :nth-child(3) {
+      grid-column: 1/-1;
+    }
+    .events-summary {
+      gap: var(--ui-space-10, 10px);
     }
   }
 </style>

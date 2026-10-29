@@ -64,9 +64,9 @@ export async function getAdminOperationAudits(req, res) {
     if (keyword) {
       const like = `%${keyword}%`;
       where.push(
-        '(a.actor_user_id LIKE ? OR u.alias LIKE ? OR a.target_type LIKE ? OR a.target_id LIKE ? OR a.reason LIKE ? OR a.request_id LIKE ?)',
+        '(a.actor_user_id LIKE ? OR u.alias LIKE ? OR a.action LIKE ? OR a.target_type LIKE ? OR a.target_id LIKE ? OR a.reason LIKE ? OR a.request_id LIKE ?)',
       );
-      params.push(like, like, like, like, like, like);
+      params.push(like, like, like, like, like, like, like);
     }
     if (startDate) {
       where.push('a.create_time >= ?');
@@ -89,14 +89,20 @@ export async function getAdminOperationAudits(req, res) {
         [...params, pageSize, offset],
       ),
       pool.query(
-        `SELECT COUNT(*) AS total
+        `SELECT COUNT(*) AS total,
+                COALESCE(SUM(a.outcome = 'succeeded'), 0) AS succeeded,
+                COALESCE(SUM(a.outcome = 'failed'), 0) AS failed,
+                COALESCE(SUM(a.outcome = 'denied'), 0) AS denied,
+                COALESCE(SUM(a.outcome = 'intent'), 0) AS intents
            FROM admin_operation_audit a
            LEFT JOIN user u ON u.id = a.actor_user_id
           WHERE ${whereSql}`,
         params,
       ),
-      pool.query(
-        `SELECT COUNT(*) AS total,
+      req.body?.includeSummary7d === false
+        ? Promise.resolve([[]])
+        : pool.query(
+            `SELECT COUNT(*) AS total,
                 COALESCE(SUM(outcome = 'succeeded'), 0) AS succeeded,
                 COALESCE(SUM(outcome = 'failed'), 0) AS failed,
                 COALESCE(SUM(outcome = 'denied'), 0) AS denied,
@@ -106,7 +112,7 @@ export async function getAdminOperationAudits(req, res) {
                 COALESCE(SUM(action = 'ai_feedback.triage'), 0) AS feedback_triages
            FROM admin_operation_audit
           WHERE create_time >= DATE_SUB(NOW(), INTERVAL 7 DAY)`,
-      ),
+          ),
     ]);
 
     return res.send(
@@ -116,6 +122,9 @@ export async function getAdminOperationAudits(req, res) {
         currentPage,
         pageSize,
         summary7d: summaryRows[0] || {},
+        filteredSummary: Object.fromEntries(
+          ['total', 'succeeded', 'failed', 'denied', 'intents'].map((key) => [key, Number(countRows[0]?.[key] || 0)]),
+        ),
         actionCatalog: ACTION_DEFINITIONS,
       }),
     );

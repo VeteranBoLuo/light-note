@@ -99,6 +99,7 @@ export const getAdminOperationAudits = async function (params: {
   endDate?: string;
   currentPage?: number;
   pageSize?: number;
+  includeSummary7d?: boolean;
 }) {
   return apiBasePost('/api/common/getAdminOperationAudits', params, { silent: true });
 };

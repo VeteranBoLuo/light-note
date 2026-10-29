@@ -793,6 +793,7 @@
   .ov-resource-breakdown__counts {
     display: inline-flex;
     flex: 1;
+    align-items: baseline;
     flex-wrap: wrap;
     justify-content: flex-end;
     gap: var(--ui-space-2, 2px) var(--ui-space-8, 8px);

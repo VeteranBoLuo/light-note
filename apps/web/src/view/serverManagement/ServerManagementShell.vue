@@ -1,13 +1,9 @@
 <template>
   <main class="infra-shell">
     <aside class="infra-shell__sidebar" :aria-label="t('serverManagement.navigationLabel')">
-      <div class="infra-shell__brand">
-        <span><SvgIcon :src="icon.infrastructure.server" size="22" aria-hidden="true" /></span>
-        <div>
-          <strong>{{ t('serverManagement.title') }}</strong>
-          <small>{{ t('serverManagement.localHost') }}</small>
-        </div>
-      </div>
+      <div class="infra-shell__brand"
+        ><strong>{{ t('serverManagement.title') }}</strong></div
+      >
       <nav class="infra-shell__nav">
         <BButton
           v-for="item in navItems"
@@ -21,17 +17,9 @@
           <span>{{ item.label }}</span>
         </BButton>
       </nav>
-      <p class="infra-shell__boundary">{{ t('serverManagement.readOnlyBoundary') }}</p>
     </aside>
 
     <section class="infra-shell__workspace">
-      <BTabs
-        class="infra-shell__mobile-tabs"
-        variant="segment"
-        :options="mobileTabOptions"
-        :active-tab="activeKey"
-        @change="go"
-      />
       <router-view />
     </section>
   </main>
@@ -44,7 +32,6 @@
   import icon from '@/config/icon';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
-  import BTabs from '@/components/base/BasicComponents/BTabs.vue';
 
   type ModuleKey = 'overview' | 'diagnostics' | 'services' | 'security' | 'storage' | 'events';
   const route = useRoute();
@@ -66,7 +53,6 @@
     const value = String(route.meta.infraModule || 'overview');
     return navItems.value.some((item) => item.key === value) ? (value as ModuleKey) : 'overview';
   });
-  const mobileTabOptions = computed(() => navItems.value.map((item) => ({ key: item.key, label: item.label })));
 
   function go(key: string) {
     if (key === activeKey.value) return;
@@ -101,29 +87,8 @@
     gap: var(--ui-space-10, 10px);
     padding: 0 var(--ui-space-8, 8px) var(--ui-space-8, 8px);
   }
-  .infra-shell__brand > span {
-    width: var(--ui-layout-38, 38px);
-    height: var(--ui-layout-38, 38px);
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    flex: 0 0 auto;
-    border: 1px solid var(--surface-border-color);
-    border-radius: 11px;
-    color: var(--primary-color);
-  }
-  .infra-shell__brand div {
-    min-width: 0;
-    display: grid;
-    gap: var(--ui-space-2, 2px);
-  }
   .infra-shell__brand strong {
     font-size: var(--ui-font-15, 15px);
-  }
-  .infra-shell__brand small,
-  .infra-shell__boundary {
-    color: var(--desc-color);
-    font-size: var(--ui-font-11, 11px);
   }
   .infra-shell__nav {
     display: grid;
@@ -134,7 +99,7 @@
     min-height: var(--ui-control-42, 42px);
     justify-content: flex-start;
     gap: var(--ui-space-10, 10px);
-    border-color: transparent;
+    border: 1px solid transparent;
     background: transparent;
     color: var(--desc-color);
   }
@@ -150,19 +115,12 @@
     background: var(--hover-background);
     font-weight: 600;
   }
-  .infra-shell__boundary {
-    margin: auto var(--ui-space-8, 8px) 0;
-    line-height: 1.65;
-  }
   .infra-shell__workspace {
     min-width: 0;
     min-height: 0;
     overflow: hidden;
   }
-  .infra-shell__mobile-tabs {
-    display: none;
-  }
-  @media (max-width: 760px) {
+  @media (max-width: 767px) {
     .infra-shell {
       display: flex;
       flex-direction: column;
@@ -174,17 +132,6 @@
       flex: 1;
       display: flex;
       flex-direction: column;
-    }
-    .infra-shell__mobile-tabs {
-      display: flex;
-      flex: 0 0 auto;
-      margin: 8px 12px 0;
-      overflow-x: auto;
-    }
-    .infra-shell__workspace :deep(.server-management-page),
-    .infra-shell__workspace :deep(.infra-module-page) {
-      flex: 1;
-      min-height: 0;
     }
   }
 </style>

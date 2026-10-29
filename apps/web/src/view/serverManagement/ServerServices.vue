@@ -1,187 +1,173 @@
 <template>
-  <main class="infra-module-page">
-    <div class="infra-module-content">
+  <InfraPage>
+    <template #header>
       <InfraModuleHeader
+        :mobile-title="t('serverManagement.modules.services')"
         :title="t('serverManagement.servicesPage.title')"
-        :subtitle="t('serverManagement.servicesPage.subtitle')"
-        :icon-src="icon.infrastructure.service"
         :cadence="t('serverManagement.servicesPage.cadence')"
         :loading="refreshing"
         :refresh-label="t('common.refresh')"
         @refresh="refresh"
       />
+    </template>
 
-      <BLoading v-if="initialLoading" inline :loading="true" :title="t('serverManagement.loading')" />
-      <BCard v-else-if="!data" class="infra-state-card" variant="panel">
-        <SvgIcon :src="icon.message.warning" size="24" aria-hidden="true" />
-        <div
-          ><strong>{{ t('serverManagement.snapshotUnavailable') }}</strong
-          ><p>{{ error }}</p></div
-        >
-        <BButton type="primary" @click="refresh">{{ t('serverManagement.retry') }}</BButton>
-      </BCard>
-      <template v-else>
-        <div v-if="error" class="infra-stale-warning" role="status">
-          <SvgIcon :src="icon.message.warning" size="16" />{{ t('serverManagement.staleSnapshot') }}
+    <BLoading v-if="initialLoading" inline :loading="true" :title="t('serverManagement.loading')" />
+    <BCard v-else-if="!data" class="infra-state-card" variant="panel">
+      <SvgIcon :src="icon.message.warning" size="24" aria-hidden="true" />
+      <div
+        ><strong>{{ t('serverManagement.snapshotUnavailable') }}</strong
+        ><p>{{ error }}</p></div
+      >
+      <BButton type="primary" @click="refresh">{{ t('serverManagement.retry') }}</BButton>
+    </BCard>
+    <template v-else>
+      <div v-if="data.collectionErrors.length" class="infra-stale-warning"
+        >{{ t('serverManagement.partialCollectionTitle') }} ·
+        {{ data.collectionErrors.map((item) => item.code).join(' · ') }}</div
+      >
+
+      <div v-if="error" class="infra-stale-warning" role="status">
+        <SvgIcon :src="icon.message.warning" size="16" />{{ t('serverManagement.staleSnapshot') }}
+      </div>
+      <BCard
+        v-if="lastActionResult"
+        class="action-receipt"
+        :title="t('serverManagement.servicesPage.actionReceiptTitle')"
+      >
+        <div class="action-receipt__summary">
+          <span class="action-receipt__icon"><SvgIcon :src="icon.infrastructure.security" size="20" /></span>
+          <div>
+            <strong>{{ lastActionResult.actionLabel }} · {{ lastActionResult.serviceName }}</strong>
+            <p>{{ lastActionResult.summary || t('serverManagement.actionSucceeded') }}</p>
+          </div>
+          <BChip tone="success">{{ t('serverManagement.actionSucceeded') }}</BChip>
         </div>
-        <BCard
-          v-if="lastActionResult"
-          class="action-receipt"
-          :title="t('serverManagement.servicesPage.actionReceiptTitle')"
-        >
-          <div class="action-receipt__summary">
-            <span class="action-receipt__icon"><SvgIcon :src="icon.infrastructure.security" size="20" /></span>
-            <div>
-              <strong>{{ lastActionResult.actionLabel }} · {{ lastActionResult.serviceName }}</strong>
-              <p>{{ lastActionResult.summary || t('serverManagement.actionSucceeded') }}</p>
-            </div>
-            <BChip tone="success">{{ t('serverManagement.actionSucceeded') }}</BChip>
+        <dl class="action-receipt__details">
+          <div
+            ><dt>{{ t('serverManagement.servicesPage.receiptState') }}</dt
+            ><dd>{{ receiptStateLabel(lastActionResult.state) }}</dd></div
+          >
+          <div
+            ><dt>{{ t('serverManagement.servicesPage.receiptJob') }}</dt
+            ><dd>{{ lastActionResult.jobId || '—' }}</dd></div
+          >
+          <div>
+            <dt>{{ t('serverManagement.servicesPage.receiptReplay') }}</dt>
+            <dd>{{
+              lastActionResult.replayed
+                ? t('serverManagement.servicesPage.receiptReplayYes')
+                : t('serverManagement.servicesPage.receiptReplayNo')
+            }}</dd>
           </div>
-          <dl class="action-receipt__details">
-            <div
-              ><dt>{{ t('serverManagement.servicesPage.receiptState') }}</dt
-              ><dd>{{ receiptStateLabel(lastActionResult.state) }}</dd></div
-            >
-            <div
-              ><dt>{{ t('serverManagement.servicesPage.receiptJob') }}</dt
-              ><dd>{{ lastActionResult.jobId || '—' }}</dd></div
-            >
-            <div>
-              <dt>{{ t('serverManagement.servicesPage.receiptReplay') }}</dt>
-              <dd>{{
-                lastActionResult.replayed
-                  ? t('serverManagement.servicesPage.receiptReplayYes')
-                  : t('serverManagement.servicesPage.receiptReplayNo')
-              }}</dd>
-            </div>
-            <div>
-              <dt>{{ t('serverManagement.servicesPage.receiptVerification') }}</dt>
-              <dd :class="lastActionResult.verified ? 'is-verified' : 'is-unverified'">{{
-                lastActionResult.verified
-                  ? t('serverManagement.servicesPage.receiptVerified')
-                  : t('serverManagement.servicesPage.receiptUnverified')
-              }}</dd>
-            </div>
-          </dl>
-          <div class="action-receipt__actions">
-            <BButton size="small" @click="router.push('/serverManagement/events')">{{
-              t('serverManagement.servicesPage.viewAudit')
-            }}</BButton>
-            <BButton size="small" @click="lastActionResult = null">{{
-              t('serverManagement.servicesPage.dismissReceipt')
-            }}</BButton>
+          <div>
+            <dt>{{ t('serverManagement.servicesPage.receiptVerification') }}</dt>
+            <dd :class="lastActionResult.verified ? 'is-verified' : 'is-unverified'">{{
+              lastActionResult.verified
+                ? t('serverManagement.servicesPage.receiptVerified')
+                : t('serverManagement.servicesPage.receiptUnverified')
+            }}</dd>
           </div>
-        </BCard>
-        <section class="service-summary-grid">
-          <BCard v-for="item in summaryCards" :key="item.key" class="service-summary-card">
-            <span>{{ item.label }}</span
-            ><strong>{{ item.value }}</strong
-            ><small>{{ item.hint }}</small>
+        </dl>
+        <div class="action-receipt__actions">
+          <BButton size="small" @click="router.push('/serverManagement/events')">{{
+            t('serverManagement.servicesPage.viewAudit')
+          }}</BButton>
+          <BButton size="small" @click="lastActionResult = null">{{
+            t('serverManagement.servicesPage.dismissReceipt')
+          }}</BButton>
+        </div>
+      </BCard>
+      <div class="service-summary-inline"
+        ><span v-for="item in summaryCards.slice(0, 3)" :key="item.key"
+          >{{ item.label }} <strong>{{ item.value }}</strong></span
+        ></div
+      >
+      <BCard :title="t('serverManagement.servicesTitle')" class="services-panel">
+        <div class="services-toolbar">
+          <BInput
+            v-model:value="serviceKeyword"
+            clearable
+            :placeholder="t('serverManagement.servicesPage.searchPlaceholder')"
+          >
+            <template #prefix><SvgIcon :src="icon.navigation.search" size="15" /></template>
+          </BInput>
+          <BSelect
+            :value="serviceStateFilter"
+            :options="serviceStateOptions"
+            :aria-label="t('serverManagement.servicesPage.stateFilterLabel')"
+            @change="serviceStateFilter = String($event)"
+          />
+          <BButton size="small" :aria-pressed="abnormalFirst" @click="abnormalFirst = !abnormalFirst">{{
+            t(abnormalFirst ? 'serverManagement.workspace.abnormalFirst' : 'serverManagement.workspace.originalOrder')
+          }}</BButton>
+          <span>{{
+            t('serverManagement.servicesPage.visibleCount', {
+              visible: filteredServices.length,
+              total: services.length,
+            })
+          }}</span>
+        </div>
+        <div v-if="!filteredServices.length" class="services-empty">{{
+          t('serverManagement.servicesPage.filterEmpty')
+        }}</div>
+        <div v-if="filteredServices.length" class="services-table">
+          <BTable :data="filteredServices" :columns="columns" row-key="id">
+            <template #bodyCell="{ column, record }">
+              <template v-if="column.key === 'name'">
+                <span class="service-name"
+                  ><SvgIcon :src="icon.infrastructure.service" size="16" />{{ serviceName(record.id) }}</span
+                >
+              </template>
+              <template v-else-if="column.key === 'state'">
+                <BChip :tone="tone(record.state)">{{ stateLabel(record.state) }}</BChip>
+              </template>
+              <template v-else-if="column.key === 'cpu'">{{ formatPercent(record.cpuPercent) }}</template>
+              <template v-else-if="column.key === 'memory'">{{ formatBytes(record.memoryBytes) }}</template>
+              <template v-else-if="column.key === 'restarts'">{{ record.restartCount ?? '—' }}</template>
+              <template v-else-if="column.key === 'uptime'">{{ formatDuration(record.uptimeSeconds) }}</template>
+              <template v-else-if="column.key === 'actions'">
+                <InfraServiceActions
+                  :service="record"
+                  :loading="actionLoading"
+                  @logs="openLogs(record)"
+                  @action="openAction(record, $event)"
+                />
+              </template>
+            </template>
+          </BTable>
+        </div>
+        <section v-if="filteredServices.length" class="services-mobile">
+          <BCard v-for="service in filteredServices" :key="service.id" class="service-mobile-card" padding="14px">
+            <header
+              ><strong>{{ serviceName(service.id) }}</strong
+              ><BChip :tone="tone(service.state)">{{ stateLabel(service.state) }}</BChip
+              ><InfraServiceActions
+                :service="service"
+                :loading="actionLoading"
+                :show-logs="false"
+                @action="openAction(service, $event)"
+            /></header>
+            <dl
+              ><div
+                ><dt>CPU</dt><dd>{{ formatPercent(service.cpuPercent) }}</dd></div
+              ><div
+                ><dt>{{ t('serverManagement.memory') }}</dt
+                ><dd>{{ formatBytes(service.memoryBytes) }}</dd></div
+              ><div
+                ><dt>{{ t('serverManagement.columns.uptime') }}</dt
+                ><dd>{{ formatDuration(service.uptimeSeconds) }}</dd></div
+              ><div
+                ><dt>{{ t('serverManagement.servicesPage.restarts') }}</dt
+                ><dd>{{ service.restartCount ?? '—' }}</dd></div
+              ></dl
+            >
+            <BButton type="text" size="small" @click="openLogs(service)"
+              ><SvgIcon :src="icon.infrastructure.logs" size="15" />{{ t('serverManagement.viewLogs') }} ›</BButton
+            >
           </BCard>
         </section>
-        <BCard :title="t('serverManagement.servicesTitle')">
-          <div class="services-toolbar">
-            <BInput
-              v-model:value="serviceKeyword"
-              clearable
-              :placeholder="t('serverManagement.servicesPage.searchPlaceholder')"
-            >
-              <template #prefix><SvgIcon :src="icon.navigation.search" size="15" /></template>
-            </BInput>
-            <BSelect
-              :value="serviceStateFilter"
-              :options="serviceStateOptions"
-              :aria-label="t('serverManagement.servicesPage.stateFilterLabel')"
-              @change="serviceStateFilter = String($event)"
-            />
-            <span>{{
-              t('serverManagement.servicesPage.visibleCount', {
-                visible: filteredServices.length,
-                total: services.length,
-              })
-            }}</span>
-          </div>
-          <div v-if="!filteredServices.length" class="services-empty">{{
-            t('serverManagement.servicesPage.filterEmpty')
-          }}</div>
-          <div v-if="filteredServices.length" class="services-table">
-            <BTable :data="filteredServices" :columns="columns" row-key="id">
-              <template #bodyCell="{ column, record }">
-                <template v-if="column.key === 'name'">
-                  <span class="service-name"
-                    ><SvgIcon :src="icon.infrastructure.service" size="16" />{{ serviceName(record.id) }}</span
-                  >
-                </template>
-                <template v-else-if="column.key === 'state'">
-                  <BChip :tone="tone(record.state)">{{ stateLabel(record.state) }}</BChip>
-                </template>
-                <template v-else-if="column.key === 'cpu'">{{ formatPercent(record.cpuPercent) }}</template>
-                <template v-else-if="column.key === 'memory'">{{ formatBytes(record.memoryBytes) }}</template>
-                <template v-else-if="column.key === 'restarts'">{{ record.restartCount ?? '—' }}</template>
-                <template v-else-if="column.key === 'uptime'">{{ formatDuration(record.uptimeSeconds) }}</template>
-                <template v-else-if="column.key === 'actions'">
-                  <div class="service-actions">
-                    <BButton size="small" @click="openLogs(record)">
-                      <SvgIcon :src="icon.infrastructure.logs" size="14" />{{ t('serverManagement.viewLogs') }}
-                    </BButton>
-                    <BButton
-                      v-for="action in record.actions"
-                      :key="action"
-                      type="danger"
-                      size="small"
-                      :disabled="actionLoading"
-                      @click="openAction(record, action)"
-                    >
-                      <SvgIcon :src="icon.infrastructure.restart" size="14" />{{ actionLabel(action) }}
-                    </BButton>
-                  </div>
-                </template>
-              </template>
-            </BTable>
-          </div>
-          <MobileListSurface v-if="filteredServices.length" class="services-mobile">
-            <MobileListRow v-for="service in filteredServices" :key="service.id" complex>
-              <template #leading><SvgIcon :src="icon.infrastructure.service" size="18" /></template>
-              <template #title>{{ serviceName(service.id) }}</template>
-              <template #subtitle>
-                CPU {{ formatPercent(service.cpuPercent) }} · {{ formatBytes(service.memoryBytes) }} ·
-                {{ formatDuration(service.uptimeSeconds) }}
-              </template>
-              <template #meta
-                ><BChip :tone="tone(service.state)">{{ stateLabel(service.state) }}</BChip></template
-              >
-              <template #trailing>
-                <div class="service-mobile-actions">
-                  <BButton
-                    size="small"
-                    :aria-label="t('serverManagement.viewServiceLogs', { service: serviceName(service.id) })"
-                    @click="openLogs(service)"
-                  >
-                    <SvgIcon :src="icon.infrastructure.logs" size="15" />
-                  </BButton>
-                  <BButton
-                    v-for="action in service.actions"
-                    :key="action"
-                    type="danger"
-                    size="small"
-                    :disabled="actionLoading"
-                    :aria-label="
-                      t('serverManagement.actionForService', {
-                        action: actionLabel(action),
-                        service: serviceName(service.id),
-                      })
-                    "
-                    @click="openAction(service, action)"
-                  >
-                    <SvgIcon :src="icon.infrastructure.restart" size="15" />
-                  </BButton>
-                </div>
-              </template>
-            </MobileListRow>
-          </MobileListSurface>
-        </BCard>
-      </template>
-    </div>
+      </BCard>
+    </template>
 
     <BModal
       v-model:visible="logsVisible"
@@ -290,7 +276,7 @@
       :loading="actionLoading"
       @confirm="confirmAction"
     />
-  </main>
+  </InfraPage>
 </template>
 
 <script setup lang="ts">
@@ -317,8 +303,8 @@
   import BSelect from '@/components/base/BasicComponents/BSelect.vue';
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
   import AdminRiskActionModal from '@/components/admin/AdminRiskActionModal.vue';
-  import MobileListSurface from '@/components/mobile/MobileListSurface.vue';
-  import MobileListRow from '@/components/mobile/MobileListRow.vue';
+  import InfraServiceActions from './InfraServiceActions.vue';
+  import InfraPage from './InfraPage.vue';
   import InfraModuleHeader from './InfraModuleHeader.vue';
   import { useInfraSnapshot } from './useInfraSnapshot';
   import { useInfraActions } from './useInfraActions';
@@ -354,6 +340,7 @@
   const services = computed(() => data.value?.services || []);
   const serviceKeyword = ref('');
   const serviceStateFilter = ref('all');
+  const abnormalFirst = ref(true);
   const serviceStateOptions = computed(() => [
     { value: 'all', label: t('serverManagement.servicesPage.stateFilter.all') },
     { value: 'running', label: t('serverManagement.servicesPage.stateFilter.running') },
@@ -361,21 +348,25 @@
   ]);
   const filteredServices = computed(() => {
     const keyword = serviceKeyword.value.trim().toLocaleLowerCase(locale.value);
-    return services.value.filter((service) => {
-      const matchesState =
-        serviceStateFilter.value === 'all' ||
-        (serviceStateFilter.value === 'running' ? service.state === 'running' : service.state !== 'running');
-      const haystack =
-        `${service.id} ${serviceName(service.id)} ${service.detail || ''} ${stateLabel(service.state)}`.toLocaleLowerCase(
-          locale.value,
-        );
-      return matchesState && (!keyword || haystack.includes(keyword));
-    });
+    return services.value
+      .filter((service) => {
+        const matchesState =
+          serviceStateFilter.value === 'all' ||
+          (serviceStateFilter.value === 'running' ? service.state === 'running' : service.state !== 'running');
+        const haystack =
+          `${service.id} ${serviceName(service.id)} ${service.detail || ''} ${stateLabel(service.state)}`.toLocaleLowerCase(
+            locale.value,
+          );
+        return matchesState && (!keyword || haystack.includes(keyword));
+      })
+      .sort((a, b) => (abnormalFirst.value ? Number(a.state === 'running') - Number(b.state === 'running') : 0));
   });
   const summaryCards = computed(() => {
     const running = services.value.filter((item) => item.state === 'running').length;
     const restarts = services.value.reduce((sum, item) => sum + Number(item.restartCount || 0), 0);
-    const memory = services.value.reduce((sum, item) => sum + Number(item.memoryBytes || 0), 0);
+    const memory = services.value.some((item) => item.memoryBytes !== null)
+      ? services.value.reduce((sum, item) => sum + Number(item.memoryBytes || 0), 0)
+      : null;
     return [
       {
         key: 'running',
@@ -408,9 +399,24 @@
     { key: 'state', title: t('serverManagement.columns.state'), width: 'var(--ui-layout-110, 110px)', ellipsis: false },
     { key: 'cpu', title: 'CPU', width: 'var(--ui-layout-90, 90px)', ellipsis: false },
     { key: 'memory', title: t('serverManagement.memory'), width: 'var(--ui-layout-110, 110px)', ellipsis: false },
-    { key: 'restarts', title: t('serverManagement.servicesPage.restarts'), width: 'var(--ui-layout-90, 90px)', ellipsis: false },
-    { key: 'uptime', title: t('serverManagement.columns.uptime'), width: 'var(--ui-layout-110, 110px)', ellipsis: false },
-    { key: 'actions', title: t('serverManagement.columns.actions'), width: 'minmax(var(--ui-layout-180, 180px), auto)', ellipsis: false },
+    {
+      key: 'restarts',
+      title: t('serverManagement.servicesPage.restarts'),
+      width: 'var(--ui-layout-90, 90px)',
+      ellipsis: false,
+    },
+    {
+      key: 'uptime',
+      title: t('serverManagement.columns.uptime'),
+      width: 'var(--ui-layout-110, 110px)',
+      ellipsis: false,
+    },
+    {
+      key: 'actions',
+      title: t('serverManagement.columns.actions'),
+      width: 'var(--ui-layout-150, 150px)',
+      ellipsis: false,
+    },
   ]);
   const logsVisible = ref(false);
   const logsLoading = ref(false);
@@ -673,19 +679,20 @@
 </script>
 
 <style scoped lang="less">
-  .infra-module-page {
-    height: 100%;
-    overflow-y: auto;
-    background: var(--background-color);
+  .service-summary-inline {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--ui-space-24, 24px);
+    padding: var(--ui-space-4, 4px) 0;
+    font-size: var(--ui-font-13, 13px);
+    color: var(--desc-color);
+  }
+  .service-summary-inline strong {
+    margin-left: var(--ui-space-6, 6px);
     color: var(--text-color);
   }
-  .infra-module-content {
-    width: min(var(--ui-layout-1320, 1320px), calc(100% - var(--ui-layout-48, 48px)));
-    margin: 0 auto;
-    padding: var(--ui-space-28, 28px) 0 var(--ui-space-48, 48px);
-    display: grid;
-    gap: var(--ui-space-18, 18px);
-  }
+
   .infra-state-card {
     min-height: var(--ui-layout-150, 150px);
     display: flex;
@@ -770,26 +777,9 @@
     gap: var(--ui-space-8, 8px);
     margin-top: var(--ui-space-12, 12px);
   }
-  .service-summary-grid {
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: var(--ui-space-14, 14px);
-  }
-  .service-summary-card {
-    display: grid;
-    gap: var(--ui-space-8, 8px);
-  }
-  .service-summary-card span,
-  .service-summary-card small {
-    color: var(--desc-color);
-  }
-  .service-summary-card strong {
-    font-size: var(--ui-font-25, 25px);
-    font-variant-numeric: tabular-nums;
-  }
   .services-toolbar {
     display: grid;
-    grid-template-columns: minmax(var(--ui-layout-220, 220px), 1fr) var(--ui-layout-150, 150px) auto;
+    grid-template-columns: minmax(var(--ui-layout-220, 220px), 1fr) var(--ui-layout-150, 150px) auto auto;
     align-items: center;
     gap: var(--ui-space-10, 10px);
     margin-bottom: var(--ui-space-12, 12px);
@@ -811,17 +801,6 @@
     align-items: center;
     gap: var(--ui-space-7, 7px);
     font-weight: 600;
-  }
-  .service-actions,
-  .service-mobile-actions {
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: var(--ui-space-7, 7px);
-  }
-  .service-actions :deep(.b_btn),
-  .service-mobile-actions :deep(.b_btn) {
-    gap: var(--ui-space-5, 5px);
   }
   .services-mobile {
     display: none;
@@ -890,7 +869,9 @@
   }
   .service-logs__filters {
     display: grid;
-    grid-template-columns: minmax(var(--ui-layout-180, 180px), 1fr) var(--ui-layout-120, 120px) var(--ui-layout-145, 145px) auto auto;
+    grid-template-columns:
+      minmax(var(--ui-layout-180, 180px), 1fr) var(--ui-layout-120, 120px) var(--ui-layout-145, 145px)
+      auto auto;
     align-items: center;
     gap: var(--ui-space-8, 8px);
   }
@@ -993,37 +974,69 @@
     box-shadow: none;
   }
   @media (max-width: 900px) {
-    .service-summary-grid {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
     .service-logs__filters {
       grid-template-columns: minmax(180px, 1fr) repeat(2, 120px);
     }
   }
-  @media (max-width: 760px) {
-    .infra-module-content {
-      width: calc(100% - 24px);
-      padding: 18px 0 32px;
-      gap: 14px;
-    }
+  @media (max-width: 767px) {
     .services-table {
       display: none;
     }
-    .services-toolbar {
-      grid-template-columns: 1fr;
+    .services-panel {
+      border: 0;
+      padding: 0;
+      box-shadow: none;
     }
+    .services-panel :deep(.card-container-header) {
+      display: none;
+    }
+    .services-toolbar {
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: var(--ui-space-8, 8px);
+    }
+    .services-toolbar > :first-child,
     .services-toolbar > span {
-      text-align: left;
+      grid-column: 1/-1;
     }
     .services-mobile {
-      display: block;
+      display: grid;
+      gap: var(--ui-space-12, 12px);
     }
-    .service-summary-grid {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 10px;
+    .service-mobile-card header {
+      display: flex;
+      align-items: center;
+      gap: var(--ui-space-8, 8px);
     }
-    .service-summary-card strong {
-      font-size: 21px;
+    .service-mobile-card header strong {
+      flex: 1;
+      min-width: 0;
+      font-size: var(--ui-font-14, 14px);
+      overflow-wrap: anywhere;
+    }
+    .service-mobile-card dl {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: var(--ui-space-8, 8px);
+      margin: var(--ui-space-14, 14px) 0;
+    }
+    .service-mobile-card dt {
+      color: var(--desc-color);
+      font-size: var(--ui-font-12, 12px);
+    }
+    .service-mobile-card dd {
+      font-size: var(--ui-font-13, 13px);
+      margin: var(--ui-space-6, 6px) 0 0;
+    }
+    .service-mobile-card > :deep(button) {
+      border-top: 1px solid var(--surface-divider-color);
+      border-radius: 0;
+      width: 100%;
+      justify-content: flex-start;
+      padding-left: 0;
+    }
+
+    .services-toolbar > span {
+      text-align: left;
     }
     .action-receipt__summary {
       grid-template-columns: 36px minmax(0, 1fr);
@@ -1040,13 +1053,6 @@
     }
     .action-receipt__actions :deep(.b_btn) {
       flex: 1;
-    }
-    .service-mobile-actions {
-      flex-wrap: nowrap;
-    }
-    .service-mobile-actions :deep(.b_btn) {
-      width: 32px;
-      padding: 0;
     }
     .service-logs {
       min-height: calc(100vh - 150px);

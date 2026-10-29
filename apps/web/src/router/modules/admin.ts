@@ -19,31 +19,37 @@ const adminRouter: RouteRecordRaw[] = [
     children: [
       {
         path: 'overview',
+        name: 'serverManagement-overview',
         meta: { infraModule: 'overview' },
         component: () => import('@/view/serverManagement/ServerManagement.vue'),
       },
       {
         path: 'diagnostics',
+        name: 'serverManagement-diagnostics',
         meta: { infraModule: 'diagnostics' },
         component: () => import('@/view/serverManagement/ServerDiagnostics.vue'),
       },
       {
         path: 'services',
+        name: 'serverManagement-services',
         meta: { infraModule: 'services' },
         component: () => import('@/view/serverManagement/ServerServices.vue'),
       },
       {
         path: 'security',
+        name: 'serverManagement-security',
         meta: { infraModule: 'security' },
         component: () => import('@/view/serverManagement/ServerSecurity.vue'),
       },
       {
         path: 'storage',
+        name: 'serverManagement-storage',
         meta: { infraModule: 'storage' },
         component: () => import('@/view/serverManagement/ServerStorage.vue'),
       },
       {
         path: 'events',
+        name: 'serverManagement-events',
         meta: { infraModule: 'events' },
         component: () => import('@/view/serverManagement/ServerEvents.vue'),
       },
