@@ -79,7 +79,7 @@ pnpm preview
 
 ### 其他领域门禁
 
-知识庄园开放前，显式运行 `pnpm --filter server migrate:knowledge-manor` 安装 `20261024_knowledge_manor.sql` 的存档与幂等操作表，不回填账号或调整资产。部署脚本仅在本轮已授权且显式设置 `LIGHTNOTE_APPLY_KNOWLEDGE_MANOR_MIGRATION=1` 时执行此迁移。`KNOWLEDGE_MANOR_ENABLED` 默认关闭；开启后入口、页面路由和接口仅允许 Root 本人，管理员代管及普通账号均不开放；启动与 Schema 门禁均检查契约。API 和 Web 必须携带同一庄园规则版本，发布前验证与主站积分并发、失败回滚、断网重试、钓鱼刷新恢复及账号隔离；MySQL 5.7 兼容门禁不能用本地 MySQL 8 的结果替代。回退先关闭开关，保留新增表、操作收据与已结算积分，不逆向回收用户资产。
+知识庄园开放前，显式运行 `pnpm --filter server migrate:knowledge-manor` 安装 `20261024_knowledge_manor.sql` 的存档与幂等操作表，不回填账号或调整资产。部署脚本仅在本轮已授权且显式设置 `LIGHTNOTE_APPLY_KNOWLEDGE_MANOR_MIGRATION=1` 时执行此迁移。`KNOWLEDGE_MANOR_ENABLED` 默认关闭，是部署总开关；开启后由 `KNOWLEDGE_MANOR_AUDIENCE` 决定开放范围，默认 `internal`（Root 与 test 账号），`all` 为全部登录账号，游客与管理员代管始终不开放；启动与 Schema 门禁均检查契约。公开开放分两段：先以 `internal` 部署 API 与 Web，用 test 账号在生产完成新手、种植、垂钓、出售与积分流水核对，确认普通账号仍不可见；再改为 `all` 并重启 API，用普通账号复核。开放获准上线时执行 `node scripts/seedKnowledgeManorKnowledge.js` 同步帮助与 AI 知识条目，随 API 重启刷新检索缓存。收回开放只需改回 `internal` 并重启，保留存档与积分。API 和 Web 必须携带同一庄园规则版本，发布前验证与主站积分并发、失败回滚、断网重试、钓鱼刷新恢复及账号隔离；MySQL 5.7 兼容门禁不能用本地 MySQL 8 的结果替代。回退先关闭开关，保留新增表、操作收据与已结算积分，不逆向回收用户资产。
 
 庄园后台启用前显式运行 `pnpm --filter server migrate:knowledge-manor-admin`，增加操作摘要列、查询索引和运行状态表，不回填历史类型或调整玩家资产。部署脚本只在已授权且设置 `LIGHTNOTE_APPLY_KNOWLEDGE_MANOR_ADMIN_MIGRATION=1` 时安装；`--check` 只读验证，启动路径不执行安装。API 与后台验证通过后，再显式运行 `pnpm --filter server migrate:knowledge-manor-admin --start-observation` 登记统计覆盖边界；结构安装本身不证明新采集已经运行。验证维护切换与新操作并发、已有收据恢复、已有钓鱼结算、审计失败回滚及普通账号的独立限流。回退保留摘要、收据和审计；不识别维护模式的旧 API 必须配合关闭部署开关，已产生 v3 存档时不能直接回退到不识别 v3 的规则版本。
 
