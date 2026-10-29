@@ -1,34 +1,32 @@
 <template>
-  <main class="infra-module-page">
-    <div class="infra-module-content">
+  <InfraPage>
+    <template #header>
       <InfraModuleHeader
+        :mobile-title="t('serverManagement.modules.storage')"
         :title="t('serverManagement.storagePage.title')"
-        :subtitle="t('serverManagement.storagePage.subtitle')"
-        :icon-src="icon.infrastructure.storage"
         :cadence="t('serverManagement.storagePage.cadence')"
         :loading="refreshing"
         :refresh-label="t('common.refresh')"
         @refresh="refresh"
       />
-      <BLoading v-if="initialLoading" inline :loading="true" :title="t('serverManagement.loading')" />
-      <BCard v-else-if="!data" class="infra-state-card" variant="panel">
-        <SvgIcon :src="icon.message.warning" size="24" /><div
-          ><strong>{{ t('serverManagement.snapshotUnavailable') }}</strong
-          ><p>{{ error }}</p></div
-        >
-        <BButton type="primary" @click="refresh">{{ t('serverManagement.retry') }}</BButton>
-      </BCard>
-      <template v-else>
-        <div v-if="error" class="infra-stale-warning" role="status"
-          ><SvgIcon :src="icon.message.warning" size="16" />{{ t('serverManagement.staleSnapshot') }}</div
-        >
-        <section class="storage-metrics">
-          <BCard v-for="item in ioCards" :key="item.key" class="storage-metric-card">
-            <span>{{ item.label }}</span
-            ><strong>{{ item.value }}</strong
-            ><small>{{ item.hint }}</small>
-          </BCard>
-        </section>
+    </template>
+    <BLoading v-if="initialLoading" inline :loading="true" :title="t('serverManagement.loading')" />
+    <BCard v-else-if="!data" class="infra-state-card" variant="panel">
+      <SvgIcon :src="icon.message.warning" size="24" /><div
+        ><strong>{{ t('serverManagement.snapshotUnavailable') }}</strong
+        ><p>{{ error }}</p></div
+      >
+      <BButton type="primary" @click="refresh">{{ t('serverManagement.retry') }}</BButton>
+    </BCard>
+    <template v-else>
+      <div v-if="error" class="infra-stale-warning" role="status"
+        ><SvgIcon :src="icon.message.warning" size="16" />{{ t('serverManagement.staleSnapshot') }}</div
+      >
+      <div v-if="data.collectionErrors.length" class="infra-stale-warning"
+        >{{ t('serverManagement.partialCollectionTitle') }} ·
+        {{ data.collectionErrors.map((item) => item.code).join(' · ') }}</div
+      >
+      <section class="storage-top">
         <BCard :title="t('serverManagement.storagePage.capacityTitle')">
           <div v-if="!data.mounts.length" class="storage-empty">{{ t('serverManagement.storagePage.noMounts') }}</div>
           <div v-for="mount in data.mounts" v-else :key="mount.mountPoint" class="storage-mount">
@@ -57,12 +55,21 @@
             </dl>
           </div>
         </BCard>
-        <BCard :title="t('serverManagement.storagePage.ioTrendTitle')">
-          <DiskIoChart :points="data.history" />
-        </BCard>
-      </template>
-    </div>
-  </main>
+        <BCard :title="t('serverManagement.workspace.liveIo')"
+          ><section class="storage-metrics">
+            <div v-for="item in ioCards.slice(0, 3)" :key="item.key" class="storage-metric-card">
+              <span>{{ item.label }}</span
+              ><strong>{{ item.value }}</strong
+              ><small>{{ item.hint }}</small>
+            </div>
+          </section></BCard
+        >
+      </section>
+      <BCard :title="t('serverManagement.workspace.ioTrend')">
+        <DiskIoChart :points="data.history" />
+      </BCard>
+    </template>
+  </InfraPage>
 </template>
 
 <script setup lang="ts">
@@ -74,6 +81,7 @@
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BCard from '@/components/base/BasicComponents/BCard.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
+  import InfraPage from './InfraPage.vue';
   import InfraModuleHeader from './InfraModuleHeader.vue';
   import DiskIoChart from './DiskIoChart.vue';
   import { useInfraSnapshot } from './useInfraSnapshot';
@@ -116,19 +124,21 @@
 </script>
 
 <style scoped lang="less">
-  .infra-module-page {
-    height: 100%;
-    overflow-y: auto;
-    background: var(--background-color);
-    color: var(--text-color);
-  }
-  .infra-module-content {
-    width: min(var(--ui-layout-1320, 1320px), calc(100% - var(--ui-layout-48, 48px)));
-    margin: 0 auto;
-    padding: var(--ui-space-28, 28px) 0 var(--ui-space-48, 48px);
+  .storage-top {
     display: grid;
+    grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
     gap: var(--ui-space-18, 18px);
+    align-items: stretch;
   }
+  .storage-metric-card:last-child {
+    grid-column: 1/-1;
+  }
+  @media (max-width: 1199px) {
+    .storage-top {
+      grid-template-columns: 1fr;
+    }
+  }
+
   .infra-state-card {
     min-height: var(--ui-layout-150, 150px);
     display: flex;
@@ -154,8 +164,8 @@
   }
   .storage-metrics {
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: var(--ui-space-14, 14px);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--ui-space-18, 18px);
   }
   .storage-metric-card {
     display: grid;
@@ -183,7 +193,7 @@
     font-size: var(--ui-font-12, 12px);
   }
   .storage-track {
-    height: 7px;
+    height: var(--ui-space-8, 8px);
     overflow: hidden;
     border-radius: 999px;
     background: var(--surface-divider-color);
@@ -227,12 +237,7 @@
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
   }
-  @media (max-width: 760px) {
-    .infra-module-content {
-      width: calc(100% - 24px);
-      padding: 18px 0 32px;
-      gap: 14px;
-    }
+  @media (max-width: 767px) {
     .storage-metrics {
       grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 10px;

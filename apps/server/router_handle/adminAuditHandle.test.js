@@ -78,6 +78,31 @@ describe('管理员操作审计查询', () => {
     expect(String(listSql)).not.toContain('note');
   });
 
+  it('returns filtered outcome totals with the same predicate and can omit global statistics', async () => {
+    query
+      .mockResolvedValueOnce([[]])
+      .mockResolvedValueOnce([[{ total: 3, succeeded: 1, failed: 1, denied: 1, intents: 0 }]]);
+    const res = response();
+    await getAdminOperationAudits(
+      {
+        user: { role: 'root' },
+        body: { actionScope: 'infra', keyword: 'worker', includeSummary7d: false, currentPage: 2, pageSize: 20 },
+      },
+      res,
+    );
+    expect(query).toHaveBeenCalledTimes(2);
+    const [listSql, listParams] = query.mock.calls[0];
+    const [countSql, countParams] = query.mock.calls[1];
+    expect(String(listSql).split('WHERE ')[1].split('ORDER BY')[0].trim()).toBe(
+      String(countSql).split('WHERE ')[1].trim(),
+    );
+    expect(listParams.slice(0, -2)).toEqual(countParams);
+    expect(countParams).toEqual(Array(7).fill('%worker%'));
+    expect(listParams.slice(-2)).toEqual([20, 20]);
+    expect(res.body.data.filteredSummary).toEqual({ total: 3, succeeded: 1, failed: 1, denied: 1, intents: 0 });
+    expect(res.body.data.summary7d).toEqual({});
+  });
+
   it('日期只接受 YYYY-MM-DD', () => {
     expect(adminAuditHandleInternals.safeDate('2026-08-09')).toBe('2026-08-09 00:00:00');
     expect(adminAuditHandleInternals.safeDate('2026-08-09', true)).toBe('2026-08-09 23:59:59');

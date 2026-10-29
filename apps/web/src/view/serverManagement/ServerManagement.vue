@@ -1,166 +1,161 @@
 <template>
-  <main class="server-management-page">
-    <div class="server-management-shell">
-      <header class="server-management-header">
-        <div class="server-management-header__main">
-          <BButton
-            class="server-management-back"
-            :aria-label="t('serverManagement.back')"
-            @click="router.push('/personCenter')"
-          >
-            <SvgIcon :src="icon.arrow_left" size="19" aria-hidden="true" />
-          </BButton>
-          <span class="server-management-header__icon">
-            <SvgIcon :src="icon.infrastructure.server" size="24" aria-hidden="true" />
-          </span>
-          <div>
-            <div class="server-management-title-row">
-              <h1>{{ t('serverManagement.title') }}</h1>
-              <BChip :tone="agentStatus === 'online' ? 'success' : agentStatus === 'loading' ? 'pending' : 'danger'">
-                <span class="server-management-status-dot" aria-hidden="true"></span>
-                {{ agentStatusLabel }}
-              </BChip>
-            </div>
-            <p v-if="dashboard" class="server-management-hostline">
-              {{ host?.hostname || '—' }} · {{ host?.platform || '—' }} {{ host?.release || '' }} ·
-              {{ t('serverManagement.agentVersion', { version: dashboard.agentVersion }) }}
-            </p>
-            <p v-else class="server-management-hostline">{{ t('serverManagement.subtitle') }}</p>
-          </div>
-        </div>
-        <div class="server-management-refresh-controls">
-          <div class="server-management-refresh-state">
-            <strong>{{ t('serverManagement.autoRefresh') }}</strong>
-            <span :class="{ 'is-error': Boolean(refreshError), 'is-paused': isAutoRefreshPaused }">
-              <i aria-hidden="true"></i>{{ refreshStatusText }}
-            </span>
-            <small v-if="lastLoadedAt">{{
-              t('serverManagement.lastUpdatedAt', { time: formatTime(lastLoadedAt) })
-            }}</small>
-          </div>
-          <BSelect
-            class="server-management-refresh-select"
+  <InfraPage>
+    <template #header>
+      <InfraModuleHeader
+        :title="t('serverManagement.modules.overview')"
+        :loading="refreshing"
+        :refresh-label="t('common.refresh')"
+        :cadence="t('serverManagement.sampledAt', { time: formatTime(dashboard?.sampledAt) })"
+        @refresh="refresh"
+      >
+        <template #status
+          ><BChip :tone="agentStatus === 'online' ? 'success' : agentStatus === 'loading' ? 'pending' : 'danger'"
+            ><span class="server-agent-dot" aria-hidden="true" />{{ agentStatusLabel }}</BChip
+          ></template
+        >
+        <template #detail
+          ><div v-if="dashboard" class="server-hostline"
+            ><span>{{ host?.hostname }}</span
+            ><BButton type="text" size="small" @click="detailsOpen = !detailsOpen"
+              >{{ t('serverManagement.workspace.hostDetails') }} {{ detailsOpen ? '⌃' : '›' }}</BButton
+            ></div
+          ></template
+        >
+        <template #controls
+          ><BSelect
+            v-if="!bookmark.isMobile"
+            class="server-refresh-select"
             :value="refreshIntervalMs"
             :options="refreshIntervalOptions"
             :aria-label="t('serverManagement.refreshIntervalLabel')"
-            @change="setRefreshInterval"
-          />
-          <BButton
-            class="server-management-refresh"
-            :aria-label="t('common.refresh')"
-            :loading="refreshing"
-            :disabled="initialLoading"
-            @click="refresh"
-          >
-            <SvgIcon v-if="!refreshing" :src="icon.infrastructure.refresh" size="16" aria-hidden="true" />
-            <span class="server-management-refresh__label">{{ t('common.refresh') }}</span>
-          </BButton>
-        </div>
-      </header>
+            @change="setRefreshInterval" /><BActionMenu
+            v-if="bookmark.isMobile"
+            :items="refreshIntervalOptions.map((item) => ({ key: String(item.value), label: item.label }))"
+            placement="bottom-right"
+            @select="setRefreshInterval(Number($event))"
+            ><BButton :aria-label="t('serverManagement.refreshIntervalLabel')"
+              ><SvgIcon :src="icon.common.more" size="16" /></BButton></BActionMenu
+        ></template>
+      </InfraModuleHeader>
+    </template>
+    <div v-if="bookmark.isMobile" class="server-mobile-meta"
+      ><span :title="host?.hostname">{{ host?.hostname || '—' }}</span
+      ><BChip :tone="agentStatus === 'online' ? 'success' : 'neutral'">{{ agentStatusLabel }}</BChip
+      ><BButton type="text" size="small" @click="detailsOpen = !detailsOpen"
+        >{{ t('serverManagement.workspace.hostDetails') }} ›</BButton
+      ></div
+    >
+    <BCard v-if="detailsOpen && dashboard" :title="t('serverManagement.workspace.hostDetails')"
+      ><dl class="server-host-details"
+        ><div
+          ><dt>{{ t('serverManagement.cpuModel') }}</dt
+          ><dd>{{ host?.cpuModel || '—' }}</dd></div
+        ><div
+          ><dt>{{ t('serverManagement.architecture') }}</dt
+          ><dd>{{ host?.platform }} · {{ host?.arch }} · {{ host?.release }}</dd></div
+        ><div
+          ><dt>Agent</dt><dd>{{ dashboard.agentVersion }}</dd></div
+        ></dl
+      ></BCard
+    >
+    <template v-if="initialLoading">
+      <BLoading inline :loading="true" :title="t('serverManagement.loading')" />
+      <section class="server-management-metrics" aria-hidden="true">
+        <BCard v-for="index in 4" :key="index"><div class="server-management-skeleton"></div></BCard>
+      </section>
+      <BCard aria-hidden="true"><div class="server-management-skeleton server-management-skeleton--large"></div></BCard>
+    </template>
 
-      <template v-if="initialLoading">
-        <BLoading inline :loading="true" :title="t('serverManagement.loading')" />
-        <section class="server-management-metrics" aria-hidden="true">
-          <BCard v-for="index in 4" :key="index"><div class="server-management-skeleton"></div></BCard>
-        </section>
-        <BCard aria-hidden="true"
-          ><div class="server-management-skeleton server-management-skeleton--large"></div
-        ></BCard>
-      </template>
+    <BCard v-else-if="!isOnline" class="server-management-unavailable" variant="panel">
+      <SvgIcon :src="icon.message.warning" size="30" aria-hidden="true" />
+      <div>
+        <h2>
+          {{
+            agentStatus === 'incompatible'
+              ? t('serverManagement.incompatibleTitle')
+              : t('serverManagement.offlineTitle')
+          }}
+        </h2>
+        <p>
+          {{
+            agentStatus === 'incompatible'
+              ? t('serverManagement.incompatibleDescription')
+              : t('serverManagement.offlineDescription')
+          }}
+        </p>
+        <code v-if="agentCode || refreshError">{{ agentCode || refreshError }}</code>
+      </div>
+      <BButton type="primary" @click="refresh">{{ t('serverManagement.retry') }}</BButton>
+    </BCard>
 
-      <BCard v-else-if="!isOnline" class="server-management-unavailable" variant="panel">
-        <SvgIcon :src="icon.message.warning" size="30" aria-hidden="true" />
+    <template v-else>
+      <section
+        v-if="dashboard && refreshError"
+        class="server-management-refresh-warning"
+        role="status"
+        :aria-label="t('serverManagement.refreshFailedTitle')"
+      >
+        <SvgIcon :src="icon.message.warning" size="18" aria-hidden="true" />
         <div>
-          <h2>
-            {{
-              agentStatus === 'incompatible'
-                ? t('serverManagement.incompatibleTitle')
-                : t('serverManagement.offlineTitle')
-            }}
-          </h2>
-          <p>
-            {{
-              agentStatus === 'incompatible'
-                ? t('serverManagement.incompatibleDescription')
-                : t('serverManagement.offlineDescription')
-            }}
-          </p>
-          <code v-if="agentCode || refreshError">{{ agentCode || refreshError }}</code>
+          <strong>{{ t('serverManagement.refreshFailedTitle') }}</strong>
+          <span>{{ t('serverManagement.refreshFailedDescription') }}</span>
         </div>
-        <BButton type="primary" @click="refresh">{{ t('serverManagement.retry') }}</BButton>
+        <BButton size="small" :loading="refreshing" @click="refresh">{{ t('common.refresh') }}</BButton>
+      </section>
+
+      <section
+        v-if="dashboard?.collectionErrors?.length"
+        class="server-management-warning"
+        role="status"
+        :aria-label="t('serverManagement.partialCollectionTitle')"
+      >
+        <SvgIcon :src="icon.message.warning" size="18" aria-hidden="true" />
+        <div>
+          <strong>{{ t('serverManagement.partialCollectionTitle') }}</strong>
+          <span>{{ collectionErrorText }}</span>
+        </div>
+      </section>
+
+      <InfraAttention :services="dashboard?.services || []" />
+      <section class="server-management-metrics" :aria-label="t('serverManagement.metricsTitle')">
+        <BCard v-for="metric in metricCards" :key="metric.key" class="server-metric-card">
+          <div class="server-metric-card__heading">
+            <span class="server-metric-card__icon"><SvgIcon :src="metric.icon" size="19" /></span>
+            <span>{{ metric.label }}</span>
+          </div>
+          <strong>{{ metric.value }}</strong>
+          <span>{{ metric.detail }}</span>
+          <div v-if="metric.percent !== null" class="server-metric-card__track" aria-hidden="true">
+            <i :style="{ width: `${metric.percent}%` }"></i>
+          </div>
+        </BCard>
+      </section>
+
+      <BCard :title="t('serverManagement.workspace.trend')" class="server-management-history">
+        <ServerMetricChart :points="dashboard?.history || []" />
       </BCard>
-
-      <template v-else>
-        <section
-          v-if="dashboard && refreshError"
-          class="server-management-refresh-warning"
-          role="status"
-          :aria-label="t('serverManagement.refreshFailedTitle')"
-        >
-          <SvgIcon :src="icon.message.warning" size="18" aria-hidden="true" />
-          <div>
-            <strong>{{ t('serverManagement.refreshFailedTitle') }}</strong>
-            <span>{{ t('serverManagement.refreshFailedDescription') }}</span>
-          </div>
-          <BButton size="small" :loading="refreshing" @click="refresh">{{ t('common.refresh') }}</BButton>
-        </section>
-
-        <section
-          v-if="dashboard?.collectionErrors?.length"
-          class="server-management-warning"
-          role="status"
-          :aria-label="t('serverManagement.partialCollectionTitle')"
-        >
-          <SvgIcon :src="icon.message.warning" size="18" aria-hidden="true" />
-          <div>
-            <strong>{{ t('serverManagement.partialCollectionTitle') }}</strong>
-            <span>{{ collectionErrorText }}</span>
-          </div>
-        </section>
-
-        <section class="server-management-metrics" :aria-label="t('serverManagement.metricsTitle')">
-          <BCard v-for="metric in metricCards" :key="metric.key" class="server-metric-card">
-            <div class="server-metric-card__heading">
-              <span class="server-metric-card__icon"><SvgIcon :src="metric.icon" size="19" /></span>
-              <span>{{ metric.label }}</span>
-            </div>
-            <strong>{{ metric.value }}</strong>
-            <span>{{ metric.detail }}</span>
-            <div v-if="metric.percent !== null" class="server-metric-card__track" aria-hidden="true">
-              <i :style="{ width: `${metric.percent}%` }"></i>
-            </div>
-          </BCard>
-        </section>
-
-        <BCard :title="t('serverManagement.runtimeTitle')" class="server-management-runtime">
-          <div class="server-management-runtime__grid">
-            <div v-for="item in runtimeFacts" :key="item.key">
-              <span class="server-management-runtime__icon">
-                <SvgIcon :src="item.icon" size="17" aria-hidden="true" />
-              </span>
-              <span>{{ item.label }}</span>
-              <strong :title="item.value">{{ item.value }}</strong>
-            </div>
-          </div>
-        </BCard>
-
-        <BCard :title="t('serverManagement.historyTitle')" class="server-management-history">
-          <template #extra>
-            <span class="server-management-sampled-at">
-              {{ t('serverManagement.sampledAt', { time: formatTime(dashboard?.sampledAt) }) }}
-            </span>
-          </template>
-          <ServerMetricChart :points="dashboard?.history || []" />
-        </BCard>
-      </template>
-    </div>
-  </main>
+      <BCard class="server-runtime-strip"
+        ><div class="server-runtime-strip__items"
+          ><span v-for="item in runtimeFacts.filter((item) => item.key !== 'cpu-model')" :key="item.key"
+            >{{ item.label }} <strong>{{ item.value }}</strong></span
+          ><BButton type="text" @click="detailsOpen = !detailsOpen"
+            >{{ t('serverManagement.workspace.hostDetails') }} {{ detailsOpen ? '⌃' : '›' }}</BButton
+          ></div
+        ></BCard
+      >
+    </template>
+  </InfraPage>
 </template>
-
 <script setup lang="ts">
-  import { computed } from 'vue';
+  import { computed, ref } from 'vue';
+  import { formatBytes, formatRate, formatPercent } from './serverManagementFormat';
   import { useI18n } from 'vue-i18n';
-  import router from '@/router';
+  import { useRouter } from 'vue-router';
+  import { bookmarkStore } from '@/store';
+  import BActionMenu from '@/components/base/BasicComponents/BActionMenu.vue';
+  import InfraPage from './InfraPage.vue';
+  import InfraModuleHeader from './InfraModuleHeader.vue';
+  import InfraAttention from './InfraAttention.vue';
   import icon from '@/config/icon';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
@@ -172,6 +167,9 @@
   import { useServerManagement } from './useServerManagement';
 
   const { t, locale } = useI18n();
+  const router = useRouter();
+  const bookmark = bookmarkStore();
+  const detailsOpen = ref(false);
   const {
     dashboard,
     agentStatus,
@@ -179,12 +177,9 @@
     initialLoading,
     refreshing,
     refreshError,
-    lastLoadedAt,
     refreshIntervalMs,
-    nextRefreshInSeconds,
     now,
     isOnline,
-    isAutoRefreshPaused,
     refresh,
     setRefreshInterval,
   } = useServerManagement();
@@ -198,16 +193,6 @@
     { label: t('serverManagement.refreshIntervals.fiveMinutes'), value: 300_000 },
     { label: t('serverManagement.refreshIntervals.paused'), value: 0 },
   ]);
-  const refreshStatusText = computed(() => {
-    if (refreshing.value) return t('serverManagement.refreshing');
-    if (isAutoRefreshPaused.value) return t('serverManagement.autoRefreshPaused');
-    if (nextRefreshInSeconds.value !== null) {
-      return refreshError.value
-        ? t('serverManagement.refreshRetryCountdown', { seconds: nextRefreshInSeconds.value })
-        : t('serverManagement.nextRefreshCountdown', { seconds: nextRefreshInSeconds.value });
-    }
-    return t('serverManagement.autoRefreshWaiting');
-  });
   const agentStatusLabel = computed(() => t(`serverManagement.agentStatus.${agentStatus.value}`));
   const collectionErrorText = computed(() =>
     (dashboard.value?.collectionErrors || []).map((item) => `${item.source}: ${item.code}`).join(' · '),
@@ -288,30 +273,6 @@
     return Number.isFinite(number) ? Math.min(100, Math.max(0, number)) : null;
   }
 
-  function formatPercent(value: unknown) {
-    const number = validPercent(value);
-    return number === null ? '—' : `${number.toFixed(number % 1 === 0 ? 0 : 1)}%`;
-  }
-
-  function formatBytes(value: unknown) {
-    if (value === null || value === undefined || value === '') return '—';
-    const bytes = Number(value);
-    if (!Number.isFinite(bytes) || bytes < 0) return '—';
-    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-    let amount = bytes;
-    let index = 0;
-    while (amount >= 1024 && index < units.length - 1) {
-      amount /= 1024;
-      index += 1;
-    }
-    return `${amount.toFixed(index === 0 || amount >= 100 ? 0 : 1)} ${units[index]}`;
-  }
-
-  function formatRate(value: unknown) {
-    const formatted = formatBytes(value);
-    return formatted === '—' ? formatted : `${formatted}/s`;
-  }
-
   function formatDuration(value: unknown) {
     if (value === null || value === undefined || value === '') return t('serverManagement.unknown');
     const seconds = Number(value);
@@ -327,144 +288,48 @@
   function formatTime(value: unknown) {
     const date = typeof value === 'number' ? new Date(value) : new Date(String(value || ''));
     if (!Number.isFinite(date.getTime())) return '—';
-    return new Intl.DateTimeFormat(locale.value, { hour: '2-digit', minute: '2-digit', second: '2-digit' }).format(
-      date,
-    );
+    return new Intl.DateTimeFormat(locale.value, {
+      timeZone: 'Asia/Shanghai',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+    }).format(date);
   }
 </script>
 
 <style scoped lang="less">
-  .server-management-page {
-    height: 100%;
-    overflow-y: auto;
-    background: var(--background-color);
-    color: var(--text-color);
-  }
-  .server-management-shell {
-    width: min(var(--ui-layout-1440, 1440px), calc(100% - var(--ui-layout-48, 48px)));
-    margin: 0 auto;
-    padding: var(--ui-space-28, 28px) 0 var(--ui-space-48, 48px);
-    display: grid;
-    gap: var(--ui-space-18, 18px);
-  }
-  .server-management-header {
-    min-width: 0;
+  .server-mobile-meta {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    gap: var(--ui-space-20, 20px);
-  }
-  .server-management-header__main,
-  .server-management-title-row,
-  .server-management-refresh-controls,
-  .server-metric-card__heading,
-  .server-management-warning,
-  .server-management-refresh-warning {
-    display: flex;
-    align-items: center;
-  }
-  .server-management-header__main {
-    min-width: 0;
-    gap: var(--ui-space-12, 12px);
-  }
-  .server-management-header__icon,
-  .server-metric-card__icon {
-    display: inline-flex;
-    flex: 0 0 auto;
-    align-items: center;
-    justify-content: center;
-    border: 1px solid var(--surface-border-color);
-    color: var(--primary-color);
-    background: var(--card-background);
-  }
-  .server-management-header__icon {
-    width: var(--ui-layout-46, 46px);
-    height: var(--ui-layout-46, 46px);
-    border-radius: 14px;
-  }
-  .server-management-title-row {
-    flex-wrap: wrap;
     gap: var(--ui-space-10, 10px);
-  }
-  .server-management-title-row h1,
-  .server-management-unavailable h2 {
-    margin: 0;
-    color: var(--text-color);
-  }
-  .server-management-title-row h1 {
-    font-size: var(--ui-font-24, 24px);
-    line-height: 1.35;
-  }
-  .server-management-hostline {
-    margin: var(--ui-space-5, 5px) 0 0;
-    color: var(--desc-color);
     font-size: var(--ui-font-12, 12px);
-    line-height: 1.45;
+    color: var(--desc-color);
   }
-  .server-management-status-dot {
+  .server-mobile-meta > span:first-child {
+    max-width: 40%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .server-agent-dot {
     display: inline-block;
-    width: 7px;
-    height: 7px;
-    margin-right: var(--ui-space-5, 5px);
-    border: 1px solid currentColor;
+    width: var(--ui-space-6, 6px);
+    height: var(--ui-space-6, 6px);
     border-radius: 50%;
     background: currentColor;
+    margin-right: var(--ui-space-4, 4px);
   }
-  .server-management-back {
-    display: none;
-    width: var(--ui-layout-36, 36px);
-    padding: 0;
-  }
-  .server-management-refresh-controls {
-    flex: 0 0 auto;
-    justify-content: flex-end;
-    gap: var(--ui-space-10, 10px);
-  }
-  .server-management-refresh-state {
-    min-width: var(--ui-layout-150, 150px);
-    display: grid;
-    justify-items: end;
-    gap: var(--ui-space-2, 2px);
-    line-height: 1.3;
-  }
-  .server-management-refresh-state strong {
-    color: var(--text-color);
-    font-size: var(--ui-font-12, 12px);
-  }
-  .server-management-refresh-state span {
-    display: inline-flex;
+  .server-hostline {
+    display: flex;
     align-items: center;
-    color: var(--success-color, #27965b);
-    font-size: var(--ui-font-11, 11px);
-    font-variant-numeric: tabular-nums;
-  }
-  .server-management-refresh-state span.is-error {
-    color: var(--error-color, #d14343);
-  }
-  .server-management-refresh-state span.is-paused {
+    gap: var(--ui-space-12, 12px);
     color: var(--desc-color);
+    font-size: var(--ui-font-12, 12px);
+    margin-top: var(--ui-space-4, 4px);
   }
-  .server-management-refresh-state span i {
-    width: 7px;
-    height: 7px;
-    margin-right: var(--ui-space-5, 5px);
-    border: 1px solid currentColor;
-    border-radius: 50%;
-    background: currentColor;
-  }
-  .server-management-refresh-state small {
-    color: var(--desc-color);
-    font-size: var(--ui-font-10, 10px);
-    font-variant-numeric: tabular-nums;
-  }
-  .server-management-refresh-select {
-    width: var(--ui-layout-142, 142px);
-  }
-  .server-management-refresh-select :deep(.select-trigger) {
-    min-height: var(--ui-control-36, 36px);
-  }
-  .server-management-refresh {
-    flex: 0 0 auto;
+  .server-refresh-select {
+    width: var(--ui-layout-160, 160px);
   }
   .server-management-metrics {
     display: grid;
@@ -472,303 +337,110 @@
     gap: var(--ui-space-14, 14px);
   }
   .server-metric-card {
-    display: grid;
-    gap: var(--ui-space-9, 9px);
+    display: flex;
+    flex-direction: column;
+    gap: var(--ui-space-10, 10px);
   }
   .server-metric-card__heading {
+    display: flex;
+    align-items: center;
     gap: var(--ui-space-8, 8px);
     color: var(--desc-color);
-    font-size: var(--ui-font-13, 13px);
-    font-weight: 600;
   }
   .server-metric-card__icon {
-    width: var(--ui-layout-30, 30px);
-    height: var(--ui-layout-30, 30px);
-    border-radius: 9px;
+    color: var(--primary-color);
+    display: flex;
   }
   .server-metric-card > strong {
-    color: var(--text-color);
-    font-size: var(--ui-font-26, 26px);
+    font-size: var(--ui-font-28, 28px);
     font-variant-numeric: tabular-nums;
+    line-height: 1.2;
   }
   .server-metric-card > span {
-    min-height: var(--ui-layout-18, 18px);
-    overflow: hidden;
     color: var(--desc-color);
     font-size: var(--ui-font-12, 12px);
-    text-overflow: ellipsis;
-    white-space: nowrap;
   }
   .server-metric-card__track {
-    height: 5px;
+    height: var(--ui-space-5, 5px);
+    background: var(--surface-divider-color);
+    border-radius: 99px;
+    margin-top: auto;
     overflow: hidden;
-    border-radius: 999px;
-    background: var(--surface-divider-color, var(--card-border-color));
   }
   .server-metric-card__track i {
     display: block;
     height: 100%;
-    border-radius: inherit;
     background: var(--primary-color);
+    border-radius: inherit;
   }
-  .server-management-skeleton {
-    height: var(--ui-layout-96, 96px);
-    border-radius: 10px;
-    background: linear-gradient(
-      90deg,
-      var(--surface-divider-color) 25%,
-      var(--card-background) 50%,
-      var(--surface-divider-color) 75%
-    );
-    background-size: 200% 100%;
-    animation: server-management-skeleton 1.3s ease-in-out infinite;
-  }
-  .server-management-skeleton--large {
-    height: var(--ui-layout-230, 230px);
-  }
-  @keyframes server-management-skeleton {
-    to {
-      background-position: -200% 0;
-    }
-  }
-  .server-management-unavailable {
-    min-height: var(--ui-layout-220, 220px);
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr) auto;
+  .server-runtime-strip__items {
+    display: flex;
     align-items: center;
+    justify-content: space-between;
     gap: var(--ui-space-16, 16px);
-    border-color: var(--error-color, #d14343);
-  }
-  .server-management-unavailable > svg {
-    color: var(--error-color, #d14343);
-  }
-  .server-management-unavailable h2 {
-    font-size: var(--ui-font-18, 18px);
-  }
-  .server-management-unavailable p {
-    margin: var(--ui-space-7, 7px) 0 0;
+    flex-wrap: wrap;
+    font-size: var(--ui-font-12, 12px);
     color: var(--desc-color);
-    line-height: 1.65;
   }
-  .server-management-unavailable code {
-    display: block;
-    margin-top: var(--ui-space-8, 8px);
-    color: var(--desc-color);
-    font-size: var(--ui-font-11, 11px);
-  }
-  .server-management-warning {
-    gap: var(--ui-space-10, 10px);
-    padding: var(--ui-space-11, 11px) var(--ui-space-14, 14px);
-    border: 1px solid var(--warning-color, #ad6800);
-    border-radius: 10px;
-    color: var(--warning-color, #ad6800);
-    background: var(--card-background);
-  }
-  .server-management-warning div {
-    min-width: 0;
-    display: grid;
-    gap: var(--ui-space-2, 2px);
-  }
-  .server-management-warning span {
-    overflow: hidden;
-    color: var(--desc-color);
-    font-size: var(--ui-font-11, 11px);
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .server-management-refresh-warning {
-    gap: var(--ui-space-10, 10px);
-    padding: var(--ui-space-11, 11px) var(--ui-space-14, 14px);
-    border: 1px solid var(--error-color, #d14343);
-    border-radius: 10px;
-    color: var(--error-color, #d14343);
-    background: var(--card-background);
-  }
-  .server-management-refresh-warning div {
-    min-width: 0;
-    flex: 1;
-    display: grid;
-    gap: var(--ui-space-2, 2px);
-  }
-  .server-management-refresh-warning span {
-    color: var(--desc-color);
-    font-size: var(--ui-font-11, 11px);
-  }
-  .server-management-runtime__grid {
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 0;
-  }
-  .server-management-runtime__grid > div {
-    min-width: 0;
-    display: grid;
-    grid-template-columns: var(--ui-layout-28, 28px) minmax(0, 1fr);
-    align-items: center;
-    gap: var(--ui-space-2, 2px) var(--ui-space-8, 8px);
-    padding: var(--ui-space-2, 2px) var(--ui-space-18, 18px);
-    border-left: 1px solid var(--surface-divider-color, var(--card-border-color));
-  }
-  .server-management-runtime__grid > div:first-child {
-    padding-left: 0;
-    border-left: 0;
-  }
-  .server-management-runtime__grid > div:last-child {
-    padding-right: 0;
-  }
-  .server-management-runtime__icon {
-    grid-row: 1 / 3;
-    width: var(--ui-layout-28, 28px);
-    height: var(--ui-layout-28, 28px);
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    border: 1px solid var(--surface-border-color);
-    border-radius: 9px;
-    color: var(--primary-color);
-    background: var(--card-background);
-  }
-  .server-management-runtime__grid span:not(.server-management-runtime__icon) {
-    color: var(--desc-color);
-    font-size: var(--ui-font-11, 11px);
-  }
-  .server-management-runtime__grid strong {
-    min-width: 0;
-    overflow: hidden;
+  .server-runtime-strip__items strong {
     color: var(--text-color);
-    font-size: var(--ui-font-13, 13px);
-    text-overflow: ellipsis;
-    white-space: nowrap;
   }
-  .server-management-sampled-at {
+  .server-host-details {
+    display: flex;
+    gap: var(--ui-space-24, 24px);
+    flex-wrap: wrap;
+    margin: 0;
+  }
+  dt {
     color: var(--desc-color);
     font-size: var(--ui-font-12, 12px);
-    font-weight: 400;
   }
-  html.light-note-mobile-rendering .server-management-header__icon,
-  html.light-note-mobile-rendering .server-metric-card__icon,
-  html.light-note-mobile-rendering .server-management-runtime__icon,
-  html.light-note-mobile-rendering .server-management-unavailable,
-  html.light-note-mobile-rendering .server-management-warning,
-  html.light-note-mobile-rendering .server-management-refresh-warning {
-    box-shadow: none;
+  dd {
+    margin: var(--ui-space-6, 6px) 0 0;
   }
-  @media (max-width: 1023px) {
+  .server-management-unavailable,
+  .server-management-refresh-warning,
+  .server-management-warning {
+    display: flex;
+    align-items: center;
+    gap: var(--ui-space-12, 12px);
+    padding: var(--ui-space-16, 16px);
+    border: 1px solid var(--warning-color);
+    border-radius: 12px;
+  }
+  .server-management-refresh-warning div,
+  .server-management-warning div {
+    flex: 1;
+    display: grid;
+    gap: var(--ui-space-4, 4px);
+  }
+  .server-management-warning span,
+  .server-management-refresh-warning span {
+    color: var(--desc-color);
+    font-size: var(--ui-font-12, 12px);
+  }
+  .server-management-skeleton {
+    min-height: var(--ui-layout-120, 120px);
+    background: var(--hover-background);
+    border-radius: 10px;
+  }
+  .server-management-skeleton--large {
+    min-height: var(--ui-layout-260, 260px);
+  }
+  @media (max-width: 1199px) {
     .server-management-metrics {
       grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-    .server-management-runtime__grid {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 14px 0;
-    }
-    .server-management-runtime__grid > div:nth-child(odd) {
-      padding-left: 0;
-      border-left: 0;
     }
   }
   @media (max-width: 767px) {
-    .server-management-shell {
-      width: 100%;
-      padding: 14px 12px 96px;
-      box-sizing: border-box;
-      gap: 13px;
-    }
-    .server-management-header {
-      flex-wrap: wrap;
-      align-items: flex-start;
-      gap: 8px;
-    }
-    .server-management-header__main {
-      gap: 8px;
-      align-items: flex-start;
-    }
-    .server-management-back {
-      display: flex;
-      flex: 0 0 auto;
-    }
-    .server-management-header__icon {
-      display: none;
-    }
-    .server-management-title-row h1 {
-      font-size: 20px;
-    }
-    .server-management-refresh-controls {
-      width: 100%;
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) 132px 36px;
-      gap: 8px;
-      padding-top: 3px;
-    }
-    .server-management-refresh-state {
-      min-width: 0;
-      justify-items: start;
-    }
-    .server-management-refresh-state small {
-      max-width: 100%;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-    .server-management-refresh-select {
-      width: 132px;
-    }
-    .server-management-refresh {
-      width: 36px;
-      padding: 0;
-      flex: 0 0 auto;
-    }
-    .server-management-refresh__label {
-      display: none;
-    }
-    .server-management-metrics {
-      grid-template-columns: 1fr;
-      gap: 10px;
-    }
-    .server-metric-card {
-      grid-template-columns: auto 1fr auto;
-      align-items: center;
+    .server-refresh-select {
+      width: var(--ui-layout-100, 100px);
     }
     .server-metric-card > strong {
-      justify-self: end;
-      font-size: 22px;
+      font-size: var(--ui-font-24, 24px);
     }
-    .server-metric-card > span {
-      grid-column: 2 / 4;
-    }
-    .server-metric-card__track {
-      grid-column: 1 / 4;
-    }
-    .server-management-unavailable {
-      grid-template-columns: auto 1fr;
-      align-items: start;
-    }
-    .server-management-unavailable > :deep(.b_btn) {
-      grid-column: 1 / 3;
-      width: 100%;
-    }
-    .server-management-sampled-at {
-      font-size: 10px;
-      white-space: nowrap;
-    }
-    .server-management-refresh-warning {
-      align-items: flex-start;
-      flex-wrap: wrap;
-    }
-    .server-management-refresh-warning > :deep(.b_btn) {
-      width: 100%;
-    }
-    .server-management-runtime__grid {
-      grid-template-columns: 1fr;
-      gap: 12px;
-    }
-    .server-management-runtime__grid > div,
-    .server-management-runtime__grid > div:nth-child(odd) {
-      padding: 0;
-      border-left: 0;
-    }
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .server-management-skeleton {
-      animation: none;
+    .server-runtime-strip__items {
+      gap: var(--ui-space-10, 10px);
     }
   }
 </style>
