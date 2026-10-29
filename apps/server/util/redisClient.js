@@ -25,6 +25,10 @@ const redisClient = isTestRuntime
     }
   : createClient({
       url: process.env.REDIS_URL || 'redis://127.0.0.1:6379',
+      // 断线重连期间命令立即失败，由调用方降级或返回错误；默认离线队列会让请求一直挂到 Redis 恢复。
+      disableOfflineQueue: true,
+      // 连接仍在但 Redis 卡住时同样有界失败；本机 Redis 的正常命令均远低于该值。订阅命令不受此限制。
+      commandOptions: { timeout: 3000 },
     });
 
 // Redis 故障不再静默(断连/超时期间验证码等纯 Redis 数据不可用,必须可观测);按 60s 抑制避免断连风暴刷屏
