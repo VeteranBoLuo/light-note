@@ -28,7 +28,12 @@ applyUiDensity(
   params.get('density') === 'compact' ? 'small' : params.get('density') === 'comfortable' ? 'large' : 'medium',
   mobile,
 );
-const scheduler = createStaticPrewarmScheduler({ entryUrl: import.meta.url, mobile: () => mobile, delayMs: 200 });
+const scheduler = createStaticPrewarmScheduler({
+  entryUrl: import.meta.url,
+  mobile: () => mobile,
+  delayMs: 200,
+  concurrency: Number(params.get('concurrency') || 4) as 1 | 2 | 4,
+});
 let stop: (() => void) | undefined;
 const elapsed = ref(0),
   loaded = ref(false);
@@ -45,6 +50,9 @@ const harness = {
   },
   warmMany() {
     scheduler.submit({ urls: Array.from({ length: 70 }, (_, i) => `/assets/prewarm-${i}.js`), priority: 1 });
+  },
+  warmFast() {
+    scheduler.submit({ urls: Array.from({ length: 64 }, (_, i) => `/assets/prewarm-fast-${i}.js`), priority: 1 });
   },
   start() {
     stop?.();
