@@ -42,23 +42,27 @@ applyUiDensity(
 const now = Date.now();
 const capturedAt = new Date(now).toISOString();
 const gb = 1024 ** 3;
+const pm2ServiceCount = 7;
 const services = [
   'lightnote-api',
   'lightnote-document-worker',
   'lightnote-bookmark-icon-worker',
   'lightnote-resource-governance-worker',
+  'lightnote-browser-push-worker',
+  'lightnote-note-import-worker',
+  'lightnote-data-export-worker',
   'nginx',
   'mysql',
   'redis',
 ].map((id, i) => ({
   id,
-  state: i === 5 ? 'degraded' : 'running',
+  state: id === 'mysql' ? 'degraded' : 'running',
   detail: 'Synthetic sample',
   pid: i + 100,
   uptimeSeconds: 86400 * 3 + 600,
-  cpuPercent: i < 4 ? 0.2 + i * 0.1 : null,
-  memoryBytes: [162, 129, 49, 92, 12, 1228, 26][i] * 1024 ** 2,
-  restartCount: i < 4 ? i * 16 : 0,
+  cpuPercent: i < pm2ServiceCount ? 0.2 + i * 0.1 : null,
+  memoryBytes: [162, 129, 49, 92, 61, 74, 70, 75, 932, 7][i] * 1024 ** 2,
+  restartCount: i < pm2ServiceCount ? i * 16 : 0,
   startedAt: capturedAt,
   actions: i > 0 && i < 4 ? ['service.restart'] : id === 'nginx' ? ['nginx.reload'] : [],
 }));
@@ -127,10 +131,15 @@ const findings = [
   { id: 'ssh-root-login', state: 'fail', severity: 'high', evidence: { value: 'yes' } },
   { id: 'ssh-password-authentication', state: 'fail', severity: 'high', evidence: { value: true } },
   { id: 'ssh-public-key-authentication', state: 'pass', severity: 'low', evidence: { value: true } },
-  { id: 'firewall', state: 'unknown', severity: 'medium', evidence: { provider: null, value: 'unknown' } },
-  { id: 'fail2ban', state: 'unknown', severity: 'medium', evidence: { value: 'unknown' } },
+  { id: 'firewall', state: 'pass', severity: 'high', evidence: { provider: 'ufw', value: 'enabled' } },
+  { id: 'fail2ban', state: 'fail', severity: 'medium', evidence: { value: 'not-installed' } },
   { id: 'security-updates', state: 'fail', severity: 'high', evidence: { pending: 420, security: 308 } },
-  { id: 'unexpected-public-ports', state: 'pass', severity: 'low', evidence: { ports: [] } },
+  {
+    id: 'unexpected-public-ports',
+    state: 'fail',
+    severity: 'high',
+    evidence: { ports: ['tcp6/3306', 'tcp/8888'], firewallFilteredPorts: ['tcp6/9001'] },
+  },
   { id: 'ssh-login-failures', state: 'fail', severity: 'medium', evidence: { failures24h: 12, successes24h: 3 } },
 ];
 const security = {
@@ -152,28 +161,32 @@ const security = {
       method: 'publickey',
     })),
   },
-  firewall: { available: false, provider: null, state: 'unknown' },
-  fail2ban: { available: false, state: 'unknown' },
+  firewall: { available: true, provider: 'ufw', state: 'enabled' },
+  fail2ban: { available: true, state: 'disabled', installed: false },
   updates: { available: true, pending: 420, security: 308 },
   listeningPorts: [
-    { protocol: 'tcp', address: '0.0.0.0', port: 443, exposure: 'public' },
-    { protocol: 'tcp', address: '0.0.0.0', port: 22, exposure: 'public' },
+    { protocol: 'tcp', address: '0.0.0.0', port: 443, exposure: 'public', firewall: 'allowed' },
+    { protocol: 'tcp', address: '0.0.0.0', port: 22, exposure: 'public', firewall: 'allowed' },
+    { protocol: 'tcp', address: '0.0.0.0', port: 8888, exposure: 'public', firewall: 'allowed' },
+    { protocol: 'tcp6', address: '::', port: 3306, exposure: 'public', firewall: 'allowed' },
+    { protocol: 'tcp6', address: '::', port: 9001, exposure: 'public', firewall: 'blocked' },
+    { protocol: 'tcp', address: '127.0.0.53', port: 53, exposure: 'loopback', firewall: 'blocked' },
   ],
   collectionErrors: [],
   findings,
-  summary: { failed: 4, unknown: 2, passed: 2 },
+  summary: { failed: 6, unknown: 0, passed: 2 },
 };
 const diagnostics = {
   capturedAt,
   status: 'critical',
-  summary: { failed: 5, warning: 0, unknown: 2, passed: 2 },
+  summary: { failed: 7, warning: 0, unknown: 0, passed: 2 },
   checks: [
     {
       id: 'services.health',
       domain: 'services',
       state: 'fail',
       severity: 'high',
-      evidence: { total: 7, unhealthy: ['mysql'] },
+      evidence: { total: services.length, unhealthy: ['mysql'] },
       target: { module: 'services', serviceId: 'mysql' },
     },
     ...findings.map((f) => ({
@@ -193,6 +206,8 @@ const diagnostics = {
 if (state === 'healthy') {
   services.forEach((service) => (service.state = 'running'));
   findings.forEach((finding) => (finding.state = 'pass'));
+  Object.assign(findings.find((finding) => finding.id === 'fail2ban')!.evidence, { value: 'enabled' });
+  Object.assign(findings.find((finding) => finding.id === 'unexpected-public-ports')!.evidence, { ports: [] });
   Object.assign(security.summary, { failed: 0, unknown: 0, passed: findings.length });
   diagnostics.status = 'healthy';
   diagnostics.checks.forEach((check) => (check.state = 'pass'));

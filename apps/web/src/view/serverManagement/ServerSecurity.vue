@@ -227,6 +227,7 @@
     if (finding.id === 'firewall')
       return `${evidence.provider || '—'} · ${t(evidence.value === 'enabled' ? 'serverManagement.workspace.enabled' : evidence.value === 'disabled' ? 'serverManagement.workspace.disabled' : 'serverManagement.workspace.evidenceUnknown')}`;
     const value = evidence.value;
+    if (value === 'not-installed') return t('serverManagement.workspace.notInstalled');
     if (value === true || value === 'true' || value === 'yes' || value === 'enabled')
       return t('serverManagement.workspace.enabled');
     if (value === false || value === 'false' || value === 'no' || value === 'disabled')

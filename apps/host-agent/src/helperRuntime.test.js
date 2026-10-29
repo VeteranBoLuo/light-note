@@ -54,17 +54,19 @@ describe("privileged helper production runtime", () => {
       expect.objectContaining({ pm2Status: expect.any(Boolean) }),
     );
 
-    const status = spawnSync(process.execPath, [helperPath, "socket"], {
-      encoding: "utf8",
-      input: '{"action":"service-status","targetId":"redis"}\n',
-      env: { PATH: "/usr/sbin:/usr/bin:/sbin:/bin" },
-    });
-    expect(JSON.parse(JSON.parse(status.stdout).stdout)).toEqual(
-      expect.objectContaining({
-        state: expect.stringMatching(/^(running|stopped)$/u),
-        detail: expect.any(String),
-      }),
-    );
+    for (const targetId of ["redis", "mysql"]) {
+      const status = spawnSync(process.execPath, [helperPath, "socket"], {
+        encoding: "utf8",
+        input: `{"action":"service-status","targetId":"${targetId}"}\n`,
+        env: { PATH: "/usr/sbin:/usr/bin:/sbin:/bin" },
+      });
+      expect(JSON.parse(JSON.parse(status.stdout).stdout)).toEqual(
+        expect.objectContaining({
+          state: expect.stringMatching(/^(running|stopped)$/u),
+          detail: expect.any(String),
+        }),
+      );
+    }
 
     const denied = spawnSync(process.execPath, [helperPath, "socket"], {
       encoding: "utf8",

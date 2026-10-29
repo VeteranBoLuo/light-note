@@ -3,6 +3,9 @@ import { runCommand, safeCommandEnvironment } from "./commandRunner.js";
 import { requestPrivilegedHelper } from "./helperClient.js";
 import { redactOperationalText, stableErrorCode } from "./redaction.js";
 
+// 这些服务可能由宝塔面板托管，systemd unit 状态不可信，需经 helper 按固定 PID 文件判定。
+const PANEL_AWARE_SERVICE_IDS = new Set(["nginx", "redis", "mysql"]);
+
 function serviceState(value) {
   if (value === "active") return "running";
   if (value === "inactive" || value === "failed")
@@ -259,7 +262,7 @@ export async function collectServiceSnapshots(
       }
       if (
         config.pm2AccessMode === "helper" &&
-        (definition.id === "nginx" || definition.id === "redis")
+        PANEL_AWARE_SERVICE_IDS.has(definition.id)
       ) {
         try {
           const result = await runHelper(

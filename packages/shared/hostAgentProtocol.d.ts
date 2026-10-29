@@ -15,6 +15,9 @@ export type HostAgentServiceId =
   | "lightnote-document-worker"
   | "lightnote-bookmark-icon-worker"
   | "lightnote-resource-governance-worker"
+  | "lightnote-browser-push-worker"
+  | "lightnote-note-import-worker"
+  | "lightnote-data-export-worker"
   | "nginx"
   | "mysql"
   | "redis";
@@ -152,11 +155,18 @@ export interface HostAgentStorageSnapshot {
 }
 
 export type HostAgentSecurityState = "enabled" | "disabled" | "unknown";
+/** 任意公网来源经主机防火墙能否到达该端口；旧版 Agent 不返回此字段。 */
+export type HostAgentFirewallCoverage =
+  | "allowed"
+  | "restricted"
+  | "blocked"
+  | "unknown";
 export interface HostAgentListeningPort {
   protocol: "tcp" | "tcp6" | "udp" | "udp6";
   address: string;
   port: number;
   exposure: "public" | "loopback" | "local";
+  firewall?: HostAgentFirewallCoverage;
 }
 export interface HostAgentSshActivityEntry {
   occurredAt: string;
@@ -183,7 +193,12 @@ export interface HostAgentSecuritySnapshot {
     provider: string | null;
     state: HostAgentSecurityState;
   };
-  fail2ban: { available: boolean; state: HostAgentSecurityState };
+  fail2ban: {
+    available: boolean;
+    state: HostAgentSecurityState;
+    /** false 表示已确认未安装；旧版 Agent 不返回此字段。 */
+    installed?: boolean | null;
+  };
   updates: {
     available: boolean;
     pending: number | null;

@@ -1,6 +1,17 @@
 #!/usr/bin/node
 import { spawnSync } from "node:child_process";
-import { accessSync, constants, readFileSync, realpathSync } from "node:fs";
+import {
+  accessSync,
+  closeSync,
+  constants,
+  fstatSync,
+  lstatSync,
+  openSync,
+  readdirSync,
+  readFileSync,
+  readSync,
+  realpathSync,
+} from "node:fs";
 
 const PM2_BIN = "/usr/bin/pm2";
 const NSENTER_BIN = "/usr/bin/nsenter";
@@ -8,14 +19,33 @@ const SYSTEMCTL_BIN = "/usr/bin/systemctl";
 const JOURNALCTL_BIN = "/usr/bin/journalctl";
 const NGINX_BIN = "/usr/sbin/nginx";
 const SSHD_BIN = "/usr/sbin/sshd";
-const UFW_BIN = "/usr/sbin/ufw";
 const FIREWALL_CMD_BIN = "/usr/bin/firewall-cmd";
 const APT_BIN = "/usr/bin/apt";
+// helper 沙箱只允许 AF_UNIX，ufw/iptables 无法读取运行时规则；改读 ufw 自身持久化的配置与规则。
+const UFW_CONFIG = "/etc/ufw/ufw.conf";
+const UFW_DEFAULTS = "/etc/default/ufw";
+const UFW_RULE_FILES = Object.freeze([
+  ["/etc/ufw/user.rules", "ipv4"],
+  ["/etc/ufw/user6.rules", "ipv6"],
+]);
+const UFW_POLICIES = Object.freeze({
+  ACCEPT: "allow",
+  DROP: "deny",
+  REJECT: "reject",
+});
 const PANEL_NGINX_BIN = "/www/server/nginx/sbin/nginx";
 const PANEL_NGINX_CONFIG = "/www/server/nginx/conf/nginx.conf";
 const PANEL_NGINX_PID = "/www/server/nginx/logs/nginx.pid";
+const PANEL_NGINX_LOG_DIR = "/www/wwwlogs";
 const PANEL_REDIS_BIN = "/www/server/redis/src/redis-server";
 const PANEL_REDIS_PID = "/www/server/redis/redis.pid";
+const PANEL_REDIS_LOG = "/www/server/redis/redis.log";
+const PANEL_MYSQL_BIN = "/www/server/mysql/bin/mysqld";
+const PANEL_MYSQL_DATA_DIR = "/www/server/data";
+const PANEL_LOG_TAIL_BYTES = 128 * 1024;
+const PANEL_LOG_TAIL_LINES = 300;
+// Linux 用户态 ABI 固定的时钟节拍，/proc/<pid>/stat 的 starttime 以此为单位。
+const USER_HZ = 100;
 const PM2_HOME = "/root/.pm2";
 const MAX_SOCKET_REQUEST_BYTES = 1024;
 const PM2_SERVICES = Object.freeze({
@@ -24,6 +54,9 @@ const PM2_SERVICES = Object.freeze({
   "lightnote-bookmark-icon-worker": "light-note-bookmark-icon-worker",
   "lightnote-resource-governance-worker":
     "light-note-resource-governance-worker",
+  "lightnote-browser-push-worker": "light-note-browser-push",
+  "lightnote-note-import-worker": "light-note-imports",
+  "lightnote-data-export-worker": "light-note-exports",
 });
 const RESTARTABLE_SERVICES = new Set([
   "lightnote-document-worker",
@@ -172,23 +205,100 @@ function readSshPosture() {
   };
 }
 
-function readFirewallPosture() {
-  if (executable(UFW_BIN)) {
-    const result = run(UFW_BIN, ["status"], {
-      timeout: 10_000,
-      maxBuffer: 256 * 1024,
-    });
-    if (result.status === 0) {
-      const active = /^Status:\s+active\s*$/imu.test(
-        String(result.stdout || ""),
-      );
-      return {
-        available: true,
-        provider: "ufw",
-        state: active ? "enabled" : "disabled",
-      };
+function readShellAssignments(file) {
+  return Object.fromEntries(
+    readFileSync(file, "utf8")
+      .split("\n")
+      .map((line) =>
+        line.match(/^\s*([A-Z0-9_]+)=("?)([^"\s#]*)\2\s*(?:#.*)?$/u),
+      )
+      .filter(Boolean)
+      .map((match) => [match[1], match[3]]),
+  );
+}
+
+function parseUfwPorts(value) {
+  if (value === "any") return "any";
+  const ranges = [];
+  for (const part of String(value || "").split(",")) {
+    const match = part.match(/^(\d{1,5})(?::(\d{1,5}))?$/u);
+    if (!match) return null;
+    const from = Number(match[1]);
+    const to = Number(match[2] ?? match[1]);
+    if (from < 1 || to > 65535 || from > to) return null;
+    ranges.push([from, to]);
+  }
+  return ranges.length ? ranges : null;
+}
+
+// 解析 ufw 写入规则文件的 "### tuple ###" 行：
+// action proto dport dst sport src [dapp sapp] direction[_iface] [comment=...]
+function readUfwInboundRules() {
+  const rules = [];
+  for (const [file, family] of UFW_RULE_FILES) {
+    let source;
+    try {
+      source = readFileSync(file, "utf8");
+    } catch {
+      if (family === "ipv6") continue;
+      return null;
+    }
+    for (const line of source.split("\n")) {
+      if (!line.startsWith("### tuple ### ")) continue;
+      const tokens = line
+        .slice("### tuple ### ".length)
+        .trim()
+        .split(/\s+/u)
+        .filter((token) => !token.startsWith("comment="));
+      const direction = /^(?:in|out)(?:_|$)/u.test(tokens[6] || "")
+        ? tokens[6]
+        : tokens[8];
+      if (!direction) return null;
+      if (!/^in(?:_|$)/u.test(direction) || tokens[0].includes(":")) continue;
+      const action = tokens[0].split("_")[0];
+      if (!["allow", "limit", "deny", "reject"].includes(action)) return null;
+      if (!["tcp", "udp", "any"].includes(tokens[1])) continue;
+      const ports = parseUfwPorts(tokens[2]);
+      if (!ports) return null;
+      rules.push({
+        family,
+        action,
+        protocol: tokens[1],
+        ports,
+        source:
+          tokens[5] === "0.0.0.0/0" || tokens[5] === "::/0"
+            ? "any"
+            : "restricted",
+      });
     }
   }
+  return rules;
+}
+
+function readUfwPosture() {
+  if (!readable(UFW_CONFIG)) return null;
+  try {
+    const enabled = readShellAssignments(UFW_CONFIG).ENABLED;
+    if (enabled !== "yes" && enabled !== "no") return null;
+    const defaults = readable(UFW_DEFAULTS)
+      ? readShellAssignments(UFW_DEFAULTS)
+      : {};
+    return {
+      available: true,
+      provider: "ufw",
+      state: enabled === "yes" ? "enabled" : "disabled",
+      defaultIncoming: UFW_POLICIES[defaults.DEFAULT_INPUT_POLICY] || null,
+      ipv6: defaults.IPV6 === "yes" ? true : defaults.IPV6 === "no" ? false : null,
+      inboundRules: readUfwInboundRules(),
+    };
+  } catch {
+    return null;
+  }
+}
+
+function readFirewallPosture() {
+  const ufw = readUfwPosture();
+  if (ufw) return ufw;
   if (executable(FIREWALL_CMD_BIN)) {
     const result = run(FIREWALL_CMD_BIN, ["--state"], {
       timeout: 10_000,
@@ -213,12 +323,17 @@ function readFail2banPosture() {
     "--no-pager",
   ]);
   const text = String(result.stdout || "");
-  if (result.status !== 0 || /LoadState=not-found/u.test(text)) {
-    return { available: false, state: "unknown" };
+  if (result.status !== 0) {
+    return { available: false, state: "unknown", installed: null };
+  }
+  // 未安装是可确认的事实，不是采集失败；按未启用防护处理。
+  if (/LoadState=not-found/u.test(text)) {
+    return { available: true, state: "disabled", installed: false };
   }
   return {
     available: true,
     state: /ActiveState=active/u.test(text) ? "enabled" : "disabled",
+    installed: true,
   };
 }
 
@@ -326,27 +441,159 @@ function verifiedProcessPid(pidFile, executablePath) {
   }
 }
 
+// 只列出固定目录下的普通文件；符号链接、子目录和不匹配的文件名一律忽略。
+function fixedDirectoryFiles(directory, pattern) {
+  try {
+    return readdirSync(directory, { withFileTypes: true })
+      .filter((entry) => entry.isFile() && pattern.test(entry.name))
+      .map((entry) => `${directory}/${entry.name}`);
+  } catch {
+    return [];
+  }
+}
+
+function latestNonEmptyFile(files) {
+  return (
+    files
+      .map((file) => {
+        try {
+          const stats = lstatSync(file);
+          return stats.isFile() && stats.size > 0
+            ? { file, modifiedAt: stats.mtimeMs }
+            : null;
+        } catch {
+          return null;
+        }
+      })
+      .filter(Boolean)
+      .sort((a, b) => b.modifiedAt - a.modifiedAt)[0]?.file || null
+  );
+}
+
+// 宝塔托管的服务不经 systemd 启动，对应 unit 可能长期处于 failed，必须以固定 PID 文件和
+// 已校验的可执行文件判定运行状态，日志也只读取面板写入的固定文件。
+const PANEL_SERVICES = Object.freeze({
+  nginx: Object.freeze({
+    binary: PANEL_NGINX_BIN,
+    pidFiles: () => [PANEL_NGINX_PID],
+    logFile: () =>
+      latestNonEmptyFile(
+        fixedDirectoryFiles(PANEL_NGINX_LOG_DIR, /^[A-Za-z0-9._-]*error\.log$/u),
+      ),
+  }),
+  redis: Object.freeze({
+    binary: PANEL_REDIS_BIN,
+    pidFiles: () => [PANEL_REDIS_PID],
+    logFile: () => latestNonEmptyFile([PANEL_REDIS_LOG]),
+  }),
+  mysql: Object.freeze({
+    binary: PANEL_MYSQL_BIN,
+    pidFiles: () =>
+      fixedDirectoryFiles(PANEL_MYSQL_DATA_DIR, /^[A-Za-z0-9._-]+\.pid$/u),
+    logFile: () =>
+      latestNonEmptyFile(
+        fixedDirectoryFiles(PANEL_MYSQL_DATA_DIR, /^[A-Za-z0-9._-]+\.err$/u),
+      ),
+  }),
+});
+
+function residentBytes(pid) {
+  try {
+    const match = readFileSync(`/proc/${pid}/status`, "utf8").match(
+      /^VmRSS:\s+(\d+)\s+kB$/mu,
+    );
+    return match ? Number(match[1]) * 1024 : 0;
+  } catch {
+    return 0;
+  }
+}
+
+function childPids(pid) {
+  try {
+    return readFileSync(`/proc/${pid}/task/${pid}/children`, "utf8")
+      .trim()
+      .split(/\s+/u)
+      .filter((value) => /^[1-9]\d{0,9}$/u.test(value))
+      .map(Number);
+  } catch {
+    return [];
+  }
+}
+
+function processStartedAt(pid) {
+  try {
+    const stat = readFileSync(`/proc/${pid}/stat`, "utf8");
+    // 进程名可能含空格或括号；从最后一个 ")" 之后的第 3 个字段起切分，starttime 是第 22 个字段。
+    const startTicks = Number(
+      stat.slice(stat.lastIndexOf(")") + 2).split(" ")[19],
+    );
+    const bootSeconds = Number(
+      readFileSync("/proc/stat", "utf8").match(/^btime\s+(\d+)$/mu)?.[1],
+    );
+    if (!Number.isSafeInteger(startTicks) || !Number.isSafeInteger(bootSeconds)) {
+      return null;
+    }
+    return new Date((bootSeconds + startTicks / USER_HZ) * 1000);
+  } catch {
+    return null;
+  }
+}
+
 function panelServiceStatus(serviceId) {
-  const definition =
-    serviceId === "nginx"
-      ? { binary: PANEL_NGINX_BIN, pidFile: PANEL_NGINX_PID }
-      : serviceId === "redis"
-        ? { binary: PANEL_REDIS_BIN, pidFile: PANEL_REDIS_PID }
-        : null;
-  if (!definition) return null;
+  if (!Object.hasOwn(PANEL_SERVICES, serviceId)) return null;
+  const definition = PANEL_SERVICES[serviceId];
   const pid = executable(definition.binary)
-    ? verifiedProcessPid(definition.pidFile, definition.binary)
+    ? definition
+        .pidFiles()
+        .map((pidFile) => verifiedProcessPid(pidFile, definition.binary))
+        .find(Boolean) || null
     : null;
+  const startedAt = pid ? processStartedAt(pid) : null;
+  // 主进程加直接子进程（如 Nginx worker）的常驻内存；共享页会重复计入，属近似值。
+  const memoryBytes = pid
+    ? [pid, ...childPids(pid)].reduce((sum, item) => sum + residentBytes(item), 0)
+    : 0;
   return {
     state: pid ? "running" : "stopped",
     detail: pid ? "active / panel-managed" : "inactive / panel-managed",
     pid,
-    uptimeSeconds: null,
+    uptimeSeconds: startedAt
+      ? Math.max(0, Math.floor((Date.now() - startedAt.getTime()) / 1000))
+      : null,
     cpuPercent: null,
-    memoryBytes: null,
+    memoryBytes: memoryBytes > 0 ? memoryBytes : null,
     restartCount: null,
-    startedAt: null,
+    startedAt: startedAt ? startedAt.toISOString() : null,
   };
+}
+
+function panelLogFile(serviceId) {
+  if (!Object.hasOwn(PANEL_SERVICES, serviceId)) return undefined;
+  const definition = PANEL_SERVICES[serviceId];
+  return executable(definition.binary) ? definition.logFile() : undefined;
+}
+
+function tailFileLines(file) {
+  let descriptor;
+  try {
+    descriptor = openSync(
+      file,
+      constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
+    );
+    const stats = fstatSync(descriptor);
+    if (!stats.isFile()) return null;
+    const length = Math.min(stats.size, PANEL_LOG_TAIL_BYTES);
+    const buffer = Buffer.alloc(length);
+    const bytesRead = readSync(descriptor, buffer, 0, length, stats.size - length);
+    const lines = buffer.subarray(0, bytesRead).toString("utf8").split("\n");
+    if (length < stats.size) lines.shift();
+    if (lines.at(-1) === "") lines.pop();
+    return lines.slice(-PANEL_LOG_TAIL_LINES);
+  } catch {
+    return null;
+  } finally {
+    if (descriptor !== undefined) closeSync(descriptor);
+  }
 }
 
 function systemdServiceStatus(serviceId) {
@@ -437,10 +684,7 @@ function executeAction(action, targetId) {
     return success(JSON.stringify(securitySnapshot()));
   }
 
-  if (
-    action === "service-status" &&
-    (targetId === "nginx" || targetId === "redis")
-  ) {
+  if (action === "service-status" && Object.hasOwn(PANEL_SERVICES, targetId)) {
     return success(JSON.stringify(managedServiceStatus(targetId)));
   }
 
@@ -525,6 +769,16 @@ function executeAction(action, targetId) {
   }
 
   if (action === "journal-logs" && Object.hasOwn(SYSTEMD_SERVICES, targetId)) {
+    // 已安装面板版时以面板日志为准；没有非空日志就返回空，不回退到失效 unit 的旧 journal。
+    const panelLog = panelLogFile(targetId);
+    if (panelLog !== undefined) {
+      if (panelLog === null) return success("");
+      const lines = tailFileLines(panelLog);
+      if (!lines) {
+        return { exitCode: 1, stdout: "", stderr: "service logs failed\n" };
+      }
+      return success(redact(lines.join("\n")));
+    }
     const result = run(JOURNALCTL_BIN, [
       "--unit",
       SYSTEMD_SERVICES[targetId],

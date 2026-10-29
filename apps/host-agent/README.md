@@ -11,13 +11,15 @@ Host Agent 是服务器管理页的本机执行端，不是 AI Agent。它只监
 - 可写动作只有：Nginx 处于已识别的 systemd 或面板托管拓扑且配置校验通过后重载，以及三个固定 Worker 的 PM2 重启。生产机仍由 root PM2 托管时，状态、日志和重启只经 root 所有、由 systemd Socket 按请求启动的 helper 进入；Socket 仅允许 Agent 账户连接，helper 内部再次校验固定 action/target，输出 PM2 状态前删除全部环境字段，日志先脱敏。
 - 命令均使用绝对路径、参数数组和 `shell: false`，并受超时、输出大小、日志脱敏和持久化幂等回执保护。Agent 在执行命令前先原子落「结果未知」占位；即使进程中途崩溃，相同 job ID 也只会返回原回执，不会自动重放。
 - 实时指标每 3 秒采样并保留 60 分钟；服务快照最多缓存 10 秒，SSH/防火墙/Fail2ban/本地 APT 索引等安全慢检查最多缓存 5 分钟。同一缓存窗口内的并发请求复用一个采集任务，慢检查不得放入实时 `/v1/dashboard`。
-- 安全采集只返回结构化事实和限定数量的 SSH 登录摘要，不返回完整认证日志；安全判断由 Express 生成“通过 / 风险 / 未知”检查项，采集失败必须保持未知，不能当作通过。
+- 安全采集只返回结构化事实和限定数量的 SSH 登录摘要，不返回完整认证日志；安全判断由 Express 生成“通过 / 风险 / 未知”检查项，采集失败必须保持未知，不能当作通过。已确认的缺失（如 Fail2ban 未安装）是事实，按未启用处理。
+- 宝塔面板托管的 Nginx、Redis、MySQL 不经 systemd 启动，对应 unit 可能长期显示 failed：状态以固定 PID 文件加 `/proc/<pid>/exe` 校验判定，日志只读面板写入的固定文件，不回退到失效 unit 的 journal。
+- helper 沙箱只允许 AF_UNIX，`ufw`/`iptables` 在沙箱内无法读取规则；防火墙状态与入站规则改读 `/etc/ufw` 持久化配置，Agent 据此为每个监听端口标注公网来源是否可达，规则本身不外传。
 
 ## 运行账户与 PM2
 
 优先让 Host Agent 与现有 PM2 daemon 使用同一个专用、非 root 应用账户，并设置 `HOST_AGENT_PM2_ACCESS_MODE=direct`。`HOST_AGENT_PM2_HOME` 必须指向该账户真实的 PM2 home；安装前先用该账户运行 `pm2 ping` 和 `pm2 jlist` 验证。systemd unit 默认只把该账户的 `~/.pm2` 以只读方式映射进隔离环境，Agent 自己只能写 `/run/lightnote-host-agent` 与 `/var/lib/lightnote-host-agent`。
 
-如果当前 PM2 仍由 root 托管，使用独立 `lightnote-agent` 账户并设置 `HOST_AGENT_PM2_ACCESS_MODE=helper`。兼容模式不共享 `/root/.pm2`、不把 Agent 加入 root 组，也不开放 `pm2 *`：`lightnote-host-helper.socket` 以 `0660 root:<agent-user>` 暴露专用 Unix Socket，systemd 为每次连接短暂启动 root helper；helper 只接受固定状态、七个固定服务日志和三个固定 Worker 重启动作，再按服务 ID 映射，并以固定 `nsenter` 参数读取被隔离的宿主 PM2。这样 Agent unit 可以继续保留 `RestrictAddressFamilies`、`LockPersonality` 等会隐式启用 `no_new_privileges` 的硬化项，不依赖 unit 内 `sudo` 提权。长期仍建议单独规划 PM2 迁移到非 root 应用账户；迁移后切回 `direct` 并停用 helper Socket。
+如果当前 PM2 仍由 root 托管，使用独立 `lightnote-agent` 账户并设置 `HOST_AGENT_PM2_ACCESS_MODE=helper`。兼容模式不共享 `/root/.pm2`、不把 Agent 加入 root 组，也不开放 `pm2 *`：`lightnote-host-helper.socket` 以 `0660 root:<agent-user>` 暴露专用 Unix Socket，systemd 为每次连接短暂启动 root helper；helper 只接受固定状态、十个固定服务日志和三个固定 Worker 重启动作，再按服务 ID 映射，并以固定 `nsenter` 参数读取被隔离的宿主 PM2。这样 Agent unit 可以继续保留 `RestrictAddressFamilies`、`LockPersonality` 等会隐式启用 `no_new_privileges` 的硬化项，不依赖 unit 内 `sudo` 提权。长期仍建议单独规划 PM2 迁移到非 root 应用账户；迁移后切回 `direct` 并停用 helper Socket。
 
 ## 一次性安装
 

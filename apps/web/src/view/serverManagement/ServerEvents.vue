@@ -115,6 +115,7 @@
 <script setup lang="ts">
   import { computed, onBeforeUnmount, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
+  import { isHostAgentServiceId } from '@lightnote/shared/host-agent-protocol';
   import { bookmarkStore } from '@/store';
   import icon from '@/config/icon';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
@@ -232,18 +233,8 @@
           : 'neutral';
   }
   function targetLabel(item: InfraAuditItem) {
-    const key = `serverManagement.serviceNames.${item.targetId}`;
-    return item.targetId &&
-      [
-        'lightnote-api',
-        'lightnote-document-worker',
-        'lightnote-bookmark-icon-worker',
-        'lightnote-resource-governance-worker',
-        'nginx',
-        'mysql',
-        'redis',
-      ].includes(item.targetId)
-      ? t(key)
+    return isHostAgentServiceId(item.targetId)
+      ? t(`serverManagement.serviceNames.${item.targetId}`)
       : [item.targetType, item.targetId].filter(Boolean).join(' / ') || '—';
   }
   const detailFields = computed(() =>

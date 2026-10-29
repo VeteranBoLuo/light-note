@@ -191,7 +191,7 @@ describe("executeHostAction", () => {
     expect(runner).not.toHaveBeenCalled();
   });
 
-  it("面板托管的 Nginx 与 Redis 通过 helper 返回已校验进程状态", async () => {
+  it("面板托管的 Nginx、Redis 与 MySQL 通过 helper 返回已校验进程状态", async () => {
     const runner = vi.fn();
     const helperRequester = vi.fn(async (_socketPath, action, targetId) => {
       if (action === "capabilities") {
@@ -210,8 +210,11 @@ describe("executeHostAction", () => {
           stdout: JSON.stringify({
             state: "running",
             detail: `active / panel-managed ${targetId}`,
-            pid: targetId === "nginx" ? 101 : 102,
-            uptimeSeconds: null,
+            pid: { nginx: 101, redis: 102, mysql: 103 }[targetId],
+            uptimeSeconds: targetId === "mysql" ? 3600 : null,
+            memoryBytes: targetId === "mysql" ? 977_723_392 : null,
+            startedAt:
+              targetId === "mysql" ? "2026-10-26T01:01:39.000Z" : null,
           }),
           stderr: "",
         };
@@ -236,6 +239,12 @@ describe("executeHostAction", () => {
             target: "redis-server.service",
             restartable: false,
           },
+          {
+            id: "mysql",
+            kind: "systemd",
+            target: "mysql.service",
+            restartable: false,
+          },
         ],
       },
       runner,
@@ -255,7 +264,21 @@ describe("executeHostAction", () => {
         pid: 102,
         actions: [],
       }),
+      expect.objectContaining({
+        id: "mysql",
+        state: "running",
+        pid: 103,
+        uptimeSeconds: 3600,
+        memoryBytes: 977_723_392,
+        actions: [],
+      }),
     ]);
+    expect(helperRequester).toHaveBeenCalledWith(
+      "/run/lightnote-host-helper.sock",
+      "service-status",
+      "mysql",
+      expect.any(Object),
+    );
     expect(runner).not.toHaveBeenCalled();
   });
 });

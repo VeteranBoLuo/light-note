@@ -30,8 +30,9 @@ function ipv6FromHex(value) {
   ).join(":");
 }
 
-function exposureFor(address) {
-  if (address === "127.0.0.1" || address === "::1") return "loopback";
+export function exposureFor(address) {
+  // 127.0.0.0/8 整段都是回环，例如 systemd-resolved 监听的 127.0.0.53。
+  if (/^127\./u.test(address) || address === "::1") return "loopback";
   if (address === "0.0.0.0" || address === "::") return "public";
   if (/^(?:10\.|192\.168\.|172\.(?:1[6-9]|2\d|3[01])\.)/u.test(address))
     return "local";
@@ -93,12 +94,113 @@ function unavailableSnapshot(capturedAt) {
       recent: [],
     },
     firewall: { available: false, provider: null, state: "unknown" },
-    fail2ban: { available: false, state: "unknown" },
+    fail2ban: { available: false, state: "unknown", installed: null },
     updates: { available: false, pending: null, security: null },
   };
 }
 
-function normalizeHelperSnapshot(stdout) {
+const FIREWALL_RULE_ACTIONS = new Set(["allow", "limit", "deny", "reject"]);
+const FIREWALL_RULE_PROTOCOLS = new Set(["tcp", "udp", "any"]);
+const FIREWALL_DEFAULT_POLICIES = new Set(["allow", "deny", "reject"]);
+
+function normalizeFirewallPorts(value) {
+  if (value === "any") return "any";
+  if (!Array.isArray(value) || !value.length || value.length > 64) return null;
+  const ranges = value.map((range) =>
+    Array.isArray(range) &&
+    range.length === 2 &&
+    range.every((port) => Number.isSafeInteger(port) && port >= 1 && port <= 65535) &&
+    range[0] <= range[1]
+      ? [range[0], range[1]]
+      : null,
+  );
+  return ranges.every(Boolean) ? ranges : null;
+}
+
+// 规则按 ufw 的先后顺序参与判定；任意一条无法识别时整组视为未知，
+// 宁可把端口当作可能暴露，也不能因丢掉一条放行规则而误判为已拦截。
+function normalizeFirewallRules(value) {
+  if (!Array.isArray(value) || value.length > 512) return null;
+  const rules = value.map((rule) => {
+    const ports = normalizeFirewallPorts(rule?.ports);
+    if (
+      (rule?.family !== "ipv4" && rule?.family !== "ipv6") ||
+      !FIREWALL_RULE_ACTIONS.has(rule?.action) ||
+      !FIREWALL_RULE_PROTOCOLS.has(rule?.protocol) ||
+      (rule?.source !== "any" && rule?.source !== "restricted") ||
+      !ports
+    ) {
+      return null;
+    }
+    return {
+      family: rule.family,
+      action: rule.action,
+      protocol: rule.protocol,
+      source: rule.source,
+      ports,
+    };
+  });
+  return rules.every(Boolean) ? rules : null;
+}
+
+function familyCoverage(port, rules, defaultIncoming) {
+  const protocol = port.protocol.startsWith("udp") ? "udp" : "tcp";
+  let restricted = false;
+  for (const rule of rules) {
+    if (rule.protocol !== "any" && rule.protocol !== protocol) continue;
+    if (
+      rule.ports !== "any" &&
+      !rule.ports.some(([from, to]) => port.port >= from && port.port <= to)
+    ) {
+      continue;
+    }
+    const allows = rule.action === "allow" || rule.action === "limit";
+    if (rule.source !== "any") {
+      restricted ||= allows;
+      continue;
+    }
+    if (allows) return "allowed";
+    return restricted ? "restricted" : "blocked";
+  }
+  if (defaultIncoming === "allow") return "allowed";
+  if (defaultIncoming === "deny" || defaultIncoming === "reject") {
+    return restricted ? "restricted" : "blocked";
+  }
+  return "unknown";
+}
+
+/**
+ * 判断任意公网来源能否经主机防火墙到达该监听端口。
+ * 绑定 `::` 的 IPv6 套接字按双栈处理，需同时检查 IPv4 与 IPv6 规则。
+ */
+export function firewallCoverage(port, firewall) {
+  if (!firewall?.available) return "unknown";
+  if (firewall.state === "disabled") return "allowed";
+  if (firewall.state !== "enabled" || !Array.isArray(firewall.inboundRules)) {
+    return "unknown";
+  }
+  const families = port.protocol.endsWith("6")
+    ? port.address === "::"
+      ? ["ipv4", "ipv6"]
+      : ["ipv6"]
+    : ["ipv4"];
+  const results = families.map((family) =>
+    family === "ipv6" && firewall.ipv6 !== true
+      ? "unknown"
+      : familyCoverage(
+          port,
+          firewall.inboundRules.filter((rule) => rule.family === family),
+          firewall.defaultIncoming,
+        ),
+  );
+  return (
+    ["allowed", "unknown", "restricted"].find((level) =>
+      results.includes(level),
+    ) || "blocked"
+  );
+}
+
+export function normalizeHelperSnapshot(stdout) {
   const payload = JSON.parse(stdout || "{}");
   if (
     !payload ||
@@ -157,10 +259,18 @@ function normalizeHelperSnapshot(stdout) {
         ? String(payload.firewall.provider).slice(0, 32)
         : null,
       state: state(payload.firewall.state),
+      defaultIncoming: FIREWALL_DEFAULT_POLICIES.has(
+        payload.firewall.defaultIncoming,
+      )
+        ? payload.firewall.defaultIncoming
+        : null,
+      ipv6: booleanOrNull(payload.firewall.ipv6),
+      inboundRules: normalizeFirewallRules(payload.firewall.inboundRules),
     },
     fail2ban: {
       available: payload.fail2ban.available === true,
       state: state(payload.fail2ban.state),
+      installed: booleanOrNull(payload.fail2ban.installed),
     },
     updates: {
       available: payload.updates.available === true,
@@ -204,7 +314,16 @@ export async function collectSecuritySnapshot(
   return {
     protocolVersion: HOST_AGENT_PROTOCOL_VERSION,
     ...host,
-    listeningPorts,
+    // 规则只用于在本机判定端口可达性，不随快照外传。
+    firewall: {
+      available: host.firewall.available,
+      provider: host.firewall.provider,
+      state: host.firewall.state,
+    },
+    listeningPorts: listeningPorts.map((item) => ({
+      ...item,
+      firewall: firewallCoverage(item, host.firewall),
+    })),
     collectionErrors,
   };
 }

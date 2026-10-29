@@ -53,6 +53,24 @@ export const SERVICE_DEFINITIONS = Object.freeze([
     restartable: true,
   }),
   Object.freeze({
+    id: "lightnote-browser-push-worker",
+    kind: "pm2",
+    target: "light-note-browser-push",
+    restartable: false,
+  }),
+  Object.freeze({
+    id: "lightnote-note-import-worker",
+    kind: "pm2",
+    target: "light-note-imports",
+    restartable: false,
+  }),
+  Object.freeze({
+    id: "lightnote-data-export-worker",
+    kind: "pm2",
+    target: "light-note-exports",
+    restartable: false,
+  }),
+  Object.freeze({
     id: "nginx",
     kind: "systemd",
     target: "nginx.service",

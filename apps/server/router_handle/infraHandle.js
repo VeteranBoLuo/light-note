@@ -146,7 +146,7 @@ export function deriveSecurityFindings(snapshot) {
       'fail2ban',
       !snapshot?.fail2ban?.available ? 'unknown' : snapshot.fail2ban.state === 'enabled' ? 'pass' : 'fail',
       'medium',
-      { value: snapshot?.fail2ban?.state || 'unknown' },
+      { value: snapshot?.fail2ban?.installed === false ? 'not-installed' : snapshot?.fail2ban?.state || 'unknown' },
     ),
   );
   const securityUpdates = snapshot?.updates?.security;
@@ -159,16 +159,24 @@ export function deriveSecurityFindings(snapshot) {
     ),
   );
   const allowedPublicPorts = new Set([80, 443, Number(ssh.port || 22)]);
-  const unexpectedPublicPorts = (snapshot?.listeningPorts || []).filter(
+  const nonStandardPublicPorts = (snapshot?.listeningPorts || []).filter(
     (item) => item.exposure === 'public' && !allowedPublicPorts.has(Number(item.port)),
   );
+  // 绑定所有地址但被主机防火墙拦截或仅放行指定来源的端口不算公网暴露；
+  // 旧版 Agent 未标注防火墙结论时按可能暴露处理。
+  const isFirewallFiltered = (item) => item.firewall === 'blocked' || item.firewall === 'restricted';
+  const unexpectedPublicPorts = nonStandardPublicPorts.filter((item) => !isFirewallFiltered(item));
   const internalPorts = new Set([3000, 3306, 6379, 9001]);
+  const portLabel = (item) => `${item.protocol}/${item.port}`;
   findings.push(
     securityFinding(
       'unexpected-public-ports',
       unexpectedPublicPorts.length ? 'fail' : 'pass',
       unexpectedPublicPorts.some((item) => internalPorts.has(Number(item.port))) ? 'high' : 'medium',
-      { ports: unexpectedPublicPorts.map((item) => `${item.protocol}/${item.port}`).slice(0, 20) },
+      {
+        ports: unexpectedPublicPorts.map(portLabel).slice(0, 20),
+        firewallFilteredPorts: nonStandardPublicPorts.filter(isFirewallFiltered).map(portLabel).slice(0, 20),
+      },
     ),
   );
   const failures24h = ssh.failures24h;

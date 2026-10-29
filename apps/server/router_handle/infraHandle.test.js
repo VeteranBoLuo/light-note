@@ -91,6 +91,36 @@ describe('infraHandle', () => {
     });
   });
 
+  it('防火墙拦截的端口不算公网暴露，Fail2ban 未安装按风险处理并保留事实', () => {
+    const findings = infraHandleInternals.deriveSecurityFindings({
+      ssh: { available: true, port: 22 },
+      firewall: { available: true, provider: 'ufw', state: 'enabled' },
+      fail2ban: { available: true, state: 'disabled', installed: false },
+      updates: { available: true, pending: 0, security: 0 },
+      listeningPorts: [
+        { protocol: 'tcp6', address: '::', port: 3306, exposure: 'public', firewall: 'allowed' },
+        { protocol: 'tcp6', address: '::', port: 9001, exposure: 'public', firewall: 'blocked' },
+        { protocol: 'tcp', address: '0.0.0.0', port: 8888, exposure: 'public', firewall: 'restricted' },
+        { protocol: 'tcp', address: '0.0.0.0', port: 888, exposure: 'public', firewall: 'unknown' },
+      ],
+    });
+    expect(findings.find((item) => item.id === 'unexpected-public-ports')).toMatchObject({
+      state: 'fail',
+      severity: 'high',
+      evidence: { ports: ['tcp6/3306', 'tcp/888'], firewallFilteredPorts: ['tcp6/9001', 'tcp/8888'] },
+    });
+    expect(findings.find((item) => item.id === 'fail2ban')).toMatchObject({
+      state: 'fail',
+      evidence: { value: 'not-installed' },
+    });
+
+    const filtered = infraHandleInternals.deriveSecurityFindings({
+      ssh: { available: true, port: 22 },
+      listeningPorts: [{ protocol: 'tcp', address: '0.0.0.0', port: 9001, exposure: 'public', firewall: 'blocked' }],
+    });
+    expect(filtered.find((item) => item.id === 'unexpected-public-ports')).toMatchObject({ state: 'pass' });
+  });
+
   it('诊断阈值由后端唯一事实源派生，并返回精确处理入口', () => {
     const report = infraHandleInternals.deriveInfraDiagnostics(
       {
