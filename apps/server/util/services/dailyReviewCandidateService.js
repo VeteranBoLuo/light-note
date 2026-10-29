@@ -9,8 +9,11 @@ const ACTIVE_TAG_LIMIT = 20;
 const DAILY_ITEM_LIMIT = 3;
 const MAX_ITEMS_PER_RESOURCE_TYPE = 2;
 const UNION_COLLATION = 'utf8mb4_unicode_ci';
+// 候选查询运行在生成当日清单的事务里，持有当日唯一键与池连接；异常计划必须失败关闭，不能拖住整个事务。
+const QUERY_TIME_LIMIT_MS = 5000;
 
 const asUnionText = (expression) => `CONVERT(${expression} USING utf8mb4) COLLATE ${UNION_COLLATION}`;
+const withTimeLimit = (sql) => sql.replace(/^SELECT\b/, `SELECT /*+ MAX_EXECUTION_TIME(${QUERY_TIME_LIMIT_MS}) */`);
 export const dailyReviewBookmarkUrlCondition = (expression) =>
   `LOWER(TRIM(${expression})) REGEXP '^https?://[^[:space:]]+$'`;
 
@@ -28,6 +31,7 @@ export const REVIEW_RESOURCE_DEFINITIONS = Object.freeze([
     alias: 'b',
     ownerColumn: 'user_id',
     idExpression: 'b.id',
+    relationIdExpression: 'b.id',
     titleExpression: 'b.name',
     urlExpression: 'b.url',
     timeExpression: 'b.create_time',
@@ -40,6 +44,7 @@ export const REVIEW_RESOURCE_DEFINITIONS = Object.freeze([
     alias: 'n',
     ownerColumn: 'create_by',
     idExpression: 'n.id',
+    relationIdExpression: 'CONVERT(n.id USING utf8)',
     titleExpression: 'n.title',
     urlExpression: 'NULL',
     timeExpression: 'n.create_time',
@@ -52,6 +57,7 @@ export const REVIEW_RESOURCE_DEFINITIONS = Object.freeze([
     alias: 'f',
     ownerColumn: 'create_by',
     idExpression: 'CAST(f.id AS CHAR)',
+    relationIdExpression: 'CONVERT(CAST(f.id AS CHAR) USING utf8)',
     titleExpression: 'f.file_name',
     urlExpression: 'NULL',
     timeExpression: 'f.create_time',
@@ -88,6 +94,10 @@ function utcBoundary(accountDateSql, shiftMinutes, dayOffset = 0) {
         : `DATE_SUB(${accountDateSql}, INTERVAL ${Math.abs(dayOffset)} DAY)`;
   return `DATE_SUB(${shiftedDate}, INTERVAL ${normalizeShiftMinutes(shiftMinutes)} MINUTE)`;
 }
+
+// resource_tag_relations 是历史 utf8 表。只把资源侧引用键转换为它的字符集，relation.resource_id 保持原列，
+// 才能沿 idx_resource 点查；两侧都 CONVERT 会让 MySQL 5.7 对账号全部资源与关联逐对比较（LN-PIT-192）。
+const relationJoinCondition = (definition) => `relation.resource_id = ${definition.relationIdExpression}`;
 
 function availabilityJoin(definition) {
   return `LEFT JOIN growth_recap_state recap_state
@@ -127,7 +137,7 @@ function buildCandidateBranch({ definition, reasonCode, accountDateSql, shiftMin
     joins.push(`INNER JOIN resource_tag_relations relation
       ON relation.user_id = ?
      AND relation.resource_type = '${definition.type}'
-     AND ${asUnionText('relation.resource_id')} = ${asUnionText(definition.idExpression)}`);
+     AND ${relationJoinCondition(definition)}`);
     params.push(null);
     joins.push(`INNER JOIN tag reason_tag
       ON reason_tag.id = relation.tag_id
@@ -204,7 +214,7 @@ export function buildCandidatePoolQuery({ userId, date, shiftMinutes = 0, reason
   const params = branches.flatMap((branch) => branch.params.map((value) => value ?? String(userId)));
   params.push(`${String(userId)}:${normalizedDate}`);
   return {
-    sql: `SELECT candidate_pool.resource_type,
+    sql: withTimeLimit(`SELECT candidate_pool.resource_type,
                  candidate_pool.resource_id,
                  MAX(candidate_pool.title) AS title,
                  MAX(candidate_pool.url) AS url,
@@ -220,7 +230,7 @@ export function buildCandidatePoolQuery({ userId, date, shiftMinutes = 0, reason
       ORDER BY CRC32(CONCAT(?, ':', candidate_pool.resource_type, ':', candidate_pool.resource_id)) ASC,
                candidate_pool.resource_type ASC,
                candidate_pool.resource_id ASC
-      LIMIT ${CANDIDATE_POOL_LIMIT}`,
+      LIMIT ${CANDIDATE_POOL_LIMIT}`),
     params,
   };
 }
@@ -235,7 +245,7 @@ export function buildActiveTagsQuery({ userId, date, shiftMinutes = 0 }) {
         INNER JOIN resource_tag_relations relation
           ON relation.user_id = ?
          AND relation.resource_type = '${definition.type}'
-         AND ${asUnionText('relation.resource_id')} = ${asUnionText(definition.idExpression)}
+         AND ${relationJoinCondition(definition)}
         WHERE ${definition.alias}.${definition.ownerColumn} = ?
           AND ${definition.liveCondition}
           AND ${definition.activityExpression} >= ${utcBoundary(accountDateSql, shiftMinutes, -13)}
@@ -244,7 +254,7 @@ export function buildActiveTagsQuery({ userId, date, shiftMinutes = 0 }) {
     };
   });
   return {
-    sql: `SELECT ${asUnionText('recent_activity.tag_id')} AS tag_id,
+    sql: withTimeLimit(`SELECT ${asUnionText('recent_activity.tag_id')} AS tag_id,
                  ${asUnionText('MAX(active_tag.name)')} AS tag_name,
                  MAX(recent_activity.activity_time) AS last_activity_time
       FROM (
@@ -256,7 +266,7 @@ export function buildActiveTagsQuery({ userId, date, shiftMinutes = 0 }) {
        AND active_tag.del_flag = 0
       GROUP BY recent_activity.tag_id
       ORDER BY last_activity_time DESC, recent_activity.tag_id ASC
-      LIMIT ${ACTIVE_TAG_LIMIT}`,
+      LIMIT ${ACTIVE_TAG_LIMIT}`),
     params: [...branches.flatMap((branch) => branch.params), String(userId)],
   };
 }

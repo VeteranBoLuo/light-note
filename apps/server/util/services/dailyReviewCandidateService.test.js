@@ -101,6 +101,26 @@ describe('daily review candidate service', () => {
     expect(query.sql).not.toContain('DATE_ADD(b.create_time, INTERVAL -420 MINUTE) >=');
   });
 
+  it('标签关联只转换资源侧引用键，relation.resource_id 保持原列以沿 idx_resource 点查（LN-PIT-192）', () => {
+    const queries = [
+      buildActiveTagsQuery({ userId: 'user-1', date: '2026-09-01' }),
+      buildCandidatePoolQuery({
+        userId: 'user-1',
+        date: '2026-09-01',
+        reasonCode: 'active_tag',
+        activeTagIds: ['tag-1'],
+      }),
+    ];
+    for (const { sql } of queries) {
+      expect(sql).not.toMatch(/CONVERT\(relation\.resource_id/);
+      expect(sql).toContain('relation.resource_id = b.id');
+      expect(sql).toContain('relation.resource_id = CONVERT(n.id USING utf8)');
+      expect(sql).toContain('relation.resource_id = CONVERT(CAST(f.id AS CHAR) USING utf8)');
+      // 生成清单的事务持有当日唯一键，候选查询必须有服务端执行上限。
+      expect(sql.startsWith('SELECT /*+ MAX_EXECUTION_TIME(5000) */')).toBe(true);
+    }
+  });
+
   it('候选响应固化判定时使用的账号本地资源日期，不让浏览器重新解释无时区时间', () => {
     const query = buildCandidatePoolQuery({
       userId: 'user-1',
