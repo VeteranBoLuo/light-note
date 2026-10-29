@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ManorError } from '@lightnote/shared/manor';
-const mocks = vi.hoisted(() => ({ get: vi.fn(), execute: vi.fn(), rootQuery: vi.fn() }));
-vi.mock('../db/index.js', () => ({ default: { query: mocks.rootQuery } }));
+const mocks = vi.hoisted(() => ({ get: vi.fn(), execute: vi.fn() }));
 vi.mock('../util/agent/data.js', () => ({ resultData: (data, status = 200, message) => ({ status, data, message }) }));
 vi.mock('../util/auth.js', () => ({ ensureNotVisitor: (req, res) => {
   if (!req.user?.id || req.user.role === 'visitor') { res.send({ status: 403 }); return false; }
@@ -15,7 +14,7 @@ import { getKnowledgeManor, runKnowledgeManorCommand } from './knowledgeManorHan
 describe('庄园接口账号与开关边界', () => {
   const req = extra => ({ user: { id: 'owner', role: 'root' }, body: { action: 'adopt' }, ...extra });
   const res = () => ({ send: vi.fn() });
-  beforeEach(() => { vi.stubEnv('KNOWLEDGE_MANOR_ENABLED', 'true'); vi.clearAllMocks(); mocks.rootQuery.mockResolvedValue([[{ role: 'root', del_flag: 0 }]]); });
+  beforeEach(() => { vi.stubEnv('KNOWLEDGE_MANOR_ENABLED', 'true'); vi.clearAllMocks(); });
   afterEach(() => vi.unstubAllEnvs());
   it('关闭入口同时拒绝直连 API，不读取或改变存档', async () => {
     vi.stubEnv('KNOWLEDGE_MANOR_ENABLED', 'false');
@@ -30,19 +29,21 @@ describe('庄园接口账号与开关边界', () => {
     expect(response.send.mock.calls[0][0].status).toBe(403);
     expect(mocks.execute).not.toHaveBeenCalled();
   });
-  it.each(['user', 'test', 'unknown'])('开关开启时，%s 仍不能直连读取或执行庄园', async role => {
-    for (const handler of [getKnowledgeManor, runKnowledgeManorCommand]) {
-      const response = res(); await handler(req({ user: { id: 'owner', role } }), response);
-      expect(response.send.mock.calls[0][0].status).toBe(403);
-    }
-    expect(mocks.get).not.toHaveBeenCalled(); expect(mocks.execute).not.toHaveBeenCalled();
-    expect(mocks.rootQuery).not.toHaveBeenCalled();
+  it.each([
+    ['internal', 'root', true], ['internal', 'test', true], ['internal', 'user', false], ['internal', 'unknown', false],
+    ['all', 'root', true], ['all', 'test', true], ['all', 'user', true], ['all', 'unknown', false],
+    ['typo', 'user', false], ['typo', 'test', true],
+  ])('开放范围 %s 下 %s 账号能否直连：%s', async (audience, role, allowed) => {
+    vi.stubEnv('KNOWLEDGE_MANOR_AUDIENCE', audience);
+    mocks.get.mockResolvedValue({ revision: 0 });
+    const response = res(); await getKnowledgeManor(req({ user: { id: 'owner', role } }), response);
+    expect(response.send.mock.calls[0][0]).toMatchObject(allowed ? { status: 200 } : { status: 403, data: { code: 'MANOR_ACCOUNT_UNAVAILABLE' } });
+    expect(mocks.get).toHaveBeenCalledTimes(allowed ? 1 : 0);
   });
-  it('登录后已被降为普通用户的旧 Root 会话也不能进入', async () => {
-    mocks.rootQuery.mockResolvedValue([[{ role: 'user', del_flag: 0 }]]);
-    const response = res(); await getKnowledgeManor(req(), response);
+  it('未设置开放范围时只放行内部账号，普通账号也不能执行命令', async () => {
+    const response = res(); await runKnowledgeManorCommand(req({ user: { id: 'owner', role: 'user' } }), response);
     expect(response.send.mock.calls[0][0].status).toBe(403);
-    expect(mocks.get).not.toHaveBeenCalled();
+    expect(mocks.execute).not.toHaveBeenCalled();
   });
   it('只使用认证账号，不接受 body 中的其他用户', async () => {
     const body = { action: 'adopt', userId: 'other' };

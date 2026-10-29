@@ -71,6 +71,7 @@ import {
   previewPointsCampaign,
 } from '../util/pointsCampaignService.js';
 import { PointsGrantError } from '../util/pointsGrantOperations.js';
+import { canEnterManor, knowledgeManorEnabled } from '../util/services/knowledgeManorAccess.js';
 
 // GET /growth/me —— 读当前用户真实成长快照（游客返回 Lv.1 默认展示）。
 export const getMyGrowth = async (req, res) => {
@@ -81,7 +82,7 @@ export const getMyGrowth = async (req, res) => {
     growth.features = {
       growthCenterV2: isGrowthCenterV2Enabled({ userId, userRole }),
       pointsCenter: getPointsEarningRuntime().pointsCenterEnabled,
-      manor: process.env.KNOWLEDGE_MANOR_ENABLED === 'true' && userRole === 'root' && !req.adminContext,
+      manor: knowledgeManorEnabled() && canEnterManor(userRole) && !req.adminContext,
     };
     res.send(resultData(growth));
   } catch (error) {

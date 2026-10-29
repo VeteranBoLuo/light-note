@@ -54,6 +54,7 @@ function setup(mounted = true, asset?: { path: string; fetcher: typeof fetch; ba
     fetch: asset?.fetcher,
     AbortController,
     innerWidth: 1003,
+    innerHeight: 700,
     devicePixelRatio: 2,
     module,
     setTimeout,

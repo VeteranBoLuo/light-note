@@ -94,8 +94,10 @@ it('已读写入串行进行，慢响应期间详情和返回仍可点击，资�
   await s.reply('command', { ...last, result: true }); await second;
 });
 
-it('可见正式庄园被动校准其他端的肥料和粪便，并刷新背包；仅时钟变更不重画控件', async () => {
+it('可见正式庄园每 30 秒被动校准其他端的肥料和粪便，并刷新背包；仅时钟变更不重画控件', async () => {
   const s = await setup();
+  await vi.advanceTimersByTimeAsync(20000);
+  expect(s.calls('get')).toHaveLength(1);
   await vi.advanceTimersByTimeAsync(10000);
   expect(s.calls('get')).toHaveLength(2);
   expect(s.calls('get')[1].payload.background).toBe(true);
@@ -103,7 +105,7 @@ it('可见正式庄园被动校准其他端的肥料和粪便，并刷新背包�
   await s.reply('get', next);
   expect(s.state.fert.rabbit).toBe(1); expect(s.state.poopPickedDay).toBe(1);
   expect(s.update).toHaveBeenCalledOnce();expect(s.inventory).toHaveBeenCalledOnce();
-  await vi.advanceTimersByTimeAsync(10000);
+  await vi.advanceTimersByTimeAsync(30000);
   await s.reply('get', { ...next, state: { ...next.state, now: 1 } });
   expect(s.update).toHaveBeenCalledOnce();expect(s.clocks).toHaveBeenCalledOnce();
 });
@@ -144,16 +146,16 @@ it('离线阻止新资产操作，恢复连接即刻读取并更新另一端已�
 
 it('本端钓鱼动画期间不重画，另一端进行中的钓鱼状态不阻断后续校准',async()=>{
   const s=await setup();s.state.casting=true;s.runtime.fishingPhase='wait';
-  await vi.advanceTimersByTimeAsync(10000);expect(s.calls('get')).toHaveLength(1);
+  await vi.advanceTimersByTimeAsync(30000);expect(s.calls('get')).toHaveLength(1);
   s.runtime.fishingPhase='idle';
-  await vi.advanceTimersByTimeAsync(10000);expect(s.calls('get')).toHaveLength(2);
+  await vi.advanceTimersByTimeAsync(30000);expect(s.calls('get')).toHaveLength(2);
   const next=s.snapshot(4);next.state.casting=false;await s.reply('get',next);
   expect(s.state.casting).toBe(false);
 });
 
 it('旧读取响应不回退已确认的存档，非庄园异常不触发资产恢复',async()=>{
-  const s=await setup();await vi.advanceTimersByTimeAsync(10000);await s.reply('get',s.snapshot(4));
-  await vi.advanceTimersByTimeAsync(10000);const old=s.snapshot(1);old.state.fert.rabbit=99;await s.reply('get',old);
+  const s=await setup();await vi.advanceTimersByTimeAsync(30000);await s.reply('get',s.snapshot(4));
+  await vi.advanceTimersByTimeAsync(30000);const old=s.snapshot(1);old.state.fert.rabbit=99;await s.reply('get',old);
   expect(s.state.fert.rabbit).toBe(0);
   const event=new Event('unhandledrejection',{cancelable:true});Object.assign(event,{reason:new Error('unrelated')});s.win.dispatchEvent(event);
   expect(event.defaultPrevented).toBe(false);expect(s.toast).not.toHaveBeenCalled();

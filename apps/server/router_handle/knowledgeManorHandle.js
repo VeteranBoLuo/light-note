@@ -1,11 +1,9 @@
 import { ManorError } from '@lightnote/shared/manor';
 import { ensureNotVisitor } from '../util/auth.js';
-import { ensureRootRole } from '../util/rootRole.js';
 import { resultData, L } from '../util/common.js';
 import { stableAgentErrorCode } from '../util/agent/logSafety.js';
 import { knowledgeManorService } from '../util/services/knowledgeManorService.js';
-
-export const knowledgeManorEnabled = () => process.env.KNOWLEDGE_MANOR_ENABLED === 'true';
+import { canEnterManor, knowledgeManorEnabled } from '../util/services/knowledgeManorAccess.js';
 
 async function allowed(req, res) {
   if (!ensureNotVisitor(req, res)) return false;
@@ -17,7 +15,11 @@ async function allowed(req, res) {
     res.send(resultData({ code: 'MANOR_UNAVAILABLE' }, 503, L(req, '庄园暂未开放', 'The manor is not available yet')));
     return false;
   }
-  if (!(await ensureRootRole(req, res))) return false;
+  // The service re-reads the account role inside its transaction.
+  if (!canEnterManor(req.user.role)) {
+    res.send(resultData({ code: 'MANOR_ACCOUNT_UNAVAILABLE' }, 403, L(req, '当前账号暂不能进入庄园', 'This account cannot enter the manor yet')));
+    return false;
+  }
   return true;
 }
 

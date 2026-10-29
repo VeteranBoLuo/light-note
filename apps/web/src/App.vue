@@ -121,6 +121,7 @@
   import { stopRouteArtworkPrewarm, trackNavigationActivity } from '@/utils/routePrefetch';
   import { scheduleAppStartupPrewarm } from '@/utils/appStartupPrewarm';
   import { scheduleManorPrewarm } from '@/utils/manorPrewarm';
+  import { showManorEntry } from '@/utils/manorAccess';
   import { resolveRouteAuthDecision } from '@/utils/authNavigationIntent.ts';
   import { loadUserAuthModal } from '@/utils/userAuthModalLoader.ts';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
@@ -161,7 +162,7 @@
   const bookmark = bookmarkStore();
   const inbox = inboxStore();
   const { guideVisible: pwaGuideVisible } = usePwaInstall();
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   provide(
     MOBILE_LAYOUT_CONTEXT,
     computed(() => bookmark.isMobile),
@@ -931,7 +932,8 @@
   function syncManorPrewarm() {
     stopManorPrewarm();
     const name = String(router.currentRoute.value.name || '');
-    if (!appStartupReady.value || !user.id || user.role !== 'root' || user.adminContext || !manorGrowth.growth.value?.features?.manor
+    // Prewarm for every account that can see the entry; the scheduler applies its network policy.
+    if (!appStartupReady.value || !user.id || !showManorEntry(manorGrowth.growth.value, user.adminContext, locale.value)
       || !name || startupPrewarmExcludedRoutes.has(name) || publicStandaloneRoute.value) return;
     disposeManorPrewarm = scheduleManorPrewarm(bookmark.isMobile);
   }
@@ -942,7 +944,7 @@
     stopManorPrewarm();
   });
   const removeManorPrewarmAfter = router.afterEach(syncManorPrewarm);
-  watch(() => [appStartupReady.value, user.id, user.role, user.adminContext, manorGrowth.growth.value?.features?.manor, bookmark.isMobile], syncManorPrewarm, { immediate: true });
+  watch(() => [appStartupReady.value, user.id, user.adminContext, manorGrowth.growth.value?.features?.manor, locale.value, bookmark.isMobile], syncManorPrewarm, { immediate: true });
   onBeforeUnmount(() => { stopManorPrewarm(); removeNavigationActivity(); stopRouteArtworkPrewarm(); removeManorPrewarmBefore(); removeManorPrewarmAfter(); disposeStaticPrewarm(); });
 
   let stopArtworkPrewarm: (() => void) | undefined;

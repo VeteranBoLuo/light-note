@@ -82,8 +82,12 @@ const GardenAnimals3D=(()=>{
     }
     return Skin.animate(model,state,dt,T,{skeleton,ik,walkFoot,hopFeet});
   }
+  // three.js only serves this idle enhancement, so it loads here instead of in the first-screen runtime.
+  let pendingScene=null,threeLoad=null;
+  const loadThree=()=>threeLoad||=new Promise((resolve,reject)=>{const script=document.createElement('script');script.src='knowledge-garden-v19/vendor/three-0.160.1.min.js';script.onload=resolve;script.onerror=()=>{threeLoad=null;script.remove();reject(new Error('three'));};document.head.append(script);});
   function mount(scene){
-    unmount();if(!scene||typeof THREE==='undefined')return;
+    unmount();if(!scene)return;
+    if(typeof THREE==='undefined'){pendingScene=scene;loadThree().then(()=>{if(pendingScene===scene&&scene.isConnected)mount(scene);},()=>{});return;}
     let renderer;try{renderer=new THREE.WebGLRenderer({alpha:true,antialias:true,premultipliedAlpha:true});}catch{return;}
     const canvas=renderer.domElement;canvas.className='animal-model-layer';canvas.setAttribute('aria-hidden','true');scene.prepend(canvas);
     renderer.setClearColor(0,0);renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.06;
@@ -102,7 +106,7 @@ const GardenAnimals3D=(()=>{
     }
     raf=requestAnimationFrame(frame);current={update(kind,state){if(!available||!models.has(kind))return false;const model=models.get(kind);model.state=state;return !!model.presented;},destroy(){cancelAnimationFrame(raf);ro.disconnect();canvas.removeEventListener('webglcontextlost',lost);canvas.removeEventListener('webglcontextrestored',restored);for(const model of models.values()){model.dead=true;model.cancelPreparation?.();model.texture?.dispose();model.materials.forEach(m=>{m.userData.texture?.dispose();m.dispose();});model.geometries.forEach(g=>g.dispose());}renderer.dispose();renderer.forceContextLoss();canvas.remove();}};
   }
-  function unmount(){current?.destroy();current=null;}
+  function unmount(){pendingScene=null;current?.destroy();current=null;}
   return {mount,unmount,update:(kind,state)=>current?.update(kind,state)||false,skeleton,ik,walkFoot,hopFeet,build,animate};
 })();
 if(typeof module!=='undefined')module.exports=GardenAnimals3D;

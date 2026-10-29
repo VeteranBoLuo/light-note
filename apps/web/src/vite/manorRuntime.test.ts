@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { runInNewContext, Script } from 'node:vm';
 import { describe, expect, it } from 'vitest';
+import { transformWithEsbuild } from 'vite';
 import manorRuntime from './manorRuntime';
 
 describe('庄园生产入口与经典规则脚本', () => {
@@ -16,11 +17,11 @@ describe('庄园生产入口与经典规则脚本', () => {
     expect(result.html).toContain('Loading your manor');
     expect(result.html).not.toContain('唤醒');
   });
-  it('输出可运行的同源经典脚本，所有入口资源按内容失效缓存', () => {
+  it('输出可运行的同源经典脚本，所有入口资源按内容失效缓存', async () => {
     const assets = new Map<string, string>();
     const plugin = manorRuntime();
     const generate = plugin.generateBundle as Function;
-    generate.call({
+    await generate.call({
       emitFile: ({ fileName, source }: { fileName: string; source: string }) => assets.set(fileName, source),
     });
     const model = assets.get('manor/garden-model.js')!;
@@ -35,7 +36,12 @@ describe('庄园生产入口与经典规则脚本', () => {
     expect(links).toHaveLength(5);
     const bundle = assets.get('manor/knowledge-garden-v19/runtime.js')!;
     expect(() => new Script(bundle)).not.toThrow();
-    expect(() => new Script(readFileSync(new URL('../../public/manor/knowledge-garden-v19/garden-ui.js', import.meta.url), 'utf8'))).not.toThrow();
+    const ui = assets.get('manor/knowledge-garden-v19/runtime-ui.js')!;
+    expect(() => new Script(ui)).not.toThrow();
+    // Minification keeps the globals that later scripts and the separately loaded UI read.
+    for (const name of ['GardenModel', 'GardenAnimals3D', 'FarmUI', 'GardenLive', 'createManorRefreshInput']) expect(bundle).toMatch(new RegExp(`\\b${name}\\b`));
+    expect(ui).toMatch(/\bfunction hudHTML\b/);
+    expect(bundle.length).toBeLessThan(readFileSync(new URL('../../public/manor/knowledge-garden-v19/fish-art.js', import.meta.url), 'utf8').length * 12);
     // The deterministic rules and all classic modules retain their global order.
     const original = readFileSync(new URL('../../public/manor/index.html', import.meta.url), 'utf8');
     let offset = -1;
@@ -44,7 +50,8 @@ describe('庄园生产入口与经典规则脚本', () => {
         path === 'garden-model.js'
           ? model
           : readFileSync(new URL(`../../public/manor/${path}`, import.meta.url), 'utf8');
-      const found = bundle.indexOf(content, offset + 1);
+      const { code } = await transformWithEsbuild(content, path, { loader: 'js', minify: true, target: 'chrome105', legalComments: 'none' });
+      const found = bundle.indexOf(code, offset + 1);
       expect(found).toBeGreaterThan(offset);
       offset = found;
     }
@@ -53,8 +60,11 @@ describe('庄园生产入口与经典规则脚本', () => {
         assets.get(`manor/${path}`) ?? readFileSync(new URL(`../../public/manor/${path}`, import.meta.url));
       expect(createHash('sha256').update(content).digest('hex').slice(0, 16)).toBe(version);
     }
-    expect(entry).toMatch(/data-ui-script="knowledge-garden-v19\/garden-ui\.js\?v=[a-f0-9]{16}"/);
+    expect(entry).toMatch(/data-ui-script="knowledge-garden-v19\/runtime-ui\.js\?v=[a-f0-9]{16}"/);
     expect(entry).not.toContain('garden-water-worker');
+    // three.js is loaded by the idle 3D enhancement, never as first-screen code.
+    expect(entry).not.toContain('three-0.160');
+    expect(bundle).not.toContain('WebGLRenderer=');
     const preload = JSON.parse(assets.get('manor/preload.json')!);
     const art = readFileSync(new URL('../../public/manor/knowledge-garden-v19/fish-art.js', import.meta.url), 'utf8');
     const fishImages = runInNewContext(`${art};Object.keys(FISH).map(key=>fishArt(key)).join('')`) as string;
@@ -71,6 +81,8 @@ describe('庄园生产入口与经典规则脚本', () => {
     expect(runtimeIndex).toBeGreaterThanOrEqual(0);
     expect(runtimeIndex).toBeLessThan(preload.desktopCritical.indexOf('/manor/knowledge-garden-v19/courtyard/pc-scene-r58.webp'));
     expect(preload.mobile).toContain('/manor/knowledge-garden-v19/courtyard/mobile-garden-scene-r56.webp');
+    for (const group of ['desktop', 'mobile']) expect(preload[group]).toContain('/manor/knowledge-garden-v19/vendor/three-0.160.1.min.js');
+    for (const group of ['desktopCritical', 'mobileCritical']) expect(preload[group]).not.toContain('/manor/knowledge-garden-v19/vendor/three-0.160.1.min.js');
     expect(preload.mobile).not.toContain('/manor/knowledge-garden-v19/courtyard/pc-scene-r58.webp');
     const boot = JSON.parse(entry.match(/id="manor-boot-images">([^<]+)/)![1]);
     for (const profile of ['desktop', 'mobile']) {

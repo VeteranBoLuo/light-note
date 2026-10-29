@@ -49,9 +49,23 @@ it.each(['garden', 'bay'])('%s 实际挂载与改尺寸时同步竿梢、场景�
   expect(Number.isFinite(Number.parseFloat(scene.style.getPropertyValue('--guide-y')))).toBe(true);
 });
 
+const layoutRule = () => read('garden-loader.js').match(/function manorMobileLayout\(\)\{[^\n]*\}\n/)![0];
+it('首屏素材与场景布局共用同一判定：竖屏平板用手机构图，横屏平板与手机横屏参数各自生效', () => {
+  const mobile = (innerWidth: number, innerHeight: number, search = '') => runInNewContext(`${layoutRule()};manorMobileLayout()`, {
+    document: { documentElement: { classList: { contains: () => false } } }, innerWidth, innerHeight, URLSearchParams, location: { search },
+  });
+  expect(mobile(390, 844)).toBe(true);
+  expect(mobile(900, 1200)).toBe(true);
+  expect(mobile(1024, 768)).toBe(false);
+  expect(mobile(1440, 900)).toBe(false);
+  expect(mobile(740, 360, '?renderProfile=mobile')).toBe(true);
+  // The loader and the scene must not keep a second copy of this rule.
+  expect(read('garden-loader.js')).toContain("boot[manorMobileLayout()?'mobile':'desktop']");
+  expect(read('garden-ui.js')).toContain('const mobile = manorMobileLayout();');
+});
 it('大屏只增加菜单和弹框的可读比例，场景比例和手机密度保持独立', () => {
   const source = read('garden-ui.js');
-  const apply = source.slice(source.indexOf('function applyDensity('), source.indexOf('function init()'));
+  const apply = layoutRule() + source.slice(source.indexOf('function applyDensity('), source.indexOf('function init()'));
   for (const [width, height, mobile, expected] of [[2560,1390,false,1.5],[1920,1080,false,1.2],[1470,726,false,1],[390,844,true,1]] as const) {
     document.documentElement.className = mobile ? 'force-mobile' : '';
     runInNewContext(`${apply};applyDensity(false)`, {

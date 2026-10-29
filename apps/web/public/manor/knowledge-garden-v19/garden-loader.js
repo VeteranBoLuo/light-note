@@ -1,5 +1,8 @@
 /* Progress counts real decoded scene resources and completed preparation tasks.
    A timeout is an error, never permission to uncover an unfinished scene. */
+// Boot images and the scene layout share one rule, so a portrait tablet never
+// downloads the desktop composition before switching to the mobile one.
+function manorMobileLayout(){return document.documentElement.classList.contains('force-mobile')||new URLSearchParams(location.search).get('renderProfile')==='mobile'||innerWidth<=700||innerWidth<=1100&&innerHeight>innerWidth;}
 const GardenStartup=(()=>{
   document.documentElement.classList.add('garden-booting');
   document.documentElement.dataset.startupPhase='resources';
@@ -120,7 +123,7 @@ const GardenStartup=(()=>{
     const manifest=document.getElementById('manor-boot-images');
     if(!manifest)return true;
     boot=JSON.parse(manifest.textContent);
-    const paths=boot[new URLSearchParams(location.search).get('renderProfile')==='mobile'?'mobile':'desktop'];
+    const paths=boot[manorMobileLayout()?'mobile':'desktop'];
     assetTotal=paths.length;assetController=new AbortController();tick();
     window.addEventListener?.('pagehide',event=>{if(!event.persisted)assetController.abort();},{once:true});
     await loadAssets(paths,true);

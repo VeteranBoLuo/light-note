@@ -69,6 +69,8 @@ beforeEach(() => {
   sessionStorage.clear();
   vi.useFakeTimers();
   mocks.bookmark.isMobile = false;
+  Object.assign(mocks.user, { id: 'root-fixture', role: 'root', adminContext: null });
+  vi.stubGlobal('CSS', { supports: () => true });
   mocks.pending.mockReturnValue(null);
   mocks.read.mockResolvedValue({ quests: [], state: {}, revision: 0, version: 'fixture' });
 });
@@ -79,6 +81,7 @@ afterEach(() => {
   vi.clearAllTimers();
   vi.useRealTimers();
   vi.clearAllMocks();
+  vi.unstubAllGlobals();
 });
 describe('庄园加载与主站导航', () => {
   it('维护说明以纯文本展示，场景就绪前不覆盖加载层',async()=>{
@@ -335,6 +338,64 @@ describe('庄园加载与主站导航', () => {
     await send('get');
     expect(mocks.read).toHaveBeenCalledTimes(3);
     expect(sessionStorage.getItem('lightnote-manor-test-v1:root-fixture')).toBeNull();
+  });
+
+  it('开放给普通账号后正常进入，但看不到也不能触发 Root 测试存档', async () => {
+    Object.assign(mocks.user, { id: 'user-fixture', role: 'user' });
+    const state=createManor({now:new Date('2026-10-25T10:00:00Z'),points:60,calendar:{dayKey:'20261025',weekKey:'202643',utcOffsetMinutes:480}});
+    mocks.read.mockResolvedValue({quests:[],state,revision:2,version:MANOR_VERSION});
+    sessionStorage.setItem('lightnote-manor-test-v1:user-fixture', '{"forged":true}');
+    await mount();
+    expect(document.querySelector('[role="alert"]')).toBeNull();
+    const frame=document.querySelector('iframe')!,nonce=new URL(frame.src).searchParams.get('bridge'),reply=vi.spyOn(frame.contentWindow!,'postMessage');
+    const send=async(action:string,id:number)=>{
+      window.dispatchEvent(new MessageEvent('message',{source:frame.contentWindow,origin:location.origin,data:{type:'lightnote-manor',nonce,id,action,payload:{}}}));
+      await flush();
+    };
+    await send('get',1);
+    expect(reply).toHaveBeenLastCalledWith(expect.objectContaining({id:1,value:expect.objectContaining({testing:false,canTest:false})}),location.origin);
+    await send('reset-test',2);
+    expect(reply).toHaveBeenLastCalledWith(expect.objectContaining({id:2,errorCode:'MANOR_ACTION_FAILED'}),location.origin);
+    expect(sessionStorage.getItem('lightnote-manor-test-v1:user-fixture')).toBe('{"forged":true}');
+    expect(document.querySelector('iframe')).toBe(frame);
+  });
+
+  it.each([
+    ['MANOR_UNAVAILABLE', 503, 'manor.unavailable'],
+    ['MANOR_ACCOUNT_UNAVAILABLE', 403, 'manor.accountUnavailable'],
+    ['MANOR_ADMIN_CONTEXT_FORBIDDEN', 403, 'manor.adminContext'],
+  ])('%s 不提供无效重试，只给返回', async (code, status, copy) => {
+    Object.assign(mocks.user, { id: 'user-fixture', role: 'user' });
+    mocks.read.mockRejectedValue({ code, status });
+    await mount();
+    const alert = document.querySelector('[role="alert"]')!;
+    expect(alert.textContent).toContain(copy);
+    expect([...alert.querySelectorAll('button')].map(button => button.textContent)).toEqual(['manor.returnToApp']);
+  });
+
+  it('游客与管理员代管不请求存档，网络失败仍可重试', async () => {
+    Object.assign(mocks.user, { id: 'visitor-fixture', role: 'visitor' });
+    await mount();
+    expect(document.querySelector('[role="alert"]')?.textContent).toContain('manor.loginRequired');
+    expect(mocks.read).not.toHaveBeenCalled();
+    app?.unmount();app=undefined;document.body.innerHTML='';
+    Object.assign(mocks.user, { id: 'root-fixture', role: 'root', adminContext: { mode: 'preview' } });
+    await mount();
+    expect(document.querySelector('[role="alert"]')?.textContent).toContain('manor.adminContext');
+    expect(mocks.read).not.toHaveBeenCalled();
+    app?.unmount();app=undefined;document.body.innerHTML='';
+    Object.assign(mocks.user, { adminContext: null });
+    mocks.read.mockRejectedValue({ status: 500 });
+    await mount();
+    expect([...document.querySelectorAll('[role="alert"] button')].map(button => button.textContent)).toEqual(['common.retry']);
+  });
+
+  it('浏览器缺少庄园所需的布局能力时提示升级，不加载场景', async () => {
+    vi.stubGlobal('CSS', { supports: (property: string) => property !== 'translate' });
+    await mount();
+    expect(document.querySelector('[role="alert"]')?.textContent).toContain('manor.unsupported');
+    expect(document.querySelector('iframe')).toBeNull();
+    expect(mocks.read).not.toHaveBeenCalled();
   });
 
   it('旧渲染器的积分入口也留在庄园内打开账本',async()=>{

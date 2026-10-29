@@ -7,13 +7,14 @@ import { getGrowthCalendarContext } from '../growthPreferences.js';
 import { getWeeklyChallenges } from '../weeklyChallenge.js';
 import { readManorRuntime, allowManorCommand } from './knowledgeManorRuntime.js';
 import { summarizeManorOperation } from './knowledgeManorOperation.js';
+import { canEnterManor } from './knowledgeManorAccess.js';
 
 const random = () => randomInt(0, 0x1_0000_0000) / 0x1_0000_0000;
 const parsed = value => typeof value === 'string' ? JSON.parse(value) : value;
 
 async function accountContext(db, userId, now) {
   const [[account]] = await db.query('SELECT role, del_flag FROM user WHERE id=? LIMIT 1', [userId]);
-  if (!account || Number(account.del_flag) !== 0 || account.role !== 'root') {
+  if (!account || Number(account.del_flag) !== 0 || !canEnterManor(account.role)) {
     throw new ManorError('MANOR_ACCOUNT_UNAVAILABLE', 403);
   }
   const calendar = await getGrowthCalendarContext(userId, { db, now });

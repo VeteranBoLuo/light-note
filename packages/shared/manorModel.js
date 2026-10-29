@@ -95,8 +95,8 @@ const GardenModel = (() => {
   ]);
   const COMPOST_RULES = Object.freeze({residuePerBatch:3,hours:COMPOST_LEVELS[0].hours,storage:COMPOST_LEVELS[0].storage,levels:COMPOST_LEVELS});
   const BAIT_RECIPES = Object.freeze({
-    fruit: Object.freeze({name:"果香引鱼饵", crop:"tomato", preference:"海水鱼类"}),
-    herb: Object.freeze({name:"草木觅贝饵", crop:"lettuce", preference:"海水底栖水族"}),
+    fruit: Object.freeze({name:"果香引鱼饵", crop:"tomato", preference:"鱼类"}),
+    herb: Object.freeze({name:"草木觅贝饵", crop:"lettuce", preference:"底栖水族"}),
   });
   const FACILITY_RULES = Object.freeze({craftHours:2, craftMax:3, targetWeight:4, pollenCapacity:6,
     flowerPollen:Object.freeze({lavender:3, sunflower:6, rosemary:4}),

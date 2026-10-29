@@ -168,15 +168,16 @@ describe('顶部插件入口', () => {
   });
 });
 
-describe('庄园仅 Root 开放', () => {
+describe('庄园入口按服务端开放标记显示', () => {
+  afterEach(() => vi.unstubAllGlobals());
   it.each([
-    ['root', true, true],
-    ['root', false, false],
-    ['user', true, false],
-    ['test', true, false],
-    ['visitor', true, false],
-  ])('%s / 开关 %s 时入口可见性为 %s', async (role, enabled, visible) => {
-    user.role = role as string;
+    ['开放且支持', true, null, true, true],
+    ['服务端未开放', false, null, true, false],
+    ['管理员代管', true, { mode: 'preview' }, true, false],
+    ['浏览器能力不足', true, null, false, false],
+  ])('%s 时入口可见性正确', async (_label, enabled, adminContext, supported, visible) => {
+    vi.stubGlobal('CSS', { supports: () => supported });
+    user.adminContext = adminContext as never;
     growth.value = { features: { manor: enabled as boolean } };
     const host = await mountRightArea();
     const entry = host.querySelector<HTMLButtonElement>(`button[aria-label="${zhCN.manor.title}"]`);
@@ -186,5 +187,6 @@ describe('庄园仅 Root 开放', () => {
       await nextTick();
       expect(mocks.routerPush).toHaveBeenCalledWith('/knowledge-manor');
     } else expect(mocks.routerPush).not.toHaveBeenCalled();
+    user.adminContext = null;
   });
 });

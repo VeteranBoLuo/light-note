@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { runInNewContext } from 'node:vm';
 import { posix } from 'node:path';
-import type { Plugin } from 'vite';
+import { transformWithEsbuild, type Plugin } from 'vite';
 import icon from '../config/icon';
 import zh from '../i18n/locales/zh-CN-core';
 import en from '../i18n/locales/en-US-core';
@@ -24,6 +24,19 @@ const firstScreenArt = (scene: PreloadScene) => [
     ...(scene.area ? [] : ['farm/bait-box-r57.webp']),
   ]),
 ];
+// Each classic script is minified on its own: esbuild keeps top-level names, which
+// later scripts and the separately loaded UI read as globals. The host only opens
+// the manor on Chromium 105+ class browsers, so syntax is not lowered further.
+const minified = new Map<string, Promise<string>>();
+function minifyClassic(name: string, code: string) {
+  const key = createHash('sha256').update(code).digest('hex');
+  if (!minified.has(key)) {
+    if (minified.size > 64) minified.clear();
+    minified.set(key, transformWithEsbuild(code, name, { loader: 'js', minify: true, target: 'chrome105', legalComments: 'none' }).then(result => result.code));
+  }
+  return minified.get(key)!;
+}
+const threeVendor = 'knowledge-garden-v19/vendor/three-0.160.1.min.js';
 const imageVariable = (path: string) => `--manor-art-${createHash('sha256').update(path).digest('hex').slice(0, 12)}`;
 const curtainAsset = 'knowledge-garden-v19/courtyard/area-curtain-r17.webp';
 
@@ -32,7 +45,7 @@ export default function manorRuntime(): Plugin {
   const modelFile = fileURLToPath(new URL('../../../../packages/shared/manorModel.js', import.meta.url));
   const publicRoot = new URL('../../public/manor/', import.meta.url);
   const classicSource = () => readFileSync(modelFile, 'utf8').replace(/export default GardenModel;\s*$/, '');
-  const runtimeSources = () => {
+  const runtimeSources = async () => {
     const entry = readFileSync(new URL('index.html', publicRoot), 'utf8');
     const files = new Map<string, string>();
     const scripts = [...entry.matchAll(/<script defer src="([^"?]+)[^"]*"[^>]*><\/script>/g)];
@@ -40,15 +53,11 @@ export default function manorRuntime(): Plugin {
     // Preserve classic global scope, script order and the CSS cascade. The UI
     // still mounts only after its authenticated snapshot. Fixed scene and water
     // inputs are compiled ahead of time, rather than recomposited on entry.
-    files.set(
-      'knowledge-garden-v19/runtime.js',
-      scripts
-        .map(
-          ([, path]) =>
-            `;\n${path === 'garden-model.js' ? classicSource() : readFileSync(new URL(path, publicRoot), 'utf8')}\n`,
-        )
-        .join(''),
-    );
+    const classic = await Promise.all(scripts.map(([, path]) =>
+      minifyClassic(path, path === 'garden-model.js' ? classicSource() : readFileSync(new URL(path, publicRoot), 'utf8'))));
+    files.set('knowledge-garden-v19/runtime.js', classic.map(code => `;\n${code}\n`).join(''));
+    const ui = entry.match(/data-ui-script="([^"?]+)/)![1];
+    files.set('knowledge-garden-v19/runtime-ui.js', await minifyClassic(ui, readFileSync(new URL(ui, publicRoot), 'utf8')));
     files.set(
       'knowledge-garden-v19/runtime.css',
       styles.map(([, path]) => readFileSync(new URL(path, publicRoot), 'utf8')).join('\n')
@@ -62,7 +71,7 @@ export default function manorRuntime(): Plugin {
     for (const [tag] of styles.slice(1)) html = html.replace(tag, '');
     html = html.replace(
       scripts[0][0],
-      '<script defer src="knowledge-garden-v19/runtime.js" data-ui-script="knowledge-garden-v19/garden-ui.js"></script>',
+      '<script defer src="knowledge-garden-v19/runtime.js" data-ui-script="knowledge-garden-v19/runtime-ui.js"></script>',
     );
     for (const [tag] of scripts.slice(1)) html = html.replace(tag, '');
     html = html.replace(
@@ -99,15 +108,15 @@ export default function manorRuntime(): Plugin {
     );
     return { html, files };
   };
-  const documentSource = () => runtimeSources().html;
+  const documentSource = async () => (await runtimeSources()).html;
   // Read the existing scene calibration, so prewarming follows the shipped art.
-  const preloadSource = () => {
+  const preloadSource = async () => {
     const calibration = runInNewContext(
       `${readFileSync(new URL('knowledge-garden-v19/farm-calibration.js', publicRoot), 'utf8')};FARM_CAL`,
       {},
     ) as Record<'desktop' | 'mobileGarden' | 'mobileBay', PreloadScene>;
     const code = [
-      ...documentSource().matchAll(/\b(?:src|href|data-ui-script)="([^"]+)"/g),
+      ...(await documentSource()).matchAll(/\b(?:src|href|data-ui-script)="([^"]+)"/g),
     ].map((match) => `/manor/${match[1]}`);
     const art = (scene: PreloadScene): string[] =>
       [scene.asset, scene.water, scene.smooth, scene.skyBleed?.asset, ...(scene.detailTiles || []).map((tile) => tile.asset)]
@@ -127,10 +136,11 @@ export default function manorRuntime(): Plugin {
     ])];
     return JSON.stringify({
       catalog,
-      desktop: [...new Set([...art(calibration.desktop), ...common(calibration.desktop), ...code])],
+      // three.js serves only the idle 3D enhancement; it is prewarmed, never part of the first screen.
+      desktop: [...new Set([...art(calibration.desktop), ...common(calibration.desktop), ...code, `/manor/${threeVendor}`])],
       desktopCritical: [...new Set([...code, ...art(calibration.desktop), ...common(calibration.desktop)])],
       mobileCritical: [...new Set([...code, ...art(calibration.mobileGarden), ...common(calibration.mobileGarden)])],
-      mobile: [...new Set([...art(calibration.mobileGarden), ...common(calibration.mobileGarden), ...art(calibration.mobileBay), ...common(calibration.mobileBay), `/manor/${curtainAsset}`, ...code])],
+      mobile: [...new Set([...art(calibration.mobileGarden), ...common(calibration.mobileGarden), ...art(calibration.mobileBay), ...common(calibration.mobileBay), `/manor/${curtainAsset}`, ...code, `/manor/${threeVendor}`])],
       desktopScene: calibration.desktop.assetSources?.map(({ asset, width }) => ({
         url: `/manor/knowledge-garden-v19/${asset}`, width,
       })),
@@ -153,35 +163,28 @@ export default function manorRuntime(): Plugin {
       };
     },
     configureServer(server) {
-      for (const file of ['runtime.js', 'runtime.css'])
-        server.middlewares.use(`/manor/knowledge-garden-v19/${file}`, (_req, res) => {
-          res.setHeader(
-            'Content-Type',
-            file.endsWith('.js') ? 'application/javascript; charset=utf-8' : 'text/css; charset=utf-8',
-          );
-          res.end(runtimeSources().files.get(`knowledge-garden-v19/${file}`));
+      const serve = (path: string, type: string, source: () => Promise<string | undefined>, cache?: string) =>
+        server.middlewares.use(path, (_req, res, next) => {
+          source().then(body => {
+            res.setHeader('Content-Type', type);
+            if (cache) res.setHeader('Cache-Control', cache);
+            res.end(body);
+          }, next);
         });
-      server.middlewares.use('/manor/preload.json', (_req, res) => {
-        res.setHeader('Content-Type', 'application/json');
-        res.setHeader('Cache-Control', 'no-cache');
-        res.end(preloadSource());
-      });
-      server.middlewares.use('/manor/index.html', (_req, res) => {
-        res.setHeader('Content-Type', 'text/html; charset=utf-8');
-        res.setHeader('Cache-Control', 'no-cache');
-        res.end(documentSource());
-      });
-      server.middlewares.use('/manor/garden-model.js', (_req, res) => {
-        res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
-        res.end(classicSource());
-      });
+      for (const file of ['runtime.js', 'runtime-ui.js', 'runtime.css'])
+        serve(`/manor/knowledge-garden-v19/${file}`,
+          file.endsWith('.js') ? 'application/javascript; charset=utf-8' : 'text/css; charset=utf-8',
+          async () => (await runtimeSources()).files.get(`knowledge-garden-v19/${file}`));
+      serve('/manor/preload.json', 'application/json', preloadSource, 'no-cache');
+      serve('/manor/index.html', 'text/html; charset=utf-8', documentSource, 'no-cache');
+      serve('/manor/garden-model.js', 'application/javascript; charset=utf-8', async () => classicSource());
     },
-    generateBundle() {
-      for (const [fileName, source] of runtimeSources().files)
+    async generateBundle() {
+      for (const [fileName, source] of (await runtimeSources()).files)
         this.emitFile({ type: 'asset', fileName: `manor/${fileName}`, source });
-      this.emitFile({ type: 'asset', fileName: 'manor/preload.json', source: preloadSource() });
+      this.emitFile({ type: 'asset', fileName: 'manor/preload.json', source: await preloadSource() });
       this.emitFile({ type: 'asset', fileName: 'manor/garden-model.js', source: classicSource() });
-      this.emitFile({ type: 'asset', fileName: 'manor/index.html', source: documentSource() });
+      this.emitFile({ type: 'asset', fileName: 'manor/index.html', source: await documentSource() });
     },
   };
 }

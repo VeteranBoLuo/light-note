@@ -1,3 +1,0 @@
-Built-in imagegen edit. Input: exact right-tank crop of pc-terrain-r36.png at logical [2950,830,3630,1330], prepared as 1020x750.
-Restore sharp painted detail in existing underwater leaves and spotted rocks; preserve composition, positions, perspective, color palette, glass rim, lantern, every object and crop. No new fish, bubbles, foam, waves, text or depth of field. Opaque background.
-Only the calibrated underwater polygon is included in the compiled scene; the calm surface and scene geometry remain separate inputs.

@@ -2,9 +2,11 @@
   <main class="knowledge-manor">
     <div v-if="maintenanceNotice && interactive" class="knowledge-manor__maintenance" role="status">{{ maintenanceNotice }}</div>
     <div v-if="failed" class="knowledge-manor__state" role="alert">
-      <p>{{ t(versionMismatch ? 'manor.updateRequired' : 'manor.loadFailed') }}</p>
-      <BButton @click="versionMismatch ? reloadPage() : initialise()">{{ t(versionMismatch ? 'common.refresh' : 'common.retry') }}</BButton>
-      <BButton v-if="bookmark.isMobile" @click="exit">{{ t('manor.returnToApp') }}</BButton>
+      <p>{{ t(failureCopy[failure]) }}</p>
+      <BButton v-if="failure === 'version'" @click="reloadPage">{{ t('common.refresh') }}</BButton>
+      <BButton v-else-if="failure === 'load'" @click="initialise()">{{ t('common.retry') }}</BButton>
+      <!-- Access failures cannot be fixed by retrying; they only need a way back. -->
+      <BButton v-if="bookmark.isMobile || !['version', 'load'].includes(failure)" @click="exit">{{ t('manor.returnToApp') }}</BButton>
     </div>
     <ManorLoadingState v-else-if="loading || !interactive" :progress="progress" class="knowledge-manor__loading" />
     <iframe v-if="!loading && !failed" ref="frame" :key="nonce" :src="frameUrl" :title="t('manor.title')" referrerpolicy="same-origin" @error="failed = true" />
@@ -27,13 +29,27 @@
   import ManorLoadingState from './ManorLoadingState.vue';
   import { isUncertainManorResult, readPendingManorCommand, savePendingManorCommand } from '@/utils/manorPending';
   import { closeCurrentMobileOverlayThen, registerMobileOverlayHistory, releaseMobileOverlayHistory, type MobileOverlayHistoryHandle } from '@/utils/mobileOverlayHistory';
+  import { randomRequestId } from '@/utils/randomRequestId';
+  import { manorBrowserSupported } from '@/utils/manorAccess';
 
   const user = useUserStore(), bookmark = bookmarkStore(), router = useRouter(), growth = useGrowth();
   const { t } = useI18n();
   const emit = defineEmits<{ 'manor-immersive-change': [ready: boolean] }>();
-  const frame = ref<HTMLIFrameElement | null>(null), nonce = ref(crypto.randomUUID());
+  const frame = ref<HTMLIFrameElement | null>(null), nonce = ref(randomRequestId());
   const loading = ref(true), failed = ref(false), frameShown = ref(false), interactive = ref(false);
-  const versionMismatch = ref(false);
+  type ManorFailure = 'load' | 'version' | 'unavailable' | 'account' | 'login' | 'admin' | 'unsupported';
+  const failure = ref<ManorFailure>('load');
+  const failureCopy: Record<ManorFailure, string> = {
+    load: 'manor.loadFailed', version: 'manor.updateRequired', unavailable: 'manor.unavailable',
+    account: 'manor.accountUnavailable', login: 'manor.loginRequired', admin: 'manor.adminContext',
+    unsupported: 'manor.unsupported',
+  };
+  const failureOf = (error: unknown): ManorFailure => ({
+    MANOR_VERSION_UNSUPPORTED: 'version', MANOR_UNAVAILABLE: 'unavailable', MANOR_ACCOUNT_UNAVAILABLE: 'account',
+    MANOR_ADMIN_CONTEXT_FORBIDDEN: 'admin', ADMIN_PREVIEW_READONLY: 'admin',
+  } as Record<string, ManorFailure>)[String((error as {code?: string})?.code)] || 'load';
+  // The server owns the audience; the host only excludes accounts that can never enter.
+  const accountEligible = () => Boolean(user.id) && user.role !== 'visitor' && !user.adminContext;
   const maintenanceNotice = ref('');
   const reloadPage = () => window.location.reload();
   const progress = ref(0);
@@ -60,7 +76,7 @@
     daily_todo_create: 'growth.quest_daily_todo_create', daily_todo: 'growth.quest_daily_todo', daily_organize: 'growth.quest_daily_organize',
     knowledge_action_1: 'growth.quest_knowledge_action_1', knowledge_action_2: 'growth.quest_knowledge_action_2',
   };
-  const current = (g: number) => !disposed && g === generation && owner === user.id && user.role === 'root' && !user.adminContext;
+  const current = (g: number) => !disposed && g === generation && owner === user.id && accountEligible();
   const control = (action: string, requestId?: number) => frame.value?.contentWindow?.postMessage({ type: 'lightnote-manor-control', nonce: nonce.value, action, requestId }, location.origin);
   let deliberateLeave = false, navigationSequence = 0;
   let navigationCheck: { id: number; resolve: (allow: boolean) => void } | null = null;
@@ -83,13 +99,14 @@
   function refreshSharedBalance(afterPending = false) {
     const account = user.id, previous = afterPending ? balanceRefresh : null;
     balanceRefresh = Promise.resolve(previous).then(() => {
-      if (user.id === account && user.role === 'root' && !user.adminContext) return Promise.all([growth.load(true), growth.loadInventory()]);
+      if (user.id === account && accountEligible()) return Promise.all([growth.load(true), growth.loadInventory()]);
     }).catch(() => {});
   }
 
-  function decorated(value: ManorSnapshot & {notice?: string}): ManorSnapshot & {testing: boolean; copy: Record<string, string>; notice?: string} {
+  function decorated(value: ManorSnapshot & {notice?: string}): ManorSnapshot & {testing: boolean; canTest: boolean; copy: Record<string, string>; notice?: string} {
     maintenanceNotice.value = !testSession && value.runtime?.mode === 'maintenance' ? value.runtime.message || t('manor.maintenance') : '';
-    return { ...value, testing: Boolean(testSession), copy: Object.fromEntries(['actionFailed','offline','panelUpdated','castSync'].map(key => [key,t(`manor.${key}`)])), quests: value.quests.map(q => ({ ...q, label: t(questKeys[q.key] || 'growth.questUnknown') })) };
+    // Test saves are a Root tool; other accounts never see or reach the reset entry.
+    return { ...value, testing: Boolean(testSession), canTest: user.role === 'root', copy: Object.fromEntries(['actionFailed','offline','panelUpdated','castSync'].map(key => [key,t(`manor.${key}`)])), quests: value.quests.map(q => ({ ...q, label: t(questKeys[q.key] || 'growth.questUnknown') })) };
   }
   const conflict = (error: unknown) => ['MANOR_REVISION_CONFLICT','MANOR_CAST_PENDING'].includes(String((error as {code?: string})?.code));
   function settlePending(g: number): Promise<void> {
@@ -108,7 +125,7 @@
           if (!current(g)) {
             // Leaving must not wait for a purchase. Once its receipt arrives,
             // refresh the same account's shared balance without touching a new scene.
-            if (user.id === requestOwner && user.role === 'root' && !user.adminContext) refreshSharedBalance(true);
+            if (user.id === requestOwner && accountEligible()) refreshSharedBalance(true);
             throw new Error('stale');
           }
           snapshot = result;
@@ -150,17 +167,20 @@
     readController.abort(); readController = new AbortController();
     clearTimeout(bootTimer); frameShown.value = false; interactive.value = false; progress.value = 0;
     releaseMobileOverlayHistory(overlay); overlay = null;
-    owner = user.id; testSession = null; snapshot = null; nonce.value = crypto.randomUUID(); initialProvided = false;
+    owner = user.id; testSession = null; snapshot = null; nonce.value = randomRequestId(); initialProvided = false;
     pendingRetryAt = 0;
-    loading.value = true; failed.value = false; versionMismatch.value = false;
+    loading.value = true; failed.value = false; failure.value = 'load';
     pending = owner ? readPendingManorCommand(owner) : null;
-    if (!owner || user.role !== 'root' || user.adminContext) { loading.value = false; failed.value = true; return; }
-    testSession = readManorTestSession(owner);
+    if (!accountEligible() || !manorBrowserSupported()) {
+      failure.value = user.adminContext ? 'admin' : !accountEligible() ? 'login' : 'unsupported';
+      loading.value = false; failed.value = true; return;
+    }
+    testSession = user.role === 'root' ? readManorTestSession(owner) : null;
     // Start static downloads while the authenticated snapshot is in flight.
     loading.value = false;
     const read = refresh(g); initialRead = read;
     try { await read; if (current(g)) armBootTimer(); }
-    catch (error) { if (g === generation) { failed.value = true; versionMismatch.value = (error as {code?: string})?.code === 'MANOR_VERSION_UNSUPPORTED'; } }
+    catch (error) { if (g === generation) { failed.value = true; failure.value = failureOf(error); } }
     finally { if (initialRead === read) initialRead = null; }
   }
   async function exit() {
@@ -194,12 +214,12 @@
         initialProvided = true;
       }
       else if (data.action === 'reset-test' || data.action === 'restore-formal') {
-        if (commanding || pending || !snapshot) throw new Error('command');
+        if (commanding || pending || !snapshot || (data.action === 'reset-test' && user.role !== 'root')) throw new Error('command');
         testSession = data.action === 'reset-test' ? createManorTestSession(snapshot) : null;
         saveManorTestSession(owner, testSession);
         releaseMobileOverlayHistory(overlay); overlay = null;
         interactive.value = false; frameShown.value = false; progress.value = 0; initialProvided = true;
-        nonce.value = crypto.randomUUID();
+        nonce.value = randomRequestId();
         return;
       }
       else if (data.action === 'command') {
@@ -217,7 +237,7 @@
             await settlePending(g);
             if (prior.action !== data.payload.action || JSON.stringify(prior.args) !== JSON.stringify(data.payload.args)) throw { code: 'MANOR_ACTION_RECOVERED' };
           } else {
-            pending = { requestId: crypto.randomUUID(), revision: snapshot.revision, version: snapshot.version, action: data.payload.action, args: data.payload.args };
+            pending = { requestId: randomRequestId(), revision: snapshot.revision, version: snapshot.version, action: data.payload.action, args: data.payload.args };
             savePendingManorCommand(owner, pending);
             await settlePending(g);
           }

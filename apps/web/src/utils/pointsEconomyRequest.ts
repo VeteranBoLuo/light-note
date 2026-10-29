@@ -1,3 +1,5 @@
+import { randomRequestId } from './randomRequestId';
+
 const STORAGE_PREFIX = 'ln:points-economy-request:';
 const memoryPending = new Map<string, PendingOperation>();
 
@@ -15,11 +17,6 @@ function safeSessionStorage() {
   } catch {
     return null;
   }
-}
-
-function randomRequestId() {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') return crypto.randomUUID();
-  return `ln-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
 }
 
 function canonicalize(value: unknown): unknown {

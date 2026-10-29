@@ -155,6 +155,7 @@ function createManorRefreshInput(doc) {
     get snapshot() { return snapshot; },
     get busy() { return busy; },
     get testing() { return Boolean(snapshot?.testing); },
+    get canTest() { return Boolean(snapshot?.canTest); },
     resetTest: () => request("reset-test"),
     restoreFormal: () => request("restore-formal"),
     exit: () => request('exit'),
@@ -239,10 +240,13 @@ function createManorRefreshInput(doc) {
   document.addEventListener('visibilitychange', () => { refresh()?.catch(() => {}); });
   window.addEventListener('focus', () => { refresh()?.catch(() => {}); });
   window.addEventListener('online', () => { refresh()?.then(()=>resumeCatch()).catch(() => {}); });
-  // Only a visible formal scene calibrates across devices. Test saves stay
-  // isolated; passive reads yield to foreground work in the shared scheduler.
+  // Only a visible formal scene calibrates across devices, every 30 seconds; a new
+  // calendar day is checked locally every 10 seconds. Test saves stay isolated;
+  // passive reads yield to foreground work in the shared scheduler.
+  let calibrationTicks = 0;
   setInterval(() => {
     if (!ready || document.hidden) return;
+    calibrationTicks = (calibrationTicks + 1) % 3;
     const value = snapshot.state;
     const now = value.clockOrigin + value.now * 3600000 + performance.now() - syncedAt;
     const day = value.calendarTimezone
@@ -250,7 +254,7 @@ function createManorRefreshInput(doc) {
       : null;
     const parts = day && Object.fromEntries(day);
     const key = parts ? `${parts.year}${parts.month}${parts.day}` : new Date(now + value.calendarOffsetMinutes * 60000).toISOString().slice(0,10).replaceAll('-', '');
-    if (key !== value.dayKey || !snapshot.testing) refresh(true)?.catch(() => {});
+    if (key !== value.dayKey || (!snapshot.testing && calibrationTicks === 0)) refresh(true)?.catch(() => {});
   }, 10000);
   request('get').then(start).catch(() => request('load-error'));
 })();

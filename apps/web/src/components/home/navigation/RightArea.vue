@@ -4,7 +4,7 @@
     :class="{ 'phone-top-menu': bookmark.isMobile }"
     :style="{ marginLeft: 'auto', gap: bookmark.isMobile ? '15px' : 'var(--ui-space-5, 5px)' }"
   >
-    <BTooltip v-if="growth?.features?.manor && !user.adminContext && user.role === 'root'" :title="t('manor.title')">
+    <BTooltip v-if="showManorEntry(growth, user.adminContext, locale)" :title="t('manor.title')">
       <BButton class="workshop-entry-btn" :aria-label="t('manor.title')" @click="manorRouter.push('/knowledge-manor')">
         <SvgIcon size="30" :src="icon.manor.entry" />
       </BButton>
@@ -91,13 +91,14 @@
   import { inboxStore } from '@/store';
   import { blockGuestWrite } from '@/composables/useGuestGuard';
   import { useI18n } from 'vue-i18n';
+  import { showManorEntry } from '@/utils/manorAccess';
   import { computed, onMounted } from 'vue';
   import { useGrowth } from '@/composables/useGrowth.ts';
   import { frameVariant } from '@/config/growthFrames';
   import { isMobileHomeRoute } from '@/utils/preferences.ts';
   const bookmark = bookmarkStore();
   const inbox = inboxStore();
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
 
   const user = useUserStore();
   const route = useRoute();

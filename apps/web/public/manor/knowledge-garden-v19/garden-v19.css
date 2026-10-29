@@ -267,8 +267,24 @@
   color: var(--hud-ink-2);
   font-weight: 600;
 }
+.util-btn > span {
+  white-space: nowrap;
+}
+/* Narrow desktop HUDs keep counts and drop secondary labels, as the mobile HUD does;
+   the full wording stays in each button's accessible name. */
+@media (max-width: 960px) {
+  html:not(.light-note-mobile-rendering) .util-btn > span:not(.game-sprite):not(.util-days) {
+    display: none;
+  }
+}
+/* “1 天” and “相伴” may stack as two words, never single characters. */
 .util-btn.plain {
   padding-left: calc(10px * var(--d));
+  flex-wrap: wrap;
+  align-content: center;
+  justify-content: center;
+  row-gap: 0;
+  line-height: 1.1;
 }
 .util-btn.round {
   width: calc(32px * var(--d));

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const facts = vi.hoisted(() => ({ growth: { points: 60, streak: 0 }, milestones: [], role: 'root', deleted: 0 }));
 vi.mock('../../db/index.js', () => ({ default: {} }));
 vi.mock('../growth.js', () => ({
@@ -12,6 +12,7 @@ import { createKnowledgeManorService } from './knowledgeManorService.js';
 
 describe('庄园沿用真实成长进度', () => {
   beforeEach(() => Object.assign(facts, { growth: { points:60, streak:0 }, milestones:[], role:'root', deleted:0 }));
+  afterEach(() => vi.unstubAllEnvs());
   const read = () => {
     const conn = { beginTransaction:vi.fn(), commit:vi.fn(), rollback:vi.fn(), release:vi.fn(), query:async sql => {
       if(sql.includes('FROM user WHERE')) return [[{role:facts.role,del_flag:facts.deleted}]];
@@ -36,8 +37,17 @@ describe('庄园沿用真实成长进度', () => {
     expect(result.state.supplyEligibility['streak-7']).toBe(false);
     expect(result.state.dailyDone).toEqual([true,false,false]);
   });
-  it.each([{role:'user',deleted:0},{role:'test',deleted:0},{role:'visitor',deleted:0},{role:'root',deleted:1}])('服务层也拒绝非 Root 或不可用账号 %j', async values => {
+  it.each([{role:'user',deleted:0},{role:'visitor',deleted:0},{role:'root',deleted:1},{role:'test',deleted:1}])('内部开放时服务层拒绝普通、游客或已删除账号 %j', async values => {
     Object.assign(facts,values);
+    await expect(read()).rejects.toMatchObject({code:'MANOR_ACCOUNT_UNAVAILABLE'});
+  });
+  it('内部开放时 test 账号可以读取；全量开放后普通账号也可读取，游客仍拒绝', async () => {
+    facts.role='test';
+    await expect(read()).resolves.toMatchObject({ revision:0 });
+    vi.stubEnv('KNOWLEDGE_MANOR_AUDIENCE','all');
+    facts.role='user';
+    await expect(read()).resolves.toMatchObject({ revision:0 });
+    facts.role='visitor';
     await expect(read()).rejects.toMatchObject({code:'MANOR_ACCOUNT_UNAVAILABLE'});
   });
 });

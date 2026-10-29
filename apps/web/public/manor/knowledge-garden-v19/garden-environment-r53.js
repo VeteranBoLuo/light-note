@@ -185,7 +185,7 @@ const GardenEnvironment = (() => {
     }
     const lost=e=>{e.preventDefault();ready=false;canvas.hidden=true;};canvas.addEventListener('webglcontextlost',lost);
     raf=requestAnimationFrame(draw);
-    return ()=>{dead=true;cancelAnimationFrame(raf);observer.disconnect();gl.deleteTexture(texture);gl.deleteTexture(smoothTexture);gl.deleteTexture(maskTexture);gl.deleteBuffer(buffer);gl.deleteProgram(program);canvas.remove();};
+    return ()=>{dead=true;cancelAnimationFrame(raf);observer.disconnect();gl.deleteTexture(texture);gl.deleteTexture(smoothTexture);gl.deleteTexture(maskTexture);gl.deleteBuffer(buffer);gl.deleteProgram(program);canvas.remove();gl.getExtension('WEBGL_lose_context')?.loseContext();};
   }
   function mount(scene){
     if(current?.scene===scene)return;

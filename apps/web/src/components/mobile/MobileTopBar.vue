@@ -58,7 +58,7 @@
     </BButton>
 
     <div v-if="showActions" class="mobile-top-bar__actions">
-      <BButton v-if="!isSecondary && growthInfo?.features?.manor && !user.adminContext && user.role === 'root'" class="mobile-top-bar__action" :aria-label="t('manor.title')" @click="router.push('/knowledge-manor')">
+      <BButton v-if="!isSecondary && showManorEntry(growthInfo, user.adminContext, locale)" class="mobile-top-bar__action" :aria-label="t('manor.title')" @click="router.push('/knowledge-manor')">
         <SvgIcon :src="icon.manor.entry" size="24" aria-hidden="true" />
       </BButton>
       <!-- AI 等自带标题区的页面不放完整搜索框,只给一个放大镜打开同一个搜索层 -->
@@ -113,6 +113,7 @@
 <script setup lang="ts">
   import { computed, onMounted } from 'vue';
   import { useI18n } from 'vue-i18n';
+  import { showManorEntry } from '@/utils/manorAccess';
   import { useRoute, useRouter } from 'vue-router';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
@@ -129,7 +130,7 @@
   const route = useRoute();
   const router = useRouter();
   const user = useUserStore();
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const { openSearch } = useMobileGlobalSearch();
   const { growth: growthInfo, load: loadGrowth } = useGrowth();
   const appUpdate = useAndroidAppUpdate();
