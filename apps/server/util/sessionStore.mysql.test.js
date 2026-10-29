@@ -3,7 +3,6 @@ import mysql from 'mysql2/promise';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('../db/index.js', () => ({ default: {} }));
 import dbProxy from '../db/index.js';
-import redis from './redisClient.js';
 import { createSession, getSession } from './sessionStore.js';
 
 const socketPath = process.env.LIGHTNOTE_TEST_MYSQL_SOCKET;
@@ -34,10 +33,6 @@ describe.skipIf(!socketPath)('会话撤销与续期（隔离 MySQL）', () => {
     await db.query(`DELETE FROM user_sessions;
       UPDATE user SET password='original';
       INSERT INTO user_sessions(sid,user_id,role,expires_at,create_time,last_active_time) VALUES ('sid','owner','user',DATE_ADD(NOW(), INTERVAL 1 HOUR),NOW(),NOW())`);
-    const [[session]] = await db.query('SELECT * FROM user_sessions WHERE sid=?', ['sid']);
-    redis.get.mockResolvedValue(JSON.stringify(session));
-    redis.setEx.mockReset().mockResolvedValue('OK');
-    redis.del.mockReset().mockResolvedValue(1);
   });
   afterAll(async () => {
     await db?.end();
@@ -47,27 +42,33 @@ describe.skipIf(!socketPath)('会话撤销与续期（隔离 MySQL）', () => {
       await admin?.end();
     }
   });
-  it('正常缓存命中仍可续期，同秒重复访问不误退出', async () => {
+  it('一分钟内只确认不写，超过一分钟才续期，同秒重复访问不误退出', async () => {
+    const first = await getSession('sid');
+    expect(first).toMatchObject({ user_id: 'owner' });
+    expect(first.expires_in_seconds).toBeLessThanOrEqual(3_600);
+    const [[untouched]] = await db.query(
+      'SELECT TIMESTAMPDIFF(SECOND,NOW(),expires_at) AS remaining FROM user_sessions',
+    );
+    expect(untouched.remaining).toBeLessThanOrEqual(3_600);
+
+    await db.query('UPDATE user_sessions SET last_active_time = DATE_SUB(NOW(), INTERVAL 2 MINUTE)');
     const startedAt = Date.now();
-    const session = await getSession('sid');
-    expect(session).toMatchObject({ user_id: 'owner' });
-    expect(session.expires_in_seconds).toBeGreaterThanOrEqual(86_400 - Math.ceil((Date.now() - startedAt) / 1000));
-    expect(session.expires_in_seconds).toBeLessThanOrEqual(86_400);
+    expect(await getSession('sid')).toMatchObject({ user_id: 'owner', expires_in_seconds: 86_400 });
     expect(await getSession('sid')).toMatchObject({ user_id: 'owner' });
-    const [[value]] = await db.query('SELECT TIMESTAMPDIFF(SECOND,NOW(),expires_at) AS remaining FROM user_sessions');
-    expect(value.remaining).toBeGreaterThanOrEqual(86_400 - Math.ceil((Date.now() - startedAt) / 1000));
+    const [[value]] = await db.query(
+      'SELECT TIMESTAMPDIFF(SECOND,NOW(),expires_at) AS remaining, TIMESTAMPDIFF(SECOND,last_active_time,NOW()) AS idle FROM user_sessions',
+    );
+    expect(value.remaining).toBeGreaterThanOrEqual(86_400 - Math.ceil((Date.now() - startedAt) / 1000) - 1);
     expect(value.remaining).toBeLessThanOrEqual(86_400);
+    expect(value.idle).toBeLessThan(60);
   });
-  it.each(['deleted', 'expired', 'different-owner'])('Redis 仍有缓存但数据库会话 %s 时拒绝', async (state) => {
+  it.each(['deleted', 'expired'])('数据库会话 %s 时拒绝，重复请求也不能放行', async (state) => {
     if (state === 'deleted') await db.query('DELETE FROM user_sessions');
     if (state === 'expired') await db.query("UPDATE user_sessions SET expires_at='2020-01-01'");
-    if (state === 'different-owner') await db.query("UPDATE user_sessions SET user_id='other'");
-    redis.del.mockRejectedValue(new Error('cache cleanup unavailable'));
     expect(await getSession('sid')).toBeNull();
     expect(await getSession('sid')).toBeNull();
-    expect(redis.setEx).not.toHaveBeenCalled();
   });
-  it('续期等待撤销事务提交后，不能凭之前命中的缓存放行', async () => {
+  it('确认会话时等待撤销事务提交，不能凭撤销前的快照放行', async () => {
     const connection = await db.getConnection();
     try {
       await connection.beginTransaction();
@@ -75,7 +76,6 @@ describe.skipIf(!socketPath)('会话撤销与续期（隔离 MySQL）', () => {
       const reading = getSession('sid');
       await connection.commit();
       expect(await reading).toBeNull();
-      expect(redis.setEx).not.toHaveBeenCalled();
     } finally {
       await connection.rollback();
       connection.release();

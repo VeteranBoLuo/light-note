@@ -2,14 +2,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const query = vi.fn();
 const getConnection = vi.fn();
-const redisDel = vi.fn();
-const redisGet = vi.fn();
-const redisSet = vi.fn();
 
 vi.mock('../db/index.js', () => ({ default: { query, getConnection } }));
-vi.mock('./redisClient.js', () => ({
-  default: { get: redisGet, expire: vi.fn(), setEx: redisSet, del: redisDel },
-}));
 
 const { createSession, getSession, getSessionDeviceKey, groupUserSessions, touchUserLastActive, removeUserSessions } =
   await import('./sessionStore.js');
@@ -75,7 +69,7 @@ describe('登录设备会话归并', () => {
     expect(fallback.query.mock.calls[1][0]).not.toContain('device_key');
     expect(query).not.toHaveBeenCalled();
   });
-  it('同一稳定设备再次登录时原子替换旧 session，并驱逐旧 Redis 缓存', async () => {
+  it('同一稳定设备再次登录时原子替换旧 session', async () => {
     const connection = createConnection();
     connection.query
       .mockResolvedValueOnce([[{ sid: 'old-sid-a' }, { sid: 'old-sid-b' }]])
@@ -104,7 +98,6 @@ describe('登录设备会话归并', () => {
     expect(connection.query.mock.calls[2][0]).toContain('device_key');
     expect(connection.commit).toHaveBeenCalledTimes(1);
     expect(connection.release).toHaveBeenCalledTimes(1);
-    expect(redisDel).toHaveBeenCalledWith(['session:old-sid-a', 'session:old-sid-b']);
   });
 
   it('无稳定设备标识的兼容客户端维持普通会话创建', async () => {
@@ -199,75 +192,99 @@ describe('用户最近活跃时间', () => {
 });
 
 describe('密码变更后的整账号会话撤销', () => {
-  it('同时删除数据库会话与所有设备的 Redis 缓存', async () => {
-    query
-      .mockReset()
-      .mockResolvedValueOnce([[{ sid: 'desktop-sid' }, { sid: 'android-sid' }]])
-      .mockResolvedValueOnce([{ affectedRows: 2 }]);
-    redisDel.mockResolvedValue(2);
+  it('删除该账号在数据库中的全部会话', async () => {
+    query.mockReset().mockResolvedValueOnce([{ affectedRows: 2 }]);
     await removeUserSessions('password-user');
+    expect(query).toHaveBeenCalledOnce();
     expect(query).toHaveBeenCalledWith('DELETE FROM user_sessions WHERE user_id = ?', ['password-user']);
-    expect(redisDel).toHaveBeenCalledWith(['session:desktop-sid', 'session:android-sid']);
   });
 });
 
-describe('撤销会话的数据库事实优先于缓存', () => {
-  const cached = () => ({
-    user_id: 'cached-owner',
-    expires_at: new Date(Date.now() + 3_600_000).toISOString(),
-    create_time: new Date().toISOString(),
+describe('会话有效性以数据库为准，续期写入按分钟节流', () => {
+  const sessionRow = (overrides = {}) => ({
+    sid: 'active',
+    user_id: 'session-owner',
+    role: 'user',
+    expires_at: new Date(Date.now() + 3_600_000),
+    create_time: new Date(Date.now() - 3_600_000),
+    expires_in_seconds: 3_600,
+    touch_due: 0,
+    ...overrides,
   });
+  const updates = () => query.mock.calls.filter(([sql]) => sql.startsWith('UPDATE user_sessions'));
   beforeEach(() => {
     query.mockReset();
-    redisGet.mockReset().mockImplementation(async () => JSON.stringify(cached()));
-    redisSet.mockReset().mockResolvedValue('OK');
-    redisDel.mockReset().mockResolvedValue(1);
   });
-  it('缓存删除失败后重复请求也不能使用已撤销会话', async () => {
-    query.mockImplementation(async (sql) => (sql.startsWith('SELECT') ? [[]] : [{ affectedRows: 0 }]));
-    redisDel.mockRejectedValue(new Error('unavailable'));
+
+  it('每次都用共享锁读确认会话，等待未提交的撤销', async () => {
+    query.mockResolvedValueOnce([[sessionRow()]]);
+    await getSession('active');
+    expect(query.mock.calls[0][0]).toContain('LOCK IN SHARE MODE');
+    expect(query.mock.calls[0][0]).toContain('WHERE sid = ? AND expires_at > NOW()');
+    expect(query.mock.calls[0][1]).toEqual([60, 'active']);
+  });
+
+  it('一分钟内已写过活跃时间时只读不写', async () => {
+    query.mockResolvedValueOnce([[sessionRow()]]);
+    const session = await getSession('active');
+    expect(session).toMatchObject({ user_id: 'session-owner', expires_in_seconds: 3_600 });
+    expect(session).not.toHaveProperty('touch_due');
+    expect(query).toHaveBeenCalledOnce();
+  });
+
+  it('到期写入时普通会话续一天，写入条件不复活已删除或过期的会话', async () => {
+    query.mockResolvedValueOnce([[sessionRow({ user_id: 'renew-owner', touch_due: 1 })]]).mockResolvedValue([{}]);
+    expect(await getSession('active')).toMatchObject({ user_id: 'renew-owner', expires_in_seconds: 86_400 });
+    expect(updates()).toEqual([[expect.stringContaining('WHERE sid = ? AND expires_at > NOW()'), [86_400, 'active']]]);
+    expect(query.mock.calls.some(([sql]) => sql.startsWith('UPDATE user SET last_active_time'))).toBe(true);
+  });
+
+  it('记住登录的会话到期写入时续七天', async () => {
+    query
+      .mockResolvedValueOnce([
+        [
+          sessionRow({
+            user_id: 'remember-owner',
+            touch_due: 1,
+            create_time: new Date(Date.now() - 86_400_000),
+            expires_at: new Date(Date.now() + 6 * 86_400_000),
+            expires_in_seconds: 6 * 86_400,
+          }),
+        ],
+      ])
+      .mockResolvedValue([{}]);
+    expect(await getSession('active')).toMatchObject({ expires_in_seconds: 604_800 });
+    expect(updates()[0][1]).toEqual([604_800, 'active']);
+  });
+
+  it('剩余充足的普通会话到期写入时只更新活跃时间', async () => {
+    query
+      .mockResolvedValueOnce([
+        [
+          sessionRow({
+            user_id: 'idle-owner',
+            touch_due: 1,
+            expires_at: new Date(Date.now() + 3 * 86_400_000),
+            expires_in_seconds: 3 * 86_400,
+          }),
+        ],
+      ])
+      .mockResolvedValue([{}]);
+    expect(await getSession('active')).toMatchObject({ expires_in_seconds: 3 * 86_400 });
+    expect(updates()).toEqual([
+      ['UPDATE user_sessions SET last_active_time = NOW() WHERE sid = ? AND expires_at > NOW()', ['active']],
+    ]);
+  });
+
+  it('数据库中已撤销或过期的会话返回空并清理该行', async () => {
+    query.mockResolvedValueOnce([[]]).mockResolvedValueOnce([{ affectedRows: 0 }]);
     expect(await getSession('revoked')).toBeNull();
-    expect(await getSession('revoked')).toBeNull();
-    expect(redisSet).not.toHaveBeenCalled();
-    expect(query.mock.calls.filter(([sql]) => sql.startsWith('UPDATE user_sessions'))).toHaveLength(2);
+    expect(query).toHaveBeenLastCalledWith('DELETE FROM user_sessions WHERE sid = ?', ['revoked']);
+    expect(updates()).toHaveLength(0);
   });
-  it('缓存命中也要等数据库验证完成才返回身份', async () => {
-    // 续期与返回值共用同一时刻，避免跨毫秒向下取整使一天变成 86,399 秒。
-    const clock = vi.spyOn(Date, 'now').mockReturnValue(Date.now());
-    try {
-      let finish;
-      query.mockImplementationOnce(() => new Promise((resolve) => (finish = resolve)));
-      query.mockResolvedValue([{ affectedRows: 1 }]);
-      let returned = false;
-      const reading = getSession('active').then((value) => {
-        returned = true;
-        return value;
-      });
-      await Promise.resolve();
-      expect(returned).toBe(false);
-      finish([{ affectedRows: 1 }]);
-      expect(await reading).toMatchObject({ user_id: 'cached-owner', expires_in_seconds: 86_400 });
-      expect(query.mock.calls[0]).toEqual([
-        expect.stringContaining('AND user_id = ? AND expires_at > NOW()'),
-        [86_400, 'active', 'cached-owner'],
-      ]);
-      expect(redisSet).toHaveBeenCalledWith('session:active', 900, expect.any(String));
-    } finally {
-      clock.mockRestore();
-    }
-  });
-  it('数据库不可用时不凭缓存放行', async () => {
+
+  it('数据库不可用时不放行', async () => {
     query.mockRejectedValue(new Error('database unavailable'));
     await expect(getSession('active')).rejects.toThrow('database unavailable');
-    expect(redisSet).not.toHaveBeenCalled();
-  });
-  it('同秒更新 affectedRows 为零时重读有效记录，不误退出正常用户', async () => {
-    query.mockResolvedValueOnce([{ affectedRows: 0 }]).mockResolvedValueOnce([[{ sid: 'active' }]]);
-    expect(await getSession('active')).toMatchObject({ user_id: 'cached-owner' });
-  });
-  it('数据库已过期的会话不能凭未过期缓存续期', async () => {
-    query.mockResolvedValueOnce([{ affectedRows: 0 }]).mockResolvedValueOnce([[]]);
-    expect(await getSession('expired')).toBeNull();
-    expect(redisSet).not.toHaveBeenCalled();
   });
 });

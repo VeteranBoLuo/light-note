@@ -1,10 +1,8 @@
 import crypto from 'crypto';
 import pool from '../db/index.js';
-import redisClient from './redisClient.js';
-import { stableAgentErrorCode } from './agent/logSafety.js';
 
-const CACHE_PREFIX = 'session:';
-const CACHE_TTL = 15 * 60; // Redis 缓存 15 分钟
+// 续期与会话活跃时间至多每分钟写一次；有效性仍逐请求以数据库为准。
+const SESSION_TOUCH_INTERVAL_SECONDS = 60;
 const USER_ACTIVITY_TOUCH_INTERVAL_MS = 5 * 60 * 1000;
 const SESSION_DEVICE_ID_PATTERN = /^[A-Za-z0-9._:-]{16,128}$/;
 const userActivityTouches = new Map();
@@ -21,16 +19,6 @@ export function getSessionDeviceKey(deviceId) {
 
 function isDeviceKeySchemaUnavailable(error) {
   return error?.code === 'ER_BAD_FIELD_ERROR';
-}
-
-async function clearSessionCache(sids) {
-  const keys = [...new Set((sids || []).filter(Boolean).map((sid) => CACHE_PREFIX + sid))];
-  if (!keys.length) return;
-  try {
-    await redisClient.del(keys);
-  } catch (error) {
-    console.error('[session] 清除 Redis 会话缓存失败 code=%s', stableAgentErrorCode(error));
-  }
 }
 
 async function createLegacySession({ sid, userId, role, maxAgeSeconds, ip, userAgent }) {
@@ -53,7 +41,6 @@ async function createDeviceBoundSession({
   validateAccount,
 }) {
   const connection = await pool.getConnection();
-  let previousSids = [];
   try {
     await connection.beginTransaction();
     if (validateAccount) {
@@ -70,8 +57,7 @@ async function createDeviceBoundSession({
           [userId, deviceKey],
         )
       : [[]];
-    previousSids = existingRows.map((row) => row.sid).filter(Boolean);
-    if (previousSids.length) {
+    if (existingRows.length) {
       await connection.query('DELETE FROM user_sessions WHERE user_id = ? AND device_key = ?', [userId, deviceKey]);
     }
     if (deviceKey)
@@ -97,13 +83,10 @@ async function createDeviceBoundSession({
   } finally {
     connection.release();
   }
-
-  // 旧 sid 若仍留在 Redis，会在缓存 TTL 内绕过 MySQL 的删除结果；提交后必须同步驱逐。
-  await clearSessionCache(previousSids);
   return { sid };
 }
 
-// 滑动过期逻辑（抽出来，MySQL 更新和 Redis 都复用）
+// 滑动过期逻辑
 function calcSlidingExpiry(session) {
   const SEVEN_DAY_MS = 604800000;
   const expiresAt = new Date(session.expires_at);
@@ -145,35 +128,6 @@ export async function touchUserLastActive(userId, now = Date.now()) {
     userActivityTouches.delete(userId);
     return false;
   }
-}
-
-// 缓存不能作为会话有效性的事实源；续期与有效性判断使用同一条数据库写入。
-async function renewSessionInDb(sid, renewSeconds, userId) {
-  let result;
-  if (renewSeconds > 0) {
-    [result] = await pool.query(
-      `UPDATE user_sessions
-         SET expires_at = DATE_ADD(NOW(), INTERVAL ? SECOND),
-             last_active_time = NOW()
-         WHERE sid = ? AND user_id = ? AND expires_at > NOW()`,
-      [renewSeconds, sid, userId],
-    );
-  } else {
-    [result] = await pool.query(
-      'UPDATE user_sessions SET last_active_time = NOW() WHERE sid = ? AND user_id = ? AND expires_at > NOW()',
-      [sid, userId],
-    );
-  }
-  // 部分客户端仅返回 changed rows；同秒活跃时间未变化不能被误判为注销。
-  if (!result.affectedRows) {
-    const [rows] = await pool.query(
-      'SELECT sid FROM user_sessions WHERE sid = ? AND user_id = ? AND expires_at > NOW() LIMIT 1',
-      [sid, userId],
-    );
-    if (!rows.length) return false;
-  }
-  await touchUserLastActive(userId);
-  return true;
 }
 
 export const createSession = async ({
@@ -223,36 +177,12 @@ export const createSession = async ({
   }
 };
 
+// 会话有效性只以 MySQL 为准，不经过 Redis：认证不因 Redis 断线挂起，也没有需要驱逐的第二事实源。
+// 共享锁读会等待未提交的撤销事务，不能凭撤销前的快照放行；续期与 last_active_time 按数据库记录的
+// 上次活跃时间节流，避免每个请求都写会话行，多进程之间也无需共享节流状态。
 export const getSession = async (sid) => {
   if (!sid) return null;
 
-  const cacheKey = CACHE_PREFIX + sid;
-
-  // 1. 先查 Redis
-  try {
-    const cached = await redisClient.get(cacheKey);
-    if (cached) {
-      const session = JSON.parse(cached);
-      const { renewSeconds } = calcSlidingExpiry(session);
-      if (!(await renewSessionInDb(sid, renewSeconds, session.user_id))) {
-        await clearSessionCache([sid]);
-        return null;
-      }
-      if (renewSeconds > 0) session.expires_at = new Date(Date.now() + renewSeconds * 1000).toISOString();
-      // 重新计算 expires_in_seconds（确保返回准确的剩余时间）
-      session.expires_in_seconds = Math.max(
-        0,
-        Math.floor((new Date(session.expires_at).getTime() - Date.now()) / 1000),
-      );
-      const cacheTTL = Math.min(CACHE_TTL, session.expires_in_seconds);
-      if (cacheTTL > 0) await redisClient.setEx(cacheKey, cacheTTL, JSON.stringify(session)).catch(() => {});
-      return session;
-    }
-  } catch (e) {
-    // Redis 不可用时回源 MySQL
-  }
-
-  // 2. Redis 未命中 → 查 MySQL
   const [rows] = await pool.query(
     `SELECT
        sid,
@@ -260,72 +190,48 @@ export const getSession = async (sid) => {
        role,
        expires_at,
        create_time,
-       GREATEST(0, TIMESTAMPDIFF(SECOND, NOW(), expires_at)) AS expires_in_seconds
+       GREATEST(0, TIMESTAMPDIFF(SECOND, NOW(), expires_at)) AS expires_in_seconds,
+       (last_active_time IS NULL OR last_active_time < DATE_SUB(NOW(), INTERVAL ? SECOND)) AS touch_due
      FROM user_sessions
      WHERE sid = ? AND expires_at > NOW()
-     LIMIT 1`,
-    [sid],
+     LIMIT 1
+     LOCK IN SHARE MODE`,
+    [SESSION_TOUCH_INTERVAL_SECONDS, sid],
   );
-  const session = rows[0];
-  if (!session) {
+  const row = rows[0];
+  if (!row) {
     await removeSession(sid);
     return null;
   }
+  const { touch_due: touchDue, ...session } = row;
+  if (!Number(touchDue)) return session;
 
-  // 3. 滑动过期 → 更新 MySQL
+  // 写入保留有效期条件：与撤销并发时只更新仍有效的会话，不能复活已删除或过期的记录。
   const { renewSeconds } = calcSlidingExpiry(session);
   if (renewSeconds > 0) {
     await pool.query(
       `UPDATE user_sessions
        SET expires_at = DATE_ADD(NOW(), INTERVAL ? SECOND),
            last_active_time = NOW()
-       WHERE sid = ?`,
+       WHERE sid = ? AND expires_at > NOW()`,
       [renewSeconds, sid],
     );
     session.expires_in_seconds = renewSeconds;
   } else {
-    await pool.query('UPDATE user_sessions SET last_active_time = NOW() WHERE sid = ?', [sid]);
+    await pool.query('UPDATE user_sessions SET last_active_time = NOW() WHERE sid = ? AND expires_at > NOW()', [sid]);
   }
   await touchUserLastActive(session.user_id);
-
-  // 4. 写 Redis 缓存（TTL 取缓存时间和剩余 session 时间的较小值）
-  const cacheTTL = Math.min(CACHE_TTL, session.expires_in_seconds);
-  if (cacheTTL > 0) {
-    try {
-      await redisClient.setEx(cacheKey, cacheTTL, JSON.stringify(session));
-    } catch (e) {
-      // 写入失败不影响业务
-    }
-  }
-
   return session;
 };
 
 export const removeSession = async (sid) => {
   if (!sid) return;
   await pool.query('DELETE FROM user_sessions WHERE sid = ?', [sid]);
-  // await 确保返回前 Redis 缓存已清,避免残留缓存在 TTL 内仍被判为有效会话
-  try {
-    await redisClient.del(CACHE_PREFIX + sid);
-  } catch (e) {
-    console.error('[session] 清除 Redis 会话缓存失败 code=%s', stableAgentErrorCode(e));
-  }
 };
 
 export const removeUserSessions = async (userId) => {
   if (!userId) return;
-  const [rows] = await pool.query('SELECT sid FROM user_sessions WHERE user_id = ?', [userId]);
   await pool.query('DELETE FROM user_sessions WHERE user_id = ?', [userId]);
-  // 清除 Redis 缓存
-  const keys = rows.map((r) => CACHE_PREFIX + r.sid);
-  if (keys.length > 0) {
-    // await 确保封号/删号返回前 Redis 缓存已清,关闭最长 CACHE_TTL(15 分钟)的失效延迟窗口
-    try {
-      await redisClient.del(keys);
-    } catch (e) {
-      console.error('[session] 清除用户 Redis 会话缓存失败 code=%s', stableAgentErrorCode(e));
-    }
-  }
 };
 
 export const cleanupExpiredSessions = async () => {
@@ -333,7 +239,7 @@ export const cleanupExpiredSessions = async () => {
 };
 
 // 清理历史 openRoot 遗留的“visitor 用户 + root 会话角色”。
-// 鉴权已不再信任 session.role，因此这些会话即使尚未清理也没有 root 权限；此处用于彻底下线旧入口并清除缓存残留。
+// 鉴权已不再信任 session.role，因此这些会话即使尚未清理也没有 root 权限；此处用于彻底下线旧入口。
 export const cleanupLegacyElevatedVisitorSessions = async () => {
   const [rows] = await pool.query(
     `SELECT s.sid
@@ -347,11 +253,6 @@ export const cleanupLegacyElevatedVisitorSessions = async () => {
 
   const placeholders = sids.map(() => '?').join(',');
   await pool.query(`DELETE FROM user_sessions WHERE sid IN (${placeholders})`, sids);
-  try {
-    await redisClient.del(sids.map((sid) => CACHE_PREFIX + sid));
-  } catch (e) {
-    console.error('[session] 清理历史游客提权缓存失败 code=%s', stableAgentErrorCode(e));
-  }
   return sids.length;
 };
 
