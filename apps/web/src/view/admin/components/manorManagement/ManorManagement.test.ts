@@ -212,4 +212,13 @@ describe('庄园管理按目标与修订展示真实结果', () => {
     const active = [...root.querySelectorAll('article')].find((el) => el.textContent?.includes('有操作人数'));
     expect(active?.querySelector('strong')?.textContent).toBe('—');
   });
+  it('已知的零积分收支显示为零，与不可用分开', async () => {
+    api.overview.mockResolvedValueOnce({ ...fixture.overview(), finances: { issued: 0, spent: 0, trend: [] } });
+    await mount();
+    for (const label of ['庄园积分产出', '庄园积分消耗']) {
+      const metric = [...root.querySelectorAll('article')].find((el) => el.textContent?.includes(label));
+      expect(metric?.querySelector('strong')?.textContent).toBe('0');
+    }
+    expect(root.textContent).toContain('净产出 0');
+  });
 });

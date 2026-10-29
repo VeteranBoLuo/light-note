@@ -101,6 +101,7 @@
         new Date(props.data.range.start.replace(' ', 'T') + '+08:00').getTime(),
   );
   const max = computed(() => Math.max(1, ...(props.data.finances?.trend.flatMap((d) => [d.issued, d.spent]) || [])));
+  const metricAmount = (value: number) => (value === 0 ? number(0) : signed(value));
   const metrics = computed(() => [
     { label: a('opened'), value: number(props.data.opened), hint: a('openedHint'), tone: '' },
     {
@@ -111,15 +112,15 @@
     },
     {
       label: a('issued'),
-      value: props.data.finances ? signed(props.data.finances.issued) : '—',
+      value: props.data.finances ? metricAmount(props.data.finances.issued) : '—',
       hint: a('issuedHint'),
       tone: 'manor-positive',
     },
     {
       label: a('spent'),
-      value: props.data.finances ? signed(-props.data.finances.spent) : '—',
+      value: props.data.finances ? metricAmount(-props.data.finances.spent) : '—',
       hint: a('net', {
-        value: props.data.finances ? signed(props.data.finances.issued - props.data.finances.spent) : '—',
+        value: props.data.finances ? metricAmount(props.data.finances.issued - props.data.finances.spent) : '—',
       }),
       tone: 'manor-negative',
     },
