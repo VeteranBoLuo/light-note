@@ -98,7 +98,7 @@ function dependencies(database = db) {
 }
 
 async function waitForWorkerLock(threadIds, pending) {
-  for (let n = 0; n < 200; n++) {
+  for (let n = 0; n < 20; n++) {
     if (threadIds.length) {
       const [rows] = await admin.query(
         'SELECT trx_state FROM information_schema.innodb_trx WHERE trx_mysql_thread_id IN (?)',
@@ -106,7 +106,8 @@ async function waitForWorkerLock(threadIds, pending) {
       );
       if (rows.some((r) => r.trx_state === 'LOCK WAIT')) return;
     }
-    const finished = await Promise.race([pending.then(() => true), pause(10).then(() => false)]);
+    // INNODB_TRX 只有在距上次读取超过 100ms 后才刷新；高频轮询会一直续用旧快照。
+    const finished = await Promise.race([pending.then(() => true), pause(150).then(() => false)]);
     if (finished) throw Error('Worker finished before the source-lock contention was exercised');
   }
   const [locks] = await admin.query(

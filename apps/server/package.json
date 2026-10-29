@@ -4,6 +4,9 @@
   "description": "",
   "main": "index.js",
   "type": "module",
+  "engines": {
+    "node": ">=22.12.0"
+  },
   "scripts": {
     "start": "node app.js",
     "dev": "node --watch --watch-preserve-output app.js",
@@ -61,8 +64,8 @@
     "@js-temporal/polyfill": "^0.5.1",
     "@lightnote/shared": "workspace:*",
     "archiver": "^7.0.1",
-    "axios": "^1.13.2",
-    "body-parser": "^1.20.6",
+    "axios": "^1.21.0",
+    "body-parser": "^1.20.9",
     "cheerio": "^1.0.0",
     "cors": "^2.8.5",
     "csv-parse": "^7.0.2",
@@ -75,13 +78,13 @@
     "mammoth": "^1.12.0",
     "marked": "^17.0.6",
     "minisearch": "^7.2.0",
-    "multer": "2.3.0",
+    "multer": "2.5.0",
     "mysql2": "^3.23.1",
-    "nodemailer": "^9.1.0",
+    "nodemailer": "^10.1.4",
     "pdf-parse": "1.1.1",
     "playwright-core": "1.57.0",
     "redis": "^5.6.0",
-    "sanitize-html": "2.17.7",
+    "sanitize-html": "2.18.1",
     "turndown": "^7.2.4",
     "turndown-plugin-gfm": "^1.0.2",
     "web-push": "^3.6.7",
@@ -90,6 +93,6 @@
   },
   "devDependencies": {
     "prettier": "^3.4.2",
-    "vitest": "^3.2.6"
+    "vitest": "^4.1.12"
   }
 }

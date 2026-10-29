@@ -137,10 +137,10 @@
     }
   },
   "devDependencies": {
-    "vitest": "^3.2.6"
+    "vitest": "^4.1.12"
   },
   "dependencies": {
-    "katex": "0.16.47",
+    "katex": "0.18.2",
     "marked": "^17.0.6"
   }
 }

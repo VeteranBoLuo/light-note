@@ -14,6 +14,21 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  security:
+    name: 依赖安全审计
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.25.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      # 同时检查生产和开发依赖；低危仍报告，不隐藏尚无修复版的上游告警。
+      - run: pnpm audit --audit-level=moderate
+
   mysql:
     name: MySQL 5.7 核心行为
     runs-on: ubuntu-latest
@@ -28,7 +43,7 @@ jobs:
           version: 10.25.0
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
@@ -98,7 +113,7 @@ jobs:
       - name: 安装 Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
 

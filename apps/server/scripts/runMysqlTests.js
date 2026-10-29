@@ -109,7 +109,6 @@ async function main() {
           'run',
           ...Object.keys(suites),
           '--maxWorkers=2',
-          '--minWorkers=1',
           '--reporter=default',
           '--reporter=json',
           `--outputFile.json=${reportPath}`,

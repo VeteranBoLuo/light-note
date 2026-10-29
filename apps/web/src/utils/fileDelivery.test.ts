@@ -160,7 +160,7 @@ describe('deliverGeneratedFile', () => {
 
   it('两条路都不可用时抛错，由调用方转成明确提示而不是静默失败', async () => {
     delete (navigator as Navigator & { share?: Navigator['share'] }).share;
-    delete (URL as Partial<typeof URL>).createObjectURL;
+    Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: undefined });
 
     expect(canShareGeneratedFile()).toBe(false);
     await expect(

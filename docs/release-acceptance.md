@@ -4,7 +4,7 @@
 
 文件整理涉及队列状态与视觉缓存结构时，发布顺序为停止旧文档／整理 Worker、执行已授权的加法迁移、更新 API 与 Worker、检查 Schema 后启用新任务。结构更新不重跑历史任务、不回填生产内容；文件理解验收需分别记录读取完整性、建议产出、耗时及用量，确定性 Provider 测试不代替真实模型质量评估。
 
-后端部署要求 Node.js 20.19 及以上；独立运行时通过 `LIGHTNOTE_REMOTE_NODE` 指定绝对路径，并由 PM2 保存解释器路径。包含文件理解、图片预览、笔记导入及游客示例结构更新的已授权发布，设置 `LIGHTNOTE_APPLY_FEATURE_MIGRATIONS=1`，部署脚本会在旧文档 Worker 停止后通过 `scripts/migrateFileFeatures.js --apply` 执行固定的幂等迁移，再运行 Schema 与运行时门禁。游客示例内容仍需按下文独立执行维护工具。
+后端部署要求 Node.js 22.12 及以上；独立运行时通过 `LIGHTNOTE_REMOTE_NODE` 指定绝对路径，并由 PM2 保存解释器路径。包含文件理解、图片预览、笔记导入及游客示例结构更新的已授权发布，设置 `LIGHTNOTE_APPLY_FEATURE_MIGRATIONS=1`，部署脚本会在旧文档 Worker 停止后通过 `scripts/migrateFileFeatures.js --apply` 执行固定的幂等迁移，再运行 Schema 与运行时门禁。游客示例内容仍需按下文独立执行维护工具。
 
 ## 本地开发与生产预览
 

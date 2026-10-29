@@ -90,8 +90,7 @@
 
 ### 前置要求
 
-- Node.js 20.x
-- MySQL 8.0+
+- Node.js 与 MySQL 要求见[开发规范](../../docs/development.md#环境与命令)，后端部署最低版本见[发布规范](../../docs/release-acceptance.md)。
 - pnpm
 - 7-Zip（`7zz`）与 LibreOffice Writer/Calc/Impress（启用压缩包和旧版 Office 预览时）
 
