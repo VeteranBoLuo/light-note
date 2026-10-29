@@ -15,6 +15,8 @@ export interface PrewarmSelection {
   priority: number;
   /** Expanded packs wait for an unrestricted network; core artwork remains eligible. */
   optional?: boolean;
+  /** Static diagnostic name only; never a URL or account value. */
+  label?: string;
 }
 type Connection = EventTarget & { saveData?: boolean; effectiveType?: string; type?: string };
 const MiB = 1024 * 1024;
@@ -105,6 +107,8 @@ export function createStaticPrewarmScheduler(options: {
   entryUrl: string;
   mobile: () => boolean;
   delayMs?: number;
+  /** Bounded override for shared-bandwidth acceptance fixtures. */
+  concurrency?: 1 | 2 | 4;
   fetcher?: typeof fetch;
   ready?: () => boolean;
 }) {
@@ -118,10 +122,11 @@ export function createStaticPrewarmScheduler(options: {
   const failures = new Map<string, number>(),
     interruptions = new Map<string, number>();
   const retryAt = new Map<string, number>();
-  type PauseReason = 'foreground' | 'incremental' | 'restricted' | 'selection' | 'disposed';
+  type PauseReason = 'foreground' | 'incremental' | 'incremental-capacity' | 'restricted' | 'selection' | 'disposed';
   const aborts: Record<PauseReason, number> = {
     foreground: 0,
     incremental: 0,
+    'incremental-capacity': 0,
     restricted: 0,
     selection: 0,
     disposed: 0,
@@ -129,22 +134,39 @@ export function createStaticPrewarmScheduler(options: {
   let manifest: PrewarmManifest | undefined;
   let disposed = false,
     disabled = false,
-    fetching = false,
     acquiring = false,
     started = false;
   let readBytes = 0,
     settleAt = 0,
     lockRetryAt = 0,
-    nextFileAt = 0,
-    revision = 0;
+    peakConcurrency = 0;
   let initialReadyAt: number | undefined;
   let hardBlocked = false,
     restricted = false,
     locksUnavailable = false,
     pageSuspended = false;
   let nativeUnmetered: boolean | undefined;
-  let timer: number | undefined, idle: number | undefined;
-  let controller: AbortController | undefined, activeUrl: string | undefined, abortReason: PauseReason | undefined;
+  let timer: number | undefined,
+    timerAt = Infinity;
+  type Transfer = { controller: AbortController; abortReason?: PauseReason; received: number; bytes: number };
+  const transfers = new Map<string, Transfer>();
+  let poolHeld = false,
+    releasePool: (() => void) | undefined;
+  const durationMs: Record<string, number> = {};
+  let phase = 'idle',
+    phaseSince = performance.now();
+  const completedAt = new Map<string, number>();
+  const transferTiming = { attempts: 0, responses: 0, completed: 0, responseWaitMs: 0, bodyReadMs: 0 };
+  const concurrency = () =>
+    mode() === 'full' && !locksUnavailable && navigator.locks?.request ? (options.concurrency ?? 4) : 1;
+  function timing(nextPhase = phase) {
+    const now = performance.now();
+    if (!['idle', 'complete', 'core-complete', 'complete-with-errors', 'disposed', 'disabled'].includes(phase))
+      durationMs[phase] = (durationMs[phase] || 0) + now - phaseSince;
+    phaseSince = now;
+    phase = nextPhase;
+    return Object.values(durationMs).reduce((sum, value) => sum + value, 0);
+  }
   let watchingImages = false,
     stopImages: (() => void) | undefined;
   const mode = () => prewarmNetworkMode(options.mobile(), connection, nativeUnmetered);
@@ -157,17 +179,27 @@ export function createStaticPrewarmScheduler(options: {
     document.visibilityState === 'visible' &&
     mode() !== 'paused';
   function cancelScheduled() {
-    revision++;
     clearTimeout(timer);
     timer = undefined;
-    if (idle !== undefined) window.cancelIdleCallback?.(idle);
-    idle = undefined;
+    timerAt = Infinity;
   }
-  function pause(reason: PauseReason) {
-    if (controller && !controller.signal.aborted) {
-      abortReason = reason;
-      aborts[reason]++;
-      controller.abort();
+  function pause(reason: PauseReason, onlyUrl?: string) {
+    for (const [url, transfer] of transfers) {
+      if ((!onlyUrl || onlyUrl === url) && !transfer.controller.signal.aborted) {
+        transfer.abortReason = reason;
+        aborts[reason]++;
+        transfer.controller.abort();
+      }
+    }
+  }
+  // The origin lock covers one active pool, including response-body cancellation.
+  // Never retain it while waiting for foreground work, backoff or another page.
+  function releaseIdlePool(keep = false) {
+    if (poolHeld && transfers.size === 0 && !keep) {
+      poolHeld = false;
+      const release = releasePool;
+      releasePool = undefined;
+      release?.();
     }
   }
   function urls(selection: PrewarmSelection) {
@@ -210,119 +242,127 @@ export function createStaticPrewarmScheduler(options: {
       stop?.();
     }
   }
-  function schedule(delay: number, useIdle = false) {
-    const current = revision;
+  function schedule(delay: number) {
+    const at = Date.now() + Math.max(0, delay);
+    // Coalesce notifications; a completion must not keep postponing a runnable task.
+    if (timer !== undefined && timerAt <= at) return;
+    cancelScheduled();
+    timerAt = at;
     timer = window.setTimeout(
       () => {
         timer = undefined;
-        if (current !== revision || disposed) return;
-        if (!useIdle) {
-          queue();
-          return;
-        }
-        if (window.requestIdleCallback)
-          idle = window.requestIdleCallback(
-            (deadline) => {
-              idle = undefined;
-              if (current !== revision) return;
-              if (deadline.didTimeout || deadline.timeRemaining() >= 1) void next();
-              else queue(100);
-            },
-            { timeout: 1000 },
-          );
-        else void next();
+        timerAt = Infinity;
+        queue(true);
       },
       Math.max(0, delay),
     );
   }
-  function queue(minDelay = 0) {
-    cancelScheduled();
-    if (!allowed()) {
-      restricted = true;
-      if (!started) initialReadyAt = undefined;
-      pause(disposed ? 'disposed' : 'restricted');
-      trackImages(false);
-      return;
+  const waiting = () => pending().filter((item) => !transfers.has(item.url));
+  function queue(dispatch = false) {
+    try {
+      if (!allowed()) {
+        restricted = true;
+        if (!started) initialReadyAt = undefined;
+        pause(disposed ? 'disposed' : 'restricted');
+        trackImages(false);
+        cancelScheduled();
+        return;
+      }
+      if (restricted) {
+        restricted = false;
+        if (started) settleAt = Math.max(settleAt, Date.now() + 500);
+      }
+      if (manifest) {
+        const needed = new Set(selected().map((item) => item.url));
+        for (const url of transfers.keys()) if (!needed.has(url)) pause('selection', url);
+      }
+      if (!pending().length) {
+        trackImages(false);
+        cancelScheduled();
+        return;
+      }
+      trackImages(true);
+      const state = requestActivitySnapshot();
+      if (state.foreground > 0 || !ready() || slowIncremental(state)) {
+        hardBlocked = true;
+        if (!started) initialReadyAt = undefined;
+        pause(state.foreground > 0 || !ready() ? 'foreground' : 'incremental');
+        schedule(250);
+        return;
+      }
+      if (hardBlocked) {
+        hardBlocked = false;
+        settleAt = Math.max(settleAt, Date.now() + 500);
+      }
+      if (state.incremental > 0) {
+        // Keeping the whole pool competes with short pagination on shared links.
+        // Retain the most complete file; aborted bodies finish cleanup independently.
+        const active = [...transfers]
+          .filter(([, item]) => !item.controller.signal.aborted)
+          .sort((a, b) => b[1].received / b[1].bytes - a[1].received / a[1].bytes);
+        for (const [url] of active.slice(1)) pause('incremental-capacity', url);
+        if (!started) initialReadyAt = undefined;
+        schedule(state.oldestIncrementalAt! + 1000 - Date.now());
+        return;
+      }
+      if (!started) initialReadyAt ??= Date.now() + initialDelay;
+      if (transfers.size >= concurrency() || (acquiring && !poolHeld)) return;
+      const items = waiting();
+      if (!items.length) return;
+      const nextAt = Math.max(
+        initialReadyAt || 0,
+        settleAt,
+        lockRetryAt,
+        Math.min(...items.map((item) => retryAt.get(item.url) || 0)),
+      );
+      if (nextAt > Date.now() || !dispatch) schedule(nextAt - Date.now());
+      else if (poolHeld || locksUnavailable || !navigator.locks?.request) fillPool();
+      else void acquirePool();
+    } finally {
+      releaseIdlePool(canStart() && waiting().some((item) => (retryAt.get(item.url) || 0) <= Date.now()));
+      updateDiagnostics();
     }
-    if (restricted) {
-      restricted = false;
-      if (started) settleAt = Math.max(settleAt, Date.now() + 500);
-    }
-    if (activeUrl && manifest && !selected().some((item) => item.url === activeUrl)) pause('selection');
-    const items = pending();
-    if (!items.length) {
-      trackImages(false);
-      return;
-    }
-    trackImages(true);
-    const state = requestActivitySnapshot();
-    const hard = state.foreground > 0 || !ready() || slowIncremental(state);
-    if (hard) {
-      hardBlocked = true;
-      if (!started) initialReadyAt = undefined;
-      pause(state.foreground > 0 || !ready() ? 'foreground' : 'incremental');
-      // Covers DOM/font readiness; request/image lifecycle events also wake immediately.
-      schedule(250);
-      return;
-    }
-    if (hardBlocked) {
-      hardBlocked = false;
-      settleAt = Math.max(settleAt, Date.now() + 500);
-    }
-    if (state.incremental > 0) {
-      if (!started) initialReadyAt = undefined;
-      schedule(state.oldestIncrementalAt! + 1000 - Date.now());
-      return;
-    }
-    if (!started) initialReadyAt ??= Date.now() + initialDelay;
-    if (fetching || acquiring) return;
-    const nextAt = Math.max(
-      initialReadyAt || 0,
-      settleAt,
-      lockRetryAt,
-      nextFileAt,
-      Math.min(...items.map((item) => retryAt.get(item.url) || 0)),
-    );
-    schedule(Math.max(minDelay, nextAt - Date.now()), true);
   }
   function canStart() {
     const state = requestActivitySnapshot();
     return (
       allowed() &&
-      !fetching &&
       ready() &&
       state.foreground === 0 &&
       state.incremental === 0 &&
-      Date.now() >= Math.max(initialReadyAt ?? Infinity, settleAt, lockRetryAt, nextFileAt)
+      Date.now() >= Math.max(initialReadyAt ?? Infinity, settleAt, lockRetryAt)
     );
   }
-  async function next() {
-    if (!canStart() || acquiring) {
-      queue();
-      return;
+  function fillPool() {
+    // At most four launches per task. Even hot-cache completions yield to the event loop.
+    const candidates = waiting().filter((item) => (retryAt.get(item.url) || 0) <= Date.now());
+    for (const item of candidates.slice(0, Math.max(0, concurrency() - transfers.size))) {
+      if (!canStart()) break;
+      void download(item);
     }
+    updateDiagnostics();
+  }
+  async function acquirePool() {
+    if (acquiring) return;
     acquiring = true;
     let entered = false;
-    const run = async () => {
-      entered = true;
-      if (!canStart()) return;
-      const item = pending().find((item) => (retryAt.get(item.url) || 0) <= Date.now());
-      if (item) await download(item);
-    };
     try {
-      const locks = !locksUnavailable && navigator.locks;
-      if (locks?.request)
-        await locks.request('lightnote:static-prewarm', { ifAvailable: true }, async (lock) => {
-          if (lock) await run();
-          else lockRetryAt = Date.now() + 500;
+      await navigator.locks.request('lightnote:static-prewarm', { ifAvailable: true }, async (lock) => {
+        if (!lock) {
+          lockRetryAt = Date.now() + 500;
+          return;
+        }
+        entered = true;
+        if (!canStart()) return;
+        poolHeld = true;
+        await new Promise<void>((resolve) => {
+          releasePool = resolve;
+          fillPool();
+          releaseIdlePool();
         });
-      else await run();
+      });
     } catch {
-      // Denied/unavailable lock API falls back once; never repeat an entered transfer.
-      if (!entered) {
-        locksUnavailable = true;
-        await run();
-      }
+      if (!entered) locksUnavailable = true;
     } finally {
       acquiring = false;
       queue();
@@ -330,10 +370,14 @@ export function createStaticPrewarmScheduler(options: {
   }
   async function download(item: { url: string; bytes: number }) {
     const request = new AbortController();
-    controller = request;
-    activeUrl = item.url;
-    abortReason = undefined;
-    fetching = started = true;
+    const transfer: Transfer = { controller: request, received: 0, bytes: item.bytes };
+    transfers.set(item.url, transfer);
+    peakConcurrency = Math.max(peakConcurrency, transfers.size);
+    const isManifest = !manifest;
+    const beganAt = performance.now();
+    let headersAt: number | undefined;
+    transferTiming.attempts++;
+    started = true;
     initialReadyAt = 0;
     let timedOut = false,
       terminal = false;
@@ -346,9 +390,12 @@ export function createStaticPrewarmScheduler(options: {
         signal: request.signal,
         credentials: 'same-origin',
         redirect: 'error',
-        cache: manifest ? 'force-cache' : 'no-cache',
+        cache: isManifest ? 'no-cache' : 'force-cache',
         priority: 'low',
       });
+      headersAt = performance.now();
+      transferTiming.responses++;
+      transferTiming.responseWaitMs += headersAt - beganAt;
       if (!response.ok) {
         terminal = response.status >= 400 && response.status < 500 && ![408, 429].includes(response.status);
         throw Error('prewarm status');
@@ -356,7 +403,7 @@ export function createStaticPrewarmScheduler(options: {
       if (
         !response.body ||
         Number(response.headers.get('Content-Length')) > item.bytes ||
-        (manifest ? /text\/html/i : /^(?!application\/json)/i).test(response.headers.get('Content-Type') || '')
+        (isManifest ? /^(?!application\/json)/i : /text\/html/i).test(response.headers.get('Content-Type') || '')
       ) {
         terminal = true;
         throw Error('prewarm response');
@@ -370,19 +417,20 @@ export function createStaticPrewarmScheduler(options: {
           if (request.signal.aborted) throw Error('prewarm aborted');
           if (done) break;
           received += value.byteLength;
+          transfer.received = received;
           readBytes += value.byteLength;
           if (received > item.bytes) {
             terminal = true;
             throw Error('prewarm size');
           }
-          if (!manifest) parts.push(value);
+          if (isManifest) parts.push(value);
         }
       } finally {
         await reader.cancel().catch(() => {});
         reader.releaseLock();
       }
       if (request.signal.aborted) throw Error('prewarm aborted');
-      if (!manifest) {
+      if (isManifest) {
         const body = new Uint8Array(received);
         let offset = 0;
         for (const part of parts) {
@@ -396,12 +444,13 @@ export function createStaticPrewarmScheduler(options: {
       } else if (received !== item.bytes) {
         terminal = true;
         throw Error('prewarm incomplete');
-      } else completed.add(item.url);
+      } else markComplete(item.url);
+      transferTiming.completed++;
       retryAt.delete(item.url);
       interruptions.delete(item.url);
     } catch {
       if (!terminal && request.signal.aborted && !timedOut) {
-        if (abortReason === 'foreground' || abortReason === 'incremental') {
+        if (['foreground', 'incremental', 'incremental-capacity'].includes(transfer.abortReason || '')) {
           const count = (interruptions.get(item.url) || 0) + 1;
           interruptions.set(item.url, count);
           if (count >= 2) retryAt.set(item.url, Date.now() + Math.min(30000, 5000 * 2 ** Math.min(count - 2, 3)));
@@ -417,10 +466,9 @@ export function createStaticPrewarmScheduler(options: {
       request.abort();
     } finally {
       clearTimeout(timeout);
-      controller = undefined;
-      activeUrl = undefined;
-      fetching = false;
-      nextFileAt = Date.now() + 50;
+      if (headersAt !== undefined) transferTiming.bodyReadMs += performance.now() - headersAt;
+      if (transfers.get(item.url) === transfer) transfers.delete(item.url);
+      queue();
     }
   }
   function markLoaded(resource: PerformanceResourceTiming) {
@@ -430,7 +478,7 @@ export function createStaticPrewarmScheduler(options: {
     // Full decoded bytes only: canceled/partial responses cannot claim completion.
     if (url.origin !== location.origin || manifest?.assets[path] !== resource.decodedBodySize || completed.has(path))
       return false;
-    completed.add(path);
+    markComplete(path);
     return true;
   }
   const unsubscribe = subscribeRequestActivity((_state, kind, phase) => {
@@ -474,6 +522,39 @@ export function createStaticPrewarmScheduler(options: {
   } catch {
     observer?.disconnect();
   }
+  function reason() {
+    const state = requestActivitySnapshot();
+    if (disposed) return 'disposed';
+    if (disabled) return 'disabled';
+    if (!scopes.size) return 'idle';
+    // Completion wins over visibility restrictions; it is not a paused download.
+    if (manifest && !pending().length && !transfers.size)
+      return selected().some((item) => failed.has(item.url))
+        ? 'complete-with-errors'
+        : selected(true).length > selected().length
+          ? 'core-complete'
+          : 'complete';
+    if (pageSuspended || document.visibilityState !== 'visible') return 'hidden';
+    if (navigator.onLine === false) return 'offline';
+    if (mode() === 'paused') return 'network-restricted';
+    if (state.foreground > 0 || !ready()) return 'foreground';
+    if (slowIncremental(state)) return 'incremental-slow';
+    if (state.incremental > 0) return 'incremental';
+    if (transfers.size) return 'fetching';
+    if (!started && (initialReadyAt === undefined || Date.now() < initialReadyAt)) return 'startup';
+    if (Date.now() < settleAt) return 'settling';
+    if (Date.now() < lockRetryAt || (acquiring && !poolHeld)) return 'other-tab';
+    if (!waiting().some((item) => (retryAt.get(item.url) || 0) <= Date.now())) return 'retry-wait';
+    return 'dispatch';
+  }
+  function markComplete(url: string) {
+    if (completed.has(url)) return;
+    completed.add(url);
+    completedAt.set(url, timing());
+  }
+  function updateDiagnostics() {
+    timing(reason());
+  }
   return {
     submit(selection: PrewarmSelection) {
       const scope = {};
@@ -487,24 +568,19 @@ export function createStaticPrewarmScheduler(options: {
     },
     activity,
     snapshot: () => {
+      updateDiagnostics();
       const items = selected(),
         remaining = pending(),
+        candidates = waiting(),
         state = requestActivitySnapshot();
-      const nextStartAt =
-        remaining.length && allowed() && ready() && !fetching && !state.foreground && !state.incremental
-          ? Math.max(
-              Date.now(),
-              initialReadyAt ?? 0,
-              settleAt,
-              lockRetryAt,
-              nextFileAt,
-              Math.min(...remaining.map((item) => retryAt.get(item.url) || 0)),
-            )
-          : null;
+      const elapsedMs = Object.values(durationMs).reduce((sum, value) => sum + value, 0);
       return {
         mode: mode(),
         readBytes,
-        fetching,
+        fetching: transfers.size > 0,
+        inFlight: transfers.size,
+        concurrency: concurrency(),
+        peakConcurrency,
         selected: items.length,
         completed: items.filter((item) => completed.has(item.url)).length,
         failed: items.filter((item) => failed.has(item.url)).length,
@@ -513,44 +589,58 @@ export function createStaticPrewarmScheduler(options: {
         disabled,
         activities: state,
         aborts: { ...aborts },
-        nextStartAt,
-        reason: disposed
-          ? 'disposed'
-          : disabled
-            ? 'disabled'
-            : !allowed()
-              ? 'restricted'
-              : state.foreground > 0 || !ready()
-                ? 'foreground'
-                : slowIncremental(state)
-                  ? 'incremental-slow'
-                  : state.incremental > 0
-                    ? 'incremental'
-                    : fetching
-                      ? 'fetching'
-                      : !remaining.length
-                        ? items.some((item) => failed.has(item.url))
-                          ? 'complete-with-errors'
-                          : selected(true).length > items.length
-                            ? 'core-complete'
-                            : 'complete'
-                        : !started && (initialReadyAt === undefined || Date.now() < initialReadyAt)
-                          ? 'startup'
-                          : Date.now() < settleAt
-                            ? 'settling'
-                            : Date.now() < lockRetryAt
-                              ? 'other-tab'
-                              : !remaining.some((item) => (retryAt.get(item.url) || 0) <= Date.now())
-                                ? 'retry-wait'
-                                : !manifest
-                                  ? 'manifest'
-                                  : 'idle',
+        nextStartAt:
+          candidates.length &&
+          allowed() &&
+          ready() &&
+          transfers.size < concurrency() &&
+          !state.foreground &&
+          !state.incremental
+            ? Math.max(
+                Date.now(),
+                initialReadyAt ?? 0,
+                settleAt,
+                lockRetryAt,
+                Math.min(...candidates.map((item) => retryAt.get(item.url) || 0)),
+              )
+            : null,
+        reason: reason(),
+        // Mutually exclusive wall time; request timings below overlap under concurrency.
+        timings: {
+          elapsedMs,
+          eligibleMs: ['fetching', 'dispatch', 'other-tab', 'retry-wait'].reduce(
+            (sum, key) => sum + (durationMs[key] || 0),
+            0,
+          ),
+          durationMs: { ...durationMs },
+          transfers: { ...transferTiming },
+        },
+        groups: [...scopes.values()].flatMap((selection) => {
+          const groups = selection.label
+            ? [{ name: selection.label, selection }]
+            : (selection.groups || []).map((name) => ({ name, selection: { ...selection, urls: [], groups: [name] } }));
+          return groups.map(({ name, selection }) => {
+            const members = urls(selection).filter((url) => manifest?.assets[url]);
+            const done = members.filter((url) => completed.has(url));
+            return {
+              name,
+              selected: members.length,
+              completed: done.length,
+              readyAtMs:
+                members.length && members.length === done.length
+                  ? Math.max(...members.map((url) => completedAt.get(url) || 0))
+                  : null,
+            };
+          });
+        }),
       };
     },
     dispose() {
       disposed = true;
       cancelScheduled();
       pause('disposed');
+      releaseIdlePool();
+      timing('disposed');
       unsubscribe();
       trackImages(false);
       scopes.clear();

@@ -105,24 +105,18 @@ describe('统一静态预热', () => {
     expect(signal?.aborted).toBe(false);
     expect(scheduler.snapshot().aborts.foreground).toBe(0);
   });
-  it('过期 idle 回调不能跳过前台活动门禁', async () => {
-    const callbacks: IdleRequestCallback[] = [];
-    vi.stubGlobal('requestIdleCallback', (callback: IdleRequestCallback) => {
-      callbacks.push(callback);
-      return callbacks.length;
-    });
-    vi.stubGlobal('cancelIdleCallback', vi.fn());
+  it('已排队的调度任务不能跳过后来开始的前台活动', async () => {
     scheduler.submit({ urls: [asset], priority: 1 });
-    await vi.advanceTimersByTimeAsync(1000);
-    const stale = callbacks[0];
+    await vi.advanceTimersByTimeAsync(999);
     const release = holdForegroundActivity();
-    stale({ didTimeout: false, timeRemaining: () => 30 });
-    expect(fetcher).not.toHaveBeenCalled();
-    release();
-    await vi.advanceTimersByTimeAsync(1000);
-    callbacks.at(-1)!({ didTimeout: false, timeRemaining: () => 30 });
-    await vi.advanceTimersByTimeAsync(0);
-    expect(fetcher).toHaveBeenCalledTimes(1);
+    try {
+      await vi.advanceTimersByTimeAsync(100);
+      expect(fetcher).not.toHaveBeenCalled();
+    } finally {
+      release();
+    }
+    await vi.advanceTimersByTimeAsync(1100);
+    expect(scheduler.snapshot().completed).toBe(1);
   });
   it('前台立即中止；反复中断只延后当前文件，其他资源继续', async () => {
     let signal: AbortSignal | undefined;
@@ -397,22 +391,18 @@ it('网络范围不能把 4g 或 Wi-Fi 名称误当成非计费确认', () => {
   expect(prewarmNetworkMode(true, { saveData: true }, true)).toBe('paused');
 });
 
-it('繁忙动画的 idle 超时仍可启动轻量下载，但不能跳过前台门禁', async () => {
-  const callbacks: IdleRequestCallback[] = [];
-  vi.stubGlobal('requestIdleCallback', (callback: IdleRequestCallback) => {
-    callbacks.push(callback);
-    return callbacks.length;
-  });
-  scheduler.submit({ urls: [asset], priority: 1 });
-  await advance();
-  callbacks.at(-1)!({ didTimeout: true, timeRemaining: () => 0 });
-  await vi.advanceTimersByTimeAsync(0);
-  expect(fetcher).toHaveBeenCalledTimes(1);
+it('浏览器始终没有 idle 回调也能推进，但仍保护未就绪首屏', async () => {
+  const idle = vi.fn();
+  vi.stubGlobal('requestIdleCallback', idle);
   ready = false;
+  scheduler.submit({ groups: ['frames'], priority: 1 });
   await advance();
-  callbacks.at(-1)!({ didTimeout: true, timeRemaining: () => 0 });
-  await vi.advanceTimersByTimeAsync(0);
-  expect(fetcher).toHaveBeenCalledTimes(1);
+  expect(fetcher).not.toHaveBeenCalled();
+  ready = true;
+  scheduler.activity();
+  await vi.advanceTimersByTimeAsync(1100);
+  expect(scheduler.snapshot().completed).toBe(2);
+  expect(idle).not.toHaveBeenCalled();
 });
 
 it('桌面窗口变窄不降低网络策略，纯触屏设备仍使用保守策略', () => {
@@ -613,4 +603,138 @@ it('revoking an account scope aborts its resource; a new scope can proceed witho
   scheduler.submit({ urls: [second], priority: 1 });
   await vi.advanceTimersByTimeAsync(600);
   expect(scheduler.snapshot()).toMatchObject({ selected: 1, completed: 1 });
+});
+
+function mockOriginLock() {
+  let held = false;
+  const request = vi.fn(async (_name, _options, callback) => {
+    if (held) return callback(null);
+    held = true;
+    try {
+      return await callback({});
+    } finally {
+      held = false;
+    }
+  });
+  Object.assign(navigator, { locks: { request } });
+  return { request, held: () => held };
+}
+function pendingPool(count = 8) {
+  const jobs = new Map<string, { signal: AbortSignal; finish: () => void }>();
+  const urls = Array.from({ length: count }, (_, index) => `/assets/pool-${index}.js`);
+  for (const url of urls) data.assets[url] = 128;
+  fetcher.mockImplementation(async (url, init) => {
+    if (String(url).endsWith('.json')) return manifestResponse();
+    return new Promise<Response>((resolve, reject) => {
+      const signal = init!.signal!;
+      jobs.set(String(url), { signal, finish: () => resolve(response(128)) });
+      signal.addEventListener('abort', () => reject(Error('abort')), { once: true });
+    });
+  });
+  scheduler.submit({ urls, priority: 3 });
+  return { jobs, urls };
+}
+it('四并发共享一把锁，完成任一文件立即补位，插队和重复提交不会重复下载', async () => {
+  const lock = mockOriginLock();
+  const { jobs, urls } = pendingPool();
+  await vi.advanceTimersByTimeAsync(1100);
+  expect(scheduler.snapshot()).toMatchObject({ inFlight: 4, concurrency: 4, peakConcurrency: 4 });
+  expect(lock.held()).toBe(true);
+  scheduler.submit({ urls: [urls[6], urls[0]], priority: -1 });
+  jobs.get(urls[2])!.finish();
+  await vi.advanceTimersByTimeAsync(10);
+  expect([...jobs.keys()]).toEqual([...urls.slice(0, 4), urls[6]]);
+  expect(jobs.get(urls[0])!.signal.aborted).toBe(false);
+  expect(fetcher.mock.calls.filter(([url]) => url === urls[0])).toHaveLength(1);
+  expect(lock.request).toHaveBeenCalledTimes(1);
+  const release = holdForegroundActivity();
+  try {
+    expect([...jobs.values()].filter((job) => job.signal.aborted)).toHaveLength(4);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(lock.held()).toBe(false);
+    expect(scheduler.snapshot()).toMatchObject({ inFlight: 0, aborts: { foreground: 4 } });
+  } finally {
+    release();
+  }
+});
+it('续页只保留一个在途下载且停止补位，慢续页统一中断，结束后恢复', async () => {
+  mockOriginLock();
+  const { jobs, urls } = pendingPool();
+  await vi.advanceTimersByTimeAsync(1100);
+  let release = holdRequestActivity('incremental');
+  try {
+    jobs.get(urls[0])!.finish();
+    await vi.advanceTimersByTimeAsync(200);
+    expect(jobs.size).toBe(4);
+    expect(scheduler.snapshot()).toMatchObject({ inFlight: 0, aborts: { 'incremental-capacity': 3 } });
+  } finally {
+    release();
+  }
+  await vi.advanceTimersByTimeAsync(99);
+  expect(jobs.size).toBe(4);
+  await vi.advanceTimersByTimeAsync(1);
+  expect(jobs.size).toBe(5);
+  release = holdRequestActivity('incremental');
+  try {
+    await vi.advanceTimersByTimeAsync(999);
+    expect(scheduler.snapshot().aborts.incremental).toBe(0);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(scheduler.snapshot().aborts.incremental).toBe(1);
+  } finally {
+    release();
+  }
+  await vi.advanceTimersByTimeAsync(499);
+  expect(scheduler.snapshot().inFlight).toBe(0);
+  await vi.advanceTimersByTimeAsync(1);
+  expect(scheduler.snapshot().inFlight).toBe(4);
+});
+it('核心模式及锁不可用均保持单并发；已缓存的队列没有逐文件50ms延迟', async () => {
+  mockOriginLock();
+  mobile = true;
+  const { jobs, urls } = pendingPool();
+  await vi.advanceTimersByTimeAsync(1100);
+  expect(scheduler.snapshot()).toMatchObject({ concurrency: 1, inFlight: 1 });
+  jobs.get(urls[0])!.finish();
+  await vi.advanceTimersByTimeAsync(10);
+  expect(jobs.size).toBe(2);
+});
+it('已完成状态优先于隐藏，诊断区分下载和暂停且不持续累计完成后的时间', async () => {
+  mockOriginLock();
+  const { jobs } = pendingPool(1);
+  await vi.advanceTimersByTimeAsync(1100);
+  vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
+  document.dispatchEvent(new Event('visibilitychange'));
+  await vi.advanceTimersByTimeAsync(2000);
+  vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
+  document.dispatchEvent(new Event('visibilitychange'));
+  await vi.advanceTimersByTimeAsync(600);
+  [...jobs.values()][0].finish();
+  await vi.advanceTimersByTimeAsync(10);
+  const before = scheduler.snapshot();
+  expect(before.reason).toBe('complete');
+  expect(before.timings.durationMs.hidden).toBeGreaterThanOrEqual(2000);
+  expect(before.timings.durationMs.fetching).toBeGreaterThan(0);
+  vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
+  document.dispatchEvent(new Event('visibilitychange'));
+  await vi.advanceTimersByTimeAsync(5000);
+  expect(scheduler.snapshot().reason).toBe('complete');
+  expect(scheduler.snapshot().timings.elapsedMs).toBe(before.timings.elapsedMs);
+});
+it('同源两个调度器合计只有一个下载池，完成和取消都会释放锁', async () => {
+  const lock = mockOriginLock();
+  const { urls } = pendingPool();
+  const otherFetch = vi.fn(async (url) => (String(url).endsWith('.json') ? manifestResponse() : response(128)));
+  const other = createStaticPrewarmScheduler({ entryUrl: entry, mobile: () => false, fetcher: otherFetch });
+  try {
+    other.submit({ urls, priority: 1 });
+    await vi.advanceTimersByTimeAsync(1100);
+    expect(scheduler.snapshot().inFlight).toBe(4);
+    expect(otherFetch).not.toHaveBeenCalled();
+    scheduler.dispose();
+    await vi.advanceTimersByTimeAsync(600);
+    expect(other.snapshot().completed).toBe(8);
+    expect(lock.held()).toBe(false);
+  } finally {
+    other.dispose();
+  }
 });
