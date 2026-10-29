@@ -1134,6 +1134,19 @@ WHERE NOT EXISTS (
     AND SUM(sub_part IS NOT NULL) = 0
 );
 
+-- API 日志按 IP 统计与清理必须有 ip 前缀索引，避免物理清理全表扫描加锁（期望 0 行）。
+SELECT '[api-log-ip] invalid_ip_index' AS check_name,
+  'api_logs.idx_api_logs_ip_time' AS detail
+FROM DUAL
+WHERE NOT EXISTS (
+  SELECT 1 FROM information_schema.statistics
+  WHERE table_schema = DATABASE() AND table_name = 'api_logs'
+    AND index_name = 'idx_api_logs_ip_time'
+  GROUP BY index_name
+  HAVING GROUP_CONCAT(column_name ORDER BY seq_in_index) = 'ip,request_time'
+    AND SUM(sub_part IS NOT NULL) = 0
+);
+
 -- 38) 产品洞察聚合必须走所有者 + 时间索引，避免后台看板扫描业务主表（期望 0 行）
 SELECT '[38] missing_admin_product_insights_index' AS check_name,
   CONCAT(expected.tn, '.', expected.ix) AS detail

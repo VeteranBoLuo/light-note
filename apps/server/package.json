@@ -24,6 +24,7 @@
     "check:file-previews": "node scripts/checkFilePreviewRuntime.js",
     "check:schema": "node scripts/checkSchemaAssertions.js",
     "migrate:api-log-duration-index": "node scripts/migrateApiLogDurationIndex.js",
+    "migrate:api-log-ip-index": "node scripts/migrateApiLogIpIndex.js",
     "migrate:toolbox-schema": "node scripts/ensureToolboxSchema.js",
     "migrate:daily-review-schema": "node scripts/ensureDailyReviewSchema.js",
     "migrate:help-sections": "node scripts/migrateHelpCenterSections.js",

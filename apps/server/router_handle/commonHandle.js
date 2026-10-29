@@ -577,11 +577,19 @@ export const getApiLogs = async (req, res) => {
         .query(defaultCountSql, hideInternal ? [...INTERNAL_ROLES, ...INTERNAL_ROLES] : [])
         .then(([rows]) => Math.max(0, Number(rows[0]?.total || 0)));
     } else if (shouldCount) {
+      // 日志行宽差异很大，20 页采样统计会严重低估行数，优化器因此常选 del_flag 前缀的 ref 计划，
+      // 再按随机 UUID 主键回表几十万次（线上 4–8 秒）。总数按筛选形态固定访问路径：
+      // 请求 ID 与错误状态足够稀疏，交给优化器走对应索引；只含时间、耗时与内部账号条件时，
+      // 走含 user_id 的耗时覆盖索引；关键词、方法与成功状态没有可覆盖的二级索引，顺序扫描主键。
+      const countIndex =
+        requestId || (hasStatusFilter && status !== 'success')
+          ? ''
+          : key || hasMethodFilter || hasStatusFilter
+            ? 'PRIMARY'
+            : 'idx_api_logs_duration_time';
+      const countHint = countIndex ? ` FORCE INDEX (${countIndex})` : '';
       // 只有关键词会读取 user 的 alias/email；其他筛选的总数无需关联用户表。
-      // 纯耗时筛选强制走覆盖索引，低阈值也不能退回读取整张日志主表。
-      const countFrom = key
-        ? 'api_logs a LEFT JOIN user u ON a.user_id = u.id'
-        : `api_logs a${coveredDurationFilter ? ' FORCE INDEX (idx_api_logs_duration_time)' : ''}`;
+      const countFrom = key ? `api_logs a${countHint} LEFT JOIN user u ON a.user_id = u.id` : `api_logs a${countHint}`;
       totalPromise = pool
         .query(`SELECT COUNT(*) AS total FROM ${countFrom} WHERE ${conditions.join(' AND ')}`, baseParams)
         .then(([rows]) => Number(rows[0]?.total || 0));
@@ -916,16 +924,20 @@ const IP_LOG_TABLES = [
   { table: 'conversion_events', key: 'conversionEvents' },
   { table: 'operation_logs', key: 'operationLogs' },
 ];
-// 构造按 IP 过滤的 WHERE:mode='local' 匹配本地/回环(等价 isLocalIp),否则按精确 IP
+// 构造按 IP 过滤的 WHERE:mode='local' 匹配本地/回环(等价 isLocalIp),否则按精确 IP。
+// 三张表的 ip 列都是 *_ci 排序规则，比较本身不区分大小写；不能包 LOWER()，否则 api_logs 无法走 ip 索引。
 const buildIpLogWhere = (mode, ip) => {
   if (mode === 'local') {
     return {
-      where: "(LOWER(ip)='::1' OR LOWER(ip)='localhost' OR ip LIKE '127.%' OR LOWER(ip) LIKE '::ffff:127.%')",
+      where: "(ip IN ('::1', 'localhost') OR ip LIKE '127.%' OR ip LIKE '::ffff:127.%')",
       params: [],
     };
   }
   return { where: 'ip = ?', params: [ip] };
 };
+// 物理清理按批自动提交，每批只锁本批命中的行。扫描器 IP 常有数万条日志，放进一个事务会长时间持锁，
+// 让同 IP（无索引时是全表）的日志写入排队占满连接池。清理可重复执行，中途失败时审计记录已删除条数。
+const IP_LOG_DELETE_BATCH_SIZE = 1000;
 
 // 统计某 IP(或本地回环)在各日志表的命中行数(清理前预览,不改数据)
 export const getIpLogStats = async (req, res) => {
@@ -950,7 +962,8 @@ export const getIpLogStats = async (req, res) => {
 // 物理删除某 IP(或本地回环)在各日志表的全部记录(root 专属;转化漏斗表无 del_flag,统一用物理删除)
 export const clearLogsByIp = async (req, res) => {
   let actionContext = null;
-  let connection = null;
+  let cleanupFinished = false;
+  const deleted = {};
   try {
     const mode = req.body?.mode === 'local' ? 'local' : 'exact';
     const ip = String(req.body?.ip || '').trim();
@@ -962,42 +975,43 @@ export const clearLogsByIp = async (req, res) => {
       metadata: { cleanupMode: mode === 'local' ? 'physical_local' : 'physical_exact_ip' },
     });
     const { where, params } = buildIpLogWhere(mode, ip);
-    const deleted = {};
-    connection = await pool.getConnection();
-    await connection.beginTransaction();
     for (const { table, key } of IP_LOG_TABLES) {
-      const [result] = await connection.query(`DELETE FROM ${table} WHERE ${where}`, params);
-      deleted[key] = result.affectedRows || 0;
+      deleted[key] = 0;
+      let affectedRows;
+      do {
+        const [result] = await pool.query(
+          `DELETE FROM ${table} WHERE ${where} LIMIT ${IP_LOG_DELETE_BATCH_SIZE}`,
+          params,
+        );
+        affectedRows = Number(result.affectedRows || 0);
+        deleted[key] += affectedRows;
+      } while (affectedRows >= IP_LOG_DELETE_BATCH_SIZE);
     }
+    cleanupFinished = true;
     const receipt = await finishAdminAction(actionContext, {
       outcome: 'succeeded',
       metadata: { deleted },
-      db: connection,
     });
-    await connection.commit();
     return res.send(resultData({ ...deleted, ...receipt }));
   } catch (error) {
-    if (connection) {
-      try {
-        await connection.rollback();
-      } catch {
-        // 保留原始错误。
-      }
+    // 删除已全部提交时，失败只可能来自结果回执；不能再记为失败或提示“已阻断”。
+    if (cleanupFinished) {
+      return res.send(
+        resultData({ code: 'ADMIN_AUDIT_RECEIPT_FAILED', ...deleted }, 500, '日志已清理，但审计回执写入失败'),
+      );
     }
     if (actionContext) {
       try {
         await finishAdminAction(actionContext, {
           outcome: 'failed',
-          metadata: { errorCode: stableAgentErrorCode(error) },
+          metadata: { errorCode: stableAgentErrorCode(error), deleted },
         });
       } catch {
         // 审计工具已安全记录错误码。
       }
     }
     const response = adminActionErrorResponse(error, '日志清理失败');
-    return res.send(resultData({ code: response.code }, response.status, response.message));
-  } finally {
-    connection?.release();
+    return res.send(resultData({ code: response.code, ...deleted }, response.status, response.message));
   }
 };
 

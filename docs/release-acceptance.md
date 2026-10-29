@@ -111,6 +111,8 @@ AI 管理员入参摘要启用前显式应用加法迁移 `apps/server/migration
 
 API 日志的最低耗时筛选依赖 `20261027_api_log_duration_index.sql`。发布前须取得该加法索引迁移授权，显式运行 `pnpm --filter server migrate:api-log-duration-index`，再通过 Schema 门禁；应用启动不建索引。迁移只添加覆盖索引，不修改历史日志，要求在线 DDL；不能在线执行时失败关闭，不回退锁表复制。回滚代码可保留该索引。
 
+API 日志按 IP 统计与清理依赖 `20261030_api_log_ip_index.sql`，发布要求同上：取得授权后显式运行 `pnpm --filter server migrate:api-log-ip-index` 并通过 Schema 门禁。未加索引前分批清理仍会逐批全表扫描，不能把清理功能当作已优化。
+
 所有后端发布在目标环境重启前运行：
 
 ```bash

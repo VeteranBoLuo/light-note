@@ -1479,20 +1479,8 @@ describe('clearLogsByIp 按 IP 清理(破坏性边界)', () => {
     getConnection.mockReset();
   });
 
-  function cleanupConnection(affectedRows) {
-    const connection = {
-      beginTransaction: vi.fn(),
-      commit: vi.fn(),
-      rollback: vi.fn(),
-      release: vi.fn(),
-      query: vi.fn(async (sql) => {
-        if (/DELETE FROM/.test(String(sql))) return [{ affectedRows }];
-        return [{ affectedRows: 1 }];
-      }),
-    };
-    getConnection.mockResolvedValue(connection);
-    return connection;
-  }
+  const cleanupBody = (body) => ({ reason: '清理本地联调噪声', confirmed: true, confirmText: '确认清理日志', ...body });
+  const deletesOf = (table) => query.mock.calls.filter(([sql]) => String(sql).startsWith(`DELETE FROM ${table} `));
 
   it('非 root → 403,不执行任何删除', async () => {
     const res = mockRes();
@@ -1512,58 +1500,68 @@ describe('clearLogsByIp 按 IP 清理(破坏性边界)', () => {
     expect(query.mock.calls.every((c) => !/DELETE/.test(c[0]))).toBe(true);
   });
 
-  it('root + local 模式 → 三表 DELETE,WHERE 为常量、params 为空(不含用户输入)', async () => {
-    query.mockResolvedValue([{ affectedRows: 1 }]);
-    const connection = cleanupConnection(2);
+  it('root + local 模式 → 三表分批 DELETE,WHERE 为常量且可走 ip 索引、params 为空', async () => {
+    query.mockResolvedValue([{ affectedRows: 2 }]);
     const res = mockRes();
     await clearLogsByIp(
-      {
-        user: { id: 'r', role: 'root' },
-        requestId: 'cleanup-local',
-        body: {
-          mode: 'local',
-          reason: '清理本地联调噪声',
-          confirmed: true,
-          confirmText: '确认清理日志',
-        },
-      },
+      { user: { id: 'r', role: 'root' }, requestId: 'cleanup-local', body: cleanupBody({ mode: 'local' }) },
       res,
     );
-    const deletes = connection.query.mock.calls.filter((c) => /DELETE FROM/.test(c[0]));
+    const deletes = query.mock.calls.filter(([sql]) => /DELETE FROM/.test(sql));
     expect(deletes).toHaveLength(3);
-    deletes.forEach((c) => {
-      expect(c[0]).toContain("LOWER(ip)='::1'");
-      expect(c[1]).toEqual([]);
+    deletes.forEach(([sql, params]) => {
+      expect(sql).toContain("ip IN ('::1', 'localhost')");
+      expect(sql).not.toContain('LOWER(');
+      expect(sql).toMatch(/LIMIT 1000$/);
+      expect(params).toEqual([]);
     });
+    // 每批自动提交，不再把三张表放进同一个长事务。
+    expect(getConnection).not.toHaveBeenCalled();
     const arg = res.send.mock.calls[0][0];
     expect(arg.status).toBe(200);
     expect(arg.data).toMatchObject({ apiLogs: 2, conversionEvents: 2, operationLogs: 2 });
     expect(arg.data.auditId).toBeTruthy();
-    expect(connection.commit).toHaveBeenCalledOnce();
   });
 
   it('root + exact 模式 → 三表 DELETE 均以 ip=? 参数化绑定该 IP', async () => {
     query.mockResolvedValue([{ affectedRows: 1 }]);
-    const connection = cleanupConnection(1);
     const res = mockRes();
-    await clearLogsByIp(
-      {
-        user: { id: 'r', role: 'root' },
-        body: {
-          ip: '1.2.3.4',
-          reason: '清理指定测试设备',
-          confirmed: true,
-          confirmText: '确认清理日志',
-        },
-      },
-      res,
-    );
-    const deletes = connection.query.mock.calls.filter((c) => /DELETE FROM/.test(c[0]));
+    await clearLogsByIp({ user: { id: 'r', role: 'root' }, body: cleanupBody({ ip: '1.2.3.4' }) }, res);
+    const deletes = query.mock.calls.filter(([sql]) => /DELETE FROM/.test(sql));
     expect(deletes).toHaveLength(3);
-    deletes.forEach((c) => {
-      expect(c[0]).toContain('ip = ?');
-      expect(c[1]).toEqual(['1.2.3.4']);
+    deletes.forEach(([sql, params]) => {
+      expect(sql).toContain('ip = ?');
+      expect(params).toEqual(['1.2.3.4']);
     });
+  });
+
+  it('命中行数达到批量上限时继续下一批，直到不足一批', async () => {
+    const apiLogBatches = [1000, 1000, 3];
+    query.mockImplementation(async (sql) => {
+      if (String(sql).startsWith('DELETE FROM api_logs ')) return [{ affectedRows: apiLogBatches.shift() }];
+      return [{ affectedRows: 0 }];
+    });
+    const res = mockRes();
+    await clearLogsByIp({ user: { id: 'r', role: 'root' }, body: cleanupBody({ ip: '219.157.171.241' }) }, res);
+    expect(deletesOf('api_logs')).toHaveLength(3);
+    expect(deletesOf('operation_logs')).toHaveLength(1);
+    expect(res.send.mock.calls[0][0].data).toMatchObject({ apiLogs: 2003, conversionEvents: 0, operationLogs: 0 });
+  });
+
+  it('删除已全部提交而结果回执写入失败时，不提示已阻断并返回已删除条数', async () => {
+    let auditWrites = 0;
+    query.mockImplementation(async (sql) => {
+      if (/INSERT INTO admin_operation_audit/.test(sql) && ++auditWrites > 1) throw new Error('audit down');
+      if (/DELETE FROM/.test(sql)) return [{ affectedRows: 4 }];
+      return [{ affectedRows: 1 }];
+    });
+    const res = mockRes();
+    await clearLogsByIp({ user: { id: 'r', role: 'root' }, body: cleanupBody({ ip: '1.2.3.4' }) }, res);
+    const arg = res.send.mock.calls[0][0];
+    expect(arg.status).toBe(500);
+    expect(arg.msg).toBe('日志已清理，但审计回执写入失败');
+    expect(arg.data).toMatchObject({ code: 'ADMIN_AUDIT_RECEIPT_FAILED', apiLogs: 4, operationLogs: 4 });
+    expect(auditWrites).toBe(2);
   });
 });
 
@@ -1770,6 +1768,24 @@ describe('后台日志组合筛选', () => {
     expect(String(countSql)).toContain('INNER JOIN user internal_user');
     expect(countParams).toEqual(['root', 'test', 'root', 'test']);
     expect(res.send.mock.calls[0][0].data.total).toBe(100);
+  });
+
+  it.each([
+    [{ status: 'success' }, 'api_logs a FORCE INDEX (PRIMARY)'],
+    [{ method: 'POST' }, 'api_logs a FORCE INDEX (PRIMARY)'],
+    [{ key: 'bobo' }, 'api_logs a FORCE INDEX (PRIMARY) LEFT JOIN user u'],
+    [{ startDate: '2026-10-01' }, 'api_logs a FORCE INDEX (idx_api_logs_duration_time)'],
+    [{ minDurationMs: 500, endDate: '2026-10-26' }, 'api_logs a FORCE INDEX (idx_api_logs_duration_time)'],
+    [{ status: '5xx', startDate: '2026-10-01' }, null],
+    [{ requestId: 'request-12345678', method: 'POST' }, null],
+  ])('API 日志筛选总数按条件形态固定访问路径 %j', async (filters, expectedFrom) => {
+    query.mockImplementation(async (sql) => (String(sql).includes('COUNT(*) AS total') ? [[{ total: 3 }]] : [[]]));
+    const res = mockRes();
+    await getApiLogs({ user: { role: 'root' }, body: { cursor: null, limit: 20, filters } }, res);
+    const [countSql] = query.mock.calls.find(([sql]) => String(sql).includes('COUNT(*) AS total'));
+    if (expectedFrom) expect(String(countSql)).toContain(`FROM ${expectedFrom}`);
+    else expect(String(countSql)).not.toContain('FORCE INDEX');
+    expect(res.send.mock.calls[0][0].data.total).toBe(3);
   });
 
   it('API 慢请求窗口不足时，完整范围查询失败不能返回不完整的一页', async () => {

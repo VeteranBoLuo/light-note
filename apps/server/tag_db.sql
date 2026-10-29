@@ -40,7 +40,8 @@ CREATE TABLE `api_logs` (
   KEY `idx_api_logs_status_time` (`del_flag`,`status_code`,`request_time`,`id`),
   KEY `idx_api_logs_duration_time` (`del_flag`,`duration_ms`,`request_time`,`user_id`),
   KEY `idx_api_logs_user_time` (`user_id`,`request_time`),
-  KEY `idx_api_logs_retention` (`request_time`,`id`)
+  KEY `idx_api_logs_retention` (`request_time`,`id`),
+  KEY `idx_api_logs_ip_time` (`ip`,`request_time`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 ROW_FORMAT=DYNAMIC COMMENT='api日志';
 
 -- ----------------------------
