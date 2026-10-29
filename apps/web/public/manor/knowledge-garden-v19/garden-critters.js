@@ -3,12 +3,11 @@
    - 兔子：在草地上休息、短跳；点击完成一次小跳，不出现爱心
    - 麻雀：PC四只、手机两只在小路活动；点到便飞往另一处小路；只由第一只投递每日种子
    - 青蛙（PC）：蹲在垂钓栈桥边，点它跳入水中，停留几秒后沿弧线跳回原处
-   - 蜻蜓（PC）：悬停、巡游；点击随机跟随手指、盘旋或掠过
+   - 蜻蜓（PC）：悬停、巡游；点击后跟随鼠标 5 秒，再次点击重新计时
    兔子在草地活动，麻雀可在田间小路巡游；落点避开菜地、养鱼舱、顶部信息栏与操作坞；减少动态效果时不出现 */
 const GardenCritters = (() => {
   const TAU = Math.PI * 2;
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
-  const ease = (p) => p * p * (3 - 2 * p);
   let current = null;
 
   // ---------- 绘制（局部坐标：脚下为原点，朝右，单位 = 身长） ----------
@@ -462,7 +461,7 @@ const GardenCritters = (() => {
       point(rabbit);point(rabbit.from);point(rabbit.target);point(calledSpot);
       for(const b of sparrows){point(b);endpoints(b.fly);if(b.fly){b.fly.bendX*=ratio;b.fly.bendY*=to.sy/from.sy;}}
       point(frog);point(frog.home);point(frog.water);endpoints(frog.jump);
-      point(fly);point(fly.anchor);point(fly.target);point(fly.lure);point(fly.orbit);
+      point(fly);point(fly.anchor);point(fly.target);point(fly.lure);
       if(fly.route){point(fly.route.from);point(fly.route.to);if(fly.route.lift)fly.route.lift*=to.sy/from.sy;}
       for(const ripple of ripples){point(ripple);ripple.size*=ratio;}
       syncFrogHit();
@@ -646,7 +645,6 @@ const GardenCritters = (() => {
     }
     function updateFly(dt, t) {
       const d = fly;
-      d.reactionLeft=Math.max(0,(d.reactionLeft||0)-dt);
       // 上空活动范围独立于草地；悬停围绕固定锚点，绝不逐帧累加漂移。
       const region = GardenHabitat.air(compactGarden(), W, H);
       if (!d.anchor) {
@@ -663,15 +661,6 @@ const GardenCritters = (() => {
         if(dist>1){d.x+=dx/dist*step;d.y+=dy/dist*step;const heading=Math.atan2(dy,dx);d.heading+=Math.atan2(Math.sin(heading-d.heading),Math.cos(heading-d.heading))*(1-Math.exp(-dt*5));}
         d.state="play";
         if(d.playLeft<=0){d.anchor={x:d.x,y:d.y};d.state="hover";d.timer=4;d.hoverAge=0;d.lure=null;}
-        return;
-      }
-      if(d.state==='orbit') {
-        const r=d.orbit;r.p=Math.min(1,r.p+dt/4);const angle=TAU*ease(r.p);
-        // 花边初始锚点可能在巡航空域外。绕当前位置画连续轨迹，不能逐帧投影到空域造成首帧闪现。
-        const point={x:r.x+Math.sin(angle)*unit()*.9,y:r.y+(1-Math.cos(angle))*unit()*.25};
-        const dx=point.x-d.x,dy=point.y-d.y;d.x=point.x;d.y=point.y;
-        if(Math.hypot(dx,dy)>.01){const a=Math.atan2(dy,dx);d.heading+=Math.atan2(Math.sin(a-d.heading),Math.cos(a-d.heading))*(1-Math.exp(-dt*6));}
-        if(r.p>=1){d.anchor={x:d.x,y:d.y};d.state='hover';d.timer=4;d.hoverAge=0;}
         return;
       }
       if (d.state === "hover") {
@@ -725,15 +714,7 @@ const GardenCritters = (() => {
         frog.face = frog.jump.tx > frog.x ? 1 : -1;
         frog.state = "jump";
       } else if (c === fly) {
-        if(!waterAnimals()||fly.reactionLeft>0)return;
-        const action=GardenAnimalPose.choose(['lure','orbit','dart'],fly.lastAction,Math.random);fly.lastAction=action;
-        fly.reactionLeft=action==='lure'?10:4;
-        if(action==='lure')startLure();
-        else if(action==='orbit'){fly.orbit={x:fly.x,y:fly.y,p:0};fly.state='orbit';}
-        else {
-          const air=GardenHabitat.air(compactGarden(),W,H),target=GardenHabitat.onLawn({x:fly.x+(fly.x<air.cx?1:-1)*unit()*2.4,y:fly.y+unit()*.3},air);
-          fly.route={from:{x:fly.x,y:fly.y},to:target,p:0,duration:3,lift:unit()*.45};fly.state='cruise';
-        }
+        startLure();
       }
     }
     // 路面落点可能处在地块按钮的透明范围内；只让鸟身的可见小范围优先响应。
@@ -768,8 +749,8 @@ const GardenCritters = (() => {
     scene.addEventListener("click", onBirdRoadClick,true);
     scene.addEventListener("click", onClick);
     scene.addEventListener("pointermove", onMove);
-    function startLure(){if(!waterAnimals())return;fly.playLeft=10;fly.lure=null;fly.anchor={x:fly.x,y:fly.y};}
-    function stopLure(){fly.playLeft=0;fly.reactionLeft=0;fly.state='hover';fly.anchor={x:fly.x,y:fly.y};fly.hoverAge=0;fly.timer=3;}
+    function startLure(){if(!waterAnimals())return;fly.lastAction='lure';fly.playLeft=5;fly.lure=null;fly.anchor={x:fly.x,y:fly.y};}
+    function stopLure(){fly.playLeft=0;fly.state='hover';fly.anchor={x:fly.x,y:fly.y};fly.hoverAge=0;fly.timer=3;}
     const onKey=e=>{if(e.key==='Escape'&&fly.playLeft>0)stopLure();};document.addEventListener('keydown',onKey);
 
     let raf = 0,

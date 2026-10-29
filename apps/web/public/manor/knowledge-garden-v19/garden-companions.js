@@ -68,7 +68,7 @@ const GardenCompanions = (() => {
     const buttons=new Map();let W=0,H=0,L=30,dpr=1,layout='',camera=null,raf=0,last=0,clock=0,lastMeasure=0;
     for(const kind of [...visitors.map(a=>a.kind),'dragonfly']) {
       const button=document.createElement('button');button.className='wildlife-hit';button.type='button';button.dataset.companion=kind;
-      button.setAttribute('aria-label',`和${names[kind]}互动`);
+      button.setAttribute('aria-label',kind==='dragonfly'?'点击蜻蜓，跟随鼠标 5 秒':`和${names[kind]}互动`);
       button.addEventListener('click',e=>{e.stopPropagation();if(kind==='dragonfly')GardenCritters.poke('fly');else react(visitors.find(a=>a.kind===kind),L);});
       scene.append(button);buttons.set(kind,button);
     }

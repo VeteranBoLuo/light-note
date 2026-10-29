@@ -110,6 +110,41 @@ it('相机取景高度不改变动物相对场景的身长，宽度缩放仍保�
   f.critters.unmount();
 });
 
+it('蜻蜓点击只触发原来的缓慢跟随，约 5 秒结束后不再追随', () => {
+  const f = fixture(); f.tick(1000);
+  const before = f.snapshot().dragonfly;
+  const target = { x: before.x < 600 ? 700 : 500, y: 250 };
+  f.critters.poke('fly');
+  const scene = document.querySelector('section')!;
+  scene.dispatchEvent(new MouseEvent('pointermove', { clientX: target.x, clientY: target.y }));
+  f.tick(1050);
+  const firstStep = f.snapshot().dragonfly;
+  expect(firstStep).toMatchObject({ state: 'play', action: 'lure' });
+  expect(Math.hypot(firstStep.x - before.x, firstStep.y - before.y)).toBeCloseTo(85 * .05);
+  expect(Math.hypot(firstStep.x - target.x, firstStep.y - target.y)).toBeGreaterThan(20);
+  for (let t = 1100; t <= 5950; t += 50) f.tick(t);
+  const following = f.snapshot().dragonfly;
+  expect(following).toMatchObject({ state: 'play', action: 'lure' });
+  expect(Math.hypot(following.x - target.x, following.y - target.y)).toBeLessThan(2);
+  f.tick(6000); f.tick(6050);
+  expect(f.snapshot().dragonfly.state).toBe('hover');
+  scene.dispatchEvent(new MouseEvent('pointermove', { clientX: 900, clientY: 650 }));
+  for (let t = 6100; t <= 6500; t += 50) f.tick(t);
+  expect(Math.hypot(f.snapshot().dragonfly.x - target.x, f.snapshot().dragonfly.y - target.y)).toBeLessThan(4);
+  f.critters.unmount();
+});
+
+it('蜻蜓再次点击仍是跟随，并重新计时 5 秒', () => {
+  const f = fixture(); f.tick(1000); f.critters.poke('fly');
+  for (let t = 1050; t <= 4000; t += 50) f.tick(t);
+  f.critters.poke('fly');
+  for (let t = 4050; t <= 8950; t += 50) f.tick(t);
+  expect(f.snapshot().dragonfly).toMatchObject({ state: 'play', action: 'lure' });
+  f.tick(9000); f.tick(9050);
+  expect(f.snapshot().dragonfly.state).toBe('hover');
+  f.critters.unmount();
+});
+
 it('3D 首次显示直接使用当前朝向，后续转身保留平滑过渡', () => {
   const module = { exports: {} as any };
   runInNewContext(read('garden-animals-3d.js'), { module, GardenAnimalSkin: {} });

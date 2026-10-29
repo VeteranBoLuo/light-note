@@ -1002,7 +1002,7 @@ const WILDLIFE_ATLAS = {
   frog: { name: "青蛙", habitat: "池塘邻居", text: "守着码头的一小片岸边。轻触后跃入水中，过一会儿再跳回栈桥。", actions: ["跃入水中", "返回岸边"] },
   butterfly: { name: "凤蝶", habitat: "花丛邻居", text: "在两侧花丛间盘旋，停下来合拢翅膀，再向另一朵花飞去。", actions: ["绕花飞行", "原地振翅"] },
   ladybird: { name: "瓢虫", habitat: "植株邻居", text: "起飞前先抬起红色鞘翅，再展开薄薄的膜翅，落地后慢慢合上。", actions: ["展开鞘翅", "掠过花丛"] },
-  dragonfly: { name: "蜻蜓", habitat: "水边邻居", text: "在水边和花丛上方悬停。轻触会绕一圈、掠过，或短暂跟随手指。", actions: ["盘旋", "掠过", "跟随手指"] }
+  dragonfly: { name: "蜻蜓", habitat: "水边邻居", text: "在水边和花丛上方悬停。点击后缓慢跟随鼠标 5 秒，之后恢复自然飞行；再次点击重新计时。", actions: ["跟随鼠标 5 秒"] }
 };
 function wildlifeEntries() {
   return Object.keys(WILDLIFE_ATLAS).filter((key) => !isMobileView() || !["frog", "dragonfly"].includes(key)).map((key) => ({ type: "wildlife", key }));
@@ -1017,12 +1017,13 @@ function wildlifeGift(kind) {
 }
 function wildlifeCard(kind) {
   const item = WILDLIFE_ATLAS[kind],gift = wildlifeGift(kind);
-  return `<button class="atlas-card discovered wildlife-card" data-action="wildlife-detail" data-kind="${kind}" aria-label="${item.name}${gift ? `，${gift.daily}` : "，轻触看随机动作"}"><strong>${item.name}</strong><small class="wildlife-habitat">${item.habitat}</small><span class="wildlife-card-art">${wildlifeArt(kind)}</span><span class="wildlife-card-story">${item.text}</span><span class="wildlife-card-gift ${gift ? "has-gift" : ""}">${gift ? `<span>${gift.art}</span><b>${gift.daily}</b>` : "轻触看随机动作"}</span></button>`;
+  const interaction = kind === "dragonfly" ? "点击后跟随鼠标 5 秒" : "轻触看随机动作";
+  return `<button class="atlas-card discovered wildlife-card" data-action="wildlife-detail" data-kind="${kind}" aria-label="${item.name}，${gift ? gift.daily : interaction}"><strong>${item.name}</strong><small class="wildlife-habitat">${item.habitat}</small><span class="wildlife-card-art">${wildlifeArt(kind)}</span><span class="wildlife-card-story">${item.text}</span><span class="wildlife-card-gift ${gift ? "has-gift" : ""}">${gift ? `<span>${gift.art}</span><b>${gift.daily}</b>` : interaction}</span></button>`;
 }
 function wildlifeDetail(kind) {
   const item = WILDLIFE_ATLAS[kind];if (!item) return;
   const gift = wildlifeGift(kind);
-  const giftHTML = gift ? `<section class="wildlife-gift-panel"><h3>每天的小礼物</h3><div class="wildlife-gift-content"><span class="wildlife-gift-art">${gift.art}</span><div><strong>${gift.name} <b>×1</b></strong><p>${gift.effect}</p><small>${gift.status}</small></div></div><p class="wildlife-pickup">${gift.pickup}</p></section>` : '<p class="wildlife-companion-note">在庄园陪伴你的小邻居，轻触会有随机动作。</p>';
+  const giftHTML = gift ? `<section class="wildlife-gift-panel"><h3>每天的小礼物</h3><div class="wildlife-gift-content"><span class="wildlife-gift-art">${gift.art}</span><div><strong>${gift.name} <b>×1</b></strong><p>${gift.effect}</p><small>${gift.status}</small></div></div><p class="wildlife-pickup">${gift.pickup}</p></section>` : `<p class="wildlife-companion-note">在庄园陪伴你的小邻居，${kind === "dragonfly" ? "点击后会缓慢跟随鼠标 5 秒" : "轻触会有随机动作"}。</p>`;
   const actions = item.actions.map((label) => `<li>${kind === "rabbit" ? '<img src="knowledge-garden-v19/farm/wildlife-rabbit-action-3-r14.webp" alt="" draggable="false">' : ""}<span>${label}</span></li>`).join("");
   showDialog(item.name, item.habitat, `<div class="wildlife-sheet"><div class="wildlife-detail-art">${wildlifeArt(kind)}</div><p class="wildlife-story">${item.text}</p>${giftHTML}<section class="wildlife-actions-panel"><h3>轻触时的动作</h3><ul>${actions}</ul></section>${gift ? '<p class="wildlife-daily-note">每天最多 1 份，未拾取不累积；互动不会增加产量。</p>' : ""}</div>`, '<button class="button primary" data-action="close">回到庄园</button>', false, "wildlife-detail-dialog", "atlas");
 }
