@@ -17,6 +17,8 @@ const PM2_BIN = "/usr/bin/pm2";
 const NSENTER_BIN = "/usr/bin/nsenter";
 const SYSTEMCTL_BIN = "/usr/bin/systemctl";
 const JOURNALCTL_BIN = "/usr/bin/journalctl";
+const STAT_BIN = "/usr/bin/stat";
+const TAIL_BIN = "/usr/bin/tail";
 const NGINX_BIN = "/usr/sbin/nginx";
 const SSHD_BIN = "/usr/sbin/sshd";
 const FIREWALL_CMD_BIN = "/usr/bin/firewall-cmd";
@@ -43,10 +45,17 @@ const PANEL_REDIS_LOG = "/www/server/redis/redis.log";
 const PANEL_MYSQL_BIN = "/www/server/mysql/bin/mysqld";
 const PANEL_MYSQL_DATA_DIR = "/www/server/data";
 const PANEL_LOG_TAIL_BYTES = 128 * 1024;
-const PANEL_LOG_TAIL_LINES = 300;
+const LOG_TAIL_LINES = 300;
 // Linux 用户态 ABI 固定的时钟节拍，/proc/<pid>/stat 的 starttime 以此为单位。
 const USER_HZ = 100;
 const PM2_HOME = "/root/.pm2";
+const PM2_LOG_DIR = `${PM2_HOME}/logs`;
+// 日志经两层 JSON 转义（流结构 + Socket 回包），每条流取 64KB 才能稳定落在 Agent 的 512KB 读取上限内。
+const PM2_LOG_STREAM_BYTES = 64 * 1024;
+const PM2_LOG_STREAMS = Object.freeze([
+  ["stdout", "out"],
+  ["stderr", "error"],
+]);
 const MAX_SOCKET_REQUEST_BYTES = 1024;
 const PM2_SERVICES = Object.freeze({
   "lightnote-api": "app",
@@ -114,13 +123,56 @@ function run(file, args, options = {}) {
   });
 }
 
-function runPm2(args, options = {}) {
-  // helper 是 systemd 按请求启动的 root 进程；固定进入宿主挂载命名空间访问 root PM2，
+function runInHostMount(file, args, options = {}) {
+  // helper 是 systemd 按请求启动的 root 进程，ProtectHome 隐藏了 /root；固定进入宿主挂载命名空间访问 root PM2，
   // 非 root Agent 只持有 helper Socket 的连接权限，始终看不到 /root/.pm2。
-  return run(NSENTER_BIN, ["--mount=/proc/1/ns/mnt", "--", PM2_BIN, ...args], {
-    ...options,
-    env: pm2Environment,
-  });
+  return run(NSENTER_BIN, ["--mount=/proc/1/ns/mnt", "--", file, ...args], options);
+}
+
+function runPm2(args, options = {}) {
+  return runInHostMount(PM2_BIN, args, { ...options, env: pm2Environment });
+}
+
+function readPm2LogStream(file) {
+  const stat = runInHostMount(STAT_BIN, ["--format=%Y", "--", file]);
+  if (stat.status !== 0) return null;
+  const tail = runInHostMount(TAIL_BIN, [
+    "--bytes",
+    String(PM2_LOG_STREAM_BYTES),
+    "--",
+    file,
+  ]);
+  if (tail.status !== 0) return null;
+  const text = String(tail.stdout || "");
+  const clipped = Buffer.byteLength(text) >= PM2_LOG_STREAM_BYTES;
+  const lines = text.split("\n");
+  if (clipped) lines.shift();
+  if (lines.at(-1) === "") lines.pop();
+  const modifiedSeconds = Number(String(stat.stdout).trim());
+  return {
+    modifiedAt:
+      Number.isSafeInteger(modifiedSeconds) && modifiedSeconds > 0
+        ? new Date(modifiedSeconds * 1000).toISOString()
+        : null,
+    lines: lines.slice(-LOG_TAIL_LINES).map(redact),
+    truncated: clipped || lines.length > LOG_TAIL_LINES,
+  };
+}
+
+// PM2 未开启 time 前缀时日志行没有时间戳，out/err 无法逐行合并；按流分别返回并附最后写入时间，由 Agent 排序。
+function readPm2LogStreams(processName) {
+  const streams = PM2_LOG_STREAMS.map(([stream, suffix]) => ({
+    stream,
+    content: readPm2LogStream(`${PM2_LOG_DIR}/${processName}-${suffix}.log`),
+  }));
+  // 单个文件缺失按空流处理；两条都读不到说明宿主命名空间或 PM2 目录不可用。
+  if (streams.every((item) => item.content === null)) return null;
+  return streams.map(({ stream, content }) => ({
+    stream,
+    modifiedAt: content?.modifiedAt ?? null,
+    lines: content?.lines ?? [],
+    truncated: content?.truncated ?? false,
+  }));
 }
 
 function commandFailure(result, message) {
@@ -588,7 +640,7 @@ function tailFileLines(file) {
     const lines = buffer.subarray(0, bytesRead).toString("utf8").split("\n");
     if (length < stats.size) lines.shift();
     if (lines.at(-1) === "") lines.pop();
-    return lines.slice(-PANEL_LOG_TAIL_LINES);
+    return lines.slice(-LOG_TAIL_LINES);
   } catch {
     return null;
   } finally {
@@ -672,8 +724,9 @@ function executeAction(action, targetId) {
         pm2Status: executable(PM2_BIN) && executable(NSENTER_BIN),
         workerRestart: executable(PM2_BIN) && executable(NSENTER_BIN),
         serviceLogs:
-          executable(PM2_BIN) &&
           executable(NSENTER_BIN) &&
+          executable(STAT_BIN) &&
+          executable(TAIL_BIN) &&
           executable(JOURNALCTL_BIN),
         securitySnapshot: executable(JOURNALCTL_BIN),
       }),
@@ -730,6 +783,8 @@ function executeAction(action, targetId) {
             status: String(item?.pm2_env?.status || "unknown"),
             pm_uptime: Number(item?.pm2_env?.pm_uptime || 0) || null,
             restart_time: Number(item?.pm2_env?.restart_time || 0) || 0,
+            unstable_restarts:
+              Number(item?.pm2_env?.unstable_restarts || 0) || 0,
           },
           monit: {
             cpu: Number(item?.monit?.cpu || 0) || 0,
@@ -753,19 +808,11 @@ function executeAction(action, targetId) {
   }
 
   if (action === "pm2-logs" && Object.hasOwn(PM2_SERVICES, targetId)) {
-    const result = runPm2([
-      "logs",
-      PM2_SERVICES[targetId],
-      "--lines",
-      "300",
-      "--nostream",
-      "--raw",
-    ]);
-    const failure = commandFailure(result, "pm2 logs failed");
-    if (failure) return failure;
-    return success(
-      redact([result.stdout, result.stderr].filter(Boolean).join("\n")),
-    );
+    const streams = readPm2LogStreams(PM2_SERVICES[targetId]);
+    if (!streams) {
+      return { exitCode: 1, stdout: "", stderr: "pm2 logs failed\n" };
+    }
+    return success(JSON.stringify({ streams }));
   }
 
   if (action === "journal-logs" && Object.hasOwn(SYSTEMD_SERVICES, targetId)) {

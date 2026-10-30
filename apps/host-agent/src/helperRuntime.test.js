@@ -68,6 +68,18 @@ describe("privileged helper production runtime", () => {
       );
     }
 
+    // 测试环境无法进入宿主挂载命名空间，两条输出流都读不到时必须失败关闭，而不是返回空日志。
+    const pm2Logs = spawnSync(process.execPath, [helperPath, "socket"], {
+      encoding: "utf8",
+      input: '{"action":"pm2-logs","targetId":"lightnote-api"}\n',
+      env: { PATH: "/usr/sbin:/usr/bin:/sbin:/bin" },
+    });
+    expect(JSON.parse(pm2Logs.stdout)).toEqual({
+      exitCode: 1,
+      stdout: "",
+      stderr: "pm2 logs failed\n",
+    });
+
     const denied = spawnSync(process.execPath, [helperPath, "socket"], {
       encoding: "utf8",
       input: '{"action":"capabilities","command":"whoami"}\n',

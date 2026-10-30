@@ -84,7 +84,15 @@ ssh -i "$KEY" "$HOST" "set -eu; \
   systemctl restart 'lightnote-host-agent@$AGENT_USER.service'"
 
 echo "✅  验证两个 Socket、协议与固定 helper 能力…"
+# Agent unit 是 Type=simple，restart 返回时 Socket 可能尚未监听；先等健康检查就绪（最多 20 秒），再做严格校验。
 ssh -i "$KEY" "$HOST" "set -eu; \
+  for attempt in \$(seq 1 40); do \
+    if test -S /run/lightnote-host-agent/agent.sock && \
+      curl --fail --silent --unix-socket /run/lightnote-host-agent/agent.sock http://localhost/v1/health >/dev/null 2>&1; then \
+      break; \
+    fi; \
+    sleep 0.5; \
+  done; \
   systemctl is-active --quiet lightnote-host-helper.socket; \
   systemctl is-active --quiet 'lightnote-host-agent@$AGENT_USER.service'; \
   test -S /run/lightnote-host-helper.sock; \

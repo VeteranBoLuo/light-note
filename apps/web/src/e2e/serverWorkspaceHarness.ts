@@ -62,7 +62,7 @@ const services = [
   uptimeSeconds: 86400 * 3 + 600,
   cpuPercent: i < pm2ServiceCount ? 0.2 + i * 0.1 : null,
   memoryBytes: [162, 129, 49, 92, 61, 74, 70, 75, 932, 7][i] * 1024 ** 2,
-  restartCount: i < pm2ServiceCount ? i * 16 : 0,
+  restartCount: i < pm2ServiceCount ? (i === 2 ? 3 : 0) : null,
   startedAt: capturedAt,
   actions: i > 0 && i < 4 ? ['service.restart'] : id === 'nginx' ? ['nginx.reload'] : [],
 }));
@@ -292,9 +292,15 @@ request.defaults.adapter = async (config) => {
     return response(config, {
       serviceId: url.split('/').pop(),
       lines: [
-        '2026-10-29 INFO Worker started',
-        '2026-10-29 WARN Retry pending task',
-        '2026-10-29 ERROR Synthetic task failed',
+        '[document-worker] ERROR Synthetic task failed',
+        '[document-worker] WARN Retry pending task',
+        'Worker started',
+        'Redis connected',
+        '[image-preview] ready source=synthetic.png',
+      ],
+      sections: [
+        { stream: 'stderr', modifiedAt: '2026-10-28T19:00:00.000Z', start: 0 },
+        { stream: 'stdout', modifiedAt: capturedAt, start: 2 },
       ],
       truncated: false,
       exitCode: 0,

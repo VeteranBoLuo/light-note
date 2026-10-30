@@ -1,3 +1,6 @@
+import { mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import {
   collectServiceSnapshots,
@@ -104,30 +107,59 @@ describe("executeHostAction", () => {
       stderr: "permission denied",
     }));
     await expect(
-      readServiceLogs(baseConfig, "lightnote-document-worker", 120, runner),
+      readServiceLogs(
+        {
+          ...baseConfig,
+          services: [
+            { id: "nginx", kind: "systemd", target: "nginx.service" },
+          ],
+        },
+        "nginx",
+        120,
+        runner,
+      ),
     ).rejects.toMatchObject({
       code: "HOST_AGENT_LOG_READ_FAILED",
     });
   });
 
-  it("root PM2 兼容模式只读取 helper 脱敏后的固定服务日志", async () => {
+  it("root PM2 兼容模式按最后写入时间排列输出流，较新的流排在最后", async () => {
     const runner = vi.fn();
     const helperRequester = vi.fn(async () => ({
       exitCode: 0,
-      stdout: "worker online",
+      stdout: JSON.stringify({
+        streams: [
+          {
+            stream: "stdout",
+            modifiedAt: "2026-10-30T09:13:25.000Z",
+            lines: ["worker online", "job done token=abc123"],
+            truncated: false,
+          },
+          {
+            stream: "stderr",
+            modifiedAt: "2026-10-29T03:00:00.000Z",
+            lines: ["old failure"],
+            truncated: false,
+          },
+        ],
+      }),
       stderr: "",
     }));
-    await expect(
-      readServiceLogs(
-        { ...baseConfig, pm2AccessMode: "helper" },
-        "lightnote-document-worker",
-        120,
-        runner,
-        helperRequester,
-      ),
-    ).resolves.toMatchObject({
+    const result = await readServiceLogs(
+      { ...baseConfig, pm2AccessMode: "helper" },
+      "lightnote-document-worker",
+      120,
+      runner,
+      helperRequester,
+    );
+    expect(result).toMatchObject({
       serviceId: "lightnote-document-worker",
-      lines: ["worker online"],
+      lines: ["old failure", "worker online", "job done token=[REDACTED]"],
+      sections: [
+        { stream: "stderr", modifiedAt: "2026-10-29T03:00:00.000Z", start: 0 },
+        { stream: "stdout", modifiedAt: "2026-10-30T09:13:25.000Z", start: 1 },
+      ],
+      truncated: false,
     });
     expect(runner).not.toHaveBeenCalled();
     expect(helperRequester).toHaveBeenCalledWith(
@@ -136,6 +168,113 @@ describe("executeHostAction", () => {
       "lightnote-document-worker",
       expect.anything(),
     );
+  });
+
+  it("行数上限在两条输出流之间分配，一条不足时余量让给另一条", async () => {
+    const stream = (name, modifiedAt, count, truncated = false) => ({
+      stream: name,
+      modifiedAt,
+      lines: Array.from({ length: count }, (_, index) => `${name}-${index}`),
+      truncated,
+    });
+    const read = (streams, limit) =>
+      readServiceLogs(
+        { ...baseConfig, pm2AccessMode: "helper" },
+        "lightnote-document-worker",
+        limit,
+        vi.fn(),
+        async () => ({
+          exitCode: 0,
+          stdout: JSON.stringify({ streams }),
+          stderr: "",
+        }),
+      );
+
+    const balanced = await read(
+      [
+        stream("stdout", "2026-10-30T09:00:00.000Z", 10),
+        stream("stderr", "2026-10-30T08:00:00.000Z", 10),
+      ],
+      6,
+    );
+    expect(balanced.lines).toEqual([
+      "stderr-7",
+      "stderr-8",
+      "stderr-9",
+      "stdout-7",
+      "stdout-8",
+      "stdout-9",
+    ]);
+
+    const uneven = await read(
+      [
+        stream("stdout", "2026-10-30T09:00:00.000Z", 10, true),
+        stream("stderr", "2026-10-30T08:00:00.000Z", 1),
+      ],
+      4,
+    );
+    expect(uneven.lines).toEqual(["stderr-0", "stdout-7", "stdout-8", "stdout-9"]);
+    expect(uneven.truncated).toBe(false);
+
+    const exhausted = await read(
+      [stream("stdout", "2026-10-30T09:00:00.000Z", 3, true)],
+      80,
+    );
+    expect(exhausted).toMatchObject({
+      lines: ["stdout-0", "stdout-1", "stdout-2"],
+      sections: [{ stream: "stdout", start: 0 }],
+      truncated: true,
+    });
+  });
+
+  it("helper 返回的日志结构不合法时失败关闭", async () => {
+    await expect(
+      readServiceLogs(
+        { ...baseConfig, pm2AccessMode: "helper" },
+        "lightnote-document-worker",
+        120,
+        vi.fn(),
+        async () => ({ exitCode: 0, stdout: "worker online", stderr: "" }),
+      ),
+    ).rejects.toMatchObject({ code: "HOST_HELPER_RESPONSE_INVALID" });
+  });
+
+  it("同账户 PM2 模式直接读取固定日志文件，缺失的输出流按空处理", async () => {
+    const pm2Home = mkdtempSync(path.join(tmpdir(), "lightnote-pm2-home-"));
+    try {
+      mkdirSync(path.join(pm2Home, "logs"));
+      const outFile = path.join(
+        pm2Home,
+        "logs",
+        "light-note-document-worker-out.log",
+      );
+      writeFileSync(outFile, "ready\nprocessed 3 files\n");
+      utimesSync(outFile, new Date("2026-10-30T09:00:00Z"), new Date("2026-10-30T09:00:00Z"));
+      const result = await readServiceLogs(
+        { ...baseConfig, pm2Home },
+        "lightnote-document-worker",
+        120,
+        vi.fn(),
+      );
+      expect(result).toMatchObject({
+        lines: ["ready", "processed 3 files"],
+        sections: [
+          { stream: "stdout", modifiedAt: "2026-10-30T09:00:00.000Z", start: 0 },
+        ],
+      });
+
+      rmSync(outFile);
+      await expect(
+        readServiceLogs(
+          { ...baseConfig, pm2Home },
+          "lightnote-document-worker",
+          120,
+          vi.fn(),
+        ),
+      ).rejects.toMatchObject({ code: "HOST_AGENT_LOG_READ_FAILED" });
+    } finally {
+      rmSync(pm2Home, { recursive: true, force: true });
+    }
   });
 
   it("root PM2 兼容模式的仪表盘只接收 helper 返回的受限状态字段", async () => {
@@ -159,7 +298,12 @@ describe("executeHostAction", () => {
             {
               name: "light-note-document-worker",
               pid: 42,
-              pm2_env: { status: "online", pm_uptime: Date.now() - 1000 },
+              pm2_env: {
+                status: "online",
+                pm_uptime: Date.now() - 1000,
+                restart_time: 366,
+                unstable_restarts: 0,
+              },
             },
           ]),
           stderr: "",
@@ -181,6 +325,8 @@ describe("executeHostAction", () => {
     expect(result.services[0]).toMatchObject({
       id: "lightnote-document-worker",
       state: "running",
+      // 部署造成的累计重启不计入，只报告崩溃循环。
+      restartCount: 0,
       actions: ["service.restart"],
     });
     expect(result.capabilities).toEqual({

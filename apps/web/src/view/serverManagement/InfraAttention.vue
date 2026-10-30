@@ -1,37 +1,35 @@
 <template>
   <div class="infra-attention" role="status">
-    <span :class="{ danger: faults > 0 }">{{ t('serverManagement.workspace.serviceFaults', { count: faults }) }}</span>
-    <span :class="{ danger: (data?.summary.failed || 0) > 0 }">{{
-      t('serverManagement.workspace.securityRisks', { count: data?.summary.failed ?? '—' })
+    <BLoading v-if="initialLoading" inline :loading="true" :title="t('serverManagement.diagnosticsPage.running')" />
+    <template v-else-if="data">
+      <span :class="{ danger: data.summary.failed > 0 }">{{
+        t('serverManagement.workspace.failedChecks', { count: data.summary.failed })
+      }}</span>
+      <span :class="{ warning: data.summary.warning > 0 }">{{
+        t('serverManagement.workspace.warningChecks', { count: data.summary.warning })
+      }}</span>
+      <span>{{ t('serverManagement.workspace.pendingChecks', { count: data.summary.unknown }) }}</span>
+    </template>
+    <span v-if="error" class="infra-attention__warning">{{
+      t(data ? 'serverManagement.workspace.diagnosticsStale' : 'serverManagement.diagnosticsPage.failed')
     }}</span>
-    <span>{{ t('serverManagement.workspace.pendingChecks', { count: pending }) }}</span>
-    <span v-if="error" class="infra-attention__warning">{{ t('serverManagement.workspace.securityUnavailable') }}</span>
     <BButton type="text" @click="router.push('/serverManagement/diagnostics')"
       >{{ t('serverManagement.workspace.viewDiagnostics') }} →</BButton
     >
   </div>
 </template>
 <script setup lang="ts">
-  import { computed } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useRouter } from 'vue-router';
-  import type { HostAgentServiceSnapshot } from '@lightnote/shared/host-agent-protocol';
-  import { getInfraSecurity } from '@/api/infraApi';
+  import { getInfraDiagnostics } from '@/api/infraApi';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import { useInfraSnapshot } from './useInfraSnapshot';
-  const props = defineProps<{ services: HostAgentServiceSnapshot[] }>();
+
+  // 与诊断页同源，避免概览、诊断、安全三处各自计数而对不上。
   const { t } = useI18n();
   const router = useRouter();
-  const { data, error } = useInfraSnapshot(getInfraSecurity, 60_000);
-  const faults = computed(() => props.services.filter((s) => s.state !== 'running' && s.state !== 'unknown').length);
-  const pending = computed(() => {
-    if (!data.value || error.value) return '—';
-    return (
-      data.value.summary.unknown +
-      props.services.filter((s) => s.state === 'unknown').length +
-      (props.services.length ? 0 : 1)
-    );
-  });
+  const { data, initialLoading, error } = useInfraSnapshot(getInfraDiagnostics, 60_000);
 </script>
 <style scoped lang="less">
   .infra-attention {
@@ -49,6 +47,10 @@
   }
   .danger {
     color: var(--error-color);
+    font-weight: 600;
+  }
+  .warning {
+    color: var(--warning-color);
     font-weight: 600;
   }
   .infra-attention__warning {

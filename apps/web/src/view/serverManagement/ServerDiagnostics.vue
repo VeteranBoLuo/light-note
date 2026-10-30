@@ -30,7 +30,7 @@
       <div class="diagnostics-status-strip"
         ><BChip :tone="statusTone(data.status)">{{ statusLabel(data.status) }}</BChip
         ><span v-for="item in summaryCards" :key="item.key"
-          >{{ item.label }} <strong :class="`is-${item.key}`">{{ item.value }}</strong></span
+          >{{ item.label }} <strong :class="item.value > 0 ? `is-${item.key}` : undefined">{{ item.value }}</strong></span
         ><small>{{ formatCapturedAt(data.capturedAt || '') }}</small></div
       >
       <BCard :title="t('serverManagement.diagnosticsPage.checklistTitle')">
@@ -599,6 +599,9 @@
   }
   .is-warning {
     color: var(--warning-color);
+  }
+  .diagnostics-status-strip .is-failed {
+    color: var(--error-color);
   }
   .diagnostics-collection {
     font-size: var(--ui-font-12, 12px);

@@ -137,13 +137,18 @@
             <div v-if="!publicPorts.length" class="security-empty">{{
               t('serverManagement.securityPage.noPublicPorts')
             }}</div>
-            <ul v-else class="public-ports">
-              <li v-for="port in publicPorts" :key="`${port.protocol}-${port.address}-${port.port}`">
-                <span><SvgIcon :src="icon.infrastructure.network" size="15" />{{ port.protocol.toUpperCase() }}</span>
-                <strong>{{ port.port }}</strong
-                ><small>{{ port.address }}</small>
-              </li>
-            </ul>
+            <BTable v-else class="port-table" :data="publicPorts" :columns="portColumns" row-key="key"
+              ><template #bodyCell="{ column, record }">
+                <span v-if="column.key === 'port'" class="port-table__port"
+                  ><strong>{{ record.port }}</strong
+                  ><small>{{ record.protocol.toUpperCase() }}</small></span
+                >
+                <code v-else-if="column.key === 'address'">{{ record.address }}</code>
+                <BChip v-else-if="column.key === 'reach'" :tone="record.reach.tone">{{
+                  t(`serverManagement.securityPage.portReach.${record.reach.key}`)
+                }}</BChip>
+              </template></BTable
+            >
           </BCard>
         </section>
       </div>
@@ -156,6 +161,7 @@
   import { useI18n } from 'vue-i18n';
   import { formatAdminDateTime } from '@/utils/adminDateTime';
   import { useRoute } from 'vue-router';
+  import type { HostAgentListeningPort } from '@lightnote/shared/host-agent-protocol';
   import { getInfraSecurity, type InfraSecurityFinding, type InfraSecurityFindingState } from '@/api/infraApi';
   import icon from '@/config/icon';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
@@ -163,6 +169,7 @@
   import BCard from '@/components/base/BasicComponents/BCard.vue';
   import BChip from '@/components/base/BasicComponents/BChip.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
+  import BTable from '@/components/base/BasicComponents/BTable/BTable.vue';
   import BTabs from '@/components/base/BasicComponents/BTabs.vue';
   import InfraPage from './InfraPage.vue';
   import InfraModuleHeader from './InfraModuleHeader.vue';
@@ -195,9 +202,49 @@
       label: `${t(`serverManagement.securityPage.filters.${key}`)} · ${key === 'all' ? data.value?.findings.length || 0 : data.value?.findings.filter((item) => item.state === key).length || 0}`,
     })),
   );
-  const publicPorts = computed(() =>
-    (data.value?.listeningPorts || []).filter((item) => allPorts.value || item.exposure === 'public'),
+  type PortReachTone = 'neutral' | 'success' | 'danger' | 'pending';
+  // “公网暴露”沿用后端安全检查的判定结果，前端不重复维护端口白名单。
+  const exposedPortLabels = computed(
+    () =>
+      new Set(
+        (data.value?.findings.find((item) => item.id === 'unexpected-public-ports')?.evidence.ports as
+          | string[]
+          | undefined) || [],
+      ),
   );
+  function portReach(port: HostAgentListeningPort): { key: string; tone: PortReachTone } {
+    if (port.exposure !== 'public') return { key: port.exposure, tone: 'neutral' };
+    if (exposedPortLabels.value.has(`${port.protocol}/${port.port}`)) return { key: 'exposed', tone: 'danger' };
+    if (port.firewall === 'blocked') return { key: 'blocked', tone: 'success' };
+    if (port.firewall === 'restricted') return { key: 'restricted', tone: 'pending' };
+    return { key: port.firewall === 'allowed' ? 'allowed' : 'unknown', tone: 'neutral' };
+  }
+  const publicPorts = computed(() =>
+    (data.value?.listeningPorts || [])
+      .filter((item) => allPorts.value || item.exposure === 'public')
+      .map((item) => ({ ...item, key: `${item.protocol}-${item.address}-${item.port}`, reach: portReach(item) }))
+      .sort((left, right) => Number(right.reach.key === 'exposed') - Number(left.reach.key === 'exposed') || left.port - right.port),
+  );
+  const portColumns = computed(() => [
+    {
+      key: 'port',
+      title: t('serverManagement.securityPage.portColumns.port'),
+      width: 'var(--ui-layout-48, 48px)',
+      ellipsis: false,
+    },
+    {
+      key: 'address',
+      title: t('serverManagement.securityPage.portColumns.address'),
+      width: 'minmax(0, 1fr)',
+      ellipsis: false,
+    },
+    {
+      key: 'reach',
+      title: t('serverManagement.securityPage.portColumns.reach'),
+      width: 'var(--ui-layout-88, 88px)',
+      ellipsis: false,
+    },
+  ]);
   function findingStateLabel(state: InfraSecurityFindingState) {
     return t(`serverManagement.securityPage.states.${state}`);
   }
@@ -401,8 +448,7 @@
   .ssh-summary strong.is-danger {
     color: var(--error-color, #d14343);
   }
-  .ssh-events,
-  .public-ports {
+  .ssh-events {
     display: grid;
     gap: var(--ui-space-8, 8px);
     margin: 0;
@@ -418,29 +464,24 @@
     gap: var(--ui-space-8, 8px);
     font-size: var(--ui-font-12, 12px);
   }
-  .ssh-events time,
-  .public-ports small {
+  .ssh-events time {
     color: var(--desc-color);
   }
-  .public-ports {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-  .public-ports li {
+  .port-table__port {
     display: grid;
-    grid-template-columns: 1fr auto;
-    gap: var(--ui-space-4, 4px) var(--ui-space-10, 10px);
-    padding: var(--ui-space-10, 10px) var(--ui-space-12, 12px);
-    border: 1px solid var(--surface-border-color);
-    border-radius: 10px;
+    gap: var(--ui-space-2, 2px);
+    font-variant-numeric: tabular-nums;
+    line-height: 1.2;
   }
-  .public-ports span {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--ui-space-6, 6px);
+  .port-table__port small,
+  .port-table code {
     color: var(--desc-color);
+    font-size: var(--ui-font-12, 12px);
   }
-  .public-ports small {
-    grid-column: 1 / -1;
+  .port-table code {
+    display: block;
+    min-width: 0;
+    overflow-wrap: anywhere;
   }
   .security-empty {
     min-height: var(--ui-layout-90, 90px);
@@ -460,9 +501,6 @@
     .ssh-events li span:nth-of-type(2),
     .ssh-events time {
       grid-column: 2;
-    }
-    .public-ports {
-      grid-template-columns: 1fr;
     }
   }
 </style>
