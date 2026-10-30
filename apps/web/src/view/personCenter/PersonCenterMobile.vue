@@ -7,6 +7,7 @@
   >
     <div class="person-center-layout" :class="{ 'person-center-layout--mobile': bookmark.isMobile }">
       <div
+        ref="menuScrollElement"
         class="person-menu-scroll"
         :class="{ 'person-menu-scroll--mobile': bookmark.isMobile, 'no-scrollbar': bookmark.isMobile }"
       >
@@ -241,6 +242,7 @@
   import { useGrowth } from '@/composables/useGrowth.ts';
   import { MOBILE_TODAY_PATH } from '@/config/mobileNavigation';
   import { useMobileTopBar } from '@/composables/useMobileTopBar';
+  import { useHistoryScrollMemory } from '@/composables/useHistoryScrollMemory';
   import { frameVariant } from '@/config/growthFrames';
   import { usePwaInstall } from '@/composables/usePwaInstall';
   import { useUiDensity } from '@/composables/useUiDensity';
@@ -263,6 +265,9 @@
   const bookmark = bookmarkStore();
   const menuVisible = ref(false);
   const userVisible = ref(false);
+  // 点菜单进入模块再返回时回到刚才的位置；从头像重新进入仍从顶部开始。
+  const menuScrollElement = ref<HTMLElement | null>(null);
+  useHistoryScrollMemory('personCenter', menuScrollElement);
 
   const user = useUserStore();
   const mobileQuickEntries: readonly PersonCenterEntry[] = MOBILE_PERSON_CENTER_QUICK_ENTRIES;
