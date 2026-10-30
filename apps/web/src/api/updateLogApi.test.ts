@@ -19,6 +19,13 @@ describe('updateLogApi', () => {
     expect(apiBasePost).toHaveBeenCalledTimes(1);
   });
 
+  it('摘要入口只请求最新几条，旧后端忽略 limit 时由前端截断', async () => {
+    apiBasePost.mockResolvedValueOnce({ status: 200, data: { items: [{ id: 'new' }, { id: 'old' }] } });
+    const response = await listUpdateLogs({ limit: 1 });
+    expect(apiBasePost).toHaveBeenCalledWith('/api/updateLog/list', { limit: 1 }, { silent: true });
+    expect(response.data.items).toEqual([{ id: 'new' }]);
+  });
+
   it('滚动发布期间新接口不存在时回退旧配置，并清洗旧 HTML 字段', async () => {
     apiBasePost.mockRejectedValueOnce({ response: { status: 404 } }).mockResolvedValueOnce({
       status: 200,

@@ -108,10 +108,14 @@ function normalizeLegacyUpdateLogs(rawContent: unknown): UpdateLogItem[] {
     .reverse();
 }
 
-export async function listUpdateLogs() {
+/** 不传 limit 读取完整列表；工作台等摘要入口只取最新几条，旧后端忽略该参数时由前端截断。 */
+export async function listUpdateLogs({ limit }: { limit?: number } = {}) {
+  const take = <T>(items: T[]) => (limit ? items.slice(0, limit) : items);
   try {
-    const response = await apiBasePost('/api/updateLog/list', undefined, { silent: true });
-    if (response.status === 200 && Array.isArray(response.data?.items)) return response;
+    const response = await apiBasePost('/api/updateLog/list', limit ? { limit } : undefined, { silent: true });
+    if (response.status === 200 && Array.isArray(response.data?.items)) {
+      return limit ? { ...response, data: { ...response.data, items: take(response.data.items) } } : response;
+    }
   } catch {
     // 滚动发布时前端可能先于新后端上线，继续尝试旧配置接口，避免页面与预渲染短暂空白。
   }
@@ -120,7 +124,7 @@ export async function listUpdateLogs() {
   return {
     ...legacyResponse,
     data: {
-      items: normalizeLegacyUpdateLogs(legacyResponse.data?.jsonContent),
+      items: take(normalizeLegacyUpdateLogs(legacyResponse.data?.jsonContent)),
       source: 'config_json_client_fallback',
     },
   };

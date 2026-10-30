@@ -111,15 +111,25 @@ async function cleanupObsObjects(keys, scene) {
   });
 }
 
+// 工作台等摘要入口只需最新几条；不传 limit 的更新日志页与预渲染仍读取完整列表。
+const PUBLIC_LIST_LIMIT_MAX = 50;
+
+function normalizePublicListLimit(value) {
+  const limit = Number(value);
+  return Number.isInteger(limit) && limit > 0 ? Math.min(limit, PUBLIC_LIST_LIMIT_MAX) : null;
+}
+
 export async function list(req, res) {
   try {
+    const limit = normalizePublicListLimit(req.body?.limit);
     if (await updateLogTableExists()) {
       const [rows] = await pool.query(
         `SELECT id, title, publish_date, summary, highlights, tags, content_markdown,
                 image_keys, status, sort, created_time, updated_time
            FROM update_logs
           WHERE status = 'published'
-          ORDER BY publish_date DESC, sort DESC, created_time DESC`,
+          ORDER BY publish_date DESC, sort DESC, created_time DESC${limit ? ' LIMIT ?' : ''}`,
+        limit ? [limit] : [],
       );
       return res.send(resultData({ items: mapRows(rows), source: 'update_logs' }));
     }
@@ -129,7 +139,7 @@ export async function list(req, res) {
       ['更新日志'],
     );
     const items = normalizeLegacyUpdateLogs(legacyRows[0]?.json_content || '[]');
-    return res.send(resultData({ items, source: 'config_json' }));
+    return res.send(resultData({ items: limit ? items.slice(0, limit) : items, source: 'config_json' }));
   } catch (error) {
     return sendServerError(req, res, 'list', error);
   }

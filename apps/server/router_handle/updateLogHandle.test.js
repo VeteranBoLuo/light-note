@@ -97,6 +97,36 @@ describe('updateLogHandle', () => {
     );
   });
 
+  it.each([
+    [1, ' LIMIT ?', [1]],
+    [500, ' LIMIT ?', [50]],
+    ['abc', '', []],
+    [0, '', []],
+  ])('公开列表按可选 limit=%s 只读取最新几条', async (limit, sqlTail, params) => {
+    tableExists();
+    mocks.poolQuery.mockResolvedValueOnce([[]]);
+    await list({ headers: {}, body: { limit } }, mockRes());
+    const [sql, values] = mocks.poolQuery.mock.calls[1];
+    expect(sql.endsWith(`created_time DESC${sqlTail}`)).toBe(true);
+    expect(values).toEqual(params);
+  });
+
+  it('旧 config_json 来源同样按 limit 截取最新条目', async () => {
+    mocks.poolQuery.mockResolvedValueOnce([[{ count: 0 }]]).mockResolvedValueOnce([
+      [
+        {
+          json_content: JSON.stringify([
+            { label: '旧一', time: '2026-07-01', list: [] },
+            { label: '旧二', time: '2026-07-02', list: [] },
+          ]),
+        },
+      ],
+    ]);
+    const res = mockRes();
+    await list({ headers: {}, body: { limit: 1 } }, res);
+    expect(res.send.mock.calls[0][0].data.items.map((item) => item.title)).toEqual(['旧二']);
+  });
+
   it('普通用户不能读取草稿图片，已发布图片使用短时 OBS 签名地址', async () => {
     tableExists();
     mocks.poolQuery.mockResolvedValueOnce([
