@@ -44,6 +44,13 @@ describe('mobile personal center experience', () => {
     expect(personCenterSource).toContain('icon.infrastructure.server');
   });
 
+  it('游客不展示社区公开资料入口，其余交流与支持入口照常', () => {
+    expect(personCenterSource).toContain('v-for="entry in mobileCommunicationEntries"');
+    expect(personCenterSource).toMatch(
+      /mobileCommunicationEntries = computed[\s\S]*?!user\.id \|\| user\.role === 'visitor'[\s\S]*?entry\.name !== PERSON_CENTER_ENTRIES\.communityProfile\.name/,
+    );
+  });
+
   it('keeps quick access entries in a strict four-column equal-width grid', () => {
     expect(personCenterSource).toContain('grid-template-columns: repeat(4, minmax(0, 1fr))');
     expect(personCenterSource).toMatch(/\.profile-quick-item\s*\{[\s\S]*?width:\s*100%;/);

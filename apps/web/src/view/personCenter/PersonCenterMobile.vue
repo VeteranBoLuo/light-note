@@ -277,7 +277,14 @@
       ? [{ ...PERSON_CENTER_ENTRIES.campaign, path: campaignPath.value }, ...MOBILE_PERSON_CENTER_MANAGEMENT_ENTRIES]
       : MOBILE_PERSON_CENTER_MANAGEMENT_ENTRIES,
   );
-  const mobileCommunicationEntries: readonly PersonCenterEntry[] = MOBILE_PERSON_CENTER_COMMUNICATION_ENTRIES;
+  // 游客没有自己的社区资料，与社区导航一致只对登录用户展示公开资料入口。
+  const mobileCommunicationEntries = computed<readonly PersonCenterEntry[]>(() =>
+    !user.id || user.role === 'visitor'
+      ? MOBILE_PERSON_CENTER_COMMUNICATION_ENTRIES.filter(
+          (entry) => entry.name !== PERSON_CENTER_ENTRIES.communityProfile.name,
+        )
+      : MOBILE_PERSON_CENTER_COMMUNICATION_ENTRIES,
+  );
   const { growth: growthInfo, loading: growthLoading, load: loadGrowth } = useGrowth();
   const equippedFrameId = computed(() => {
     const id = growthInfo.value?.equippedFrame;
