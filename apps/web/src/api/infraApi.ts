@@ -56,6 +56,17 @@ export interface InfraActionResultPayload {
   code?: string;
 }
 
+/** 风险静默：只遮住仍处于异常或预警的检查项，到期或恢复后自动失效。 */
+export interface InfraCheckSilence {
+  reason: string;
+  until: string;
+  createdAt: string;
+  actorUserId: string;
+  actorAlias: string | null;
+}
+export const INFRA_SILENCE_DAYS = [1, 7, 30] as const;
+export type InfraSilenceDays = (typeof INFRA_SILENCE_DAYS)[number];
+
 export type InfraDiagnosticState = 'pass' | 'warning' | 'fail' | 'unknown';
 export type InfraDiagnosticDomain = 'overview' | 'services' | 'storage' | 'security';
 export interface InfraDiagnosticCheck {
@@ -69,11 +80,14 @@ export interface InfraDiagnosticCheck {
     serviceId?: HostAgentServiceId;
     findingId?: string;
   };
+  /** 静默相关字段由新版后端返回；部署窗口内的旧后端没有。 */
+  silenceable?: boolean;
+  silence?: InfraCheckSilence | null;
 }
 export interface InfraDiagnosticsPayload {
   capturedAt: string | null;
   status: 'healthy' | 'attention' | 'critical';
-  summary: { failed: number; warning: number; passed: number; unknown: number };
+  summary: { failed: number; warning: number; passed: number; unknown: number; silenced?: number };
   checks: InfraDiagnosticCheck[];
   sources: Array<{
     domain: InfraDiagnosticDomain;
@@ -90,11 +104,12 @@ export interface InfraSecurityFinding {
   state: InfraSecurityFindingState;
   severity: 'high' | 'medium' | 'low';
   evidence: Record<string, unknown>;
+  silence?: InfraCheckSilence | null;
 }
 export interface InfraSecurityPayload extends HostAgentSecuritySnapshot {
   findings: InfraSecurityFinding[];
-  /** warning 由新版后端返回；部署窗口内的旧后端没有该字段。 */
-  summary: { failed: number; warning?: number; passed: number; unknown: number };
+  /** warning、silenced 由新版后端返回；部署窗口内的旧后端没有这些字段。 */
+  summary: { failed: number; warning?: number; passed: number; unknown: number; silenced?: number };
 }
 
 export class InfraApiError extends Error {
@@ -161,6 +176,27 @@ export async function executeInfraAction(
 ): Promise<ApiResponse & { data: InfraActionResultPayload }> {
   const response = (await apiBasePost('/api/infra/actions', payload, { silent: true })) as ApiResponse & {
     data: InfraActionResultPayload;
+  };
+  return requireSuccess(response);
+}
+
+export async function silenceInfraCheck(payload: {
+  checkId: string;
+  days: InfraSilenceDays;
+  reason: string;
+  confirmed: true;
+}): Promise<ApiResponse & { data: { checkId: string; silence: InfraCheckSilence } }> {
+  const response = (await apiBasePost('/api/infra/silences', payload, { silent: true })) as ApiResponse & {
+    data: { checkId: string; silence: InfraCheckSilence };
+  };
+  return requireSuccess(response);
+}
+
+export async function unsilenceInfraCheck(
+  checkId: string,
+): Promise<ApiResponse & { data: { checkId: string; removed: boolean } }> {
+  const response = (await apiBasePost('/api/infra/silences/remove', { checkId }, { silent: true })) as ApiResponse & {
+    data: { checkId: string; removed: boolean };
   };
   return requireSuccess(response);
 }

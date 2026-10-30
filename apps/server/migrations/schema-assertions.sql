@@ -4453,3 +4453,16 @@ FROM (
 ) required LEFT JOIN information_schema.columns present
   ON present.table_schema=DATABASE() AND present.table_name='infra_alerts' AND present.column_name=required.name
 WHERE present.column_name IS NULL;
+
+-- 风险静默由诊断页写入、告警评估读取并到期清理；与 infra_alerts 同一脚本建表。
+SELECT 'infra_alert_silence_schema' AS check_name, 'infra_alert_silences' AS detail
+FROM DUAL WHERE NOT EXISTS (
+  SELECT 1 FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='infra_alert_silences'
+);
+SELECT 'infra_alert_silence_column' AS check_name, required.name AS detail
+FROM (
+  SELECT 'check_id' AS name UNION ALL SELECT 'reason' UNION ALL SELECT 'silenced_until'
+  UNION ALL SELECT 'pass_streak' UNION ALL SELECT 'created_by' UNION ALL SELECT 'created_at'
+) required LEFT JOIN information_schema.columns present
+  ON present.table_schema=DATABASE() AND present.table_name='infra_alert_silences' AND present.column_name=required.name
+WHERE present.column_name IS NULL;

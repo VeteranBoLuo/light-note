@@ -264,6 +264,8 @@ describe('adminRoutePolicyMiddleware', () => {
       ['GET', '/infra/security'],
       ['GET', '/infra/logs/nginx'],
       ['POST', '/infra/actions'],
+      ['POST', '/infra/silences'],
+      ['POST', '/infra/silences/remove'],
     ]) {
       const next = vi.fn();
       const res = createRes();

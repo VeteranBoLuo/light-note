@@ -9,6 +9,12 @@ const mocks = vi.hoisted(() => ({
   security: vi.fn(),
   logs: vi.fn(),
   execute: vi.fn(),
+  query: vi.fn(),
+  connection: { beginTransaction: vi.fn(), query: vi.fn(), commit: vi.fn(), rollback: vi.fn(), release: vi.fn() },
+}));
+
+vi.mock('../db/index.js', () => ({
+  default: { query: mocks.query, getConnection: async () => mocks.connection },
 }));
 
 vi.mock('../util/common.js', () => ({
@@ -34,8 +40,15 @@ vi.mock('../util/hostAgentClient.js', () => {
 });
 vi.mock('../util/agent/logSafety.js', () => ({ stableAgentErrorCode: (error) => String(error?.code || 'ERROR') }));
 
-const { executeInfraAction, getInfraDashboard, getInfraDiagnostics, getInfraSecurity, infraHandleInternals } =
-  await import('./infraHandle.js');
+const {
+  executeInfraAction,
+  getInfraDashboard,
+  getInfraDiagnostics,
+  getInfraSecurity,
+  infraHandleInternals,
+  silenceInfraCheck,
+  unsilenceInfraCheck,
+} = await import('./infraHandle.js');
 
 function response() {
   return { send: vi.fn() };
@@ -46,6 +59,8 @@ beforeEach(() => {
   mocks.begin.mockResolvedValue({ definition: {}, baseEntry: {}, metadata: {}, intentAuditId: '1' });
   mocks.finish.mockResolvedValue({ auditId: '2' });
   mocks.execute.mockResolvedValue({ receipt: { state: 'succeeded', exitCode: 0, durationMs: 20 }, replayed: false });
+  mocks.query.mockResolvedValue([[]]);
+  mocks.connection.query.mockResolvedValue([{ affectedRows: 1 }]);
 });
 
 describe('infraHandle', () => {
@@ -337,5 +352,151 @@ describe('infraHandle', () => {
       }),
     );
     expect(mocks.finish).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ outcome: 'failed' }));
+  });
+
+  it('诊断与安全接口带回静默信息，计数不含静默项', async () => {
+    mocks.security.mockResolvedValue({
+      sampledAt: '2026-10-30T04:00:00.000Z',
+      ssh: { available: true, permitRootLogin: 'prohibit-password', passwordAuthentication: false },
+      fail2ban: { available: true, installed: false, state: 'disabled' },
+    });
+    mocks.query.mockImplementation(async (sql) =>
+      sql.startsWith('SELECT check_id')
+        ? [
+            [
+              {
+                check_id: 'security.fail2ban',
+                reason: '下周统一安装 Fail2ban',
+                silenced_until: new Date(Date.now() + 86_400_000),
+                pass_streak: 0,
+                created_by: 'root-1',
+                created_at: new Date(),
+              },
+            ],
+          ]
+        : [[{ id: 'root-1', alias: '菠萝' }]],
+    );
+    const res = response();
+    await getInfraSecurity({ user: { id: 'root-1', role: 'root' }, query: {} }, res);
+    const payload = res.send.mock.calls[0][0].data;
+    expect(payload.findings.find((item) => item.id === 'fail2ban').silence).toMatchObject({
+      reason: '下周统一安装 Fail2ban',
+      actorAlias: '菠萝',
+    });
+    expect(payload.summary).toMatchObject({ warning: 1, silenced: 1 });
+    expect(payload.findings.filter((item) => item.state === 'fail' && !item.silence)).toHaveLength(
+      payload.summary.failed,
+    );
+  });
+
+  it('静默记录读取失败时诊断照常返回且不隐藏异常', async () => {
+    mocks.dashboard.mockResolvedValue({ sampledAt: '2026-10-30T04:00:00.000Z', metrics: { cpu: { percent: 95 } } });
+    mocks.services.mockResolvedValue({ services: [] });
+    mocks.storage.mockResolvedValue({ mounts: [], io: null });
+    mocks.security.mockResolvedValue({});
+    mocks.query.mockRejectedValue(Object.assign(new Error('down'), { code: 'ER_NO_SUCH_TABLE' }));
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const res = response();
+    await getInfraDiagnostics({ user: { id: 'root-1', role: 'root' }, query: {} }, res);
+    const payload = res.send.mock.calls[0][0];
+    expect(payload.status).toBe(200);
+    expect(payload.data.checks.find((item) => item.id === 'system.cpu')).toMatchObject({
+      state: 'fail',
+      silenceable: true,
+      silence: null,
+    });
+    expect(payload.data.summary.silenced).toBe(0);
+    error.mockRestore();
+  });
+
+  it('静默只接受可静默的检查项与固定时长，非法请求不进入审计', async () => {
+    for (const body of [
+      { checkId: 'services.health', days: 7, reason: '服务故障也想静默', confirmed: true },
+      { checkId: 'security.fail2ban', days: 3, reason: '时长不在选项内', confirmed: true },
+      { checkId: 'security.fail2ban', days: 7, reason: '带额外字段', confirmed: true, until: '2099-01-01' },
+    ]) {
+      const res = response();
+      await silenceInfraCheck({ user: { id: 'root-1', role: 'root' }, body }, res);
+      expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ status: 400 }));
+    }
+    const denied = response();
+    await silenceInfraCheck(
+      { user: { id: 'u', role: 'admin' }, body: { checkId: 'security.fail2ban', days: 7 } },
+      denied,
+    );
+    expect(denied.send).toHaveBeenCalledWith(expect.objectContaining({ status: 403 }));
+    expect(mocks.begin).not.toHaveBeenCalled();
+  });
+
+  it('静默写入与终态审计在同一事务内提交', async () => {
+    mocks.begin.mockResolvedValue({ reason: '下周统一安装 Fail2ban', definition: {}, baseEntry: {}, metadata: {} });
+    const req = {
+      user: { id: 'root-1', role: 'root', alias: '菠萝' },
+      body: { checkId: 'security.fail2ban', days: 7, reason: '下周统一安装 Fail2ban', confirmed: true },
+    };
+    const res = response();
+    await silenceInfraCheck(req, res);
+
+    expect(mocks.begin).toHaveBeenCalledWith(
+      req,
+      expect.objectContaining({ action: 'infra.alert_silence', targetId: 'security.fail2ban' }),
+    );
+    const [sql, params] = mocks.connection.query.mock.calls[0];
+    expect(sql).toContain('INSERT INTO infra_alert_silences');
+    expect(params.slice(0, 2)).toEqual(['security.fail2ban', '下周统一安装 Fail2ban']);
+    expect(params[2].getTime() - params[4].getTime()).toBe(7 * 86_400_000);
+    expect(params[4].getMilliseconds()).toBe(0);
+    expect(mocks.finish).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ outcome: 'succeeded', db: mocks.connection }),
+    );
+    expect(mocks.connection.commit).toHaveBeenCalled();
+    expect(res.send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: 200,
+        data: expect.objectContaining({ silence: expect.objectContaining({ actorAlias: '菠萝' }) }),
+      }),
+    );
+  });
+
+  it('静默写入失败时回滚并补记失败审计', async () => {
+    mocks.connection.query.mockRejectedValue(Object.assign(new Error('lock'), { code: 'ER_LOCK_WAIT_TIMEOUT' }));
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const res = response();
+    await silenceInfraCheck(
+      {
+        user: { id: 'root-1', role: 'root' },
+        body: { checkId: 'system.memory', days: 1, reason: '扩容前临时静默', confirmed: true },
+      },
+      res,
+    );
+    expect(mocks.connection.rollback).toHaveBeenCalled();
+    expect(mocks.finish).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ outcome: 'failed' }));
+    expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ status: 500 }));
+    error.mockRestore();
+  });
+
+  it('取消静默由服务端写入固定原因，删除记录并审计', async () => {
+    const req = { user: { id: 'root-1', role: 'root' }, body: { checkId: 'security.fail2ban' } };
+    const res = response();
+    await unsilenceInfraCheck(req, res);
+    expect(req.body.reason.length).toBeGreaterThanOrEqual(6);
+    expect(mocks.begin).toHaveBeenCalledWith(
+      req,
+      expect.objectContaining({ action: 'infra.alert_unsilence', targetId: 'security.fail2ban' }),
+    );
+    expect(mocks.connection.query).toHaveBeenCalledWith('DELETE FROM infra_alert_silences WHERE check_id=?', [
+      'security.fail2ban',
+    ]);
+    expect(res.send).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 200, data: expect.objectContaining({ removed: true }) }),
+    );
+
+    const invalid = response();
+    await unsilenceInfraCheck(
+      { user: { id: 'root-1', role: 'root' }, body: { checkId: 'security.fail2ban', reason: '自带原因' } },
+      invalid,
+    );
+    expect(invalid.send).toHaveBeenCalledWith(expect.objectContaining({ status: 400 }));
   });
 });

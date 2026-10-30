@@ -2,6 +2,7 @@ import pool from '../db/index.js';
 import { createNotification } from './notification.js';
 import { sendTrackedEmail } from './emailDelivery.js';
 import { loadInfraDiagnostics } from './infraDiagnostics.js';
+import { evaluateSilenceLifecycle, loadInfraAlertSilences } from './infraAlertSilences.js';
 import { notificationSchedulerEnabled } from './notificationSchedulerPolicy.js';
 import { formatDateTime } from './dateTime.js';
 import { stableAgentErrorCode } from './agent/logSafety.js';
@@ -242,7 +243,45 @@ async function deliverAlert(row, kind, recipients, { notify, sendEmail, siteUrl 
   }
 }
 
-/** 单轮评估：采集诊断 → 推进状态 → 先落库再通知，通知失败不回滚状态，来源键保证重试不重复。 */
+async function deliverSilenceReminder(silence, check, recipients, notify) {
+  const title = CHECK_TITLES[silence.checkId] || silence.checkId;
+  for (const recipient of recipients) {
+    try {
+      await notify(recipient.id, {
+        type: 'system',
+        title: `静默已到期，仍未恢复：${title}`,
+        content: [`静默原因：${silence.reason}`, check ? checkDetail(check) : null, '可再次静默或尽快处理。']
+          .filter(Boolean)
+          .join('\n'),
+        link: DIAGNOSTICS_LINK,
+        meta: { alertKey: silence.checkId, state: 'silence_expired' },
+        sourceType: 'infra_alert',
+        sourceId: `${silence.checkId}#${epochSeconds(silence.silencedUntil)}`,
+      });
+    } catch (error) {
+      console.error(
+        '[infra-alerts] silence reminder failed key=%s code=%s',
+        silence.checkId,
+        stableAgentErrorCode(error),
+      );
+    }
+  }
+}
+
+async function loadSilencesForCycle(db) {
+  try {
+    return await loadInfraAlertSilences(db);
+  } catch (error) {
+    // 静默表未就绪时照常告警，宁可多提醒也不漏报。
+    if (error?.code === 'ER_NO_SUCH_TABLE') return [];
+    throw error;
+  }
+}
+
+/**
+ * 单轮评估：采集诊断 → 推进状态 → 先落库再通知，通知失败不回滚状态，来源键保证重试不重复。
+ * 静默项照常推进状态机，只是不投递；到期后若告警已开启，不会再补发开启通知，改由到期提醒告知。
+ */
 export async function runInfraAlertCycle({
   db = pool,
   loadDiagnostics = loadInfraDiagnostics,
@@ -255,7 +294,9 @@ export async function runInfraAlertCycle({
   const [rows] = await db.query(
     'SELECT alert_key, state, channel, fail_streak, pass_streak, title, detail, first_failed_at, opened_at, resolved_at FROM infra_alerts',
   );
+  const silences = await loadSilencesForCycle(db);
   const result = evaluateInfraAlerts(rows.map(fromDatabaseRow), deriveAlertSignals(diagnostics), now);
+  const lifecycle = evaluateSilenceLifecycle(silences, diagnostics, now, INFRA_ALERT_POLICY);
   for (const row of result.changed) {
     await db.query(UPSERT_ALERT_SQL, [
       row.alertKey,
@@ -270,12 +311,40 @@ export async function runInfraAlertCycle({
       row.resolvedAt,
     ]);
   }
-  if (result.opened.length || result.resolved.length) {
-    const [recipients] = await db.query("SELECT id, email FROM user WHERE role='root' AND del_flag=0");
-    for (const row of result.opened) await deliverAlert(row, 'open', recipients, { notify, sendEmail, siteUrl });
-    for (const row of result.resolved) await deliverAlert(row, 'resolved', recipients, { notify, sendEmail, siteUrl });
+  // 按静默截止时刻做条件写入，评估期间被重新静默的记录不会被这一轮覆盖或删除。
+  for (const { silence, passStreak } of lifecycle.streakUpdates) {
+    await db.query('UPDATE infra_alert_silences SET pass_streak=? WHERE check_id=? AND silenced_until=?', [
+      passStreak,
+      silence.checkId,
+      silence.silencedUntil,
+    ]);
   }
-  return result;
+  const reminders = [];
+  for (const removal of lifecycle.removals) {
+    const [deleted] = await db.query('DELETE FROM infra_alert_silences WHERE check_id=? AND silenced_until=?', [
+      removal.silence.checkId,
+      removal.silence.silencedUntil,
+    ]);
+    // 同一轮刚开启的告警已经会通知，不再叠加到期提醒。
+    if (
+      removal.remind &&
+      Number(deleted?.affectedRows || 0) > 0 &&
+      !result.opened.some((row) => row.alertKey === removal.silence.checkId)
+    ) {
+      reminders.push(removal.silence);
+    }
+  }
+  const opened = result.opened.filter((row) => !lifecycle.suppressed.has(row.alertKey));
+  const resolved = result.resolved.filter((row) => !lifecycle.suppressed.has(row.alertKey));
+  if (opened.length || resolved.length || reminders.length) {
+    const [recipients] = await db.query("SELECT id, email FROM user WHERE role='root' AND del_flag=0");
+    for (const row of opened) await deliverAlert(row, 'open', recipients, { notify, sendEmail, siteUrl });
+    for (const row of resolved) await deliverAlert(row, 'resolved', recipients, { notify, sendEmail, siteUrl });
+    const checks = new Map((diagnostics?.checks || []).map((check) => [check.id, check]));
+    for (const silence of reminders)
+      await deliverSilenceReminder(silence, checks.get(silence.checkId), recipients, notify);
+  }
+  return { ...result, silences: lifecycle };
 }
 
 let schedulerTimer = null;

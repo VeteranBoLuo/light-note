@@ -50,4 +50,18 @@ describe('adminActionRegistry', () => {
       });
     }
   });
+
+  it('静默告警必须审计；取消静默只恢复告警，按中风险记录', () => {
+    expect(assertRegisteredAdminAction('infra.alert_silence')).toMatchObject({
+      targetType: 'infra_check',
+      riskLevel: 'high',
+      reasonRequired: true,
+      auditRequired: true,
+    });
+    expect(assertRegisteredAdminAction('infra.alert_unsilence')).toMatchObject({
+      targetType: 'infra_check',
+      riskLevel: 'medium',
+      auditRequired: false,
+    });
+  });
 });

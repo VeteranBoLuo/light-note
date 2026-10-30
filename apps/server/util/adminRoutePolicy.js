@@ -871,6 +871,8 @@ declare(ADMIN_POLICIES.ADMIN_ONLY, 'infrastructure', [
   ['GET', '/infra/security'],
   ['GET', '/infra/logs/:serviceId'],
   ['POST', '/infra/actions'],
+  ['POST', '/infra/silences'],
+  ['POST', '/infra/silences/remove'],
 ]);
 
 const normalizePath = (req) => {

@@ -35,12 +35,16 @@ describe('服务器管理信息架构', () => {
     expect(services).toContain('lastActionResult');
   });
 
-  it('诊断页只聚合证据并导航到权威模块，不复制白名单写操作', () => {
+  it('诊断页聚合证据并导航到权威模块，不复制服务写操作；风险静默只在诊断页操作', () => {
     expect(diagnostics).toContain('getInfraDiagnostics');
     expect(diagnostics).toContain('`/serverManagement/${check.target.module}`');
     expect(diagnostics).not.toContain('useInfraActions');
     expect(diagnostics).not.toContain('executeInfraAction');
-    expect(diagnostics).not.toContain('AdminRiskActionModal');
+    expect(diagnostics).toContain('silenceInfraCheck');
+    expect(diagnostics).toContain('unsilenceInfraCheck');
+    for (const page of [overview, services, read('ServerSecurity.vue'), read('InfraAttention.vue')]) {
+      expect(page).not.toContain('silenceInfraCheck');
+    }
     expect(zhCN.serverManagement.diagnosticsPage.checks.system.cpu.title).toBe('CPU 压力');
     expect(enUS.serverManagement.diagnosticsPage.checks.storage.ioBusy.title).toBe('Disk IO pressure');
   });

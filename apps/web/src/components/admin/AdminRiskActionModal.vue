@@ -7,10 +7,14 @@
     :mask-closable="!loading"
     :esc-closable="!loading"
     :close-disabled="loading"
+    content-class="admin-risk-action-content"
     fullscreen-mobile
   >
     <div class="admin-risk-action">
       <p class="admin-risk-action__impact">{{ impact }}</p>
+
+      <!-- 业务专属参数（如静默时长）放在原因之前，弹框的原因、确认与审计规则保持统一。 -->
+      <slot />
 
       <label class="admin-risk-action__field">
         <span
@@ -156,5 +160,27 @@
 
   html.light-note-mobile-rendering .admin-risk-action__impact {
     box-shadow: none;
+  }
+
+  /* 手机全屏时 BModal 不给内容区留白，由弹框自己排版：内容可滚动，取消与确认固定在底部。 */
+  :global(.modal-view.is-mobile-fullscreen .modal-content.admin-risk-action-content) {
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+
+  :global(.modal-view.is-mobile-fullscreen .admin-risk-action) {
+    display: flex;
+    flex-direction: column;
+    box-sizing: border-box;
+    min-height: 100%;
+    padding: var(--ui-space-12, 12px) var(--ui-space-16, 16px) 0;
+  }
+
+  :global(.modal-view.is-mobile-fullscreen .admin-risk-action__footer) {
+    position: sticky;
+    bottom: 0;
+    margin-top: auto;
+    padding: var(--ui-space-12, 12px) 0 calc(var(--ui-space-12, 12px) + env(safe-area-inset-bottom));
+    background: var(--background-color);
   }
 </style>

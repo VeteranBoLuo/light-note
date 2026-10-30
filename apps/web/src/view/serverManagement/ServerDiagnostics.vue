@@ -29,7 +29,7 @@
 
       <div class="diagnostics-status-strip"
         ><BChip :tone="statusTone(data.status)">{{ statusLabel(data.status) }}</BChip
-        ><span v-for="item in summaryCards" :key="item.key"
+        ><span v-for="item in visibleSummaryCards" :key="item.key"
           >{{ item.label }}
           <strong :class="item.value > 0 ? `is-${item.key}` : undefined">{{ item.value }}</strong></span
         ><small>{{ formatCapturedAt(data.capturedAt || '') }}</small></div
@@ -67,11 +67,17 @@
           :columns="columns"
           row-key="id"
           ><template #bodyCell="{ column, record }">
-            <BChip v-if="column.key === 'state'" :tone="checkTone(record.state)">{{ stateLabel(record.state) }}</BChip>
+            <BChip v-if="column.key === 'state'" :tone="record.silence ? 'neutral' : checkTone(record.state)"
+              ><span v-if="record.silence" class="diagnostics-silence-dot" aria-hidden="true"></span
+              >{{ checkStateLabel(record) }}</BChip
+            >
             <template v-else-if="column.key === 'domain'">{{ moduleLabel(record.domain) }}</template>
             <div v-else-if="column.key === 'finding'" class="diagnostics-finding-cell"
               ><strong>{{ checkTitle(record) }}</strong
-              ><p>{{ evidenceText(record) }}</p
+              ><p>{{ evidenceLine(record) }}</p
+              ><div v-if="record.silence" class="diagnostics-silence"
+                ><blockquote>{{ record.silence.reason }}</blockquote
+                ><span>{{ silenceMeta(record.silence) }}</span></div
               ><BButton type="text" size="small" @click="toggleEvidence(record.id)"
                 >{{ t('serverManagement.workspace.rawEvidence') }} {{ expanded.has(record.id) ? '⌃' : '›' }}</BButton
               ><pre v-if="expanded.has(record.id)">{{ JSON.stringify(record.evidence, null, 2) }}</pre>
@@ -79,19 +85,20 @@
             <span v-else-if="column.key === 'recommendation'" class="diagnostics-recommendation">{{
               recommendationText(record)
             }}</span>
-            <BButton
-              v-else-if="column.key === 'actions' && record.state !== 'pass'"
-              type="text"
-              size="small"
-              @click="inspect(record)"
-              >{{
-                t(
-                  record.domain === 'services'
-                    ? 'serverManagement.workspace.viewService'
-                    : 'serverManagement.workspace.viewCheck',
-                )
-              }}
-              →</BButton
+            <div v-else-if="column.key === 'actions' && record.state !== 'pass'" class="diagnostics-actions"
+              ><BButton type="text" size="small" @click="inspect(record)">{{ inspectLabel(record) }} →</BButton
+              ><BButton
+                v-if="record.silence"
+                size="small"
+                :loading="unsilencingId === record.id"
+                @click="confirmUnsilence(record)"
+                >{{ t('serverManagement.diagnosticsPage.silence.unsilence') }}</BButton
+              ><BButton v-else-if="canSilence(record)" size="small" @click="openSilence(record)">{{
+                t('serverManagement.diagnosticsPage.silence.action')
+              }}</BButton
+              ><small v-else-if="record.domain === 'services' && record.state === 'fail'">{{
+                t('serverManagement.diagnosticsPage.silence.notSilenceable')
+              }}</small></div
             >
           </template></BTable
         >
@@ -107,26 +114,38 @@
             </span>
             <div class="diagnostics-check__body">
               <div class="diagnostics-check__meta">
-                <BChip :tone="checkTone(check.state)">{{ stateLabel(check.state) }}</BChip>
-                <BChip v-if="check.state !== 'pass'" tone="neutral">{{ severityLabel(check.severity) }}</BChip>
+                <BChip :tone="check.silence ? 'neutral' : checkTone(check.state)"
+                  ><span v-if="check.silence" class="diagnostics-silence-dot" aria-hidden="true"></span
+                  >{{ checkStateLabel(check) }}</BChip
+                >
+                <BChip v-if="check.state !== 'pass' && !check.silence" tone="neutral">{{
+                  severityLabel(check.severity)
+                }}</BChip>
                 <span>{{ moduleLabel(check.domain) }}</span>
               </div>
               <strong>{{ checkTitle(check) }}</strong>
-              <p>{{ evidenceText(check) }}</p>
+              <p>{{ evidenceLine(check) }}</p>
               <small>{{ recommendationText(check) }}</small
+              ><div v-if="check.silence" class="diagnostics-silence"
+                ><blockquote>{{ check.silence.reason }}</blockquote
+                ><span>{{ silenceMeta(check.silence) }}</span></div
               ><BButton type="text" size="small" @click="toggleEvidence(check.id)"
                 >{{ t('serverManagement.workspace.rawEvidence') }} {{ expanded.has(check.id) ? '⌃' : '›' }}</BButton
               ><pre v-if="expanded.has(check.id)">{{ JSON.stringify(check.evidence, null, 2) }}</pre>
             </div>
-            <BButton v-if="check.state !== 'pass'" size="small" @click="inspect(check)">
-              {{
-                t(
-                  check.domain === 'services'
-                    ? 'serverManagement.workspace.viewService'
-                    : 'serverManagement.workspace.viewCheck',
-                )
-              }}
-            </BButton>
+            <div v-if="check.state !== 'pass'" class="diagnostics-check__actions">
+              <BButton size="small" @click="inspect(check)">{{ inspectLabel(check) }}</BButton>
+              <BButton
+                v-if="check.silence"
+                size="small"
+                :loading="unsilencingId === check.id"
+                @click="confirmUnsilence(check)"
+                >{{ t('serverManagement.diagnosticsPage.silence.unsilence') }}</BButton
+              >
+              <BButton v-else-if="canSilence(check)" size="small" @click="openSilence(check)">{{
+                t('serverManagement.diagnosticsPage.silence.action')
+              }}</BButton>
+            </div>
           </article>
         </div>
         <div class="diagnostics-collection"
@@ -154,6 +173,32 @@
         <p class="diagnostics-rerun-hint">{{ t('serverManagement.diagnosticsPage.rerunHint') }}</p>
       </BCard>
     </template>
+    <AdminRiskActionModal
+      v-model:visible="silenceVisible"
+      :title="
+        t('serverManagement.diagnosticsPage.silence.dialogTitle', {
+          check: silenceTarget ? checkTitle(silenceTarget) : '',
+        })
+      "
+      :impact="t('serverManagement.diagnosticsPage.silence.impact')"
+      :confirm-label="t('serverManagement.diagnosticsPage.silence.confirm')"
+      :loading="silenceLoading"
+      @confirm="confirmSilence"
+    >
+      <div class="diagnostics-silence-duration">
+        <span>{{ t('serverManagement.diagnosticsPage.silence.durationLabel') }}</span>
+        <div
+          ><BTabs
+            variant="segment"
+            :active-tab="String(silenceDays)"
+            :options="silenceDayOptions"
+            @change="silenceDays = Number($event) as InfraSilenceDays"
+          /><small>{{
+            t('serverManagement.diagnosticsPage.silence.expiresAt', { time: silenceExpiresAt })
+          }}</small></div
+        >
+      </div>
+    </AdminRiskActionModal>
   </InfraPage>
 </template>
 
@@ -163,10 +208,15 @@
   import { formatAdminDateTime } from '@/utils/adminDateTime';
   import { useRouter } from 'vue-router';
   import {
+    INFRA_SILENCE_DAYS,
     getInfraDiagnostics,
+    silenceInfraCheck,
+    unsilenceInfraCheck,
+    type InfraCheckSilence,
     type InfraDiagnosticCheck,
     type InfraDiagnosticDomain,
     type InfraDiagnosticState,
+    type InfraSilenceDays,
   } from '@/api/infraApi';
   import icon from '@/config/icon';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
@@ -178,14 +228,17 @@
   import BTable from '@/components/base/BasicComponents/BTable/BTable.vue';
   import { bookmarkStore } from '@/store';
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
+  import Alert from '@/components/base/BasicComponents/BModal/Alert';
+  import AdminRiskActionModal from '@/components/admin/AdminRiskActionModal.vue';
   import { copyTextToClipboard } from '@/utils/clipboard';
   import { buildExportFileName, deliverGeneratedFile } from '@/utils/fileDelivery';
   import InfraPage from './InfraPage.vue';
   import InfraModuleHeader from './InfraModuleHeader.vue';
   import { useInfraSnapshot } from './useInfraSnapshot';
   import { formatBytes, formatPercent } from './serverManagementFormat';
+  import { infraCheckRecommendation, infraCheckTitle, securityFindingIdOf, silenceMetaText } from './infraCheckText';
 
-  type FilterValue = 'actionable' | 'all' | InfraDiagnosticState;
+  type FilterValue = 'actionable' | 'all' | 'silenced' | InfraDiagnosticState;
   type ChipTone = 'success' | 'danger' | 'pending' | 'neutral';
 
   const { t, locale } = useI18n();
@@ -214,6 +267,7 @@
     {
       key: 'actions',
       title: t('serverManagement.columns.actions'),
+      // 查看与静默在本列上下排列；不加宽本列，窄桌面才不会出现横向滚动。
       width: 'var(--ui-layout-130,130px)',
       ellipsis: false,
     },
@@ -227,11 +281,19 @@
     next.has(id) ? next.delete(id) : next.add(id);
     expanded.value = next;
   }
-  const stateOrder: Record<InfraDiagnosticState, number> = { fail: 0, warning: 1, unknown: 2, pass: 3 };
+  // 已静默的检查项排在待确认之后、通过之前。
+  const stateOrder: Record<InfraDiagnosticState, number> = { fail: 0, warning: 1, unknown: 2, pass: 4 };
+  const sortRank = (check: InfraDiagnosticCheck) => (check.silence ? 3 : stateOrder[check.state]);
+  function matchesFilter(check: InfraDiagnosticCheck, value: FilterValue) {
+    if (value === 'all') return true;
+    if (value === 'silenced') return Boolean(check.silence);
+    if (check.silence) return false;
+    return value === 'actionable' ? check.state !== 'pass' : check.state === value;
+  }
   const filterOptions = computed(() =>
-    (['actionable', 'all', 'fail', 'warning', 'unknown', 'pass'] as const).map((value) => ({
+    (['actionable', 'all', 'fail', 'warning', 'unknown', 'silenced', 'pass'] as const).map((value) => ({
       value,
-      label: `${t(`serverManagement.diagnosticsPage.filters.${value}`)} · ${(data.value?.checks || []).filter((check) => value === 'all' || (value === 'actionable' ? check.state !== 'pass' : check.state === value)).length}`,
+      label: `${t(`serverManagement.diagnosticsPage.filters.${value}`)} · ${(data.value?.checks || []).filter((check) => matchesFilter(check, value)).length}`,
     })),
   );
   const summaryCards = computed(() => [
@@ -251,19 +313,24 @@
       value: data.value?.summary.unknown || 0,
     },
     {
+      key: 'silenced',
+      label: t('serverManagement.diagnosticsPage.summary.silenced'),
+      value: data.value?.summary.silenced || 0,
+    },
+    {
       key: 'passed',
       label: t('serverManagement.diagnosticsPage.summary.passed'),
       value: data.value?.summary.passed || 0,
     },
   ]);
+  // 静默数为 0 时不占状态条位置；其余计数即使为 0 也保留。
+  const visibleSummaryCards = computed(() =>
+    summaryCards.value.filter((item) => item.key !== 'silenced' || item.value > 0),
+  );
   const filteredChecks = computed(() =>
     [...(data.value?.checks || [])]
-      .filter((check) => {
-        if (filter.value === 'all') return true;
-        if (filter.value === 'actionable') return check.state !== 'pass';
-        return check.state === filter.value;
-      })
-      .sort((left, right) => stateOrder[left.state] - stateOrder[right.state]),
+      .filter((check) => matchesFilter(check, filter.value))
+      .sort((left, right) => sortRank(left) - sortRank(right)),
   );
 
   function moduleIcon(domain: InfraDiagnosticDomain) {
@@ -293,24 +360,19 @@
   function severityLabel(severity: string) {
     return t(`serverManagement.diagnosticsPage.severity.${severity}`);
   }
-  function securityFindingId(check: InfraDiagnosticCheck) {
-    return check.id.startsWith('security.') && check.id !== 'security.snapshot' ? check.id.slice(9) : '';
+  function checkStateLabel(check: InfraDiagnosticCheck) {
+    return check.silence ? t('serverManagement.diagnosticsPage.silence.chip') : stateLabel(check.state);
   }
   function checkTitle(check: InfraDiagnosticCheck) {
-    const findingId = securityFindingId(check);
-    return findingId
-      ? t(`serverManagement.securityPage.findings.${findingId}.title`)
-      : t(
-          `serverManagement.diagnosticsPage.checks.${check.id.startsWith('collection.') ? 'collection' : check.id}.title`,
-        );
+    return infraCheckTitle(t, check.id);
   }
   function recommendationText(check: InfraDiagnosticCheck) {
-    const findingId = securityFindingId(check);
-    return findingId
-      ? t(`serverManagement.securityPage.findings.${findingId}.recommendation`)
-      : t(
-          `serverManagement.diagnosticsPage.checks.${check.id.startsWith('collection.') ? 'collection' : check.id}.recommendation`,
-        );
+    return infraCheckRecommendation(t, check.id);
+  }
+  function inspectLabel(check: InfraDiagnosticCheck) {
+    return t(
+      check.domain === 'services' ? 'serverManagement.workspace.viewService' : 'serverManagement.workspace.viewCheck',
+    );
   }
   function percentValue(value: unknown) {
     if (value === null || value === undefined || value === '') return '—';
@@ -355,7 +417,7 @@
     }
     if (check.id.startsWith('collection.'))
       return t('serverManagement.diagnosticsPage.evidence.collection', { count: evidence.count ?? 0 });
-    const findingId = securityFindingId(check);
+    const findingId = securityFindingIdOf(check.id);
     if (findingId === 'unexpected-public-ports')
       return (
         (evidence.ports as string[] | undefined)?.join(', ') || t('serverManagement.securityPage.noUnexpectedPorts')
@@ -383,6 +445,15 @@
       return t('serverManagement.workspace.disabled');
     return String(value ?? t('serverManagement.securityPage.notAvailable'));
   }
+  function evidenceLine(check: InfraDiagnosticCheck) {
+    const evidence = evidenceText(check);
+    return check.silence && (check.state === 'fail' || check.state === 'warning')
+      ? `${evidence} · ${t(`serverManagement.diagnosticsPage.silence.still.${check.state}`)}`
+      : evidence;
+  }
+  function silenceMeta(silence: InfraCheckSilence) {
+    return silenceMetaText(t, locale.value, silence);
+  }
   function formatTime(value: string) {
     return formatAdminDateTime(value, locale.value);
   }
@@ -400,13 +471,24 @@
     const lines = [
       `${t('serverManagement.diagnosticsPage.title')} · ${statusLabel(data.value.status)}`,
       data.value.capturedAt ? formatCapturedAt(data.value.capturedAt) : '',
-      `${t('serverManagement.diagnosticsPage.summary.failed')}: ${data.value.summary.failed} · ${t('serverManagement.diagnosticsPage.summary.warning')}: ${data.value.summary.warning} · ${t('serverManagement.diagnosticsPage.summary.unknown')}: ${data.value.summary.unknown} · ${t('serverManagement.diagnosticsPage.summary.passed')}: ${data.value.summary.passed}`,
+      visibleSummaryCards.value.map((item) => `${item.label}: ${item.value}`).join(' · '),
       '',
       ...[...data.value.checks]
-        .sort((left, right) => stateOrder[left.state] - stateOrder[right.state])
-        .map(
-          (check) =>
-            `[${stateLabel(check.state)}] ${checkTitle(check)}\n${evidenceText(check)}\n${recommendationText(check)}`,
+        .sort((left, right) => sortRank(left) - sortRank(right))
+        .map((check) =>
+          [
+            `[${checkStateLabel(check)}] ${checkTitle(check)}`,
+            evidenceLine(check),
+            recommendationText(check),
+            check.silence
+              ? t('serverManagement.diagnosticsPage.silence.reportLine', {
+                  until: formatTime(check.silence.until),
+                  reason: check.silence.reason,
+                })
+              : '',
+          ]
+            .filter(Boolean)
+            .join('\n'),
         ),
     ];
     return lines.filter((line, index) => line || index > 2).join('\n');
@@ -438,6 +520,74 @@
       message.error(t('serverManagement.diagnosticsPage.copyFailed'));
     }
   }
+
+  // 资源与安全检查处于异常或预警时才可静默；服务故障与 Agent 离线后端同样拒绝。
+  function canSilence(check: InfraDiagnosticCheck) {
+    return Boolean(check.silenceable) && (check.state === 'fail' || check.state === 'warning');
+  }
+  const silenceTarget = ref<InfraDiagnosticCheck | null>(null);
+  const silenceVisible = ref(false);
+  const silenceLoading = ref(false);
+  const silenceDays = ref<InfraSilenceDays>(7);
+  const silenceOpenedAt = ref(Date.now());
+  const unsilencingId = ref('');
+  const silenceDayOptions = computed(() =>
+    INFRA_SILENCE_DAYS.map((days) => ({
+      key: String(days),
+      label: t('serverManagement.diagnosticsPage.silence.days', { count: days }, days),
+    })),
+  );
+  const silenceExpiresAt = computed(() =>
+    formatAdminDateTime(new Date(silenceOpenedAt.value + silenceDays.value * 86_400_000), locale.value, {
+      includeSeconds: false,
+    }),
+  );
+  function requestErrorMessage(cause: unknown, fallback: string) {
+    return cause instanceof Error && cause.message ? cause.message : fallback;
+  }
+  function openSilence(check: InfraDiagnosticCheck) {
+    silenceTarget.value = check;
+    silenceDays.value = 7;
+    silenceOpenedAt.value = Date.now();
+    silenceVisible.value = true;
+  }
+  async function confirmSilence(payload: { reason: string }) {
+    const target = silenceTarget.value;
+    if (!target || silenceLoading.value) return;
+    silenceLoading.value = true;
+    try {
+      await silenceInfraCheck({ checkId: target.id, days: silenceDays.value, reason: payload.reason, confirmed: true });
+      // 计数与整体状态以后端为准，刷新完成后再关闭弹框，避免短暂显示旧状态。
+      await refresh();
+      silenceVisible.value = false;
+      message.success(t('serverManagement.diagnosticsPage.silence.succeeded'));
+    } catch (cause) {
+      message.error(requestErrorMessage(cause, t('serverManagement.diagnosticsPage.silence.failed')));
+    } finally {
+      silenceLoading.value = false;
+    }
+  }
+  function confirmUnsilence(check: InfraDiagnosticCheck) {
+    if (unsilencingId.value) return;
+    Alert.alert({
+      title: t('serverManagement.diagnosticsPage.silence.unsilenceTitle'),
+      content: t('serverManagement.diagnosticsPage.silence.unsilenceContent', { check: checkTitle(check) }),
+      okText: t('serverManagement.diagnosticsPage.silence.unsilence'),
+      onOk: () => void unsilence(check),
+    });
+  }
+  async function unsilence(check: InfraDiagnosticCheck) {
+    unsilencingId.value = check.id;
+    try {
+      await unsilenceInfraCheck(check.id);
+      await refresh();
+      message.success(t('serverManagement.diagnosticsPage.silence.unsilenced'));
+    } catch (cause) {
+      message.error(requestErrorMessage(cause, t('serverManagement.diagnosticsPage.silence.unsilenceFailed')));
+    } finally {
+      unsilencingId.value = '';
+    }
+  }
 </script>
 
 <style scoped lang="less">
@@ -465,6 +615,66 @@
     font-size: var(--ui-font-13, 13px);
     color: var(--desc-color);
     line-height: 1.6;
+  }
+  .diagnostics-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--ui-space-6, 6px) var(--ui-space-8, 8px);
+  }
+  .diagnostics-actions small {
+    color: var(--desc-color);
+    font-size: var(--ui-font-12, 12px);
+    white-space: normal;
+  }
+  .diagnostics-silence-dot {
+    flex: none;
+    width: var(--ui-layout-6, 6px);
+    height: var(--ui-layout-6, 6px);
+    margin-right: var(--ui-space-5, 5px);
+    border-radius: 50%;
+    background: currentColor;
+  }
+  /* 静默原因用实色左边线标明引用，不只依赖底色区分。 */
+  .diagnostics-silence {
+    grid-column: 1 / -1;
+    display: grid;
+    gap: var(--ui-space-6, 6px);
+    margin-top: var(--ui-space-6, 6px);
+    min-width: 0;
+  }
+  .diagnostics-silence blockquote {
+    margin: 0;
+    padding: var(--ui-space-8, 8px) var(--ui-space-12, 12px);
+    border-left: 3px solid var(--desc-color);
+    border-radius: 0 8px 8px 0;
+    background: color-mix(in srgb, var(--text-color) 5%, transparent);
+    color: var(--text-color);
+    font-size: var(--ui-font-12, 12px);
+    line-height: 1.6;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+  .diagnostics-silence span {
+    color: var(--desc-color);
+    font-size: var(--ui-font-12, 12px);
+    line-height: 1.5;
+  }
+  .diagnostics-silence-duration {
+    display: grid;
+    gap: var(--ui-space-8, 8px);
+    color: var(--text-color);
+    font-size: var(--ui-font-13, 13px);
+  }
+  .diagnostics-silence-duration > div {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--ui-space-8, 8px) var(--ui-space-14, 14px);
+  }
+  .diagnostics-silence-duration small {
+    color: var(--desc-color);
+    font-size: var(--ui-font-12, 12px);
   }
   .diagnostics-collection {
     margin-top: var(--ui-space-12, 12px);
@@ -580,6 +790,11 @@
   .diagnostics-check__body > :deep(button) {
     justify-self: start;
   }
+  .diagnostics-check__actions {
+    display: flex;
+    flex-direction: column;
+    gap: var(--ui-space-8, 8px);
+  }
   pre {
     grid-column: 1/-1;
     white-space: pre-wrap;
@@ -606,6 +821,9 @@
   }
   .diagnostics-status-strip .is-failed {
     color: var(--error-color);
+  }
+  .diagnostics-status-strip .is-silenced {
+    color: var(--desc-color);
   }
   .diagnostics-collection {
     font-size: var(--ui-font-12, 12px);
@@ -650,9 +868,15 @@
       grid-template-columns: 34px minmax(0, 1fr);
       align-items: start;
     }
-    .diagnostics-check > :deep(.b_btn) {
-      grid-column: 2;
-      justify-self: start;
+    .diagnostics-check__actions {
+      flex: 1 0 100%;
+      display: grid;
+      grid-auto-columns: minmax(0, 1fr);
+      grid-auto-flow: column;
+    }
+    .diagnostics-check__actions > :deep(.b_btn) {
+      width: 100%;
+      justify-content: center;
     }
     .diagnostics-rerun-hint {
       text-align: left;

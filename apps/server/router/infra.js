@@ -8,6 +8,8 @@ import {
   getInfraSecurity,
   getInfraServices,
   getInfraStorage,
+  silenceInfraCheck,
+  unsilenceInfraCheck,
 } from '../router_handle/infraHandle.js';
 
 const router = express.Router();
@@ -31,5 +33,7 @@ router.get('/storage', getInfraStorage);
 router.get('/security', getInfraSecurity);
 router.get('/logs/:serviceId', getInfraLogs);
 router.post('/actions', actionLimiter, executeInfraAction);
+router.post('/silences', actionLimiter, silenceInfraCheck);
+router.post('/silences/remove', actionLimiter, unsilenceInfraCheck);
 
 export default router;

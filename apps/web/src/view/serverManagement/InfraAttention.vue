@@ -9,6 +9,9 @@
         t('serverManagement.workspace.warningChecks', { count: data.summary.warning })
       }}</span>
       <span>{{ t('serverManagement.workspace.pendingChecks', { count: data.summary.unknown }) }}</span>
+      <span v-if="data.summary.silenced" class="silenced">{{
+        t('serverManagement.workspace.silencedChecks', { count: data.summary.silenced })
+      }}</span>
     </template>
     <span v-if="error" class="infra-attention__warning">{{
       t(data ? 'serverManagement.workspace.diagnosticsStale' : 'serverManagement.diagnosticsPage.failed')
@@ -52,6 +55,9 @@
   .warning {
     color: var(--warning-color);
     font-weight: 600;
+  }
+  .silenced {
+    color: var(--desc-color);
   }
   .infra-attention__warning {
     color: var(--warning-color);

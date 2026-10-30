@@ -132,6 +132,7 @@
   import InfraPage from './InfraPage.vue';
   import InfraModuleHeader from './InfraModuleHeader.vue';
   import { useInfraAuditList, type InfraAuditItem } from './useInfraAuditList';
+  import { infraCheckTitle } from './infraCheckText';
   import { formatAdminDateTime } from '@/utils/adminDateTime';
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
   import { copyTextToClipboard } from '@/utils/clipboard';
@@ -211,12 +212,14 @@
   function formatTime(value: string) {
     return formatAdminDateTime(value, locale.value);
   }
+  const ACTION_LABEL_KEYS: Record<string, string> = {
+    'infra.nginx_reload': 'serverManagement.reloadNginx',
+    'infra.service_restart': 'serverManagement.restartService',
+    'infra.alert_silence': 'serverManagement.silenceAlert',
+    'infra.alert_unsilence': 'serverManagement.unsilenceAlert',
+  };
   function actionLabel(action: string) {
-    return action === 'infra.nginx_reload'
-      ? t('serverManagement.reloadNginx')
-      : action === 'infra.service_restart'
-        ? t('serverManagement.restartService')
-        : action;
+    return ACTION_LABEL_KEYS[action] ? t(ACTION_LABEL_KEYS[action]) : action;
   }
   function outcomeLabel(value: string) {
     return t(
@@ -233,9 +236,9 @@
           : 'neutral';
   }
   function targetLabel(item: InfraAuditItem) {
-    return isHostAgentServiceId(item.targetId)
-      ? t(`serverManagement.serviceNames.${item.targetId}`)
-      : [item.targetType, item.targetId].filter(Boolean).join(' / ') || '—';
+    if (isHostAgentServiceId(item.targetId)) return t(`serverManagement.serviceNames.${item.targetId}`);
+    if (item.targetType === 'infra_check' && item.targetId) return infraCheckTitle(t, item.targetId);
+    return [item.targetType, item.targetId].filter(Boolean).join(' / ') || '—';
   }
   const detailFields = computed(() =>
     detail.value

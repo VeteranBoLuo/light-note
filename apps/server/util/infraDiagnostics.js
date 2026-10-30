@@ -221,24 +221,30 @@ export function deriveInfraDiagnostics({ dashboard, services, storage, security 
     );
   }
 
-  const summary = {
-    failed: checks.filter((item) => item.state === 'fail').length,
-    warning: checks.filter((item) => item.state === 'warning').length,
-    passed: checks.filter((item) => item.state === 'pass').length,
-    unknown: checks.filter((item) => item.state === 'unknown').length,
-  };
-  const status = summary.failed > 0 ? 'critical' : summary.warning > 0 || summary.unknown > 0 ? 'attention' : 'healthy';
   const availableCapturedAt = sources
     .filter((item) => item.state === 'available' && item.capturedAt)
     .map((item) => new Date(item.capturedAt).getTime())
     .filter(Number.isFinite);
   return {
     capturedAt: availableCapturedAt.length ? new Date(Math.max(...availableCapturedAt)).toISOString() : null,
-    status,
-    summary,
+    ...summarizeDiagnosticChecks(checks),
     checks,
     sources,
   };
+}
+
+/** 计数与整体状态只看未静默的检查项；静默项单独计数，诊断页、概览和告警口径一致。 */
+export function summarizeDiagnosticChecks(checks) {
+  const visible = checks.filter((item) => !item.silence);
+  const summary = {
+    failed: visible.filter((item) => item.state === 'fail').length,
+    warning: visible.filter((item) => item.state === 'warning').length,
+    passed: visible.filter((item) => item.state === 'pass').length,
+    unknown: visible.filter((item) => item.state === 'unknown').length,
+    silenced: checks.length - visible.length,
+  };
+  const status = summary.failed > 0 ? 'critical' : summary.warning > 0 || summary.unknown > 0 ? 'attention' : 'healthy';
+  return { status, summary };
 }
 
 /**

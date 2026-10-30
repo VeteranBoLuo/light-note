@@ -5,6 +5,7 @@ import {
   normalizeHostAgentLogLimit,
   validateHostAgentJobRequest,
 } from '@lightnote/shared/host-agent-protocol';
+import pool from '../db/index.js';
 import { resultData, L } from '../util/common.js';
 import { adminActionErrorResponse, beginAdminAction, finishAdminAction } from '../util/adminActionExecution.js';
 import {
@@ -23,10 +24,19 @@ import {
   loadInfraDiagnostics,
   thresholdState,
 } from '../util/infraDiagnostics.js';
+import {
+  SILENCE_DURATION_DAYS,
+  UPSERT_SILENCE_SQL,
+  applyDiagnosticSilences,
+  applyFindingSilences,
+  isSilenceableCheckId,
+  loadInfraAlertSilences,
+} from '../util/infraAlertSilences.js';
 import { stableAgentErrorCode } from '../util/agent/logSafety.js';
 
 const IDEMPOTENCY_KEY_PATTERN = /^[a-zA-Z0-9-]{16,64}$/u;
 const ACTION_BODY_KEYS = new Set(['action', 'targetId', 'idempotencyKey', 'reason', 'confirmed', 'confirmText']);
+const SILENCE_BODY_KEYS = new Set(['checkId', 'days', 'reason', 'confirmed', 'confirmText']);
 const ACTION_REGISTRY_MAP = Object.freeze({
   [HOST_AGENT_ACTIONS.NGINX_RELOAD]: 'infra.nginx_reload',
   [HOST_AGENT_ACTIONS.SERVICE_RESTART]: 'infra.service_restart',
@@ -104,15 +114,18 @@ export async function getInfraSecurity(req, res) {
   }
   try {
     const snapshot = await getHostAgentSecurity();
-    const findings = deriveSecurityFindings(snapshot);
+    const findings = applyFindingSilences(deriveSecurityFindings(snapshot), await loadSilencesForView());
+    const visible = findings.filter((item) => !item.silence);
     return res.send(
       resultData({
         ...snapshot,
         findings,
         summary: {
-          failed: findings.filter((item) => item.state === 'fail').length,
-          passed: findings.filter((item) => item.state === 'pass').length,
-          unknown: findings.filter((item) => item.state === 'unknown').length,
+          failed: visible.filter((item) => item.state === 'fail').length,
+          warning: visible.filter((item) => item.state === 'warning').length,
+          passed: visible.filter((item) => item.state === 'pass').length,
+          unknown: visible.filter((item) => item.state === 'unknown').length,
+          silenced: findings.length - visible.length,
         },
       }),
     );
@@ -137,7 +150,129 @@ export async function getInfraDiagnostics(req, res) {
   const diagnostics = await loadInfraDiagnostics({
     onSourceError: (domain, code) => console.error('[infra] diagnostics source failed domain=%s code=%s', domain, code),
   });
-  return res.send(resultData(diagnostics));
+  return res.send(resultData(applyDiagnosticSilences(diagnostics, await loadSilencesForView())));
+}
+
+// 静默记录读取失败时按未静默展示：计数偏多可以接受，不能因此把真实异常藏起来。
+async function loadSilencesForView() {
+  try {
+    return await loadInfraAlertSilences(pool, { withActors: true });
+  } catch (error) {
+    console.error('[infra] silences unavailable code=%s', stableAgentErrorCode(error));
+    return [];
+  }
+}
+
+function isPlainBody(body, allowedKeys) {
+  return (
+    Boolean(body) &&
+    typeof body === 'object' &&
+    !Array.isArray(body) &&
+    Object.keys(body).every((key) => allowedKeys.has(key))
+  );
+}
+
+async function sendSilenceFailure(req, res, error, context, connection) {
+  if (connection) {
+    try {
+      await connection.rollback();
+    } catch {}
+  }
+  if (context) {
+    try {
+      await finishAdminAction(context, { outcome: 'failed', metadata: { errorCode: stableAgentErrorCode(error) } });
+    } catch (auditError) {
+      console.error('[infra] silence audit failed code=%s', stableAgentErrorCode(auditError));
+    }
+  }
+  if (error?.code === 'ER_NO_SUCH_TABLE') {
+    return res.send(
+      resultData(
+        { code: 'INFRA_SILENCE_SCHEMA_NOT_READY' },
+        503,
+        L(req, '风险静默尚未初始化，请稍后再试', 'Alert silencing is not ready yet. Try again later.'),
+      ),
+    );
+  }
+  const response = adminActionErrorResponse(error, L(req, '静默操作失败', 'The silence action failed.'));
+  console.error('[infra] silence action failed code=%s', stableAgentErrorCode(error));
+  return res.send(resultData({ code: response.code }, response.status, response.message));
+}
+
+export async function silenceInfraCheck(req, res) {
+  if (!ensureRootActor(req, res)) return;
+  const checkId = String(req.body?.checkId || '').trim();
+  const days = Number(req.body?.days);
+  if (
+    !isPlainBody(req.body, SILENCE_BODY_KEYS) ||
+    !isSilenceableCheckId(checkId) ||
+    !SILENCE_DURATION_DAYS.includes(days)
+  ) {
+    return res.send(resultData(null, 400, L(req, '静默参数无效', 'Invalid silence parameters.')));
+  }
+  // DATETIME 只存到秒；先截掉毫秒，告警评估按截止时刻做条件写入时才能精确匹配。
+  const now = new Date(Math.floor(Date.now() / 1000) * 1000);
+  const until = new Date(now.getTime() + days * 86_400_000);
+  let context;
+  let connection;
+  try {
+    context = await beginAdminAction(req, {
+      action: 'infra.alert_silence',
+      targetId: checkId,
+      metadata: { days, silencedUntil: until.toISOString() },
+    });
+    connection = await pool.getConnection();
+    await connection.beginTransaction();
+    await connection.query(UPSERT_SILENCE_SQL, [checkId, context.reason, until, String(req.user.id), now]);
+    const audit = await finishAdminAction(context, { outcome: 'succeeded', db: connection });
+    await connection.commit();
+    return res.send(
+      resultData({
+        checkId,
+        silence: {
+          reason: context.reason,
+          until: until.toISOString(),
+          createdAt: now.toISOString(),
+          actorUserId: String(req.user.id),
+          actorAlias: req.user.alias || null,
+        },
+        audit,
+      }),
+    );
+  } catch (error) {
+    return sendSilenceFailure(req, res, error, context, connection);
+  } finally {
+    connection?.release();
+  }
+}
+
+export async function unsilenceInfraCheck(req, res) {
+  if (!ensureRootActor(req, res)) return;
+  const checkId = String(req.body?.checkId || '').trim();
+  if (!isPlainBody(req.body, new Set(['checkId'])) || !isSilenceableCheckId(checkId)) {
+    return res.send(resultData(null, 400, L(req, '静默参数无效', 'Invalid silence parameters.')));
+  }
+  // 取消静默只恢复告警、不扩大风险，界面只做二次确认；审计原因由服务端写入固定说明。
+  req.body = {
+    checkId,
+    reason: L(req, '手动取消静默，恢复告警', 'Silence ended manually; alerts resume.'),
+  };
+  let context;
+  let connection;
+  try {
+    context = await beginAdminAction(req, { action: 'infra.alert_unsilence', targetId: checkId });
+    connection = await pool.getConnection();
+    await connection.beginTransaction();
+    const [deleted] = await connection.query('DELETE FROM infra_alert_silences WHERE check_id=?', [checkId]);
+    const removed = Number(deleted?.affectedRows || 0) > 0;
+    const audit = await finishAdminAction(context, { outcome: 'succeeded', metadata: { removed }, db: connection });
+    await connection.commit();
+    return res.send(resultData({ checkId, removed, audit }));
+  } catch (error) {
+    return sendSilenceFailure(req, res, error, context, connection);
+  } finally {
+    connection?.release();
+  }
 }
 
 export async function getInfraLogs(req, res) {
@@ -283,4 +418,5 @@ export const infraHandleInternals = {
   diagnosticSourceErrorCode,
   IDEMPOTENCY_KEY_PATTERN,
   ACTION_BODY_KEYS,
+  SILENCE_BODY_KEYS,
 };

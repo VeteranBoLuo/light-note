@@ -100,13 +100,14 @@ describe('服务器告警状态机', () => {
 });
 
 describe('服务器告警执行', () => {
-  function fakeDatabase(rows = []) {
+  function fakeDatabase(rows = [], silences = []) {
     const queries = [];
     return {
       queries,
       query: vi.fn(async (sql, params) => {
         queries.push({ sql, params });
         if (sql.startsWith('SELECT alert_key')) return [rows];
+        if (sql.startsWith('SELECT check_id')) return [silences];
         if (sql.includes("role='root'")) return [[{ id: 'root-1', email: 'root@example.com' }]];
         return [{ affectedRows: 1 }];
       }),
@@ -183,5 +184,101 @@ describe('服务器告警执行', () => {
     expect(notify).toHaveBeenCalledTimes(2);
     expect(sendEmail).toHaveBeenCalledTimes(2);
     error.mockRestore();
+  });
+
+  const silenceRow = (checkId, until, passStreak = 0) => ({
+    check_id: checkId,
+    reason: '已关闭密码登录，下周统一安装',
+    silenced_until: new Date(until),
+    pass_streak: passStreak,
+    created_by: 'root-1',
+    created_at: new Date('2026-10-29T04:00:00Z'),
+  });
+
+  it('静默期内照常推进告警状态，但开启通知不投递', async () => {
+    const db = fakeDatabase(
+      [openRow('security.fail2ban', 'notice'), openRow('service.mysql', 'urgent')],
+      [silenceRow('security.fail2ban', '2026-11-05T04:00:00Z')],
+    );
+    const notify = vi.fn();
+    const result = await runInfraAlertCycle({
+      db,
+      notify,
+      sendEmail: vi.fn(),
+      now: new Date('2026-10-30T04:03:00Z'),
+      loadDiagnostics: async () =>
+        diagnostics([
+          check('services.health', 'fail', { unhealthy: ['mysql'] }, 'services'),
+          check('security.fail2ban', 'fail', { value: 'not-installed' }),
+        ]),
+    });
+    expect(result.opened.map((row) => row.alertKey).sort()).toEqual(['security.fail2ban', 'service.mysql']);
+    expect(db.queries.some((item) => item.params?.[0] === 'security.fail2ban' && item.sql.startsWith('INSERT'))).toBe(
+      true,
+    );
+    expect(notify).toHaveBeenCalledTimes(1);
+    expect(notify).toHaveBeenCalledWith('root-1', expect.objectContaining({ title: '服务器告警：MySQL 未运行' }));
+  });
+
+  it('静默到期仍异常时解除静默并只发一条站内提醒', async () => {
+    const until = '2026-10-30T04:02:00Z';
+    const db = fakeDatabase([], [silenceRow('security.ssh-login-failures', until)]);
+    const notify = vi.fn();
+    const sendEmail = vi.fn();
+    await runInfraAlertCycle({
+      db,
+      notify,
+      sendEmail,
+      now: new Date('2026-10-30T04:03:00Z'),
+      loadDiagnostics: async () => diagnostics([check('security.ssh-login-failures', 'fail', { failures24h: 1841 })]),
+    });
+    const removal = db.queries.find((item) => item.sql.startsWith('DELETE FROM infra_alert_silences'));
+    expect(removal.params).toEqual(['security.ssh-login-failures', new Date(until)]);
+    expect(notify).toHaveBeenCalledTimes(1);
+    expect(notify).toHaveBeenCalledWith(
+      'root-1',
+      expect.objectContaining({
+        title: '静默已到期，仍未恢复：SSH 失败登录尝试过多',
+        content: expect.stringContaining('24 小时内失败 1841 次'),
+        sourceType: 'infra_alert',
+        sourceId: `security.ssh-login-failures#${Date.parse(until) / 1000}`,
+        meta: { alertKey: 'security.ssh-login-failures', state: 'silence_expired' },
+      }),
+    );
+    expect(sendEmail).not.toHaveBeenCalled();
+  });
+
+  it('静默期内恢复满 3 轮时自动解除，恢复通知同样不投递', async () => {
+    const opened = { ...openRow('security.fail2ban', 'notice'), state: 'open', fail_streak: 0, pass_streak: 2 };
+    const db = fakeDatabase([opened], [silenceRow('security.fail2ban', '2026-11-05T04:00:00Z', 2)]);
+    const notify = vi.fn();
+    const result = await runInfraAlertCycle({
+      db,
+      notify,
+      sendEmail: vi.fn(),
+      now: new Date('2026-10-30T04:03:00Z'),
+      loadDiagnostics: async () => diagnostics([check('security.fail2ban', 'pass')]),
+    });
+    expect(result.resolved.map((row) => row.alertKey)).toEqual(['security.fail2ban']);
+    expect(db.queries.some((item) => item.sql.startsWith('DELETE FROM infra_alert_silences'))).toBe(true);
+    expect(notify).not.toHaveBeenCalled();
+  });
+
+  it('静默表尚未建好时照常告警', async () => {
+    const db = fakeDatabase([openRow('security.fail2ban', 'notice')]);
+    const query = db.query.getMockImplementation();
+    db.query.mockImplementation(async (sql, params) => {
+      if (sql.startsWith('SELECT check_id')) throw Object.assign(new Error('missing'), { code: 'ER_NO_SUCH_TABLE' });
+      return query(sql, params);
+    });
+    const notify = vi.fn();
+    await runInfraAlertCycle({
+      db,
+      notify,
+      sendEmail: vi.fn(),
+      now: new Date('2026-10-30T04:03:00Z'),
+      loadDiagnostics: async () => diagnostics([check('security.fail2ban', 'fail', { value: 'not-installed' })]),
+    });
+    expect(notify).toHaveBeenCalledTimes(1);
   });
 });

@@ -30,6 +30,9 @@
           t('serverManagement.workspace.warningChecks', { count: data.summary.warning })
         }}</span
         ><span>{{ t('serverManagement.workspace.pendingChecks', { count: data.summary.unknown }) }}</span
+        ><span v-if="data.summary.silenced" class="is-silenced">{{
+          t('serverManagement.workspace.silencedChecks', { count: data.summary.silenced })
+        }}</span
         ><span>{{ t('serverManagement.securityPage.passed') }} {{ data.summary.passed }}</span
         ><small>{{ formatTime(data.capturedAt) }}</small></div
       >
@@ -68,18 +71,27 @@
               >
                 <div class="security-finding-row__heading"
                   ><strong>{{ findingText(finding.id, 'title') }}</strong
-                  ><BChip v-if="finding.state === 'fail'" :tone="finding.severity === 'high' ? 'danger' : 'pending'">{{
-                    severityLabel(finding.severity)
-                  }}</BChip
-                  ><BChip v-if="finding.state === 'warning'" tone="pending">{{
+                  ><BChip v-if="finding.silence" tone="neutral"
+                    ><span class="security-silence-dot" aria-hidden="true"></span
+                    >{{ findingStateLabel('silenced') }}</BChip
+                  ><BChip
+                    v-else-if="finding.state === 'fail'"
+                    :tone="finding.severity === 'high' ? 'danger' : 'pending'"
+                    >{{ severityLabel(finding.severity) }}</BChip
+                  ><BChip v-else-if="finding.state === 'warning'" tone="pending">{{
                     findingStateLabel(finding.state)
                   }}</BChip
-                  ><BChip v-if="finding.state === 'unknown'" tone="neutral"
+                  ><BChip v-else-if="finding.state === 'unknown'" tone="neutral"
                     >? {{ findingStateLabel(finding.state) }}</BChip
                   ></div
                 >
                 <p>{{ evidenceText(finding) }}</p
-                ><p class="security-recommendation">{{ findingText(finding.id, 'recommendation') }}</p>
+                ><p class="security-recommendation">{{ findingText(finding.id, 'recommendation') }}</p
+                ><div v-if="finding.silence" class="security-silence"
+                  ><blockquote>{{ finding.silence.reason }}</blockquote
+                  ><span>{{ silenceMetaText(t, locale, finding.silence) }}</span
+                  ><span>{{ t('serverManagement.diagnosticsPage.silence.manageHint') }}</span></div
+                >
                 <div class="security-finding-actions"
                   ><BButton type="text" size="small" @click="toggleEvidence(finding.id)"
                     >{{ t('serverManagement.workspace.rawEvidence') }}
@@ -175,6 +187,7 @@
   import { useRoute } from 'vue-router';
   import type { HostAgentListeningPort } from '@lightnote/shared/host-agent-protocol';
   import { getInfraSecurity, type InfraSecurityFinding, type InfraSecurityFindingState } from '@/api/infraApi';
+  import { silenceMetaText } from './infraCheckText';
   import icon from '@/config/icon';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
@@ -197,10 +210,15 @@
   const allLogins = ref(false);
   const allPorts = ref(false);
   const expanded = ref(new Set<string>());
+  type FindingGroupKey = InfraSecurityFindingState | 'silenced';
+  // 已静默项单独成组，不再计入风险、预警分组；与诊断页的计数口径一致。
+  function inGroup(finding: InfraSecurityFinding, key: FindingGroupKey) {
+    return key === 'silenced' ? Boolean(finding.silence) : !finding.silence && finding.state === key;
+  }
   const findingGroups = computed(() =>
-    (['fail', 'warning', 'unknown', 'pass'] as const)
+    (['fail', 'warning', 'unknown', 'silenced', 'pass'] as const)
       .filter((state) => filter.value === 'all' || filter.value === state)
-      .map((state) => ({ state, items: (data.value?.findings || []).filter((item) => item.state === state) }))
+      .map((state) => ({ state, items: (data.value?.findings || []).filter((item) => inGroup(item, state)) }))
       .filter((group) => group.items.length > 0 || filter.value !== 'all'),
   );
   function toggleEvidence(id: string) {
@@ -209,9 +227,9 @@
     expanded.value = next;
   }
   const securityFilters = computed(() =>
-    (['fail', 'warning', 'unknown', 'all'] as const).map((key) => ({
+    (['fail', 'warning', 'unknown', 'silenced', 'all'] as const).map((key) => ({
       key,
-      label: `${t(`serverManagement.securityPage.filters.${key}`)} · ${key === 'all' ? data.value?.findings.length || 0 : data.value?.findings.filter((item) => item.state === key).length || 0}`,
+      label: `${t(`serverManagement.securityPage.filters.${key}`)} · ${key === 'all' ? data.value?.findings.length || 0 : data.value?.findings.filter((item) => inGroup(item, key)).length || 0}`,
     })),
   );
   type PortReachTone = 'neutral' | 'success' | 'danger' | 'pending';
@@ -259,7 +277,7 @@
       ellipsis: false,
     },
   ]);
-  function findingStateLabel(state: InfraSecurityFindingState) {
+  function findingStateLabel(state: FindingGroupKey) {
     return t(`serverManagement.securityPage.states.${state}`);
   }
   function severityLabel(severity: string) {
@@ -345,6 +363,9 @@
     color: var(--warning-color);
     font-weight: 600;
   }
+  .security-status-strip .is-silenced {
+    color: var(--desc-color);
+  }
   .security-status-strip small {
     margin-left: auto;
     color: var(--desc-color);
@@ -387,6 +408,34 @@
   }
   .security-recommendation {
     color: var(--desc-color);
+  }
+  .security-silence-dot {
+    flex: none;
+    width: var(--ui-layout-6, 6px);
+    height: var(--ui-layout-6, 6px);
+    margin-right: var(--ui-space-5, 5px);
+    border-radius: 50%;
+    background: currentColor;
+  }
+  .security-silence {
+    display: grid;
+    gap: var(--ui-space-6, 6px);
+    margin-bottom: var(--ui-space-8, 8px);
+  }
+  .security-silence blockquote {
+    margin: 0;
+    padding: var(--ui-space-8, 8px) var(--ui-space-12, 12px);
+    border-left: 3px solid var(--desc-color);
+    border-radius: 0 8px 8px 0;
+    background: color-mix(in srgb, var(--text-color) 5%, transparent);
+    font-size: var(--ui-font-12, 12px);
+    line-height: 1.6;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+  .security-silence span {
+    color: var(--desc-color);
+    font-size: var(--ui-font-12, 12px);
   }
   .security-finding-actions {
     display: flex;

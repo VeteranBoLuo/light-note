@@ -25,7 +25,7 @@ const messages = {
 
 let cleanup: (() => void) | undefined;
 
-function mountModal(defaultReason = '', loading = false) {
+function mountModal(defaultReason = '', loading = false, extra?: () => ReturnType<typeof h>) {
   const host = document.createElement('div');
   document.body.append(host);
   const visible = ref(true);
@@ -33,18 +33,22 @@ function mountModal(defaultReason = '', loading = false) {
   const app = createApp({
     setup() {
       return () =>
-        h(AdminRiskActionModal, {
-          visible: visible.value,
-          'onUpdate:visible': (nextVisible: boolean) => {
-            visible.value = nextVisible;
+        h(
+          AdminRiskActionModal,
+          {
+            visible: visible.value,
+            'onUpdate:visible': (nextVisible: boolean) => {
+              visible.value = nextVisible;
+            },
+            title: '确认安全事件结论',
+            impact: '将事件标记为误报并回滚风险影响。',
+            confirmLabel: '标记误报',
+            defaultReason,
+            loading,
+            onConfirm: confirmed,
           },
-          title: '确认安全事件结论',
-          impact: '将事件标记为误报并回滚风险影响。',
-          confirmLabel: '标记误报',
-          defaultReason,
-          loading,
-          onConfirm: confirmed,
-        });
+          extra ? { default: extra } : undefined,
+        );
     },
   });
   app.component('OriginalIcon', { render: () => h('span') });
@@ -103,5 +107,16 @@ describe('AdminRiskActionModal 默认操作原因', () => {
     expect(document.body.querySelector<HTMLTextAreaElement>('textarea')?.disabled).toBe(true);
     expect(findConfirmButton()?.disabled).toBe(true);
     expect(document.body.querySelector<HTMLButtonElement>('.modal-close')?.disabled).toBe(true);
+  });
+
+  it('业务参数插槽渲染在影响说明与原因之间', async () => {
+    mountModal('', false, () => h('div', { class: 'risk-extra' }, '静默时长'));
+    await nextTick();
+
+    const extra = document.body.querySelector('.risk-extra')!;
+    const impact = document.body.querySelector('.admin-risk-action__impact')!;
+    const reason = document.body.querySelector('textarea')!;
+    expect(impact.compareDocumentPosition(extra) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(extra.compareDocumentPosition(reason) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 });

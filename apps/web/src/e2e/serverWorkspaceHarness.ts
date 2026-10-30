@@ -232,11 +232,56 @@ if (state === 'unknown') {
   diagnostics.checks.forEach((check) => (check.state = 'unknown'));
   Object.assign(diagnostics.summary, { failed: 0, warning: 0, unknown: diagnostics.checks.length, passed: 0 });
 }
+// 风险静默：模拟后端口径，只遮住异常/预警项，计数与整体状态排除静默项。
+const silences = new Map<string, Record<string, unknown>>();
+if (state === 'populated' || state === 'long')
+  silences.set('security.ssh-login-failures', {
+    reason:
+      state === 'long'
+        ? 'This is a long silence reason for checking how quoted reasons wrap inside narrow cards and tables. '.repeat(
+            3,
+          )
+        : '已关闭 SSH 密码登录，失败尝试无法得手；Fail2ban 计划下周统一安装后再恢复告警。',
+    until: new Date(now + 7 * 86400e3 - 60e3).toISOString(),
+    createdAt: new Date(now - 60e3).toISOString(),
+    actorUserId: 'infra-fixture',
+    actorAlias: '菠萝',
+  });
+const activeSilence = (id: string, checkState: string) =>
+  (checkState === 'fail' || checkState === 'warning') && silences.has(id) ? silences.get(id) : null;
+function summarize(items: Array<{ state: string; silence?: unknown }>) {
+  const visible = items.filter((item) => !item.silence);
+  const count = (value: string) => visible.filter((item) => item.state === value).length;
+  return {
+    failed: count('fail'),
+    warning: count('warning'),
+    unknown: count('unknown'),
+    passed: count('pass'),
+    silenced: items.length - visible.length,
+  };
+}
+function diagnosticsPayload() {
+  const checks = diagnostics.checks.map((check) => ({
+    ...check,
+    silenceable: check.domain !== 'services',
+    silence: activeSilence(check.id, check.state),
+  }));
+  const summary = summarize(checks);
+  const status = summary.failed ? 'critical' : summary.warning || summary.unknown ? 'attention' : 'healthy';
+  return { ...diagnostics, checks, summary, status };
+}
+function securityPayload() {
+  const items = findings.map((finding) => ({
+    ...finding,
+    silence: activeSilence(`security.${finding.id}`, finding.state),
+  }));
+  return { ...security, findings: items, summary: summarize(items) };
+}
 const audits = Array.from({ length: 83 }, (_, i) => ({
   id: `audit-${i}`,
-  action: i % 4 ? 'infra.service_restart' : 'infra.nginx_reload',
-  targetType: 'service',
-  targetId: i % 4 ? 'lightnote-document-worker' : 'nginx',
+  action: i % 7 === 3 ? 'infra.alert_silence' : i % 4 ? 'infra.service_restart' : 'infra.nginx_reload',
+  targetType: i % 7 === 3 ? 'infra_check' : 'service',
+  targetId: i % 7 === 3 ? 'security.ssh-login-failures' : i % 4 ? 'lightnote-document-worker' : 'nginx',
   outcome: ['succeeded', 'failed', 'denied', 'intent'][i % 4],
   reason:
     state === 'long'
@@ -277,8 +322,21 @@ request.defaults.adapter = async (config) => {
       capabilities: dashboard.capabilities,
       collectionErrors: [],
     });
-  if (url === '/api/infra/security') return response(config, security);
-  if (url === '/api/infra/diagnostics') return response(config, diagnostics);
+  if (url === '/api/infra/security') return response(config, securityPayload());
+  if (url === '/api/infra/diagnostics') return response(config, diagnosticsPayload());
+  if (url === '/api/infra/silences') {
+    const silence = {
+      reason: body.reason,
+      until: new Date(Date.now() + body.days * 86400e3).toISOString(),
+      createdAt: new Date().toISOString(),
+      actorUserId: 'infra-fixture',
+      actorAlias: '菠萝',
+    };
+    silences.set(body.checkId, silence);
+    return response(config, { checkId: body.checkId, silence });
+  }
+  if (url === '/api/infra/silences/remove')
+    return response(config, { checkId: body.checkId, removed: silences.delete(body.checkId) });
   if (url === '/api/infra/storage')
     return response(config, {
       protocolVersion: 1,
