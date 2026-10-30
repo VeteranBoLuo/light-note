@@ -1063,7 +1063,8 @@
   async function fetchUpdateLogs() {
     loadingUpdateLogs.value = true;
     try {
-      const res = await listUpdateLogs();
+      // 工作台只展示最新一条；完整列表含全部 Markdown 正文，按需留给更新日志页读取。
+      const res = await listUpdateLogs({ limit: 1 });
       updateLogList.value = Array.isArray(res.data?.items) ? res.data.items : [];
     } catch (error) {
       console.warn('fetchUpdateLogs fallback', error);
