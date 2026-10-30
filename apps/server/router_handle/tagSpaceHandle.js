@@ -1,12 +1,19 @@
 import pool from '../db/index.js';
 import { L, resultData } from '../util/common.js';
-import { ensureUserOrAdminPolicy } from '../util/auth.js';
+import { ensureNotVisitor, ensureUserOrAdminPolicy } from '../util/auth.js';
 import { ADMIN_POLICIES } from '../util/adminRoutePolicy.js';
 import { getTagEditorBootstrap } from '../util/services/tagEditorService.js';
 import { getTagSpaceOverview, queryTagSpaceList, queryTagSpaceResources } from '../util/services/tagSpaceService.js';
 
 function getResourceUserId(req) {
   return (req.resourceUser || req.user)?.id;
+}
+
+// 标签空间与 queryTagList 一致：游客只读共享游客账号的示例标签；管理员上下文仍按读取策略授权。
+// 标签编辑器数据只服务于编辑，继续拒绝游客。
+function ensureTagSpaceRead(req, res) {
+  if (req.adminContext) return ensureUserOrAdminPolicy(req, res, [ADMIN_POLICIES.READ]);
+  return Boolean(getResourceUserId(req)) || ensureNotVisitor(req, res);
 }
 
 export async function getTagEditorData(req, res) {
@@ -28,7 +35,7 @@ export async function getTagEditorData(req, res) {
 }
 
 export async function queryTagSpaces(req, res) {
-  if (!ensureUserOrAdminPolicy(req, res, [ADMIN_POLICIES.READ])) return;
+  if (!ensureTagSpaceRead(req, res)) return;
   try {
     const data = await queryTagSpaceList(pool, {
       userId: getResourceUserId(req),
@@ -48,7 +55,7 @@ export async function queryTagSpaces(req, res) {
 }
 
 export async function getTagSpace(req, res) {
-  if (!ensureUserOrAdminPolicy(req, res, [ADMIN_POLICIES.READ])) return;
+  if (!ensureTagSpaceRead(req, res)) return;
   try {
     const data = await getTagSpaceOverview(pool, {
       userId: getResourceUserId(req),
@@ -69,7 +76,7 @@ export async function getTagSpace(req, res) {
 }
 
 export async function queryTagSpaceResourceList(req, res) {
-  if (!ensureUserOrAdminPolicy(req, res, [ADMIN_POLICIES.READ])) return;
+  if (!ensureTagSpaceRead(req, res)) return;
   try {
     const data = await queryTagSpaceResources(pool, {
       userId: getResourceUserId(req),
