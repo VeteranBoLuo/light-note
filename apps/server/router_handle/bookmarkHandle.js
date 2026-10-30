@@ -31,6 +31,7 @@ import {
 import { suggestBookmarkMeta, suggestTagsFromText, ORGANIZE_MAX_BATCH } from '../util/aiOrganize.js';
 import { attachPendingStatus } from '../util/resourceInbox.js';
 import { createBookmark, normalizeBookmarkUrl, shouldResetBookmarkIcon } from '../util/services/bookmarkService.js';
+import { queryFrequentBookmarks } from '../util/services/frequentBookmarkService.js';
 import { runBookmarkImportTransaction } from '../util/services/bookmarkImportService.js';
 import { createIconBatch } from '../util/bookmarkIconBatchService.js';
 import { getIconBatchStatus, retryIconBatchFailures } from '../util/bookmarkIconBatchService.js';
@@ -1029,20 +1030,7 @@ export const delBookmark = async (req, res) => {
 
 export const getCommonBookmarks = async (req, res) => {
   try {
-    const [result] = await pool.query(
-      `SELECT b.id, b.url, REPLACE(ol.operation, '点击书签卡片', '') AS name, COUNT(*) AS count
-         FROM operation_logs ol
-         LEFT JOIN bookmark b
-           ON b.user_id = ol.create_by
-          AND CONVERT(b.name USING utf8mb4) COLLATE utf8mb4_general_ci =
-              CONVERT(REPLACE(ol.operation, '点击书签卡片', '') USING utf8mb4) COLLATE utf8mb4_general_ci
-          AND b.del_flag = 0
-        WHERE ol.create_by = ? AND ol.operation LIKE '点击书签卡片%'
-        GROUP BY ol.operation, b.id, b.url
-        ORDER BY count DESC
-        LIMIT 10`,
-      [req.user.id],
-    );
+    const result = await queryFrequentBookmarks(req.user.id);
     res.send(
       resultData({
         items: result,

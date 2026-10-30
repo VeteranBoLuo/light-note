@@ -5,6 +5,7 @@ import { buildObjectUrl, createDownloadSignedUrl } from '../util/obsClient.js';
 import { getFileExtension, resolveFileCategory } from '../util/fileCategory.js';
 import { listTodoPage, queryTodoPendingCount } from '../util/services/todoService.js';
 import { listInboxResources } from '../util/resourceInbox.js';
+import { queryFrequentBookmarks } from '../util/services/frequentBookmarkService.js';
 import { ensureNotVisitor } from '../util/auth.js';
 import { isDailyBriefFeatureEnabled } from '../util/dailyBriefFeature.js';
 import {
@@ -288,26 +289,7 @@ async function queryFileTypeStats(userId) {
 }
 
 async function queryCommonBookmarks(userId) {
-  const [rows] = await pool.query(
-    `
-      SELECT
-        b.id,
-        b.url,
-        REPLACE(ol.operation, '点击书签卡片', '') AS name,
-        COUNT(*) AS count
-      FROM operation_logs ol
-      LEFT JOIN bookmark b
-        ON b.user_id = ol.create_by
-        AND CONVERT(b.name USING utf8mb4) COLLATE utf8mb4_general_ci =
-            CONVERT(REPLACE(ol.operation, '点击书签卡片', '') USING utf8mb4) COLLATE utf8mb4_general_ci
-        AND b.del_flag = 0
-      WHERE ol.create_by = ? AND ol.operation LIKE '点击书签卡片%'
-      GROUP BY ol.operation, b.id, b.url
-      ORDER BY count DESC
-      LIMIT 10
-    `,
-    [userId],
-  );
+  const rows = await queryFrequentBookmarks(userId);
   return rows.map((item, index) => ({ ...item, index: index + 1 }));
 }
 

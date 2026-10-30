@@ -72,6 +72,7 @@ const suites = {
   'util/toolbox/taskList.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
   'util/fileCategory.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
   'util/services/organizeTagMerge.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
+  'util/services/frequentBookmarkService.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
 };
 
 async function main() {
