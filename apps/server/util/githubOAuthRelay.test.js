@@ -203,7 +203,7 @@ describe('backend relay transport', () => {
       agent: false,
       lookup: guardedPublicLookup,
       method: 'POST',
-      headers: { authorization: `Bearer ${secret}` },
+      headers: { authorization: `Bearer ${secret}`, 'user-agent': 'light-note' },
     });
     expect(JSON.parse(req.end.mock.calls[0][0])).toEqual({ operation: 'user', accessToken: 'github-token' });
   });

@@ -47,6 +47,7 @@ export function requestGitHubRelay(relay, payload, timeoutMs) {
         lookup: guardedPublicLookup,
         headers: {
           authorization: `Bearer ${relay.token}`,
+          'user-agent': 'light-note',
           'content-type': 'application/json',
           'content-length': Buffer.byteLength(body),
         },
