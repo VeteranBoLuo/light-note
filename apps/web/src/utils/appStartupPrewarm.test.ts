@@ -28,7 +28,7 @@ it('keeps browsing before unopened manor resources and editors regardless of pro
   for (const result of vi.mocked(scheduleStaticPrewarm).mock.results) expect(result.value).toHaveBeenCalledOnce();
 });
 
-it('预热的导航入口覆盖手机底栏与 PC 侧栏，且每个分组都已在构建入口中登记', () => {
+it('预热的导航入口覆盖手机底栏、PC 侧栏与“我的”页，且每个分组都已在构建入口中登记', () => {
   scheduleAppStartupPrewarm();
   const [navigation, ...rest] = vi.mocked(scheduleStaticPrewarm).mock.calls.map(([selection]) => selection);
   for (const group of [
@@ -41,6 +41,8 @@ it('预热的导航入口覆盖手机底栏与 PC 侧栏，且每个分组都已
     'route.communityChat',
     'route.searchCenter',
     'route.growth',
+    'route.personCenter',
+    'route.support',
   ]) {
     expect(navigation.groups).toContain(group);
   }

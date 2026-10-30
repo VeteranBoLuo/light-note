@@ -1,3 +1,5 @@
+import type { RouteMeta } from 'vue-router';
+
 /**
  * 底部一级模块。
  *
@@ -70,6 +72,11 @@ export const MOBILE_BOTTOM_NAVIGATION: readonly MobileBottomNavigationItem[] = [
 
 /** 今日路径：移动端所有默认落点与底部第一个入口共用 */
 export const MOBILE_TODAY_PATH = '/workbenches' as const;
+
+/** 当前路由是否由手机外壳承载：根组件据此启用外壳，主布局据此把导航等待态交给外壳内容区显示。 */
+export function isMobileShellRoute(isMobile: boolean, meta: RouteMeta) {
+  return isMobile && Boolean(meta.mobileShell);
+}
 
 export const MOBILE_RESOURCE_INBOX_TABS: readonly MobileResourceInboxTab[] = ['all', 'bookmark', 'note', 'file'];
 export const MOBILE_CREATE_HUB_ACTIONS: readonly MobileCreateHubActionKey[] = [

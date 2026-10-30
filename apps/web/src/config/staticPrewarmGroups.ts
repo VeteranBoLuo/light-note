@@ -17,6 +17,7 @@ export const PREWARM_RUNTIME_ENTRIES: Record<string, string> = {
   'route.communityChat': 'view/communityChat/CommunityChat.vue',
   'route.communityFeed': 'view/community/CommunityFeed.vue',
   'route.growth': 'view/growth/GrowthPage.vue',
+  'route.personCenter': 'view/personCenter/PersonCenterMobile.vue',
   account: 'view/login/UserAuthModal.vue',
 };
 

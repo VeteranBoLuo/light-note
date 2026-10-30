@@ -99,6 +99,7 @@
   import { resetBookmarkIconRuntime } from '@/composables/bookmarkIconRuntime.ts';
   import { handleMobilePageBack } from '@/composables/useMobileTopBar';
   import MobileAppShell from '@/components/mobile/MobileAppShell.vue';
+  import { isMobileShellRoute } from '@/config/mobileNavigation';
   import {
     getLandingAuthRetryDelay,
     LANDING_AUTH_CONTEXT,
@@ -231,7 +232,7 @@
   );
   // `mobileShell` 表示该路由需要统一移动端顶栏；资源切换器与底部导航是两个独立开关。
   // 二级页（例如模板管理）只需要「返回 + 标题 + 页面动作」，不能因为两项导航都关闭就把顶栏一并卸载。
-  const mobileShellEnabled = computed(() => bookmark.isMobile && Boolean(router.currentRoute.value.meta.mobileShell));
+  const mobileShellEnabled = computed(() => isMobileShellRoute(bookmark.isMobile, router.currentRoute.value.meta));
   // 聊天室页面已有负责消息列表的实时连接；其余页面由根层连接守护导航角标。
   // 放在 App 而不是底部导航中，键盘弹出导致底栏卸载时也不会断开订阅。
   useCommunityChatUnreadRuntime({

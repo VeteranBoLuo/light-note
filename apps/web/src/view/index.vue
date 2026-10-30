@@ -4,7 +4,7 @@
     <Navigation v-if="showNavigation" />
     <router-view :key="routeViewKey" :style="viewStyle" @manor-immersive-change="manorImmersive = $event" />
     <RoutePendingIndicator
-      v-if="pendingTarget && pendingVisible && pendingTarget.matched[0] === route.matched[0]"
+      v-if="pendingTarget && pendingVisible && !mobileShellRoute"
       class="route-pending-layer"
       :style="pendingStyle"
       :target="pendingTarget"
@@ -21,6 +21,7 @@
   import { useRoute } from 'vue-router';
   import { computed, ref, watch } from 'vue';
   import { NAVIGATION_HIDDEN_ROUTE_NAMES } from '@/config/navigation.ts';
+  import { isMobileShellRoute } from '@/config/mobileNavigation';
   import { getMainRouteViewKey } from '@/utils/routeViewKey.ts';
 
   const route = useRoute();
@@ -55,7 +56,9 @@
           boxSizing: 'border-box',
         },
   );
-  // 模块代码下载期间覆盖在当前页面的内容区上：PC 位于顶部导航之下，手机位于外壳顶栏与底栏之间。
+  // 当前页由手机外壳承载时，等待态改由外壳内容区显示，这样不在本布局下的“我的”页进出也有反馈。
+  const mobileShellRoute = computed(() => isMobileShellRoute(bookmark.isMobile, route.meta));
+  // 模块代码下载期间覆盖在当前页面上：PC 位于顶部导航之下，无外壳的手机页覆盖整页。
   const pendingStyle = computed(() =>
     bookmark.isMobile
       ? { position: 'absolute', inset: '0' }
