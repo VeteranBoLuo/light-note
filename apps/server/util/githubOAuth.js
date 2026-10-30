@@ -1,6 +1,7 @@
 import dns from 'node:dns/promises';
 import https from 'node:https';
 import net from 'node:net';
+import { githubOAuthRelay, requestGitHubRelay } from './githubOAuthRelay.js';
 
 const GITHUB_HOST = 'github.com';
 const TOKEN_PATH = '/login/oauth/access_token';
@@ -175,9 +176,27 @@ export async function selectGitHubTokenEndpoint({ resolveIps = resolveGitHubIpv4
  */
 export async function fetchGitHubTokenSafely(
   bodyStr,
-  { selectEndpoint = selectGitHubTokenEndpoint, requestViaIp = httpsRequestViaIp } = {},
+  {
+    selectEndpoint = selectGitHubTokenEndpoint,
+    requestViaIp = httpsRequestViaIp,
+    relay = githubOAuthRelay(),
+    requestRelay = requestGitHubRelay,
+  } = {},
 ) {
-  const endpoint = await selectEndpoint();
+  let endpoint;
+  if (relay) {
+    const startedAt = Date.now();
+    try {
+      const probe = await requestRelay(relay, { operation: 'probe' }, 5000);
+      if (![200, 400, 401, 404, 422].includes(probe.status)) throw new Error('unhealthy');
+      endpoint = { ip: 'relay', latencyMs: Date.now() - startedAt };
+    } catch (cause) {
+      throw new GitHubOAuthError('GITHUB_OAUTH_ROUTE_UNAVAILABLE', 'GitHub 登录线路暂不可用', {
+        stage: 'TOKEN_CONNECT',
+        cause,
+      });
+    }
+  } else endpoint = await selectEndpoint();
   const headers = {
     Accept: 'application/json',
     'Content-Type': 'application/x-www-form-urlencoded',
@@ -187,11 +206,13 @@ export async function fetchGitHubTokenSafely(
 
   let response;
   try {
-    response = await requestViaIp(
-      endpoint.ip,
-      { method: 'POST', path: TOKEN_PATH, headers, body: bodyStr },
-      DEFAULT_TOKEN_TIMEOUT_MS,
-    );
+    response = relay
+      ? await requestRelay(relay, { operation: 'token', body: bodyStr }, 10000)
+      : await requestViaIp(
+          endpoint.ip,
+          { method: 'POST', path: TOKEN_PATH, headers, body: bodyStr },
+          DEFAULT_TOKEN_TIMEOUT_MS,
+        );
   } catch (cause) {
     const error = new GitHubOAuthError('GITHUB_OAUTH_TOKEN_RESULT_UNKNOWN', 'GitHub 响应超时，请重新发起授权', {
       stage: 'TOKEN_EXCHANGE',
@@ -247,24 +268,48 @@ function wait(ms) {
 export async function fetchGitHubApiJson(
   path,
   accessToken,
-  { attempts = 3, timeoutMs = 6500, fetchImpl = globalThis.fetch, waitImpl = wait } = {},
+  {
+    attempts = 3,
+    timeoutMs = 6500,
+    fetchImpl = globalThis.fetch,
+    waitImpl = wait,
+    relay = githubOAuthRelay(),
+    requestRelay = requestGitHubRelay,
+  } = {},
 ) {
+  if (relay && !['/user', '/user/emails'].includes(path)) {
+    throw new GitHubOAuthError('GITHUB_OAUTH_API_PATH_INVALID', 'GitHub 接口不可用', { stage: 'PROFILE_FETCH' });
+  }
   let lastResponse;
   let lastCause;
   for (let attempt = 0; attempt < attempts; attempt += 1) {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      const response = await fetchImpl(`https://api.github.com${path}`, {
-        method: 'GET',
-        signal: controller.signal,
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          Accept: 'application/vnd.github+json',
-          'X-GitHub-Api-Version': '2022-11-28',
-          'User-Agent': 'light-note',
-        },
-      });
+      const response = relay
+        ? await requestRelay(
+            relay,
+            {
+              operation: path === '/user' ? 'user' : 'emails',
+              accessToken,
+            },
+            timeoutMs,
+          ).then((result) => ({
+            ok: result.status >= 200 && result.status < 300,
+            status: result.status,
+            headers: { get: (name) => result.headers[name] ?? null },
+            json: async () => JSON.parse(result.body),
+          }))
+        : await fetchImpl(`https://api.github.com${path}`, {
+            method: 'GET',
+            signal: controller.signal,
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              Accept: 'application/vnd.github+json',
+              'X-GitHub-Api-Version': '2022-11-28',
+              'User-Agent': 'light-note',
+            },
+          });
       lastResponse = response;
       if (response.ok) return await response.json();
 
