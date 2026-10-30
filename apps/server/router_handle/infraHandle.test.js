@@ -91,6 +91,22 @@ describe('infraHandle', () => {
     });
   });
 
+  it('root 仅允许密钥登录时降为中级预警，并进入诊断预警计数', () => {
+    const snapshot = {
+      ssh: { available: true, port: 22, permitRootLogin: 'without-password', passwordAuthentication: false },
+    };
+    expect(
+      infraHandleInternals.deriveSecurityFindings(snapshot).find((item) => item.id === 'ssh-root-login'),
+    ).toMatchObject({ state: 'warning', severity: 'medium', evidence: { value: 'without-password' } });
+    const diagnostics = infraHandleInternals.deriveInfraDiagnostics({ security: snapshot }, [
+      { domain: 'security', state: 'available' },
+    ]);
+    expect(diagnostics.checks.find((item) => item.id === 'security.ssh-root-login')).toMatchObject({
+      state: 'warning',
+    });
+    expect(diagnostics.summary.warning).toBeGreaterThanOrEqual(1);
+  });
+
   it('防火墙拦截的端口不算公网暴露，Fail2ban 未安装按风险处理并保留事实', () => {
     const findings = infraHandleInternals.deriveSecurityFindings({
       ssh: { available: true, port: 22 },

@@ -128,7 +128,7 @@ const dashboard = {
   collectionErrors: [],
 };
 const findings = [
-  { id: 'ssh-root-login', state: 'fail', severity: 'high', evidence: { value: 'yes' } },
+  { id: 'ssh-root-login', state: 'warning', severity: 'medium', evidence: { value: 'without-password' } },
   { id: 'ssh-password-authentication', state: 'fail', severity: 'high', evidence: { value: true } },
   { id: 'ssh-public-key-authentication', state: 'pass', severity: 'low', evidence: { value: true } },
   { id: 'firewall', state: 'pass', severity: 'high', evidence: { provider: 'ufw', value: 'enabled' } },
@@ -148,7 +148,7 @@ const security = {
   ssh: {
     available: true,
     port: 22,
-    permitRootLogin: 'yes',
+    permitRootLogin: 'without-password',
     passwordAuthentication: true,
     publicKeyAuthentication: true,
     successes24h: 3,
@@ -174,12 +174,12 @@ const security = {
   ],
   collectionErrors: [],
   findings,
-  summary: { failed: 6, unknown: 0, passed: 2 },
+  summary: { failed: 5, warning: 1, unknown: 0, passed: 2 },
 };
 const diagnostics = {
   capturedAt,
   status: 'critical',
-  summary: { failed: 7, warning: 0, unknown: 0, passed: 2 },
+  summary: { failed: 6, warning: 1, unknown: 0, passed: 2 },
   checks: [
     {
       id: 'services.health',
@@ -208,7 +208,7 @@ if (state === 'healthy') {
   findings.forEach((finding) => (finding.state = 'pass'));
   Object.assign(findings.find((finding) => finding.id === 'fail2ban')!.evidence, { value: 'enabled' });
   Object.assign(findings.find((finding) => finding.id === 'unexpected-public-ports')!.evidence, { ports: [] });
-  Object.assign(security.summary, { failed: 0, unknown: 0, passed: findings.length });
+  Object.assign(security.summary, { failed: 0, warning: 0, unknown: 0, passed: findings.length });
   diagnostics.status = 'healthy';
   diagnostics.checks.forEach((check) => (check.state = 'pass'));
   Object.assign(diagnostics.summary, { failed: 0, warning: 0, unknown: 0, passed: diagnostics.checks.length });
@@ -225,7 +225,7 @@ if (state === 'unknown') {
     }),
   );
   findings.forEach((finding) => (finding.state = 'unknown'));
-  Object.assign(security.summary, { failed: 0, unknown: findings.length, passed: 0 });
+  Object.assign(security.summary, { failed: 0, warning: 0, unknown: findings.length, passed: 0 });
   Object.assign(security.ssh, { available: false, recent: [], successes24h: null, failures24h: null });
   Object.assign(io, { readBytesPerSecond: null, writeBytesPerSecond: null, busyPercent: null });
   diagnostics.status = 'attention';
