@@ -821,6 +821,7 @@
     promoteEmptyMarkdownTaskToken,
   } from '@/utils/noteHtmlToMarkdown';
   import { scrollIntoContainer } from '@/utils/scrolling';
+  import { cacheTinyMceHtmlContent } from '@/utils/tinyMceContentCache';
 
   import {
     applyContentImageSizeToElement,
@@ -5458,7 +5459,9 @@
         setSelectedMermaidFigure(null);
         return true;
       };
+      let releaseContentCache = () => {};
       editor.on('init', () => {
+        releaseContentCache = cacheTinyMceHtmlContent(editor);
         bindMermaidEditRequest();
         bindRichImageNativeMenuGuard();
         contextToolbarScrollContainer =
@@ -5516,6 +5519,7 @@
         editor.shortcuts.remove('Meta+Alt+R');
       });
       editor.on('remove', () => {
+        releaseContentCache();
         contextToolbarObserver?.disconnect();
         contextToolbarObserver = null;
         if (contextToolbarAdjustFrame !== null) window.cancelAnimationFrame(contextToolbarAdjustFrame);
