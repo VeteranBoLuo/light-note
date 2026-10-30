@@ -34,7 +34,7 @@ vi.mock('../util/hostAgentClient.js', () => {
 });
 vi.mock('../util/agent/logSafety.js', () => ({ stableAgentErrorCode: (error) => String(error?.code || 'ERROR') }));
 
-const { executeInfraAction, getInfraDashboard, getInfraDiagnostics, infraHandleInternals } =
+const { executeInfraAction, getInfraDashboard, getInfraDiagnostics, getInfraSecurity, infraHandleInternals } =
   await import('./infraHandle.js');
 
 function response() {
@@ -49,6 +49,22 @@ beforeEach(() => {
 });
 
 describe('infraHandle', () => {
+  it('loads the production routes and keeps the security snapshot restricted to Root', async () => {
+    await expect(import('../router/infra.js')).resolves.toHaveProperty('default');
+    const denied = response();
+    await getInfraSecurity({ user: { id: '1', role: 'user' } }, denied);
+    expect(denied.send).toHaveBeenCalledWith(expect.objectContaining({ status: 403 }));
+    expect(mocks.security).not.toHaveBeenCalled();
+    mocks.security.mockResolvedValue({ sampledAt: '2026-10-30T04:00:00.000Z' });
+    const allowed = response();
+    await getInfraSecurity({ user: { id: '1', role: 'root' } }, allowed);
+    expect(allowed.send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ findings: expect.any(Array), summary: expect.any(Object) }),
+      }),
+    );
+  });
+
   it('仅 Root 普通上下文可读取仪表盘', async () => {
     const denied = response();
     await getInfraDashboard({ user: { id: '1', role: 'user' } }, denied);

@@ -174,6 +174,6 @@ if [ "$code" = "200" ]; then
   echo "✅  后端健康检查 HTTP 200"
 else
   echo "⚠️  后端健康检查 HTTP $code —— 请查 pm2 logs app;必要时回滚:"
-  echo "    先停止 $DOCUMENT_WORKER_PM2，再恢复备份目录 ${REMOTE}_bak_$TS；重启 $PM2 后，再用同一备份版本启动 $DOCUMENT_WORKER_PM2。"
+  echo "    先停止 ${DOCUMENT_WORKER_PM2}，再恢复备份目录 ${REMOTE}_bak_${TS}；重启 ${PM2} 后，再用同一备份版本启动 ${DOCUMENT_WORKER_PM2}。"
   exit 1
 fi

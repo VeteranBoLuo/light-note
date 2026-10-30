@@ -97,6 +97,38 @@ export function getInfraStorage(req, res) {
   return sendReadOnlySnapshot(req, res, getHostAgentStorage, 'storage');
 }
 
+export async function getInfraSecurity(req, res) {
+  if (!ensureRootActor(req, res)) return;
+  if (req.query && Object.keys(req.query).length > 0) {
+    return res.send(resultData(null, 400, L(req, '查询参数无效', 'Invalid query parameters.')));
+  }
+  try {
+    const snapshot = await getHostAgentSecurity();
+    const findings = deriveSecurityFindings(snapshot);
+    return res.send(
+      resultData({
+        ...snapshot,
+        findings,
+        summary: {
+          failed: findings.filter((item) => item.state === 'fail').length,
+          passed: findings.filter((item) => item.state === 'pass').length,
+          unknown: findings.filter((item) => item.state === 'unknown').length,
+        },
+      }),
+    );
+  } catch (error) {
+    const status = error instanceof HostAgentClientError ? 503 : 500;
+    console.error('[infra] security failed code=%s', stableAgentErrorCode(error));
+    return res.send(
+      resultData(
+        { code: String(error?.code || 'HOST_AGENT_SECURITY_FAILED') },
+        status,
+        L(req, '安全快照暂时不可用', 'The security snapshot is temporarily unavailable.'),
+      ),
+    );
+  }
+}
+
 export async function getInfraDiagnostics(req, res) {
   if (!ensureRootActor(req, res)) return;
   if (req.query && Object.keys(req.query).length > 0) {
