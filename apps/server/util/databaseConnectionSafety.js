@@ -55,9 +55,24 @@ export function isLocalDatabaseHost(hostValue) {
   );
 }
 
+// SSH 隧道把线上库映射到回环地址，单凭主机无法区分；LIGHTNOTE_DATABASE_SCOPE=remote 让隧道仍按远程库失败关闭。
+// local 只确认本机主机，不能把远程主机降级为本地。
+export function isLocalDatabase(env = process.env) {
+  const scope = String(env.LIGHTNOTE_DATABASE_SCOPE || '')
+    .trim()
+    .toLowerCase();
+  if (scope === 'remote') return false;
+  if (scope && scope !== 'local')
+    throw safetyError('DATABASE_SCOPE_INVALID', 'LIGHTNOTE_DATABASE_SCOPE 只允许 local 或 remote');
+  const local = isLocalDatabaseHost(env.DB_HOST);
+  if (scope === 'local' && !local)
+    throw safetyError('DATABASE_SCOPE_INVALID', 'LIGHTNOTE_DATABASE_SCOPE=local 只能用于本机数据库');
+  return local;
+}
+
 export function assertDatabaseConnectionSafety(env = process.env) {
   const runtime = resolveLightNoteRuntime(env);
-  const databaseScope = isLocalDatabaseHost(env.DB_HOST) ? 'local' : 'remote';
+  const databaseScope = isLocalDatabase(env) ? 'local' : 'remote';
   const remoteWriteOverride = explicitTrue(env.ALLOW_REMOTE_DATABASE_WRITES);
   const readOnly = explicitTrue(env.ALLOW_REMOTE_DATABASE_READS);
   if (readOnly && remoteWriteOverride)

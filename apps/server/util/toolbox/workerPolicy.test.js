@@ -12,6 +12,10 @@ describe('toolbox queue ownership', () => {
       }),
     ).toBe(false);
     expect(toolboxWorkerEnabled({ LIGHTNOTE_RUNTIME_ENV: 'local', DB_HOST: '127.0.0.1' })).toBe(true);
+    // SSH 隧道映射到回环地址的线上库同样不能被本地 Worker 消费。
+    expect(
+      toolboxWorkerEnabled({ LIGHTNOTE_RUNTIME_ENV: 'local', DB_HOST: '127.0.0.1', LIGHTNOTE_DATABASE_SCOPE: 'remote' }),
+    ).toBe(false);
     expect(toolboxWorkerEnabled({ LIGHTNOTE_RUNTIME_ENV: 'production', DB_HOST: 'db.example.com' })).toBe(true);
   });
   it('does not claim, expire or refund jobs when disabled', async () => {
