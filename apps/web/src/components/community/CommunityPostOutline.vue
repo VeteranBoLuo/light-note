@@ -76,8 +76,9 @@
     () => [props.contentRoot, props.content] as const,
     () => {
       selectedIndex = null;
-      const content = props.contentRoot?.querySelector('.community-markdown');
-      headings.value = Array.from(content?.querySelectorAll<HTMLElement>('h1,h2,h3,h4,h5,h6') || [])
+      // Inline images split one article into several Markdown blocks; collect headings across all of them.
+      const selector = ['h1', 'h2', 'h3', 'h4', 'h5', 'h6'].map((tag) => `.community-markdown ${tag}`).join(',');
+      headings.value = Array.from(props.contentRoot?.querySelectorAll<HTMLElement>(selector) || [])
         .filter((element) => element.textContent?.trim())
         .map((element) => ({ text: element.textContent!.trim(), level: Number(element.tagName.slice(1)), element }));
       updateActive();

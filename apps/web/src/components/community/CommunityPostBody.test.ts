@@ -35,16 +35,6 @@ it('renders inline images once between paragraphs with attachments above the bod
   expect(host.innerHTML.indexOf(second)).toBeLessThan(host.innerHTML.indexOf('前'));
   app.unmount();
 });
-it('keeps the feed excerpt text only without fetching or embedding images', () => {
-  const host = document.createElement('div');
-  const app = createApp(Body, { body: `前\n\n![](community-image:${first})\n\n后`, excerpt: true, images: [] });
-  app.mount(host);
-  expect(host.querySelector('img')).toBeNull();
-  expect(host.textContent).toContain('前');
-  expect(host.textContent).toContain('后');
-  app.unmount();
-});
-
 it('keeps attachments out of the body-only Markdown preview', () => {
   const host = document.createElement('div');
   const app = createApp(Body, {

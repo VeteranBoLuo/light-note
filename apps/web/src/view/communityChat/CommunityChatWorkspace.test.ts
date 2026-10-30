@@ -55,12 +55,13 @@ const mocks = vi.hoisted(() => ({
   messageError: vi.fn(),
   routerReplace: vi.fn(),
   scrollIntoContainer: vi.fn(),
-  route: { query: {} as Record<string, unknown> },
+  route: { query: {} as Record<string, unknown>, fullPath: '/community/chat' },
   bookmark: {
     authModalTab: '登录',
     authModalSource: '',
     isShowLogin: false,
     isMobile: false,
+    openAuthModal: vi.fn(),
   },
   user: {
     id: 'user-1',
@@ -226,10 +227,12 @@ function chatMessage(overrides = {}) {
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
-  const promise = new Promise<T>((resolver) => {
+  let reject!: (reason: unknown) => void;
+  const promise = new Promise<T>((resolver, rejecter) => {
     resolve = resolver;
+    reject = rejecter;
   });
-  return { promise, resolve };
+  return { promise, resolve, reject };
 }
 
 class WorkspaceRealtimeSocket {
@@ -2980,6 +2983,31 @@ describe('CommunityChatWorkspace', () => {
     expect(host.querySelector('[data-message-public-id="message-sent"]')?.textContent).toContain('网络慢时也立即出现');
   });
 
+  it('发送中输入框保持可编辑，失败时原消息放回草稿前部且保留期间新输入', async () => {
+    const request = deferred<any>();
+    mocks.sendMessage.mockReturnValueOnce(request.promise);
+    const host = await mountWorkspace();
+    const textarea = host.querySelector<HTMLTextAreaElement>('textarea')!;
+    textarea.value = '第一条';
+    textarea.dispatchEvent(new Event('input', { bubbles: true }));
+    await nextTick();
+    host.querySelector<HTMLButtonElement>('.community-composer__send')?.click();
+    await flushAsync();
+
+    expect(host.querySelector('.community-message.is-sending')?.textContent).toContain('第一条');
+    expect(textarea.disabled).toBe(false);
+    textarea.value = '发送中继续写';
+    textarea.dispatchEvent(new Event('input', { bubbles: true }));
+    await nextTick();
+
+    request.reject(new Error('网络中断'));
+    await flushAsync();
+
+    expect(host.querySelector('.community-message.is-sending')).toBeNull();
+    expect(textarea.value).toBe('第一条\n发送中继续写');
+    expect(mocks.messageError).toHaveBeenCalledWith('网络中断');
+  });
+
   it('发送后主动浏览历史时，迟到的服务端回执只对账消息而不抢回底部', async () => {
     const request = deferred<any>();
     mocks.sendMessage.mockReturnValueOnce(request.promise);
@@ -3084,8 +3112,7 @@ describe('CommunityChatWorkspace', () => {
       button.textContent?.includes('登录 / 注册后参与'),
     );
     loginButton?.click();
-    expect(mocks.bookmark.isShowLogin).toBe(true);
-    expect(mocks.bookmark.authModalSource).toBe('community_chat');
+    expect(mocks.bookmark.openAuthModal).toHaveBeenCalledWith('登录', 'community_chat', '/community/chat');
   });
 
   it('他人消息可提交举报，客户端只发送消息公有 ID、原因和说明', async () => {
