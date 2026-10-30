@@ -285,7 +285,7 @@
                               @{{ name }}
                             </span>
                           </span>
-                          <ChatInlineEmojiText v-if="chatMessage.content" :content="chatMessage.content" />
+                          <ChatInlineEmojiText v-if="chatMessage.content" :content="chatMessage.content" links />
                         </p>
                         <ChatMessageAttachments
                           v-else-if="messageHasAttachments(chatMessage)"
@@ -6022,6 +6022,11 @@
     text-decoration: underline;
     text-decoration-color: rgba(255, 255, 255, 0.68);
     text-underline-offset: 2px;
+  }
+
+  .community-message.is-own .community-message__content :deep(.chat-message-link) {
+    color: #fff;
+    text-decoration-color: rgba(255, 255, 255, 0.68);
   }
 
   .community-message__actions {

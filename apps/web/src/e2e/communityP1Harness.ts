@@ -87,7 +87,10 @@ const rooms = [
 ];
 const messages = Array.from({ length: 50 }, (_, index) => ({
   publicId: `message-${index}`,
-  content: `第 ${index + 1} 条交流：欢迎分享你的轻笺使用心得。`,
+  content:
+    params.has('links') && index >= 48
+      ? `去广场看看：https://boluo66.top/community/feed 。参考资料（https://developer.mozilla.org/zh-CN/docs/Web/HTML）`
+      : `第 ${index + 1} 条交流：欢迎分享你的轻笺使用心得。`,
   status: 'active',
   createdAt: new Date(Date.UTC(2026, 8, 14, 8, index)).toISOString(),
   editedAt: null,

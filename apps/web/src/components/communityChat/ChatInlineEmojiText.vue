@@ -2,6 +2,7 @@
   <span ref="root" class="chat-inline-emoji-text" @dblclick="selectInlineEmoji" @click="selectInlineEmojiParagraph">
     <template v-for="(segment, index) in segments" :key="index">
       <span v-if="segment.type === 'text'">{{ segment.value }}</span>
+      <ChatMessageLink v-else-if="segment.type === 'link'" :href="segment.value" />
       <span
         v-else
         data-emoji-atom
@@ -30,15 +31,24 @@
 
 <script setup lang="ts">
   import { publicArtworkUrl } from '@/utils/publicArtwork';
-  import { parseCommunityChatInlineEmojiContent } from '@lightnote/shared/community-chat-inline-emojis';
+  import {
+    parseCommunityChatInlineEmojiContent,
+    type CommunityChatInlineEmojiContentSegment,
+  } from '@lightnote/shared/community-chat-inline-emojis';
   import { computed, ref, onMounted, onBeforeUnmount } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { inlineEmojiBounds } from './inlineEmojiBounds';
   import { selectInlineEmoji, selectInlineEmojiParagraph, syncInlineEmojiSelection } from './inlineEmojiSelection';
+  import { splitChatMessageLinks, type ChatMessageTextPart } from './chatMessageLinks';
+  import ChatMessageLink from './ChatMessageLink.vue';
 
-  const props = withDefaults(defineProps<{ content?: string }>(), { content: '' });
+  const props = withDefaults(defineProps<{ content?: string; links?: boolean }>(), { content: '', links: false });
   const { t } = useI18n();
-  const segments = computed(() => parseCommunityChatInlineEmojiContent(props.content));
+  const segments = computed(() =>
+    parseCommunityChatInlineEmojiContent(props.content).flatMap<
+      CommunityChatInlineEmojiContentSegment | ChatMessageTextPart
+    >((segment) => (props.links && segment.type === 'text' ? splitChatMessageLinks(segment.value) : [segment])),
+  );
   const root = ref<HTMLElement | null>(null);
   const bounds = (id: string) => inlineEmojiBounds[id] || [0, 1];
   const syncSelection = () => {
