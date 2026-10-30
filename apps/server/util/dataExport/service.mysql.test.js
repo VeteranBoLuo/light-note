@@ -202,6 +202,7 @@ describe.skipIf(!socket)('export jobs on isolated MySQL', () => {
       bookmarks: 1,
       files: 1,
       fileBytes: 1000,
+      filesFit: true,
       lastBackup: null,
     });
   });

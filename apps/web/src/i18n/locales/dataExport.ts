@@ -20,6 +20,7 @@ export const dataExportZh = {
     partial: '{done} / {total} 项已备份',
     expired: '上次备份：{date} · {total} 项',
     expiredCustom: '上次备份：{date} · {total} 项（自定义内容）',
+    expiredNoFiles: '上次备份：{date} · {total} 项（不含文件）',
     failed: '这次备份没有完成',
   },
   sub: {
@@ -34,6 +35,10 @@ export const dataExportZh = {
   },
   stage: { notes: '正在打包笔记', bookmarks: '正在打包书签', files: '正在打包文件' },
   backupAll: '备份全部资料',
+  backupNotesBookmarks: '备份笔记和书签',
+  filesTooLarge: '文件共 {size}，超出服务器一次能打包的大小，这次只备份笔记和书签。文件可以在云空间选中后批量下载。',
+  fileTooLargeHint: '文件共 {size}，超出一次能打包的大小，请在云空间选中后批量下载。',
+  openCloudSpace: '去云空间',
   backupAgain: '再备份一次',
   rebackup: '重新备份',
   customize: '自定义内容',
@@ -50,6 +55,7 @@ export const dataExportZh = {
     files: '文件 {n} 个',
     filesHint: '原始文件，按云空间目录存放',
     filesHintWithSize: '原始文件，共 {size}，按云空间目录存放',
+    filesTooLarge: '共 {size}，不在一键备份内，请在云空间批量下载',
   },
   promise: {
     ownTitle: '内容归你',
@@ -121,6 +127,7 @@ export const dataExportEn = {
     partial: '{done} of {total} items backed up',
     expired: 'Last backup: {date} · {total} items',
     expiredCustom: 'Last backup: {date} · {total} items (custom)',
+    expiredNoFiles: 'Last backup: {date} · {total} items (without files)',
     failed: 'This backup did not finish',
   },
   sub: {
@@ -135,6 +142,11 @@ export const dataExportEn = {
   },
   stage: { notes: 'Packing notes', bookmarks: 'Packing bookmarks', files: 'Packing files' },
   backupAll: 'Back up everything',
+  backupNotesBookmarks: 'Back up notes and bookmarks',
+  filesTooLarge:
+    'Your files total {size}, more than the server can pack at once, so this backup covers notes and bookmarks. Select files in Cloud Space to download them in batches.',
+  fileTooLargeHint: 'Your files total {size}, more than can be packed at once. Select them in Cloud Space to download in batches.',
+  openCloudSpace: 'Open Cloud Space',
   backupAgain: 'Back up again',
   rebackup: 'Back up again',
   customize: 'Customize',
@@ -151,6 +163,7 @@ export const dataExportEn = {
     files: '{n} files',
     filesHint: 'Original files in your cloud folders',
     filesHintWithSize: 'Original files, {size} in total, in your cloud folders',
+    filesTooLarge: '{size} in total, not included in one-click backup; download them in batches from Cloud Space',
   },
   promise: {
     ownTitle: 'Your content is yours',

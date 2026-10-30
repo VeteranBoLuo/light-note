@@ -44,6 +44,8 @@ export interface DataBackupSummary {
   bookmarks: number;
   files: number;
   fileBytes: number;
+  /** 文件原件能否和笔记、书签一起打包；超出服务器暂存空间时一键备份不含文件。 */
+  filesFit: boolean;
   lastBackup: {
     at: string;
     total: number;

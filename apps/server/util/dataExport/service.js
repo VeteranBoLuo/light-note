@@ -3,7 +3,18 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import pool from '../../db/index.js';
 import { normalizeDataExportOptions, DATA_EXPORT_ACTIVE } from '@lightnote/shared/data-export';
-import { root, runtime, hostKey, exportError, taskDirectory, ensureSpace, assertSchema } from './storage.js';
+import {
+  root,
+  runtime,
+  hostKey,
+  exportError,
+  taskDirectory,
+  ensureSpace,
+  assertSchema,
+  availableBytes,
+  filesFitStaging,
+  stagingBytesForFiles,
+} from './storage.js';
 import { resourcePage, resourceVersion, buildPaths } from './resources.js';
 export async function transaction(fn) {
   const db = await pool.getConnection();
@@ -88,11 +99,22 @@ export async function exportSummary(owner, db = pool) {
         (SELECT preferences FROM user WHERE id=?) AS preferences`,
     [owner, owner, owner, owner, owner],
   );
+  const fileBytes = Number(row?.fileBytes) || 0;
+  // 文件总量超出暂存空间时，一键备份不含文件；读不到磁盘信息时按能放下处理，创建任务时仍会再检查。
+  let filesFit = true;
+  if (fileBytes) {
+    try {
+      filesFit = filesFitStaging(fileBytes, await availableBytes());
+    } catch {
+      filesFit = true;
+    }
+  }
   return {
     notes: Number(row?.notes) || 0,
     bookmarks: Number(row?.bookmarks) || 0,
     files: Number(row?.files) || 0,
-    fileBytes: Number(row?.fileBytes) || 0,
+    fileBytes,
+    filesFit,
     lastBackup: readLastBackup(row?.preferences),
   };
 }
@@ -157,8 +179,8 @@ export async function createTask(owner, input) {
           if (rows.length < 100) break;
         }
       }
-      // 原件要先复制再打包，按两倍体积预估暂存空间，避免大备份做到一半才因空间不足失败。
-      if (fileBytes) await ensureSpace(fileBytes * 2);
+      // 原件要先复制再打包，按预估暂存空间检查，避免大备份做到一半才因空间不足失败。
+      if (fileBytes) await ensureSpace(stagingBytesForFiles(fileBytes));
       if (!total) {
         await db.query('DELETE FROM data_export_tasks WHERE id=?', [id]);
         await fs.rm(directory, { recursive: true, force: true });

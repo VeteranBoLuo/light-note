@@ -23,10 +23,21 @@ export async function writeJson(file, data) {
   await fs.writeFile(file + '.tmp', JSON.stringify(data), { mode: 0o600 });
   await fs.rename(file + '.tmp', file);
 }
-export async function ensureSpace(required = 0) {
+const RESERVED_BYTES = 512 * 1024 * 1024;
+export async function availableBytes() {
   await fs.mkdir(root, { recursive: true, mode: 0o700 });
   const stat = await fs.statfs(root);
-  if (stat.bavail * stat.bsize < required + 512 * 1024 * 1024) throw exportError('DATA_EXPORT_DISK_FULL', 507);
+  return stat.bavail * stat.bsize;
+}
+export async function ensureSpace(required = 0) {
+  if ((await availableBytes()) < required + RESERVED_BYTES) throw exportError('DATA_EXPORT_DISK_FULL', 507);
+}
+/** 文件原件要先复制再打包，按两倍体积预估暂存空间；创建任务与「数据与备份」页的判断共用这一口径。 */
+export function stagingBytesForFiles(fileBytes) {
+  return Number(fileBytes) > 0 ? Number(fileBytes) * 2 : 0;
+}
+export function filesFitStaging(fileBytes, available) {
+  return stagingBytesForFiles(fileBytes) + RESERVED_BYTES <= available;
 }
 export async function assertSchema(db) {
   await db.query(

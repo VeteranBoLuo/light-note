@@ -12,6 +12,13 @@
           </BChip>
           <p class="backup-headline">{{ headline }}</p>
           <p class="backup-sub">{{ sub }}</p>
+          <p v-if="filesTooLarge && ['never', 'expired', 'failed'].includes(state)" class="backup-notice">
+            <SvgIcon :src="icon.message.info" size="14" />
+            <span>{{ t('dataExport.filesTooLarge', { size: formatSize(summary!.fileBytes) }) }}</span>
+            <BButton type="text" size="small" class="backup-link" @click="openCloudSpace">{{
+              t('dataExport.openCloudSpace')
+            }}</BButton>
+          </p>
           <BButton v-if="state === 'partial'" type="text" size="small" class="backup-link" @click="openFailures">
             {{ t('dataExport.failures') }}
           </BButton>
@@ -26,7 +33,13 @@
             <BButton type="primary" :block="stacked" :loading="busy" :disabled="!owner" @click="download">
               <SvgIcon :src="icon.toolbox.download" size="16" />{{ t('dataExport.downloadBackup') }}
             </BButton>
-            <BButton type="text" size="small" class="backup-link" :disabled="busy || !owner" @click="submit(task!.options)">
+            <BButton
+              type="text"
+              size="small"
+              class="backup-link"
+              :disabled="busy || !owner"
+              @click="submit(fitOptions(task!.options))"
+            >
               {{ t('dataExport.rebackup') }}
             </BButton>
           </template>
@@ -38,7 +51,9 @@
             <BButton type="text" size="small" class="backup-link" :disabled="busy || !owner" @click="openOptions">
               {{ t('dataExport.customize') }}
             </BButton>
-            <p v-if="largeFiles && state !== 'failed'" class="backup-hint">{{ t('dataExport.largeHint') }}</p>
+            <p v-if="largeFiles && !filesTooLarge && state !== 'failed'" class="backup-hint">{{
+              t('dataExport.largeHint')
+            }}</p>
           </template>
         </div>
         <div v-if="state === 'running' && task" class="backup-progress">
@@ -73,11 +88,14 @@
           <section v-for="kind in kinds" :key="kind" class="export-option">
             <BCheckbox
               :model-value="options.types.includes(kind)"
-              :disabled="busy"
+              :disabled="busy || (kind === 'files' && filesTooLarge)"
               @update:model-value="toggle(kind, $event)"
               >{{ t(`dataExport.${kind}`) }}</BCheckbox
             >
-            <p>{{ t(`dataExport.${KIND_HINTS[kind]}`) }}</p>
+            <p v-if="kind === 'files' && filesTooLarge">{{
+              t('dataExport.fileTooLargeHint', { size: formatSize(summary!.fileBytes) })
+            }}</p>
+            <p v-else>{{ t(`dataExport.${KIND_HINTS[kind]}`) }}</p>
             <div v-if="kind === 'notes' && options.types.includes('notes')" class="export-note-options">
               <label id="data-export-format">{{ t('dataExport.format') }}</label>
               <BSelect
@@ -139,6 +157,7 @@
     type DataExportTask,
     type DataExportFailure,
   } from '@lightnote/shared/data-export';
+  import { useRouter } from 'vue-router';
   import { apiBasePost } from '@/http/request';
   import { isLightNoteAndroidApp, postAndroidMessage } from '@/utils/androidBridge';
   import icon from '@/config/icon';
@@ -156,6 +175,7 @@
   // stacked：手机等窄屏把操作放到说明下方，主按钮撑满宽度。
   const props = defineProps<{ owner: string; stacked?: boolean }>();
   const { t, locale } = useI18n();
+  const router = useRouter();
   const KIND_HINTS: Record<DataExportType, string> = {
     notes: 'noteHint',
     bookmarks: 'bookmarkHint',
@@ -229,6 +249,14 @@
     summary.value ? summary.value.notes + summary.value.bookmarks + summary.value.files : 0,
   );
   const largeFiles = computed(() => (summary.value?.fileBytes || 0) > LARGE_FILE_BYTES);
+  // 文件总量超出服务器一次能打包的大小：一键备份只含笔记和书签，文件引导到云空间批量下载。
+  const filesTooLarge = computed(() => summary.value?.filesFit === false);
+  function fitOptions(input: DataExportOptions): DataExportOptions {
+    if (!filesTooLarge.value || !input.types.includes('files')) return input;
+    const types = input.types.filter((type) => type !== 'files');
+    return { ...input, types: types.length ? types : ['notes', 'bookmarks'] };
+  }
+  const oneClickBackup = () => fitOptions(fullBackup());
   const stageLabel = computed(() => {
     const stage = task.value?.stage || '';
     if (['notes', 'bookmarks', 'files'].includes(stage)) return t(`dataExport.stage.${stage}`);
@@ -250,10 +278,14 @@
         return t('dataExport.headline.partial', { done: current!.total - current!.failed, total: current!.total });
       case 'expired': {
         const last = summary.value!.lastBackup!;
-        return t(isFullDataBackup(last.types) ? 'dataExport.headline.expired' : 'dataExport.headline.expiredCustom', {
-          date: formatTime(last.at, false),
-          total: last.total,
-        });
+        const withoutFiles =
+          !last.types.includes('files') && last.types.includes('notes') && last.types.includes('bookmarks');
+        const key = isFullDataBackup(last.types)
+          ? 'dataExport.headline.expired'
+          : withoutFiles
+            ? 'dataExport.headline.expiredNoFiles'
+            : 'dataExport.headline.expiredCustom';
+        return t(key, { date: formatTime(last.at, false), total: last.total });
       }
       case 'failed':
         return t('dataExport.headline.failed');
@@ -286,9 +318,11 @@
         return t('dataExport.sub.never');
     }
   });
-  const primaryLabel = computed(() =>
-    t(state.value === 'failed' ? 'dataExport.retry' : state.value === 'expired' ? 'dataExport.backupAgain' : 'dataExport.backupAll'),
-  );
+  const primaryLabel = computed(() => {
+    if (state.value === 'failed') return t('dataExport.retry');
+    if (filesTooLarge.value) return t('dataExport.backupNotesBookmarks');
+    return t(state.value === 'expired' ? 'dataExport.backupAgain' : 'dataExport.backupAll');
+  });
   const includes = computed(() => {
     const value = summary.value;
     const count = (n: number | undefined) => (value ? n || 0 : '—');
@@ -309,9 +343,11 @@
         kind: 'file',
         icon: icon.resource.file,
         title: t('dataExport.include.files', { n: count(value?.files) }),
-        hint: value?.fileBytes
-          ? t('dataExport.include.filesHintWithSize', { size: formatSize(value.fileBytes) })
-          : t('dataExport.include.filesHint'),
+        hint: filesTooLarge.value
+          ? t('dataExport.include.filesTooLarge', { size: formatSize(value!.fileBytes) })
+          : value?.fileBytes
+            ? t('dataExport.include.filesHintWithSize', { size: formatSize(value.fileBytes) })
+            : t('dataExport.include.filesHint'),
       },
     ];
   });
@@ -390,7 +426,11 @@
   async function open() {
     if (!active.value) openOptions();
   }
+  function openCloudSpace() {
+    void router.push('/cloudSpace');
+  }
   function openOptions() {
+    options.value = fitOptions(options.value);
     mode.value = 'options';
     empty.value = false;
     error.value = '';
@@ -408,7 +448,7 @@
     empty.value = false;
   }
   function submitPrimary() {
-    void submit(state.value === 'failed' && task.value ? task.value.options : fullBackup());
+    void submit(state.value === 'failed' && task.value ? fitOptions(task.value.options) : oneClickBackup());
   }
   async function submit(input: DataExportOptions, fromDialog = false) {
     if (busy.value || !props.owner) return;
@@ -598,6 +638,30 @@
   .backup-link {
     margin-top: var(--ui-space-6, 6px);
     color: var(--workspace-purple-text, var(--primary-color));
+  }
+  .backup-notice {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--ui-space-4, 4px) var(--ui-space-6, 6px);
+    margin: var(--ui-space-10, 10px) 0 0;
+    padding: var(--ui-space-8, 8px) var(--ui-space-12, 12px);
+    border: 1px solid var(--workspace-divider, var(--border-color));
+    border-left: 3px solid var(--warning-color);
+    border-radius: 8px;
+    color: var(--text-color);
+    font-size: var(--ui-font-13, 13px);
+    line-height: 1.6;
+  }
+  .backup-notice > :first-child {
+    align-self: center;
+    color: var(--warning-color);
+  }
+  .backup-notice span {
+    flex: 1 1 var(--ui-layout-220, 220px);
+  }
+  .backup-notice .backup-link {
+    margin-top: 0;
   }
   .backup-actions {
     display: flex;

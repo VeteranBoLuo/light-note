@@ -4,6 +4,7 @@ import { createI18n } from 'vue-i18n';
 import { dataExportZh } from '@/i18n/locales/dataExport';
 const api = vi.hoisted(() => vi.fn());
 vi.mock('@/http/request', () => ({ apiBasePost: api }));
+vi.mock('vue-router', () => ({ useRouter: () => ({ push: vi.fn() }) }));
 vi.mock('@/utils/androidBridge', () => ({ isLightNoteAndroidApp: () => false, postAndroidMessage: vi.fn() }));
 vi.mock('@/components/base/BasicComponents/BModal/BModal.vue', () => ({
   default: { props: ['visible'], template: '<section v-if="visible"><slot/></section>' },
@@ -67,7 +68,15 @@ const task = (status = 'running') => ({
   expiresAt: new Date(Date.now() + (status === 'expired' ? -1 : 1) * 86400000).toISOString(),
   canDownload: status === 'completed',
 });
-const summary = (lastBackup: unknown = null) => ({ notes: 2, bookmarks: 1, files: 0, fileBytes: 0, lastBackup });
+const summary = (lastBackup: unknown = null, extra: Record<string, unknown> = {}) => ({
+  notes: 2,
+  bookmarks: 1,
+  files: 0,
+  fileBytes: 0,
+  filesFit: true,
+  lastBackup,
+  ...extra,
+});
 /** 按接口路径返回：latest 走传入的任务，summary 走清单，其余交给 handlers。 */
 function routes(latest: unknown, handlers: Record<string, unknown> = {}, sum: unknown = summary()) {
   api.mockImplementation(async (url: string) => {
@@ -178,6 +187,22 @@ describe('data backup panel', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+  it('leaves files out of one-click backup when they cannot be packed at once', async () => {
+    routes(null, { create: task() }, summary(null, { files: 1616, fileBytes: 12 * 1024 ** 3, filesFit: false }));
+    const { host, click } = mount();
+    await flush();
+    expect(host.textContent).toContain('超出服务器一次能打包的大小');
+    expect(host.textContent).toContain('去云空间');
+    await click('自定义内容');
+    const files = [...host.querySelectorAll<HTMLElement>('[role=checkbox]')].find(
+      (el) => el.textContent?.trim() === '文件',
+    )!;
+    expect(files.getAttribute('aria-checked')).toBe('false');
+    expect(files.getAttribute('aria-disabled')).toBe('true');
+    await click('关闭');
+    await click('备份笔记和书签');
+    expect(calls('create')[0][1]).toMatchObject({ types: ['notes', 'bookmarks'], noteFormat: 'original' });
   });
   it('ignores a late response after switching accounts', async () => {
     let resolve!: (v: any) => void;

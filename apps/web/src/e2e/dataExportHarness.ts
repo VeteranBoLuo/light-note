@@ -13,7 +13,8 @@ import '@/assets/css/index.less';
 const params = new URLSearchParams(location.search);
 document.documentElement.dataset.theme = params.get('theme') === 'night' ? 'night' : 'day';
 document.documentElement.classList.toggle('light-note-mobile-rendering', params.get('renderProfile') === 'mobile');
-// ?state=running|completed|partial|failed|expired（缺省为从未备份）；?reason=disk 让失败显示空间不足；?files=0 无文件。
+// ?state=running|completed|partial|failed|expired（缺省为从未备份）；?reason=disk 让失败显示空间不足；
+// ?files=0 无文件，?files=huge 文件超出暂存空间（一键备份不含文件）。
 const state = params.get('state');
 const fullOptions = { types: ['notes', 'bookmarks', 'files'], noteFormat: 'original', includeImages: true };
 let task: any =
@@ -33,11 +34,13 @@ let task: any =
       }
     : null;
 const noFiles = params.get('files') === '0';
+const hugeFiles = params.get('files') === 'huge';
 const summary = {
   notes: 128,
   bookmarks: 156,
-  files: noFiles ? 0 : 28,
-  fileBytes: noFiles ? 0 : 1.2 * 1024 ** 3,
+  files: noFiles ? 0 : hugeFiles ? 1616 : 28,
+  fileBytes: noFiles ? 0 : (hugeFiles ? 12.06 : 1.2) * 1024 ** 3,
+  filesFit: !hugeFiles,
   lastBackup:
     state === 'expired'
       ? { at: new Date(Date.now() - 2 * 86400000).toISOString(), total: 312, types: fullOptions.types, status: 'completed', count: 1 }
