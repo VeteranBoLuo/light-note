@@ -1,4 +1,5 @@
 import fs from 'node:fs/promises';
+import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import pool from '../../db/index.js';
 import { normalizeDataExportOptions, DATA_EXPORT_ACTIVE } from '@lightnote/shared/data-export';
@@ -41,13 +42,59 @@ export async function ownedTask(owner, id, db = pool) {
   if (!t) throw exportError('DATA_EXPORT_NOT_FOUND', 404);
   return t;
 }
+/** 可下载的任务附带压缩包大小；文件已被清理或读取失败时不返回。 */
+export async function presentTaskWithArchive(t) {
+  const task = presentTask(t);
+  if (!task.canDownload) return task;
+  try {
+    const stat = await fs.stat(path.join(taskDirectory(t.id), 'export.zip'));
+    return { ...task, archiveBytes: stat.size };
+  } catch {
+    return task;
+  }
+}
 export async function latestTask(owner) {
   await assertSchema(pool);
   const [[t]] = await pool.query(
     'SELECT * FROM data_export_tasks WHERE owner_id=? AND runtime=? AND host_key=? ORDER BY create_time DESC,id DESC LIMIT 1',
     [owner, runtime, hostKey],
   );
-  return t ? presentTask(t) : null;
+  return t ? presentTaskWithArchive(t) : null;
+}
+function readLastBackup(preferences) {
+  try {
+    const parsed = typeof preferences === 'string' ? JSON.parse(preferences) : preferences;
+    const backup = parsed?.dataBackup;
+    if (!backup || typeof backup.at !== 'string') return null;
+    return {
+      at: backup.at,
+      total: Number(backup.total) || 0,
+      types: Array.isArray(backup.types) ? backup.types : [],
+      status: backup.status === 'partial' ? 'partial' : 'completed',
+      count: Number(backup.count) || 1,
+    };
+  } catch {
+    return null;
+  }
+}
+/** 「数据与备份」页的资料清单：口径与导出范围一致（本人未删除的笔记、书签、文件），附上次成功备份。 */
+export async function exportSummary(owner, db = pool) {
+  const [[row]] = await db.query(
+    `SELECT
+        (SELECT COUNT(*) FROM note WHERE create_by=? AND del_flag=0) AS notes,
+        (SELECT COUNT(*) FROM bookmark WHERE user_id=? AND del_flag=0) AS bookmarks,
+        (SELECT COUNT(*) FROM files WHERE create_by=? AND del_flag=0) AS files,
+        (SELECT COALESCE(SUM(file_size),0) FROM files WHERE create_by=? AND del_flag=0) AS fileBytes,
+        (SELECT preferences FROM user WHERE id=?) AS preferences`,
+    [owner, owner, owner, owner, owner],
+  );
+  return {
+    notes: Number(row?.notes) || 0,
+    bookmarks: Number(row?.bookmarks) || 0,
+    files: Number(row?.files) || 0,
+    fileBytes: Number(row?.fileBytes) || 0,
+    lastBackup: readLastBackup(row?.preferences),
+  };
 }
 export async function createTask(owner, input) {
   const options = normalizeDataExportOptions(input);
@@ -92,7 +139,8 @@ export async function createTask(owner, input) {
           [owner],
         );
       const { paths, filePath } = buildPaths(nodes, folders, options.noteFormat);
-      let total = 0;
+      let total = 0,
+        fileBytes = 0;
       for (const kind of options.types) {
         for (let offset = 0; ; offset += 100) {
           const rows = await resourcePage(db, owner, kind, offset);
@@ -104,10 +152,13 @@ export async function createTask(owner, input) {
               [id, kind, String(row.id), row.title || '', resourceVersion(row), dest],
             );
             total++;
+            if (kind === 'files') fileBytes += Number(row.file_size) || 0;
           }
           if (rows.length < 100) break;
         }
       }
+      // 原件要先复制再打包，按两倍体积预估暂存空间，避免大备份做到一半才因空间不足失败。
+      if (fileBytes) await ensureSpace(fileBytes * 2);
       if (!total) {
         await db.query('DELETE FROM data_export_tasks WHERE id=?', [id]);
         await fs.rm(directory, { recursive: true, force: true });

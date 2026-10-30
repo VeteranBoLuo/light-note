@@ -13,30 +13,48 @@ import '@/assets/css/index.less';
 const params = new URLSearchParams(location.search);
 document.documentElement.dataset.theme = params.get('theme') === 'night' ? 'night' : 'day';
 document.documentElement.classList.toggle('light-note-mobile-rendering', params.get('renderProfile') === 'mobile');
-let task: any = params.has('state')
-  ? {
-      id: 'test-task',
-      status: params.get('state'),
-      stage: params.get('state') === 'running' ? 'notes' : 'ready',
-      options: { types: ['notes', 'bookmarks'], noteFormat: 'html', includeImages: true },
-      total: 120,
-      completed: params.get('state') === 'running' ? 36 : 119,
-      failed: params.get('state') === 'partial' ? 1 : 0,
-      expiresAt: new Date(Date.now() + 86400000).toISOString(),
-      canDownload: ['completed', 'partial'].includes(params.get('state') || ''),
-    }
-  : null;
+// ?state=running|completed|partial|failed|expired（缺省为从未备份）；?reason=disk 让失败显示空间不足；?files=0 无文件。
+const state = params.get('state');
+const fullOptions = { types: ['notes', 'bookmarks', 'files'], noteFormat: 'original', includeImages: true };
+let task: any =
+  state && state !== 'never'
+    ? {
+        id: 'test-task',
+        status: state,
+        stage: state === 'running' ? 'files' : 'ready',
+        options: fullOptions,
+        total: 312,
+        completed: state === 'running' ? 186 : state === 'partial' ? 312 : 312,
+        failed: state === 'partial' ? 2 : 0,
+        expiresAt: new Date(Date.now() + (state === 'expired' ? -3600000 : 86400000)).toISOString(),
+        canDownload: ['completed', 'partial'].includes(state),
+        archiveBytes: ['completed', 'partial'].includes(state) ? 1.3 * 1024 ** 3 : undefined,
+        errorCode: state === 'failed' && params.get('reason') === 'disk' ? 'DATA_EXPORT_DISK_FULL' : undefined,
+      }
+    : null;
+const noFiles = params.get('files') === '0';
+const summary = {
+  notes: 128,
+  bookmarks: 156,
+  files: noFiles ? 0 : 28,
+  fileBytes: noFiles ? 0 : 1.2 * 1024 ** 3,
+  lastBackup:
+    state === 'expired'
+      ? { at: new Date(Date.now() - 2 * 86400000).toISOString(), total: 312, types: fullOptions.types, status: 'completed', count: 1 }
+      : null,
+};
 request.defaults.adapter = async (config) => {
   const url = String(config.url);
   const body = typeof config.data === 'string' ? JSON.parse(config.data) : config.data || {};
   let data: any = task;
+  if (url.endsWith('/summary')) data = summary;
   if (url.endsWith('/create')) {
     task = {
       id: 'test-task',
       status: 'running',
       stage: 'notes',
-      options: body,
-      total: 120,
+      options: { types: body.types, noteFormat: body.noteFormat, includeImages: body.includeImages },
+      total: 312,
       completed: 36,
       failed: 0,
       expiresAt: new Date(Date.now() + 86400000).toISOString(),

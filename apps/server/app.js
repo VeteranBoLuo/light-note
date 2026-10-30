@@ -16,6 +16,7 @@ import { attackMonitor, ensureSecurityTables, cleanupExpiredSecurityEvents } fro
 import { cleanupAllExpiredTrash } from './router_handle/trashHandle.js';
 import { generateWeeklyReports } from './util/weeklyReport.js';
 import { scheduleAnnualReportNotices } from './util/annualReport/notice.js';
+import { scheduleDataBackupNudges } from './util/dataExport/nudge.js';
 import { notificationSchedulerEnabled } from './util/notificationSchedulerPolicy.js';
 import { startInfraAlertScheduler } from './util/infraAlerts.js';
 import { ensureNotificationTable } from './util/notification.js';
@@ -309,6 +310,8 @@ function scheduleGrowthNudges() {
 scheduleGrowthNudges();
 // 年度报告开放通知（开放后第一周每天 10:00 检查，同一账号最多一条）
 scheduleAnnualReportNotices();
+// 资料较多且从未备份的账号收到一次备份提醒（每天 10:30 检查，同一账号只发一次）
+scheduleDataBackupNudges();
 startCommunityFeedScheduler();
 startCommunityReviewScheduler();
 startPublicResourceReviewScheduler();

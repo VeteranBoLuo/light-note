@@ -8,6 +8,7 @@ vi.mock('@/utils/androidBridge', () => ({ isLightNoteAndroidApp: () => false, po
 vi.mock('@/components/base/BasicComponents/BModal/BModal.vue', () => ({
   default: { props: ['visible'], template: '<section v-if="visible"><slot/></section>' },
 }));
+vi.mock('@/components/base/SvgIcon/src/SvgIcon.vue', () => ({ default: { template: '<i />' } }));
 vi.mock('@/components/base/BasicComponents/BSelect.vue', () => ({
   default: {
     props: ['value', 'options'],
@@ -63,75 +64,120 @@ const task = (status = 'running') => ({
   completed: 1,
   failed: 0,
   options: { types: ['notes', 'bookmarks'], noteFormat: 'html', includeImages: true },
-  expiresAt: new Date(Date.now() + 86400000).toISOString(),
+  expiresAt: new Date(Date.now() + (status === 'expired' ? -1 : 1) * 86400000).toISOString(),
   canDownload: status === 'completed',
 });
-describe('unified export control', () => {
-  it('submits and remembers the original-format option', async () => {
-    api.mockResolvedValue(result(null));
-    const { host, click } = mount();
-    await flush();
-    await click('导出数据');
-    const select = host.querySelector('select')!;
-    expect(select.textContent).toContain('保留原始格式');
-    select.value = 'original';
-    select.dispatchEvent(new Event('change', { bubbles: true }));
-    await flush();
-    expect(host.textContent).toContain('富文本导出为 HTML');
-    await click('开始导出');
-    expect(api).toHaveBeenCalledWith('/api/user/dataExports/create', expect.objectContaining({ noteFormat: 'original' }), { silent: true });
-    expect(Object.values(localStorage)).toEqual(expect.arrayContaining([expect.stringContaining('original')]));
+const summary = (lastBackup: unknown = null) => ({ notes: 2, bookmarks: 1, files: 0, fileBytes: 0, lastBackup });
+/** 按接口路径返回：latest 走传入的任务，summary 走清单，其余交给 handlers。 */
+function routes(latest: unknown, handlers: Record<string, unknown> = {}, sum: unknown = summary()) {
+  api.mockImplementation(async (url: string) => {
+    const action = url.split('/').pop()!;
+    if (action in handlers) return result(handlers[action]);
+    if (action === 'summary') return result(sum);
+    if (action === 'latest') return result(latest);
+    return result(null);
   });
-  it('defaults to notes and bookmarks, disables empty selection and supports extraction-only export', async () => {
-    api.mockResolvedValue(result(null));
+}
+const calls = (action: string) => api.mock.calls.filter(([u]) => u.endsWith('/' + action));
+describe('data backup panel', () => {
+  it('backs up everything in one click and remembers the preset', async () => {
+    routes(null, { create: task() });
     const { host, click } = mount();
     await flush();
-    await click('导出数据');
-    const checkbox = (label: string) => [...host.querySelectorAll<HTMLElement>('[role=checkbox]')]
-      .find((element) => element.textContent?.trim() === label)!;
+    expect(host.textContent).toContain('还没有备份过');
+    expect(host.textContent).toContain('共 3 项资料');
+    await click('备份全部资料');
+    expect(calls('create')[0][1]).toMatchObject({
+      types: ['notes', 'bookmarks', 'files'],
+      noteFormat: 'original',
+      includeImages: true,
+    });
+    expect(host.textContent).toContain('备份中');
+    expect(JSON.parse(localStorage.getItem('light-note:data-export:u')!).types).toEqual([
+      'notes',
+      'bookmarks',
+      'files',
+    ]);
+  });
+  it('customizes content from the existing dialog, including extraction-only exports', async () => {
+    routes(null);
+    const { host, click } = mount();
+    await flush();
+    await click('自定义内容');
+    const checkbox = (label: string) =>
+      [...host.querySelectorAll<HTMLElement>('[role=checkbox]')].find(
+        (element) => element.textContent?.trim() === label,
+      )!;
     expect(checkbox('笔记').getAttribute('aria-checked')).toBe('true');
-    expect(checkbox('包含图片').getAttribute('aria-checked')).toBe('true');
-    expect(checkbox('书签').getAttribute('aria-checked')).toBe('true');
-    expect(checkbox('文件').getAttribute('aria-checked')).toBe('false');
+    expect(checkbox('文件').getAttribute('aria-checked')).toBe('true');
     expect(checkbox('资料提取表').getAttribute('aria-checked')).toBe('false');
-    checkbox('笔记').click();
-    await flush();
-    checkbox('书签').click();
-    await flush();
-    expect([...host.querySelectorAll('button')].find((b) => b.textContent?.includes('开始导出'))?.disabled).toBe(true);
+    const select = host.querySelector('select')!;
+    select.value = 'markdown';
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+    for (const label of ['笔记', '书签', '文件']) {
+      checkbox(label).click();
+      await flush();
+    }
+    expect([...host.querySelectorAll('button')].find((b) => b.textContent?.includes('开始备份'))?.disabled).toBe(true);
     checkbox('资料提取表').click();
     await flush();
-    await click('开始导出');
-    expect(api).toHaveBeenCalledWith('/api/user/dataExports/create', expect.objectContaining({ types: ['extractions'] }), { silent: true });
+    await click('开始备份');
+    expect(calls('create')[0][1]).toMatchObject({ types: ['extractions'] });
   });
-  it('submits one job, remembers settings and closes without cancelling', async () => {
-    api.mockImplementation(async (url) => result(url.endsWith('/create') ? task() : null));
+  it('opens the options with an empty result instead of a download', async () => {
+    routes(null, { create: { empty: true } });
     const { host, click } = mount();
     await flush();
-    await click('导出数据');
-    await click('开始导出');
-    expect(host.textContent).toContain('正在导出');
-    expect(JSON.parse(localStorage.getItem('light-note:data-export:u')!).types).toEqual(['notes', 'bookmarks']);
-    await click('关闭');
-    expect(api.mock.calls.filter(([u]) => u.endsWith('/cancel'))).toHaveLength(0);
-    expect(api.mock.calls.filter(([u]) => u.endsWith('/create'))).toHaveLength(1);
-  });
-  it('shows empty result without a download', async () => {
-    api.mockImplementation(async (url) => result(url.endsWith('/create') ? { empty: true } : null));
-    const { host, click } = mount();
-    await flush();
-    await click('导出数据');
-    await click('开始导出');
+    await click('备份全部资料');
     expect(host.textContent).toContain('所选内容为空');
-    expect(host.textContent).not.toContain('下载导出文件');
+    expect(host.textContent).not.toContain('下载备份');
   });
-  it('restores, cancels, and shows partial failures', async () => {
-    api.mockImplementation(async (url) => result(url.endsWith('/cancel') ? task('cancelled') : task()));
+  it('restores a running backup and cancels it', async () => {
+    routes(task(), { cancel: task('cancelled') });
     const { host, click } = mount();
     await flush();
-    await click('查看导出进度');
-    await click('取消导出');
-    expect(host.textContent).toContain('已取消');
+    expect(host.textContent).toContain('已打包 1 / 3 项');
+    await click('取消备份');
+    expect(host.textContent).toContain('还没有备份过');
+  });
+  it('offers the download while the file is kept and the last backup after it expires', async () => {
+    routes(task('completed'));
+    const first = mount();
+    await flush();
+    expect(first.host.textContent).toContain('已完成');
+    expect(first.host.textContent).toContain('下载备份');
+    cleanup();
+
+    routes(
+      task('expired'),
+      {},
+      summary({ at: '2026-10-28T08:00:00.000Z', total: 3, types: ['notes'], status: 'completed', count: 1 }),
+    );
+    const second = mount();
+    await flush();
+    expect(second.host.textContent).toContain('上次备份');
+    expect(second.host.textContent).toContain('（自定义内容）');
+    expect(second.host.textContent).toContain('再备份一次');
+  });
+  it('reloads the summary once a running backup finishes', async () => {
+    let latest: unknown = task();
+    api.mockImplementation(async (url: string) => {
+      if (url.endsWith('/summary')) return result(summary());
+      return result(latest);
+    });
+    vi.useFakeTimers();
+    try {
+      const { host } = mount();
+      await flush();
+      expect(calls('summary')).toHaveLength(1);
+      latest = task('completed');
+      await vi.advanceTimersByTimeAsync(3100);
+      await flush();
+      expect(host.textContent).toContain('已完成');
+      expect(calls('summary')).toHaveLength(2);
+    } finally {
+      vi.useRealTimers();
+    }
   });
   it('ignores a late response after switching accounts', async () => {
     let resolve!: (v: any) => void;
@@ -148,6 +194,6 @@ describe('unified export control', () => {
     await flush();
     resolve(result(task('completed')));
     await flush();
-    expect(host.textContent).not.toContain('下载导出文件');
+    expect(host.textContent).not.toContain('下载备份');
   });
 });

@@ -3,7 +3,16 @@ import path from 'node:path';
 import fs from 'node:fs/promises';
 import { ensureNotVisitor } from '../util/auth.js';
 import { resultData, L } from '../util/common.js';
-import { createTask, latestTask, ownedTask, presentTask, cancelTask, failurePage } from '../util/dataExport/service.js';
+import {
+  createTask,
+  latestTask,
+  ownedTask,
+  presentTask,
+  presentTaskWithArchive,
+  cancelTask,
+  failurePage,
+  exportSummary,
+} from '../util/dataExport/service.js';
 import { taskDirectory, exportError } from '../util/dataExport/storage.js';
 const router = express.Router();
 router.use((req, res, next) => {
@@ -37,8 +46,12 @@ router.post(
   handler((req) => latestTask(req.user.id)),
 );
 router.post(
+  '/summary',
+  handler((req) => exportSummary(req.user.id)),
+);
+router.post(
   '/detail',
-  handler(async (req) => presentTask(await ownedTask(req.user.id, req.body.id))),
+  handler(async (req) => presentTaskWithArchive(await ownedTask(req.user.id, req.body.id))),
 );
 router.post(
   '/cancel',
