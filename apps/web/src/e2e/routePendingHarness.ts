@@ -1,7 +1,7 @@
 import { createApp, defineComponent, h, ref } from 'vue';
 import { createPinia } from 'pinia';
 import { createI18n } from 'vue-i18n';
-import { createMemoryHistory, createRouter, RouterView } from 'vue-router';
+import { createMemoryHistory, createRouter, RouterView, useRoute } from 'vue-router';
 import request from '@/http/request';
 import globalDirect from '@/config/globalDirect';
 import zh from '@/i18n/locales/zh-CN';
@@ -9,11 +9,13 @@ import en from '@/i18n/locales/en-US';
 import { bookmarkStore } from '@/store';
 import { applyUiDensity } from '@/composables/useUiDensity';
 import { installRoutePending } from '@/utils/routePending';
+import { isMobileShellRoute } from '@/config/mobileNavigation';
 import MainLayout from '@/view/index.vue';
 import MobileAppShell from '@/components/mobile/MobileAppShell.vue';
 import '@/assets/css/index.less';
 
-// 本地验收：真实主布局、PC 导航与手机外壳；目标模块按 delay 参数延迟“下载”，接口全部返回空数据。
+// 本地验收：真实主布局、PC 导航与手机外壳（与根组件一样按路由声明启用）；目标模块按 delay 参数延迟“下载”，接口全部返回空数据。
+// /personCenter 与线上一致位于主布局之外，用于验证进出“我的”页时的等待态。
 const params = new URLSearchParams(location.search);
 const mobile = params.get('renderProfile') === 'mobile';
 const delay = Math.max(0, Number(params.get('delay') ?? 2500) || 0);
@@ -48,7 +50,14 @@ const router = createRouter({
         { path: 'inbox', name: 'inbox', component: delayed('待办'), meta: { mobileShell: 'todo', mobileBottomNav: true } },
         { path: 'growth', name: 'growth', component: delayed('成长中心') },
         { path: 'settings', name: 'settings', component: delayed('设置') },
+        { path: 'support', name: 'support', component: delayed('支持轻笺') },
       ],
+    },
+    {
+      path: '/personCenter',
+      name: 'personCenter',
+      component: delayed('我的'),
+      meta: { mobileShell: 'profile', mobileBottomNav: true },
     },
   ],
 });
@@ -66,9 +75,19 @@ const app = createApp({
     };
     sync();
     window.addEventListener('resize', sync);
+    const route = useRoute();
     return () =>
       mobile
-        ? h(MobileAppShell, { enabled: true, showTopBar: true, showTopSwitcher: false, showBottomNav: true }, () => h(RouterView))
+        ? h(
+            MobileAppShell,
+            {
+              enabled: isMobileShellRoute(true, route.meta),
+              showTopBar: route.meta.mobileTopBar !== false,
+              showTopSwitcher: false,
+              showBottomNav: route.meta.mobileBottomNav === true,
+            },
+            () => h(RouterView),
+          )
         : h(RouterView);
   },
 });

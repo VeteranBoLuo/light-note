@@ -25,6 +25,13 @@
     </div>
     <main class="mobile-app-shell__content">
       <slot />
+      <!-- 外壳内的页面（含不在主布局下的“我的”页）切换到尚未下载的模块时，在顶栏与底栏之间显示等待态。 -->
+      <RoutePendingIndicator
+        v-if="pendingTarget && pendingVisible"
+        class="mobile-app-shell__route-pending"
+        :target="pendingTarget"
+        :slow="pendingSlow"
+      />
     </main>
     <div
       v-if="showBottomNav"
@@ -63,6 +70,8 @@
   import { getMobileResourcePath, type MobileFormalCreateActionKey } from '@/config/mobileNavigation';
   import { getMobileTopBarBinding, getMobilePageBack } from '@/composables/useMobileTopBar';
   import { useMobileNavigationState } from '@/composables/useMobileNavigationState';
+  import RoutePendingIndicator from '@/components/home/navigation/RoutePendingIndicator.vue';
+  import { useRoutePending } from '@/utils/routePending';
 
   const MobileFormalCreateLayer = defineAsyncComponent(() => import('@/components/mobile/MobileFormalCreateLayer.vue'));
 
@@ -75,6 +84,7 @@
 
   const route = useRoute();
   const router = useRouter();
+  const { target: pendingTarget, visible: pendingVisible, slow: pendingSlow } = useRoutePending();
   const keyboardOpen = ref(false);
   const visibleViewportHeight = ref(0);
   const keyboardObscuredHeight = ref(0);
@@ -366,6 +376,13 @@
     width: 100%;
     height: 100%;
     min-height: 0;
+  }
+
+  // 与主布局的等待层一致：高于页面内的吸顶头部，由内容区裁切，不覆盖顶栏与底栏。
+  .mobile-app-shell__route-pending {
+    position: absolute;
+    inset: 0;
+    z-index: 20;
   }
 
   .mobile-app-shell__bottom-nav {

@@ -3,7 +3,7 @@ import { syncServiceWorkerAssets } from './assetCache';
 import { scheduleStaticPrewarm } from './staticPrewarm';
 
 /**
- * 手机底栏、PC 侧栏和成长中心是常驻入口，空闲时先备好代码，移动网络下也执行（去重后约 2.9MB，gzip 传输约 0.8MB）；
+ * 手机底栏、PC 侧栏、成长中心、手机“我的”页及其支持轻笺是常驻入口，空闲时先备好代码，移动网络下也执行（去重后约 2.9MB，gzip 传输约 0.8MB）；
  * 省流量和 2G/3G 下调度器整体暂停。其余页面与编辑器仍只在不限流量的网络下预热。
  */
 export function scheduleAppStartupPrewarm() {
@@ -19,6 +19,8 @@ export function scheduleAppStartupPrewarm() {
         'route.tagMg',
         'route.growth',
         'route.workbenches',
+        'route.personCenter',
+        'route.support',
       ],
       priority: PREWARM_PRIORITY.browsing,
     }),
