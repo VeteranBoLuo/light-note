@@ -35,6 +35,9 @@ const SENSITIVE_PAYLOAD_KEYS = new Set([
 
 const MAX_LOG_PAYLOAD_DEPTH = 4;
 const MAX_LOG_TEXT_LENGTH = 10_000;
+// 单段文本已截断，但数组条数不限；整体再设上限，超出只留摘要和开头预览。
+const MAX_LOG_PAYLOAD_BYTES = 64 * 1024;
+const LOG_PAYLOAD_PREVIEW_LENGTH = 4096;
 
 function normalizeSensitiveKey(key) {
   return String(key || '')
@@ -44,6 +47,17 @@ function normalizeSensitiveKey(key) {
 
 function isSensitivePayloadKey(key) {
   return SENSITIVE_PAYLOAD_KEYS.has(normalizeSensitiveKey(key));
+}
+
+export function capLogPayload(serialized) {
+  if (typeof serialized !== 'string') return serialized;
+  const bytes = Buffer.byteLength(serialized);
+  if (bytes <= MAX_LOG_PAYLOAD_BYTES) return serialized;
+  return JSON.stringify({
+    payloadSummary: 'payload_too_large',
+    bytes,
+    preview: serialized.slice(0, LOG_PAYLOAD_PREVIEW_LENGTH),
+  });
 }
 
 export function sanitizeSensitivePayload(value, depth = 0, seen = new WeakSet()) {
@@ -119,13 +133,15 @@ export async function logFunction(req, res, next) {
     }
     const sourceRequestPayload = req.method === 'GET' ? req.query : req.body;
     const rawRequestPayload = sanitizeSensitivePayload(summarizeApiLogPayload(req.originalUrl, sourceRequestPayload));
-    const requestPayload = JSON.stringify(
-      isVisitorWorkspaceWrite
-        ? {
-            payload: rawRequestPayload,
-            visitorWorkspaceTargetUserId: req.user?.id || '',
-          }
-        : rawRequestPayload,
+    const requestPayload = capLogPayload(
+      JSON.stringify(
+        isVisitorWorkspaceWrite
+          ? {
+              payload: rawRequestPayload,
+              visitorWorkspaceTargetUserId: req.user?.id || '',
+            }
+          : rawRequestPayload,
+      ),
     );
     // 等待响应结束
     res.on('finish', async () => {
