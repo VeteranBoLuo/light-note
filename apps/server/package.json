@@ -39,6 +39,7 @@
     "backfill:community-chat-identities": "node scripts/backfillCommunityChatIdentities.js",
     "test": "vitest run",
     "test:mysql": "node scripts/runMysqlTests.js",
+    "test:mysql:temp": "bash scripts/withTempMysql.sh",
     "test:watch": "vitest",
     "worker:browser-push": "node browserPushWorker.js",
     "worker:browser-push:dev": "node --watch --watch-preserve-output browserPushWorker.js",
