@@ -44,3 +44,20 @@ it('uses rendered headings in order, navigates inside the reader, and clears a r
   app.unmount();
   vi.unstubAllGlobals();
 });
+it('keeps headings from every Markdown block of an article split by inline images', async () => {
+  const root = document.createElement('article');
+  root.innerHTML =
+    '<div class="community-markdown"><h2>01</h2></div><div class="inline-image"><h2>图片说明不进目录</h2></div>' +
+    '<div class="community-markdown"><h2>02</h2><h3>细节</h3></div>';
+  const host = document.createElement('div');
+  const app = createApp({ setup: () => () => h(Outline, { contentRoot: root, content: 'body' }) });
+  app.directive('auto-scrollbar', {});
+  app.mount(host);
+  await nextTick();
+  expect(Array.from(host.querySelectorAll('button')).map((button) => button.textContent)).toEqual([
+    '01',
+    '02',
+    '细节',
+  ]);
+  app.unmount();
+});

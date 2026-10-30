@@ -296,11 +296,15 @@
                         item.title || t('community.feed.' + (item.action || item.kind || item.status))
                       }}</template></h2
                     ></div
-                  ><p class="feed-body">{{ item.body || item.reason }}</p
+                  ><CommunityPostExcerpt
+                    v-if="['posts', 'publishedPosts'].includes(managementTab) && item.body"
+                    class="managed-post-excerpt"
+                    :body="item.body"
+                    :lines="2" /><p v-else class="feed-body">{{ item.body || item.reason }}</p
                   ><time v-if="managementTab === 'results' && item.createdAt" :datetime="item.createdAt">{{
                     new Date(item.createdAt).toLocaleString()
                   }}</time
-                  ><CommunityPostImages :images="item.images" /><CommunityPostResources :resources="item.resources" /><p
+                  ><CommunityPostImages :images="managedImages(item)" /><CommunityPostResources :resources="item.resources" /><p
                     v-if="item.detail"
                     >{{ item.detail }}</p
                   ><p v-if="item.reason && item.body">{{ item.reason }}</p>
@@ -654,6 +658,8 @@
   import CommunityTaskReward from '@/components/community/CommunityTaskReward.vue';
   import CommunityPostEditor from '@/components/community/CommunityPostEditor.vue';
   import CommunityPostImages from '@/components/community/CommunityPostImages.vue';
+  import CommunityPostExcerpt from '@/components/community/CommunityPostExcerpt.vue';
+  import { parseCommunityPostDocument } from '@lightnote/shared/community-feed';
   import BVirtualList from '@/components/base/BasicComponents/BVirtualList.vue';
   import CommunityPostCard from '@/components/community/CommunityPostCard.vue';
   import CommunityPostDiscussion from '@/components/community/CommunityPostDiscussion.vue';
@@ -909,6 +915,12 @@
   function canOpenManagedItem(item: any) {
     if (managementTab.value === 'posts') return Boolean(item.hasPublishedVersion) && item.status === 'published';
     return Boolean(Number(item.canOpen));
+  }
+  // 正文插图已属于摘要所代表的正文；审核队列仍列出全部图片供核对。
+  function managedImages(item: any) {
+    if (mode.value !== 'manage' || managementTab.value !== 'posts' || !item.body) return item.images;
+    const inline = parseCommunityPostDocument(item.body).imageIds;
+    return (item.images || []).filter((image: { publicId: string }) => !inline.includes(image.publicId));
   }
   function managedItemQuery(item: any) {
     return {
@@ -1658,9 +1670,12 @@
       }
     }
 
-    .is-management .managed-post h2 {
+    .is-management .managed-post-heading > h2 {
       margin: 0;
       font-size: var(--ui-font-16, 16px);
+    }
+    .is-management .managed-post .managed-post-excerpt {
+      margin: var(--ui-space-10, 10px) 0 var(--ui-space-12, 12px);
     }
     .is-management .managed-post .feed-body {
       margin: var(--ui-space-10, 10px) 0 var(--ui-space-12, 12px);

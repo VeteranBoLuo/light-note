@@ -34,16 +34,12 @@
       ><span v-if="detail || preview">{{ post.title }}</span
       ><RouterLink v-else :to="postTarget()">{{ post.title }}</RouterLink></h2
     >
-    <CommunityPostImages v-if="(detail || preview) && !inlineImages" :images="post.images" article />
-    <CommunityPostBody
-      v-if="inlineImages"
-      :body="post.body"
-      :images="post.images"
-      :excerpt="!detail && !preview"
-      :class="{ 'feed-excerpt': !detail && !preview }"
-      :disable-links="preview"
-    />
-    <CommunityMarkdown v-else :body="post.body" :class="{ 'feed-excerpt': !detail && !preview }" :inert="preview" />
+    <CommunityPostExcerpt v-if="!detail && !preview" :body="post.body" />
+    <template v-else>
+      <CommunityPostImages v-if="!inlineImages" :images="post.images" article />
+      <CommunityPostBody v-if="inlineImages" :body="post.body" :images="post.images" :disable-links="preview" />
+      <CommunityMarkdown v-else :body="post.body" :inert="preview" />
+    </template>
     <div :inert="preview">
       <CommunityPostResources :resources="post.resources" :class="{ 'feed-resource-grid': !detail }" />
     </div>
@@ -84,6 +80,7 @@
   import CommunityPostImages from './CommunityPostImages.vue';
   import CommunityMarkdown from './CommunityMarkdown.vue';
   import CommunityPostBody from './CommunityPostBody.vue';
+  import CommunityPostExcerpt from './CommunityPostExcerpt.vue';
   import { computed } from 'vue';
   import { parseCommunityPostDocument } from '@lightnote/shared/community-feed';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
@@ -154,47 +151,6 @@
       display: flex;
       align-items: center;
       flex-wrap: wrap;
-    }
-    .feed-excerpt {
-      margin: 0;
-      color: var(--desc-color);
-      font-size: var(--ui-font-14, 14px);
-      font-weight: 400;
-      line-height: 1.8;
-      display: -webkit-box;
-      -webkit-line-clamp: 4;
-      -webkit-box-orient: vertical;
-      overflow: hidden;
-      max-height: 9em;
-      white-space: normal;
-      overflow-wrap: anywhere;
-    }
-    .feed-excerpt :deep(h1),
-    .feed-excerpt :deep(h2),
-    .feed-excerpt :deep(h3),
-    .feed-excerpt :deep(h4),
-    .feed-excerpt :deep(h5),
-    .feed-excerpt :deep(h6) {
-      font-size: var(--ui-font-15, 15px);
-      line-height: 1.6;
-      margin: 0.4em 0 0.2em;
-    }
-    .feed-excerpt :deep(p),
-    .feed-excerpt :deep(ul),
-    .feed-excerpt :deep(ol),
-    .feed-excerpt :deep(blockquote),
-    .feed-excerpt :deep(pre),
-    .feed-excerpt :deep(table) {
-      margin-top: 0;
-      margin-bottom: 0.35em;
-    }
-    .feed-excerpt :deep(pre) {
-      padding: var(--ui-space-6, 6px) var(--ui-space-10, 10px);
-      white-space: pre-wrap;
-      overflow-wrap: anywhere;
-    }
-    .feed-excerpt :deep(> :first-child) {
-      margin-top: 0;
     }
     padding: var(--ui-space-24, 24px) 0;
     .post-author-row {

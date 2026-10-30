@@ -583,7 +583,6 @@
               :placeholder="
                 t(bookmark.isMobile ? 'communityChat.messagePlaceholderMobile' : 'communityChat.messagePlaceholder')
               "
-              :disabled="sending"
               @input="handleComposerTextInput"
               @keydown="handleComposerKeydown"
               @select="handleComposerSelectionChange"
@@ -4753,11 +4752,16 @@
       }
     } catch (error: any) {
       chatMessages.value = chatMessages.value.filter((item) => item.publicId !== optimisticPublicId);
-      draftSession.text = draftSnapshot;
-      draftSession.replyTarget = replySnapshot;
-      draftSession.mentionTargets = mentionSnapshot;
-      draftSession.mentionEveryone = mentionEveryoneSnapshot;
-      draftSession.pendingAttachments = attachmentSnapshot;
+      // 输入框发送期间保持可编辑：失败的消息放回草稿前部，不覆盖期间新输入的内容。
+      const typedDuringSend = draftSession.text;
+      const mentionsDuringSend = draftSession.mentionTargets.filter(
+        (target) => !mentionSnapshot.some((item) => item.key === target.key),
+      );
+      draftSession.text = typedDuringSend.trim() ? `${draftSnapshot}\n${typedDuringSend}` : draftSnapshot;
+      draftSession.replyTarget = replySnapshot || draftSession.replyTarget;
+      draftSession.mentionEveryone = mentionEveryoneSnapshot || draftSession.mentionEveryone;
+      draftSession.mentionTargets = draftSession.mentionEveryone ? [] : [...mentionSnapshot, ...mentionsDuringSend];
+      draftSession.pendingAttachments = [...attachmentSnapshot, ...draftSession.pendingAttachments];
       touchCommunityChatDraftSession(draftSession);
       emit('accessInvalidated');
       message.error(error?.message || t('communityChat.sendFailed'));
@@ -4842,9 +4846,7 @@
   }
 
   function openAuthentication() {
-    bookmark.authModalTab = '登录';
-    bookmark.authModalSource = 'community_chat';
-    bookmark.isShowLogin = true;
+    bookmark.openAuthModal('登录', 'community_chat', route.fullPath);
   }
 
   function rememberReadingPosition() {

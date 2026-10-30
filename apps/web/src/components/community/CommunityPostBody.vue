@@ -1,7 +1,7 @@
 <template>
   <div class="community-post-body">
     <div
-      v-if="!excerpt && !hideAttachments && attachments.length"
+      v-if="!hideAttachments && attachments.length"
       class="body-attachments"
       :class="{ 'is-single': attachments.length === 1 }"
     >
@@ -30,7 +30,7 @@
         :body="block.source + '\n\n' + document.definitions"
         :inert="disableLinks"
       />
-      <div v-else-if="!excerpt" class="inline-image">
+      <div v-else class="inline-image">
         <BButton
           :aria-label="
             block.alt ||
@@ -67,7 +67,6 @@
   const props = defineProps<{
     body: string;
     images?: FeedImage[];
-    excerpt?: boolean;
     disableLinks?: boolean;
     hideAttachments?: boolean;
   }>();
@@ -79,9 +78,7 @@
     ...(props.hideAttachments ? [] : attachments.value),
     ...document.value.imageIds.map(image).filter((i): i is FeedImage => Boolean(i)),
   ]);
-  const { imageSource, imageUnavailable } = useCommunityPreviewImages(() =>
-    props.excerpt ? [] : ordered.value.map((i) => i.url),
-  );
+  const { imageSource, imageUnavailable } = useCommunityPreviewImages(() => ordered.value.map((i) => i.url));
   const failed = ref(new Set<string>()),
     visible = ref(false),
     selected = ref('');
