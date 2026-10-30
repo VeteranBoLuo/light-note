@@ -103,7 +103,7 @@ describe('achievement collection behavior', () => {
   });
   it('shows every achievement exactly once across ten distinct families', () => {
     const { host } = mount(ACHIEVEMENT_KEYS.map((key) => achievement(key)));
-    expect(host.querySelectorAll('.aw-badge')).toHaveLength(48);
+    expect(host.querySelectorAll('.aw-badge')).toHaveLength(ACHIEVEMENT_KEYS.length);
     expect(host.querySelectorAll('.aw-group')).toHaveLength(10);
     const groups = [...host.querySelectorAll('.aw-group')];
     for (const [label, count] of [
