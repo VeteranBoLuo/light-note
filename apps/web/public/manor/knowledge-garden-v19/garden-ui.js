@@ -694,7 +694,7 @@ function baitDialog() {
   const free = remainingCasts(),selected = state.preferredBait || "bait";
   const option = (kind, name, count, effect) => `<article class="bait-choice ${selected === kind ? "selected" : ""}">${M.BAIT_RECIPES[kind] ? FarmFacilities.baitArt(kind) : `<img src="knowledge-garden-v19/incoming/farm-r2/sprites/icon-bait${kind === "rainbow" ? "-rainbow" : ""}.webp" alt="">`}<div><h3>${name} <small>× ${count}</small></h3><p>${effect}</p></div><button class="tile-btn ${selected === kind ? "" : "primary"}" data-action="select-bait" data-kind="${kind}" aria-pressed="${selected === kind}" ${selected === kind ? "disabled" : ""}>${selected === kind ? "✓ 已选用" : "选用"}</button></article>`;
   const crafted = state.workshop || M.BAIT_RECIPES[selected] || Object.values(state.craftedBait || {}).some(Boolean) ? Object.entries(M.BAIT_RECIPES).map(([key, r]) => option(key, r.name, state.craftedBait?.[key] || 0, `更易遇见${r.preference}`)).join("") : "";
-  showDialog("鱼饵箱", free ? `今日还有 ${free} 次免费垂钓，暂不消耗鱼饵。` : "点水面抛竿，继续使用上次选用的鱼饵。",
+  showDialog("鱼饵箱", free ? `今日免费垂钓剩余 ${free} / ${R.dailyFree} 次，暂不消耗鱼饵。` : "今日免费次数已用完，点水面抛竿会使用选用的鱼饵。",
   option("bait", "普通鱼饵", state.bait, "每竿使用 1 份") + option("rainbow", "彩虹鱼饵", state.rainbowBait, "必定上钩") + crafted + `<p class="bait-memory-note">${crafted && free ? "免费次数优先，之后才消耗特制鱼饵。" : ""}用完时再提醒更换，不会自动消耗另一种鱼饵。</p>${state.workshop ? '<button class="tile-btn" data-action="facility-open" data-facility="workshop">去工坊制作</button>' : ""}`,
   `<button class="button" data-action="buy-bait" data-count="1" ${state.wallet < R.baitCost ? "disabled" : ""}>买普通鱼饵 · ${R.baitCost} 积分</button><button class="button primary" data-action="close">选好了</button>`, false, "bait-dialog");
 }
@@ -794,8 +794,9 @@ async function cast(event, choice = null) {
     const caught = result.fish;
     update();
     if (!caught) {
-      const misses = state.emptyCastStreak || 0;
-      const hint = misses >= R.pityCasts - 1 ? "下一竿必有收获" : misses ? `已连续空 ${misses} 竿 · 第 ${R.pityCasts} 竿保底` : "鱼儿碰了碰鱼饵，又游走了";
+      // 保底仍由服务端结算，水面只提示今天还剩几次免费
+      const free = remainingCasts();
+      const hint = free ? `今日免费剩余 ${free} 次` : "今日免费次数已用完";
       GardenFX.miss(pondEl, "空竿", hint);
       announce(`这次空竿，${hint}`);
       return;
