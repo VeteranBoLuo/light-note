@@ -22,7 +22,7 @@
         <template v-if="navigationFucVisible">
           <div
             :style="{
-              color: route.path.includes('/workbenches') ? '#615ced' : '',
+              color: activeRoute.path.includes('/workbenches') ? '#615ced' : '',
             }"
             style="font-size: 14px; cursor: pointer"
             v-click-log="OPERATION_LOG_MAP.navigation.work"
@@ -33,7 +33,7 @@
           <div
             id="nav-bookmark-entry"
             v-route-prefetch="'/home'"
-            :style="{ color: route.path.includes('/home') ? '#615ced' : '' }"
+            :style="{ color: activeRoute.path.includes('/home') ? '#615ced' : '' }"
             style="font-size: 14px; cursor: pointer"
             v-click-log="OPERATION_LOG_MAP.navigation.home"
             @click="handleToBookmark"
@@ -42,7 +42,7 @@
           <div
             id="nav-note-entry"
             v-route-prefetch="'/noteLibrary'"
-            :style="{ color: route.path.includes('/noteLibrary') ? '#615ced' : '' }"
+            :style="{ color: activeRoute.path.includes('/noteLibrary') ? '#615ced' : '' }"
             style="font-size: 14px; cursor: pointer"
             v-click-log="OPERATION_LOG_MAP.navigation.note"
             @click="handleToNoteLibrary"
@@ -51,7 +51,7 @@
           <div
             id="nav-cloud-entry"
             v-route-prefetch="'/cloudSpace'"
-            :style="{ color: route.path.includes('/cloudSpace') ? '#615ced' : '' }"
+            :style="{ color: activeRoute.path.includes('/cloudSpace') ? '#615ced' : '' }"
             style="font-size: 14px; cursor: pointer"
             v-click-log="OPERATION_LOG_MAP.navigation.cloudSpace"
             @click="handleToCloudSpace"
@@ -94,7 +94,7 @@
           <div
             id="nav-resource-center-entry"
             v-route-prefetch="'/search'"
-            :style="{ color: route.path.startsWith('/search') ? '#615ced' : '' }"
+            :style="{ color: activeRoute.path.startsWith('/search') ? '#615ced' : '' }"
             style="font-size: 14px; cursor: pointer"
             v-click-log="OPERATION_LOG_MAP.navigation.resourceCenter"
             @click="router.push('/search')"
@@ -104,8 +104,8 @@
           <BButton
             id="nav-community-entry"
             class="navigation-pill-entry navigation-community-entry"
-            :class="{ 'is-active': isCommunityRoute(route) }"
-            :aria-current="isCommunityRoute(route) ? 'page' : undefined"
+            :class="{ 'is-active': isCommunityRoute(activeRoute) }"
+            :aria-current="isCommunityRoute(activeRoute) ? 'page' : undefined"
             :aria-label="communityEntryLabel"
             :title="communityEntryLabel"
             v-click-log="{ module: '导航栏', operation: '打开社区' }"
@@ -155,6 +155,7 @@
   import { useCommunityChatUnread } from '@/composables/useCommunityChatUnread';
   import icon from '@/config/icon';
   import { createRoutePrefetchDirective } from '@/directives/routePrefetch';
+  import { useRoutePending } from '@/utils/routePending';
 
   const vRoutePrefetch = createRoutePrefetchDirective(router);
   const route = useRoute();
@@ -170,16 +171,25 @@
   const navigationFucVisible = computed(() => !bookmark.isMobile);
   const { t } = useI18n();
 
-  const adminRouteActive = computed(
-    () =>
-      route.path.includes('/knowledgeBase') ||
-      route.path.includes('/admin') ||
-      route.path.includes('/securityCenter') ||
-      route.path.includes('/notificationCenter') ||
-      route.path.includes('/serverManagement'),
+  // 目标模块代码还在下载时先高亮目标入口，让点击立即有反馈；跳转判断仍以当前路由为准。
+  const { target: pendingTarget } = useRoutePending();
+  const activeRoute = computed(() => pendingTarget.value ?? route);
+  const adminRouteActive = computed(() => {
+    const path = activeRoute.value.path;
+    return (
+      path.includes('/knowledgeBase') ||
+      path.includes('/admin') ||
+      path.includes('/securityCenter') ||
+      path.includes('/notificationCenter') ||
+      path.includes('/serverManagement')
+    );
+  });
+  const isTodoRoute = computed(
+    () => activeRoute.value.path === '/inbox' && String(activeRoute.value.query?.tab || '') === 'todo',
   );
-  const isTodoRoute = computed(() => route.path === '/inbox' && String(route.query?.tab || '') === 'todo');
-  const isTagRoute = computed(() => route.path.startsWith('/manage/tag') || route.path.startsWith('/tag/'));
+  const isTagRoute = computed(
+    () => activeRoute.value.path.startsWith('/manage/tag') || activeRoute.value.path.startsWith('/tag/'),
+  );
   const displayTodoAttention = computed(() =>
     inbox.todoAttentionTotal > 99 ? '99+' : String(inbox.todoAttentionTotal),
   );

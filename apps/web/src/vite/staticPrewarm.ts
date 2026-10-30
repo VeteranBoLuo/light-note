@@ -3,7 +3,12 @@ import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import type { Plugin } from 'vite';
 import type { OutputAsset, OutputBundle, OutputChunk } from 'rollup';
-import { PREWARM_RUNTIME_ENTRIES } from '../config/staticPrewarmGroups';
+import {
+  CODE_PREWARM_GROUP_SIZE,
+  CODE_PREWARM_GROUPS,
+  PREWARM_MANIFEST_LIMIT,
+  PREWARM_RUNTIME_ENTRIES,
+} from '../config/staticPrewarmGroups';
 import { COMMUNITY_CHAT_OFFICIAL_STICKERS } from '../../../../packages/shared/communityChatStickers.js';
 import { COMMUNITY_CHAT_INLINE_EMOJIS } from '../../../../packages/shared/communityChatInlineEmojis.js';
 
@@ -121,6 +126,13 @@ export function buildPrewarmManifest(bundle: OutputBundle) {
     groups['manor.mobileCritical'] = (manor.mobileCritical || []).filter((url: string) => assets[url]);
     groups['manor.critical'] = (manor.desktopCritical || []).filter((url: string) => assets[url]);
   }
+  const code = Object.keys(assets)
+    .filter((url) => url.startsWith('/assets/') && /\.(?:js|mjs|css)$/.test(url))
+    .sort();
+  if (code.length > CODE_PREWARM_GROUPS.length * CODE_PREWARM_GROUP_SIZE) throw Error('Too many code assets for prewarm shards');
+  CODE_PREWARM_GROUPS.forEach((group, index) => {
+    groups[group] = code.slice(index * CODE_PREWARM_GROUP_SIZE, (index + 1) * CODE_PREWARM_GROUP_SIZE);
+  });
   const selectedCode = new Set(Object.values(groups).flat());
   for (const url of Object.keys(assets)) {
     if (/\.(?:js|mjs|css)(?:\?|$)/.test(url) && !selectedCode.has(url)) delete assets[url];
@@ -142,7 +154,9 @@ export default function staticPrewarmManifestPlugin(): Plugin {
       order: 'post',
       handler(_options, bundle) {
         const manifest = buildPrewarmManifest(bundle);
-        this.emitFile({ type: 'asset', fileName: 'static-prewarm.json', source: JSON.stringify(manifest) });
+        const source = JSON.stringify(manifest);
+        if (Buffer.byteLength(source) > PREWARM_MANIFEST_LIMIT) this.error('static-prewarm.json exceeds the runtime limit');
+        this.emitFile({ type: 'asset', fileName: 'static-prewarm.json', source });
         const rows = Object.entries(manifest.groups).map(
           ([group, urls]) => `${group}\t${urls.length}\t${urls.reduce((sum, url) => sum + manifest.assets[url], 0)}`,
         );

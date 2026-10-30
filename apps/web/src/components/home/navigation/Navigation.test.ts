@@ -200,7 +200,7 @@ describe('Navigation', () => {
   });
 
   it('标签详情也保持标签一级导航选中语义', () => {
-    expect(navigationSource).toContain("route.path.startsWith('/tag/')");
+    expect(navigationSource).toContain("activeRoute.value.path.startsWith('/tag/')");
   });
 
   it('PC 顶栏保留书签、笔记和云空间三个高频资料入口，可一键切换', async () => {

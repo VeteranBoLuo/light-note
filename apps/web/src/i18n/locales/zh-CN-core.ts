@@ -1225,6 +1225,11 @@ export default {
     projectAddress: '项目地址',
     coBuild: '共建轻笺',
   },
+  routePending: {
+    opening: '正在打开',
+    openingPage: '正在打开页面',
+    slow: '网络有点慢，仍在打开',
+  },
   mobileNavigation: {
     backToResources: '返回资料',
     backToToday: '回到今日',

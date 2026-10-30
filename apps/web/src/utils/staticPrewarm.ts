@@ -1,6 +1,7 @@
 import { subscribeAndroidPrewarmNetwork } from './androidBridge';
 import { requestActivitySnapshot, subscribeRequestActivity } from '@/http/requestActivity';
 import { observePrewarmImages } from './prewarmImages';
+import { PREWARM_MANIFEST_LIMIT } from '@/config/staticPrewarmGroups';
 
 export interface PrewarmManifest {
   version: 1;
@@ -20,7 +21,7 @@ export interface PrewarmSelection {
 }
 type Connection = EventTarget & { saveData?: boolean; effectiveType?: string; type?: string };
 const MiB = 1024 * 1024;
-const manifestLimit = 256 * 1024;
+const manifestLimit = PREWARM_MANIFEST_LIMIT;
 
 /** Network policy is independent of layout width (including docked DevTools). */
 export function isConstrainedPrewarmDevice() {

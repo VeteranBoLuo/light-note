@@ -33,6 +33,7 @@ import { hasLoggedInBefore } from '@/utils/authStorage.ts';
 import { hasVisitedMobileLanding } from '@/utils/mobileLandingVisit.ts';
 import { syncRouteSeoMeta } from '@/utils/seoMeta.ts';
 import { prepareServerManagementLocale } from '@/i18n';
+import { installRoutePending } from '@/utils/routePending';
 
 function getStoredPreferences() {
   try {
@@ -204,6 +205,7 @@ const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes,
 });
+installRoutePending(router);
 router.beforeResolve(async (to) => {
   if (to.matched.some((record) => record.path === '/serverManagement')) {
     await prepareServerManagementLocale();

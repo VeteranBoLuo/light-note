@@ -1277,6 +1277,11 @@ export default {
     projectAddress: 'Project Address',
     coBuild: 'Co-build',
   },
+  routePending: {
+    opening: 'Opening ',
+    openingPage: 'Opening page',
+    slow: 'Slow connection, still opening',
+  },
   mobileNavigation: {
     backToResources: 'Back to library',
     backToToday: 'Back to Today',

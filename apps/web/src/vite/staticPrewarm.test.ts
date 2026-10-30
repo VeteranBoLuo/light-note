@@ -32,7 +32,18 @@ describe('构建预热清单', () => {
     expect(manifest.entries).toEqual(['/assets/main.js']);
     expect(manifest.groups['editor.html']).toEqual(['/assets/editor.js', '/assets/shared.js', '/assets/editor.css']);
     expect(manifest.assets['/assets/db.wasm']).toBeUndefined();
-    expect(manifest.assets['/assets/optional.js']).toBeUndefined();
+    // 动态模块不进入运行时分组，只由全部代码分片在 Service Worker 接管后补齐。
+    expect(Object.values(manifest.groups).filter((urls) => urls.includes('/assets/optional.js'))).toEqual([
+      manifest.groups['code.1'],
+    ]);
+    expect(manifest.groups['code.1']).toEqual([
+      '/assets/editor.css',
+      '/assets/editor.js',
+      '/assets/main.js',
+      '/assets/optional.js',
+      '/assets/shared.js',
+    ]);
+    expect(manifest.groups['code.2']).toEqual([]);
   });
   it('公共图片只包含运行资源，历史贴图、原稿和安装包不进入副本', () => {
     const paths = publicArtworkPaths();

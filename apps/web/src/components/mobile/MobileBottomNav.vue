@@ -5,7 +5,7 @@
       :key="item.key"
       class="mobile-bottom-nav__item"
       :class="{
-        'mobile-bottom-nav__item--active': isItemActive(item.key) || pendingKey === item.key,
+        'mobile-bottom-nav__item--active': pendingKey ? pendingKey === item.key : isItemActive(item.key),
         'mobile-bottom-nav__item--create': item.key === 'create',
       }"
       :aria-current="isItemActive(item.key) ? 'page' : undefined"

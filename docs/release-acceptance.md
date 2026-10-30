@@ -43,6 +43,7 @@ pnpm preview
 
 ### 静态资源缓存
 
+- Service Worker 资源缓存发布后在浏览器与 App 各验证：页面已被接管；Wi-Fi 下空闲后 Cache Storage 的 `light-note-assets-v1` 含当前版本全部代码，蜂窝网络下只预取常驻入口；断网后打开未访问过的模块仍能加载；再次发布后只保留两版文件；App 的分享入口与网络出错页行为不变。紧急停用时把 `public/light-note-sw.js` 的 `ASSET_CACHE_ENABLED` 改为 `false` 并发布网页，客户端下次打开页面即更新 Service Worker 并清空资源缓存，回退为 HTTP 缓存。
 - 站点 Nginx 的 `/assets/` 必须覆盖图片、字体、JS、CSS 和 WASM 的长期 HTTP 缓存，配置入口为 [`scripts/nginx/static-assets-cache.conf`](../scripts/nginx/static-assets-cache.conf)。与既有同路径 `location` 合并或替换，不能重复声明；保留安全响应头继承。该目录只放内容哈希产物，禁止同地址覆盖不同内容。
 - `/static-prewarm.json` 重新验证且缺失时返回 404，不回退 SPA HTML。它随构建生成并绑定当前入口；旧页面遇到新清单只停止预热，不触发刷新。公共图片的哈希副本和普通构建资源一起纳入现有当前版／上一版资源保留机制。
 - 缓存配置修改属于部署操作，须有上线授权并通过 `nginx -t` 后生效。发布验收抽查图片与代码响应头、重复访问缓存命中、新版本 URL，以及已有页面的懒加载；仅本地代码检查不能证明生产缓存已生效。

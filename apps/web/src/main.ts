@@ -7,7 +7,7 @@ import '@/assets/css/index.less';
 import globalDirect from '@/config/globalDirect';
 import { createPinia } from 'pinia';
 import i18n, { prepareInitialLocale } from '@/i18n';
-import { initializePwaInstall } from '@/composables/usePwaInstall';
+import { initializePwaInstall, registerAppAssetServiceWorker } from '@/composables/usePwaInstall';
 import { isAndroidWebViewRuntime, isLightNoteAndroidApp } from '@/utils/androidBridge';
 import { installRenderingProfileSync } from '@/config/renderingProfile';
 import {
@@ -38,9 +38,11 @@ app.use(i18n);
 app.config.globalProperties.$t = i18n.global.t;
 globalDirect(app);
 // 必须在 mount 前监听 beforeinstallprompt，否则浏览器可能在应用组件挂载前触发事件而丢失安装入口。
-// 轻笺原生 APK 已经安装完成，不再注册 PWA Service Worker 或安装提示监听。
+// 轻笺原生 APK 已经安装完成，不注册安装提示监听，只注册用于缓存构建资源的 App 模式 Service Worker。
 if (!isAndroidApp) {
   initializePwaInstall();
+} else {
+  registerAppAssetServiceWorker();
 }
 async function mountApplication() {
   // 公开页的构建产物已经包含完整首屏。保留它直到语言与首路由分包同时就绪，

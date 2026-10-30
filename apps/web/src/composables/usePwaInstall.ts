@@ -107,16 +107,21 @@ function updateStandaloneState() {
   standalone.value = navigatorStandalone || window.matchMedia('(display-mode: standalone)').matches;
 }
 
-async function registerServiceWorker() {
+async function registerServiceWorker(scriptUrl = '/light-note-sw.js?v=3') {
   if (!('serviceWorker' in navigator) || (!window.isSecureContext && window.location.hostname !== 'localhost')) return;
   try {
-    await navigator.serviceWorker.register('/light-note-sw.js?v=3', {
+    await navigator.serviceWorker.register(scriptUrl, {
       scope: '/',
       updateViaCache: 'none',
     });
   } catch (error) {
     console.warn('PWA service worker registration failed:', error);
   }
+}
+
+/** App 只用 Service Worker 持久缓存构建资源：导航失败交给原生出错页，原生分享路径不经过它。 */
+export function registerAppAssetServiceWorker() {
+  if (import.meta.env.PROD) void registerServiceWorker('/light-note-sw.js?v=3&app=1');
 }
 
 export function initializePwaInstall() {

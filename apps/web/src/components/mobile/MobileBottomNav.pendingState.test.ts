@@ -6,7 +6,8 @@ const source = readFileSync(resolve(process.cwd(), 'src/components/mobile/Mobile
 
 describe('移动端底部导航切换状态', () => {
   it('点击后立即切换选中态，但不展示额外加载点或位移动画', () => {
-    expect(source).toContain("'mobile-bottom-nav__item--active': isItemActive(item.key) || pendingKey === item.key");
+    // 等待目标代码时只高亮目标入口，避免当前页与目标页两个入口同时选中。
+    expect(source).toContain("'mobile-bottom-nav__item--active': pendingKey ? pendingKey === item.key : isItemActive(item.key)");
     expect(source).not.toContain('mobile-bottom-nav__item--pending');
     expect(source).not.toContain('mobile-navigation-pending');
   });

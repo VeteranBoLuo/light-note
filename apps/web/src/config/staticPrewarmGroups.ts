@@ -13,8 +13,19 @@ export const PREWARM_RUNTIME_ENTRIES: Record<string, string> = {
   'route.support': 'view/support/SupportUs.vue',
   'route.entitlementStore': 'view/entitlementStore/EntitlementStore.vue',
   'route.campaign': 'view/campaign/CampaignPage.vue',
+  'route.inbox': 'view/inbox/Inbox.vue',
+  'route.communityChat': 'view/communityChat/CommunityChat.vue',
+  'route.communityFeed': 'view/community/CommunityFeed.vue',
+  'route.growth': 'view/growth/GrowthPage.vue',
   account: 'view/login/UserAuthModal.vue',
 };
+
+/** 全部构建代码按固定分片登记；仅在 Service Worker 已接管页面时于空闲补齐，持久缓存后切换模块无需再等下载。 */
+export const CODE_PREWARM_GROUPS = ['code.1', 'code.2', 'code.3', 'code.4'] as const;
+/** 与运行时清单校验的单组上限一致。 */
+export const CODE_PREWARM_GROUP_SIZE = 500;
+/** 与运行时 static-prewarm.json 的读取上限一致，超出时构建失败而不是线上静默停用预热。 */
+export const PREWARM_MANIFEST_LIMIT = 256 * 1024;
 
 /** Shared ordering across independent producers; smaller values run first. */
 export const PREWARM_PRIORITY = {
