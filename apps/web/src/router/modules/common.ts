@@ -76,6 +76,20 @@ const commonRouter: RouteRecordRaw[] = [
     component: () => import('@/view/growth/GrowthPage.vue'),
   },
   {
+    // 年度报告：手机全屏沉浸，隐藏顶栏与底栏；游客不开放。
+    meta: {
+      title: '年度报告',
+      keepAlive: false,
+      requireAuth: true,
+      mobileTopBar: false,
+      mobileBottomNav: false,
+      roles: [RoleEnum.Root, RoleEnum.USER, RoleEnum.TEST],
+    },
+    path: '/growth/annual/:year(\\d{4})',
+    name: 'annualReport',
+    component: () => import('@/view/growth/AnnualReportPage.vue'),
+  },
+  {
     meta: {
       title: '资源商店',
       keepAlive: true,

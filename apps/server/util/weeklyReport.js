@@ -24,24 +24,24 @@ export const WEEKLY_REPORT_ITEM_LIMIT = 20;
 
 const DAY_MS = 86_400_000;
 
-function dayKeyToUtcDate(key) {
+export function dayKeyToUtcDate(key) {
   return new Date(Date.UTC(Number(key.slice(0, 4)), Number(key.slice(4, 6)) - 1, Number(key.slice(6, 8))));
 }
 
-function addUtcDays(date, amount) {
+export function addUtcDays(date, amount) {
   return new Date(date.getTime() + amount * DAY_MS);
 }
 
-function isoDay(date) {
+export function isoDay(date) {
   return date.toISOString().slice(0, 10);
 }
 
-function compactDay(date) {
+export function compactDay(date) {
   return isoDay(date).replaceAll('-', '');
 }
 
 /** 账号时区某日 0 点在服务器本地时间下的写法；业务表 create_time 按服务器本地时间写入。 */
-function serverLocalSql(utcMidnight, shiftMinutes) {
+export function serverLocalSql(utcMidnight, shiftMinutes) {
   const shifted = new Date(utcMidnight.getTime() - Number(shiftMinutes || 0) * 60_000).toISOString();
   return `${shifted.slice(0, 10)} ${shifted.slice(11, 19)}`;
 }
@@ -164,7 +164,7 @@ export function mergeWeeklyReportItems(groups, limit = WEEKLY_REPORT_ITEM_LIMIT)
     .map(({ time: _time, ...item }) => item);
 }
 
-const SEED_FILTER = {
+export const SEED_FILTER = {
   bookmark: `NOT EXISTS (
           SELECT 1 FROM onboarding_seed_resources osr
           WHERE osr.user_id = b.user_id AND osr.resource_type = 'bookmark' AND osr.resource_id = b.id

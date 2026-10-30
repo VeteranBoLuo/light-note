@@ -2,6 +2,7 @@ import { publicResourcesZh } from './publicResources';
 import { cloudFileScopeZh } from './cloudFileScope';
 import { profileBackgroundsZh, profileBackgroundItemsZh } from './profileBackgrounds';
 import { profileAppearanceZh } from './profileAppearance';
+import { annualReportZh } from './annualReport';
 import { MAKEUP_WINDOW_DAYS } from '@lightnote/shared';
 import { noteMathZh } from './noteMath';
 import { extractionZh } from './extraction';
@@ -46,6 +47,7 @@ export default {
   publicResources: publicResourcesZh,
   profileBackgrounds: profileBackgroundsZh,
   profileAppearance: profileAppearanceZh,
+  annualReport: annualReportZh,
   noteMath: noteMathZh,
   nativePush: {
     title: 'App 通知连接',
@@ -10082,6 +10084,7 @@ export default {
       join_30: '满月之约',
       join_100: '百日陪伴',
       join_365: '周年知己',
+      annual_review_2026: '年度回望 · 2026',
     },
     achDesc: {
       public_resource_1: '审核通过且有效公开 1 项自己的书签或纯文字笔记',
@@ -10134,6 +10137,7 @@ export default {
       join_30: '加入轻笺满 30 天',
       join_100: '加入轻笺满 100 天',
       join_365: '加入轻笺满一年',
+      annual_review_2026: '看完 2026 年度报告，纪念不发积分',
     },
     timelineEmpty: '还没有成长记录，开始你的第一步吧',
     timelineLevelUp: '升级到 Lv.{level} · {name}',

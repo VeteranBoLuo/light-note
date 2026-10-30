@@ -21,6 +21,7 @@ const suites = {
   'util/services/bookmarkImportService.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
   'util/publicResources/publicResources.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
   'util/weeklyReport.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
+  'util/annualReport/annualReport.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
   'util/previewJobQueue.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
   'util/filePreview/heif.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
   'util/imagePreview/lifecycle.test.js': 'IMAGE_PREVIEW_TEST_SOCKET',

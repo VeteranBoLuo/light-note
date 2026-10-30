@@ -583,6 +583,18 @@ export const LEGACY_ACHIEVEMENTS = [
   { key: 'join_30', group: 'tenure', metric: 'joinDays', target: 30, reward: 100 },
   { key: 'join_100', group: 'tenure', metric: 'joinDays', target: 100, reward: 250 },
   { key: 'join_365', group: 'tenure', metric: 'joinDays', target: 365, reward: 600 },
+  // 纪念成就：看完年度报告由专用接口写入已解锁且已领取的状态，不发积分、不进入领取流程；
+  // 未解锁时不出现在成就墙，避免往后的新账号看到一枚永远拿不到的成就。
+  {
+    key: 'annual_review_2026',
+    group: 'tenure',
+    metric: 'annualReview2026',
+    target: 1,
+    reward: 0,
+    rewardPolicy: 'commemorative',
+    autoClaim: true,
+    hiddenUntilUnlocked: true,
+  },
 ];
 
 export const ACHIEVEMENTS = LEGACY_ACHIEVEMENTS.map((achievement) =>
@@ -1217,8 +1229,11 @@ export async function getGrowthDashboard(userId, { userRole = null, db = pool, c
   const communityMetrics = isGuest ? {} : await communityGrowthMetrics(userId, { db });
   const publicMetrics = isGuest ? {} : await publicResourceGrowthMetrics(userId, { db });
   const metrics = { ...stats, ...communityMetrics, ...publicMetrics, level: growth.level, activeDays };
-  const achievements = achievementCatalog.map((a) => {
-    const cur = Number(metrics[a.metric] || 0);
+  const visibleCatalog = achievementCatalog.filter(
+    (a) => !a.hiddenUntilUnlocked || achievementState.get(a.key)?.unlockedAt,
+  );
+  const achievements = visibleCatalog.map((a) => {
+    const cur = a.autoClaim && achievementState.get(a.key)?.unlockedAt ? a.target : Number(metrics[a.metric] || 0);
     const minLevel = Math.max(0, Number(a.minLevel || 0));
     const minActiveDays = Math.max(0, Number(a.minActiveDays || 0));
     const currentLevel = Number(growth.level || 0);
@@ -1258,7 +1273,8 @@ export async function getGrowthDashboard(userId, { userRole = null, db = pool, c
         : null,
       frameId: state?.rewardFrameIdSnapshot || rewardFrame?.id || null, // 可选头像框奖励；领取时与积分在同一事务发放
       claimed, // 是否已领取奖励
-      claimable: unlocked && !claimed, // 可领取(已解锁且未领)
+      claimable: unlocked && !claimed && !a.autoClaim, // 可领取(已解锁且未领)；纪念成就解锁即领取
+      commemorative: a.rewardPolicy === 'commemorative',
       unlockedAt: state?.unlockedAt || null,
       claimedAt: state?.claimedAt || null,
     };
@@ -1336,7 +1352,7 @@ export async function getGrowthDashboard(userId, { userRole = null, db = pool, c
     achievements,
     unlockedCount,
     claimableCount,
-    totalAchievements: achievementCatalog.length,
+    totalAchievements: achievements.length,
     achievementPolicyVersion,
     quests,
     questBonus,
@@ -1409,6 +1425,7 @@ export async function claimAchievement(userId, key, { userRole = null, dashboard
   if (isVisitorGrowthActor(userId, userRole)) return { ok: false, reason: 'visitor' };
   const ach = ACHIEVEMENTS.find((a) => a.key === key);
   if (!ach) return { ok: false, reason: 'not_found', msg: '成就不存在' };
+  if (ach.autoClaim) return { ok: false, reason: 'claimed', msg: '该成就奖励已领取' };
   // 复用看板派生的解锁判定(单一事实源),避免重复实现各 metric 的统计口径;
   // claimAll 场景可传入已算好的 dashboard,免得每领一个成就重跑一遍完整聚合(N+1)
   const dash = dashboard || (await getGrowthDashboard(userId, { userRole }));

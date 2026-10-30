@@ -281,6 +281,12 @@ const GROUP_FALLBACK_ICON: Record<AchievementGroup, string> = {
   tenure: icon.growth.tenure,
 };
 
+// 已有专属线条图形、尚未提供珐琅图稿的成就：用自己的图形渲染，不登记进 ACHIEVEMENT_VISUALS，
+// 因而不会请求不存在的 WebP。图稿交付后移入 ACHIEVEMENT_VISUALS 并删除这里的条目。
+const ARTWORK_PENDING_ICONS: Record<string, string> = {
+  annual_review_2026: icon.growth.achievement.annual_review_2026,
+};
+
 function knownGroup(group?: string): AchievementGroup {
   return ACHIEVEMENT_GROUPS.includes(group as AchievementGroup) ? (group as AchievementGroup) : 'level';
 }
@@ -290,7 +296,8 @@ export function achievementVisualFor(key: string, group?: string): AchievementVi
   if (mapped) return mapped;
   const fallbackGroup = knownGroup(group);
   const family = GROUP_FALLBACK_FAMILY[fallbackGroup];
-  return visual(fallbackGroup, family, 1, GROUP_FALLBACK_ICON[fallbackGroup]);
+  const pendingIcon = ARTWORK_PENDING_ICONS[key];
+  return visual(fallbackGroup, family, pendingIcon ? 2 : 1, pendingIcon || GROUP_FALLBACK_ICON[fallbackGroup]);
 }
 
 export function achievementVisualStyle(key: string, group?: string): Record<string, string> {

@@ -359,7 +359,14 @@ export function resolveWeeklyChallenges(version = POINTS_EARNING_POLICY_VERSION)
 }
 
 export function applyAchievementEarningPolicy(achievement, version = POINTS_EARNING_POLICY_VERSION) {
-  if (!achievement || achievement.rewardPolicy === 'public-contribution-v1' || !usesC5EarningRules(version)) return { ...(achievement || {}) };
+  // 公开贡献与纪念成就使用最终奖励值，不参与旧成就的折算规则。
+  if (
+    !achievement ||
+    ['public-contribution-v1', 'commemorative'].includes(achievement.rewardPolicy) ||
+    !usesC5EarningRules(version)
+  ) {
+    return { ...(achievement || {}) };
+  }
   const resolved = { ...achievement, ...(ACHIEVEMENT_OVERRIDES[achievement.key] || {}) };
   return version === POINTS_EARNING_C8_POLICY_VERSION
     ? { ...resolved, reward: Math.floor(Number(resolved.reward || 0) / 2) }

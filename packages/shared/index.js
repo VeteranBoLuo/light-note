@@ -47,6 +47,13 @@ export const FEATURE_ANNOUNCEMENTS = Object.freeze({
     publishedAt: '2026-08-31T00:00:00.000+08:00',
     expiresAt: '2026-09-15T00:00:00.000+08:00',
   }),
+  // 与 annual-report 契约中的开放、入口截止时刻一致：控制成长中心红点与「今日」入口行。
+  ANNUAL_REPORT_2026: Object.freeze({
+    id: 'annual-report-2026',
+    version: 'annual-report-2026-v1',
+    publishedAt: '2026-12-15T00:00:00.000+08:00',
+    expiresAt: '2027-02-01T00:00:00.000+08:00',
+  }),
 });
 
 const FEATURE_ANNOUNCEMENT_BY_ID = new Map(

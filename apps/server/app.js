@@ -15,6 +15,7 @@ import { adminRoutePolicyMiddleware } from './util/adminRoutePolicy.js';
 import { attackMonitor, ensureSecurityTables, cleanupExpiredSecurityEvents } from './util/security/index.js';
 import { cleanupAllExpiredTrash } from './router_handle/trashHandle.js';
 import { generateWeeklyReports } from './util/weeklyReport.js';
+import { scheduleAnnualReportNotices } from './util/annualReport/notice.js';
 import { notificationSchedulerEnabled } from './util/notificationSchedulerPolicy.js';
 import { ensureNotificationTable } from './util/notification.js';
 import { initLogExclude } from './util/logExclude.js';
@@ -305,6 +306,8 @@ function scheduleGrowthNudges() {
   console.log(`[成长提醒] 定时已注册,首次执行: ${next.toLocaleString('zh-CN')}`);
 }
 scheduleGrowthNudges();
+// 年度报告开放通知（开放后第一周每天 10:00 检查，同一账号最多一条）
+scheduleAnnualReportNotices();
 startCommunityFeedScheduler();
 startCommunityReviewScheduler();
 startPublicResourceReviewScheduler();

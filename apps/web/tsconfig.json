@@ -36,6 +36,7 @@
       "@lightnote/shared/profile-backgrounds": ["../../packages/shared/profileBackgrounds.d.ts"],
       "@lightnote/shared/file-category": ["../../packages/shared/fileCategory.d.ts"],
       "@lightnote/shared/notification-presentation": ["../../packages/shared/notificationPresentation.d.ts"],
+      "@lightnote/shared/annual-report": ["../../packages/shared/annualReport.d.ts"],
       "@lightnote/shared/ai-usage-modules": ["../../packages/shared/aiUsageModules.d.ts"],
       "@lightnote/shared/organize-progress": ["../../packages/shared/organizeProgress.d.ts"],
       "@lightnote/shared/organize-capabilities": ["../../packages/shared/organizeCapabilities.d.ts"],

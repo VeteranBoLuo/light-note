@@ -108,12 +108,10 @@
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon';
   import { useMobileLayout } from '@/composables/useMobileLayout';
+  import { usePosterExport } from '@/composables/usePosterExport';
   import { useUiDensity } from '@/composables/useUiDensity';
   import { useUserStore } from '@/store';
-  import { recordOperation } from '@/api/commonApi';
   import { getWeeklyReport } from '@/api/growthApi';
-  import { ensureCloudFolder, uploadCloudFile } from '@/api/cloudFileUploadApi';
-  import { prepareMaskedIconsForCanvas } from '@/utils/canvasExport';
   import { closeCurrentMobileOverlayThen } from '@/utils/mobileOverlayHistory';
   import {
     normalizeWeeklyReport,
@@ -169,10 +167,6 @@
   const loadFailed = ref(false);
   const cache = new Map<WeeklyReportPeriodKind, NormalizedWeeklyReport>();
   let generation = 0;
-  const exporting = ref(false);
-  const sharing = ref(false);
-  const cloudSaving = ref(false);
-  const posterActionBusy = computed(() => exporting.value || sharing.value || cloudSaving.value);
 
   const periodOptions = computed(() => [
     { key: 'current', label: t('growth.wrPeriodCurrent') },
@@ -365,132 +359,41 @@
 
   /* ---------- 导出、分享与保存 ---------- */
   const exportDisabled = computed(() => !shown.value || shown.value.blank || loading.value);
-
-  async function posterFile() {
-    const owner = reportOwnerKey.value;
-    const filename = posterFilename();
-    const blob = await canvasToBlob(await renderPoster());
-    if (owner !== reportOwnerKey.value) throw new DOMException('Report owner changed', 'AbortError');
-    return new File([blob], filename, { type: 'image/png' });
-  }
-
-  async function renderPoster() {
-    const poster = posterRef.value?.root;
-    if (!poster) throw new Error('poster_not_ready');
-    const html2canvas = (await import('html2canvas')).default;
-    const exportHost = document.createElement('div');
-    const exportPoster = poster.cloneNode(true) as HTMLElement;
-    exportHost.setAttribute('aria-hidden', 'true');
-    Object.assign(exportHost.style, {
-      position: 'fixed',
-      top: '0',
-      left: '-10000px',
-      width: `${POSTER_WIDTH}px`,
-      height: `${POSTER_HEIGHT}px`,
-      overflow: 'hidden',
-      pointerEvents: 'none',
-    });
-    exportPoster.dataset.weeklyReportExport = 'true';
-    exportPoster.style.transform = 'none';
-    exportHost.append(exportPoster);
-    document.body.append(exportHost);
-    try {
-      prepareMaskedIconsForCanvas(exportPoster, window);
-      await document.fonts?.ready;
-      await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
-      return await html2canvas(exportPoster, {
-        backgroundColor: '#0d1022',
-        scale: EXPORT_SCALE,
-        useCORS: true,
-        logging: false,
-        onclone: (documentClone) => {
-          const clonedPoster = documentClone.querySelector<HTMLElement>('[data-weekly-report-export="true"]');
-          if (clonedPoster) clonedPoster.style.transform = 'none';
-        },
-      });
-    } finally {
-      exportHost.remove();
-    }
-  }
-  function canvasToBlob(canvas: HTMLCanvasElement) {
-    return new Promise<Blob>((resolve, reject) =>
-      canvas.toBlob((blob) => (blob ? resolve(blob) : reject(new Error('poster_blob_failed'))), 'image/png'),
-    );
-  }
-  function posterFilename() {
-    const report = shown.value;
-    return `${t('growth.wrFileName')}-${report?.start || 'weekly'}.png`;
-  }
-  function saveBlob(file: File) {
-    const url = URL.createObjectURL(file);
-    const link = document.createElement('a');
-    link.download = file.name;
-    link.href = url;
-    link.click();
-    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-  }
-  async function downloadPoster() {
-    if (posterActionBusy.value || exportDisabled.value) return;
-    exporting.value = true;
-    try {
-      saveBlob(await posterFile());
-      message.success(t('growth.wrExportSuccess'));
-      recordOperation({ module: '成长', operation: '导出成长周报图片成功' });
-    } catch (error) {
-      if ((error as DOMException)?.name === 'AbortError') return;
-      console.error('导出周报失败:', error);
-      message.error(t('growth.wrExportFailed'));
-    } finally {
-      exporting.value = false;
-    }
-  }
-  async function sharePoster() {
-    if (posterActionBusy.value || exportDisabled.value) return;
-    sharing.value = true;
-    try {
-      const file = await posterFile();
-      const canShareFile =
-        typeof navigator.share === 'function' && (!navigator.canShare || navigator.canShare({ files: [file] }));
-      if (canShareFile) {
-        try {
-          await navigator.share({ title: t('growth.weeklyReportTitle'), files: [file] });
-          recordOperation({ module: '成长', operation: '分享成长周报图片成功' });
-          return;
-        } catch (error) {
-          // 某些容器暴露 API 却不支持文件分享，或绘制后已失去短时用户手势。
-          if (!['NotAllowedError', 'NotSupportedError', 'TypeError'].includes((error as Error)?.name)) throw error;
-        }
-      }
-      saveBlob(file);
-      message.info(t('growth.wrShareFallback'));
-    } catch (error) {
-      if ((error as DOMException)?.name !== 'AbortError') {
-        console.error('分享周报失败:', error);
-        message.error(t('growth.wrShareFailed'));
-      }
-    } finally {
-      sharing.value = false;
-    }
-  }
-  async function savePosterToCloud() {
-    if (posterActionBusy.value || exportDisabled.value || isAdminContext.value) return;
-    cloudSaving.value = true;
-    const owner = reportOwnerKey.value;
-    try {
-      const file = await posterFile();
-      const folder = await ensureCloudFolder('周报');
-      if (owner !== reportOwnerKey.value) return;
-      await uploadCloudFile(file, folder.id);
-      message.success(t('growth.wrCloudSaveSuccess'));
-      recordOperation({ module: '成长', operation: '保存成长周报到云空间成功' });
-    } catch (error) {
-      if ((error as DOMException)?.name === 'AbortError') return;
-      console.error('保存周报到云空间失败:', error);
-      message.error(t('growth.wrCloudSaveFailed'));
-    } finally {
-      cloudSaving.value = false;
-    }
-  }
+  const {
+    exporting,
+    sharing,
+    cloudSaving,
+    busy: posterActionBusy,
+    downloadPoster,
+    sharePoster,
+    savePosterToCloud,
+  } = usePosterExport({
+    posterRoot: () => posterRef.value?.root,
+    width: POSTER_WIDTH,
+    height: POSTER_HEIGHT,
+    background: '#0d1022',
+    scale: EXPORT_SCALE,
+    filename: () => `${t('growth.wrFileName')}-${shown.value?.start || 'weekly'}.png`,
+    shareTitle: () => t('growth.weeklyReportTitle'),
+    cloudFolder: '周报',
+    ownerKey: () => reportOwnerKey.value,
+    canExport: () => !exportDisabled.value,
+    canSaveToCloud: () => !isAdminContext.value,
+    text: {
+      exportSuccess: () => t('growth.wrExportSuccess'),
+      exportFailed: () => t('growth.wrExportFailed'),
+      shareFallback: () => t('growth.wrShareFallback'),
+      shareFailed: () => t('growth.wrShareFailed'),
+      cloudSuccess: () => t('growth.wrCloudSaveSuccess'),
+      cloudFailed: () => t('growth.wrCloudSaveFailed'),
+    },
+    log: {
+      module: '成长',
+      download: '导出成长周报图片成功',
+      share: '分享成长周报图片成功',
+      cloud: '保存成长周报到云空间成功',
+    },
+  });
 </script>
 
 <style lang="less">

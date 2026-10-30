@@ -37,14 +37,28 @@
         </BButton>
         <h1 class="growth-title">{{ t('growth.pageTitle') }}</h1>
         <p class="growth-subtitle">{{ t('growth.pageSubtitle') }}</p>
-        <BButton
-          class="growth-report-btn"
-          v-click-log="{ module: '成长', operation: '打开成长周报' }"
-          @click="openWeeklyReport"
-        >
-          <SvgIcon :src="icon.growth.rank" size="15" /> {{ t('growth.weeklyReportEntry') }}
-        </BButton>
+        <div class="growth-report-actions">
+          <BButton
+            class="growth-report-btn"
+            v-click-log="{ module: '成长', operation: '打开成长周报' }"
+            @click="openWeeklyReport"
+          >
+            <SvgIcon :src="icon.growth.rank" size="15" /> {{ t('growth.weeklyReportEntry') }}
+          </BButton>
+          <BButton
+            v-if="annualVisible"
+            class="growth-report-btn growth-annual-btn"
+            :class="{ 'has-dot': annualUnseen }"
+            v-click-log="{ module: '成长', operation: '打开年度报告' }"
+            @click="openAnnualReport"
+          >
+            <SvgIcon :src="icon.todoWorkspace.star" size="15" />
+            {{ t('annualReport.entry.button', { year: annualYear }) }}
+          </BButton>
+        </div>
       </header>
+
+      <AnnualReportEntry v-if="bookmark.isMobile" :dismissible="false" source="成长中心" />
 
       <div v-if="isAdminContext" class="growth-admin-notice" role="status">
         <strong>{{ t('growth.adminContextTitle') }}</strong>
@@ -87,6 +101,16 @@
           >
             <SvgIcon :src="icon.growth.rank" size="16" />
             <span>{{ t('growth.weeklyReportEntry') }}</span>
+          </BButton>
+          <BButton
+            v-if="annualVisible"
+            class="growth-side-report growth-annual-btn"
+            :class="{ 'has-dot': annualUnseen }"
+            v-click-log="{ module: '成长', operation: '打开年度报告' }"
+            @click="openAnnualReport"
+          >
+            <SvgIcon :src="icon.todoWorkspace.star" size="16" />
+            <span>{{ t('annualReport.entry.button', { year: annualYear }) }}</span>
           </BButton>
         </aside>
 
@@ -471,6 +495,8 @@
   import { useGrowth } from '@/composables/useGrowth.ts';
   import { useGrowthClaimFeedback } from '@/composables/useGrowthClaimFeedback';
   import WeeklyReportModal from '@/components/growth/WeeklyReportModal.vue';
+  import AnnualReportEntry from '@/components/growth/annualReport/AnnualReportEntry.vue';
+  import { useAnnualReportEntry } from '@/composables/useAnnualReportEntry';
   import { bookmarkStore, useUserStore } from '@/store';
   import { resetMobileScrollElement } from '@/composables/useMobileNavigationState';
   import { useForegroundRefresh } from '@/composables/useForegroundRefresh';
@@ -997,6 +1023,17 @@
     wrVisible.value = true;
   }
 
+  // 年度报告入口：入口期内显示，没看过时带红点；进入报告页后由报告页标记已读。
+  const {
+    visible: annualVisible,
+    unseen: annualUnseen,
+    year: annualYear,
+    route: annualRoute,
+  } = useAnnualReportEntry();
+  function openAnnualReport() {
+    void router.push(annualRoute);
+  }
+
   watch(
     [taskTabsScrollRef, taskView, () => taskViewOptions.value.map((option) => option.label).join('|')] as const,
     ([container, view], [previousContainer, previousView]) => {
@@ -1390,6 +1427,31 @@
   .growth-report-btn:hover {
     background: color-mix(in srgb, var(--primary-color) 15%, transparent);
   }
+  .growth-report-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    align-self: flex-start;
+    gap: var(--ui-space-8, 8px);
+    margin-top: var(--ui-space-10, 10px);
+  }
+  .growth-report-actions .growth-report-btn {
+    margin-top: 0;
+  }
+  .growth-annual-btn {
+    position: relative;
+  }
+  .growth-annual-btn.has-dot::after {
+    position: absolute;
+    top: var(--ui-space-4, 4px);
+    right: var(--ui-space-6, 6px);
+    width: var(--ui-layout-8, 8px);
+    height: var(--ui-layout-8, 8px);
+    border-radius: 50%;
+    background: #f43f5e;
+    box-shadow: 0 0 0 2px var(--background-color);
+    content: '';
+  }
   .growth-panel {
     border: 1px solid color-mix(in srgb, var(--card-border-color) 62%, transparent);
     border-radius: 16px;
@@ -1442,7 +1504,8 @@
       display: none;
     }
     .growth-back,
-    .growth-report-btn {
+    .growth-report-btn,
+    .growth-report-actions {
       margin: 0;
       align-self: center;
     }
