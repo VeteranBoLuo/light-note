@@ -56,15 +56,21 @@
         class="post-like"
         :disabled="!canLike || likePending"
         :aria-pressed="post.liked"
-        :aria-label="t(post.liked ? 'community.feed.unlike' : 'community.feed.likes')"
+        :title="t(post.liked ? 'community.feed.liked' : 'community.feed.likes')"
+        :aria-label="t(post.liked ? 'community.feed.unlike' : 'community.feed.likes') + ' · ' + (post.likeCount || 0)"
         @click="$emit('like', post)"
-        ><SvgIcon :src="icon.coBuild.vote" size="15" />{{ post.likeCount || 0 }}
-        {{ t(post.liked ? 'community.feed.liked' : 'community.feed.likes') }}</BButton
+        ><SvgIcon
+          :src="post.liked ? icon.coBuild.vote : icon.coBuild.voteOutline"
+          size="15"
+          aria-hidden="true"
+        />{{ post.likeCount || 0 }}</BButton
       ><BButton
         v-if="!detail"
         class="post-like"
+        :title="t('community.feed.comments')"
+        :aria-label="t('community.feed.comments') + ' · ' + (post.commentCount || 0)"
         @click="router.push({ ...postTarget(), query: { ...postTarget().query, comments: '1' } })"
-        >{{ post.commentCount || 0 }} {{ t('community.feed.comments') }}</BButton
+        ><SvgIcon :src="icon.ai.conversations" size="15" aria-hidden="true" />{{ post.commentCount || 0 }}</BButton
       ></div
     >
     <small v-if="likeFailed" class="post-like-error" role="alert">{{ t('community.feed.likeFailed') }}</small>
