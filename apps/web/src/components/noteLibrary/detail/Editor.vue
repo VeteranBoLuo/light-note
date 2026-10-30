@@ -54,7 +54,7 @@
           @update:model-value="handleRichContentUpdate"
           tag-name="div"
           class="note-editor-body note-editor-rich-content"
-          :class="{ 'is-preparing': !richEditorRuntimeReady }"
+          :data-preparing="!richEditorRuntimeReady || undefined"
           :aria-hidden="!richEditorRuntimeReady || undefined"
           :init="editorInit"
           license-key="gpl"
@@ -6169,6 +6169,15 @@
         });
       });
       editor.on('init', async () => {
+        // TinyMCE 在 tap 中选中 contenteditable=false 的资源胶囊并阻止 touchend，移动端因此收不到 click。
+        // 初始化后前置注册，才能排在其内部处理之前打开资源详情，并阻止它生成离屏选区。
+        editor.on(
+          'tap',
+          (event: Event) => {
+            if (handleTinyMceResourceReferenceActivation(event)) event.stopImmediatePropagation?.();
+          },
+          true,
+        );
         if (editor.mode?.set) {
           editor.mode.set(props.readonly ? 'readonly' : 'design');
         } else if (editor.setMode) {
@@ -6453,7 +6462,8 @@
 
     // The preview owns the same scroll container until init. Preparing the real
     // inline editor must not add a second copy of the document to its height.
-    &.is-preparing {
+    // 准备态用属性表达：TinyMCE 会给正文追加 mce-content-body 等类名，动态 :class 会在切换时被 Vue 整体覆盖。
+    &[data-preparing] {
       position: absolute;
       top: 0;
       left: 0;

@@ -27,6 +27,24 @@ describe('Editor 文件引用预览入口', () => {
     expect(source).not.toContain('router.push');
   });
 
+  it('移动端 tap 资源胶囊先于 TinyMCE 选中不可编辑节点处理', () => {
+    const initStart = editorSource.indexOf("editor.on('init', async () => {");
+    expect(initStart).toBeGreaterThan(-1);
+    const initSource = editorSource.slice(initStart, editorSource.indexOf('editor.mode', initStart));
+    // 必须在 init 后以 prepend 注册，排到 TinyMCE SelectionOverrides 的 tap 处理之前。
+    expect(initSource).toMatch(
+      /editor\.on\(\s*'tap',[\s\S]*?handleTinyMceResourceReferenceActivation\(event\)[\s\S]*?stopImmediatePropagation[\s\S]*?true,\s*\)/,
+    );
+  });
+
+  it('正文元素不绑定动态 class，避免覆盖 TinyMCE 的 mce-content-body', () => {
+    const tinyMce = editorSource.match(/<TinyMceEditor[\s\S]*?\/>/)?.[0] || '';
+    expect(tinyMce).toContain('class="note-editor-body note-editor-rich-content"');
+    expect(tinyMce).not.toContain(':class=');
+    expect(tinyMce).toContain(':data-preparing="!richEditorRuntimeReady || undefined"');
+    expect(editorSource).toContain('&[data-preparing] {');
+  });
+
   it('主动进入资源目标前先把引用定位写入原笔记历史项', () => {
     const source = functionSource('navigateResourceRef', 'showMobileResourcePreview');
     expect(source).toContain('buildNoteReturnFocusLocation');
