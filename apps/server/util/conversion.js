@@ -37,6 +37,64 @@ export function normalizeConversionSource(source) {
   return CONVERSION_SOURCES.has(s) ? s : 'unknown';
 }
 
+// 访客来源:新版客户端随每个浏览器会话首个 page_view 附带来源网站域名与推广参数,
+// 服务端归类后另记一条 entry_source(context 为归类结果),只存归类,不存完整网址。
+export const ENTRY_SOURCE_EVENT = 'entry_source';
+const SEARCH_ENGINES = [
+  ['baidu', /(^|\.)baidu\.com$/],
+  ['bing', /(^|\.)bing\.com$/],
+  ['google', /(^|\.)google\.[a-z.]+$/],
+  ['sogou', /(^|\.)sogou\.com$/],
+  ['360', /(^|\.)so\.com$/],
+  ['shenma', /(^|\.)sm\.cn$/],
+  ['duckduckgo', /(^|\.)duckduckgo\.com$/],
+  ['yandex', /(^|\.)yandex\.[a-z.]+$/],
+];
+// 顺序有意义:微信在 qq.com 之下,必须先于 QQ 匹配。
+const REFERRAL_SITES = [
+  ['github', /(^|\.)github\.com$/],
+  ['csdn', /(^|\.)csdn\.net$/],
+  ['zhihu', /(^|\.)zhihu\.com$/],
+  ['juejin', /(^|\.)juejin\.(cn|im)$/],
+  ['v2ex', /(^|\.)v2ex\.com$/],
+  ['linuxdo', /(^|\.)linux\.do$/],
+  ['sspai', /(^|\.)sspai\.com$/],
+  ['xiaohongshu', /(^|\.)(xiaohongshu\.com|xhslink\.com)$/],
+  ['bilibili', /(^|\.)(bilibili\.com|b23\.tv)$/],
+  ['douyin', /(^|\.)douyin\.com$/],
+  ['weibo', /(^|\.)(weibo\.com|weibo\.cn)$/],
+  ['weixin', /(^|\.)(weixin\.qq\.com|wechat\.com)$/],
+  ['qq', /(^|\.)qq\.com$/],
+  ['producthunt', /(^|\.)producthunt\.com$/],
+  ['reddit', /(^|\.)reddit\.com$/],
+  ['x', /(^|\.)(x\.com|twitter\.com|t\.co)$/],
+];
+
+/**
+ * 归类访客来源。推广参数(utm_source/ref)优先;否则按来源域名归为 search:* / ref:* / site:域名;
+ * 本站跳转返回 null(不记录);没有来源时 Android App 内为 android_app,其余为 direct。
+ */
+export function normalizeEntrySource({ referrer, campaign, userAgent, ownHost } = {}) {
+  const tag = String(campaign || '')
+    .trim()
+    .toLowerCase();
+  if (/^[a-z0-9][a-z0-9_.-]{0,31}$/.test(tag)) return `utm:${tag}`;
+  const host = String(referrer || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\.$/, '');
+  if (!host) return /LightNoteAndroid\//.test(String(userAgent || '')) ? 'android_app' : 'direct';
+  if (!/^[a-z0-9.-]{1,253}$/.test(host)) return 'site:invalid';
+  const bare = host.replace(/^www\./, '');
+  const own = String(ownHost || '')
+    .toLowerCase()
+    .replace(/^www\./, '');
+  if (own && (bare === own || bare.endsWith(`.${own}`))) return null;
+  for (const [name, pattern] of SEARCH_ENGINES) if (pattern.test(bare)) return `search:${name}`;
+  for (const [name, pattern] of REFERRAL_SITES) if (pattern.test(bare)) return `ref:${name}`;
+  return `site:${bare}`.slice(0, 64);
+}
+
 /**
  * 记录游客转化漏斗事件(旁路、fire-and-forget,绝不阻塞/抛错影响主流程)。
  * 事件枚举:page_view / wall_hit(撞写操作墙) / cta_click(点立即注册) / register(注册成功) / share_view(分享页曝光) / share_cta_click(分享页点注册)。

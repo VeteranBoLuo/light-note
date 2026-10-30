@@ -56,6 +56,24 @@
     <section class="funnel-block">
       <header class="funnel-block__head">
         <div>
+          <h3 class="funnel-section-title">访客来源</h3>
+          <p>
+            按访客在所选时间内首次进入的来源归类，只记录来源网站域名；链接带 utm_source 或 ref
+            参数时按参数归类。2026-10-30 起记录，跨设备注册不会归回原来源。
+          </p>
+        </div>
+        <span v-if="entrySources?.length" class="funnel-source-coverage">
+          已记录来源 {{ formatNumber(sourceVisitorTotal) }} / 访问 {{ formatNumber(pageView) }} 人
+        </span>
+      </header>
+      <p v-if="entrySources === null" class="funnel-empty">访客来源暂时不可用</p>
+      <p v-else-if="!entrySources.length" class="funnel-empty">所选时间内还没有记录到访客来源</p>
+      <BTable v-else :data="sourceRows" :columns="sourceColumns" row-key="source" />
+    </section>
+
+    <section class="funnel-block">
+      <header class="funnel-block__head">
+        <div>
           <h3 class="funnel-section-title">入口贡献</h3>
           <p>看过示例与直接注册是两条并行入口，不互相充当上一步。</p>
         </div>
@@ -149,6 +167,14 @@
     lost: number | null;
   }
 
+  interface EntrySourceRow {
+    source: string;
+    visitors: number;
+    signupOpen: number;
+    registered: number;
+    activated: number;
+  }
+
   const mainFunnel = ref<FunnelStep[]>([]);
   const orderedFunnel = ref<FunnelStep[]>([]);
   const pageView = ref(0);
@@ -174,6 +200,45 @@
   const shareCta = ref(0);
   const activated = ref(0);
   const trend = ref<any[]>([]);
+  // null 表示来源查询失败(或旧后端未返回),与「还没有记录」区分开。
+  const entrySources = ref<EntrySourceRow[] | null>([]);
+
+  // 与服务端 util/conversion.js 的归类键对应;未知网站直接显示域名。
+  const SOURCE_LABELS: Record<string, string> = {
+    direct: '直接访问',
+    android_app: 'Android App',
+    'search:baidu': '百度搜索',
+    'search:bing': 'Bing 搜索',
+    'search:google': 'Google 搜索',
+    'search:sogou': '搜狗搜索',
+    'search:360': '360 搜索',
+    'search:shenma': '神马搜索',
+    'search:duckduckgo': 'DuckDuckGo',
+    'search:yandex': 'Yandex',
+    'ref:github': 'GitHub',
+    'ref:csdn': 'CSDN',
+    'ref:zhihu': '知乎',
+    'ref:juejin': '掘金',
+    'ref:v2ex': 'V2EX',
+    'ref:linuxdo': 'LINUX DO',
+    'ref:sspai': '少数派',
+    'ref:xiaohongshu': '小红书',
+    'ref:bilibili': '哔哩哔哩',
+    'ref:douyin': '抖音',
+    'ref:weibo': '微博',
+    'ref:weixin': '微信',
+    'ref:qq': 'QQ',
+    'ref:producthunt': 'Product Hunt',
+    'ref:reddit': 'Reddit',
+    'ref:x': 'X',
+    'site:invalid': '其他网站',
+  };
+  function sourceLabel(source: string) {
+    if (SOURCE_LABELS[source]) return SOURCE_LABELS[source];
+    if (source.startsWith('utm:')) return `推广链接 · ${source.slice(4)}`;
+    if (source.startsWith('site:')) return source.slice(5);
+    return source;
+  }
 
   const firstStage = computed(() => mainFunnel.value[0]);
   const lastStage = computed(() => mainFunnel.value[mainFunnel.value.length - 1]);
@@ -211,6 +276,28 @@
     { title: '功能接口', key: 'context', width: '2fr', ellipsis: true },
     { title: '撞墙次数', key: 'cnt', width: 'var(--ui-layout-120, 120px)' },
   ];
+  const sourceColumns = [
+    { title: '来源', key: 'label', width: '2fr', ellipsis: true },
+    { title: '访客', key: 'visitors', width: '1fr' },
+    { title: '打开注册', key: 'signupOpen', width: '1fr' },
+    { title: '注册成功', key: 'registered', width: '1fr' },
+    { title: '注册率', key: 'registerRate', width: '1fr' },
+    { title: '注册后激活', key: 'activated', width: '1fr' },
+  ];
+  const sourceVisitorTotal = computed(() =>
+    (entrySources.value || []).reduce((sum, row) => sum + Number(row.visitors || 0), 0),
+  );
+  const sourceRows = computed(() =>
+    (entrySources.value || []).map((row) => ({
+      source: row.source,
+      label: sourceLabel(row.source),
+      visitors: formatNumber(row.visitors),
+      signupOpen: formatNumber(row.signupOpen),
+      registered: formatNumber(row.registered),
+      registerRate: `${rate(row.registered, row.visitors)}%`,
+      activated: formatNumber(row.activated),
+    })),
+  );
 
   const rate = (value: number, base: number) => (base > 0 ? Math.round((value / base) * 1000) / 10 : 0);
   const formatNumber = (value: number) => Number(value || 0).toLocaleString('zh-CN');
@@ -357,6 +444,7 @@
     uniqueIps.value = data.uniqueIps || 0;
     hotspots.value = data.hotspots || [];
     trend.value = data.trend || [];
+    entrySources.value = Array.isArray(data.entrySources) ? data.entrySources : null;
     // 主数字始终由独立事件标量重建，避免前端先更新、后端进程尚未重启时，
     // 旧接口把严格时序子集（如 2 人）继续误显示成真实注册总数（如 4 人）。
     mainFunnel.value = fallbackFunnel();
@@ -406,6 +494,21 @@
     color: var(--text-color);
     font-size: var(--ui-font-14, 14px);
     font-weight: 600;
+  }
+
+  .funnel-source-coverage {
+    flex: 0 0 auto;
+    color: var(--desc-color);
+    font-size: var(--ui-font-12, 12px);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .funnel-empty {
+    margin: 0;
+    padding: var(--ui-space-12, 12px) 0;
+    color: var(--desc-color);
+    font-size: var(--ui-font-13, 13px);
+    text-align: center;
   }
 
   .funnel-overview__result {

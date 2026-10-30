@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { buildApproximateFunnelQuery } from './conversionFunnelQuery.js';
+import { buildApproximateFunnelQuery, buildEntrySourceQuery } from './conversionFunnelQuery.js';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import mysql from 'mysql2/promise';
 import {
@@ -12,6 +12,7 @@ import {
 // Opt-in isolated MySQL integration test. Writes only a newly created, randomly named test schema.
 // Never reads project database credentials or connects over TCP.
 const socketPath = process.env.M01_TEST_MYSQL_SOCKET;
+const EVENT_INSERT = 'INSERT INTO conversion_events (fingerprint, user_id, visitor_type, event, create_time) VALUES ?';
 describe.skipIf(!socketPath)('增长测量 SQL 行为（隔离 MySQL）', () => {
   let db;
   const schema = `m01_test_${randomUUID().replaceAll('-', '')}`;
@@ -23,7 +24,8 @@ describe.skipIf(!socketPath)('增长测量 SQL 行为（隔离 MySQL）', () => 
     await db.query(`USE ${schema}`);
     await db.query("SET timestamp = UNIX_TIMESTAMP('2026-09-11 12:00:00')");
     await db.query(`CREATE TABLE conversion_events (
-      fingerprint VARCHAR(128), user_id VARCHAR(64), visitor_type VARCHAR(20), event VARCHAR(64), create_time DATETIME,
+      id INT AUTO_INCREMENT PRIMARY KEY, fingerprint VARCHAR(128), user_id VARCHAR(64), visitor_type VARCHAR(20),
+      event VARCHAR(64), context VARCHAR(255), create_time DATETIME,
       KEY idx_event_time(event,create_time), KEY idx_fingerprint(fingerprint), KEY idx_user_event(user_id,event))`);
     await db.query(
       `CREATE TABLE user (id VARCHAR(64) PRIMARY KEY, role VARCHAR(20), del_flag CHAR(1), create_time DATETIME)`,
@@ -111,12 +113,51 @@ describe.skipIf(!socketPath)('增长测量 SQL 行为（隔离 MySQL）', () => 
       add('', event, 1);
       add('internal', event, 1, 'root');
     }
-    await db.query('INSERT INTO conversion_events VALUES ?', [rows]);
+    await db.query(EVENT_INSERT, [rows]);
     const query = buildApproximateFunnelQuery({ startDate: '2026-09-01', endDate: '2026-09-01' });
     const [result] = await db.query(query.sql, query.params);
     expect(result[0]).toEqual({ pageView: 4, signupOpen: 3, signupSubmit: 3, registerSuccess: 2 });
     const outside = buildApproximateFunnelQuery({ startDate: '2026-09-02', endDate: '2026-09-02' });
     expect((await db.query(outside.sql, outside.params))[0][0].pageView).toBe(0);
+  });
+  it('访客来源按窗口内首次来源归类，注册与激活按指纹去重，窗口外来源和空指纹不计', async () => {
+    const at = (time) => `2026-09-01 ${time}`;
+    const events = [
+      ['baidu-reg', null, 'visitor', 'entry_source', 'search:baidu', at('10:00:00')],
+      ['baidu-reg', null, 'visitor', 'entry_source', 'direct', at('10:00:05')],
+      ['baidu-reg', null, 'visitor', 'signup_open', 'nav', at('10:00:06')],
+      ['baidu-reg', 'u1', 'user', 'register', 'nav', at('10:00:07')],
+      ['baidu-reg', 'u2', 'user', 'register', 'nav', at('10:00:08')],
+      ['other-device', 'u1', 'user', 'first_own_resource', 'note', at('11:00:00')],
+      ['baidu-view', null, 'visitor', 'entry_source', 'search:baidu', at('10:01:00')],
+      ['direct-open', null, 'visitor', 'entry_source', 'direct', at('10:02:00')],
+      ['direct-open', null, 'visitor', 'signup_open', 'nav', at('10:02:01')],
+      ['returning', null, 'visitor', 'entry_source', 'search:bing', '2026-08-31 23:59:59'],
+      ['returning', null, 'visitor', 'entry_source', 'direct', at('09:00:00')],
+      ['returning', 'u3', 'user', 'register', 'nav', at('09:00:10')],
+      ['', null, 'visitor', 'entry_source', 'search:google', at('10:03:00')],
+      ['no-entry', 'u4', 'user', 'register', 'nav', at('10:04:00')],
+    ];
+    await db.query(
+      'INSERT INTO conversion_events (fingerprint, user_id, visitor_type, event, context, create_time) VALUES ?',
+      [events],
+    );
+    const query = buildEntrySourceQuery({ startDate: '2026-09-01', endDate: '2026-09-01' });
+    const [rows] = await db.query(query.sql, query.params);
+    expect(
+      rows.map((row) => ({
+        ...row,
+        signupOpen: Number(row.signupOpen),
+        registered: Number(row.registered),
+        activated: Number(row.activated),
+      })),
+    ).toEqual([
+      { source: 'direct', visitors: 2, signupOpen: 1, registered: 1, activated: 0 },
+      { source: 'search:baidu', visitors: 2, signupOpen: 1, registered: 1, activated: 1 },
+    ]);
+    const all = buildEntrySourceQuery();
+    const [allRows] = await db.query(all.sql, all.params);
+    expect(allRows.find((row) => row.source === 'search:bing')).toMatchObject({ visitors: 1 });
   });
   it('激活仅纳入完整七天，边界包含起点排除终点，内部与停用账号不参与', async () => {
     const users = [
@@ -130,7 +171,7 @@ describe.skipIf(!socketPath)('增长测量 SQL 行为（隔离 MySQL）', () => 
     const events = users.map(([id, , , created]) => [id, id, 'user', 'first_own_resource', created]);
     events[2][4] = '2026-09-10 12:00:00';
     events.push(events[0]);
-    await db.query('INSERT INTO conversion_events VALUES ?', [events]);
+    await db.query(EVENT_INSERT, [events]);
     const [rows] = await db.query(ACTIVATION_QUERY, [30]);
     expect(rows[0]).toEqual({ new_users: 2, activated_users: 1 });
   });

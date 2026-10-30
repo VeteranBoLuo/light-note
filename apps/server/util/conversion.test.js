@@ -4,7 +4,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 const query = vi.fn().mockResolvedValue([[]]);
 vi.mock('../db/index.js', () => ({ default: { query } }));
 
-const { recordConversionEvent, recordFirstOwnResource, normalizeConversionSource } = await import('./conversion.js');
+const { recordConversionEvent, recordFirstOwnResource, normalizeConversionSource, normalizeEntrySource } =
+  await import('./conversion.js');
 
 describe('recordConversionEvent', () => {
   beforeEach(() => query.mockClear());
@@ -86,5 +87,35 @@ describe('normalizeConversionSource(渠道 source 白名单)', () => {
     expect(normalizeConversionSource('')).toBe('unknown');
     expect(normalizeConversionSource(undefined)).toBe('unknown');
     expect(normalizeConversionSource('x'.repeat(100))).toBe('unknown');
+  });
+});
+
+describe('normalizeEntrySource(访客来源归类)', () => {
+  const own = { ownHost: 'boluo66.top' };
+  it('搜索引擎与常见社区按域名归类,移动端与子域名同样命中', () => {
+    expect(normalizeEntrySource({ ...own, referrer: 'www.baidu.com' })).toBe('search:baidu');
+    expect(normalizeEntrySource({ ...own, referrer: 'm.baidu.com' })).toBe('search:baidu');
+    expect(normalizeEntrySource({ ...own, referrer: 'cn.bing.com' })).toBe('search:bing');
+    expect(normalizeEntrySource({ ...own, referrer: 'www.google.com.hk' })).toBe('search:google');
+    expect(normalizeEntrySource({ ...own, referrer: 'github.com' })).toBe('ref:github');
+    expect(normalizeEntrySource({ ...own, referrer: 'mp.weixin.qq.com' })).toBe('ref:weixin');
+    expect(normalizeEntrySource({ ...own, referrer: 'user.qzone.qq.com' })).toBe('ref:qq');
+  });
+  it('其他网站只留域名,个人 github.io 站点不算 GitHub', () => {
+    expect(normalizeEntrySource({ ...own, referrer: 'www.example.org' })).toBe('site:example.org');
+    expect(normalizeEntrySource({ ...own, referrer: 'someone.github.io' })).toBe('site:someone.github.io');
+    expect(normalizeEntrySource({ ...own, referrer: 'evil.com/path?q=1' })).toBe('site:invalid');
+    expect(normalizeEntrySource({ ...own, referrer: `${'a'.repeat(80)}.com` })).toHaveLength(64);
+  });
+  it('推广参数优先于来源网站,非法参数忽略后按来源网站归类', () => {
+    expect(normalizeEntrySource({ ...own, referrer: 'www.baidu.com', campaign: 'V2EX' })).toBe('utm:v2ex');
+    expect(normalizeEntrySource({ ...own, referrer: 'www.baidu.com', campaign: '<script>' })).toBe('search:baidu');
+    expect(normalizeEntrySource({ ...own, campaign: '中文' })).toBe('direct');
+  });
+  it('本站跳转不记录;没有来源时区分 Android App 与直接访问', () => {
+    expect(normalizeEntrySource({ ...own, referrer: 'boluo66.top' })).toBeNull();
+    expect(normalizeEntrySource({ ...own, referrer: 'www.boluo66.top' })).toBeNull();
+    expect(normalizeEntrySource({ ...own, referrer: '' })).toBe('direct');
+    expect(normalizeEntrySource({ ...own, userAgent: 'Mozilla/5.0 LightNoteAndroid/1.0.4' })).toBe('android_app');
   });
 });

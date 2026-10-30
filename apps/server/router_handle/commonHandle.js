@@ -1,5 +1,5 @@
 import { ensureRootRole } from '../util/rootRole.js';
-import { buildApproximateFunnelQuery } from '../util/services/conversionFunnelQuery.js';
+import { buildApproximateFunnelQuery, buildEntrySourceQuery } from '../util/services/conversionFunnelQuery.js';
 import { queryActivitySummary, queryActivityBaseline, activityFailure } from '../util/services/userActivityService.js';
 import { resultData, snakeCaseKeys, insertData, generateUUID, INTERNAL_ROLES } from '../util/common.js';
 import { isLocalIp } from '../util/ipFilter.js';
@@ -8,7 +8,12 @@ import fsP from 'fs/promises';
 import path from 'path';
 import pool from '../db/index.js';
 import { validateQueryParams } from '../util/request.js';
-import { recordConversionEvent, normalizeConversionSource } from '../util/conversion.js';
+import {
+  recordConversionEvent,
+  normalizeConversionSource,
+  normalizeEntrySource,
+  ENTRY_SOURCE_EVENT,
+} from '../util/conversion.js';
 import { buildOperationLogSystem } from '../util/apiLogSystem.js';
 import { getDeepSeekBalance as queryDeepSeekBalance } from '../util/agent/providerBalance.js';
 import { getDeepSeekDailyBalanceChange } from '../util/agent/providerBalanceSnapshot.js';
@@ -57,6 +62,18 @@ export const recordConversion = (req, res) => {
   const rawSource = req.body?.source || '';
   const context = CHANNEL_EVENTS.has(event) ? normalizeConversionSource(rawSource) : String(rawSource).slice(0, 255);
   recordConversionEvent(req, event, context);
+  // 访客来源只随 page_view 由新版客户端附带;旧客户端不带 entry 时不记,避免被全部算成直接访问。
+  // 空指纹无法关联后续注册,也不记,免得抬高「无法归因事件」。
+  const entry = req.body?.entry;
+  if (event === 'page_view' && entry && typeof entry === 'object' && req.headers?.fingerprint) {
+    const source = normalizeEntrySource({
+      referrer: entry.referrer,
+      campaign: entry.campaign,
+      userAgent: req.headers['user-agent'],
+      ownHost: req.hostname,
+    });
+    if (source) recordConversionEvent(req, ENTRY_SOURCE_EVENT, source);
+  }
   res.send(resultData(null));
 };
 
@@ -159,6 +176,23 @@ export const getConversionFunnel = async (req, res) => {
     // 指纹近似路径只用于诊断；同秒允许关联但不代表因果顺序，不替代独立事件计数。
     const pathQuery = buildApproximateFunnelQuery({ startDate, endDate });
     const [orderedRows] = await pool.query(pathQuery.sql, pathQuery.params);
+    // 访客来源是附加诊断:失败时返回 null 让页面标明不可用,不拖垮整个漏斗。
+    const sourceQuery = buildEntrySourceQuery({ startDate, endDate });
+    let entrySources = null;
+    try {
+      const [sourceRows] = await pool.query(sourceQuery.sql, sourceQuery.params);
+      entrySources = (sourceRows || [])
+        .filter((row) => typeof row.source === 'string')
+        .map((row) => ({
+          source: row.source,
+          visitors: Number(row.visitors || 0),
+          signupOpen: Number(row.signupOpen || 0),
+          registered: Number(row.registered || 0),
+          activated: Number(row.activated || 0),
+        }));
+    } catch (error) {
+      console.error('[ConversionFunnel] 访客来源查询失败 code=%s', stableAgentErrorCode(error));
+    }
     const pathOf = (key) => Number(pathRows[0]?.[key] || 0);
     const ordered = orderedRows[0] || {};
     const independentStageValues = [
@@ -213,6 +247,7 @@ export const getConversionFunnel = async (req, res) => {
         signupFailReasons: (failReasons || []).map((r) => ({ reason: r.reason, cnt: Number(r.cnt || 0) })),
         uniqueIps: Number(ipRow[0]?.ips || 0),
         hotspots,
+        entrySources,
         trend: (trend || []).map((t) => ({
           d: t.d,
           pv: Number(t.pv || 0),

@@ -44,3 +44,46 @@ export function buildApproximateFunnelQuery({ startDate, endDate } = {}) {
     params,
   };
 }
+
+/**
+ * 访客来源表：每个浏览器标识取所选时间内最早一条 entry_source 作为首次来源，
+ * 再看同一标识在时间内是否打开注册、注册成功，以及注册账号是否完成首个自建资源。
+ * 只覆盖记录了来源的访客；跨设备注册无法归回原来源。MySQL 5.7 无窗口函数，用 MIN(id) 取首条。
+ */
+export function buildEntrySourceQuery({ startDate, endDate } = {}) {
+  const params = [];
+  const timeFor = (alias) => {
+    let condition = '';
+    if (startDate) {
+      condition += ` AND ${alias}.create_time >= ?`;
+      params.push(`${startDate} 00:00:00`);
+    }
+    if (endDate) {
+      condition += ` AND ${alias}.create_time < DATE_ADD(?, INTERVAL 1 DAY)`;
+      params.push(String(endDate));
+    }
+    return condition;
+  };
+  // 参数按 SQL 文本顺序收集：先 SELECT 列表里的子查询，再 FROM 的首次来源。
+  const reached = (event, alias) => `SUM(EXISTS(SELECT 1 FROM conversion_events ${alias}
+      WHERE ${alias}.fingerprint = ft.fingerprint AND ${alias}.event = '${event}'${
+        event === 'register' ? '' : ` AND ${alias}.visitor_type = 'visitor'`
+      }${timeFor(alias)}))`;
+  const signupOpen = reached('signup_open', 'o');
+  const registered = reached('register', 'r');
+  const activated = `SUM(EXISTS(SELECT 1 FROM conversion_events a
+      JOIN conversion_events f ON f.user_id = a.user_id AND f.event = 'first_own_resource'
+      WHERE a.fingerprint = ft.fingerprint AND a.event = 'register' AND a.user_id IS NOT NULL${timeFor('a')}))`;
+  const firstTouch = `SELECT s.fingerprint, s.context AS source
+      FROM conversion_events s
+      JOIN (SELECT t.fingerprint, MIN(t.id) AS first_id FROM conversion_events t
+        WHERE t.event = 'entry_source' AND t.fingerprint <> ''${timeFor('t')}
+        GROUP BY t.fingerprint) first_touch ON first_touch.first_id = s.id`;
+  return {
+    sql: `SELECT ft.source, COUNT(*) AS visitors, ${signupOpen} AS signupOpen,
+      ${registered} AS registered, ${activated} AS activated
+      FROM (${firstTouch}) ft
+      GROUP BY ft.source ORDER BY visitors DESC, ft.source LIMIT 50`,
+    params,
+  };
+}

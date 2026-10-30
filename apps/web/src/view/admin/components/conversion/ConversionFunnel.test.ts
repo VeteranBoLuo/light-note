@@ -14,7 +14,12 @@ vi.mock('@/components/admin/AdminDataPage.vue', () => ({
   },
 }));
 vi.mock('@/components/base/BasicComponents/BTable/BTable.vue', () => ({
-  default: { name: 'BTableStub', template: '<div class="table-stub" />' },
+  default: {
+    name: 'BTableStub',
+    props: ['data'],
+    template:
+      '<div class="table-stub"><p v-for="row in data" class="table-stub__row">{{ row.label }}·{{ row.registerRate }}</p></div>',
+  },
 }));
 vi.mock('./ConversionTrendChart.vue', () => ({
   default: { name: 'ConversionTrendChartStub', template: '<div class="trend-stub" />' },
@@ -203,5 +208,29 @@ describe('转化漏斗新可视化', () => {
 
     expect(host.textContent).not.toContain('NaN');
     expect(host.querySelectorAll('.funnel-chain__step')).toHaveLength(4);
+  });
+
+  it('访客来源按归类显示中文名称、注册率与已记录覆盖', async () => {
+    const host = await mountFunnel({
+      ...REAL_DATA,
+      entrySources: [
+        { source: 'search:baidu', visitors: 40, signupOpen: 12, registered: 5, activated: 3 },
+        { source: 'utm:v2ex', visitors: 8, signupOpen: 3, registered: 2, activated: 1 },
+        { source: 'site:example.org', visitors: 2, signupOpen: 0, registered: 0, activated: 0 },
+      ],
+    });
+    const rows = [...host.querySelectorAll('.table-stub__row')].map((row) => row.textContent);
+    expect(rows).toEqual(['百度搜索·12.5%', '推广链接 · v2ex·25%', 'example.org·0%']);
+    expect(host.querySelector('.funnel-source-coverage')?.textContent).toContain('已记录来源 50 / 访问 580 人');
+  });
+
+  it('区分来源查询不可用与所选时间内没有记录', async () => {
+    const unavailable = await mountFunnel({ ...REAL_DATA });
+    expect(unavailable.textContent).toContain('访客来源暂时不可用');
+    cleanup?.();
+    cleanup = undefined;
+    const empty = await mountFunnel({ ...REAL_DATA, entrySources: [] });
+    expect(empty.textContent).toContain('所选时间内还没有记录到访客来源');
+    expect(empty.querySelector('.funnel-source-coverage')).toBeNull();
   });
 });

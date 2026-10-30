@@ -75,6 +75,7 @@
   import { getNoticeSummary, resetBookmarkIconRefreshRequests } from '@/api/commonApi.ts';
   import { useRouter, type RouteLocationNormalized } from 'vue-router';
   import { getLogFingerprint } from '@/utils/common';
+  import { entrySource } from '@/utils/conversion';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import { throttle } from 'lodash-es';
   import { setLocale } from './i18n';
@@ -508,9 +509,11 @@
                   : location.pathname === '/home'
                     ? 'home'
                     : 'app';
+          // entry 只含来源域名与推广参数,服务端归类后另记访客来源;本站内打开的新标签页不带。
+          const entry = entrySource();
           apiBasePost(
             '/api/common/recordConversion',
-            { event: 'page_view', source: pvPage },
+            { event: 'page_view', source: pvPage, ...(entry ? { entry } : {}) },
             { silent: true, feedback: false },
           ).catch(() => {});
         }

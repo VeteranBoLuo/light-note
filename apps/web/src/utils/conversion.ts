@@ -34,6 +34,22 @@ const SOURCES = new Set([
 
 const lastSignupOpenAt: Record<string, number> = {};
 
+/**
+ * 访客本次进入的来源,随会话首个 page_view 上报:只取来源网站域名与推广参数(utm_source,其次 ref),
+ * 不上报完整网址;从本站其他页面打开的新标签页不算来源,返回 null。
+ */
+export function entrySource(): { referrer: string; campaign: string } | null {
+  let referrer = '';
+  try {
+    referrer = document.referrer ? new URL(document.referrer).hostname : '';
+  } catch {
+    referrer = '';
+  }
+  if (referrer && referrer === location.hostname) return null;
+  const params = new URLSearchParams(location.search);
+  return { referrer, campaign: (params.get('utm_source') || params.get('ref') || '').slice(0, 32) };
+}
+
 /** 上报一条转化事件。event/source 不在白名单则丢弃(source 兜底为 unknown)。 */
 export function trackConversion(event: string, source = 'unknown'): void {
   if (!EVENTS.has(event)) return;

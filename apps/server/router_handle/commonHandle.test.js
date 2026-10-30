@@ -226,6 +226,37 @@ describe('recordConversion 白名单', () => {
     expect(query.mock.calls[0][1][4]).toBe('unknown');
   });
 
+  it('page_view 附带来源时另记一条 entry_source,只存归类结果', () => {
+    query.mockReset();
+    query.mockResolvedValue([[]]);
+    recordConversion(
+      {
+        user: { role: 'visitor' },
+        hostname: 'boluo66.top',
+        headers: { fingerprint: 'fp' },
+        body: { event: 'page_view', source: 'landing', entry: { referrer: 'www.baidu.com', campaign: '' } },
+      },
+      mockRes(),
+    );
+    expect(query).toHaveBeenCalledTimes(2);
+    expect(query.mock.calls[1][1].slice(3, 5)).toEqual(['entry_source', 'search:baidu']);
+  });
+
+  it('旧客户端不带来源、本站跳转或空指纹时不记 entry_source', () => {
+    const cases = [
+      { headers: { fingerprint: 'fp' }, body: { event: 'page_view', source: 'app' } },
+      { headers: { fingerprint: 'fp' }, body: { event: 'page_view', source: 'app', entry: { referrer: 'boluo66.top' } } },
+      { headers: {}, body: { event: 'page_view', source: 'app', entry: { referrer: 'github.com' } } },
+      { headers: { fingerprint: 'fp' }, body: { event: 'signup_open', source: 'nav', entry: { referrer: 'github.com' } } },
+    ];
+    for (const req of cases) {
+      query.mockReset();
+      query.mockResolvedValue([[]]);
+      recordConversion({ user: { role: 'visitor' }, hostname: 'boluo66.top', ...req }, mockRes());
+      expect(query.mock.calls.map((call) => call[1][3])).not.toContain('entry_source');
+    }
+  });
+
   it('wall_hit 的 context 保留原始操作名(撞墙操作是另一维度,不套渠道白名单)', () => {
     query.mockReset();
     query.mockResolvedValue([[]]);
@@ -1448,6 +1479,50 @@ describe('getConversionFunnel', () => {
     expect(pathCall.sql).toContain("fingerprint <> ''");
     // 时间窗同样下推,否则路径拆分会用全期数据、和上面各段的时间窗对不上
     expect(pathCall.params).toEqual(['2026-07-01 00:00:00', '2026-07-31']);
+  });
+
+  it('返回按首次来源归类的访客来源,查询失败时为 null 且不影响其余字段', async () => {
+    const calls = [];
+    query.mockImplementation((sql, params) => {
+      calls.push({ sql, params });
+      if (/GROUP BY event/.test(sql)) return Promise.resolve([[{ event: 'page_view', visitors: 5 }]]);
+      if (/entry_source/.test(sql)) {
+        return Promise.resolve([
+          [{ source: 'search:baidu', visitors: 3, signupOpen: '2', registered: '1', activated: '1' }],
+        ]);
+      }
+      return Promise.resolve([[]]);
+    });
+    const res = mockRes();
+    await getConversionFunnel(
+      { user: { role: 'root' }, body: { startDate: '2026-10-30', endDate: '2026-10-31' } },
+      res,
+    );
+    expect(res.send.mock.calls[0][0].data.entrySources).toEqual([
+      { source: 'search:baidu', visitors: 3, signupOpen: 2, registered: 1, activated: 1 },
+    ]);
+    const sourceCall = calls.find((call) => /entry_source/.test(call.sql));
+    expect(sourceCall.params).toEqual([
+      '2026-10-30 00:00:00',
+      '2026-10-31',
+      '2026-10-30 00:00:00',
+      '2026-10-31',
+      '2026-10-30 00:00:00',
+      '2026-10-31',
+      '2026-10-30 00:00:00',
+      '2026-10-31',
+    ]);
+
+    query.mockImplementation((sql) => {
+      if (/entry_source/.test(sql)) return Promise.reject(Object.assign(new Error('x'), { code: 'ER_X' }));
+      if (/GROUP BY event/.test(sql)) return Promise.resolve([[{ event: 'page_view', visitors: 5 }]]);
+      return Promise.resolve([[]]);
+    });
+    const failed = mockRes();
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    await getConversionFunnel({ user: { role: 'root' } }, failed);
+    error.mockRestore();
+    expect(failed.send.mock.calls[0][0]).toMatchObject({ status: 200, data: { pageViewVisitors: 5, entrySources: null } });
   });
 
   it('路径拆分查询无结果时各路径字段归零,不影响其余字段', async () => {

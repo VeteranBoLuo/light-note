@@ -8,6 +8,7 @@ import AdminOverview from '@/view/admin/components/overview/AdminOverview.vue';
 import UserMg from '@/view/admin/components/userMg/UserMg.vue';
 import UserMgMobile from '@/view/admin/components/userMg/UserMgMobile.vue';
 import OperationLog from '@/view/admin/components/operationLog/OperationLog.vue';
+import ConversionFunnel from '@/view/admin/components/conversion/ConversionFunnel.vue';
 import { bookmarkStore, useUserStore } from '@/store';
 import { isMobileViewport, usesMobileDeviceLayout } from '@/config/responsive';
 import { applyUiDensity } from '@/composables/useUiDensity';
@@ -233,6 +234,35 @@ request.defaults.adapter = async (config) => {
       trend: [],
     });
   }
+  if (url.endsWith('getConversionFunnel')) {
+    // ?state=empty 为没有来源记录，?state=unavailable 模拟旧后端不返回来源。
+    const entrySources = [
+      { source: 'search:baidu', visitors: 87, signupOpen: 21, registered: 9, activated: 4 },
+      { source: 'direct', visitors: 64, signupOpen: 12, registered: 5, activated: 2 },
+      { source: 'ref:github', visitors: 26, signupOpen: 8, registered: 4, activated: 3 },
+      { source: 'search:bing', visitors: 24, signupOpen: 6, registered: 2, activated: 1 },
+      { source: 'utm:v2ex', visitors: 12, signupOpen: 5, registered: 3, activated: 2 },
+      {
+        source: 'site:a-very-long-navigation-directory-example.com',
+        visitors: 3,
+        signupOpen: 0,
+        registered: 0,
+        activated: 0,
+      },
+    ];
+    return response(config, {
+      pageViewVisitors: 520,
+      demoEnterVisitors: 122,
+      wallHitVisitors: 48,
+      signupOpenVisitors: 81,
+      signupSubmitVisitors: 41,
+      registerVisitors: 32,
+      activatedUsers: 15,
+      hotspots: [{ context: 'save-note', cnt: 4 }],
+      trend: [],
+      ...(state === 'unavailable' ? {} : { entrySources: state === 'empty' ? [] : entrySources }),
+    });
+  }
   if (url.includes('community')) return response(config, { items: [], total: 0 });
   // No unhandled endpoint can reach the live API, including mutation endpoints.
   throw new Error(`UNEXPECTED_ADMIN_FIXTURE_REQUEST: ${url}`);
@@ -247,11 +277,13 @@ const router = createRouter({
         { path: 'overview', component: AdminOverview },
         { path: 'userMg', component: UserMg },
         { path: 'operationLog', component: OperationLog },
+        { path: 'conversion', component: ConversionFunnel },
       ],
     },
     { path: '/overview', component: AdminOverview },
     { path: '/userMg', component: UserMgMobile },
     { path: '/operationLog', component: OperationLog },
+    { path: '/conversion', component: ConversionFunnel },
   ],
 });
 // Navigation in the production shell imports its router directly. Keep those
@@ -259,7 +291,7 @@ const router = createRouter({
 const navigationRouter = (await import('@/router')).default;
 navigationRouter.push = router.push.bind(router);
 navigationRouter.replace = router.replace.bind(router);
-const page = ['overview', 'userMg', 'operationLog'].includes(params.get('page') || '')
+const page = ['overview', 'userMg', 'operationLog', 'conversion'].includes(params.get('page') || '')
   ? params.get('page')!
   : 'overview';
 const app = createApp({
