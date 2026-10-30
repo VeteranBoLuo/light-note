@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest';
 import type { OutputBundle } from 'rollup';
-import { buildPrewarmManifest, publicArtworkPaths } from './staticPrewarm';
+import { buildPrewarmManifest, publicArtworkDisplayPath, publicArtworkPaths } from './staticPrewarm';
 
 describe('构建预热清单', () => {
   it('沿静态依赖与样式收集，不展开动态模块或 WASM', () => {
@@ -39,6 +39,15 @@ describe('构建预热清单', () => {
     expect(paths.some((url) => url.includes('paper-spirit-v3/'))).toBe(true);
     expect(paths.some((url) => /masters|downloads|paper-spirit-v[12]\//.test(url))).toBe(false);
     expect(paths.every((url) => /\.(png|webp)$/.test(url))).toBe(true);
+  });
+  it('聊天表情保留 PNG 规范地址，展示副本全部使用压缩后的 WebP', () => {
+    const chatPaths = publicArtworkPaths().filter((url) => url.startsWith('/community-chat/'));
+    expect(chatPaths.length).toBeGreaterThan(0);
+    for (const url of chatPaths) {
+      expect(url.endsWith('.png')).toBe(true);
+      expect(publicArtworkDisplayPath(url)).toBe(url.replace(/\.png$/, '.webp'));
+    }
+    expect(publicArtworkDisplayPath('/brand-scenes/missing.png')).toBe('/brand-scenes/missing.png');
   });
 });
 

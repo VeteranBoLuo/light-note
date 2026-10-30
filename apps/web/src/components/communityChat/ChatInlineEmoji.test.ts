@@ -78,7 +78,7 @@ describe('community chat inline emoji', () => {
     expect(images).toHaveLength(48);
     expect(host.querySelector('.chat-emoji-panel__heading')?.textContent).toContain('笺团');
     expect(host.querySelector('.chat-emoji-panel__heading')?.textContent).toContain('48 个');
-    expect(images[0].getAttribute('src')).toBe(COMMUNITY_CHAT_INLINE_EMOJIS[0].assetPath);
+    expect(images[0].getAttribute('src')).toBe(COMMUNITY_CHAT_INLINE_EMOJIS[0].assetPath.replace(/\.png$/, '.webp'));
 
     buttons[0].click();
     await nextTick();
@@ -93,7 +93,7 @@ describe('community chat inline emoji', () => {
     await nextTick();
 
     const image = host.querySelector<HTMLImageElement>('.chat-inline-emoji-text__image');
-    expect(image?.getAttribute('src')).toBe(emoji.assetPath);
+    expect(image?.getAttribute('src')).toBe(emoji.assetPath.replace(/\.png$/, '.webp'));
     expect(image?.getAttribute('alt')).toBe('开心');
     expect(host.textContent).toContain('今天不错！[[ln-emoji:jian-tuan-v9:future]]');
     expect(host.textContent).not.toContain(emoji.token);

@@ -4228,8 +4228,9 @@ describe('CommunityChatWorkspace', () => {
       stickerSource: 'official',
       stickerKey: 'paper-spirit-v3:laughing_tears',
     });
+    // 消息仍保存 PNG 规范地址，展示使用同名 WebP 副本。
     expect(host.querySelector<HTMLImageElement>('.community-message__sticker.has-image img')?.src).toContain(
-      '/community-chat/stickers/paper-spirit-v3/laughing-tears.png',
+      '/community-chat/stickers/paper-spirit-v3/laughing-tears.webp',
     );
     expect(host.querySelector('.chat-expression-panel')).toBeNull();
   });
@@ -4245,7 +4246,9 @@ describe('CommunityChatWorkspace', () => {
     await flushAsync();
 
     const emojiButton = host.querySelector<HTMLButtonElement>('.chat-emoji-panel__grid .b_btn');
-    expect(emojiButton?.querySelector('img')?.getAttribute('src')).toBe(COMMUNITY_CHAT_INLINE_EMOJIS[0].assetPath);
+    expect(emojiButton?.querySelector('img')?.getAttribute('src')).toBe(
+      COMMUNITY_CHAT_INLINE_EMOJIS[0].assetPath.replace(/\.png$/, '.webp'),
+    );
     emojiButton?.click();
     await flushAsync();
 
