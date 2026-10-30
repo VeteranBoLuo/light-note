@@ -5,9 +5,9 @@
  * 这里只补上「从纯文本 + 光标位置解析出当前 @ 查询区间」的能力,供待办说明、AI 输入框等
  * 普通 textarea 场景复用——它们不像笔记那样有 DOM 上下文可判断。
  */
-import { isResourceMentionTextTrigger } from './noteMentionTrigger';
+import { isAmbiguousAsciiMention, isResourceMentionTextTrigger } from './noteMentionTrigger';
 
-export { isResourceMentionTextTrigger };
+export { isAmbiguousAsciiMention, isResourceMentionTextTrigger };
 
 export interface MentionQuery {
   /** `@` 自身的下标 */
@@ -43,8 +43,10 @@ export function resolveMentionQuery(text: string, caret: number): MentionQuery |
   }
   if (atIndex < 0) return null;
   if (!isResourceMentionTextTrigger(value, atIndex)) return null;
+  const keyword = value.slice(atIndex + 1, cursor);
+  if (isAmbiguousAsciiMention(value, atIndex, keyword)) return null;
 
-  return { start: atIndex, end: cursor, keyword: value.slice(atIndex + 1, cursor) };
+  return { start: atIndex, end: cursor, keyword };
 }
 
 /** 用给定内容替换 `@关键词` 区间;传空串即为「只消费掉查询文本」。 */

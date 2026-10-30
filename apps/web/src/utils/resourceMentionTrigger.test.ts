@@ -19,9 +19,22 @@ describe('resourceMentionTrigger', () => {
     expect(resolveMentionQuery(text, text.length)).toBeNull();
   });
 
-  it('邮箱与 URL 不触发', () => {
-    const mail = 'felix@dupoin.com';
-    expect(resolveMentionQuery(mail, 'felix@'.length)).toBeNull();
+  it('紧接中文混排词立即触发，紧接纯英文/数字时等关键词出现中文', () => {
+    expect(resolveMentionQuery('版本v2@', 5)).toMatchObject({ start: 4, keyword: '' });
+    expect(resolveMentionQuery('第2@', 3)).toMatchObject({ keyword: '' });
+    expect(resolveMentionQuery('hello@', 6)).toBeNull();
+    expect(resolveMentionQuery('参考 v2@项', 7)).toMatchObject({ keyword: '项' });
+    expect(resolveMentionQuery('2024@年报', 7)).toMatchObject({ keyword: '年报' });
+  });
+
+  it('纯字母或数字开头的邮箱全程不触发，URL 不触发', () => {
+    for (const mail of ['felix@dupoin.com', '1902013368@qq.com']) {
+      for (let caret = mail.indexOf('@') + 1; caret <= mail.length; caret += 1) {
+        expect(resolveMentionQuery(mail, caret)).toBeNull();
+      }
+    }
+    expect(resolveMentionQuery('name.surname@资料', 15)).toBeNull();
+    expect(resolveMentionQuery('参考 @readme.md', 13)).toMatchObject({ keyword: 'readme.md' });
     const url = 'https://a.com/@user';
     expect(resolveMentionQuery(url, url.length)).toBeNull();
   });

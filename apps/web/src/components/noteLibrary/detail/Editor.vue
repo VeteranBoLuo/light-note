@@ -834,7 +834,7 @@
     type ContentImageSize,
   } from '@/utils/contentImageSize.ts';
   import { recordOperation } from '@/api/commonApi.ts';
-  import { resolveMentionQuery } from '@/utils/resourceMentionTrigger';
+  import { isAmbiguousAsciiMention, resolveMentionQuery } from '@/utils/resourceMentionTrigger';
   import { resolveSlashCommandQuery } from '@/utils/editorSlashCommand';
   import {
     applyResourceReferenceChipPresentation,
@@ -2049,6 +2049,8 @@
     bookmark: any | null;
     markerId: string | null;
     text: string;
+    /** @ 在正文纯文本中的下标，用于记住用户关掉的提及 */
+    textStart?: number;
   };
   type InlineSlashRange = { start: number; end: number };
   type HtmlSlashSelection = { range: Range; text: string };
@@ -2412,7 +2414,7 @@
   let dismissedMentionStart: number | null = null;
 
   function closeInlineMention(options?: { dismissed?: boolean }) {
-    if (options?.dismissed) dismissedMentionStart = markdownMentionRange?.start ?? null;
+    if (options?.dismissed) dismissedMentionStart = markdownMentionRange?.start ?? htmlMentionSelection?.textStart ?? null;
     if (!inlineMentionVisible.value) return;
     inlineMentionVisible.value = false;
     inlineMentionHasResults.value = false;
@@ -2446,6 +2448,16 @@
   });
 
   function closeMentionPicker() {
+    // 移动端弹窗被关掉（而非选中资源）时同样记住这个 @，否则继续输入会立刻再次弹出；
+    // 选中资源后插入流程已清空提及区间。工具栏打开时 Markdown 区间起点不是 @，无需记住。
+    const markdownSource = currentType.value === 'markdown' ? String(mdCodeMirrorRef.value?.getValue() ?? '') : '';
+    const pendingStart =
+      currentType.value === 'markdown'
+        ? markdownMentionRange && markdownSource[markdownMentionRange.start] === '@'
+          ? markdownMentionRange.start
+          : null
+        : (htmlMentionSelection?.textStart ?? null);
+    if (pendingStart !== null) dismissedMentionStart = pendingStart;
     mentionPickerVisible.value = false;
     markdownMentionRange = null;
     clearTinyMceMentionSelection();
@@ -2508,19 +2520,42 @@
     allBefore.selectNodeContents(editor.getBody());
     allBefore.setEnd(range.startContainer, range.startOffset);
     const textBefore = allBefore.toString();
+    // 正文纯文本不含段落分隔：规则只看当前段落，避免上一段末尾的中文与本段的英文连成一个词。
+    const block =
+      (editor.dom?.getParent?.(range.startContainer, 'p,li,blockquote,h1,h2,h3,h4,h5,h6,td,th,figcaption,div') as
+        | HTMLElement
+        | null) || editor.getBody();
+    const blockBefore = editor.dom.createRng();
+    blockBefore.selectNodeContents(block);
+    blockBefore.setEnd(range.startContainer, range.startOffset);
+    const lineBefore = blockBefore.toString();
     // 原来只认「刚敲下 @」;改用通用解析,浮层收起后退回到能匹配的词也能重新唤起
-    const mention = resolveMentionQuery(textBefore, textBefore.length);
-    if (!mention) return;
-    const backspaces = textBefore.length - mention.start;
+    const mention = resolveMentionQuery(lineBefore, lineBefore.length);
+    if (!mention) {
+      dismissedMentionStart = null;
+      return;
+    }
+    const backspaces = lineBefore.length - mention.start;
+    // 关闭记忆按全文位置记录，不同段落里同样位置的 @ 不会互相影响。
+    const textStart = textBefore.length - backspaces;
+    // 用户刚关掉的同一个 @ 不再自动弹出，与 Markdown 一致。
+    if (dismissedMentionStart === textStart) return;
+    dismissedMentionStart = null;
     // 跨文本节点的 @(例如中间夹着格式标记)保守放弃,避免构造出错误的替换区间
     if (backspaces < 1 || range.startOffset < backspaces) return;
     const replacementRange = range.cloneRange();
     replacementRange.setStart(range.startContainer, range.startOffset - backspaces);
     if (isMobile.value) {
-      htmlMentionSelection = captureTinyMceMentionSelection(editor, replacementRange);
+      htmlMentionSelection = { ...captureTinyMceMentionSelection(editor, replacementRange), textStart };
       mentionPickerVisible.value = true;
     } else {
-      htmlMentionSelection = { range: replacementRange, bookmark: null, markerId: null, text: '@' };
+      htmlMentionSelection = {
+        range: replacementRange,
+        bookmark: null,
+        markerId: null,
+        text: '@',
+        textStart,
+      };
       syncTinyMceInlineMention(editor);
       inlineMentionVisible.value = true;
     }
@@ -2536,7 +2571,12 @@
       mentionRange.setEnd(currentRange.startContainer, currentRange.startOffset);
       const text = mentionRange.toString();
       if (!isValidTinyMceMentionText(text)) return closeInlineMention();
-      htmlMentionSelection = { range: mentionRange, bookmark: null, markerId: null, text };
+      // 与 Markdown 共用规则：紧接英文单词的 @ 删回纯 ASCII 关键词时，可能是在写邮箱或账号。
+      const { startContainer, startOffset } = mentionRange;
+      const textBefore =
+        startContainer.nodeType === Node.TEXT_NODE ? String(startContainer.textContent || '').slice(0, startOffset) : '';
+      if (isAmbiguousAsciiMention(textBefore + text, textBefore.length, text.slice(1))) return closeInlineMention();
+      htmlMentionSelection = { ...htmlMentionSelection, range: mentionRange, bookmark: null, markerId: null, text };
       inlineMentionQuery.value = text.slice(1);
       // 锚定在 @ 起点(mentionRange 的起始),继续输入时浮层保持不动;
       // TinyMCE 的 Range rect 已是页面视口坐标,不能再叠加 iframe 偏移。
@@ -3038,6 +3078,13 @@
   }
 
   /**
+   * 工具栏主动插入的 @ 紧接英文单词时会被当作疑似邮箱而不弹出，先补一个空格作分隔。
+   */
+  function mentionTriggerTextAfter(textBefore: string) {
+    return isAmbiguousAsciiMention(`${textBefore}@`, textBefore.length, '') ? ' @' : '@';
+  }
+
+  /**
    * 工具栏点「插入资源」:等价于在光标处敲一个 @,复用整套提及流程。
    * 桌面端走贴着光标的内联浮层(和输入 @ 完全一致);只有手机才用弹窗 ——
    * 桌面用弹窗的话,一个只有几行的列表被撑进 460px 的框里,底下全是空白。
@@ -3063,8 +3110,9 @@
      * 由 CodeMirror transaction 插入，能与后续资源替换分别撤销。
      */
     dismissedMentionStart = null;
-    const caret = selection.from + 1;
-    markdownEditor.replaceRange(selection.from, selection.to, '@', caret, caret);
+    const trigger = mentionTriggerTextAfter(markdownEditor.getValue().slice(0, selection.from));
+    const caret = selection.from + trigger.length;
+    markdownEditor.replaceRange(selection.from, selection.to, trigger, caret, caret);
     void nextTick().then(syncOrOpenMarkdownMention);
   }
 
@@ -4004,7 +4052,13 @@
   function openRichResourceMentionPicker(editor: any) {
     if (!canEditResourceMentions.value || !editor) return;
     editor.focus();
-    editor.undoManager?.transact(() => editor.insertContent('@'));
+    const range = editor.selection?.getRng?.() as Range | null;
+    const textBefore =
+      range?.collapsed && range.startContainer.nodeType === Node.TEXT_NODE
+        ? String(range.startContainer.textContent || '').slice(0, range.startOffset)
+        : '';
+    dismissedMentionStart = null;
+    editor.undoManager?.transact(() => editor.insertContent(mentionTriggerTextAfter(textBefore)));
     window.setTimeout(() => tryOpenTinyMceMention(editor), 0);
   }
 
