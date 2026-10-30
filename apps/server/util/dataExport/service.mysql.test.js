@@ -32,7 +32,8 @@ describe.skipIf(!socket)('export jobs on isolated MySQL', () => {
       .split(';')
       .filter((s) => s.trim()))
       await state.pool.query(sql);
-    await state.pool.query("CREATE TABLE user (id VARCHAR(128) PRIMARY KEY,role VARCHAR(24) DEFAULT 'user',del_flag INT DEFAULT 0,preferences JSON NULL)");
+    // del_flag 与线上 user 表一致为 varchar：正常账号是字符串 '0'，JS 里按真假判断会把所有人当成已删除。
+    await state.pool.query("CREATE TABLE user (id VARCHAR(128) PRIMARY KEY,role VARCHAR(24) DEFAULT 'user',del_flag VARCHAR(255) DEFAULT '0',preferences JSON NULL)");
     await state.pool.query('CREATE TABLE bookmark (id VARCHAR(128) PRIMARY KEY,user_id VARCHAR(128),del_flag INT DEFAULT 0)');
     await state.pool.query(
       'CREATE TABLE onboarding_seed_resources (user_id VARCHAR(128),resource_type VARCHAR(24),resource_id VARCHAR(128))',
@@ -185,6 +186,12 @@ describe.skipIf(!socket)('export jobs on isolated MySQL', () => {
   it('rejects creation when account deletion won the row lock', async () => {
     await state.pool.query("UPDATE user SET role='deleted',del_flag=1 WHERE id='u'");
     await expect(service.createTask('u',opts())).rejects.toMatchObject({code:'DATA_EXPORT_ACCOUNT_UNAVAILABLE'});
+  });
+  it('rejects disabled accounts but accepts active ones stored as varchar flags', async () => {
+    await state.pool.query("UPDATE user SET del_flag='1' WHERE id='u'");
+    await expect(service.createTask('u', opts())).rejects.toMatchObject({ code: 'DATA_EXPORT_ACCOUNT_UNAVAILABLE' });
+    await state.pool.query("UPDATE user SET del_flag='0' WHERE id='u'");
+    expect((await service.createTask('u', opts())).total).toBe(1);
   });
   it('does not create empty archives', async () => {
     await state.pool.query("DELETE FROM note WHERE create_by='u'");

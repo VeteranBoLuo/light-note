@@ -127,7 +127,8 @@ export async function createTask(owner, input) {
   try {
     return await transaction(async (db) => {
       const [[account]] = await db.query('SELECT id,role,del_flag FROM user WHERE id=? FOR UPDATE', [owner]);
-      if (!account || account.del_flag || ['deleted','visitor'].includes(account.role)) throw exportError('DATA_EXPORT_ACCOUNT_UNAVAILABLE',403);
+      // user.del_flag 线上是 varchar('0'/'1')，字符串 '0' 是真值，必须按数字比较。
+      if (!account || Number(account.del_flag) !== 0 || ['deleted','visitor'].includes(account.role)) throw exportError('DATA_EXPORT_ACCOUNT_UNAVAILABLE',403);
       const [[receipt]] = await db.query(
         'SELECT * FROM data_export_tasks WHERE owner_id=? AND runtime=? AND host_key=? AND request_id=?',
         [owner, runtime, hostKey, input.requestId],

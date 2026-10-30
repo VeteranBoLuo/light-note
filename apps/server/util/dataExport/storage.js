@@ -32,9 +32,14 @@ export async function availableBytes() {
 export async function ensureSpace(required = 0) {
   if ((await availableBytes()) < required + RESERVED_BYTES) throw exportError('DATA_EXPORT_DISK_FULL', 507);
 }
-/** 文件原件要先复制再打包，按两倍体积预估暂存空间；创建任务与「数据与备份」页的判断共用这一口径。 */
+// 暂存目录与数据库、上传共用系统盘：打包原件时额外给它们留出这部分空间，避免大备份把服务器挤满。
+const FILE_PACKING_HEADROOM_BYTES = 8 * 1024 * 1024 * 1024;
+/**
+ * 文件原件要先复制再打包，按两倍体积预估暂存空间，再加上系统盘保底空间；
+ * 创建任务与「数据与备份」页的判断共用这一口径。
+ */
 export function stagingBytesForFiles(fileBytes) {
-  return Number(fileBytes) > 0 ? Number(fileBytes) * 2 : 0;
+  return Number(fileBytes) > 0 ? Number(fileBytes) * 2 + FILE_PACKING_HEADROOM_BYTES : 0;
 }
 export function filesFitStaging(fileBytes, available) {
   return stagingBytesForFiles(fileBytes) + RESERVED_BYTES <= available;
