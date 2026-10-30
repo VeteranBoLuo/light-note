@@ -1,5 +1,5 @@
 import { RouteRecordRaw } from 'vue-router';
-import { ALL_ROLES, RoleEnum } from '@/config/bookmarkCfg.ts';
+import { ALL_ROLES } from '@/config/bookmarkCfg.ts';
 import { resolveTagSpaceEntryId } from '@/utils/tagSpaceNavigation';
 import { resolveViewportDeviceType } from '@/config/responsive';
 
@@ -42,7 +42,8 @@ const manageRouter: RouteRecordRaw = {
       },
       // 移动端作为资料区第四个页签(书签/笔记/云空间/标签),走统一移动壳
       meta: {
-        roles: [RoleEnum.Root, RoleEnum.USER, RoleEnum.TEST],
+        // 游客可只读预览共享游客账号的示例标签；写操作由页面 blockGuestWrite 与后端 ensureNotVisitor 拦截
+        roles: ALL_ROLES,
         mobileShell: 'resources',
         mobileTopSwitcher: true,
         mobileBottomNav: true,

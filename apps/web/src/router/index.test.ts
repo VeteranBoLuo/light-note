@@ -95,13 +95,13 @@ describe('官网与应用入口路由', () => {
     expect(typeof redirect).toBe('function');
   });
 
-  it('标签列表与详情都是私人资源路由', () => {
+  it('标签列表与详情对游客开放只读预览', () => {
     const index = router.resolve('/manage/tagMg');
     const detail = router.resolve('/tag/tag-1');
     expect(index.name).toBe('tagMg');
     expect(detail.name).toBe('tagDetail');
-    expect(index.meta.roles).not.toContain('visitor');
-    expect(detail.meta.roles).not.toContain('visitor');
+    expect(index.meta.roles).toContain('visitor');
+    expect(detail.meta.roles).toContain('visitor');
     expect(detail.meta.mobileShell).toBe('resources');
     expect(detail.meta.mobileTopSwitcher).toBe(true);
     expect(detail.meta.mobileBottomNav).toBe(true);
