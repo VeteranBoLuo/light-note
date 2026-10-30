@@ -557,6 +557,7 @@ declare(ADMIN_POLICIES.ACCOUNT_WRITE, 'user', [
   ['POST', '/user/exportData'],
   ['POST', '/user/dataExports/create'],
   ['POST', '/user/dataExports/latest'],
+  ['POST', '/user/dataExports/summary'],
   ['POST', '/user/dataExports/detail'],
   ['POST', '/user/dataExports/cancel'],
   ['POST', '/user/dataExports/failures'],

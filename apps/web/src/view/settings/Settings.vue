@@ -175,24 +175,29 @@
 
         <!-- 浏览器收集：完整扩展与轻量书签栏入口并列，避免把能力不同的两种方式混成一个按钮。 -->
 
-        <!-- 数据导出 / 备份 -->
-        <BCard
-          as="section"
-          v-if="sectionVisible('export')"
-          class="settings-card"
-          id="set-export"
-        >
-          <div class="card-head">
-            <span class="card-icon"><SvgIcon :src="icon.toolbox.download" size="20" /></span>
-            <div class="card-head-text">
-              <h2 class="card-title">{{ t('dataExport.title') }}</h2>
-              <p class="card-sub">{{ t('dataExport.description') }}</p>
+        <!-- 数据与备份：一键备份与状态，加三条承诺 -->
+        <template v-if="sectionVisible('export')">
+          <BCard as="section" class="settings-card" id="set-export">
+            <div class="card-head"
+              ><h2 class="card-title">{{ t('dataExport.backupTitle') }}</h2></div
+            >
+            <div class="data-export-entry">
+              <DataExportControl
+                ref="dataExportControl"
+                :owner="user.adminContext || user.role === 'visitor' ? '' : String(user.id || '')"
+                :stacked="bookmark.isMobile"
+              />
             </div>
-          </div>
-          <div class="data-export-entry">
-            <DataExportControl ref="dataExportControl" :owner="user.adminContext || user.role === 'visitor' ? '' : String(user.id || '')" />
-          </div>
-        </BCard>
+          </BCard>
+          <BCard as="section" class="settings-card" id="set-export-promise">
+            <div class="card-head"
+              ><h2 class="card-title">{{ t('dataExport.promiseTitle') }}</h2></div
+            >
+            <div class="data-export-entry">
+              <DataBackupPromise :stacked="bookmark.isMobile" @open-legal="openLegalDocument" />
+            </div>
+          </BCard>
+        </template>
 
         <!-- 隐私与协议 -->
         <BCard as="section" v-if="sectionVisible('privacy')" class="settings-card" id="set-privacy">
@@ -271,6 +276,7 @@
   import icon from '@/config/icon.ts';
   import { OPERATION_LOG_MAP } from '@/config/logMap.ts';
   import DataExportControl from '@/components/settings/DataExportControl.vue';
+  import DataBackupPromise from '@/components/settings/DataBackupPromise.vue';
   import AccountSecurity from '@/components/settings/AccountSecurity.vue';
   import AiUsagePage from '@/view/aiUsage/AiUsagePage.vue';
   import { inventoryPointsRoute } from '@/utils/inventoryNavigation';

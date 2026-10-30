@@ -17,6 +17,7 @@ import { getGrowth } from './growth.js';
 import { DEFAULT_GROWTH_PREFERENCES, dayKeyAtOffset, getGrowthCalendarContext } from './growthPreferences.js';
 import { stableAgentErrorCode } from './agent/logSafety.js';
 import crypto from 'crypto';
+import { SEED_FILTER } from './onboardingSeedFilter.js';
 
 export const WEEKLY_REPORT_PERIODS = Object.freeze(['current', 'last']);
 /** 「本周留下的内容」只回最近若干条；完整数量以分类型计数为准。 */
@@ -164,26 +165,7 @@ export function mergeWeeklyReportItems(groups, limit = WEEKLY_REPORT_ITEM_LIMIT)
     .map(({ time: _time, ...item }) => item);
 }
 
-export const SEED_FILTER = {
-  bookmark: `NOT EXISTS (
-          SELECT 1 FROM onboarding_seed_resources osr
-          WHERE osr.user_id = b.user_id AND osr.resource_type = 'bookmark' AND osr.resource_id = b.id
-        )`,
-  note: `NOT EXISTS (
-          SELECT 1 FROM onboarding_seed_resources osr
-          WHERE osr.user_id = n.create_by AND osr.resource_type = 'note' AND osr.resource_id = n.id
-        )`,
-  file: `NOT EXISTS (
-          SELECT 1 FROM onboarding_seed_resources osr
-          WHERE osr.user_id = f.create_by AND osr.resource_type = 'file'
-            AND osr.resource_id = CAST(f.id AS CHAR)
-        )`,
-  organize: `NOT EXISTS (
-          SELECT 1 FROM onboarding_seed_resources osr
-          WHERE osr.user_id = ri.user_id AND osr.resource_type = ri.resource_type
-            AND osr.resource_id = ri.resource_id
-        )`,
-};
+export { SEED_FILTER };
 
 async function queryWeeklyReportItems(userId, period) {
   const bounds = [period.shiftMinutes, userId, period.startSql, period.nextSql, WEEKLY_REPORT_ITEM_LIMIT];

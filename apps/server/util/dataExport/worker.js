@@ -11,6 +11,7 @@ import { runtime, hostKey, taskDirectory, writeJson, exportError, ensureSpace } 
 import { resourcePage, resourceVersion } from './resources.js';
 import { copyFile } from './downloads.js';
 import { renderNote, createBookmarkWorkbook, defaultReadImage } from './documents.js';
+import { recordExportOutcome } from './outcome.js';
 const safeCode = (e) => (/^DATA_EXPORT_[A-Z_]+$/.test(e?.code || '') ? e.code : 'DATA_EXPORT_ITEM_FAILED');
 export async function zipDirectory(directory, destination, signal) {
   const archive = archiver('zip', { zlib: { level: 6 }, forceZip64: true });
@@ -224,11 +225,14 @@ export async function processTask() {
         [failed ? 'partial' : 'completed', task.id],
       );
     });
+    await recordExportOutcome(task, failed ? 'partial' : 'completed', { failed });
   } catch (e) {
-    await pool.query(
+    const [updated] = await pool.query(
       "UPDATE data_export_tasks SET status='failed',stage='failed',error_code=? WHERE id=? AND lease_token=? AND status='running'",
       [safeCode(e), task.id, task.lease_token],
     );
+    // 只有本次真正把任务标为失败才通知；取消、租约被接管等情况不更新任何行。
+    if (updated.affectedRows) await recordExportOutcome(task, 'failed');
   } finally {
     clearInterval(timer);
     controller.abort();
