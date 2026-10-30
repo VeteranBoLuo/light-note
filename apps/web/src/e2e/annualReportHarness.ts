@@ -17,7 +17,7 @@ import AnnualReportEntry from '@/components/growth/annualReport/AnnualReportEntr
 
 /*
  * 年度报告视觉验收：
- * ?state=full|light|empty|upcoming|loading|error&ch=0..8&theme=night&locale=en-US&density=small|large
+ * ?state=full|light|empty|upcoming|guest|loading|error&ch=0..8&theme=night&locale=en-US&density=small|large
  * ?view=entry 只看入口行（「今日」可关闭 + 成长中心常驻）。
  * 数字为示例，口径与服务端返回结构一致；入口红点按 2026-12-16 计算。
  */
@@ -176,7 +176,10 @@ const LIGHT: AnnualReport = {
 function reportFor(): AnnualReport {
   if (state === 'light') return LIGHT;
   if (state === 'empty') return { year: 2026, available: true, tier: 'empty', chapters: [], phase: 'preview' };
-  if (state === 'upcoming') return { year: 2026, available: false, openFrom: '2026-12-15T00:00:00.000+08:00' };
+  if (state === 'upcoming') {
+    return { year: 2026, available: false, reason: 'upcoming', openFrom: '2026-12-15T00:00:00.000+08:00' };
+  }
+  if (state === 'guest') return { year: 2026, available: false, reason: 'login' };
   return FULL;
 }
 
@@ -184,7 +187,9 @@ let failures = 0;
 request.defaults.adapter = async (config) => {
   const url = String(config.url || '');
   let data: unknown = null;
-  if (url.includes('/api/growth/annual-report/status')) {
+  if (url.includes('/api/growth/preferences')) {
+    data = { celebrationEnabled: params.get('celebrate') !== '0' };
+  } else if (url.includes('/api/growth/annual-report/status')) {
     data = { year: 2026, available: true, eligible: true, entryActive: true };
   } else if (url.includes('/api/growth/annual-report/complete')) {
     data = { key: 'annual_review_2026', newlyUnlocked: true };

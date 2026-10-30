@@ -21,6 +21,7 @@
         @retry="emit('retry')"
         @back="emit('back')"
         @create="emit('create')"
+        @login="emit('login')"
       />
     </div>
 
@@ -155,7 +156,12 @@
   import icon from '@/config/icon';
   import { useUiDensity } from '@/composables/useUiDensity';
   import { useAnnualPosterExport } from '@/composables/useAnnualReport';
-  import { ANNUAL_CHAPTER_ICONS, formatAnnualDate, type AnnualReport } from '@/utils/annualReport';
+  import {
+    ANNUAL_CHAPTER_ICONS,
+    annualReportStateKind,
+    formatAnnualDate,
+    type AnnualReport,
+  } from '@/utils/annualReport';
   import AnnualPosterOptions from './AnnualPosterOptions.vue';
   import AnnualReportDetails from './AnnualReportDetails.vue';
   import AnnualReportPoster from './AnnualReportPoster.vue';
@@ -189,6 +195,7 @@
     retry: [];
     back: [];
     create: [];
+    login: [];
     open: [target: RouteLocationRaw];
   }>();
   const { t, locale } = useI18n();
@@ -197,11 +204,7 @@
   const ready = computed(
     () => props.state === 'ready' && Boolean(props.report?.available) && props.report?.tier !== 'empty',
   );
-  const stateKind = computed(() => {
-    if (props.state === 'loading') return 'loading';
-    if (props.state === 'failed') return 'failed';
-    return props.report?.available ? 'empty' : 'upcoming';
-  });
+  const stateKind = computed(() => annualReportStateKind(props.state, props.report));
   const rangeLabel = computed(() => {
     const report = props.report;
     if (!report?.available || !report.dataEnd) return '';

@@ -19,7 +19,7 @@
       </span>
       <span class="arp-who">
         <b>{{ showName ? displayName : t('annualReport.poster.anonymous', { year: report.year }) }}</b>
-        <span>{{ t('annualReport.poster.day', { n: report.profile?.joinDays || 1 }) }}</span>
+        <span v-if="report.profile?.joinDays">{{ t('annualReport.poster.day', { n: report.profile.joinDays }) }}</span>
       </span>
       <span class="arp-level">Lv.{{ report.profile?.level || 1 }}</span>
     </section>
@@ -129,7 +129,10 @@
       ? [
           { value: overview?.total || 0, label: t('annualReport.poster.records') },
           { value: rhythm?.activeDays || 0, label: t('annualReport.poster.activeDays') },
-          { value: props.report.profile?.joinDays || 1, label: t('annualReport.poster.joinDays') },
+          // 加入日未知时不编造天数。
+          ...(props.report.profile?.joinDays
+            ? [{ value: props.report.profile.joinDays, label: t('annualReport.poster.joinDays') }]
+            : []),
         ]
       : [
           { value: overview?.total || 0, label: t('annualReport.poster.records') },

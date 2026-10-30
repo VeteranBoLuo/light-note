@@ -118,8 +118,8 @@ describe.skipIf(!socketPath)('年度报告真实 MySQL 聚合', () => {
     await insertNote('note-3', actor, '2026-04-04 23:00:00', { title: '草图', type: 'drawing', content: '{"x":1}' });
     for (let index = 0; index < 3; index++) {
       await state.db.query(
-        "INSERT INTO note_versions (id, note_id, title, content, create_by, create_time, type) VALUES (?, 'note-1', '读书清单', '', ?, ?, 'markdown')",
-        [`v-${index}`, actor, `2026-05-0${index + 1} 21:00:00`],
+        "INSERT INTO note_versions (note_id, title, content, create_by, create_time, type) VALUES ('note-1', '读书清单', '', ?, ?, 'markdown')",
+        [actor, `2026-05-0${index + 1} 21:00:00`],
       );
     }
     const [fileInsert] = await state.db.query(
@@ -306,5 +306,29 @@ describe.skipIf(!socketPath)('年度报告真实 MySQL 聚合', () => {
       expect(meta).toEqual({ annualReport: 2026 });
     }
     expect(rows.some((row) => row.userId === empty)).toBe(false);
+  });
+
+  it('falls back to the earliest own record when the registration time is missing', async () => {
+    const { buildAnnualReport } = await import('./build.js');
+    const legacy = 'annual-legacy';
+    await state.db.query("INSERT INTO user (id, alias, role, create_time) VALUES (?, '老账号', 'user', NULL)", [
+      legacy,
+    ]);
+    await state.db.query(
+      "INSERT INTO user_growth_preferences (user_id, timezone, utc_offset_minutes) VALUES (?, 'Asia/Shanghai', 480)",
+      [legacy],
+    );
+    // 示例书签更早，但不算用户自己的记录；最早的真实记录是一篇北京时间 2024-11-08 的笔记。
+    await insertBookmark('legacy-seed', legacy, '2023-05-01 10:00:00', 'https://seed.example/');
+    await state.db.query(
+      "INSERT INTO onboarding_seed_resources (user_id, resource_type, resource_id) VALUES (?, 'bookmark', 'legacy-seed')",
+      [legacy],
+    );
+    await insertNote('legacy-note', legacy, '2024-11-08 11:22:00');
+    await insertBookmark('legacy-bm', legacy, '2026-03-01 10:00:00', 'https://legacy.example/');
+
+    const report = await buildAnnualReport(legacy, { year: 2026, now: NOW });
+    expect(report.profile.joinedDay).toBe('2024-11-08');
+    expect(report.profile.joinDays).toBe(773);
   });
 });

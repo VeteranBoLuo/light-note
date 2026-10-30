@@ -86,11 +86,19 @@ describe('annual report handlers', () => {
     expect(mocks.hasAnnualRecords).not.toHaveBeenCalled();
   });
 
+  it('asks visitors to sign in instead of claiming the report has not opened', async () => {
+    mocks.now = Date.parse('2026-12-20T10:00:00+08:00');
+    const res = createRes();
+    await getAnnualReport({ query: { year: '2026' }, user: user('visitor'), headers: {} }, res);
+    expect(res.body.data).toEqual({ year: 2026, available: false, reason: 'login' });
+    expect(mocks.buildAnnualReport).not.toHaveBeenCalled();
+  });
+
   it('keeps regular accounts closed before launch', async () => {
     mocks.now = Date.parse('2026-12-01T10:00:00+08:00');
     const res = createRes();
     await getAnnualReport({ query: { year: '2026' }, user: user(), headers: {} }, res);
-    expect(res.body.data).toMatchObject({ year: 2026, available: false });
+    expect(res.body.data).toMatchObject({ year: 2026, available: false, reason: 'upcoming' });
     expect(mocks.buildAnnualReport).not.toHaveBeenCalled();
   });
 
