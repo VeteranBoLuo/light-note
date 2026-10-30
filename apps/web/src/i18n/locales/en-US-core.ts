@@ -2,6 +2,7 @@ import { publicResourcesEn } from './publicResources';
 import { cloudFileScopeEn } from './cloudFileScope';
 import { profileBackgroundsEn, profileBackgroundItemsEn } from './profileBackgrounds';
 import { profileAppearanceEn } from './profileAppearance';
+import { annualReportEn } from './annualReport';
 import { MAKEUP_WINDOW_DAYS } from '@lightnote/shared';
 import { noteMathEn } from './noteMath';
 import { extractionEn } from './extraction';
@@ -46,6 +47,7 @@ export default {
   publicResources: publicResourcesEn,
   profileBackgrounds: profileBackgroundsEn,
   profileAppearance: profileAppearanceEn,
+  annualReport: annualReportEn,
   noteMath: noteMathEn,
   nativePush: {
     title: 'App notification connection',
@@ -10556,6 +10558,7 @@ export default {
       join_30: 'One Month Together',
       join_100: 'Hundred Days Together',
       join_365: 'A Year Together',
+      annual_review_2026: 'Looking Back · 2026',
     },
     achDesc: {
       public_resource_1: 'Have 1 approved, active public bookmark or plain-text note of your own.',
@@ -10608,6 +10611,7 @@ export default {
       join_30: '30 days since joining',
       join_100: '100 days since joining',
       join_365: 'One year since joining',
+      annual_review_2026: 'Viewed your 2026 year in review (commemorative, no points)',
     },
     timelineEmpty: 'No growth records yet — take your first step',
     timelineLevelUp: 'Level up to Lv.{level} · {name}',

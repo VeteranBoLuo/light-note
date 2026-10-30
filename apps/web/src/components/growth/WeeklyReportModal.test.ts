@@ -10,6 +10,7 @@ const zhSource = read('src/i18n/locales/zh-CN-core.ts');
 const enSource = read('src/i18n/locales/en-US-core.ts');
 const growthPage = read('src/view/growth/GrowthPage.vue');
 const notificationBell = read('src/components/notification/NotificationBell.vue');
+const posterExport = read('src/composables/usePosterExport.ts');
 
 describe('成长周报改版', () => {
   it('只使用 B 组件与统一图标，不在模板内新增原生控件或静态 SVG', () => {
@@ -27,10 +28,12 @@ describe('成长周报改版', () => {
     expect(poster).toContain('ui-density-fixed: 周报卡为固定 400×640 导出画布');
     expect(poster).not.toContain('@media');
     expect(modal).toContain('transform: `scale(${posterScale.value})`');
-    expect(modal).toContain('poster.cloneNode(true)');
-    expect(modal).toContain('prepareMaskedIconsForCanvas(exportPoster, window)');
+    // 导出链路与年度报告共用 usePosterExport：克隆同一画布、去掉预览缩放后绘制。
+    expect(modal).toContain('usePosterExport({');
     expect(modal).toContain('scale: EXPORT_SCALE');
-    expect(modal).toContain('exportHost.remove()');
+    expect(posterExport).toContain('poster.cloneNode(true)');
+    expect(posterExport).toContain('prepareMaskedIconsForCanvas(exportPoster, window)');
+    expect(posterExport).toContain('exportHost.remove()');
   });
 
   it('周报卡只放公开汇总，资源标题只出现在仅自己可见的右栏', () => {
@@ -50,7 +53,7 @@ describe('成长周报改版', () => {
 
   it('操作栏放在弹框底栏，移动端固定在底部并保留安全区', () => {
     expect(modal).toContain('<template #footer>');
-    expect(modal).toContain("ensureCloudFolder('周报')");
+    expect(modal).toContain("cloudFolder: '周报'");
     expect(modal).toContain('env(safe-area-inset-bottom)');
     expect(modal).toMatch(/\.wr-footer\.is-mobile \.wr-footer-actions \.b_btn\s*\{[\s\S]*?height:\s*44px/);
     expect(modal).toMatch(/exportDisabled = computed\(\(\) => !shown\.value \|\| shown\.value\.blank/);

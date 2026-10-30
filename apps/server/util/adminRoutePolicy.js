@@ -674,6 +674,12 @@ declare(ADMIN_POLICIES.READ, 'growth', [
   ['GET', '/growth/heatmap'],
 ]);
 declare(ADMIN_POLICIES.READ, 'daily_review', [['GET', '/daily-review/today']]);
+// 年度报告含本人的标题、网站与标签明细，纪念成就也只记在真实登录账号上；任何代管上下文都不开放。
+declare(ADMIN_POLICIES.ACCOUNT_WRITE, 'annual_report', [
+  ['GET', '/growth/annual-report/status'],
+  ['GET', '/growth/annual-report'],
+  ['POST', '/growth/annual-report/complete'],
+]);
 declare(ADMIN_POLICIES.ACCOUNT_WRITE, 'growth_preferences', [
   ['PUT', '/growth/preferences'],
   ['PUT', '/growth/preferences/points-goal'],

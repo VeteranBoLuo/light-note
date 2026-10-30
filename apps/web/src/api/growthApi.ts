@@ -28,6 +28,13 @@ export const claimGrowthTask = (taskKey: string) => apiBasePost('/api/growth/tas
 export const getWeeklyReport = (period: 'current' | 'last' = 'current') =>
   apiBaseGet('/api/growth/weeklyReport', { period }, { silent: true });
 
+// 年度报告：入口状态只做轻量判断；完整报告本人实时计算；看完写入纪念成就。
+export const getAnnualReportStatus = (year: number) =>
+  apiBaseGet('/api/growth/annual-report/status', { year }, { silent: true });
+export const getAnnualReport = (year: number) => apiBaseGet('/api/growth/annual-report', { year }, { silent: true });
+export const completeAnnualReport = (year: number) =>
+  apiBasePost('/api/growth/annual-report/complete', { year }, { silent: true });
+
 // 后台成长运营(root):查目标用户成长 + 调整(发经验/设等级/送补签卡)
 export const adminGetUserGrowth = (userId: string) => apiBasePost('/api/growth/admin/userGrowth', { userId });
 export const adminAdjustGrowth = (payload: {

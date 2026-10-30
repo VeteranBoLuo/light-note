@@ -73,6 +73,10 @@
       "types": "./notificationPresentation.d.ts",
       "default": "./notificationPresentation.js"
     },
+    "./annual-report": {
+      "types": "./annualReport.d.ts",
+      "default": "./annualReport.js"
+    },
     "./workspace-board": {
       "types": "./workspaceBoard.d.ts",
       "default": "./workspaceBoard.js"

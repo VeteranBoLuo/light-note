@@ -39,6 +39,7 @@
       />
     </div>
 
+    <AnnualReportEntry source="今日" />
     <CampaignEntry row />
 
     <section class="mobile-today__pending" :aria-label="t('workbench.panel.todaySummary')">
@@ -192,6 +193,7 @@
 
 <script setup lang="ts">
   import CampaignEntry from '@/components/support/CampaignEntry.vue';
+  import AnnualReportEntry from '@/components/growth/annualReport/AnnualReportEntry.vue';
   import BTabs from '@/components/base/BasicComponents/BTabs.vue';
   import WorkshopProjectEntry from '@/components/workbenches/WorkshopProjectEntry.vue';
   import { computed, onActivated, onMounted, ref, watch } from 'vue';
@@ -627,6 +629,9 @@
 
   .mobile-today__brief {
     margin-bottom: 14px;
+  }
+  .mobile-today > .annual-entry {
+    margin-bottom: var(--ui-space-14, 14px);
   }
   .mobile-today__brief:empty {
     display: none;

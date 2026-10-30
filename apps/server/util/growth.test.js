@@ -416,29 +416,43 @@ describe('每日经验上限与一次性奖励隔离', () => {
 describe('成就体系职责', () => {
   it('首签与社区首次贡献保留入门目标，其余成就保持长期积累目标', () => {
     const retiredKeys = ['first_checkin', 'first_bookmark', 'first_note', 'first_file'];
-    const keys = ACHIEVEMENTS.map((achievement) => achievement.key);
+    // 纪念成就是独立的一次性记录，不参与长期积累门槛的约束，单独断言。
+    const accumulation = ACHIEVEMENTS.filter((achievement) => achievement.rewardPolicy !== 'commemorative');
+    const keys = accumulation.map((achievement) => achievement.key);
 
     expect(keys).toHaveLength(48);
     expect(keys).not.toEqual(expect.arrayContaining(retiredKeys));
-    expect(ACHIEVEMENTS.filter((achievement) => achievement.target === 1)).toEqual(
+    expect(accumulation.filter((achievement) => achievement.target === 1)).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ key: 'community_post_1', reward: 20 }),
         expect.objectContaining({ key: 'community_answer_1', reward: 30 }),
         expect.objectContaining({ key: 'streak_1', metric: 'maxStreak', reward: 10 }),
       ]),
     );
-    expect(ACHIEVEMENTS.filter((achievement) => achievement.target === 1)).toHaveLength(4);
+    expect(accumulation.filter((achievement) => achievement.target === 1)).toHaveLength(4);
     expect(
-      ACHIEVEMENTS.filter(
+      accumulation.filter(
         (achievement) => !['public_resource_1', 'streak_1', 'community_post_1', 'community_answer_1'].includes(achievement.key),
       ).every((achievement) => achievement.target > 1),
     ).toBe(true);
     expect(
-      ACHIEVEMENTS.reduce((counts, achievement) => {
+      accumulation.reduce((counts, achievement) => {
         counts[achievement.group] = (counts[achievement.group] || 0) + 1;
         return counts;
       }, {}),
     ).toEqual({ checkin: 7, create: 17, action: 4, organize: 4, level: 3, tenure: 4, community: 4, sharing: 5 });
+  });
+
+  it('纪念成就不发积分、解锁即领取，未解锁时隐藏', () => {
+    expect(ACHIEVEMENTS.filter((achievement) => achievement.rewardPolicy === 'commemorative')).toEqual([
+      expect.objectContaining({
+        key: 'annual_review_2026',
+        group: 'tenure',
+        reward: 0,
+        autoClaim: true,
+        hiddenUntilUnlocked: true,
+      }),
+    ]);
   });
 
   it('为书签、笔记和文件提供基础与进阶两级静态头像框门槛', () => {

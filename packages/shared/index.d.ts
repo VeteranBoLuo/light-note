@@ -50,6 +50,12 @@ export declare const FEATURE_ANNOUNCEMENTS: {
     readonly publishedAt: '2026-08-31T00:00:00.000+08:00';
     readonly expiresAt: '2026-09-15T00:00:00.000+08:00';
   };
+  readonly ANNUAL_REPORT_2026: {
+    readonly id: 'annual-report-2026';
+    readonly version: 'annual-report-2026-v1';
+    readonly publishedAt: '2026-12-15T00:00:00.000+08:00';
+    readonly expiresAt: '2027-02-01T00:00:00.000+08:00';
+  };
 };
 export declare function getFeatureAnnouncement(announcementId?: unknown): FeatureAnnouncementDefinition | null;
 export declare function isFeatureAnnouncementActive(

@@ -1,5 +1,6 @@
 import express from 'express';
 import * as growthHandle from '../router_handle/growthHandle.js';
+import * as annualReportHandle from '../router_handle/annualReportHandle.js';
 import { getKnowledgeManor, runKnowledgeManorCommand } from '../router_handle/knowledgeManorHandle.js';
 import * as manorAdmin from '../router_handle/manorAdminHandle.js';
 import { manorReadLimit, manorCommandLimit, manorAdminWriteLimit } from '../util/manorRateLimit.js';
@@ -24,6 +25,9 @@ router.get('/ranks', growthHandle.getRanks);
 router.post('/checkin', growthHandle.doCheckin);
 router.post('/useProtectCard', growthHandle.doUseProtectCard);
 router.get('/weeklyReport', growthHandle.getWeeklyReport);
+router.get('/annual-report/status', annualReportHandle.getAnnualReportStatus);
+router.get('/annual-report', annualReportHandle.getAnnualReport);
+router.post('/annual-report/complete', annualReportHandle.completeAnnualReport);
 router.post('/admin/userGrowth', growthHandle.getUserGrowthForAdmin);
 router.post('/admin/adjust', growthHandle.doAdminAdjustGrowth);
 router.post('/claimDailyBonus', growthHandle.claimDailyBonus);
