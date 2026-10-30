@@ -95,6 +95,8 @@ ssh -i "$KEY" "$HOST" "cd '$REMOTE' && '$REMOTE_NODE' scripts/ensureAccountEmail
 echo "🔎  显式安装新用户来源调查结构（不启用、不发通知）…"
 ssh -i "$KEY" "$HOST" "cd '$REMOTE' && '$REMOTE_NODE' scripts/configureSignupSourceSurvey.js --install-schema"
 
+echo "🚨  幂等初始化服务器告警 Schema…"
+ssh -i "$KEY" "$HOST" "cd '$REMOTE' && '$REMOTE_NODE' scripts/ensureInfraAlertSchema.js"
 echo "🔎  执行只读 Schema 发布门禁…"
 ssh -i "$KEY" "$HOST" "cd '$REMOTE' && '$REMOTE_NODE' scripts/checkSchemaAssertions.js"
 

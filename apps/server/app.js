@@ -17,6 +17,7 @@ import { cleanupAllExpiredTrash } from './router_handle/trashHandle.js';
 import { generateWeeklyReports } from './util/weeklyReport.js';
 import { scheduleAnnualReportNotices } from './util/annualReport/notice.js';
 import { notificationSchedulerEnabled } from './util/notificationSchedulerPolicy.js';
+import { startInfraAlertScheduler } from './util/infraAlerts.js';
 import { ensureNotificationTable } from './util/notification.js';
 import { initLogExclude } from './util/logExclude.js';
 import { ensurePointsSchema } from './util/points.js';
@@ -236,6 +237,8 @@ startAccountDeletionCleanupScheduler().catch((err) =>
 );
 startOperationalLogRetentionScheduler();
 startAfdianReconciliationScheduler();
+// 服务器告警：每分钟评估诊断，异常持续 3 分钟才通知 Root（仅生产运行时）。
+startInfraAlertScheduler();
 
 // 回收站定时清理（每天凌晨 3:00）
 function scheduleTrashCleanup() {

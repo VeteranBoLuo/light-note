@@ -28,6 +28,7 @@ const suites = {
   'util/bookmarkArchiveStatus.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
   'util/security/services/autoResponse.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
   'util/adminAsyncJobHealth.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
+  'util/infraAlerts.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
   'util/points.backgrounds.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
   'util/services/aiAdoption.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
   'util/extraction/service.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',

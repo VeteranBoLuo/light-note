@@ -4429,7 +4429,27 @@ SELECT 'account_email_health_index' AS check_name, 'account_email_health_runs.PR
 WHERE NOT EXISTS (SELECT 1 FROM information_schema.statistics WHERE table_schema=DATABASE()
  AND table_name='account_email_health_runs' AND index_name='PRIMARY' GROUP BY index_name
  HAVING GROUP_CONCAT(column_name ORDER BY seq_in_index)='period' AND MAX(non_unique)=0 AND SUM(sub_part IS NOT NULL)=0);
+-- Community originals and derived images share the same private lifecycle.
+SELECT 'community_image_preview_column' AS check_name, expected.col AS detail
+FROM (SELECT 'preview_object_key' AS col UNION ALL SELECT 'preview_file_size' UNION ALL SELECT 'preview_width' UNION ALL SELECT 'preview_height') expected
+WHERE NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='community_post_images' AND column_name=expected.col);
+
 -- New-user source survey is installed explicitly; activation and data preservation are separate.
 SELECT 'signup_source_survey_schema' AS check_name, 'missing columns' AS detail
 FROM DUAL WHERE (SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE()
   AND table_name='signup_source_survey' AND column_name IN ('id','form_id','eligible_from','after_create_time','after_user_id'))<>5;
+
+-- 服务器告警状态由 API 每分钟评估写入；表缺失时告警静默跳过，发布前必须就绪。
+SELECT 'infra_alert_schema' AS check_name, 'infra_alerts' AS detail
+FROM DUAL WHERE NOT EXISTS (
+  SELECT 1 FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='infra_alerts'
+);
+SELECT 'infra_alert_column' AS check_name, required.name AS detail
+FROM (
+  SELECT 'alert_key' AS name UNION ALL SELECT 'state' UNION ALL SELECT 'channel'
+  UNION ALL SELECT 'fail_streak' UNION ALL SELECT 'pass_streak' UNION ALL SELECT 'title'
+  UNION ALL SELECT 'detail' UNION ALL SELECT 'first_failed_at' UNION ALL SELECT 'opened_at'
+  UNION ALL SELECT 'resolved_at' UNION ALL SELECT 'updated_at'
+) required LEFT JOIN information_schema.columns present
+  ON present.table_schema=DATABASE() AND present.table_name='infra_alerts' AND present.column_name=required.name
+WHERE present.column_name IS NULL;

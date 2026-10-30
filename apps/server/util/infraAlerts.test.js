@@ -1,0 +1,187 @@
+import { describe, expect, it, vi } from 'vitest';
+
+vi.mock('./notification.js', () => ({ createNotification: vi.fn() }));
+vi.mock('./emailDelivery.js', () => ({ sendTrackedEmail: vi.fn() }));
+
+const { deriveAlertSignals, evaluateInfraAlerts, runInfraAlertCycle } = await import('./infraAlerts.js');
+
+const available = (domain) => ({ domain, state: 'available' });
+const diagnostics = (checks, sources = ['overview', 'services', 'storage', 'security'].map(available)) => ({
+  checks,
+  sources,
+});
+const check = (id, state, evidence = {}, domain = id.split('.')[0]) => ({ id, domain, state, evidence });
+
+function step(rows, input, minute) {
+  const result = evaluateInfraAlerts(rows, deriveAlertSignals(input), new Date(Date.UTC(2026, 9, 30, 4, minute)));
+  const next = new Map(rows.map((row) => [row.alertKey, row]));
+  for (const row of result.changed) next.set(row.alertKey, row);
+  return { rows: [...next.values()], ...result };
+}
+
+describe('服务器告警信号', () => {
+  it('服务按 ID 拆分、安全项只发站内通知、预警与采集错误不告警', () => {
+    const { signals, servicesKnown } = deriveAlertSignals(
+      diagnostics([
+        check('services.health', 'fail', { unhealthy: ['mysql', 'lightnote-document-worker'] }, 'services'),
+        check('storage.capacity', 'warning', { percent: 85 }),
+        check('security.fail2ban', 'fail', { value: 'not-installed' }),
+        check('collection.storage', 'unknown', { count: 1 }, 'storage'),
+      ]),
+    );
+    expect(servicesKnown).toBe(true);
+    expect(signals.get('service.mysql')).toMatchObject({ state: 'fail', title: 'MySQL 未运行', channel: 'urgent' });
+    expect(signals.get('service.lightnote-document-worker')).toMatchObject({ title: '文档处理 Worker 未运行' });
+    expect(signals.get('storage.capacity')).toMatchObject({ state: 'pass' });
+    expect(signals.get('security.fail2ban')).toMatchObject({ state: 'fail', channel: 'notice' });
+    expect(signals.has('collection.storage')).toBe(false);
+    expect(signals.get('agent.offline')).toMatchObject({ state: 'pass' });
+  });
+
+  it('Agent 四个域都不可用时单独告警 Agent 离线', () => {
+    const { signals, servicesKnown } = deriveAlertSignals(
+      diagnostics(
+        [check('services.health', 'unknown', {}, 'services')],
+        ['overview', 'services', 'storage', 'security'].map((domain) => ({ domain, state: 'unavailable' })),
+      ),
+    );
+    expect(signals.get('agent.offline')).toMatchObject({ state: 'fail', channel: 'urgent' });
+    expect(servicesKnown).toBe(false);
+  });
+});
+
+describe('服务器告警状态机', () => {
+  const mysqlDown = diagnostics([check('services.health', 'fail', { unhealthy: ['mysql'] }, 'services')]);
+  const allRunning = diagnostics([check('services.health', 'pass', { unhealthy: [] }, 'services')]);
+  const servicesUnknown = diagnostics([check('services.health', 'unknown', {}, 'services')]);
+
+  it('连续 3 分钟异常才开启告警，部署重启这类短暂异常不会通知', () => {
+    let state = { rows: [] };
+    state = step(state.rows, mysqlDown, 0);
+    state = step(state.rows, mysqlDown, 1);
+    expect(state.opened).toHaveLength(0);
+    expect(state.rows.find((row) => row.alertKey === 'service.mysql')).toMatchObject({ state: 'pending' });
+    state = step(state.rows, allRunning, 2);
+    expect(state.rows.find((row) => row.alertKey === 'service.mysql')).toMatchObject({ state: 'clear' });
+    expect(state.opened).toHaveLength(0);
+    expect(state.resolved).toHaveLength(0);
+  });
+
+  it('开启后持续异常不重复通知，连续 3 分钟正常才发恢复', () => {
+    let state = { rows: [] };
+    for (const minute of [0, 1]) state = step(state.rows, mysqlDown, minute);
+    state = step(state.rows, mysqlDown, 2);
+    expect(state.opened.map((row) => row.alertKey)).toEqual(['service.mysql']);
+    state = step(state.rows, mysqlDown, 3);
+    expect(state.opened).toHaveLength(0);
+    expect(state.changed).toHaveLength(0);
+    // 未知状态既不计入恢复也不计入异常。
+    state = step(state.rows, servicesUnknown, 4);
+    expect(state.changed).toHaveLength(0);
+    state = step(state.rows, allRunning, 5);
+    state = step(state.rows, allRunning, 6);
+    expect(state.resolved).toHaveLength(0);
+    state = step(state.rows, allRunning, 7);
+    expect(state.resolved.map((row) => row.alertKey)).toEqual(['service.mysql']);
+    expect(state.rows.find((row) => row.alertKey === 'service.mysql')).toMatchObject({ state: 'clear' });
+  });
+
+  it('恢复途中再次异常会清零恢复计数，不提前宣布恢复', () => {
+    let state = { rows: [] };
+    for (const minute of [0, 1, 2]) state = step(state.rows, mysqlDown, minute);
+    state = step(state.rows, allRunning, 3);
+    state = step(state.rows, allRunning, 4);
+    state = step(state.rows, mysqlDown, 5);
+    expect(state.rows.find((row) => row.alertKey === 'service.mysql')).toMatchObject({ state: 'open', passStreak: 0 });
+    state = step(state.rows, allRunning, 6);
+    state = step(state.rows, allRunning, 7);
+    expect(state.resolved).toHaveLength(0);
+  });
+});
+
+describe('服务器告警执行', () => {
+  function fakeDatabase(rows = []) {
+    const queries = [];
+    return {
+      queries,
+      query: vi.fn(async (sql, params) => {
+        queries.push({ sql, params });
+        if (sql.startsWith('SELECT alert_key')) return [rows];
+        if (sql.includes("role='root'")) return [[{ id: 'root-1', email: 'root@example.com' }]];
+        return [{ affectedRows: 1 }];
+      }),
+    };
+  }
+  const openRow = (alertKey, channel, failStreak = 2) => ({
+    alert_key: alertKey,
+    state: 'pending',
+    channel,
+    fail_streak: failStreak,
+    pass_streak: 0,
+    title: 'x',
+    detail: null,
+    first_failed_at: new Date('2026-10-30T04:00:00Z'),
+    opened_at: null,
+    resolved_at: null,
+  });
+
+  it('先落库再通知：服务故障发站内通知和邮件，安全项只发站内通知', async () => {
+    const db = fakeDatabase([openRow('service.mysql', 'urgent'), openRow('security.fail2ban', 'notice')]);
+    const notify = vi.fn();
+    const sendEmail = vi.fn();
+    const result = await runInfraAlertCycle({
+      db,
+      notify,
+      sendEmail,
+      now: new Date('2026-10-30T04:03:00Z'),
+      siteUrl: 'https://example.test',
+      loadDiagnostics: async () =>
+        diagnostics([
+          check('services.health', 'fail', { unhealthy: ['mysql'] }, 'services'),
+          check('security.fail2ban', 'fail', { value: 'not-installed' }),
+        ]),
+    });
+    expect(result.opened.map((row) => row.alertKey).sort()).toEqual(['security.fail2ban', 'service.mysql']);
+    const upsertIndex = db.queries.findIndex((item) => item.sql.startsWith('INSERT INTO infra_alerts'));
+    const recipientIndex = db.queries.findIndex((item) => item.sql.includes("role='root'"));
+    expect(upsertIndex).toBeGreaterThan(-1);
+    expect(upsertIndex).toBeLessThan(recipientIndex);
+    expect(notify).toHaveBeenCalledWith(
+      'root-1',
+      expect.objectContaining({
+        type: 'system',
+        title: '服务器告警：MySQL 未运行',
+        link: '/serverManagement/diagnostics',
+        sourceType: 'infra_alert',
+        sourceId: `service.mysql@${Date.parse('2026-10-30T04:03:00Z') / 1000}`,
+      }),
+    );
+    expect(sendEmail).toHaveBeenCalledTimes(1);
+    expect(sendEmail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        emailType: 'infra_alert',
+        recipient: 'root@example.com',
+        subject: '【轻笺服务器告警】MySQL 未运行',
+        text: expect.stringContaining('https://example.test/serverManagement/diagnostics'),
+      }),
+    );
+  });
+
+  it('通知失败只记日志，不中断其余告警', async () => {
+    const db = fakeDatabase([openRow('service.mysql', 'urgent'), openRow('service.redis', 'urgent')]);
+    const notify = vi.fn().mockRejectedValueOnce(Object.assign(new Error('down'), { code: 'NOTIFY_DOWN' }));
+    const sendEmail = vi.fn();
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    await runInfraAlertCycle({
+      db,
+      notify,
+      sendEmail,
+      now: new Date('2026-10-30T04:03:00Z'),
+      loadDiagnostics: async () =>
+        diagnostics([check('services.health', 'fail', { unhealthy: ['mysql', 'redis'] }, 'services')]),
+    });
+    expect(notify).toHaveBeenCalledTimes(2);
+    expect(sendEmail).toHaveBeenCalledTimes(2);
+    error.mockRestore();
+  });
+});
