@@ -38,6 +38,12 @@ describe.skipIf(!socketPath)('庄园后台只读、维护并发与统计（隔�
     await root.query(`CREATE DATABASE ${schema} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`);
     created = true;
     db = mysql.createPool({ socketPath, user: 'root', database: schema, connectionLimit: 8, timezone: '+08:00' });
+    // 收据与积分流水的时间取数据库 DEFAULT CURRENT_TIMESTAMP，后台统计窗口取注入时钟；
+    // 把会话时钟固定为测试时钟、时区对齐线上 +08:00，否则真实日期越过窗口后收据被排除。
+    db.on('connection', (c) => {
+      c.query("SET SESSION time_zone='+08:00'");
+      c.query('SET timestamp=?', [clock.getTime() / 1000]);
+    });
     await db.query(
       'CREATE TABLE user (id VARCHAR(64) PRIMARY KEY,alias VARCHAR(64),role VARCHAR(16),del_flag INT DEFAULT 0) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci',
     );
