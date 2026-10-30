@@ -129,8 +129,9 @@ export const plainText = (html) => {
 export function createBookmarkWorkbook(filename) {
   const workbook = new ExcelJS.stream.xlsx.WorkbookWriter({ filename, useStyles: true, useSharedStrings: false });
   const sheet = workbook.addWorksheet('书签', { views: [{ state: 'frozen', ySplit: 1 }] });
+  // 表头和标签分隔（「 | 」）与书签页的 Excel 导出一致，备份里的书签表可以直接在书签页导入；网页正文与收藏时间导入时忽略。
   sheet.columns = [
-    ['标题', 28],
+    ['书签名', 28],
     ['网址', 45],
     ['描述', 45],
     ['网页正文', 70],

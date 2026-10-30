@@ -144,6 +144,8 @@ describe('portable documents', () => {
     await book.xlsx.readFile(file);
     const sheet = book.getWorksheet('书签'),
       long = book.getWorksheet('长正文');
+    // 表头与书签页导入要求的「书签名、网址、描述、标签」一致，备份表可以直接导回。
+    expect(sheet.getRow(1).values.slice(1)).toEqual(['书签名', '网址', '描述', '网页正文', '标签', '收藏时间']);
     expect(sheet.getCell('A2').value).toBe('=HYPERLINK("bad")');
     expect(sheet.getCell('D2').value.hyperlink).toContain('长正文');
     const chunks = [];

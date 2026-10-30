@@ -29,7 +29,7 @@ export async function resourcePage(db, owner, kind, offset = 0, id) {
       row.tags = tags
         .filter((t) => String(t.resource_id) === String(row.id))
         .map((t) => t.name)
-        .join(', ');
+        .join(' | ');
   }
   return rows;
 }

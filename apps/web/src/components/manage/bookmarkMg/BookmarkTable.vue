@@ -677,6 +677,7 @@
   import { useBookmarkManage } from '@/composables/useBookmarkManage.ts';
   import { refreshAfterBookmarkImport, useBookmarkIconBatchTracking } from '@/composables/useBookmarkIconBatch';
   import { exportExcelFile, readFirstExcelSheet } from '@/utils/excel';
+  import { parseBookmarkExcelRows } from '@/utils/bookmarkExcelImport';
   import { OPERATION_LOG_MAP } from '@/config/logMap.ts';
   import { resolveBookmarkUrlInput } from '@lightnote/shared';
   import { buildNetscapeBookmarkHtml } from '@/utils/bookmarkHtml';
@@ -1597,25 +1598,12 @@
     importStage.value = 'reading';
     try {
       const jsonData = await readFirstExcelSheet(file);
-      const requiredColumns = ['书签名', '网址', '描述'];
-      const hasRequired = requiredColumns.every((col) => jsonData.length > 0 && Object.keys(jsonData[0]).includes(col));
-      if (!hasRequired) {
+      // 兼容书签页导出与「数据与备份」里的书签表（含早期「标题」表头的备份）。
+      const bookmarksToImport = parseBookmarkExcelRows(jsonData);
+      if (!bookmarksToImport) {
         message.error(t('bookmarkMg.excelImportFormatInvalid'));
         return;
       }
-      const bookmarksToImport = jsonData.map((item: any) => ({
-        name: String(item['书签名'] ?? '').trim(),
-        url: String(item['网址'] ?? '').trim(),
-        description: String(item['描述'] ?? '').trim(),
-        tagNames: Array.from(
-          new Set(
-            String(item['标签'] || '')
-              .split('|')
-              .map((tagName) => tagName.trim())
-              .filter(Boolean),
-          ),
-        ),
-      }));
       importStage.value = 'importing';
       const res = await apiBasePost(
         '/api/bookmark/importBookmarksExcel',
