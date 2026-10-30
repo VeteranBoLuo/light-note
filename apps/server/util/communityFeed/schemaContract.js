@@ -265,6 +265,13 @@ export const COMMUNITY_IMAGE_SCHEMA = {
   },
 };
 
+export const COMMUNITY_IMAGE_PREVIEW_SCHEMA = {
+  community_post_images: {
+    columns: ['preview_object_key', 'preview_file_size', 'preview_width', 'preview_height'],
+    indexes: [],
+  },
+};
+
 export const COMMUNITY_RESOURCE_SCHEMA = {
   community_resource_snapshots: {
     columns: ['public_id', 'owner_id', 'post_id', 'kind', 'title', 'body', 'url', 'created_at'],

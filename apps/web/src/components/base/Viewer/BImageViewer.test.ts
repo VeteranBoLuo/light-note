@@ -4,7 +4,7 @@ import { resolve } from 'node:path';
 import { createApp, h, nextTick, ref, type Ref } from 'vue';
 import { createI18n } from 'vue-i18n';
 import zhCN from '@/i18n/locales/zh-CN';
-import type { ImageViewerItem } from '@/types/imageViewer';
+import type { ImageViewerItem, ImageViewerSourceResolver } from '@/types/imageViewer';
 import viewerSource from './BImageViewer.vue?raw';
 import BImageViewer from './BImageViewer.vue';
 import { requestActivitySnapshot } from '@/http/requestActivity';
@@ -29,6 +29,7 @@ let cleanup: (() => void) | undefined;
 async function mountViewer(
   viewerImages: Ref<ImageViewerItem[]> = ref([...images]),
   initialId: string | Ref<string> = 'one',
+  resolveSource?: ImageViewerSourceResolver,
 ) {
   const host = document.createElement('div');
   document.body.append(host);
@@ -40,6 +41,7 @@ async function mountViewer(
           visible: visible.value,
           images: viewerImages.value,
           initialId: typeof initialId === 'string' ? initialId : initialId.value,
+          resolveSource,
           'onUpdate:visible': (value: boolean) => {
             visible.value = value;
           },
@@ -104,11 +106,69 @@ afterEach(() => {
   cleanup?.();
   cleanup = undefined;
   vi.useRealTimers();
+  vi.unstubAllGlobals();
   document.documentElement.style.zoom = '';
   document.documentElement.classList.remove('disable-animations');
 });
 
 describe('BImageViewer', () => {
+  it('resolves only the active original and ignores a late response after switching images', async () => {
+    const pending: { image: ImageViewerItem; signal: AbortSignal; resolve: (source: string) => void }[] = [];
+    const resolveSource = vi.fn<ImageViewerSourceResolver>(
+      (image, signal) =>
+        new Promise((resolve) => {
+          pending.push({ image, signal, resolve });
+        }),
+    );
+    const { visible } = await mountViewer(ref([...images]), 'one', resolveSource);
+    expect(pending.map((p) => p.image.id)).toEqual(['one']);
+    expect(currentImage()).toBeNull();
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true, cancelable: true }));
+    await nextTick();
+    await nextTick();
+    expect(pending.map((p) => p.image.id)).toEqual(['one', 'two']);
+    expect(pending[0].signal.aborted).toBe(true);
+    pending[0].resolve('/stale.png');
+    pending[1].resolve('/resolved/two.png');
+    await nextTick();
+    await nextTick();
+    await vi.waitFor(() => expect(currentImage()?.src).toContain('/resolved/two.png'));
+    visible.value = false;
+    await nextTick();
+    expect(pending[1].signal.aborted).toBe(true);
+  });
+  it('retries a failed original resolution and releases its Blob when closed', async () => {
+    const create = vi.fn(() => 'blob:original');
+    const revoke = vi.fn();
+    vi.stubGlobal(
+      'URL',
+      class extends URL {
+        static createObjectURL = create;
+        static revokeObjectURL = revoke;
+      },
+    );
+    const resolveSource = vi
+      .fn<ImageViewerSourceResolver>()
+      .mockRejectedValueOnce(new Error('unavailable'))
+      .mockResolvedValueOnce(new Blob(['original'], { type: 'image/png' }));
+    const { visible } = await mountViewer(ref([...images]), 'one', resolveSource);
+    await nextTick();
+    await nextTick();
+    const retry = Array.from(document.body.querySelectorAll('button')).find((button) =>
+      button.textContent?.includes(zhCN.common.imageViewer.retry),
+    );
+    expect(retry).toBeTruthy();
+    retry!.click();
+    await nextTick();
+    await nextTick();
+    await nextTick();
+    expect(resolveSource).toHaveBeenCalledTimes(2);
+    await vi.waitFor(() => expect(currentImage()?.getAttribute('src')).toBe('blob:original'));
+    visible.value = false;
+    await nextTick();
+    expect(revoke).toHaveBeenCalledWith('blob:original');
+    vi.unstubAllGlobals();
+  });
   it('不依赖 transitionend 建立图片和关闭事件，减少动画时仍可展示并关闭', async () => {
     vi.useFakeTimers();
     document.documentElement.classList.add('disable-animations');
@@ -401,13 +461,16 @@ it('viewer load, source switch, failure and close release foreground leases', as
   currentImage()!.dispatchEvent(new Event('load'));
   expect(requestActivitySnapshot().foreground).toBe(0);
   viewerImages.value = [{ ...images[0], src: '/replacement.png' }];
-  await nextTick(); await nextTick();
+  await nextTick();
+  await nextTick();
   expect(requestActivitySnapshot().foreground).toBe(1);
   currentImage()!.dispatchEvent(new Event('error'));
   expect(requestActivitySnapshot().foreground).toBe(0);
   viewerImages.value = [{ ...images[0], src: '/another.png' }];
-  await nextTick(); await nextTick();
+  await nextTick();
+  await nextTick();
   expect(requestActivitySnapshot().foreground).toBe(1);
-  visible.value = false; await nextTick();
+  visible.value = false;
+  await nextTick();
   expect(requestActivitySnapshot().foreground).toBe(0);
 });

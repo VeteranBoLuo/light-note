@@ -226,11 +226,15 @@ app.use((req, res, next) => {
   next();
 });
 const routes = {
-  'GET feed/capabilities': async (args) => ({
-    ...(await capabilities(args)),
-    imagesEnabled: await images.imagesReady(db),
-    resourcesEnabled: await resources.resourcesReady(db),
-  }),
+  'GET feed/capabilities': async (args) => {
+    const imagesEnabled = await images.imagesReady(db);
+    return {
+      ...(await capabilities(args)),
+      imagesEnabled,
+      inlineImagesEnabled: imagesEnabled,
+      resourcesEnabled: await resources.resourcesReady(db),
+    };
+  },
   'GET resources/eligible': resources.eligibleResources,
   'POST resources/prepare': resources.prepareResource,
   'GET topics': topics.listTopics,
@@ -334,6 +338,9 @@ app.use(async (req, res) => {
         file: req.file,
         putObject: async (key, file) => {
           imageObjects.set(key, await fs.readFile(file));
+        },
+        putPreview: async (key, body) => {
+          imageObjects.set(key, body);
         },
       });
     else if (/^images\/[a-f0-9-]+\/discard$/.test(path))

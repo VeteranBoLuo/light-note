@@ -4,6 +4,7 @@ import * as images from '../util/communityFeed/images.js';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import fs from 'node:fs/promises';
+import { createHash } from 'node:crypto';
 import { resultData } from '../util/agent/data.js';
 import {
   CommunityFeedError,
@@ -147,13 +148,24 @@ export async function image(req, res) {
   const viewer = req.adminContext ? req.resourceUser : req.user;
   try {
     const data = await images.readImage({ user: viewer, id: req.params.id, input: req.query });
+    // Store immutable bytes privately, but recheck current post/account visibility on every reuse.
+    if (!req.adminContext) {
+      res.set('Cache-Control', 'private, no-cache');
+      res.set('ETag', `"${createHash('sha256').update(`${data.object_key}:${data.content_hash}`).digest('hex')}"`);
+      if (req.fresh) return res.status(304).end();
+    }
     const upstream = await fetch(data.signedUrl, { signal: AbortSignal.timeout(15000), redirect: 'error' });
-    if (!upstream.ok || !upstream.body) return res.sendStatus(404);
+    if (!upstream.ok || !upstream.body) {
+      res.set('Cache-Control', 'private, no-store');
+      return res.sendStatus(404);
+    }
     res.type(data.content_type);
     await pipeline(Readable.fromWeb(upstream.body), res);
   } catch {
-    if (!res.headersSent) res.sendStatus(404);
-    else res.destroy();
+    if (!res.headersSent) {
+      res.set('Cache-Control', 'private, no-store');
+      res.sendStatus(404);
+    } else res.destroy();
   }
 }
 

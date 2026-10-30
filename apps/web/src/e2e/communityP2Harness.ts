@@ -5,6 +5,7 @@ import { createRouter, createMemoryHistory, RouterView } from 'vue-router';
 import request from '@/http/request';
 import globalDirect from '@/config/globalDirect';
 import { bookmarkStore, useUserStore } from '@/store';
+import { applyUiDensity } from '@/composables/useUiDensity';
 import { useCommunityChatUnread } from '@/composables/useCommunityChatUnread';
 import { communityChatWorkspaceActive } from '@/composables/useCommunityChatActivation';
 import zh from '@/i18n/locales/zh-CN';
@@ -183,6 +184,17 @@ request.defaults.adapter = async (config) => {
       ...(method !== 'get' ? { body: body instanceof FormData ? body : JSON.stringify(body) } : {}),
     });
     const payload = await response.json();
+    // Native img requests cannot carry the fixture account header. Keep both image variants local.
+    const localImages = (value: any) => {
+      if (!value || typeof value !== 'object') return;
+      if (typeof value.url === 'string' && value.url.startsWith('/api/community/images/')) {
+        const media = new URL(value.url, fixtureOrigin);
+        media.searchParams.set('account', params.get('account') || 'a');
+        value.url = media.href;
+      }
+      Object.values(value).forEach(localImages);
+    };
+    localImages(payload);
     if (url.endsWith('/profiles/options/me') && payload.status === 200 && !payload.data.userPublicId) {
       const headers = { 'X-Fixture-Account': params.get('account') || 'a' };
       const own = await fetch(fixtureOrigin + '/api/community/own/posts', { headers }).then((r) => r.json());
@@ -324,6 +336,7 @@ const app = createApp({
     user.preferences.theme = params.get('theme') === 'night' ? 'night' : 'day';
     bookmark.screenWidth = innerWidth;
     bookmark.screenHeight = innerHeight;
+    applyUiDensity(params.get('density'), bookmark.isMobile || bookmark.isTablet);
     const unread = useCommunityChatUnread();
     unread.syncDirectory({ access, messagingEnabled: true, items: rooms } as any);
     Object.assign(window, {

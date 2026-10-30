@@ -68,6 +68,29 @@ it('keeps normal image URLs unchanged outside administrator preview', () => {
   expect(mocks.get).not.toHaveBeenCalled();
 });
 
+it('fetches an administrator original only on demand with its preview identity', async () => {
+  mocks.user = reactive({ id: 'subject', role: 'user', adminContext: { id: 'context' } });
+  const original = new Blob(['original'], { type: 'image/png' });
+  mocks.get.mockResolvedValue({ data: original });
+  let images!: ReturnType<typeof useCommunityPreviewImages>;
+  const app = createApp({
+    setup() {
+      images = useCommunityPreviewImages(() => ['/api/community/images/photo?variant=preview']);
+      return () => h('div');
+    },
+  });
+  app.mount(document.createElement('div'));
+  cleanup = () => app.unmount();
+  expect(mocks.get).toHaveBeenCalledTimes(1);
+  expect(mocks.get.mock.calls[0][0]).toContain('variant=preview');
+  const signal = new AbortController().signal;
+  expect(await images.viewerSourceResolver.value!({ id: 'photo', src: '/api/community/images/photo' }, signal)).toBe(
+    original,
+  );
+  expect(mocks.get).toHaveBeenCalledTimes(2);
+  expect(mocks.get.mock.calls[1][0]).toBe('/api/community/images/photo');
+});
+
 it('uses public avatar metadata without forwarding the preview request to an external host', async () => {
   mocks.user = reactive({ id: 'subject', role: 'user', adminContext: { id: 'context' } });
   mocks.get.mockResolvedValue({

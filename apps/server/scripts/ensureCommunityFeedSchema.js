@@ -1,6 +1,6 @@
 import { reviewSchemaReady } from '../util/communityFeed/reviewQueue.js';
 import { resourcesReady } from '../util/communityFeed/resources.js';
-import { imagesReady } from '../util/communityFeed/images.js';
+import { imagesReady, imagePreviewsReady } from '../util/communityFeed/images.js';
 import pool from '../db/index.js';
 import { ensureCommunityFeedSchema, communityFeedSchemaReady } from '../util/communityFeed/schema.js';
 try {
@@ -8,6 +8,7 @@ try {
   if (
     !(await communityFeedSchemaReady(pool)) ||
     !(await imagesReady(pool)) ||
+    !(await imagePreviewsReady(pool)) ||
     !(await resourcesReady(pool)) ||
     !(await reviewSchemaReady(pool))
   )

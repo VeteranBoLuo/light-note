@@ -21,6 +21,13 @@ export interface FeedImage {
   height: number;
   fileSize: number;
   contentType: string;
+  preview?: {
+    url: string;
+    width: number;
+    height: number;
+    fileSize: number;
+    contentType: string;
+  };
 }
 export interface FeedAuthor {
   userPublicId: string;
@@ -72,7 +79,11 @@ export interface FeedPage<T> {
   items: T[];
   nextCursor: string | null;
 }
-export async function feedGet<T = any>(path: string, params: Record<string, any> = {}, options?: import('@/http/request').RequestOptions): Promise<T> {
+export async function feedGet<T = any>(
+  path: string,
+  params: Record<string, any> = {},
+  options?: import('@/http/request').RequestOptions,
+): Promise<T> {
   const response = await apiBaseGet('/api/community/' + path, params, { silent: true, ...options });
   if (response.status !== 200) throw Object.assign(new Error('COMMUNITY_UNAVAILABLE'), { code: response.data?.code });
   return response.data;

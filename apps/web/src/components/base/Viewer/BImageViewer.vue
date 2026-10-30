@@ -68,11 +68,11 @@
         >
           <div ref="stageRef" class="b-image-viewer__stage" :style="imageStageStyle">
             <img
-              v-if="currentImage"
-              :key="`${currentImage.id}-${currentImage.src}-${imageRenderKey}`"
+              v-if="currentImage && imageSource"
+              :key="`${currentImage.id}-${imageSource}-${imageRenderKey}`"
               class="b-image-viewer__image"
               :class="{ 'is-loaded': imageLoaded }"
-              :src="currentImage.src"
+              :src="imageSource"
               :alt="currentImage.alt || t('common.imageViewer.previewAlt')"
               :style="imageStyle"
               draggable="false"
@@ -214,7 +214,7 @@
   import icon from '@/config/icon';
   import { announceNativeDownloadStart } from '@/composables/useAndroidDownloadProgress';
   import { useMobileLayout } from '@/composables/useMobileLayout';
-  import type { ImageViewerItem } from '@/types/imageViewer';
+  import type { ImageViewerItem, ImageViewerSourceResolver } from '@/types/imageViewer';
   import { isLightNoteAndroidApp, postAndroidMessage, saveImageViaAndroid } from '@/utils/androidBridge';
   import { resolveImageViewportLayout, type ImageViewportPadding } from '@/utils/imageViewport';
 
@@ -232,6 +232,7 @@
       title?: string;
       showToolbar?: boolean;
       allowDownload?: boolean;
+      resolveSource?: ImageViewerSourceResolver;
     }>(),
     {
       images: () => [],
@@ -296,6 +297,8 @@
     });
   });
   const currentImage = computed(() => images.value[currentIndex.value] || null);
+  const resolvedSource = ref('');
+  const imageSource = computed(() => (props.resolveSource ? resolvedSource.value : currentImage.value?.src || ''));
   const hasPrevious = computed(() => currentIndex.value > 0);
   const hasNext = computed(() => currentIndex.value < images.value.length - 1);
   const resolvedTitle = computed(() => props.title.trim() || t('common.imageViewer.title'));
@@ -334,7 +337,7 @@
       imageLayout.value.stageWidth > viewportSize.value.width + 1 ||
       imageLayout.value.stageHeight > viewportSize.value.height + 1,
   );
-  const canDownloadCurrent = computed(() => canSaveImage(currentImage.value?.src, isLightNoteAndroidApp()));
+  const canDownloadCurrent = computed(() => canSaveImage(imageSource.value, isLightNoteAndroidApp()));
   const viewerModalClass = computed(() =>
     [
       'b-image-viewer-modal',
@@ -384,8 +387,8 @@
     if (!viewport) return null;
     const rect = viewport.getBoundingClientRect();
 
-    const offsetX = clientX == null ? viewport.clientWidth / 2 : (clientX - rect.left);
-    const offsetY = clientY == null ? viewport.clientHeight / 2 : (clientY - rect.top);
+    const offsetX = clientX == null ? viewport.clientWidth / 2 : clientX - rect.left;
+    const offsetY = clientY == null ? viewport.clientHeight / 2 : clientY - rect.top;
     return {
       ratioX: (viewport.scrollLeft + offsetX) / Math.max(1, viewport.scrollWidth),
       ratioY: (viewport.scrollTop + offsetY) / Math.max(1, viewport.scrollHeight),
@@ -630,9 +633,9 @@
   }
 
   async function saveCurrentImage() {
-    const src = currentImage.value?.src;
+    const src = imageSource.value;
     if (!src || saving.value) return;
-    const fileName = deriveImageFileName(src);
+    const fileName = currentImage.value?.fileName || deriveImageFileName(src);
     const inApp = isLightNoteAndroidApp();
 
     if (inApp && isHttpImageSrc(src) && postAndroidMessage({ type: 'download', url: src, fileName })) {
@@ -797,6 +800,48 @@
         document.removeEventListener('keydown', handleDocumentKeydown, true);
         document.removeEventListener('pointerdown', handleDocumentPointerDown, true);
       }
+    },
+    { immediate: true },
+  );
+
+  watch(
+    () =>
+      [
+        visible.value,
+        currentImage.value?.id,
+        currentImage.value?.src,
+        props.resolveSource,
+        imageRenderKey.value,
+      ] as const,
+    (_value, _previous, cleanup) => {
+      resolvedSource.value = '';
+      const item = currentImage.value;
+      const resolve = props.resolveSource;
+      if (!visible.value || !item || !resolve) return;
+      imageLoaded.value = false;
+      imageFailed.value = false;
+      const controller = new AbortController();
+      let active = true;
+      let objectUrl = '';
+      cleanup(() => {
+        active = false;
+        controller.abort();
+        if (objectUrl) URL.revokeObjectURL(objectUrl);
+      });
+      void Promise.resolve()
+        .then(() => (active ? resolve(item, controller.signal) : undefined))
+        .then((source) => {
+          if (!active) return;
+          if (source instanceof Blob) {
+            if (!source.type.startsWith('image/')) throw new Error('Unavailable image');
+            objectUrl = URL.createObjectURL(source);
+            resolvedSource.value = objectUrl;
+          } else if (source) resolvedSource.value = source;
+          else throw new Error('Unavailable image');
+        })
+        .catch(() => {
+          if (active) imageFailed.value = true;
+        });
     },
     { immediate: true },
   );
@@ -1120,7 +1165,8 @@
   .b-image-viewer__toolbar {
     min-height: var(--ui-control-50, 50px);
     box-sizing: border-box;
-    padding: var(--ui-space-6, 6px) var(--ui-space-12, 12px) calc(var(--ui-space-6, 6px) + env(safe-area-inset-bottom, 0px));
+    padding: var(--ui-space-6, 6px) var(--ui-space-12, 12px)
+      calc(var(--ui-space-6, 6px) + env(safe-area-inset-bottom, 0px));
     display: flex;
     align-items: center;
     justify-content: center;

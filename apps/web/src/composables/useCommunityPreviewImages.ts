@@ -1,6 +1,7 @@
 import { computed, onBeforeUnmount, shallowRef, watch } from 'vue';
 import request, { type RequestOptions } from '@/http/request';
 import { useCommunityPreview } from './useCommunityPreview';
+import type { ImageViewerSourceResolver } from '@/types/imageViewer';
 
 /** img requests have no preview header; resolve protected media through the authenticated client. */
 export function useCommunityPreviewImages(sources: () => (string | undefined)[]) {
@@ -78,5 +79,26 @@ export function useCommunityPreviewImages(sources: () => (string | undefined)[])
     if (source.startsWith('/brand-scenes/') || source.startsWith('data:image/')) return source;
     return resolved.value.identity === identity.value ? resolved.value.urls.get(source) : undefined;
   }
-  return { imageSource, imageUnavailable: (source: string) => preview.value && unavailable.value.has(source) };
+  const viewerSourceResolver = computed<ImageViewerSourceResolver | undefined>(() =>
+    preview.value
+      ? async (image, signal) => {
+          const owner = identity.value;
+          const path = protectedPath(image.src);
+          if (!path) throw new Error('Unavailable media');
+          const { data } = await request.get<Blob>(path, {
+            responseType: 'blob',
+            signal,
+            silent: true,
+          } as RequestOptions);
+          if (owner !== identity.value || signal.aborted || !data.type.startsWith('image/'))
+            throw new Error('Unavailable media');
+          return data;
+        }
+      : undefined,
+  );
+  return {
+    imageSource,
+    viewerSourceResolver,
+    imageUnavailable: (source?: string) => Boolean(source && preview.value && unavailable.value.has(source)),
+  };
 }
