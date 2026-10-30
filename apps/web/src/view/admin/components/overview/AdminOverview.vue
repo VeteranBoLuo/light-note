@@ -147,7 +147,7 @@
         <h3>{{ t('adminWorkspace.runtime') }}</h3>
         <div class="ov-runtime__grid">
           <div class="ov-runtime__item"
-            ><SvgIcon :src="icon.growth.ai" size="20" /><div
+            ><SvgIcon class="ov-runtime__icon" :src="icon.growth.ai" size="20" /><div class="ov-runtime__body"
               ><span>{{ t('adminWorkspace.ai') }}</span
               ><strong>{{ n(data.ai.todayCount) }}</strong
               ><small>Token {{ n(data.ai.todayTokens) }}</small
@@ -155,7 +155,7 @@
             ></div
           >
           <div class="ov-runtime__item"
-            ><SvgIcon :src="icon.userCenter.log" size="20" /><div
+            ><SvgIcon class="ov-runtime__icon" :src="icon.userCenter.log" size="20" /><div class="ov-runtime__body"
               ><span>{{ t('adminWorkspace.api') }}</span
               ><strong>{{ n(data.system.apiToday) }}</strong
               ><small class="ov-api-health"
@@ -172,7 +172,8 @@
             ></div
           >
           <div class="ov-runtime__item"
-            ><SvgIcon :src="icon.todoWorkspace.checkSquare" size="20" /><div
+            ><SvgIcon class="ov-runtime__icon" :src="icon.todoWorkspace.checkSquare" size="20" /><div
+              class="ov-runtime__body"
               ><span>{{ t('adminWorkspace.todoHealth') }}</span
               ><strong>{{ t('adminWorkspace.unfinished', { count: n(data.todos.pending) }) }}</strong
               ><small
@@ -185,7 +186,7 @@
             ></div
           >
           <div class="ov-runtime__item"
-            ><SvgIcon :src="icon.growth.storage" size="20" /><div
+            ><SvgIcon class="ov-runtime__icon" :src="icon.growth.storage" size="20" /><div class="ov-runtime__body"
               ><span>{{ t('adminWorkspace.storage') }}</span
               ><strong>{{ t('adminWorkspace.used', { size: mb(data.resources.storageMb) }) }}</strong
               ><small>{{
@@ -865,7 +866,10 @@
     gap: var(--ui-space-10, 10px);
     color: var(--primary-color);
   }
-  .ov-runtime__item > div {
+  .ov-runtime__icon {
+    flex: none;
+  }
+  .ov-runtime__body {
     display: flex;
     flex-direction: column;
     min-width: 0;
@@ -942,8 +946,19 @@
     }
     .ov-runtime__grid {
       grid-template-columns: 1fr;
+      gap: 0;
+      margin-top: var(--ui-space-4, 4px);
     }
-    .ov-runtime__item > div {
+    .ov-runtime__item {
+      padding: var(--ui-space-12, 12px) 0;
+    }
+    .ov-runtime__item + .ov-runtime__item {
+      border-top: 1px solid var(--surface-border-color);
+    }
+    .ov-runtime__item:last-child {
+      padding-bottom: 0;
+    }
+    .ov-runtime__body {
       flex: 1;
     }
     .ov-runtime__item strong {
