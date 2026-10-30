@@ -1,4 +1,6 @@
 import pool from '../../db/index.js';
+import { knowledgeSnapshotHash } from '../knowledgeMaintenancePlan.js';
+export { knowledgeSnapshotHash } from '../knowledgeMaintenancePlan.js';
 import { generateUUID } from '../agent/data.js';
 import { invalidateKnowledgeCache } from '../knowledgeService.js';
 import { finishAdminAction } from '../adminActionExecution.js';
@@ -122,6 +124,7 @@ export async function updateKnowledgeBaseById({
   patch = {},
   maxContentLength = 1_000_000,
   actionContext = null,
+  expectedSnapshot,
 } = {}) {
   if (!userId) throw new Error('USER_REQUIRED: 缺少操作用户');
   if (!id) throw new Error('ID_REQUIRED: 缺少 ID');
@@ -178,6 +181,14 @@ export async function updateKnowledgeBaseById({
   const connection = await pool.getConnection();
   try {
     await connection.beginTransaction();
+    if (expectedSnapshot !== undefined) {
+      const [[current]] = await connection.query('SELECT * FROM knowledge_base WHERE id = ? FOR UPDATE', [id]);
+      if (!current || knowledgeSnapshotHash(current) !== expectedSnapshot) {
+        throw Object.assign(new Error('KNOWLEDGE_CHANGED: 条目已变化，请重新核对后再更新'), {
+          code: 'KNOWLEDGE_CHANGED',
+        });
+      }
+    }
     if (patch.title !== undefined) {
       const [duplicates] = await connection.query(
         'SELECT id FROM knowledge_base WHERE title = ? AND id <> ? AND COALESCE(admin_archived, 0) = 0 LIMIT 1',

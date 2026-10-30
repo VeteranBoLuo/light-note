@@ -116,6 +116,29 @@ describe('getHelpConfig 帮助栏目元数据', () => {
       expect.objectContaining({ data: [expect.objectContaining({ helpSection: '其他帮助' })] }),
     );
   });
+
+  it('公开阅读接口把 Markdown 源文转换为 HTML，而不改变知识库源文', async () => {
+    const source = '# 翻译教程\n\n## 操作\n\n1. 选择资料\n2. 开始翻译';
+    query.mockResolvedValueOnce([
+      [
+        {
+          id: 'markdown-guide',
+          title: '翻译教程',
+          content: source,
+          type: 'markdown',
+          sort: 1,
+          help_section: 'AI 与权益',
+        },
+      ],
+    ]);
+    const res = mockRes();
+    await getHelpConfig({}, res);
+    const payload = res.send.mock.calls[0][0];
+    expect(payload.data[0].content).toContain('<h2>操作</h2>');
+    expect(payload.data[0].content).toContain('<ol>');
+    expect(query.mock.calls).toHaveLength(1);
+    expect(query.mock.calls[0][0]).toMatch(/SELECT[^]*\btype\b[^]*FROM knowledge_base/);
+  });
 });
 
 describe('getDeepSeekBalance 余额主指标', () => {

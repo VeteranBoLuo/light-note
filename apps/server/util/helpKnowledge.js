@@ -1,4 +1,7 @@
+import { marked } from 'marked';
+
 export const HELP_KNOWLEDGE_CATEGORY = '帮助中心';
+
 export const DEFAULT_HELP_SECTION = '其他帮助';
 
 export function normalizeKnowledgeHelpSection(value, category = HELP_KNOWLEDGE_CATEGORY) {
@@ -14,7 +17,8 @@ export function toPublicHelpArticle(row = {}) {
   return {
     id: row.id,
     title: row.title,
-    content: row.content,
+    // The public reader consumes HTML, while the knowledge editor retains its source format.
+    content: row.type === 'markdown' ? marked.parse(String(row.content || ''), { async: false }) : row.content,
     sort: row.sort,
     help_section: normalizeKnowledgeHelpSection(row.help_section),
   };

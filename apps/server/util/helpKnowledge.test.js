@@ -25,4 +25,17 @@ describe('helpKnowledge', () => {
   it('拒绝超长栏目名', () => {
     expect(() => normalizeKnowledgeHelpSection('x'.repeat(51), '帮助中心')).toThrow('HELP_SECTION_TOO_LONG');
   });
+
+  it('将 Markdown 标题、列表、表格和链接转换为阅读页可用的 HTML，保留原始富文本', () => {
+    const content =
+      '# 教程\n\n## 操作\n\n1. 核对资料\n2. 保存\n\n| 类型 | 内容 |\n|---|---|\n| 文字 | 正文 |\n\n[入口](/toolbox)';
+    const result = toPublicHelpArticle({ type: 'markdown', content });
+    expect(result.content).toContain('<h1>教程</h1>');
+    expect(result.content).toContain('<h2>操作</h2>');
+    expect(result.content).toContain('<ol>');
+    expect(result.content).toContain('<table>');
+    expect(result.content).toContain('href="/toolbox"');
+    expect(toPublicHelpArticle({ type: 'html', content: '<h2>原富文本</h2>' }).content).toBe('<h2>原富文本</h2>');
+    expect(toPublicHelpArticle({ type: 'markdown', content: null }).content).toBe('');
+  });
 });

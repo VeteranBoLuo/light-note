@@ -450,7 +450,7 @@ export const getKnowledgeCategories = async (req, res) => {
 export const getHelpCenterArticles = async (req, res) => {
   try {
     const [result] = await pool.query(
-      "SELECT id, title, content, sort, help_section FROM knowledge_base WHERE category = '帮助中心' AND status = 'public' AND COALESCE(admin_archived, 0) = 0 ORDER BY sort ASC, created_at ASC",
+      "SELECT id, title, content, type, sort, help_section FROM knowledge_base WHERE category = '帮助中心' AND status = 'public' AND COALESCE(admin_archived, 0) = 0 ORDER BY sort ASC, created_at ASC",
     );
     res.send(resultData(result.map(toPublicHelpArticle), 200));
   } catch (e) {

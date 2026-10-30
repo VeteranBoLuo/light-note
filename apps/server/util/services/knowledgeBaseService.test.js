@@ -12,7 +12,8 @@ const cacheMocks = vi.hoisted(() => ({ invalidateKnowledgeCache: vi.fn() }));
 vi.mock('../../db/index.js', () => ({ default: pool }));
 vi.mock('../knowledgeService.js', () => cacheMocks);
 
-const { upsertKnowledgeBase, updateKnowledgeBaseById } = await import('./knowledgeBaseService.js');
+const { upsertKnowledgeBase, updateKnowledgeBaseById, knowledgeSnapshotHash } =
+  await import('./knowledgeBaseService.js');
 
 describe('knowledgeBaseService', () => {
   beforeEach(() => {
@@ -96,6 +97,62 @@ describe('knowledgeBaseService', () => {
       upsertKnowledgeBase({ userId: 'root-1', input: { title: '说明', status: 'draft', type: 'markdown' } }),
     ).rejects.toThrow('INVALID_STATUS');
     expect(pool.getConnection).not.toHaveBeenCalled();
+  });
+
+  it('维护快照变化时拒绝覆盖正文、公开范围或归档状态', async () => {
+    const before = {
+      id: 'kb-1',
+      title: '说明',
+      content: '原文',
+      category: '帮助中心',
+      help_section: '快速上手',
+      status: 'public',
+      type: 'markdown',
+      sort: 3,
+      admin_archived: 0,
+    };
+    for (const change of [{ content: '他人新编辑' }, { status: 'internal' }, { admin_archived: 1 }]) {
+      connection.query.mockReset().mockResolvedValueOnce([[{ ...before, ...change }]]);
+      await expect(
+        updateKnowledgeBaseById({
+          userId: 'root-1',
+          id: before.id,
+          patch: { content: '维护正文' },
+          expectedSnapshot: knowledgeSnapshotHash(before),
+        }),
+      ).rejects.toMatchObject({ code: 'KNOWLEDGE_CHANGED' });
+      expect(connection.query).toHaveBeenCalledTimes(1);
+      expect(connection.query.mock.calls[0][0]).toContain('FOR UPDATE');
+    }
+    expect(connection.commit).not.toHaveBeenCalled();
+    expect(cacheMocks.invalidateKnowledgeCache).not.toHaveBeenCalled();
+  });
+
+  it('核对过的条目原位更新并在提交后失效缓存', async () => {
+    const before = {
+      id: 'kb-1',
+      title: '说明',
+      content: '原文',
+      category: '帮助中心',
+      help_section: '快速上手',
+      status: 'public',
+      type: 'markdown',
+      sort: 3,
+      admin_archived: 0,
+    };
+    connection.query
+      .mockReset()
+      .mockResolvedValueOnce([[before]])
+      .mockResolvedValueOnce([{ affectedRows: 1 }]);
+    await updateKnowledgeBaseById({
+      userId: 'root-1',
+      id: before.id,
+      patch: { content: '维护正文' },
+      expectedSnapshot: knowledgeSnapshotHash(before),
+    });
+    expect(connection.query.mock.calls[1][1]).toEqual(['维护正文', 'root-1', 'kb-1']);
+    expect(connection.commit).toHaveBeenCalledTimes(1);
+    expect(cacheMocks.invalidateKnowledgeCache).toHaveBeenCalledTimes(1);
   });
 
   it('按 ID 更新时拒绝同名冲突', async () => {
