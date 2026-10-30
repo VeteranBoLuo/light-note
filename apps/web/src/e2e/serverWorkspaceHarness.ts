@@ -141,6 +141,19 @@ const findings = [
     evidence: { ports: ['tcp6/3306', 'tcp/8888'], firewallFilteredPorts: ['tcp6/9001'] },
   },
   { id: 'ssh-login-failures', state: 'fail', severity: 'medium', evidence: { failures24h: 12, successes24h: 3 } },
+  {
+    id: 'database-backup',
+    state: 'fail',
+    severity: 'high',
+    evidence: {
+      lastSuccessAt: new Date(now - 40.2 * 36e5).toISOString(),
+      ageHours: 40.2,
+      bytes: 169409795,
+      lastRunOk: false,
+      errorCode: 'MYSQLDUMP_FAILED',
+      offsite: null,
+    },
+  },
 ];
 const security = {
   protocolVersion: 1,
@@ -208,6 +221,12 @@ if (state === 'healthy') {
   findings.forEach((finding) => (finding.state = 'pass'));
   Object.assign(findings.find((finding) => finding.id === 'fail2ban')!.evidence, { value: 'enabled' });
   Object.assign(findings.find((finding) => finding.id === 'unexpected-public-ports')!.evidence, { ports: [] });
+  Object.assign(findings.find((finding) => finding.id === 'database-backup')!.evidence, {
+    ageHours: 5.2,
+    lastRunOk: true,
+    errorCode: null,
+    offsite: 'uploaded',
+  });
   Object.assign(security.summary, { failed: 0, warning: 0, unknown: 0, passed: findings.length });
   diagnostics.status = 'healthy';
   diagnostics.checks.forEach((check) => (check.state = 'pass'));
@@ -263,7 +282,8 @@ function summarize(items: Array<{ state: string; silence?: unknown }>) {
 function diagnosticsPayload() {
   const checks = diagnostics.checks.map((check) => ({
     ...check,
-    silenceable: check.domain !== 'services',
+    // 与后端白名单一致：服务故障和备份中断不可静默。
+    silenceable: check.domain !== 'services' && check.id !== 'security.database-backup',
     silence: activeSilence(check.id, check.state),
   }));
   const summary = summarize(checks);

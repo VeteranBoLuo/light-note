@@ -187,7 +187,7 @@
   import { useRoute } from 'vue-router';
   import type { HostAgentListeningPort } from '@lightnote/shared/host-agent-protocol';
   import { getInfraSecurity, type InfraSecurityFinding, type InfraSecurityFindingState } from '@/api/infraApi';
-  import { silenceMetaText } from './infraCheckText';
+  import { backupEvidenceText, silenceMetaText } from './infraCheckText';
   import icon from '@/config/icon';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
@@ -303,6 +303,7 @@
         failed: evidence.failures24h ?? '—',
         succeeded: evidence.successes24h ?? '—',
       });
+    if (finding.id === 'database-backup') return backupEvidenceText(t, evidence);
     if (finding.id === 'firewall')
       return `${evidence.provider || '—'} · ${t(evidence.value === 'enabled' ? 'serverManagement.workspace.enabled' : evidence.value === 'disabled' ? 'serverManagement.workspace.disabled' : 'serverManagement.workspace.evidenceUnknown')}`;
     const value = evidence.value;

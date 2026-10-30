@@ -35,6 +35,11 @@ const UFW_POLICIES = Object.freeze({
   DROP: "deny",
   REJECT: "reject",
 });
+// 每日数据库备份（运维脚本 /usr/local/lib/lightnote-ops/backup-database.mjs）的固定产物位置；
+// 只有通过校验的备份才会改名为 tag_db-*.sql.gz，所以最新文件即最近一次成功备份。
+const DB_BACKUP_DIR = "/www/backup/mysql-daily";
+const DB_BACKUP_STATUS_FILE = `${DB_BACKUP_DIR}/last-run.json`;
+const DB_BACKUP_FILE_PATTERN = /^tag_db-\d{8}-\d{6}\.sql\.gz$/u;
 const PANEL_NGINX_BIN = "/www/server/nginx/sbin/nginx";
 const PANEL_NGINX_CONFIG = "/www/server/nginx/conf/nginx.conf";
 const PANEL_NGINX_PID = "/www/server/nginx/logs/nginx.pid";
@@ -471,6 +476,40 @@ function readSshActivity() {
   return { successes24h, failures24h, recent: recent.slice(-20).reverse() };
 }
 
+// 只回传时间、大小与状态值；备份路径、错误原文和对象存储键都不外传。
+function readDatabaseBackup() {
+  let latest = null;
+  try {
+    for (const name of readdirSync(DB_BACKUP_DIR)) {
+      if (!DB_BACKUP_FILE_PATTERN.test(name)) continue;
+      const stat = lstatSync(`${DB_BACKUP_DIR}/${name}`);
+      if (stat.isFile() && (!latest || stat.mtimeMs > latest.mtimeMs))
+        latest = stat;
+    }
+  } catch {
+    return { available: false };
+  }
+  let status = null;
+  try {
+    status = JSON.parse(readFileSync(DB_BACKUP_STATUS_FILE, "utf8"));
+  } catch {
+    status = null;
+  }
+  const offsite = String(status?.offsite || "").split(":")[0];
+  const errorCode = String(status?.error?.code || "");
+  return {
+    available: true,
+    lastSuccessAt: latest ? new Date(latest.mtimeMs).toISOString() : null,
+    lastSuccessBytes: latest ? latest.size : null,
+    lastRunAt: status?.finishedAt || null,
+    lastRunOk: typeof status?.ok === "boolean" ? status.ok : null,
+    lastRunErrorCode: /^[A-Z0-9_]{1,64}$/u.test(errorCode) ? errorCode : null,
+    offsite: ["uploaded", "failed", "skipped"].includes(offsite)
+      ? offsite
+      : null,
+  };
+}
+
 function securitySnapshot() {
   const ssh = { ...readSshPosture(), ...readSshActivity() };
   return {
@@ -479,6 +518,7 @@ function securitySnapshot() {
     firewall: readFirewallPosture(),
     fail2ban: readFail2banPosture(),
     updates: readPendingUpdates(),
+    backup: readDatabaseBackup(),
   };
 }
 

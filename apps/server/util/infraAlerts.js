@@ -50,7 +50,11 @@ const CHECK_TITLES = Object.freeze({
   'security.security-updates': '有待安装的安全更新',
   'security.unexpected-public-ports': '出现非预期的公网监听端口',
   'security.ssh-login-failures': 'SSH 失败登录尝试过多',
+  'security.database-backup': '数据库备份中断',
 });
+
+// 备份中断关系到数据能否恢复，虽归在安全检查里，也和服务故障一样发邮件。
+const URGENT_SECURITY_CHECKS = new Set(['security.database-backup']);
 
 const SERVICE_NAMES = Object.freeze({
   'lightnote-api': '轻笺 API',
@@ -87,6 +91,14 @@ function checkDetail(check) {
       return `端口：${(evidence.ports || []).join('、') || '—'}`;
     case 'security.ssh-login-failures':
       return `24 小时内失败 ${evidence.failures24h ?? '—'} 次`;
+    case 'security.database-backup':
+      return [
+        // 详情按整小时变化，告警开启期间不会每分钟改写一次状态行。
+        evidence.ageHours == null ? '没有找到成功的备份' : `最近一次成功备份在 ${Math.floor(evidence.ageHours)} 小时前`,
+        evidence.lastRunOk === false && evidence.errorCode ? `最近一次运行失败：${evidence.errorCode}` : null,
+      ]
+        .filter(Boolean)
+        .join('，');
     default:
       return null;
   }
@@ -127,8 +139,8 @@ export function deriveAlertSignals(diagnostics, { servicesPaused = false } = {})
       state: check.state === 'fail' ? 'fail' : check.state === 'unknown' ? 'unknown' : 'pass',
       title,
       detail: checkDetail(check),
-      // 安全态势变化只发站内通知与推送；服务、资源和 Agent 故障同时发邮件。
-      channel: check.domain === 'security' ? 'notice' : 'urgent',
+      // 安全态势变化只发站内通知与推送；服务、资源、Agent 故障和备份中断同时发邮件。
+      channel: check.domain === 'security' && !URGENT_SECURITY_CHECKS.has(check.id) ? 'notice' : 'urgent',
     });
   }
   return { signals, servicesKnown };

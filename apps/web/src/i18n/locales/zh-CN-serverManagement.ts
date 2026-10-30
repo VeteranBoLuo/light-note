@@ -238,6 +238,7 @@ export default {
         unsilence: '取消静默',
         chip: '已静默',
         notSilenceable: '服务故障不可静默',
+        backupNotSilenceable: '备份中断不可静默',
         dialogTitle: '静默告警：{check}',
         impact:
           '静默期间不再发送这条告警，诊断、安全检查与概览的异常计数不含此项。到期后若仍异常，会重新通知一次；在此之前恢复正常，静默自动解除。',
@@ -377,6 +378,20 @@ export default {
           recommendation: '确认端口用途；数据库、Redis 与内部 API 应仅监听内网或回环地址。',
         },
         'ssh-login-failures': { title: 'SSH 失败登录尝试', recommendation: '失败次数异常时检查来源、密钥与封禁策略。' },
+        'database-backup': {
+          title: '数据库备份',
+          recommendation:
+            '每天 03:30 自动备份，本机保留 7 天、对象存储保留 30 天。异常时在服务器上查看 /var/log/lightnote-db-backup.log 与 /www/backup/mysql-daily/last-run.json，修复后手动运行一次备份确认恢复。',
+        },
+      },
+      backupEvidence: {
+        lastSuccess: '最近成功：{age}前 · {size}',
+        never: '没有找到成功的备份',
+        lastRunFailed: '最近一次运行失败（{code}）',
+        offsite: { uploaded: '异地副本已上传', failed: '异地副本未上传', skipped: '异地副本未上传', unknown: '异地副本状态未知' },
+        lessThanHour: '不到 1 小时',
+        hours: '{count} 小时',
+        days: '{count} 天',
       },
       noUnexpectedPorts: '未发现 80、443 和 SSH 端口之外的公网监听',
       updateEvidence: '待更新 {pending} 项，其中安全更新 {security} 项',

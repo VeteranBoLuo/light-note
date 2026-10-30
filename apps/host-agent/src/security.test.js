@@ -153,4 +153,64 @@ describe("collectSecuritySnapshot", () => {
       "unknown",
     );
   });
+
+  it("备份状态只保留时间、大小与状态值，旧版 helper 不带字段时按读不到处理", async () => {
+    const backup = {
+      available: true,
+      lastSuccessAt: "2026-10-30T07:32:59.000Z",
+      lastSuccessBytes: 169409795,
+      lastRunAt: "2026-10-30T07:33:23.076Z",
+      lastRunOk: true,
+      lastRunErrorCode: null,
+      offsite: "uploaded",
+    };
+    const snapshot = await collectSecuritySnapshot(
+      { privilegedHelperSocketPath: "/run/lightnote-host-helper.sock" },
+      async () => ({
+        exitCode: 0,
+        stdout: JSON.stringify({
+          ...helperPayload(ufw([rule("ipv4", 22)])),
+          backup: { ...backup, file: "/www/backup/secret.sql.gz" },
+        }),
+        stderr: "",
+      }),
+    );
+    expect(snapshot.backup).toEqual(backup);
+
+    const legacy = normalizeHelperSnapshot(
+      JSON.stringify(helperPayload(ufw([rule("ipv4", 22)]))),
+    );
+    expect(legacy.backup).toMatchObject({ available: false, lastSuccessAt: null });
+
+    const malformed = normalizeHelperSnapshot(
+      JSON.stringify({
+        ...helperPayload(ufw([rule("ipv4", 22)])),
+        backup: {
+          available: true,
+          lastSuccessAt: "not a date",
+          lastSuccessBytes: -1,
+          lastRunOk: "yes",
+          lastRunErrorCode: "mysqldump: Access denied for 'root'",
+          offsite: "uploaded:ops-backups/mysql/x.sql.gz",
+        },
+      }),
+    );
+    expect(malformed.backup).toEqual({
+      available: true,
+      lastSuccessAt: null,
+      lastSuccessBytes: null,
+      lastRunAt: null,
+      lastRunOk: null,
+      lastRunErrorCode: null,
+      offsite: null,
+    });
+  });
+
+  it("helper 不可用时备份同样标为读不到", async () => {
+    const snapshot = await collectSecuritySnapshot(
+      { privilegedHelperSocketPath: "/run/lightnote-host-helper.sock" },
+      async () => ({ exitCode: 1, stdout: "", stderr: "failed" }),
+    );
+    expect(snapshot.backup).toMatchObject({ available: false });
+  });
 });

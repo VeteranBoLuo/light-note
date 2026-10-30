@@ -138,6 +138,39 @@ describe('infraHandle', () => {
     expect(diagnostics.summary.warning).toBeGreaterThanOrEqual(1);
   });
 
+  it('数据库备份按最近一次成功的时长判定，读不到时保持未知', () => {
+    const { deriveSecurityFindings } = infraHandleInternals;
+    const capturedAt = '2026-10-31T12:00:00.000Z';
+    const backupOf = (backup) =>
+      deriveSecurityFindings({ capturedAt, ssh: {}, backup }).find((item) => item.id === 'database-backup');
+    const healthy = {
+      available: true,
+      lastSuccessAt: '2026-10-31T03:31:00.000Z',
+      lastSuccessBytes: 169409795,
+      lastRunOk: true,
+      lastRunErrorCode: null,
+      offsite: 'uploaded',
+    };
+    expect(backupOf(healthy)).toMatchObject({
+      state: 'pass',
+      evidence: { ageHours: 8.5, bytes: 169409795, offsite: 'uploaded' },
+    });
+    expect(backupOf({ ...healthy, offsite: 'failed' })).toMatchObject({ state: 'warning', severity: 'medium' });
+    expect(backupOf({ ...healthy, lastRunOk: false, lastRunErrorCode: 'MYSQLDUMP_FAILED' })).toMatchObject({
+      state: 'warning',
+      evidence: { errorCode: 'MYSQLDUMP_FAILED' },
+    });
+    expect(backupOf({ ...healthy, lastSuccessAt: '2026-10-29T23:59:00.000Z' })).toMatchObject({
+      state: 'fail',
+      severity: 'high',
+      evidence: { ageHours: 36 },
+    });
+    expect(backupOf({ ...healthy, lastSuccessAt: '2026-10-29T23:30:00.000Z' }).state).toBe('fail');
+    expect(backupOf({ ...healthy, lastSuccessAt: null }).state).toBe('fail');
+    expect(backupOf({ available: false }).state).toBe('unknown');
+    expect(backupOf(undefined)).toMatchObject({ state: 'unknown', evidence: { ageHours: null } });
+  });
+
   it('防火墙拦截的端口不算公网暴露，Fail2ban 未安装按风险处理并保留事实', () => {
     const findings = infraHandleInternals.deriveSecurityFindings({
       ssh: { available: true, port: 22 },

@@ -21,10 +21,17 @@ const check = (id, state, domain = 'security') => ({ id, domain, state, severity
 const diagnostics = (checks) => ({ capturedAt: null, status: 'healthy', summary: {}, checks, sources: [] });
 
 describe('风险静默', () => {
-  it('只允许静默资源与安全检查，服务故障、采集异常和安全快照不可静默', () => {
+  it('只允许静默资源与安全检查，服务故障、备份中断、采集异常和安全快照不可静默', () => {
     expect(isSilenceableCheckId('security.fail2ban')).toBe(true);
     expect(isSilenceableCheckId('storage.capacity')).toBe(true);
-    for (const id of ['services.health', 'agent.offline', 'collection.storage', 'security.snapshot', 'service.mysql']) {
+    for (const id of [
+      'services.health',
+      'agent.offline',
+      'collection.storage',
+      'security.snapshot',
+      'service.mysql',
+      'security.database-backup',
+    ]) {
       expect(isSilenceableCheckId(id)).toBe(false);
     }
   });

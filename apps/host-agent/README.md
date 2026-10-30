@@ -14,6 +14,7 @@ Host Agent 是服务器管理页的本机执行端，不是 AI Agent。它只监
 - 安全采集只返回结构化事实和限定数量的 SSH 登录摘要，不返回完整认证日志；安全判断由 Express 生成“通过 / 风险 / 未知”检查项，采集失败必须保持未知，不能当作通过。已确认的缺失（如 Fail2ban 未安装）是事实，按未启用处理。
 - 宝塔面板托管的 Nginx、Redis、MySQL 不经 systemd 启动，对应 unit 可能长期显示 failed：状态以固定 PID 文件加 `/proc/<pid>/exe` 校验判定，日志只读面板写入的固定文件，不回退到失效 unit 的 journal。
 - PM2 日志行默认没有时间戳，标准输出与错误输出无法逐行合并：两条流分别读取固定日志文件尾部，按最后写入时间排序（较新的在后），并在响应 `sections` 中标注来源与写入时间，行数上限在两条流之间分配。服务的重启次数只统计异常重启（PM2 `unstable_restarts`、systemd `NRestarts`），部署与手动重启不计入。
+- 安全慢检查附带数据库备份状态：helper 只读 `/www/backup/mysql-daily` 下的 `last-run.json` 和 `tag_db-*.sql.gz` 文件，回传时间、大小和状态值，不外传路径、错误原文或对象存储键；目录读不到时标为不可用，不能当作备份正常。
 - helper 沙箱只允许 AF_UNIX，`ufw`/`iptables` 在沙箱内无法读取规则；防火墙状态与入站规则改读 `/etc/ufw` 持久化配置，Agent 据此为每个监听端口标注公网来源是否可达，规则本身不外传。
 
 ## 运行账户与 PM2

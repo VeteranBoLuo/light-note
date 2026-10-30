@@ -242,6 +242,7 @@ export default {
         unsilence: 'End silence',
         chip: 'Silenced',
         notSilenceable: 'Service failures cannot be silenced',
+        backupNotSilenceable: 'Backup failures cannot be silenced',
         dialogTitle: 'Silence alert: {check}',
         impact:
           'While silenced, this alert is not sent and the check is left out of failure counts on Diagnostics, Security, and Overview. If it is still failing when the silence ends, you will be notified once; if it recovers earlier, the silence ends automatically.',
@@ -419,6 +420,25 @@ export default {
           title: 'Failed SSH logins',
           recommendation: 'Inspect sources, keys, and banning policy when failures spike.',
         },
+        'database-backup': {
+          title: 'Database backup',
+          recommendation:
+            'Backups run daily at 03:30, kept 7 days on the server and 30 days in object storage. When this fails, check /var/log/lightnote-db-backup.log and /www/backup/mysql-daily/last-run.json on the server, then run a backup manually to confirm the fix.',
+        },
+      },
+      backupEvidence: {
+        lastSuccess: 'Last success {age} ago · {size}',
+        never: 'No successful backup found',
+        lastRunFailed: 'Last run failed ({code})',
+        offsite: {
+          uploaded: 'Off-site copy uploaded',
+          failed: 'Off-site copy not uploaded',
+          skipped: 'Off-site copy not uploaded',
+          unknown: 'Off-site copy status unknown',
+        },
+        lessThanHour: 'under 1 hour',
+        hours: '{count} h',
+        days: '{count} d',
       },
       noUnexpectedPorts: 'No public listeners beyond ports 80, 443, and SSH',
       updateEvidence: '{pending} updates pending, including {security} security updates',

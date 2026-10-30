@@ -80,6 +80,44 @@ export async function collectListeningPorts() {
     .sort((a, b) => a.port - b.port || a.protocol.localeCompare(b.protocol));
 }
 
+const UNAVAILABLE_BACKUP = Object.freeze({
+  available: false,
+  lastSuccessAt: null,
+  lastSuccessBytes: null,
+  lastRunAt: null,
+  lastRunOk: null,
+  lastRunErrorCode: null,
+  offsite: null,
+});
+const BACKUP_OFFSITE_STATES = new Set(["uploaded", "failed", "skipped"]);
+
+// 旧版 helper 不带备份字段时按“读不到”处理，不能当作备份正常。
+function normalizeBackup(value) {
+  if (!value || typeof value !== "object" || value.available !== true)
+    return UNAVAILABLE_BACKUP;
+  const isoOrNull = (input) =>
+    typeof input === "string" && Number.isFinite(Date.parse(input))
+      ? new Date(input).toISOString()
+      : null;
+  return {
+    available: true,
+    lastSuccessAt: isoOrNull(value.lastSuccessAt),
+    lastSuccessBytes:
+      Number.isSafeInteger(value.lastSuccessBytes) &&
+      value.lastSuccessBytes >= 0
+        ? value.lastSuccessBytes
+        : null,
+    lastRunAt: isoOrNull(value.lastRunAt),
+    lastRunOk: typeof value.lastRunOk === "boolean" ? value.lastRunOk : null,
+    lastRunErrorCode: /^[A-Z0-9_]{1,64}$/u.test(
+      String(value.lastRunErrorCode || ""),
+    )
+      ? value.lastRunErrorCode
+      : null,
+    offsite: BACKUP_OFFSITE_STATES.has(value.offsite) ? value.offsite : null,
+  };
+}
+
 function unavailableSnapshot(capturedAt) {
   return {
     capturedAt,
@@ -96,6 +134,7 @@ function unavailableSnapshot(capturedAt) {
     firewall: { available: false, provider: null, state: "unknown" },
     fail2ban: { available: false, state: "unknown", installed: null },
     updates: { available: false, pending: null, security: null },
+    backup: UNAVAILABLE_BACKUP,
   };
 }
 
@@ -277,6 +316,7 @@ export function normalizeHelperSnapshot(stdout) {
       pending: countOrNull(payload.updates.pending),
       security: countOrNull(payload.updates.security),
     },
+    backup: normalizeBackup(payload.backup),
   };
 }
 

@@ -1,5 +1,6 @@
 import type { InfraCheckSilence } from '@/api/infraApi';
 import { formatAdminDateTime } from '@/utils/adminDateTime';
+import { formatBytes } from './serverManagementFormat';
 
 type Translate = (key: string, named?: Record<string, unknown>) => string;
 
@@ -35,4 +36,33 @@ export function silenceMetaText(t: Translate, locale: string, silence: InfraChec
     until: format(silence.until),
     days: silenceRemainingDays(silence, now),
   });
+}
+
+function backupAge(t: Translate, hours: number) {
+  if (hours < 1) return t('serverManagement.securityPage.backupEvidence.lessThanHour');
+  return hours < 48
+    ? t('serverManagement.securityPage.backupEvidence.hours', { count: Math.floor(hours) })
+    : t('serverManagement.securityPage.backupEvidence.days', { count: Math.floor(hours / 24) });
+}
+
+/** 数据库备份检查项的证据：最近一次成功距今多久、大小、最近运行是否失败、异地副本状态。 */
+export function backupEvidenceText(t: Translate, evidence: Record<string, unknown>) {
+  const ageHours = typeof evidence.ageHours === 'number' ? evidence.ageHours : null;
+  const offsite = ['uploaded', 'failed', 'skipped'].includes(String(evidence.offsite))
+    ? String(evidence.offsite)
+    : 'unknown';
+  return [
+    ageHours == null
+      ? t('serverManagement.securityPage.backupEvidence.never')
+      : t('serverManagement.securityPage.backupEvidence.lastSuccess', {
+          age: backupAge(t, ageHours),
+          size: formatBytes(evidence.bytes),
+        }),
+    evidence.lastRunOk === false
+      ? t('serverManagement.securityPage.backupEvidence.lastRunFailed', { code: evidence.errorCode || '—' })
+      : '',
+    t(`serverManagement.securityPage.backupEvidence.offsite.${offsite}`),
+  ]
+    .filter(Boolean)
+    .join(' · ');
 }

@@ -175,6 +175,19 @@ export interface HostAgentSshActivityEntry {
   user: string | null;
   method: string | null;
 }
+/** 每日数据库备份状态；只含时间、大小与状态值。 */
+export interface HostAgentDatabaseBackup {
+  /** false 表示读不到备份目录（未部署备份或权限不足），不能当作正常。 */
+  available: boolean;
+  /** 最新一份通过校验的备份写入时间。 */
+  lastSuccessAt: string | null;
+  lastSuccessBytes: number | null;
+  lastRunAt: string | null;
+  lastRunOk: boolean | null;
+  lastRunErrorCode: string | null;
+  /** 最近一次运行的异地副本结果。 */
+  offsite: "uploaded" | "failed" | "skipped" | null;
+}
 export interface HostAgentSecuritySnapshot {
   protocolVersion: 1;
   capturedAt: string;
@@ -204,6 +217,8 @@ export interface HostAgentSecuritySnapshot {
     pending: number | null;
     security: number | null;
   };
+  /** 旧版 Agent 不返回此字段。 */
+  backup?: HostAgentDatabaseBackup;
   listeningPorts: HostAgentListeningPort[];
   collectionErrors: HostAgentCollectionError[];
 }

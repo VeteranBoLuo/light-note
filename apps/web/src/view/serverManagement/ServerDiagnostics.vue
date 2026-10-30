@@ -96,9 +96,7 @@
               ><BButton v-else-if="canSilence(record)" size="small" @click="openSilence(record)">{{
                 t('serverManagement.diagnosticsPage.silence.action')
               }}</BButton
-              ><small v-else-if="record.domain === 'services' && record.state === 'fail'">{{
-                t('serverManagement.diagnosticsPage.silence.notSilenceable')
-              }}</small></div
+              ><small v-else-if="notSilenceableHint(record)">{{ notSilenceableHint(record) }}</small></div
             >
           </template></BTable
         >
@@ -236,7 +234,13 @@
   import InfraModuleHeader from './InfraModuleHeader.vue';
   import { useInfraSnapshot } from './useInfraSnapshot';
   import { formatBytes, formatPercent } from './serverManagementFormat';
-  import { infraCheckRecommendation, infraCheckTitle, securityFindingIdOf, silenceMetaText } from './infraCheckText';
+  import {
+    backupEvidenceText,
+    infraCheckRecommendation,
+    infraCheckTitle,
+    securityFindingIdOf,
+    silenceMetaText,
+  } from './infraCheckText';
 
   type FilterValue = 'actionable' | 'all' | 'silenced' | InfraDiagnosticState;
   type ChipTone = 'success' | 'danger' | 'pending' | 'neutral';
@@ -432,6 +436,7 @@
         failed: evidence.failures24h ?? '—',
         succeeded: evidence.successes24h ?? '—',
       });
+    if (findingId === 'database-backup') return backupEvidenceText(t, evidence);
     if (check.state === 'unknown') return t('serverManagement.workspace.evidenceUnknown');
     if (findingId === 'firewall')
       return `${evidence.provider || '—'} · ${t(evidence.value === 'enabled' ? 'serverManagement.workspace.enabled' : 'serverManagement.workspace.disabled')}`;
@@ -521,6 +526,14 @@
     }
   }
 
+  // 服务故障和备份中断必须持续告警，在原本放“静默”按钮的位置说明原因。
+  function notSilenceableHint(check: InfraDiagnosticCheck) {
+    if (check.state !== 'fail') return '';
+    if (check.domain === 'services') return t('serverManagement.diagnosticsPage.silence.notSilenceable');
+    return check.id === 'security.database-backup'
+      ? t('serverManagement.diagnosticsPage.silence.backupNotSilenceable')
+      : '';
+  }
   // 资源与安全检查处于异常或预警时才可静默；服务故障与 Agent 离线后端同样拒绝。
   function canSilence(check: InfraDiagnosticCheck) {
     return Boolean(check.silenceable) && (check.state === 'fail' || check.state === 'warning');

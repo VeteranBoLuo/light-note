@@ -28,6 +28,33 @@ export function diagnosticSourceErrorCode(error) {
   return /^HOST_AGENT_[A-Z0-9_]{1,52}$/u.test(code) ? code : 'HOST_AGENT_REQUEST_FAILED';
 }
 
+// 每天 03:30 备份，正常情况下最近一次成功不超过 24 小时；超过 36 小时判为异常，留出在下一次定时前修复的时间。
+const BACKUP_MAX_AGE_HOURS = 36;
+
+function backupFinding(snapshot) {
+  const backup = snapshot?.backup;
+  const referenceMs = Date.parse(snapshot?.capturedAt) || Date.now();
+  const ageMs = referenceMs - Date.parse(backup?.lastSuccessAt);
+  // 判定用精确时长，证据里的小时数只保留一位小数供展示。
+  const ageHours = Number.isFinite(ageMs) ? Math.max(0, Math.round(ageMs / 360_000) / 10) : null;
+  const evidence = {
+    lastSuccessAt: backup?.lastSuccessAt ?? null,
+    ageHours,
+    bytes: backup?.lastSuccessBytes ?? null,
+    lastRunOk: backup?.lastRunOk ?? null,
+    errorCode: backup?.lastRunErrorCode ?? null,
+    offsite: backup?.offsite ?? null,
+  };
+  // 旧版 Agent 或读不到备份目录时保持未知，不能当作备份正常。
+  if (!backup?.available) return securityFinding('database-backup', 'unknown', 'high', evidence);
+  if (ageHours == null || ageMs > BACKUP_MAX_AGE_HOURS * 3_600_000) {
+    return securityFinding('database-backup', 'fail', 'high', evidence);
+  }
+  // 最近一次运行失败或异地副本没传上去时，本机仍有可用备份，先预警。
+  const healthy = backup.lastRunOk === true && backup.offsite === 'uploaded';
+  return securityFinding('database-backup', healthy ? 'pass' : 'warning', healthy ? 'high' : 'medium', evidence);
+}
+
 // root 只允许密钥（含仅强制命令）时口令无法被爆破，但仍是 root 直登：降为预警，继续提示改用普通账号。
 const KEY_ONLY_ROOT_LOGIN = new Set(['without-password', 'prohibit-password', 'forced-commands-only']);
 
@@ -108,6 +135,7 @@ export function deriveSecurityFindings(snapshot) {
       { failures24h: failures24h ?? null, successes24h: ssh.successes24h ?? null },
     ),
   );
+  findings.push(backupFinding(snapshot));
   return findings;
 }
 

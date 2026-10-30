@@ -103,6 +103,28 @@ describe('服务器告警状态机', () => {
   });
 });
 
+describe('数据库备份告警', () => {
+  it('备份中断虽属安全检查也走邮件通道，详情按整小时变化', () => {
+    const backup = (ageHours, extra = {}) =>
+      deriveAlertSignals(
+        diagnostics([check('security.database-backup', 'fail', { ageHours, lastRunOk: false, ...extra })]),
+      ).signals.get('security.database-backup');
+    expect(backup(40.4, { errorCode: 'MYSQLDUMP_FAILED' })).toEqual({
+      state: 'fail',
+      title: '数据库备份中断',
+      detail: '最近一次成功备份在 40 小时前，最近一次运行失败：MYSQLDUMP_FAILED',
+      channel: 'urgent',
+    });
+    expect(backup(40.9).detail).toBe(backup(40.4).detail);
+    expect(backup(null).detail).toBe('没有找到成功的备份');
+    expect(
+      deriveAlertSignals(diagnostics([check('security.fail2ban', 'fail', { value: 'not-installed' })])).signals.get(
+        'security.fail2ban',
+      ).channel,
+    ).toBe('notice');
+  });
+});
+
 describe('服务器告警执行', () => {
   function fakeDatabase(rows = [], silences = []) {
     const queries = [];
