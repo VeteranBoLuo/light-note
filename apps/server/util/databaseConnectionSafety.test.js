@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   assertDatabaseConnectionSafety,
+  isLocalDatabase,
   isLocalDatabaseHost,
   resolveLightNoteRuntime,
 } from './databaseConnectionSafety.js';
@@ -34,6 +35,33 @@ describe('数据库运行环境隔离', () => {
     expect(
       assertDatabaseConnectionSafety({ LIGHTNOTE_RUNTIME_ENV: 'production', DB_HOST: 'db.example.internal' }),
     ).toMatchObject({ runtime: 'production', databaseScope: 'remote', remoteWriteOverride: false });
+  });
+
+  it('SSH 隧道声明为远程库后，回环地址也按远程失败关闭，只读与写入仍须单次开关', () => {
+    const tunnel = { LIGHTNOTE_RUNTIME_ENV: 'local', DB_HOST: '127.0.0.1', LIGHTNOTE_DATABASE_SCOPE: 'remote' };
+    expect(isLocalDatabase(tunnel)).toBe(false);
+    expect(() => assertDatabaseConnectionSafety(tunnel)).toThrow(
+      expect.objectContaining({ code: 'REMOTE_DATABASE_WRITE_BLOCKED' }),
+    );
+    expect(assertDatabaseConnectionSafety({ ...tunnel, ALLOW_REMOTE_DATABASE_READS: 'true' })).toMatchObject({
+      databaseScope: 'remote',
+      readOnly: true,
+    });
+    expect(assertDatabaseConnectionSafety({ ...tunnel, ALLOW_REMOTE_DATABASE_WRITES: 'true' })).toMatchObject({
+      databaseScope: 'remote',
+      remoteWriteOverride: true,
+    });
+  });
+
+  it('数据库范围声明只能收紧：local 不能把远程主机降级，未知取值失败关闭', () => {
+    expect(isLocalDatabase({ DB_HOST: '127.0.0.1', LIGHTNOTE_DATABASE_SCOPE: 'local' })).toBe(true);
+    expect(isLocalDatabase({ DB_HOST: '127.0.0.1', LIGHTNOTE_DATABASE_SCOPE: '' })).toBe(true);
+    expect(() => isLocalDatabase({ DB_HOST: 'db.example.internal', LIGHTNOTE_DATABASE_SCOPE: 'local' })).toThrow(
+      expect.objectContaining({ code: 'DATABASE_SCOPE_INVALID' }),
+    );
+    expect(() => isLocalDatabase({ DB_HOST: '127.0.0.1', LIGHTNOTE_DATABASE_SCOPE: 'tunnel' })).toThrow(
+      expect.objectContaining({ code: 'DATABASE_SCOPE_INVALID' }),
+    );
   });
 
   it('未知显式环境失败关闭，Linux 也不能被操作系统猜成生产环境', () => {

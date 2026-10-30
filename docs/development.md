@@ -25,6 +25,7 @@ Vite 开发服务器的 REST、上传写入、Worker 和实时代理固定指向
 
 - HTTP、Worker 和脚本都通过 `apps/server/db/index.js` 建立数据库连接。
 - 本地默认只允许回环地址或 Unix Socket；远程地址默认以 `REMOTE_DATABASE_WRITE_BLOCKED` 失败关闭。
+- 线上 MySQL 不对公网开放，本机只经 SSH 隧道（如 `-L 3307:127.0.0.1:3306`）访问。隧道把线上库映射到回环地址，必须同时设置 `LIGHTNOTE_DATABASE_SCOPE=remote`，让连接保护和图片预览、工具箱等共享队列的消费开关仍按远程库处理；该值只能收紧，`local` 不能把远程主机降级为本地。
 - 当前任务明确授权远程只读检查时，可在一次性进程环境设置 `ALLOW_REMOTE_DATABASE_READS=true`（同时保持 `ALLOW_REMOTE_DATABASE_WRITES=false`）。连接适配器仅开放 SELECT/SHOW/DESCRIBE/EXPLAIN SELECT，并在每次连接借出前设置 MySQL 只读事务模式；拒绝写入、导出文件、锁定读取和多语句。只读与写入开关同时启用时失败关闭，不把授权写入 `.env` 或用于启动业务后端/Worker。
 - 本地使用 `LIGHTNOTE_RUNTIME_ENV=local` 与 `ALLOW_REMOTE_DATABASE_WRITES=false`；生产必须显式设置 `LIGHTNOTE_RUNTIME_ENV=production`。
 - 远程写入只允许在当前任务明确授权后，用一次性进程环境开启；不得写回本地 `.env`。

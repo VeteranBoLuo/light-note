@@ -33,14 +33,23 @@
           ><b>{{ report.profile?.joinDays }}</b></template
         >
       </i18n-t>
-      <i18n-t v-else-if="light" keypath="annualReport.cover.leadLight" tag="p" class="s-lead rise" style="--i: 3">
+      <i18n-t
+        v-else-if="light || !report.profile?.joinDays"
+        keypath="annualReport.cover.leadLight"
+        tag="p"
+        class="s-lead rise"
+        style="--i: 3"
+      >
         <template #total
           ><b>{{ number(overview.total) }}</b></template
         >
       </i18n-t>
       <i18n-t v-else keypath="annualReport.cover.lead" tag="p" class="s-lead rise" style="--i: 3">
+        <template #date
+          ><b>{{ formatAnnualFullDate(report.profile?.joinedDay, locale) }}</b></template
+        >
         <template #days
-          ><b>{{ number(report.profile?.joinDays || 1) }}</b></template
+          ><b>{{ number(report.profile?.joinDays) }}</b></template
         >
         <template #total
           ><b>{{ number(overview.total) }}</b></template
@@ -419,6 +428,7 @@
     annualDayLevel,
     formatAnnualCompact,
     formatAnnualDate,
+    formatAnnualFullDate,
     formatAnnualNumber,
     type AnnualReport,
   } from '@/utils/annualReport';

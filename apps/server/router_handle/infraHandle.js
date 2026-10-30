@@ -112,14 +112,18 @@ function diagnosticSourceErrorCode(error) {
   return /^HOST_AGENT_[A-Z0-9_]{1,52}$/u.test(code) ? code : 'HOST_AGENT_REQUEST_FAILED';
 }
 
+// root 只允许密钥（含仅强制命令）时口令无法被爆破，但仍是 root 直登：降为预警，继续提示改用普通账号。
+const KEY_ONLY_ROOT_LOGIN = new Set(['without-password', 'prohibit-password', 'forced-commands-only']);
+
 export function deriveSecurityFindings(snapshot) {
   const findings = [];
   const ssh = snapshot?.ssh || {};
+  const rootLoginKeyOnly = KEY_ONLY_ROOT_LOGIN.has(ssh.permitRootLogin);
   findings.push(
     securityFinding(
       'ssh-root-login',
-      !ssh.available ? 'unknown' : ssh.permitRootLogin === 'no' ? 'pass' : 'fail',
-      'high',
+      !ssh.available ? 'unknown' : ssh.permitRootLogin === 'no' ? 'pass' : rootLoginKeyOnly ? 'warning' : 'fail',
+      rootLoginKeyOnly ? 'medium' : 'high',
       { value: ssh.permitRootLogin || null },
     ),
     securityFinding(
@@ -205,6 +209,7 @@ export async function getInfraSecurity(req, res) {
         findings,
         summary: {
           failed: findings.filter((item) => item.state === 'fail').length,
+          warning: findings.filter((item) => item.state === 'warning').length,
           passed: findings.filter((item) => item.state === 'pass').length,
           unknown: findings.filter((item) => item.state === 'unknown').length,
         },

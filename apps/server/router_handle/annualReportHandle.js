@@ -62,8 +62,14 @@ export const getAnnualReportStatus = async (req, res) => {
 export const getAnnualReport = async (req, res) => {
   const definition = resolveDefinition(req, res, req.query?.year);
   if (!definition) return;
-  if (!isRegisteredUser(req) || !canOpenAnnualReport(definition, req.user.role)) {
-    return res.send(resultData({ year: definition.year, available: false, openFrom: definition.openFrom }));
+  // 游客没有个人记录，引导登录；正式账号只会因为还没到开放时间而不可用。
+  if (!isRegisteredUser(req)) {
+    return res.send(resultData({ year: definition.year, available: false, reason: 'login' }));
+  }
+  if (!canOpenAnnualReport(definition, req.user.role)) {
+    return res.send(
+      resultData({ year: definition.year, available: false, reason: 'upcoming', openFrom: definition.openFrom }),
+    );
   }
   try {
     const report = await buildOnce(req.user.id, definition.year, req.user.role);

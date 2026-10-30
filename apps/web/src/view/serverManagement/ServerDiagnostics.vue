@@ -30,7 +30,8 @@
       <div class="diagnostics-status-strip"
         ><BChip :tone="statusTone(data.status)">{{ statusLabel(data.status) }}</BChip
         ><span v-for="item in summaryCards" :key="item.key"
-          >{{ item.label }} <strong :class="item.value > 0 ? `is-${item.key}` : undefined">{{ item.value }}</strong></span
+          >{{ item.label }}
+          <strong :class="item.value > 0 ? `is-${item.key}` : undefined">{{ item.value }}</strong></span
         ><small>{{ formatCapturedAt(data.capturedAt || '') }}</small></div
       >
       <BCard :title="t('serverManagement.diagnosticsPage.checklistTitle')">
@@ -50,6 +51,7 @@
         </template>
 
         <BTabs
+          class="diagnostics-filter-tabs"
           variant="segment"
           :active-tab="filter"
           :options="filterOptions.map((item) => ({ key: item.value, label: item.label }))"
@@ -373,6 +375,8 @@
       return `${evidence.provider || '—'} · ${t(evidence.value === 'enabled' ? 'serverManagement.workspace.enabled' : 'serverManagement.workspace.disabled')}`;
     const value = evidence.value;
     if (value === 'not-installed') return t('serverManagement.workspace.notInstalled');
+    if (value === 'without-password' || value === 'prohibit-password' || value === 'forced-commands-only')
+      return t('serverManagement.workspace.keyOnly');
     if (value === true || value === 'true' || value === 'yes' || value === 'enabled')
       return t('serverManagement.workspace.enabled');
     if (value === false || value === 'false' || value === 'no' || value === 'disabled')
@@ -605,6 +609,11 @@
   }
   .diagnostics-collection {
     font-size: var(--ui-font-12, 12px);
+  }
+  /* 分段筛选在窄屏放不下时横向滚动，避免末尾的筛选项被裁掉无法点击。 */
+  .diagnostics-filter-tabs.tab-container.is-segment {
+    max-width: 100%;
+    overflow-x: auto;
   }
   @media (max-width: 767px) {
     .diagnostics-check__body {

@@ -26,6 +26,9 @@
         ><strong :class="{ 'is-danger': data.summary.failed > 0 }">{{
           t('serverManagement.workspace.securityRisks', { count: data.summary.failed })
         }}</strong
+        ><span v-if="data.summary.warning" class="is-warning">{{
+          t('serverManagement.workspace.warningChecks', { count: data.summary.warning })
+        }}</span
         ><span>{{ t('serverManagement.workspace.pendingChecks', { count: data.summary.unknown }) }}</span
         ><span>{{ t('serverManagement.securityPage.passed') }} {{ data.summary.passed }}</span
         ><small>{{ formatTime(data.capturedAt) }}</small></div
@@ -36,7 +39,13 @@
       >
       <div class="security-workspace"
         ><BCard :title="t('serverManagement.securityPage.checksTitle')" class="security-findings">
-          <BTabs variant="segment" :active-tab="filter" :options="securityFilters" @change="filter = $event" />
+          <BTabs
+            class="security-filter-tabs"
+            variant="segment"
+            :active-tab="filter"
+            :options="securityFilters"
+            @change="filter = $event"
+          />
           <section v-for="group in findingGroups" :key="group.state">
             <div class="security-group-heading"
               ><BButton
@@ -61,6 +70,9 @@
                   ><strong>{{ findingText(finding.id, 'title') }}</strong
                   ><BChip v-if="finding.state === 'fail'" :tone="finding.severity === 'high' ? 'danger' : 'pending'">{{
                     severityLabel(finding.severity)
+                  }}</BChip
+                  ><BChip v-if="finding.state === 'warning'" tone="pending">{{
+                    findingStateLabel(finding.state)
                   }}</BChip
                   ><BChip v-if="finding.state === 'unknown'" tone="neutral"
                     >? {{ findingStateLabel(finding.state) }}</BChip
@@ -186,7 +198,7 @@
   const allPorts = ref(false);
   const expanded = ref(new Set<string>());
   const findingGroups = computed(() =>
-    (['fail', 'unknown', 'pass'] as const)
+    (['fail', 'warning', 'unknown', 'pass'] as const)
       .filter((state) => filter.value === 'all' || filter.value === state)
       .map((state) => ({ state, items: (data.value?.findings || []).filter((item) => item.state === state) }))
       .filter((group) => group.items.length > 0 || filter.value !== 'all'),
@@ -197,7 +209,7 @@
     expanded.value = next;
   }
   const securityFilters = computed(() =>
-    (['fail', 'unknown', 'all'] as const).map((key) => ({
+    (['fail', 'warning', 'unknown', 'all'] as const).map((key) => ({
       key,
       label: `${t(`serverManagement.securityPage.filters.${key}`)} · ${key === 'all' ? data.value?.findings.length || 0 : data.value?.findings.filter((item) => item.state === key).length || 0}`,
     })),
@@ -208,8 +220,7 @@
     () =>
       new Set(
         (data.value?.findings.find((item) => item.id === 'unexpected-public-ports')?.evidence.ports as
-          | string[]
-          | undefined) || [],
+          string[] | undefined) || [],
       ),
   );
   function portReach(port: HostAgentListeningPort): { key: string; tone: PortReachTone } {
@@ -223,7 +234,10 @@
     (data.value?.listeningPorts || [])
       .filter((item) => allPorts.value || item.exposure === 'public')
       .map((item) => ({ ...item, key: `${item.protocol}-${item.address}-${item.port}`, reach: portReach(item) }))
-      .sort((left, right) => Number(right.reach.key === 'exposed') - Number(left.reach.key === 'exposed') || left.port - right.port),
+      .sort(
+        (left, right) =>
+          Number(right.reach.key === 'exposed') - Number(left.reach.key === 'exposed') || left.port - right.port,
+      ),
   );
   const portColumns = computed(() => [
     {
@@ -275,6 +289,8 @@
       return `${evidence.provider || '—'} · ${t(evidence.value === 'enabled' ? 'serverManagement.workspace.enabled' : evidence.value === 'disabled' ? 'serverManagement.workspace.disabled' : 'serverManagement.workspace.evidenceUnknown')}`;
     const value = evidence.value;
     if (value === 'not-installed') return t('serverManagement.workspace.notInstalled');
+    if (value === 'without-password' || value === 'prohibit-password' || value === 'forced-commands-only')
+      return t('serverManagement.workspace.keyOnly');
     if (value === true || value === 'true' || value === 'yes' || value === 'enabled')
       return t('serverManagement.workspace.enabled');
     if (value === false || value === 'false' || value === 'no' || value === 'disabled')
@@ -325,6 +341,10 @@
   .security-status-strip .is-danger {
     color: var(--error-color);
   }
+  .security-status-strip .is-warning {
+    color: var(--warning-color);
+    font-weight: 600;
+  }
   .security-status-strip small {
     margin-left: auto;
     color: var(--desc-color);
@@ -340,6 +360,11 @@
     display: grid;
     gap: var(--ui-space-14, 14px);
     min-width: 0;
+  }
+  /* 分段筛选在窄屏放不下时横向滚动，避免末尾的筛选项被裁掉无法点击。 */
+  .security-filter-tabs.tab-container.is-segment {
+    max-width: 100%;
+    overflow-x: auto;
   }
   .security-finding-row {
     padding: var(--ui-space-16, 16px) 0;

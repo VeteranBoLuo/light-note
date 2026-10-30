@@ -37,6 +37,7 @@ export default {
     enabled: '已启用',
     disabled: '已关闭',
     notInstalled: '未安装',
+    keyOnly: '仅密钥',
     evidenceUnknown: '尚未取得有效证据，需要人工核实',
     expandList: '展开列表',
     collapseList: '收起列表',
@@ -321,8 +322,8 @@ export default {
       securityUpdates: '安全更新',
       checksTitle: '安全检查项',
       filterEmpty: '当前筛选条件下没有检查项',
-      filters: { all: '全部检查', fail: '仅风险', pass: '已通过', unknown: '待确认' },
-      states: { pass: '通过', fail: '风险', unknown: '未知' },
+      filters: { all: '全部检查', fail: '仅风险', warning: '仅预警', pass: '已通过', unknown: '待确认' },
+      states: { pass: '通过', warning: '预警', fail: '风险', unknown: '未知' },
       severity: { high: '高风险', medium: '中风险', low: '低风险' },
       findings: {
         'ssh-root-login': {

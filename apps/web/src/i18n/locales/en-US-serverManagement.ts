@@ -37,6 +37,7 @@ export default {
     enabled: 'Enabled',
     disabled: 'Disabled',
     notInstalled: 'Not installed',
+    keyOnly: 'Key only',
     evidenceUnknown: 'No valid evidence yet; manual verification required',
     expandList: 'Expand list',
     collapseList: 'Collapse list',
@@ -347,8 +348,8 @@ export default {
       securityUpdates: 'Security updates',
       checksTitle: 'Security checks',
       filterEmpty: 'No check matches this filter',
-      filters: { all: 'All checks', fail: 'Risks only', pass: 'Passed', unknown: 'Unknown' },
-      states: { pass: 'Pass', fail: 'Risk', unknown: 'Unknown' },
+      filters: { all: 'All checks', fail: 'Risks only', warning: 'Warnings only', pass: 'Passed', unknown: 'Unknown' },
+      states: { pass: 'Pass', warning: 'Warning', fail: 'Risk', unknown: 'Unknown' },
       severity: { high: 'High', medium: 'Medium', low: 'Low' },
       findings: {
         'ssh-root-login': {

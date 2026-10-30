@@ -84,7 +84,7 @@ export interface InfraDiagnosticsPayload {
   }>;
 }
 
-export type InfraSecurityFindingState = 'pass' | 'fail' | 'unknown';
+export type InfraSecurityFindingState = 'pass' | 'warning' | 'fail' | 'unknown';
 export interface InfraSecurityFinding {
   id: string;
   state: InfraSecurityFindingState;
@@ -93,7 +93,8 @@ export interface InfraSecurityFinding {
 }
 export interface InfraSecurityPayload extends HostAgentSecuritySnapshot {
   findings: InfraSecurityFinding[];
-  summary: { failed: number; passed: number; unknown: number };
+  /** warning 由新版后端返回；部署窗口内的旧后端没有该字段。 */
+  summary: { failed: number; warning?: number; passed: number; unknown: number };
 }
 
 export class InfraApiError extends Error {

@@ -15,7 +15,7 @@ function serverAchievements() {
   }));
   return [
     ...publicItems,
-    ...[...definition.matchAll(/\{ key: '([^']+)', group: '([^']+)'/g)].map((match) => ({
+    ...[...definition.matchAll(/\{\s*key: '([^']+)',\s*group: '([^']+)'/g)].map((match) => ({
       key: match[1],
       group: match[2],
     })),

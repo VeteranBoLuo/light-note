@@ -6,6 +6,7 @@ it.each([
   [{ DB_HOST: 'db.example' }, false],
   [{ LIGHTNOTE_RUNTIME_ENV: 'production', DB_HOST: 'db.example' }, true],
   [{ LIGHTNOTE_RUNTIME_ENV: 'local', DB_HOST: '127.0.0.1' }, true],
+  [{ LIGHTNOTE_RUNTIME_ENV: 'local', DB_HOST: '127.0.0.1', LIGHTNOTE_DATABASE_SCOPE: 'remote' }, false],
   [{ NODE_ENV: 'test' }, true],
 ])('image queue ownership follows runtime and database scope: %j', (env, expected) => {
   expect(imagePreviewWorkerEnabled(env)).toBe(expected);
