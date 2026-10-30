@@ -17,9 +17,18 @@ export interface InfraDashboardPayload {
   dashboard: HostAgentDashboard | null;
 }
 
+export interface InfraLogSection {
+  stream: 'stdout' | 'stderr';
+  modifiedAt: string | null;
+  /** 该输出流在 lines 中的起始下标；PM2 日志按最后写入时间排列，较新的流在后。 */
+  start: number;
+}
+
 export interface InfraLogsPayload {
   serviceId: HostAgentServiceId;
   lines: string[];
+  /** 仅 PM2 服务返回；旧版 Agent 与 systemd 日志没有分段。 */
+  sections?: InfraLogSection[];
   truncated: boolean;
   exitCode: number | null;
   capturedAt: string;

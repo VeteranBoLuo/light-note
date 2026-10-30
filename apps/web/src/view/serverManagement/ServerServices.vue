@@ -259,10 +259,15 @@
             <span>{{ t('serverManagement.logsOutputColumn') }}</span>
           </div>
           <ol :aria-label="logViewerLabel">
-            <li v-for="entry in filteredLogEntries" :key="`${entry.index}-${entry.line}`" :class="`is-${entry.level}`">
-              <span aria-hidden="true">{{ entry.index + 1 }}</span
-              ><code>{{ entry.line || ' ' }}</code>
-            </li>
+            <template v-for="entry in filteredLogEntries" :key="`${entry.index}-${entry.line}`">
+              <li v-if="entry.section" class="service-log-viewer__section" :class="`is-${entry.section.stream}`">
+                <span aria-hidden="true"></span><strong>{{ logSectionLabel(entry.section) }}</strong>
+              </li>
+              <li :class="`is-${entry.level}`">
+                <span aria-hidden="true">{{ entry.index + 1 }}</span
+                ><code>{{ entry.line || ' ' }}</code>
+              </li>
+            </template>
           </ol>
         </div>
       </div>
@@ -290,7 +295,12 @@
     HostAgentServiceState,
   } from '@lightnote/shared/host-agent-protocol';
   import { HOST_AGENT_ACTIONS } from '@lightnote/shared/host-agent-protocol';
-  import { getInfraLogs, getInfraServices, type InfraActionResultPayload } from '@/api/infraApi';
+  import {
+    getInfraLogs,
+    getInfraServices,
+    type InfraActionResultPayload,
+    type InfraLogSection,
+  } from '@/api/infraApi';
   import icon from '@/config/icon';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
@@ -395,10 +405,15 @@
     ];
   });
   const columns = computed(() => [
-    { key: 'name', title: t('serverManagement.columns.service'), width: '1.5fr', ellipsis: false },
-    { key: 'state', title: t('serverManagement.columns.state'), width: 'var(--ui-layout-110, 110px)', ellipsis: false },
-    { key: 'cpu', title: 'CPU', width: 'var(--ui-layout-90, 90px)', ellipsis: false },
-    { key: 'memory', title: t('serverManagement.memory'), width: 'var(--ui-layout-110, 110px)', ellipsis: false },
+    {
+      key: 'name',
+      title: t('serverManagement.columns.service'),
+      width: 'minmax(var(--ui-layout-140, 140px), 1.5fr)',
+      ellipsis: false,
+    },
+    { key: 'state', title: t('serverManagement.columns.state'), width: 'var(--ui-layout-100, 100px)', ellipsis: false },
+    { key: 'cpu', title: 'CPU', width: 'var(--ui-layout-80, 80px)', ellipsis: false },
+    { key: 'memory', title: t('serverManagement.memory'), width: 'var(--ui-layout-100, 100px)', ellipsis: false },
     {
       key: 'restarts',
       title: t('serverManagement.servicesPage.restarts'),
@@ -408,13 +423,13 @@
     {
       key: 'uptime',
       title: t('serverManagement.columns.uptime'),
-      width: 'var(--ui-layout-110, 110px)',
+      width: 'var(--ui-layout-100, 100px)',
       ellipsis: false,
     },
     {
       key: 'actions',
       title: t('serverManagement.columns.actions'),
-      width: 'var(--ui-layout-150, 150px)',
+      width: 'var(--ui-layout-120, 120px)',
       ellipsis: false,
     },
   ]);
@@ -423,6 +438,7 @@
   const logsRefreshing = ref(false);
   const logsError = ref('');
   const logLines = ref<string[]>([]);
+  const logSections = ref<InfraLogSection[]>([]);
   const logsTruncated = ref(false);
   const logsCapturedAt = ref('');
   const logLimit = ref<LogLimit>(160);
@@ -454,13 +470,21 @@
   ]);
   const filteredLogEntries = computed(() => {
     const keyword = logKeyword.value.trim().toLocaleLowerCase(locale.value);
+    let previousSection: InfraLogSection | undefined;
     return logLines.value
       .map((line, index) => ({ line, index, level: detectLogLevel(line) }))
       .filter(
         (entry) =>
           (logLevel.value === 'all' || entry.level === logLevel.value) &&
           (!keyword || entry.line.toLocaleLowerCase(locale.value).includes(keyword)),
-      );
+      )
+      .map((entry) => {
+        // 输出流分段标题跟随筛选，挂在每段第一条可见日志前。
+        const section = logSections.value.filter((item) => item.start <= entry.index).at(-1);
+        const heading = section && section !== previousSection ? section : undefined;
+        previousSection = section;
+        return { ...entry, section: heading };
+      });
   });
   const logViewerLabel = computed(() =>
     selectedService.value
@@ -519,6 +543,7 @@
     logsError.value = '';
     if (!preserveCurrent) {
       logLines.value = [];
+      logSections.value = [];
       logsTruncated.value = false;
       logsCapturedAt.value = '';
     }
@@ -526,6 +551,7 @@
       const response = await getInfraLogs(serviceId, limit);
       if (requestId !== logsRequestId) return;
       logLines.value = response.data.lines || [];
+      logSections.value = response.data.sections || [];
       logsTruncated.value = Boolean(response.data.truncated);
       logsCapturedAt.value = response.data.capturedAt || '';
     } catch (cause) {
@@ -573,8 +599,16 @@
     if (/\b(info|notice|debug|trace|online|ready|started)\b/i.test(line)) return 'info';
     return 'other';
   }
+  function logSectionLabel(section: InfraLogSection) {
+    const stream = t(`serverManagement.logStreams.${section.stream}`);
+    return section.modifiedAt
+      ? `${stream} · ${t('serverManagement.logStreamModifiedAt', { time: formatLogTime(section.modifiedAt) })}`
+      : stream;
+  }
   function visibleLogText() {
-    return filteredLogEntries.value.map((entry) => entry.line).join('\n');
+    return filteredLogEntries.value
+      .flatMap((entry) => (entry.section ? [`── ${logSectionLabel(entry.section)} ──`, entry.line] : [entry.line]))
+      .join('\n');
   }
   async function copyVisibleLogs() {
     const copied = await copyTextToClipboard(visibleLogText());
@@ -800,7 +834,12 @@
     display: inline-flex;
     align-items: center;
     gap: var(--ui-space-7, 7px);
+    max-width: 100%;
     font-weight: 600;
+    overflow-wrap: anywhere;
+  }
+  .service-name > :first-child {
+    flex: none;
   }
   .services-mobile {
     display: none;
@@ -942,6 +981,19 @@
   .service-log-viewer li:not(:last-child) {
     border-bottom: 1px solid var(--pre-border-color);
   }
+  .service-log-viewer li.service-log-viewer__section {
+    border-bottom: 1px solid var(--pre-border-color);
+    color: var(--pre-muted-color);
+    background: var(--pre-bg-color);
+  }
+  .service-log-viewer li.service-log-viewer__section strong {
+    padding: var(--ui-space-6, 6px) var(--ui-space-12, 12px);
+    font-size: var(--ui-font-12, 12px);
+    font-weight: 600;
+  }
+  .service-log-viewer li.service-log-viewer__section.is-stderr strong {
+    color: var(--error-color, #d14343);
+  }
   .service-log-viewer li.is-error code {
     color: var(--error-color, #d14343);
   }
@@ -978,28 +1030,21 @@
       grid-template-columns: minmax(180px, 1fr) repeat(2, 120px);
     }
   }
-  @media (max-width: 767px) {
+  /* 平板宽度下表格最少需要约 900px，横向滚动会藏掉右侧列；与 responsive.ts 的桌面断点一致改用卡片。 */
+  @media (max-width: 1199px) {
     .services-table {
       display: none;
     }
-    .services-panel {
-      border: 0;
-      padding: 0;
-      box-shadow: none;
-    }
-    .services-panel :deep(.card-container-header) {
-      display: none;
-    }
     .services-toolbar {
-      grid-template-columns: minmax(0, 1fr) auto;
-      gap: var(--ui-space-8, 8px);
+      grid-template-columns: minmax(0, 1fr) var(--ui-layout-150, 150px) auto;
     }
-    .services-toolbar > :first-child,
     .services-toolbar > span {
       grid-column: 1/-1;
+      text-align: left;
     }
     .services-mobile {
       display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(var(--ui-layout-360, 360px), 1fr));
       gap: var(--ui-space-12, 12px);
     }
     .service-mobile-card header {
@@ -1034,9 +1079,25 @@
       justify-content: flex-start;
       padding-left: 0;
     }
-
-    .services-toolbar > span {
-      text-align: left;
+  }
+  @media (max-width: 767px) {
+    .services-panel {
+      border: 0;
+      padding: 0;
+      box-shadow: none;
+    }
+    .services-panel :deep(.card-container-header) {
+      display: none;
+    }
+    .services-toolbar {
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: var(--ui-space-8, 8px);
+    }
+    .services-toolbar > :first-child {
+      grid-column: 1/-1;
+    }
+    .services-mobile {
+      grid-template-columns: 1fr;
     }
     .action-receipt__summary {
       grid-template-columns: 36px minmax(0, 1fr);

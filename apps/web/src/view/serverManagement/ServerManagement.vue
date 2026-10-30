@@ -116,7 +116,7 @@
         </div>
       </section>
 
-      <InfraAttention :services="dashboard?.services || []" />
+      <InfraAttention />
       <section class="server-management-metrics" :aria-label="t('serverManagement.metricsTitle')">
         <BCard v-for="metric in metricCards" :key="metric.key" class="server-metric-card">
           <div class="server-metric-card__heading">

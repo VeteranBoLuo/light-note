@@ -1,3 +1,6 @@
+import { constants } from "node:fs";
+import { open } from "node:fs/promises";
+import path from "node:path";
 import { HOST_AGENT_ACTIONS } from "@lightnote/shared/host-agent-protocol";
 import { runCommand, safeCommandEnvironment } from "./commandRunner.js";
 import { requestPrivilegedHelper } from "./helperClient.js";
@@ -5,6 +8,12 @@ import { redactOperationalText, stableErrorCode } from "./redaction.js";
 
 // 这些服务可能由宝塔面板托管，systemd unit 状态不可信，需经 helper 按固定 PID 文件判定。
 const PANEL_AWARE_SERVICE_IDS = new Set(["nginx", "redis", "mysql"]);
+const PM2_LOG_STREAMS = Object.freeze([
+  ["stdout", "out"],
+  ["stderr", "error"],
+]);
+const PM2_LOG_STREAM_BYTES = 64 * 1024;
+const PM2_LOG_STREAM_LINES = 300;
 
 function serviceState(value) {
   if (value === "active") return "running";
@@ -57,7 +66,8 @@ function parsePm2Item(item) {
   const startedAt = Number(item?.pm2_env?.pm_uptime || 0);
   const cpuPercent = Number(item?.monit?.cpu);
   const memoryBytes = Number(item?.monit?.memory);
-  const restartCount = Number(item?.pm2_env?.restart_time);
+  // restart_time 含每次部署与手动重启；只取 PM2 的不稳定重启（启动后未达 min_uptime 即退出），即崩溃循环。
+  const restartCount = Number(item?.pm2_env?.unstable_restarts);
   return {
     state,
     detail: status,
@@ -337,6 +347,156 @@ export async function collectServiceSnapshots(
   };
 }
 
+function logReadFailed(exitCode) {
+  return Object.assign(new Error("Service logs could not be read"), {
+    code: "HOST_AGENT_LOG_READ_FAILED",
+    ...(exitCode === undefined ? {} : { exitCode }),
+  });
+}
+
+async function readLogTail(file) {
+  let handle;
+  try {
+    handle = await open(
+      file,
+      constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
+    );
+    const stats = await handle.stat();
+    if (!stats.isFile()) return null;
+    const length = Math.min(stats.size, PM2_LOG_STREAM_BYTES);
+    const buffer = Buffer.alloc(length);
+    const { bytesRead } = await handle.read(
+      buffer,
+      0,
+      length,
+      stats.size - length,
+    );
+    const lines = buffer.subarray(0, bytesRead).toString("utf8").split("\n");
+    const clipped = length < stats.size;
+    if (clipped) lines.shift();
+    if (lines.at(-1) === "") lines.pop();
+    return {
+      modifiedAt: stats.mtime.toISOString(),
+      lines: lines.slice(-PM2_LOG_STREAM_LINES),
+      truncated: clipped || lines.length > PM2_LOG_STREAM_LINES,
+    };
+  } catch (error) {
+    return error?.code === "ENOENT" ? undefined : null;
+  } finally {
+    await handle?.close();
+  }
+}
+
+async function readPm2LogFiles(pm2Home, processName) {
+  const streams = await Promise.all(
+    PM2_LOG_STREAMS.map(async ([stream, suffix]) => ({
+      stream,
+      content: await readLogTail(
+        path.join(pm2Home, "logs", `${processName}-${suffix}.log`),
+      ),
+    })),
+  );
+  // 单个文件缺失按空流处理；任一文件不可读或两个都不存在时按读取失败处理。
+  if (
+    streams.some((item) => item.content === null) ||
+    streams.every((item) => item.content === undefined)
+  ) {
+    return null;
+  }
+  return streams.map(({ stream, content }) => ({
+    stream,
+    modifiedAt: content?.modifiedAt ?? null,
+    lines: content?.lines ?? [],
+    truncated: content?.truncated ?? false,
+  }));
+}
+
+function parseHelperLogStreams(result) {
+  if (result.exitCode !== 0) throw logReadFailed(result.exitCode);
+  let streams;
+  try {
+    streams = JSON.parse(result.stdout || "{}")?.streams;
+  } catch {
+    streams = null;
+  }
+  const valid =
+    Array.isArray(streams) &&
+    streams.length <= PM2_LOG_STREAMS.length &&
+    streams.every(
+      (item) =>
+        PM2_LOG_STREAMS.some(([stream]) => stream === item?.stream) &&
+        (item.modifiedAt === null ||
+          Number.isFinite(Date.parse(item.modifiedAt))) &&
+        typeof item.truncated === "boolean" &&
+        Array.isArray(item.lines) &&
+        item.lines.length <= PM2_LOG_STREAM_LINES &&
+        item.lines.every((line) => typeof line === "string"),
+    );
+  if (!valid) {
+    throw Object.assign(new Error("helper log streams are invalid"), {
+      code: "HOST_HELPER_RESPONSE_INVALID",
+    });
+  }
+  return streams;
+}
+
+// 按流轮流分配行数，保证两条流都有内容时各自至少能看到一半；一条不足时余量让给另一条。
+function shareLineLimit(lengths, limit) {
+  const takes = lengths.map(() => 0);
+  let remaining = limit;
+  let pending = lengths.flatMap((length, index) => (length > 0 ? [index] : []));
+  while (remaining > 0 && pending.length) {
+    const share = Math.max(1, Math.floor(remaining / pending.length));
+    for (const index of pending) {
+      const add = Math.min(share, lengths[index] - takes[index], remaining);
+      takes[index] += add;
+      remaining -= add;
+    }
+    pending = pending.filter((index) => takes[index] < lengths[index]);
+  }
+  return takes;
+}
+
+function composePm2Logs(serviceId, streams, limit) {
+  // 最近写入的流排在最后，符合“越往下越新”的阅读习惯；两条流各自保持文件内顺序。
+  const ordered = streams
+    .filter((item) => item.lines.length > 0)
+    .sort(
+      (a, b) =>
+        (Date.parse(a.modifiedAt) || 0) - (Date.parse(b.modifiedAt) || 0),
+    );
+  const takes = shareLineLimit(
+    ordered.map((item) => item.lines.length),
+    limit,
+  );
+  const lines = [];
+  const sections = [];
+  ordered.forEach((item, index) => {
+    if (!takes[index]) return;
+    sections.push({
+      stream: item.stream,
+      modifiedAt: item.modifiedAt,
+      start: lines.length,
+    });
+    lines.push(
+      ...item.lines
+        .slice(-takes[index])
+        .map((line) => redactOperationalText(line, 4000)),
+    );
+  });
+  return {
+    serviceId,
+    lines,
+    sections,
+    // 只有安全读取上限截掉了用户本可以看到的更早内容时才提示截断。
+    truncated: ordered.some(
+      (item, index) => item.truncated && takes[index] === item.lines.length,
+    ),
+    exitCode: 0,
+    capturedAt: new Date().toISOString(),
+  };
+}
+
 export async function readServiceLogs(
   config,
   serviceId,
@@ -349,31 +509,32 @@ export async function readServiceLogs(
     throw Object.assign(new Error("Service is not allowlisted"), {
       code: "HOST_AGENT_SERVICE_FORBIDDEN",
     });
+  if (definition.kind === "pm2") {
+    const streams =
+      config.pm2AccessMode === "helper"
+        ? parseHelperLogStreams(
+            await runHelper(
+              config,
+              "pm2-logs",
+              serviceId,
+              { timeoutMs: 8000, maxOutputBytes: 512 * 1024 },
+              helperRequester,
+            ),
+          )
+        : config.pm2AccessMode === "direct"
+          ? await readPm2LogFiles(config.pm2Home, definition.target)
+          : null;
+    if (!streams) throw logReadFailed();
+    return composePm2Logs(serviceId, streams, limit);
+  }
   let result;
   if (config.pm2AccessMode === "helper") {
     result = await runHelper(
       config,
-      definition.kind === "pm2" ? "pm2-logs" : "journal-logs",
+      "journal-logs",
       serviceId,
       { timeoutMs: 8000, maxOutputBytes: 256 * 1024 },
       helperRequester,
-    );
-  } else if (definition.kind === "pm2") {
-    result = await runner(
-      config.pm2Bin,
-      [
-        "logs",
-        definition.target,
-        "--lines",
-        String(limit),
-        "--nostream",
-        "--raw",
-      ],
-      {
-        timeoutMs: 8000,
-        maxOutputBytes: 256 * 1024,
-        env: safeCommandEnvironment({ PM2_HOME: config.pm2Home }),
-      },
     );
   } else {
     result = await runner(
@@ -393,12 +554,7 @@ export async function readServiceLogs(
       },
     );
   }
-  if (result.exitCode !== 0) {
-    throw Object.assign(new Error("Service logs could not be read"), {
-      code: "HOST_AGENT_LOG_READ_FAILED",
-      exitCode: result.exitCode,
-    });
-  }
+  if (result.exitCode !== 0) throw logReadFailed(result.exitCode);
   const output = redactOperationalText(
     [result.stdout, result.stderr].filter(Boolean).join("\n"),
   );
