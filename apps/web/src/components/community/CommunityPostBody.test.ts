@@ -63,28 +63,28 @@ it('keeps attachments out of the body-only Markdown preview', () => {
   expect(Array.from(host.querySelectorAll('img')).map((i) => i.getAttribute('src'))).toEqual(['/image/' + first]);
   app.unmount();
 });
-it('keeps compressed body images after opening an original and supports legacy images', async () => {
+it('uses the same uploaded file in the body and the viewer', async () => {
   const host = document.createElement('div');
   const app = createApp(Body, {
     body: `![截图](community-image:${first})`,
     images: [
       {
         publicId: first,
-        url: '/original.png',
+        url: '/uploaded.webp',
         width: 2000,
         height: 1000,
         fileSize: 10000,
-        contentType: 'image/png',
-        preview: { url: '/preview.webp', width: 1600, height: 800, fileSize: 1000, contentType: 'image/webp' },
+        contentType: 'image/webp',
       },
     ],
   });
   app.mount(host);
-  expect(host.querySelector('.inline-image img')?.getAttribute('src')).toBe('/preview.webp');
+  const source = host.querySelector<HTMLImageElement>('.inline-image img')!.src;
+  expect(source).toContain('/uploaded.webp');
   host.querySelector<HTMLButtonElement>('.inline-image button')!.click();
   await vi.dynamicImportSettled();
   for (let n = 0; n < 5; n++) await nextTick();
-  await vi.waitFor(() => expect(host.querySelector('.test-original')?.getAttribute('src')).toContain('/original.png'));
-  expect(host.querySelector('.inline-image img')?.getAttribute('src')).toBe('/preview.webp');
+  await vi.waitFor(() => expect(host.querySelector('.test-original')?.getAttribute('src')).toBe(source));
+  expect(host.querySelector<HTMLImageElement>('.inline-image img')!.src).toBe(source);
   app.unmount();
 });

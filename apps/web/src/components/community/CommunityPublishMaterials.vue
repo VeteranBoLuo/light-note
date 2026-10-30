@@ -57,7 +57,7 @@
           :aria-label="t('community.feed.imagePreview', { index: index + 1 })"
           @click="$emit('preview-image', item.publicId)"
         >
-          <img :src="item.preview?.url || item.url" :alt="t('community.feed.imagePreview', { index: index + 1 })" />
+          <img :src="item.url" :alt="t('community.feed.imagePreview', { index: index + 1 })" />
         </BButton>
         <span v-if="item.status !== 'ready'" role="status">{{
           t(

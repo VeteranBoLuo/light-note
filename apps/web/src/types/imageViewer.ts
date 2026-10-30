@@ -9,9 +9,6 @@ export interface ImageViewerItem {
   height?: number;
 }
 
-/** Resolve only the active image; Blob URLs belong to the viewer's current request lifetime. */
-export type ImageViewerSourceResolver = (image: ImageViewerItem, signal: AbortSignal) => Promise<string | Blob>;
-
 export interface GlobalImageViewerOptions {
   /** 默认展示完整工具栏；显式传 false 时只保留查看与关闭。 */
   toolbar?: boolean;

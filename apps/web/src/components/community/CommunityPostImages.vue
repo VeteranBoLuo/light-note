@@ -8,35 +8,27 @@
       v-for="(item, index) in images"
       :key="item.publicId"
       :aria-label="
-        failed.has(item.publicId) || imageUnavailable(item.preview?.url || item.url)
+        failed.has(item.publicId) || imageUnavailable(item.url)
           ? t('community.feed.imageUnavailable')
           : t('community.feed.imagePreview', { index: index + 1 })
       "
       @click="openImage(item.publicId)"
     >
-      <span
-        v-if="failed.has(item.publicId) || imageUnavailable(item.preview?.url || item.url)"
-        class="image-unavailable"
-        >{{ t('community.feed.imageUnavailable') }}</span
-      >
+      <span v-if="failed.has(item.publicId) || imageUnavailable(item.url)" class="image-unavailable">{{
+        t('community.feed.imageUnavailable')
+      }}</span>
       <img
-        v-else-if="imageSource(item.preview?.url || item.url)"
-        :src="imageSource(item.preview?.url || item.url)"
+        v-else-if="imageSource(item.url)"
+        :src="imageSource(item.url)"
         :alt="t('community.feed.imagePreview', { index: index + 1 })"
         loading="lazy"
-        :width="item.preview?.width || item.width"
-        :height="item.preview?.height || item.height"
+        :width="item.width"
+        :height="item.height"
         @error="failed.add(item.publicId)"
       />
     </BButton>
   </div>
-  <BImageViewer
-    v-if="visible"
-    v-model:visible="visible"
-    :images="viewerImages"
-    :initial-id="selected"
-    :resolve-source="viewerSourceResolver"
-  />
+  <BImageViewer v-if="visible" v-model:visible="visible" :images="viewerImages" :initial-id="selected" />
 </template>
 <script setup lang="ts">
   import { useCommunityPreviewImages } from '@/composables/useCommunityPreviewImages';
@@ -48,14 +40,17 @@
   const BImageViewer = defineAsyncComponent(() => import('@/components/base/Viewer/BImageViewer.vue'));
   const props = defineProps<{ images?: FeedImage[]; article?: boolean }>();
   const { t } = useI18n();
-  const { imageSource, imageUnavailable, viewerSourceResolver } = useCommunityPreviewImages(() =>
-    (props.images || []).map((image) => image.preview?.url || image.url),
+  const { imageSource, imageUnavailable } = useCommunityPreviewImages(() =>
+    (props.images || []).map((image) => image.url),
   );
   const { identity } = useCommunityPreview();
   const failed = ref(new Set<string>());
   function openImage(id: string) {
-    const image = props.images?.find((image) => image.publicId === id);
-    if (!image?.url) return;
+    if (failed.value.has(id)) {
+      failed.value.delete(id);
+      return;
+    }
+    if (!imageSource(props.images?.find((image) => image.publicId === id)?.url)) return;
     selected.value = id;
     visible.value = true;
   }
@@ -71,10 +66,10 @@
   );
   const viewerImages = computed(() =>
     (props.images || [])
-      .filter((i) => i.url)
+      .filter((i) => imageSource(i.url))
       .map((i) => ({
         id: i.publicId,
-        src: new URL(i.url, window.location.origin).href,
+        src: new URL(imageSource(i.url)!, window.location.origin).href,
         fileName: `${i.publicId}.${i.contentType === 'image/jpeg' ? 'jpg' : i.contentType === 'image/webp' ? 'webp' : 'png'}`,
         width: i.width,
         height: i.height,

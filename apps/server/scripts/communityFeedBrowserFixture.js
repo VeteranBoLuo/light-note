@@ -21,6 +21,8 @@ const { COMMUNITY_CHAT_TABLE_SQL } = await import('../util/communityChatSchema.j
 const { ensureCommunityFeedSchema } = await import('../util/communityFeed/schema.js');
 const topics = await import('../util/communityFeed/topics.js');
 const fixturePort = Number(process.env.COMMUNITY_FIXTURE_PORT || 19092);
+const webOrigin = process.env.COMMUNITY_FIXTURE_WEB_ORIGIN || 'http://localhost:5173';
+if (!/^http:\/\/localhost:517[3-9]$/.test(webOrigin)) throw new Error('Unsupported fixture web origin');
 if (![19092, 19093, 19094, 19095].includes(fixturePort)) throw new Error('Unsupported fixture port');
 const posts = await import('../util/communityFeed/posts.js');
 const comments = await import('../util/communityFeed/comments.js');
@@ -219,7 +221,7 @@ if (!reuseSchema) {
 const app = express();
 app.use(express.json());
 app.use((req, res, next) => {
-  res.set('Access-Control-Allow-Origin', 'http://localhost:5173');
+  res.set('Access-Control-Allow-Origin', webOrigin);
   res.set('Access-Control-Allow-Headers', 'Content-Type,X-Fixture-Account');
   res.set('Access-Control-Allow-Methods', 'GET,POST,PUT,OPTIONS');
   if (req.method === 'OPTIONS') return res.sendStatus(204);
@@ -338,9 +340,6 @@ app.use(async (req, res) => {
         file: req.file,
         putObject: async (key, file) => {
           imageObjects.set(key, await fs.readFile(file));
-        },
-        putPreview: async (key, body) => {
-          imageObjects.set(key, body);
         },
       });
     else if (/^images\/[a-f0-9-]+\/discard$/.test(path))

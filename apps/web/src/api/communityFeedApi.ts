@@ -21,13 +21,6 @@ export interface FeedImage {
   height: number;
   fileSize: number;
   contentType: string;
-  preview?: {
-    url: string;
-    width: number;
-    height: number;
-    fileSize: number;
-    contentType: string;
-  };
 }
 export interface FeedAuthor {
   userPublicId: string;

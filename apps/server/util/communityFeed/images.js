@@ -1,17 +1,13 @@
 import fs from 'node:fs/promises';
 import pool from '../../db/index.js';
 import { validateCommunityChatImage } from '../services/communityChatImageService.js';
-import { putObjectToObs, putObjectBodyToObs, deleteObjectFromObs, createDownloadSignedUrl } from '../obsClient.js';
-import { compressCommunityImage } from '../imagePreview/compress.js';
+import { putObjectToObs, deleteObjectFromObs, createDownloadSignedUrl } from '../obsClient.js';
 import { access, first, fail, publicId, loadPost, strictFields } from './core.js';
 
 import { communityFeedSchemaReady } from './schema.js';
-import { COMMUNITY_IMAGE_SCHEMA, COMMUNITY_IMAGE_PREVIEW_SCHEMA } from './schemaContract.js';
+import { COMMUNITY_IMAGE_SCHEMA } from './schemaContract.js';
 export function imagesReady(db = pool) {
   return communityFeedSchemaReady(db, COMMUNITY_IMAGE_SCHEMA);
-}
-export function imagePreviewsReady(db = pool) {
-  return communityFeedSchemaReady(db, COMMUNITY_IMAGE_PREVIEW_SCHEMA);
 }
 export function imageDto(row, postId, revision) {
   const url = `/api/community/images/${row.public_id}${postId ? `?postId=${postId}&revision=${revision}` : ''}`;
@@ -22,29 +18,9 @@ export function imageDto(row, postId, revision) {
     height: Number(row.height),
     fileSize: Number(row.file_size),
     contentType: row.content_type,
-    ...(row.preview_object_key && row.preview_file_size && row.preview_width && row.preview_height
-      ? {
-          preview: {
-            url: `${url}${postId ? '&' : '?'}variant=preview`,
-            width: Number(row.preview_width),
-            height: Number(row.preview_height),
-            fileSize: Number(row.preview_file_size),
-            contentType: 'image/webp',
-          },
-        }
-      : {}),
   };
 }
-export async function uploadImage({
-  user,
-  input,
-  file,
-  db = pool,
-  env = process.env,
-  putObject = putObjectToObs,
-  putPreview = putObjectBodyToObs,
-  compress = compressCommunityImage,
-}) {
+export async function uploadImage({ user, input, file, db = pool, env = process.env, putObject = putObjectToObs }) {
   try {
     await access(db, user, { env, write: true });
     if (!(await imagesReady(db))) fail('COMMUNITY_IMAGES_UNAVAILABLE', 503);
@@ -87,31 +63,8 @@ export async function uploadImage({
       c.release();
     }
     if (existing) return imageDto(existing);
-    let preview = null;
-    let previewKey = null;
     try {
-      if (await imagePreviewsReady(db)) {
-        try {
-          preview = await compress(await fs.readFile(file.path));
-        } catch (error) {
-          // A derivative failure never loses the original or prevents posting.
-          console.warn(
-            '[community-image] preview unavailable code=%s',
-            /^[A-Z_]+$/.test(error?.code || '') ? error.code : 'IMAGE_PROCESS_FAILED',
-          );
-        }
-      }
-      if (preview) {
-        previewKey = `community-feed/previews/${id}/v1.webp`;
-        // Register both objects before uploading, including an uncertain storage response.
-        const [registered] = await db.query(
-          "UPDATE community_post_images SET preview_object_key=?,preview_file_size=?,preview_width=?,preview_height=? WHERE public_id=? AND status='uploading'",
-          [previewKey, preview.body.length, preview.width, preview.height, id],
-        );
-        if (registered.affectedRows !== 1) fail('COMMUNITY_UPLOAD_PENDING', 409);
-      }
       await putObject(objectKey, file.path, info.contentType);
-      if (preview) await putPreview(previewKey, preview.body, 'image/webp');
       const [result] = await db.query(
         "UPDATE community_post_images SET status='ready' WHERE public_id=? AND status='uploading'",
         [id],
@@ -130,10 +83,6 @@ export async function uploadImage({
       height: info.height,
       file_size: info.fileSize,
       content_type: info.contentType,
-      preview_object_key: previewKey,
-      preview_file_size: preview?.body.length,
-      preview_width: preview?.width,
-      preview_height: preview?.height,
     });
   } finally {
     if (file?.path) await fs.unlink(file.path).catch(() => {});
@@ -196,14 +145,10 @@ export async function readImage({
     if (!revision || (!privileged && Number(post.published_revision_id) !== Number(revision.id)))
       fail('COMMUNITY_IMAGE_UNAVAILABLE', 404);
   } else if (row.owner_id !== user?.id) fail('COMMUNITY_IMAGE_UNAVAILABLE', 404);
-  const preview = variant === 'preview' && row.preview_object_key && row.preview_file_size;
-  const objectKey = preview ? row.preview_object_key : row.object_key;
+  // Previously opened clients may still request variant=preview. Both URLs now read the one uploaded file.
   return {
     ...row,
-    object_key: objectKey,
-    content_type: preview ? 'image/webp' : row.content_type,
-    file_size: preview ? Number(row.preview_file_size) : Number(row.file_size),
-    signedUrl: sign({ objectKey, expires: 60 }).url,
+    signedUrl: sign({ objectKey: row.object_key, expires: 60 }).url,
   };
 }
 export async function discardImage({ user, id, db = pool, env = process.env }) {
@@ -221,6 +166,7 @@ export async function cleanupImages({ db = pool, deleteObject = deleteObjectFrom
   );
   const [rows] = await db.query("SELECT * FROM community_post_images WHERE status='delete_pending' LIMIT 50");
   for (const row of rows) {
+    // Old derived objects remain registered until their parent image is eligible for cleanup.
     if (row.preview_object_key) await deleteObject(row.preview_object_key);
     await deleteObject(row.object_key);
     await db.query("DELETE FROM community_post_images WHERE public_id=? AND status='delete_pending'", [row.public_id]);

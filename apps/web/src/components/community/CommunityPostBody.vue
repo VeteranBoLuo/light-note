@@ -15,8 +15,8 @@
           v-if="available(item.publicId)"
           :src="source(item.publicId)"
           alt=""
-          :width="item.preview?.width || item.width"
-          :height="item.preview?.height || item.height"
+          :width="item.width"
+          :height="item.height"
           loading="lazy"
           @error="failed.add(item.publicId)"
         />
@@ -42,8 +42,8 @@
             v-if="available(block.id)"
             :src="source(block.id)"
             :alt="block.alt"
-            :width="image(block.id)?.preview?.width || image(block.id)?.width || undefined"
-            :height="image(block.id)?.preview?.height || image(block.id)?.height || undefined"
+            :width="image(block.id)?.width || undefined"
+            :height="image(block.id)?.height || undefined"
             loading="lazy"
             @error="failed.add(block.id)"
           />
@@ -51,13 +51,7 @@
         </BButton>
       </div>
     </template>
-    <BImageViewer
-      v-if="visible"
-      v-model:visible="visible"
-      :images="viewerImages"
-      :initial-id="selected"
-      :resolve-source="viewerSourceResolver"
-    />
+    <BImageViewer v-if="visible" v-model:visible="visible" :images="viewerImages" :initial-id="selected" />
   </div>
 </template>
 <script setup lang="ts">
@@ -84,29 +78,26 @@
     ...(props.hideAttachments ? [] : attachments.value),
     ...document.value.imageIds.map(image).filter((i): i is FeedImage => Boolean(i)),
   ]);
-  const { imageSource, imageUnavailable, viewerSourceResolver } = useCommunityPreviewImages(() =>
-    ordered.value.map((i) => i.preview?.url || i.url),
-  );
+  const { imageSource, imageUnavailable } = useCommunityPreviewImages(() => ordered.value.map((i) => i.url));
   const failed = ref(new Set<string>()),
     visible = ref(false),
     selected = ref('');
-  const previewUrl = (id: string) => image(id)?.preview?.url || image(id)?.url;
-  const source = (id: string) => imageSource(previewUrl(id));
-  const available = (id: string) => !failed.value.has(id) && !imageUnavailable(previewUrl(id)) && Boolean(source(id));
+  const source = (id: string) => imageSource(image(id)?.url);
+  const available = (id: string) => !failed.value.has(id) && !imageUnavailable(image(id)?.url) && Boolean(source(id));
   function open(id: string) {
-    if (!image(id)?.url) return;
+    if (!available(id)) return;
     selected.value = id;
     visible.value = true;
   }
   const viewerImages = computed(() =>
     ordered.value
-      .filter((i) => i.url)
+      .filter((i) => available(i.publicId))
       .map((i) => ({
         id: i.publicId,
-        src: new URL(i.url, window.location.origin).href,
+        src: new URL(source(i.publicId)!, window.location.origin).href,
+        fileName: `${i.publicId}.${i.contentType === 'image/jpeg' ? 'jpg' : i.contentType === 'image/webp' ? 'webp' : 'png'}`,
         width: i.width,
         height: i.height,
-        fileName: `${i.publicId}.${i.contentType === 'image/jpeg' ? 'jpg' : i.contentType === 'image/webp' ? 'webp' : 'png'}`,
       })),
   );
   const { identity } = useCommunityPreview();

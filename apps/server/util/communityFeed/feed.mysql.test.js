@@ -5,7 +5,7 @@ import { resolveAchievements } from '../growth.js';
 import { POINTS_EARNING_C5_POLICY_VERSION, POINTS_EARNING_C8_POLICY_VERSION } from '../pointsEarningPolicy.js';
 import { listTopics, topicDetail, saveTopic } from './topics.js';
 import { prepareResource, readResource, discardResource, cleanupResources, resourcesReady } from './resources.js';
-import { readImage, uploadImage, discardImage, cleanupImages, imagesReady, imagePreviewsReady } from './images.js';
+import { readImage, uploadImage, discardImage, cleanupImages, imagesReady } from './images.js';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -1355,7 +1355,6 @@ describe.skipIf(!socketPath)('P2 real database boundaries', () => {
           input: { requestId: id },
           file: { path: filePath, size: bytes.length, mimetype },
           putObject,
-          compress: async () => null,
         });
       } finally {
         await expect(fs.stat(filePath)).rejects.toMatchObject({ code: 'ENOENT' });
@@ -1391,21 +1390,14 @@ describe.skipIf(!socketPath)('P2 real database boundaries', () => {
       await fs.rm(temp, { recursive: true, force: true });
     }
   });
-  it('retains exact original bytes, authorizes both variants and cleans both objects after a failed upload', async () => {
+  it('uploads one file, serves it for both current and legacy URLs, and preserves legacy cleanup', async () => {
     const png = Buffer.from(
       'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl6Ff8AAAAASUVORK5CYII=',
       'base64',
     );
-    const preview = { body: Buffer.from('derived image bytes'), width: 1, height: 1 };
-    const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'community-preview-test-'));
+    const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'community-single-image-'));
     const objects = new Map();
-    const compress = vi.fn(async () => preview);
     const putObject = vi.fn(async (key, file) => objects.set(key, await fs.readFile(file)));
-    const putPreview = vi.fn(async (key, body) => {
-      const [[row]] = await db.query('SELECT * FROM community_post_images WHERE preview_object_key=?', [key]);
-      expect(row.status).toBe('uploading');
-      objects.set(key, body);
-    });
     async function upload(id, extra = {}) {
       const file = path.join(temp, randomUUID());
       await fs.writeFile(file, png);
@@ -1415,9 +1407,7 @@ describe.skipIf(!socketPath)('P2 real database boundaries', () => {
         file: { path: file, size: png.length, mimetype: 'image/png' },
         db,
         env,
-        compress,
         putObject,
-        putPreview,
         ...extra,
       });
     }
@@ -1425,23 +1415,21 @@ describe.skipIf(!socketPath)('P2 real database boundaries', () => {
       const id = randomUUID();
       const image = await upload(id);
       expect(await upload(id)).toEqual(image);
-      expect(compress).toHaveBeenCalledTimes(1);
       expect(putObject).toHaveBeenCalledTimes(1);
-      expect(putPreview).toHaveBeenCalledTimes(1);
-      expect(image.preview).toMatchObject({
-        url: image.url + '?variant=preview',
-        fileSize: preview.body.length,
-        contentType: 'image/webp',
-      });
+      expect(objects.size).toBe(1);
+      expect(image.preview).toBeUndefined();
       const sign = ({ objectKey }) => ({ url: objectKey });
       const original = await readImage({ user: A, id, db, env, sign });
-      const derived = await readImage({ user: A, id, input: { variant: 'preview' }, db, env, sign });
       expect(objects.get(original.object_key)).toEqual(png);
-      expect(objects.get(derived.object_key)).toEqual(preview.body);
-      expect(derived.content_type).toBe('image/webp');
-      await expect(readImage({ user: B, id, input: { variant: 'preview' }, db, env, sign })).rejects.toMatchObject({
-        status: 404,
-      });
+      // Stored derivatives from the retired version remain private and recoverable by cleanup.
+      const legacyKey = 'community-feed/previews/' + id + '/v1.webp';
+      await db.query(
+        'UPDATE community_post_images SET preview_object_key=?,preview_file_size=100,preview_width=1,preview_height=1 WHERE public_id=?',
+        [legacyKey, id],
+      );
+      expect((await readImage({ user: A, id, input: { variant: 'preview' }, db, env, sign })).object_key).toBe(
+        original.object_key,
+      );
       const post = await run(submitPost, A, postInput({ images: [id] }));
       const query = { postId: post.publicId, revision: 1, variant: 'preview' };
       await expect(readImage({ user: B, id, input: query, db, env, sign })).rejects.toMatchObject({ status: 404 });
@@ -1450,10 +1438,8 @@ describe.skipIf(!socketPath)('P2 real database boundaries', () => {
         ROOT,
         input({ postId: post.publicId, expectedRevision: post.revision, action: 'approve', reason: '符合规则' }),
       );
-      expect((await postDetail({ user: B, id: post.publicId, db, env })).images[0].preview.url).toContain(
-        '&variant=preview',
-      );
-      expect((await readImage({ user: B, id, input: query, db, env, sign })).object_key).toBe(derived.object_key);
+      expect((await postDetail({ user: B, id: post.publicId, db, env })).images[0].preview).toBeUndefined();
+      expect((await readImage({ user: B, id, input: query, db, env, sign })).object_key).toBe(original.object_key);
       const current = await postDetail({ user: A, id: post.publicId, db, env });
       await run(withdrawPost, A, input({ postId: post.publicId, expectedRevision: current.revision }));
       for (const variant of ['original', 'preview'])
@@ -1463,69 +1449,67 @@ describe.skipIf(!socketPath)('P2 real database boundaries', () => {
       const failedId = randomUUID();
       await expect(
         upload(failedId, {
-          putPreview: async () => {
+          putObject: async () => {
             throw new Error('uncertain storage response');
           },
         }),
       ).rejects.toThrow('uncertain storage response');
       const [[failed]] = await db.query('SELECT * FROM community_post_images WHERE public_id=?', [failedId]);
       expect(failed.status).toBe('delete_pending');
-      expect(failed.preview_object_key).toBeTruthy();
-      const remove = vi.fn().mockRejectedValueOnce(new Error('offline')).mockResolvedValue({});
-      await expect(cleanupImages({ db, deleteObject: remove })).rejects.toThrow('offline');
-      expect((await db.query('SELECT * FROM community_post_images WHERE public_id=?', [failedId]))[0]).toHaveLength(1);
+      expect(failed.preview_object_key).toBeNull();
+      const remove = vi.fn().mockResolvedValue({});
       await cleanupImages({ db, deleteObject: remove });
-      expect(remove).toHaveBeenCalledWith(failed.preview_object_key);
       expect(remove).toHaveBeenCalledWith(failed.object_key);
-      expect((await db.query('SELECT * FROM community_post_images WHERE public_id=?', [failedId]))[0]).toHaveLength(0);
+      const legacyId = randomUUID();
+      await upload(legacyId);
+      await db.query(
+        "UPDATE community_post_images SET preview_object_key=?,status='delete_pending' WHERE public_id=?",
+        [legacyKey + '-old', legacyId],
+      );
+      remove.mockRejectedValueOnce(new Error('offline'));
+      await expect(cleanupImages({ db, deleteObject: remove })).rejects.toThrow('offline');
+      expect((await db.query('SELECT * FROM community_post_images WHERE public_id=?', [legacyId]))[0]).toHaveLength(1);
+      await cleanupImages({ db, deleteObject: remove });
+      expect(remove).toHaveBeenCalledWith(legacyKey + '-old');
+      expect((await db.query('SELECT * FROM community_post_images WHERE public_id=?', [legacyId]))[0]).toHaveLength(0);
     } finally {
       await fs.rm(temp, { recursive: true, force: true });
     }
   });
-  it('keeps original uploads available when rendering fails or preview columns are not installed', async () => {
+  it('keeps single-image uploads available without retired derivative columns', async () => {
     const png = Buffer.from(
       'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl6Ff8AAAAASUVORK5CYII=',
       'base64',
     );
-    const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'community-preview-compat-'));
-    const compress = vi.fn(async () => {
-      throw Object.assign(new Error('runtime unavailable'), { code: 'IMAGE_RUNTIME_UNAVAILABLE' });
-    });
-    const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    async function upload() {
+    const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'community-single-image-compat-'));
+    try {
+      await db.query('ALTER TABLE community_post_images DROP COLUMN preview_width');
+      expect(await imagesReady(db)).toBe(true);
       const file = path.join(temp, randomUUID());
       await fs.writeFile(file, png);
-      return uploadImage({
+      const image = await uploadImage({
         user: A,
         input: input(),
         file: { path: file, size: png.length, mimetype: 'image/png' },
         db,
         env,
-        compress,
         putObject: async () => {},
       });
-    }
-    try {
-      expect((await upload()).preview).toBeUndefined();
-      expect(compress).toHaveBeenCalledTimes(1);
-      await db.query('ALTER TABLE community_post_images DROP COLUMN preview_width');
-      expect(await imagePreviewsReady(db)).toBe(false);
-      expect(await imagesReady(db)).toBe(true);
-      const original = await upload();
-      expect(original.preview).toBeUndefined();
-      expect(compress).toHaveBeenCalledTimes(1);
-      const result = await readImage({
-        user: A,
-        id: original.publicId,
-        input: { variant: 'preview' },
-        db,
-        env,
-        sign: ({ objectKey }) => ({ url: objectKey }),
-      });
-      expect(result.content_type).toBe('image/png');
+      expect(image.preview).toBeUndefined();
+      expect(
+        (
+          await readImage({
+            user: A,
+            id: image.publicId,
+            input: { variant: 'preview' },
+            db,
+            env,
+            sign: ({ objectKey }) => ({ url: objectKey }),
+          })
+        ).content_type,
+      ).toBe('image/png');
     } finally {
       await ensureCommunityFeedSchema(db);
-      warning.mockRestore();
       await fs.rm(temp, { recursive: true, force: true });
     }
   });

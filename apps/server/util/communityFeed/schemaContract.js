@@ -265,6 +265,7 @@ export const COMMUNITY_IMAGE_SCHEMA = {
   },
 };
 
+// Retained only for cleanup of derived objects already registered in production.
 export const COMMUNITY_IMAGE_PREVIEW_SCHEMA = {
   community_post_images: {
     columns: ['preview_object_key', 'preview_file_size', 'preview_width', 'preview_height'],
