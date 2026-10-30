@@ -69,9 +69,15 @@ router.get('/download/:id', async (req, res) => {
     await fs.access(file);
     res.set('Cache-Control', 'private, no-store');
     res.set('X-Content-Type-Options', 'nosniff');
-    res.download(file, `轻笺导出_${new Date(task.create_time).toISOString().slice(0, 10)}.zip`, (e) => {
-      if (e && !res.headersSent) res.sendStatus(404);
-    });
+    // 线上存放目录是 .runtime/data-exports，send 默认忽略点开头的路径段并回 404，必须显式允许。
+    res.download(
+      file,
+      `轻笺导出_${new Date(task.create_time).toISOString().slice(0, 10)}.zip`,
+      { dotfiles: 'allow' },
+      (e) => {
+        if (e && !res.headersSent) res.sendStatus(404);
+      },
+    );
   } catch (e) {
     res.sendStatus(e.status || 404);
   }

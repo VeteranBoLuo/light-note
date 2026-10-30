@@ -1,37 +1,33 @@
 import pool from './db/index.js';
 import { assertSchema, runtime } from './util/dataExport/storage.js';
 import { processTask, cleanup } from './util/dataExport/worker.js';
-let stopping = false,
-  lastCleanup = 0,
-  warned = false;
+import { runExportWorker } from './util/dataExport/workerLoop.js';
+let stopping = false;
 process.on('SIGTERM', () => {
   stopping = true;
 });
 process.on('SIGINT', () => {
   stopping = true;
 });
+// 按秒切分等待，收到停止信号后尽快退出。
+const sleep = async (ms) => {
+  for (let waited = 0; waited < ms && !stopping; waited += 1000)
+    await new Promise((r) => setTimeout(r, Math.min(1000, ms - waited)));
+};
 try {
-  while (!stopping) {
-    try {
-      await assertSchema(pool);
-      if (Date.now() - lastCleanup > 60000) {
-        await cleanup();
-        lastCleanup = Date.now();
-      }
-      if (await processTask()) continue;
-    } catch (e) {
-      if (runtime !== 'local' || !['ER_NO_SUCH_TABLE', 'ER_BAD_FIELD_ERROR'].includes(e.code)) throw e;
-      if (!warned) {
-        console.warn('[data-export-worker] DATA_EXPORT_SCHEMA_NOT_READY');
-        warned = true;
-      }
-      for (let i = 0; i < 30 && !stopping; i++) await new Promise((r) => setTimeout(r, 1000));
-    }
-    await new Promise((r) => setTimeout(r, 1500));
-  }
+  await runExportWorker({
+    assertSchema: () => assertSchema(pool),
+    cleanup,
+    processTask,
+    isStopping: () => stopping,
+    sleep,
+    runtime,
+  });
 } catch {
   console.error('[data-export-worker] DATA_EXPORT_WORKER_FAILED');
   process.exitCode = 1;
 } finally {
-  await pool.end();
+  await pool.end().catch(() => {});
+  // Redis 等长连接会让事件循环一直存活：必须显式退出，交给 pm2 重新拉起，不能留下只显示在线的空进程。
+  process.exit();
 }

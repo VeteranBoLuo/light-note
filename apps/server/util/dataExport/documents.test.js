@@ -87,6 +87,17 @@ describe('portable documents', () => {
     expect(result.warnings).toEqual([]);
     expect(await fs.readdir(path.join(dir, '笔记/图片'))).toHaveLength(1);
   });
+  it('reads legacy site images stored without a leading slash', async () => {
+    const ctx = context();
+    const r = await renderNote(
+      { title: 'Legacy', type: 'html', content: '<p><img src="uploads/note-1-mceclip0.png"></p>' },
+      { path: '笔记/Legacy.html' },
+      ctx,
+    );
+    expect(ctx.readImage).toHaveBeenCalledWith('/uploads/note-1-mceclip0.png', 'u', {}, expect.anything());
+    expect(r.warnings).toEqual([]);
+    expect(r.content).not.toContain('src="uploads/');
+  });
   it('retains unavailable links and reports partial images', async () => {
     const r = await renderNote(
       { title: 'T', type: 'html', content: '<img alt="图" src="https://example.com/missing.png">' },

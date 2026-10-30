@@ -71,7 +71,8 @@ router.get('/image', async (req, res) => {
     if (!/^[a-f0-9]{64}\.(png|jpg|webp|gif)$/.test(key)) throw importError('NOTE_IMPORT_NOT_FOUND');
     res.set('Cache-Control', 'private, no-store');
     res.set('X-Content-Type-Options', 'nosniff');
-    res.sendFile(path.join(taskDirectory(task.id), 'assets', key));
+    // 线上存放目录是 .runtime/note-imports，send 默认忽略点开头的路径段并回 404，必须显式允许。
+    res.sendFile(path.join(taskDirectory(task.id), 'assets', key), { dotfiles: 'allow' });
   } catch {
     res.sendStatus(404);
   }

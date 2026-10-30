@@ -36,7 +36,9 @@ export async function renderNote(row, item, ctx) {
   for (const el of $('img').toArray()) {
     imageIndex++;
     const img = $(el),
-      source = img.attr('src') || '';
+      raw = img.attr('src') || '',
+      // 早期富文本把站内图片存成不带开头斜杠的 uploads/…，按站内路径处理。
+      source = /^uploads\//.test(raw) ? `/${raw}` : raw;
     img.removeAttr('srcset');
     if (!ctx.options.includeImages) {
       img.replaceWith($('<span>').text(img.attr('alt') || ''));
