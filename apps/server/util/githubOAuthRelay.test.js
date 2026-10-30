@@ -1,8 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import https from 'node:https';
 import { EventEmitter } from 'node:events';
-import { githubOAuthRelay, requestGitHubRelay } from './githubOAuthRelay.js';
-import { guardedPublicLookup } from './webUrlSafety.js';
+import { connectGitHubRelayTls, githubOAuthRelay, requestGitHubRelay } from './githubOAuthRelay.js';
 import worker, { handleGitHubRelay } from '../../../scripts/github-oauth-relay/worker.mjs';
 
 const secret = 's'.repeat(43);
@@ -176,8 +175,94 @@ describe('GitHub Pages Function', () => {
   });
 });
 
+describe('relay TLS selection', () => {
+  const url = new URL(relay.url);
+  const addresses = [
+    { address: '192.0.2.1', family: 4 },
+    { address: '192.0.2.2', family: 4 },
+    { address: '2001:db8::1', family: 6 },
+  ];
+  function connections() {
+    const sockets = [];
+    const connectTls = vi.fn(() => {
+      const socket = new EventEmitter();
+      socket.destroy = vi.fn();
+      sockets.push(socket);
+      return socket;
+    });
+    return { sockets, connectTls };
+  }
+  it('validates every DNS address first, preserves the relay TLS identity, and closes losing connections', async () => {
+    const { sockets, connectTls } = connections();
+    const resolveIps = vi.fn(async () => addresses);
+    const connecting = connectGitHubRelayTls(url, { resolveIps, connectTls });
+    await Promise.resolve();
+    expect(resolveIps).toHaveBeenCalledExactlyOnceWith('relay.example.com');
+    expect(connectTls).toHaveBeenCalledTimes(3);
+    expect(connectTls.mock.calls[1][0]).toEqual({
+      host: '192.0.2.2',
+      port: 443,
+      family: 4,
+      servername: 'relay.example.com',
+      rejectUnauthorized: true,
+    });
+    sockets[1].emit('secureConnect');
+    await expect(connecting).resolves.toBe(sockets[1]);
+    expect(sockets[0].destroy).toHaveBeenCalledOnce();
+    expect(sockets[2].destroy).toHaveBeenCalledOnce();
+    expect(sockets[1].destroy).not.toHaveBeenCalled();
+  });
+  it('sends no HTTP request when DNS validation rejects a private answer', async () => {
+    const { connectTls } = connections();
+    const request = vi.spyOn(https, 'request');
+    const resolveIps = vi.fn(async () => {
+      throw new Error('BLOCKED_PRIVATE_IP');
+    });
+    await expect(connectGitHubRelayTls(url, { resolveIps, connectTls })).rejects.toThrow('BLOCKED_PRIVATE_IP');
+    expect(connectTls).not.toHaveBeenCalled();
+    expect(request).not.toHaveBeenCalled();
+  });
+  it('a failed IPv6 connection does not abort a viable IPv4 handshake', async () => {
+    const { sockets, connectTls } = connections();
+    const connecting = connectGitHubRelayTls(url, { resolveIps: async () => addresses, connectTls });
+    await Promise.resolve();
+    sockets[2].emit('error', Object.assign(new Error('unreachable'), { code: 'ENETUNREACH' }));
+    sockets[0].emit('secureConnect');
+    await expect(connecting).resolves.toBe(sockets[0]);
+  });
+  it('rejects after all handshakes fail and closes every candidate', async () => {
+    const { sockets, connectTls } = connections();
+    const connecting = connectGitHubRelayTls(url, { resolveIps: async () => addresses, connectTls });
+    await Promise.resolve();
+    for (const socket of sockets) socket.emit('error', new Error('bad certificate'));
+    await expect(connecting).rejects.toHaveProperty('code', 'GITHUB_OAUTH_RELAY_UNAVAILABLE');
+    for (const socket of sockets) expect(socket.destroy).toHaveBeenCalled();
+  });
+  it('the caller deadline closes stalled TLS handshakes without an HTTP request', async () => {
+    const { sockets, connectTls } = connections();
+    const controller = new AbortController();
+    const connecting = connectGitHubRelayTls(url, {
+      resolveIps: async () => addresses,
+      connectTls,
+      signal: controller.signal,
+    });
+    await Promise.resolve();
+    controller.abort();
+    await expect(connecting).rejects.toHaveProperty('code', 'GITHUB_OAUTH_RELAY_TIMEOUT');
+    for (const socket of sockets) expect(socket.destroy).toHaveBeenCalled();
+  });
+});
+
 describe('backend relay transport', () => {
+  const relayTransport = { connect: connectGitHubRelayTls };
+  const readRelay = (payload, timeoutMs = 1000) =>
+    requestGitHubRelay(relay, payload, timeoutMs, {
+      connect: relayTransport.connect,
+    });
   function transport() {
+    const socket = { destroy: vi.fn() };
+    const connect = vi.fn(async () => socket);
+    vi.spyOn(relayTransport, 'connect').mockImplementation(connect);
     const req = new EventEmitter();
     req.end = vi.fn();
     req.destroy = vi.fn((error) => {
@@ -185,26 +270,30 @@ describe('backend relay transport', () => {
       return req;
     });
     const call = vi.spyOn(https, 'request').mockReturnValue(req);
-    return { req, call };
+    return { req, call, socket };
   }
-  function finish(call, value, status = 200) {
+  async function finish(call, value, status = 200) {
+    // Wait until the injected TLS handshake has completed, before delivering the HTTP response.
+    await vi.waitFor(() => expect(call).toHaveBeenCalledOnce());
     const res = new EventEmitter();
     res.statusCode = status;
     call.mock.calls[0][2](res);
     res.emit('data', Buffer.from(typeof value === 'string' ? value : JSON.stringify(value)));
     res.emit('end');
   }
-  it('uses socket-bound DNS validation, a fresh TLS connection and separate service authorization', async () => {
-    const { call, req } = transport();
-    const reading = requestGitHubRelay(relay, { operation: 'user', accessToken: 'github-token' }, 50);
-    finish(call, { status: 200, body: '{"id":1}', headers: {} });
+  it('sends one authenticated HTTP request on a fresh selected TLS connection', async () => {
+    const { call, req, socket } = transport();
+    const reading = readRelay({ operation: 'user', accessToken: 'github-token' });
+    await finish(call, { status: 200, body: '{"id":1}', headers: {} });
     await expect(reading).resolves.toEqual({ status: 200, body: '{"id":1}', headers: {} });
     expect(call.mock.calls[0][1]).toMatchObject({
-      agent: false,
-      lookup: guardedPublicLookup,
       method: 'POST',
       headers: { authorization: `Bearer ${secret}`, 'user-agent': 'light-note' },
     });
+    expect(call.mock.calls[0][1].agent.keepAlive).toBe(false);
+    expect(call.mock.calls[0][1].agent.createConnection()).toBe(socket);
+    expect(socket.destroy).toHaveBeenCalled();
+    expect(req.end).toHaveBeenCalledOnce();
     expect(JSON.parse(req.end.mock.calls[0][0])).toEqual({ operation: 'user', accessToken: 'github-token' });
   });
   it.each([
@@ -215,24 +304,39 @@ describe('backend relay transport', () => {
     { status: 200, body: '{}', headers: { 'retry-after': 'bad' } },
   ])('rejects malformed or oversized relay results', async (value) => {
     const { call } = transport();
-    const reading = requestGitHubRelay(relay, { operation: 'probe' }, 50);
-    finish(call, value);
-    await expect(reading).rejects.toHaveProperty('code', 'GITHUB_OAUTH_RELAY_RESPONSE_INVALID');
+    const reading = readRelay({ operation: 'probe' });
+    const checked = expect(reading).rejects.toHaveProperty('code', 'GITHUB_OAUTH_RELAY_RESPONSE_INVALID');
+    await finish(call, value);
+    await checked;
   });
   it('does not follow an HTTP redirect from the relay', async () => {
     const { call } = transport();
-    const reading = requestGitHubRelay(relay, { operation: 'token', body: tokenBody }, 50);
-    finish(call, {}, 302);
-    await expect(reading).rejects.toHaveProperty('code', 'GITHUB_OAUTH_RELAY_UNAVAILABLE');
+    const reading = readRelay({ operation: 'token', body: tokenBody });
+    const checked = expect(reading).rejects.toHaveProperty('code', 'GITHUB_OAUTH_RELAY_UNAVAILABLE');
+    await finish(call, {}, 302);
+    await checked;
     expect(call).toHaveBeenCalledOnce();
   });
   it('ends a stalled connection at its hard deadline', async () => {
     vi.useFakeTimers();
     const { req } = transport();
-    const reading = requestGitHubRelay(relay, { operation: 'token', body: tokenBody }, 50);
-    const checked = expect(reading).rejects.toHaveProperty('code', 'GITHUB_OAUTH_RELAY_UNAVAILABLE');
+    const reading = readRelay({ operation: 'token', body: tokenBody }, 50);
+    const checked = expect(reading).rejects.toHaveProperty('code', 'GITHUB_OAUTH_RELAY_TIMEOUT');
     await vi.advanceTimersByTimeAsync(50);
     await checked;
     expect(req.destroy).toHaveBeenCalledOnce();
+  });
+  it('the hard deadline also covers DNS and TLS selection before an HTTP request exists', async () => {
+    vi.useFakeTimers();
+    const call = vi.spyOn(https, 'request');
+    const connect = vi.fn(() => new Promise(() => {}));
+    const reading = requestGitHubRelay(relay, { operation: 'probe' }, 50, { connect });
+    const checked = expect(reading).rejects.toMatchObject({
+      code: 'GITHUB_OAUTH_RELAY_TIMEOUT',
+      transportPhase: 'CONNECT',
+    });
+    await vi.advanceTimersByTimeAsync(50);
+    await checked;
+    expect(call).not.toHaveBeenCalled();
   });
 });

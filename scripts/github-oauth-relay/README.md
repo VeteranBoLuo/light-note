@@ -17,7 +17,7 @@ GITHUB_OAUTH_RELAY_TOKEN=<与实例一致的独立鉴权密钥>
 
 ## 协议与验收
 
-只接受带服务端 Bearer 鉴权的 `POST /github`，JSON 操作固定为 `probe`、`token`、`user`、`emails`。目标固定为 GitHub 换票及两个 GET 接口，不接收 URL，不转发 Cookie，不跟随重定向；每次请求只访问上游一次。先通过无用户凭据的 POST 探测 GitHub，再提交一次授权码。换票发出后，即使超时或响应无效也只能重新授权；资料 GET 可按后端已有策略有限重试。`state`、PKCE、浏览器 nonce 与账号绑定校验仍由原后端负责。
+只接受带服务端 Bearer 鉴权的 `POST /github`，JSON 操作固定为 `probe`、`token`、`user`、`emails`。目标固定为 GitHub 换票及两个 GET 接口，不接收 URL，不转发 Cookie，不跟随重定向；每次请求只访问上游一次。后端先校验全部 DNS 结果，再竞争最多八条 TLS 连接；只有成功建立且验证了证书的连接发送 HTTP 请求，其余连接关闭，不竞争或重放授权码。先通过无用户凭据的 POST 探测 GitHub，再提交一次授权码。换票发出后，即使超时或响应无效也只能重新授权；资料 GET 可按后端已有策略有限重试。`state`、PKCE、浏览器 nonce 与账号绑定校验仍由原后端负责。
 
 发布前运行：
 
