@@ -320,7 +320,6 @@ declare(ADMIN_POLICIES.CONTENT_WRITE, 'file', [
   ['POST', '/file/share/revoke'],
   ['POST', '/file/share/rotate'],
 ]);
-declare(ADMIN_POLICIES.CONTENT_DESTRUCTIVE, 'file', [['POST', '/file/hermesBackup']]);
 
 declare(ADMIN_POLICIES.READ, 'search', [
   ['POST', '/search/global'],

@@ -16,8 +16,6 @@ import { previewDescriptor, hydrateImagePreviewStates } from '../util/imagePrevi
 import { registerCloudImage, removeImageReferences } from '../util/imagePreview/references.js';
 import express from 'express';
 import rateLimit from 'express-rate-limit';
-import multer from 'multer';
-import os from 'os';
 import { L, resultData, snakeCaseKeys } from '../util/common.js';
 import pool from '../db/index.js';
 import { awardCreate, getUserSpaceMb } from '../util/growth.js';
@@ -29,7 +27,6 @@ import {
   createDownloadSignedUrl,
   deleteObjectFromObs,
   getObjectMetadataFromObs,
-  putObjectToObs,
 } from '../util/obsClient.js';
 import {
   FILE_CATEGORY_ORDER,
@@ -99,8 +96,6 @@ function sendFileServerError(res, scene, error, message = '服务器暂时无法
   console.error('[file] %s failed code=%s', scene, stableAgentErrorCode(error));
   return res.send(resultData(null, 500, message));
 }
-
-const backupUpload = multer({ dest: os.tmpdir(), limits: { fileSize: 200 * 1024 * 1024 } });
 
 // 列表/预览/分享页会把这个签名 URL 烤进页面并在整个浏览会话里复用(缩略图、预览、拖拽下载),
 // 原 600s(10 分钟)太短——用户停留稍久再点预览/下载就拿到过期 URL,表现为图裂/预览失败/下载报错。
@@ -918,95 +913,5 @@ router.post('/clearFolderFiles', fileHandle.clearFolderFiles);
 router.post('/updateFolderSort', fileHandle.updateFolderSort);
 router.post('/getFileTags', fileHandle.getFileTags);
 router.post('/updateFileTags', fileHandle.updateFileTags);
-
-// Hermes 备份上传：服务端一键上传 OBS + 写库
-const HERMES_BACKUP_USER_ID = '453c9c95-9b2e-11ef-9d4d-84a93e80c16e';
-const HERMES_BACKUP_FILENAME = 'hermes-backup.tar.gz';
-
-router.post('/hermesBackup', backupUpload.single('file'), async (req, res) => {
-  const filePath = req.file?.path;
-  try {
-    const token = req.headers['x-backup-token'];
-    const expected = process.env.BACKUP_TOKEN;
-
-    if (!expected || token !== expected) {
-      if (filePath) await import('fs').then((fs) => fs.promises.unlink(filePath).catch(() => {}));
-      return res.send(resultData(null, 403, '备份令牌无效'));
-    }
-
-    if (!req.file) {
-      return res.send(resultData(null, 400, '未收到文件'));
-    }
-
-    const { objectKey } = await prepareLegacyCloudUpload({
-      userId: HERMES_BACKUP_USER_ID,
-      fileName: HERMES_BACKUP_FILENAME,
-      fileType: 'application/gzip',
-    });
-
-    // 1. 直传 OBS
-    await putObjectToObs(objectKey, filePath, 'application/gzip');
-
-    // 2. 写入 files 表（同名覆盖）
-    let supersededKey;
-    const connection = await pool.getConnection();
-    try {
-      await connection.beginTransaction();
-
-      await lockActiveUploadOwner(connection, HERMES_BACKUP_USER_ID);
-      await lockCloudObjectForPublication(connection, HERMES_BACKUP_USER_ID, objectKey);
-
-      const [existing] = await connection.query(
-        'SELECT id,obs_key,file_name FROM files WHERE create_by = ? AND file_name = ? AND del_flag = 0',
-        [HERMES_BACKUP_USER_ID, HERMES_BACKUP_FILENAME],
-      );
-      if (existing.length > 0) {
-        supersededKey = existing[0].obs_key || buildObjectKey(HERMES_BACKUP_USER_ID, existing[0].file_name);
-        await purgeDocumentSourcesForCloudFiles(connection, HERMES_BACKUP_USER_ID, [existing[0].id]);
-      }
-
-      const directory = `${bucketBaseUrl}/files/${HERMES_BACKUP_USER_ID}/`;
-      const fileInfo = {
-        create_by: HERMES_BACKUP_USER_ID,
-        file_name: HERMES_BACKUP_FILENAME,
-        file_type: 'application/gzip',
-        file_size: req.file.size,
-        directory,
-        obs_key: objectKey,
-        folder_id: null,
-      };
-      if (existing.length) {
-        await connection.query('UPDATE files SET ? WHERE id = ? AND create_by = ?', [
-          snakeCaseKeys(fileInfo),
-          existing[0].id,
-          HERMES_BACKUP_USER_ID,
-        ]);
-      } else {
-        await connection.query('INSERT INTO files SET ?', [snakeCaseKeys(fileInfo)]);
-      }
-
-      await connection.commit();
-    } catch (dbErr) {
-      await connection.rollback();
-      throw dbErr;
-    } finally {
-      connection.release();
-    }
-    if (supersededKey && supersededKey !== objectKey) {
-      await deleteUnmanagedObject(supersededKey).catch((error) => {
-        console.warn('[file] backup object cleanup failed code=%s', stableAgentErrorCode(error));
-      });
-    }
-    res.send(resultData({ fileName: HERMES_BACKUP_FILENAME, size: req.file.size }, 200, '备份上传成功'));
-  } catch (e) {
-    return sendFileServerError(res, 'hermes-backup', e, '备份上传失败，请稍后重试');
-  } finally {
-    // 清理临时文件
-    if (filePath) {
-      const fs = await import('fs');
-      fs.promises.unlink(filePath).catch(() => {});
-    }
-  }
-});
 
 export default router;

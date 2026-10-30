@@ -40,7 +40,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   realLifecycle: false,
-  putObjectToObs: vi.fn(),
   routes: new Map(),
   pool: { query: vi.fn(), getConnection: vi.fn() },
   getUserSpaceMb: vi.fn(),
@@ -84,7 +83,6 @@ vi.mock('../util/obsClient.js', () => ({
   createUploadSignedUrl: mocks.createUploadSignedUrl,
   deleteObjectFromObs: mocks.deleteObjectFromObs,
   getObjectMetadataFromObs: mocks.getObjectMetadataFromObs,
-  putObjectToObs: mocks.putObjectToObs,
 }));
 vi.mock('../util/fileCategory.js', () => ({
   FILE_CATEGORY_ORDER: ['pdf', 'image'],
@@ -785,7 +783,6 @@ describe('upload routes with the real lifecycle service', () => {
       headers: {},
       expiresIn: 900,
     }));
-    mocks.putObjectToObs.mockResolvedValue({});
     const query = vi.fn(async (sql, params = []) => {
       if (sql.startsWith('SELECT id, file_name, del_flag FROM files')) return [[]];
       if (sql.startsWith('INSERT INTO cloud_legacy')) {
@@ -843,25 +840,5 @@ describe('upload routes with the real lifecycle service', () => {
     expect(result.status).toBe(409);
     expect(mocks.getObjectMetadataFromObs).not.toHaveBeenCalled();
     expect(mocks.pool.getConnection).not.toHaveBeenCalled();
-  });
-  it('uploads a backup to a random key and stores the same key under an owner lock', async () => {
-    vi.stubEnv('BACKUP_TOKEN', 'test-backup-only');
-    const res = response();
-    await mocks.routes.get('/hermesBackup').at(-1)(
-      {
-        headers: { 'x-backup-token': 'test-backup-only' },
-        file: { path: '/tmp/lightnote-missing-backup-test-file', size: 12 },
-      },
-      res,
-    );
-    expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ status: 200 }));
-    const key = mocks.putObjectToObs.mock.calls[0][0];
-    expect(key).toMatch(/\/uploads\/[0-9a-f-]{36}$/);
-    expect(connection.query).toHaveBeenCalledWith('SELECT id,role,del_flag FROM user WHERE id=? FOR UPDATE', [
-      expect.any(String),
-    ]);
-    expect(connection.query).toHaveBeenCalledWith('INSERT INTO files SET ?', [
-      expect.objectContaining({ obs_key: key, file_name: 'hermes-backup.tar.gz' }),
-    ]);
   });
 });
