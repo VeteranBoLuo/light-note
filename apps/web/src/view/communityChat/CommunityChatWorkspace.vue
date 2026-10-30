@@ -938,6 +938,7 @@
     createCommunityChatDraftSession,
     getCommunityChatDraftSession,
     touchCommunityChatDraftSession,
+    type CommunityChatComposerDraftSession,
     type CommunityChatDraftMentionTarget,
   } from '@/composables/useCommunityChatDraftMemory';
   import { useCommunityChatEmojiRecent } from '@/composables/useCommunityChatEmojiRecent';
@@ -1061,6 +1062,17 @@
       composerDraftSession.value.pendingClientRequestId = value;
     },
   });
+  // 失败后放回的草稿与已发出的请求一致时沿用原请求号；服务端若已写入会返回原消息，不再重复创建。
+  const pendingRequestPayloads = new WeakMap<CommunityChatComposerDraftSession, string>();
+  function draftPayloadKey(session: CommunityChatComposerDraftSession) {
+    return JSON.stringify([
+      String(session.text || '').trim(),
+      session.replyTarget?.publicId || '',
+      session.mentionTargets.map((target) => target.key),
+      session.mentionEveryone,
+      session.pendingAttachments.map((attachment) => attachment.publicId),
+    ]);
+  }
   const reportVisible = ref(false);
   const reportTarget = ref<CommunityChatMessage | null>(null);
   const reporting = ref(false);
@@ -2762,7 +2774,8 @@
     const previousScrollHeight = element?.scrollHeight || 0;
     try {
       const response = await getCommunityChatMessages(roomSlug, { before, limit: INITIAL_MESSAGE_PAGE_SIZE }, { activity: 'incremental' });
-      if (roomSlug !== selectedRoomSlug.value) return;
+      // 「回到最新」等整窗重载后，旧游标取回的更早一页已不与当前窗口相接，拼上去会造成永久断档。
+      if (generation !== loadGeneration || roomSlug !== selectedRoomSlug.value) return;
       const page = response.data as CommunityChatMessagePage;
       syncCommunityClock(page.serverTime);
       const knownIds = new Set(chatMessages.value.map((item) => item.publicId));
@@ -4679,6 +4692,7 @@
     if (!roomSlug || !canSend.value || !canPostCurrentRoom.value) return;
     const clientRequestId = draftSession.pendingClientRequestId || createCommunityChatClientRequestId();
     draftSession.pendingClientRequestId = clientRequestId;
+    pendingRequestPayloads.set(draftSession, draftPayloadKey(draftSession));
     const attachmentRefs = draftSession.pendingAttachments.map((attachment) => ({
       kind: attachment.kind,
       publicId: attachment.publicId,
@@ -4963,8 +4977,11 @@
           .join('|'),
     ],
     () => {
-      touchCommunityChatDraftSession(composerDraftSession.value);
-      if (!sending.value) pendingClientRequestId.value = null;
+      const session = composerDraftSession.value;
+      touchCommunityChatDraftSession(session);
+      if (!sending.value && draftPayloadKey(session) !== pendingRequestPayloads.get(session)) {
+        pendingClientRequestId.value = null;
+      }
     },
   );
 
@@ -5992,7 +6009,7 @@
     border-radius: 5px 15px 15px;
     color: var(--text-color);
     background: var(--card-background);
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     line-height: 1.65;
     overflow-wrap: anywhere;
     white-space: pre-wrap;
@@ -6247,7 +6264,7 @@
     width: 100%;
     min-width: 0;
     display: block;
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
   }
 
   .community-composer__mention-anchor {
@@ -6285,7 +6302,7 @@
     outline: 0;
     box-shadow: none !important;
     background: transparent !important;
-    font-size: 13px;
+    font-size: var(--ui-font-13, 13px);
     line-height: 1.45;
   }
 

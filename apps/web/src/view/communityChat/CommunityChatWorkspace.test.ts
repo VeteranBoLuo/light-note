@@ -2474,6 +2474,73 @@ describe('CommunityChatWorkspace', () => {
     expect(host.textContent).toContain('最新消息');
   });
 
+  it('回到最新后迟到的更早一页不拼进新窗口，避免历史断档', async () => {
+    mocks.route.query = { message: 'message-focus' };
+    const pendingOlder = deferred<any>();
+    mocks.getMessages
+      .mockResolvedValueOnce({
+        data: {
+          roomSlug: 'general',
+          items: [
+            chatMessage({ publicId: 'message-before', content: '定位前消息' }),
+            chatMessage({ publicId: 'message-focus', content: '定位消息' }),
+          ],
+          hasMore: true,
+          nextBefore: 'message-before',
+          nextAfter: 'message-focus',
+          focusPublicId: 'message-focus',
+          hasNewer: true,
+        },
+      })
+      .mockReturnValueOnce(pendingOlder.promise)
+      .mockResolvedValueOnce({
+        data: {
+          roomSlug: 'general',
+          items: [chatMessage({ publicId: 'message-latest', content: '最新窗口消息' })],
+          hasMore: true,
+          nextBefore: 'message-latest',
+          focusPublicId: null,
+          hasNewer: false,
+        },
+      });
+    const host = await mountWorkspace();
+    // 定位历史消息会保持两帧“程序化导航中”，等过该边界再模拟用户上滑。
+    await flushAnimationFrame();
+    await flushAnimationFrame();
+    await flushAnimationFrame();
+    const messageList = host.querySelector<HTMLElement>('.community-message-list')!;
+    Object.defineProperties(messageList, {
+      scrollHeight: { configurable: true, value: 2000 },
+      clientHeight: { configurable: true, value: 400 },
+      scrollTop: { configurable: true, writable: true, value: 1000 },
+    });
+    messageList.dispatchEvent(new Event('scroll'));
+    await flushAnimationFrame();
+    messageList.scrollTop = 120;
+    messageList.dispatchEvent(new Event('scroll'));
+    await vi.waitFor(() => expect(mocks.getMessages).toHaveBeenCalledTimes(2));
+    expect(mocks.getMessages).toHaveBeenNthCalledWith(2, 'general', { before: 'message-before', limit: 30 }, { activity: 'incremental' });
+
+    host.querySelector<HTMLButtonElement>('.community-message-list__new')!.click();
+    await vi.waitFor(() => expect(mocks.getMessages).toHaveBeenCalledTimes(3));
+    await vi.waitFor(() => expect(host.textContent).toContain('最新窗口消息'));
+    expect(host.textContent).not.toContain('定位消息');
+    pendingOlder.resolve({
+      data: {
+        roomSlug: 'general',
+        items: [chatMessage({ publicId: 'message-ancient', content: '旧游标取回的消息' })],
+        hasMore: true,
+        nextBefore: 'message-ancient',
+        focusPublicId: null,
+        hasNewer: false,
+      },
+    });
+    await flushAsync();
+
+    expect(host.textContent).toContain('最新窗口消息');
+    expect(host.textContent).not.toContain('旧游标取回的消息');
+  });
+
   it('上滑加载更早消息后，图片预览数量同步包含已加载历史图片', async () => {
     const latestImage = {
       publicId: 'image-latest',
@@ -3006,6 +3073,41 @@ describe('CommunityChatWorkspace', () => {
     expect(host.querySelector('.community-message.is-sending')).toBeNull();
     expect(textarea.value).toBe('第一条\n发送中继续写');
     expect(mocks.messageError).toHaveBeenCalledWith('网络中断');
+  });
+
+  it('弱网发送失败后原样重试沿用同一请求号，改过草稿才换新请求号', async () => {
+    mocks.createClientRequestId.mockReset();
+    mocks.createClientRequestId.mockReturnValueOnce('request-stable-1').mockReturnValueOnce('request-new-2');
+    mocks.sendMessage
+      .mockRejectedValueOnce(new Error('network response lost'))
+      .mockRejectedValueOnce(new Error('still offline'))
+      .mockResolvedValueOnce({ data: { message: chatMessage({ publicId: 'message-sent', content: '改过的内容', isOwn: true }) } });
+    const host = await mountWorkspace();
+    const textarea = host.querySelector<HTMLTextAreaElement>('textarea')!;
+    const type = async (value: string) => {
+      textarea.value = value;
+      textarea.dispatchEvent(new Event('input', { bubbles: true }));
+      await nextTick();
+    };
+    const send = async () => {
+      host.querySelector<HTMLButtonElement>('.community-composer__send')!.click();
+      await flushAsync();
+    };
+
+    await type('弱网里的消息');
+    await send();
+    await vi.waitFor(() => expect(textarea.value).toBe('弱网里的消息'));
+    await send();
+    await vi.waitFor(() => expect(mocks.messageError).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(textarea.value).toBe('弱网里的消息'));
+    await type('改过的内容');
+    await send();
+
+    expect(mocks.sendMessage.mock.calls.map((call) => [call[1].clientRequestId, call[1].content])).toEqual([
+      ['request-stable-1', '弱网里的消息'],
+      ['request-stable-1', '弱网里的消息'],
+      ['request-new-2', '改过的内容'],
+    ]);
   });
 
   it('发送后主动浏览历史时，迟到的服务端回执只对账消息而不抢回底部', async () => {

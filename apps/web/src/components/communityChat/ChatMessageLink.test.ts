@@ -1,13 +1,14 @@
-import { afterEach, expect, it } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
 import { createApp, nextTick } from 'vue';
 import { createI18n } from 'vue-i18n';
 import { createMemoryHistory, createRouter } from 'vue-router';
 import ChatInlineEmojiText from './ChatInlineEmojiText.vue';
+import { chatMessageLinkNavigatorKey } from './chatMessageLinks';
 
 let cleanup: (() => void) | undefined;
 afterEach(() => cleanup?.());
 
-async function mount(content: string, links = true) {
+async function mount(content: string, links = true, navigator?: (path: string) => void) {
   const router = createRouter({
     history: createMemoryHistory(),
     routes: [
@@ -21,6 +22,7 @@ async function mount(content: string, links = true) {
   document.body.append(host);
   const app = createApp(ChatInlineEmojiText, { content, links });
   app.use(router).use(createI18n({ legacy: false, locale: 'zh-CN', missingWarn: false, fallbackWarn: false }));
+  if (navigator) app.provide(chatMessageLinkNavigatorKey, navigator);
   app.mount(host);
   await nextTick();
   cleanup = () => {
@@ -59,4 +61,12 @@ it('renders links only where the caller enables them', async () => {
   const { host } = await mount('https://example.com', false);
   expect(host.querySelector('a')).toBeNull();
   expect(host.textContent).toBe('https://example.com');
+});
+
+it('lets an overlay close itself before an in-app link navigates', async () => {
+  const navigator = vi.fn();
+  const { host, router } = await mount('https://boluo66.top/updateLogs', true, navigator);
+  expect(click(host.querySelector('a')).defaultPrevented).toBe(true);
+  expect(navigator).toHaveBeenCalledWith('/updateLogs');
+  expect(router.currentRoute.value.path).toBe('/community/chat');
 });

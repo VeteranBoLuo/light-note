@@ -212,7 +212,7 @@
 <script setup lang="ts">
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon';
-  import { computed, defineComponent, h, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+  import { computed, defineComponent, h, nextTick, onBeforeUnmount, onMounted, provide, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useRoute, useRouter } from 'vue-router';
   import { useUserStore } from '@/store';
@@ -226,6 +226,7 @@
   import BVirtualList from '@/components/base/BasicComponents/BVirtualList.vue';
   import CommunityCommentComposer from './CommunityCommentComposer.vue';
   import ChatInlineEmojiText from '@/components/communityChat/ChatInlineEmojiText.vue';
+  import { chatMessageLinkNavigatorKey } from '@/components/communityChat/chatMessageLinks';
   import Alert from '@/components/base/BasicComponents/BModal/Alert';
   import CommunityContentMenu from './CommunityContentMenu.vue';
   import CommunitySavePost from './CommunitySavePost.vue';
@@ -278,6 +279,15 @@
     props.post.topics?.some((topic) => (typeof topic === 'string' ? topic : topic.slug) === 'help'),
   );
   const commentsOpen = ref(false);
+  // 评论里的站内链接先关掉占 history 的评论抽屉，再进入目标页。
+  provide(chatMessageLinkNavigatorKey, (path) =>
+    closeCurrentMobileOverlayThen(
+      () => {
+        commentsOpen.value = false;
+      },
+      () => router.push(path),
+    ),
+  );
   const targetUnavailable = ref(false);
   const stateBusy = ref('');
   const pendingTargetRoot = ref('');
@@ -324,7 +334,7 @@
             'p',
             { class: 'feed-body' },
             c.status === 'published'
-              ? h(ChatInlineEmojiText, { content: c.body })
+              ? h(ChatInlineEmojiText, { content: c.body, links: true })
               : t(
                   'community.feed.' +
                     (c.status === 'unavailable'

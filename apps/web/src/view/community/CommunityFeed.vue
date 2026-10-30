@@ -302,7 +302,12 @@
                     :body="item.body"
                     :lines="2" /><p v-else class="feed-body">{{ item.body || item.reason }}</p
                   ><time v-if="managementTab === 'results' && item.createdAt" :datetime="item.createdAt">{{
-                    new Date(item.createdAt).toLocaleString()
+                    new Date(item.createdAt).toLocaleString(locale, {
+                      month: 'short',
+                      day: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })
                   }}</time
                   ><CommunityPostImages :images="managedImages(item)" /><CommunityPostResources :resources="item.resources" /><p
                     v-if="item.detail"

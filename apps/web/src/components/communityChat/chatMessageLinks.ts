@@ -1,6 +1,9 @@
+import type { InjectionKey } from 'vue';
 import { SITE_ORIGIN } from '@/utils/seoMeta';
 
 export type ChatMessageTextPart = { type: 'text'; value: string } | { type: 'link'; value: string };
+/** Links inside a history-backed overlay close it before navigating; elsewhere the router pushes directly. */
+export const chatMessageLinkNavigatorKey: InjectionKey<(path: string) => void> = Symbol('chatMessageLinkNavigator');
 
 // Only explicit http(s) URLs. ASCII-only characters let a link end at adjacent Chinese text or punctuation.
 const LINK_PATTERN = /https?:\/\/[\w\-.~:/?#[\]@!$&()*+,;=%]+/gi;

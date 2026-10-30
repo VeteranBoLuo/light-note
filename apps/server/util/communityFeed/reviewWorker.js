@@ -180,6 +180,12 @@ export async function consumePostReview({
   withDispatch = withActiveUserAiDispatch,
 } = {}) {
   if (!(await reviewSchemaReady(db))) return false;
+  // Disabled review only hands leftover jobs to people; skip the lock while nothing is queued.
+  if (
+    !reviewEnabled(env) &&
+    !(await first(db, "SELECT 1 AS queued FROM community_post_review_jobs WHERE status IN ('pending','processing') LIMIT 1"))
+  )
+    return false;
   const lock = await db.getConnection();
   let acquired = false;
   try {
