@@ -102,19 +102,31 @@ describe('persistent bookmark archives', () => {
     expect(mocks.commit).toHaveBeenCalledTimes(1);
     expect(mocks.invalidate).toHaveBeenCalledWith('u');
   });
-  it('does not fetch when no due work is available', async () => {
-    mocks.query.mockResolvedValueOnce([{}]).mockResolvedValueOnce([{ affectedRows: 0 }]);
+  it('does not fetch or write when no due work is available', async () => {
+    mocks.query.mockResolvedValueOnce([[]]).mockResolvedValueOnce([[]]);
     expect(await processBookmarkArchive()).toBe(false);
     expect(mocks.archive).not.toHaveBeenCalled();
+    expect(mocks.query).toHaveBeenCalledTimes(2);
+    for (const [sql] of mocks.query.mock.calls) expect(sql).not.toMatch(/^\s*UPDATE/u);
+  });
+  it('fails leases that ran out of attempts only when such a job exists', async () => {
+    mocks.query
+      .mockResolvedValueOnce([[{ bookmark_id: 'stuck' }]])
+      .mockResolvedValueOnce([{ affectedRows: 1 }])
+      .mockResolvedValueOnce([[]]);
+    expect(await claimBookmarkArchive()).toBeNull();
+    expect(mocks.query.mock.calls[1][0]).toMatch(/^\s*UPDATE bookmark_archive_jobs SET status = 'failed'/u);
   });
   it('claims with a unique token and includes expired leases for restart recovery', async () => {
     mocks.query
-      .mockResolvedValueOnce([{}])
+      .mockResolvedValueOnce([[]])
+      .mockResolvedValueOnce([[{ bookmark_id: 'b' }]])
       .mockResolvedValueOnce([{ affectedRows: 1 }])
       .mockResolvedValueOnce([[job]]);
     expect(await claimBookmarkArchive()).toEqual(job);
     expect(mocks.query.mock.calls[1][0]).toContain("status = 'running' AND lease_expires_at < NOW()");
-    expect(mocks.query.mock.calls[2][1]).toEqual(mocks.query.mock.calls[1][1]);
+    expect(mocks.query.mock.calls[2][0]).toContain("status = 'running' AND lease_expires_at < NOW()");
+    expect(mocks.query.mock.calls[3][1]).toEqual(mocks.query.mock.calls[2][1]);
   });
   it('persists queue saturation as an actionable failure instead of dropping it', async () => {
     mocks.connectionQuery

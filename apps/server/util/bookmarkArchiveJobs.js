@@ -123,9 +123,22 @@ export async function retryFailedBookmarkArchives(userId) {
 }
 
 // MySQL 5.7 使用原子 UPDATE 领取；租约过期可恢复，旧 Worker 的结果不能覆盖新任务。
+// 两条 UPDATE 前都先只读确认有活可干：空闲时每 1.5 秒的零行 UPDATE 也会写入 binlog 并刷盘。
 export async function claimBookmarkArchive() {
-  await pool.query(`UPDATE bookmark_archive_jobs SET status = 'failed', reason_code = 'INTERRUPTED', lease_token = NULL,
-    lease_expires_at = NULL WHERE status = 'running' AND lease_expires_at < NOW() AND attempts >= 3`);
+  const [[exhausted]] = await pool.query(
+    `SELECT bookmark_id FROM bookmark_archive_jobs
+     WHERE status = 'running' AND lease_expires_at < NOW() AND attempts >= 3 LIMIT 1`,
+  );
+  if (exhausted) {
+    await pool.query(`UPDATE bookmark_archive_jobs SET status = 'failed', reason_code = 'INTERRUPTED', lease_token = NULL,
+      lease_expires_at = NULL WHERE status = 'running' AND lease_expires_at < NOW() AND attempts >= 3`);
+  }
+  const [[due]] = await pool.query(
+    `SELECT bookmark_id FROM bookmark_archive_jobs
+     WHERE attempts < 3 AND ((status IN ('pending','retry_wait') AND next_attempt_at <= NOW())
+       OR (status = 'running' AND lease_expires_at < NOW())) LIMIT 1`,
+  );
+  if (!due) return null;
   const token = randomUUID();
   const [result] = await pool.query(
     `UPDATE bookmark_archive_jobs SET status = 'running', attempts = attempts + 1,

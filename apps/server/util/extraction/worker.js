@@ -14,9 +14,15 @@ import { extractionEnabled, transaction, activeAccount } from './service.js';
 export async function claimExtraction(database, phase = 'all') {
   return transaction(database, async (connection) => {
     // A dispatched call is never automatically repeated after a crash.
-    await connection.query(`UPDATE toolbox_extractions SET status=IF(status='paused' OR dispatched=1,'paused',IF(phase='prepare','preparing','queued')),
-      error_code=IF(dispatched=1,'EXTRACTION_OUTCOME_UNKNOWN',NULL),lease_token=NULL,lease_until=NULL,version=version+1
-      WHERE lease_token IS NOT NULL AND lease_until<NOW() AND status<>'ended'`);
+    // Probe first: an idle queue would otherwise log a zero-row UPDATE to the binlog on every poll.
+    const [[expired]] = await connection.query(
+      "SELECT id FROM toolbox_extractions WHERE lease_token IS NOT NULL AND lease_until<NOW() AND status<>'ended' LIMIT 1",
+    );
+    if (expired) {
+      await connection.query(`UPDATE toolbox_extractions SET status=IF(status='paused' OR dispatched=1,'paused',IF(phase='prepare','preparing','queued')),
+        error_code=IF(dispatched=1,'EXTRACTION_OUTCOME_UNKNOWN',NULL),lease_token=NULL,lease_until=NULL,version=version+1
+        WHERE lease_token IS NOT NULL AND lease_until<NOW() AND status<>'ended'`);
+    }
     const phaseFilter = phase === 'prepare' ? " AND phase='prepare'" : phase === 'ai' ? " AND phase<>'prepare'" : '';
     const [[row]] = await connection.query(
       "SELECT * FROM toolbox_extractions WHERE status IN ('preparing','queued') AND lease_token IS NULL AND available_at<=NOW()" +

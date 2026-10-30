@@ -223,9 +223,21 @@ describe('bookmark icon worker claiming', () => {
     vi.clearAllMocks();
   });
 
+  it('空闲时只读不写：没有超时任务也没有到期任务就不执行任何 UPDATE', async () => {
+    const connection = createConnection();
+    connection.query.mockResolvedValueOnce([[]]).mockResolvedValueOnce([[]]);
+    mocks.pool.getConnection.mockResolvedValue(connection);
+
+    expect(await claimTasks('worker-1', 10, 3)).toEqual([]);
+    expect(connection.query).toHaveBeenCalledTimes(2);
+    for (const [sql] of connection.query.mock.calls) expect(sql).not.toMatch(/^\s*UPDATE/u);
+    expect(connection.commit).toHaveBeenCalledOnce();
+  });
+
   it('可领取到期 retry_wait，并恢复超时 processing', async () => {
     const connection = createConnection();
     connection.query
+      .mockResolvedValueOnce([[{ id: 4 }]])
       .mockResolvedValueOnce([{ affectedRows: 1 }])
       .mockResolvedValueOnce([
         [
@@ -242,9 +254,10 @@ describe('bookmark icon worker claiming', () => {
     const rows = await claimTasks('worker-1', 10, 3);
 
     expect(rows).toHaveLength(1);
-    expect(connection.query.mock.calls[0][0]).toContain("status = 'processing'");
-    expect(connection.query.mock.calls[1][0]).toContain("'retry_wait'");
-    expect(connection.query.mock.calls[1][0]).toContain('available_at <= NOW()');
+    expect(connection.query.mock.calls[0][0]).toMatch(/^\s*SELECT id FROM bookmark_icon_jobs/u);
+    expect(connection.query.mock.calls[1][0]).toMatch(/^\s*UPDATE bookmark_icon_jobs[\s\S]*status = 'processing'/u);
+    expect(connection.query.mock.calls[2][0]).toContain("'retry_wait'");
+    expect(connection.query.mock.calls[2][0]).toContain('available_at <= NOW()');
     expect(connection.commit).toHaveBeenCalledOnce();
     expect(connection.release).toHaveBeenCalledOnce();
   });

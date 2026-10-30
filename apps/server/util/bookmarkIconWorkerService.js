@@ -53,18 +53,29 @@ export async function claimTasks(workerId, batchSize, lockTimeoutMinutes) {
   try {
     await connection.beginTransaction();
 
-    // 先清理超时的 processing 任务：恢复到 queued（而不是 retry_wait，否则不会被领取）
-    await connection.query(
-      `UPDATE bookmark_icon_jobs
-       SET status = 'queued',
-           available_at = NOW(),
-           locked_at = NULL,
-           locked_by = NULL
+    // 先清理超时的 processing 任务：恢复到 queued（而不是 retry_wait，否则不会被领取）。
+    // 先只读确认确有超时任务再更新：空闲时每 500ms 一次的零行 UPDATE 也会写入 binlog 并刷盘。
+    const [[stale]] = await connection.query(
+      `SELECT id FROM bookmark_icon_jobs
        WHERE status = 'processing'
          AND locked_at IS NOT NULL
-         AND locked_at < DATE_SUB(NOW(), INTERVAL ? MINUTE)`,
+         AND locked_at < DATE_SUB(NOW(), INTERVAL ? MINUTE)
+       LIMIT 1`,
       [lockTimeoutMinutes],
     );
+    if (stale) {
+      await connection.query(
+        `UPDATE bookmark_icon_jobs
+         SET status = 'queued',
+             available_at = NOW(),
+             locked_at = NULL,
+             locked_by = NULL
+         WHERE status = 'processing'
+           AND locked_at IS NOT NULL
+           AND locked_at < DATE_SUB(NOW(), INTERVAL ? MINUTE)`,
+        [lockTimeoutMinutes],
+      );
+    }
 
     // 抢任务：包括 queued 和到期的 retry_wait
     const [rows] = await connection.query(
