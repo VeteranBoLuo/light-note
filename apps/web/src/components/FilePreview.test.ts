@@ -508,6 +508,51 @@ describe('FilePreview PDF preview', () => {
   });
 });
 
+describe('FilePreview embedded mode', () => {
+  it('嵌入参考栏时不全屏、不锁页面滚动、不占用 Esc，也不显示自带标题栏', async () => {
+    const host = document.createElement('div');
+    document.body.append(host);
+    document.body.style.overflow = 'auto';
+    const close = vi.fn();
+    const app = createApp({
+      setup() {
+        return () =>
+          h(FilePreview, {
+            visible: true,
+            embedded: true,
+            fileInfo: {
+              id: 'pdf-embedded',
+              fileName: 'reference.pdf',
+              fileType: 'application/pdf',
+              fileUrl: 'https://files.example/reference.pdf?signature=test',
+              category: 'pdf',
+            },
+            onClose: close,
+            'onUpdate:visible': close,
+          });
+      },
+    });
+    app.mount(host);
+    await nextTick();
+    await Promise.resolve();
+    await nextTick();
+    cleanup = () => {
+      app.unmount();
+      host.remove();
+    };
+    const root = host.querySelector<HTMLElement>('.fullscreen-preview');
+    expect(root?.classList.contains('is-embedded')).toBe(true);
+    expect(root?.querySelector('.preview-header')).toBeNull();
+    expect(document.body.style.overflow).toBe('auto');
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    await nextTick();
+    expect(close).not.toHaveBeenCalled();
+    app.unmount();
+    cleanup = () => host.remove();
+    expect(document.body.style.overflow).toBe('auto');
+  });
+});
+
 describe('FilePreview Word anchors', () => {
   it('scrolls to a Word TOC bookmark without changing the preview URL history', async () => {
     window.history.replaceState({}, '', '/cloudSpace?fileId=1448');

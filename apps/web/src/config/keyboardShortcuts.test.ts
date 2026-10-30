@@ -4,7 +4,10 @@ import {
   getGlobalShortcutLabel,
   getHeadingShortcutLabels,
   getRepeatLastActionShortcutLabels,
+  getWorkspacePanelAriaKeyShortcut,
+  getWorkspacePanelShortcutLabel,
   isEditableShortcutTarget,
+  matchWorkspacePanelShortcut,
   matchesGlobalShortcut,
   matchEditorInlineFormatShortcut,
   matchHeadingShortcut,
@@ -107,5 +110,51 @@ describe('keyboardShortcuts', () => {
       isEditableShortcutTarget({ tagName: 'SPAN', closest: () => ({}) as Element } as unknown as EventTarget),
     ).toBe(true);
     expect(isEditableShortcutTarget({ tagName: 'DIV', closest: () => null } as unknown as EventTarget)).toBe(false);
+  });
+});
+
+describe('笔记工作区面板开关快捷键', () => {
+  const event = (patch: Partial<ShortcutKeyboardEvent>): ShortcutKeyboardEvent => ({
+    key: '\\',
+    code: 'Backslash',
+    ctrlKey: false,
+    metaKey: false,
+    altKey: false,
+    shiftKey: false,
+    defaultPrevented: false,
+    isComposing: false,
+    keyCode: 220,
+    ...patch,
+  });
+
+  it('macOS：⌘ + \\ 开关页面树，⌃ + \\ 开关右侧面板，⌥ + \\ 留给输入字符', () => {
+    expect(matchWorkspacePanelShortcut(event({ metaKey: true }), 'mac')).toBe('sidebar');
+    expect(matchWorkspacePanelShortcut(event({ ctrlKey: true }), 'mac')).toBe('sidePanel');
+    expect(matchWorkspacePanelShortcut(event({ altKey: true, key: '«' }), 'mac')).toBeNull();
+  });
+
+  it('Windows / Linux：Ctrl + \\ 开关页面树，Alt + \\ 开关右侧面板', () => {
+    expect(matchWorkspacePanelShortcut(event({ ctrlKey: true }), 'other')).toBe('sidebar');
+    expect(matchWorkspacePanelShortcut(event({ altKey: true }), 'other')).toBe('sidePanel');
+    expect(matchWorkspacePanelShortcut(event({ metaKey: true }), 'other')).toBeNull();
+  });
+
+  it('多个修饰键、缺少修饰键、Shift、输入法组字或已被处理时不触发', () => {
+    expect(matchWorkspacePanelShortcut(event({}), 'other')).toBeNull();
+    expect(matchWorkspacePanelShortcut(event({ ctrlKey: true, altKey: true }), 'other')).toBeNull();
+    expect(matchWorkspacePanelShortcut(event({ metaKey: true, ctrlKey: true }), 'mac')).toBeNull();
+    expect(matchWorkspacePanelShortcut(event({ ctrlKey: true, shiftKey: true }), 'other')).toBeNull();
+    expect(matchWorkspacePanelShortcut(event({ ctrlKey: true, isComposing: true }), 'other')).toBeNull();
+    expect(matchWorkspacePanelShortcut(event({ ctrlKey: true, defaultPrevented: true }), 'other')).toBeNull();
+    expect(matchWorkspacePanelShortcut(event({ ctrlKey: true, key: 'b', code: 'KeyB', keyCode: 66 }), 'other')).toBeNull();
+  });
+
+  it('提示文字与无障碍快捷键按平台生成', () => {
+    expect(getWorkspacePanelShortcutLabel('sidebar', 'mac')).toBe('⌘ + \\');
+    expect(getWorkspacePanelShortcutLabel('sidePanel', 'mac')).toBe('⌃ + \\');
+    expect(getWorkspacePanelShortcutLabel('sidebar', 'other')).toBe('Ctrl + \\');
+    expect(getWorkspacePanelShortcutLabel('sidePanel', 'other')).toBe('Alt + \\');
+    expect(getWorkspacePanelAriaKeyShortcut('sidePanel', 'mac')).toBe('Control+\\');
+    expect(getWorkspacePanelAriaKeyShortcut('sidePanel', 'other')).toBe('Alt+\\');
   });
 });

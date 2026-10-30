@@ -761,6 +761,7 @@
   import {
     getHeadingShortcutLabels,
     getRepeatLastActionShortcutLabels,
+    getWorkspacePanelShortcutLabel,
     matchEditorInlineFormatShortcut,
     matchHeadingShortcut,
     matchesRepeatLastActionShortcut,
@@ -3741,6 +3742,23 @@
         : []),
     ];
 
+    // 页面树与右侧面板只在桌面笔记编辑页出现，快捷键说明随之展示。
+    const workspaceItems: NoteShortcutItem[] =
+      props.context === 'note' && !isMobile.value
+        ? [
+            {
+              key: 'togglePageSidebar',
+              label: t('note.togglePageSidebar'),
+              keys: [getWorkspacePanelShortcutLabel('sidebar')],
+            },
+            {
+              key: 'toggleSidePanel',
+              label: t('note.toggleSidePanel'),
+              keys: [getWorkspacePanelShortcutLabel('sidePanel')],
+            },
+          ]
+        : [];
+
     return [
       {
         key: 'common',
@@ -3752,6 +3770,9 @@
         title: t('noteDetail.editor.shortcutsFormatting'),
         items: formattingItems,
       },
+      ...(workspaceItems.length
+        ? [{ key: 'workspace', title: t('noteDetail.editor.shortcutsWorkspace'), items: workspaceItems }]
+        : []),
     ];
   });
 

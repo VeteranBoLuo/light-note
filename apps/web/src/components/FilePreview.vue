@@ -1,5 +1,5 @@
 <template>
-  <Teleport to="body">
+  <Teleport to="body" :disabled="embedded">
     <div
       v-if="visible"
       ref="previewRootRef"
@@ -8,9 +8,9 @@
       :data-reuse-resource-id="
         !loading && !error && (!previewAccess || previewAccess.kind === 'owner') ? fileInfo?.id : undefined
       "
-      :class="{ 'html-fullscreen-mode': isHtmlFullscreen }"
+      :class="{ 'html-fullscreen-mode': isHtmlFullscreen, 'is-embedded': embedded }"
     >
-      <div class="preview-header">
+      <div v-if="!embedded" class="preview-header">
         <div class="preview-title">
           <span class="file-type-badge">{{ previewType === 'csv' ? 'CSV' : getFileTypeName(currentCategory) }}</span>
           <span class="file-name" :title="fileInfo.fileName">{{ fileInfo.fileName }}</span>
@@ -439,6 +439,11 @@
       | { kind: 'share'; token: string; accessCode?: string }
       | { kind: 'owner' }
       | { kind: 'community_chat_file'; publicId: string };
+    /**
+     * 嵌入在页面局部（如笔记参考栏）：不全屏、不锁页面滚动、不占用移动返回栈，
+     * Esc 与左右键交给宿主页面；标题与关闭由宿主自行提供。
+     */
+    embedded?: boolean;
   }>();
 
   const emit = defineEmits<{
@@ -686,11 +691,15 @@
   watch(
     () => props.visible,
     async (newVisible) => {
-      syncEscapeLock(newVisible);
+      if (!props.embedded) syncEscapeLock(newVisible);
       if (newVisible && props.fileInfo) {
         // 文件监听可能已在同一批更新中启动；外壳仍需初始化，内容不重复请求。
         const shouldStart = !props.fileInfo.id || activePreviewFileId !== String(props.fileInfo.id);
         activePreviewFileId = String(props.fileInfo.id || '');
+        if (props.embedded) {
+          if (shouldStart) await startPreview(props.fileInfo);
+          return;
+        }
         previousBodyOverflow = document.body.style.overflow;
         document.body.style.overflow = 'hidden';
         if (!previewHistoryHandle) {
@@ -713,7 +722,7 @@
         activePreviewFileId = '';
         resetDerivedPreviewState();
         resetHtmlPreview();
-        document.body.style.overflow = previousBodyOverflow;
+        if (!props.embedded) document.body.style.overflow = previousBodyOverflow;
         if (previewHistoryHandle) {
           releaseMobileOverlayHistory(previewHistoryHandle);
           previewHistoryHandle = null;
@@ -1451,8 +1460,14 @@
     resetZoom();
   }
 
+  /** 嵌入模式下只响应发生在预览区域内的全局键鼠事件，不干扰宿主页面。 */
+  function eventOutsideEmbeddedPreview(target: EventTarget | null) {
+    if (!props.embedded) return false;
+    return !(target instanceof Node && previewRootRef.value?.contains(target));
+  }
+
   function handleMiddleDblClick(e: MouseEvent) {
-    if (!props.visible) return;
+    if (!props.visible || eventOutsideEmbeddedPreview(e.target)) return;
     if (e.button !== 1 || e.detail !== 2) return;
     if (previewType.value !== 'image') return;
     e.preventDefault();
@@ -1548,6 +1563,7 @@
   // 键盘事件
   function handleFindShortcut(e: KeyboardEvent) {
     if (!props.visible || previewType.value !== 'excel') return;
+    if (eventOutsideEmbeddedPreview(document.activeElement)) return;
     if (e.defaultPrevented || e.isComposing || e.keyCode === 229 || e.altKey || e.shiftKey) return;
     if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== 'f') return;
     // An overlaid dialog (including global search) owns its own keyboard input.
@@ -1559,7 +1575,7 @@
   }
 
   function handleKeyDown(e: KeyboardEvent) {
-    if (!props.visible || e.defaultPrevented || e.isComposing || e.keyCode === 229) return;
+    if (!props.visible || props.embedded || e.defaultPrevented || e.isComposing || e.keyCode === 229) return;
 
     if (e.key === 'Escape') {
       e.preventDefault();
@@ -1596,7 +1612,7 @@
   }
 
   function handleWheel(e: WheelEvent) {
-    if (!props.visible) return;
+    if (!props.visible || eventOutsideEmbeddedPreview(e.target)) return;
     if (e.ctrlKey && previewType.value === 'image') {
       e.preventDefault();
       if (e.deltaY < 0) {
@@ -1634,7 +1650,7 @@
     imageResizeObserver = null;
     if (previewHistoryHandle) releaseMobileOverlayHistory(previewHistoryHandle);
     previewHistoryHandle = null;
-    document.body.style.overflow = previousBodyOverflow;
+    if (!props.embedded) document.body.style.overflow = previousBodyOverflow;
     resetHtmlPreview();
     void exitHtmlFullscreen();
   });
@@ -1655,6 +1671,21 @@
     &:fullscreen {
       width: 100vw;
       height: 100vh;
+    }
+
+    // 嵌入宿主局部区域：不再覆盖全屏，也不显示自带标题栏。
+    &.is-embedded {
+      position: relative;
+      inset: auto;
+      z-index: auto;
+      width: 100%;
+      height: 100%;
+      grid-template-rows: minmax(0, 1fr);
+      background: transparent;
+
+      .preview-content {
+        grid-row: 1;
+      }
     }
 
     &.html-fullscreen-mode {

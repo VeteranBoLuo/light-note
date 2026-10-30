@@ -59,7 +59,7 @@ describe('手绘笔记详情边界', () => {
 
   it('手绘详情不挂载 AI 与正文目录', () => {
     expect(source).toContain(':has-ai="!bookmark.isMobile && !isDrawingNote"');
-    expect(source).toContain('<template v-if="!isDrawingNote" #ai>');
+    expect(source).toContain('<template v-if="!isDrawingNote" #ai="{ collapse }">');
     expect(source).toContain(':has-catalog="!isDrawingNote && nStore.headings.length > 0"');
   });
 

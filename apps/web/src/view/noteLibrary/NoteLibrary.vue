@@ -85,6 +85,7 @@
       :mobile="bookmark.isMobile"
       :has-sidebar="showNoteWorkspaceSidebar"
       :has-ai="false"
+      panel-shortcuts
       :sidebar-width="noteWorkspaceSidebarWidth"
       v-model:sidebar-open="noteSidebarExpanded"
       :sidebar-overlay-open="librarySidebarOverlayOpen"
@@ -97,9 +98,10 @@
       @touchend.passive="pullRefresh.onTouchEnd"
       @touchcancel.passive="pullRefresh.onTouchCancel"
     >
-      <template #sidebar>
+      <template #sidebar="{ collapse }">
         <aside class="note-sidebar-panel">
           <NoteWorkspaceSidebar
+            collapsible
             :range-selection="rangeSelection"
             v-model:mode="librarySidebarMode"
             :current-parent-id="currentParentId"
@@ -143,6 +145,7 @@
             @search="treeSearchValue = $event"
             @drag-start="onTreeDragStart"
             @drag-end="onTreeDragEnd"
+            @collapse="collapse"
           >
             <template #outline>
               <NoteOutlineList

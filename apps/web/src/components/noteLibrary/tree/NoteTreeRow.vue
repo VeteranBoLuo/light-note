@@ -24,6 +24,7 @@
         class="note-tree-row"
         :class="{
           'is-active': active,
+          'is-referenced': referenced && !active,
           'is-batch': batchMode,
           'is-browse-scope': browsing,
           'is-search-match': node.matched,
@@ -68,8 +69,14 @@
         />
 
         <BButton class="note-tree-title" @click="emit('open', node.id)">
-          <SvgIcon :src="pageIcon" size="16" class="note-tree-page-icon" aria-hidden="true" />
+          <SvgIcon
+            :src="referenced && !active ? icon.noteTree.reference : pageIcon"
+            size="16"
+            class="note-tree-page-icon"
+            aria-hidden="true"
+          />
           <span class="note-tree-title-text">{{ node.title || t('note.untitled') }}</span>
+          <span v-if="referenced && !active" class="note-tree-sr-only">{{ t('note.reference.referencing') }}</span>
           <span v-if="node.isTop" class="note-tree-pin" :aria-label="t('common.pinned')">
             <SvgIcon :src="icon.contextMenu.pin" size="12" aria-hidden="true" />
           </span>
@@ -137,7 +144,7 @@
   import type { RangeSelectionController } from '@/composables/useRangeSelection';
   import { vRangeSelect } from '@/directives/rangeSelection';
   import BCheckbox from '@/components/base/BasicComponents/BCheckbox.vue';
-  import { computed } from 'vue';
+  import { computed, inject } from 'vue';
   import { useI18n } from 'vue-i18n';
   import BActionMenu from '@/components/base/BasicComponents/BActionMenu.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
@@ -149,6 +156,7 @@
   import type { NoteTreeItem } from '@/types/noteTree';
   import type { NoteTreeDropPosition } from '@/utils/noteTreeDrop';
   import { getNoteTreePageColor, getNoteTreePageIcon } from '@/utils/noteTreePresentation';
+  import { NOTE_TREE_REFERENCE_CONTEXT } from './noteTreeReference';
 
   const props = withDefaults(
     defineProps<{
@@ -207,6 +215,8 @@
   }>();
   const { t } = useI18n();
   const active = computed(() => props.activePageId === props.node.id);
+  const referenceContext = inject(NOTE_TREE_REFERENCE_CONTEXT, null);
+  const referenced = computed(() => Boolean(referenceContext && referenceContext.referencedNoteId.value === props.node.id));
   const pageIcon = computed(() => getNoteTreePageIcon(props.node.type));
   const browsing = computed(() => !props.activePageId && props.browseParentId === props.node.id);
   const expanded = computed(() => props.expandedIds.has(props.node.id));
@@ -222,7 +232,26 @@
   const showDropAfter = computed(() => props.dropTargetKey === props.node.id && props.dropTargetPosition === 'after');
   const showEdgeDrop = computed(() => showDropBefore.value || showDropAfter.value);
   const actionMenuTriggers: BActionMenuTrigger[] = ['hover', 'contextmenu'];
+  // 编辑页额外提供参考与新窗口打开；当前正在编辑的那篇不能参考自己。
+  const referenceMenuItems = computed<BActionMenuItem[]>(() => {
+    if (!referenceContext) return [];
+    const isCurrent = referenceContext.currentNoteId.value === props.node.id;
+    return [
+      ...(isCurrent
+        ? []
+        : [
+            {
+              key: 'reference',
+              label: referenced.value ? t('note.reference.cancel') : t('note.reference.referenceThisNote'),
+              icon: icon.noteTree.reference,
+            },
+          ]),
+      { key: 'open-window', label: t('note.reference.openInNewWindow'), icon: icon.noteTree.openPage },
+      { key: 'note-tree-reference-divider', divider: true },
+    ];
+  });
   const actionMenuItems = computed<BActionMenuItem[]>(() => [
+    ...referenceMenuItems.value,
     ...(props.node.hasChildren
       ? [
           {
@@ -308,6 +337,11 @@
       import: () => emit('import', props.node),
       export: () => emit('export', props.node),
       delete: () => emit('delete', props.node),
+      reference: () => {
+        if (referenced.value) referenceContext?.cancelReference();
+        else referenceContext?.reference(props.node.id, props.node.title || '');
+      },
+      'open-window': () => referenceContext?.openInNewWindow(props.node.id),
     };
     actions[action]?.();
   }
@@ -598,5 +632,29 @@
     border-color: var(--workspace-note-stat);
 
     .note-tree-count { color: var(--workspace-note-stat); }
+  }
+
+  // 正在参考：淡紫底 + 左侧实色竖条 + 参考图标，与当前编辑项（笔记绿）区分，不额外占宽度。
+  .note-tree-row.is-referenced,
+  .note-tree-row.is-referenced:hover {
+    color: var(--workspace-purple-text);
+    background: var(--workspace-purple-selected);
+    box-shadow: inset 3px 0 0 var(--workspace-purple-text);
+    font-weight: 600;
+
+    .note-tree-page-icon {
+      color: var(--workspace-purple-text);
+    }
+  }
+
+  .note-tree-sr-only {
+    position: absolute;
+    /* ui-density-fixed: 读屏专用文本的视觉隐藏几何 */
+    width: 1px;
+    /* ui-density-fixed: 读屏专用文本的视觉隐藏几何 */
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
 </style>

@@ -2,7 +2,11 @@ import { computed, ref, watch } from 'vue';
 import { defineStore } from 'pinia';
 import { apiBasePost } from '@/http/request';
 import type { NoteBreadcrumbItem, NoteTreeItem, NoteTreeQueryResult } from '@/types/noteTree';
-import { NOTE_WORKSPACE_DEFAULT_SIDEBAR_WIDTH } from '@/utils/noteWorkspaceLayout';
+import {
+  NOTE_WORKSPACE_DEFAULT_SIDEBAR_WIDTH,
+  NOTE_WORKSPACE_SIDE_PANEL_MIN_WIDTH,
+  clampNoteWorkspaceSidebarWidth,
+} from '@/utils/noteWorkspaceLayout';
 
 export const NOTE_TREE_ROOT_KEY = '__light_note_root__';
 
@@ -15,6 +19,14 @@ interface NoteWorkspaceLayoutPreference {
   sidebarPreferredOpen: boolean;
   aiPreferredOpen: boolean;
   sidebarWidth: number;
+  /** 右侧卡片（AI 助手 / 参考）共用宽度；null 表示跟随默认宽度。 */
+  sidePanelWidth: number | null;
+}
+
+function readSidePanelWidth(value: unknown) {
+  const width = Number(value);
+  if (!Number.isFinite(width) || width <= 0) return null;
+  return Math.max(NOTE_WORKSPACE_SIDE_PANEL_MIN_WIDTH, Math.round(width));
 }
 
 function readJson<T>(storage: Storage | undefined, key: string, fallback: T): T {
@@ -50,7 +62,8 @@ function readLayoutPreference(): NoteWorkspaceLayoutPreference {
   return {
     sidebarPreferredOpen: value.sidebarPreferredOpen !== false,
     aiPreferredOpen: value.aiPreferredOpen !== false,
-    sidebarWidth: Math.min(360, Math.max(220, Number(value.sidebarWidth || NOTE_WORKSPACE_DEFAULT_SIDEBAR_WIDTH))),
+    sidebarWidth: clampNoteWorkspaceSidebarWidth(Number(value.sidebarWidth || NOTE_WORKSPACE_DEFAULT_SIDEBAR_WIDTH)),
+    sidePanelWidth: readSidePanelWidth(value.sidePanelWidth),
   };
 }
 
@@ -185,6 +198,7 @@ export default defineStore('noteWorkspace', () => {
   const sidebarPreferredOpen = ref(layout.sidebarPreferredOpen);
   const aiPreferredOpen = ref(layout.aiPreferredOpen);
   const sidebarWidth = ref(layout.sidebarWidth);
+  const sidePanelWidth = ref<number | null>(layout.sidePanelWidth);
 
   const childrenByParent = ref<Record<string, NoteTreeItem[]>>({});
   const expandedIds = ref<Set<string>>(readExpandedIds());
@@ -616,7 +630,11 @@ export default defineStore('noteWorkspace', () => {
   }
 
   function setSidebarWidth(width: number) {
-    sidebarWidth.value = Math.min(360, Math.max(220, Math.round(width)));
+    sidebarWidth.value = clampNoteWorkspaceSidebarWidth(width);
+  }
+
+  function setSidePanelWidth(width: number | null) {
+    sidePanelWidth.value = width === null ? null : readSidePanelWidth(width);
   }
 
   watch(expandedIds, (value) => {
@@ -628,7 +646,7 @@ export default defineStore('noteWorkspace', () => {
     }
   });
 
-  watch([sidebarPreferredOpen, aiPreferredOpen, sidebarWidth], () => {
+  watch([sidebarPreferredOpen, aiPreferredOpen, sidebarWidth, sidePanelWidth], () => {
     if (typeof localStorage === 'undefined') return;
     try {
       localStorage.setItem(
@@ -637,6 +655,7 @@ export default defineStore('noteWorkspace', () => {
           sidebarPreferredOpen: sidebarPreferredOpen.value,
           aiPreferredOpen: aiPreferredOpen.value,
           sidebarWidth: sidebarWidth.value,
+          sidePanelWidth: sidePanelWidth.value,
         }),
       );
     } catch {
@@ -659,6 +678,7 @@ export default defineStore('noteWorkspace', () => {
     loadedKeys,
     loadingKeys,
     ownerKey,
+    sidePanelWidth,
     sidebarPreferredOpen,
     sidebarWidth,
     treeError,
@@ -686,6 +706,7 @@ export default defineStore('noteWorkspace', () => {
     setDetailTreeScrollTop,
     setNavigation,
     setSidebarPreferredOpen,
+    setSidePanelWidth,
     setSidebarWidth,
     toggleExpanded,
     updateNoteMetadata,

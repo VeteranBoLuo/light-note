@@ -1,19 +1,42 @@
 <template>
   <nav class="note-library-sidebar" :aria-label="t('note.libraryNavigation')">
-    <BTabs v-if="tabs.length > 1" v-model:active-tab="activeTab" :options="tabs" variant="segment" />
+    <div v-if="tabs.length > 1" class="note-library-sidebar__head">
+      <BTabs v-model:active-tab="activeTab" :options="tabs" variant="segment" />
+      <BTooltip v-if="collapsible" :title="collapseTitle">
+        <BButton
+          class="note-library-sidebar__collapse"
+          :aria-label="t('note.collapsePageSidebar')"
+          @click="emit('collapse')"
+        >
+          <SvgIcon :src="icon.noteTree.panelLeftClose" size="16" aria-hidden="true" />
+        </BButton>
+      </BTooltip>
+    </div>
 
     <div v-if="activeTab === 'directory'" class="note-directory-panel">
-      <BInput
-        v-model:value="directorySearch"
-        class="note-tree-search"
-        :placeholder="t('note.searchAllPages')"
-        :maxlength="120"
-        clearable
-      >
-        <template #prefix>
-          <SvgIcon :src="icon.navigation.search" size="14" aria-hidden="true" />
-        </template>
-      </BInput>
+      <div class="note-library-sidebar__search-row">
+        <BInput
+          v-model:value="directorySearch"
+          class="note-tree-search"
+          :placeholder="t('note.searchAllPages')"
+          :maxlength="120"
+          clearable
+        >
+          <template #prefix>
+            <SvgIcon :src="icon.navigation.search" size="14" aria-hidden="true" />
+          </template>
+        </BInput>
+        <!-- 只有一个页签时不单独占一行标题栏，收起按钮跟在搜索框后面。 -->
+        <BTooltip v-if="collapsible && tabs.length <= 1" :title="collapseTitle">
+          <BButton
+            class="note-library-sidebar__collapse"
+            :aria-label="t('note.collapsePageSidebar')"
+            @click="emit('collapse')"
+          >
+            <SvgIcon :src="icon.noteTree.panelLeftClose" size="16" aria-hidden="true" />
+          </BButton>
+        </BTooltip>
+      </div>
       <BButton
         class="note-tree-root"
         :class="{
@@ -102,6 +125,7 @@
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import BTabs from '@/components/base/BasicComponents/BTabs.vue';
+  import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import NoteTreeRow from '@/components/noteLibrary/tree/NoteTreeRow.vue';
   import { NOTE_TREE_ROOT_KEY } from '@/composables/useNoteTree';
@@ -109,6 +133,7 @@
   import type { NoteTreeItem } from '@/types/noteTree';
   import type { NoteTreeDropPosition } from '@/utils/noteTreeDrop';
   import { scrollNearestIntoContainer } from '@/utils/scrolling';
+  import { getWorkspacePanelShortcutLabel } from '@/config/keyboardShortcuts';
 
   const props = withDefaults(
     defineProps<{
@@ -138,6 +163,8 @@
       batchMode?: boolean;
       selectedIds?: Set<string>;
       selectionDisabled?: boolean;
+      /** 由工作区外壳提供收起动作时，在标题行显示收起按钮。 */
+      collapsible?: boolean;
     }>(),
     {
       treeError: '',
@@ -164,6 +191,7 @@
       treeScrollTop: 0,
       browseParentId: null,
       surface: 'library',
+      collapsible: false,
     },
   );
 
@@ -186,8 +214,12 @@
     search: [value: string];
     dragStart: [node: NoteTreeItem, event: DragEvent];
     dragEnd: [];
+    collapse: [];
   }>();
   const { t } = useI18n();
+  const collapseTitle = computed(
+    () => `${t('note.collapsePageSidebar')} · ${getWorkspacePanelShortcutLabel('sidebar')}`,
+  );
   const activeTab = defineModel<'directory' | 'outline'>('mode', { default: 'directory' });
   const tabs = computed(() => [
     ...(props.directoryEnabled ? [{ key: 'directory', label: t('note.pagesTab') }] : []),
@@ -300,6 +332,39 @@
     gap: var(--ui-space-8, 8px);
   }
 
+  .note-library-sidebar__head,
+  .note-library-sidebar__search-row {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: var(--ui-space-4, 4px);
+    min-width: 0;
+  }
+
+  .note-library-sidebar__head :deep(.tab-container.is-segment),
+  .note-library-sidebar__search-row .note-tree-search {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .note-library-sidebar__collapse.b_btn {
+    flex: 0 0 auto;
+    width: var(--ui-control-28, 28px);
+    min-width: var(--ui-control-28, 28px);
+    height: var(--ui-control-28, 28px);
+    padding: 0;
+    border: 0;
+    border-radius: var(--ui-space-8, 8px);
+    color: var(--desc-color);
+    background: transparent;
+
+    &:hover,
+    &:focus-visible {
+      color: var(--workspace-note-text, var(--resource-note-color));
+      background: var(--workspace-hover, var(--surface-card-hover-bg));
+    }
+  }
+
   :deep(.tab-container.is-segment) {
     flex: 0 0 auto;
     width: 100%;
@@ -321,8 +386,7 @@
     flex-direction: column;
   }
 
-  .note-tree-search {
-    flex: 0 0 auto;
+  .note-library-sidebar__search-row {
     margin-bottom: var(--ui-space-5, 5px);
   }
 

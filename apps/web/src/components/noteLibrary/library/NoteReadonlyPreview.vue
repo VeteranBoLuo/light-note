@@ -1,6 +1,6 @@
 <template>
-  <section class="note-readonly-preview" aria-live="polite">
-    <header class="note-readonly-preview__header">
+  <section class="note-readonly-preview" :class="{ 'is-reference': variant === 'reference' }" aria-live="polite">
+    <header v-if="variant !== 'reference'" class="note-readonly-preview__header">
       <div class="note-readonly-preview__heading">
         <nav class="note-readonly-preview__breadcrumb" :aria-label="t('note.currentDirectory')">
           <BButton size="small" class="note-readonly-preview__crumb" @click="emit('goLibrary')">
@@ -230,6 +230,8 @@
       childCount?: number;
       menuOptions?: PreviewMenuOption[];
       outlineTarget?: PreviewOutlineTarget | null;
+      /** reference：编辑页参考栏，只保留正文；正文里的笔记与文件链接交给参考栏切换。 */
+      variant?: 'library' | 'reference';
     }>(),
     {
       seed: null,
@@ -237,6 +239,7 @@
       childCount: 0,
       menuOptions: () => [],
       outlineTarget: null,
+      variant: 'library',
     },
   );
   const emit = defineEmits<{
@@ -251,6 +254,7 @@
     pendingState: [pending: boolean];
     outlineChange: [headings: NoteOutlineItem[]];
     outlineActiveChange: [id: string | null];
+    openReference: [ref: { type: 'note' | 'file'; id: string }];
   }>();
   const { t } = useI18n();
   const router = useRouter();
@@ -367,6 +371,10 @@
     if (!ref || !anchor) return;
     event.preventDefault();
     event.stopPropagation();
+    if (props.variant === 'reference' && (ref.type === 'note' || ref.type === 'file')) {
+      emit('openReference', { type: ref.type, id: ref.id });
+      return;
+    }
     resourcePreview.value = {
       ref,
       title: String(anchor.textContent || '').trim() || ref.id,
@@ -845,6 +853,11 @@
     flex: 1 1 auto;
     overflow: auto;
     padding: 22px clamp(24px, 5vw, 68px) 40px;
+  }
+
+  // 参考栏宽度与视口无关，不能沿用按 vw 放大的阅读留白。
+  .note-readonly-preview.is-reference .note-readonly-preview__scroll {
+    padding: var(--ui-space-16, 16px) var(--ui-space-20, 20px) var(--ui-space-32, 32px);
   }
 
   .note-readonly-preview__loading {

@@ -66,6 +66,15 @@ export default {
       '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none"><rect x="3" y="4" width="18" height="16" rx="3" stroke="currentColor" stroke-width="1.7"/><path d="M8.5 4v16" stroke="currentColor" stroke-width="1.7"/><path d="M5.5 8h.5M5.5 11h.5M11.5 8h6M11.5 12h6M11.5 16h4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>',
     sidebarClosed:
       '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none"><rect x="3" y="4" width="18" height="16" rx="3" stroke="currentColor" stroke-width="1.7"/><path d="M8.5 4v16" stroke="currentColor" stroke-width="1.7" stroke-dasharray="2 2" opacity=".6"/><path d="m12 9l3 3l-3 3M16.5 8v8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+
+    // 收起侧栏：方框里竖线隔出侧栏，箭头指向收起方向；与「返回」箭头区分。
+    panelLeftClose:
+      '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none"><rect x="3" y="4" width="18" height="16" rx="3" stroke="currentColor" stroke-width="1.7"/><path d="M9 4v16" stroke="currentColor" stroke-width="1.7"/><path d="m15.5 9.5l-2.5 2.5l2.5 2.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    panelRightClose:
+      '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none"><rect x="3" y="4" width="18" height="16" rx="3" stroke="currentColor" stroke-width="1.7"/><path d="M15 4v16" stroke="currentColor" stroke-width="1.7"/><path d="m8.5 9.5l2.5 2.5l-2.5 2.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    // 编辑页右侧「参考」：右栏放一份只读内容。
+    reference:
+      '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none"><rect x="3" y="4" width="18" height="16" rx="3" stroke="currentColor" stroke-width="1.7"/><path d="M13 4v16" stroke="currentColor" stroke-width="1.7"/><path d="M15.75 9h2.75M15.75 12h2.75M15.75 15h1.75" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>',
   },
   drawingNote: {
     pen: '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none"><path d="m4 20l1.2-4.7L16.5 4a2.1 2.1 0 0 1 3 3L8.2 18.3L4 20Z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="m14.7 5.8l3.5 3.5M5.2 15.3l3 3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>',

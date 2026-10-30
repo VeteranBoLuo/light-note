@@ -9,6 +9,7 @@
       {
         'is-sidebar-open': sidebarOpen,
         'is-ai-open': aiOpen,
+        'is-resizing': resizing,
       },
     ]"
     :style="shellStyle"
@@ -17,37 +18,25 @@
     <aside
       v-if="hasSidebar && effectiveSidebarPresentation === 'dock'"
       class="note-workspace-shell__sidebar note-workspace-shell__sidebar--dock"
-      :class="{ 'is-collapsed': !sidebarOpen }"
+      :class="{ 'is-collapsed': !sidebarOpen, 'is-collapse-pending': sidebarCollapsePending }"
       :aria-hidden="!sidebarOpen"
     >
       <div class="note-workspace-shell__sidebar-content">
-        <slot name="sidebar" />
+        <slot name="sidebar" :collapse="closeSidebar" />
       </div>
-      <BTooltip
+      <NoteWorkspaceSplitter
         v-if="sidebarOpen"
-        class="note-workspace-shell__resize-tooltip"
-        :title="t('note.resetPageSidebarWidthHint')"
-        :delay="1000"
-        follow-cursor
-      >
-        <BButton
-          class="note-workspace-shell__resizer"
-          :aria-label="t('note.resizePageSidebar')"
-          @pointerdown="startSidebarResize"
-          @dblclick.stop.prevent="resetSidebarWidth"
-          @keydown.left.prevent="resizeSidebarBy(-12)"
-          @keydown.right.prevent="resizeSidebarBy(12)"
-        />
-      </BTooltip>
-      <BButton
-        v-if="sidebarOpen"
-        class="note-workspace-shell__sidebar-boundary-toggle note-workspace-shell__sidebar-boundary-toggle--close"
-        :title="t('note.collapsePageSidebar')"
-        :aria-label="t('note.collapsePageSidebar')"
-        @click.stop="closeSidebar"
-      >
-        <SvgIcon :src="icon.arrow_left" size="15" aria-hidden="true" />
-      </BButton>
+        side="start"
+        :width="sidebarWidthPx"
+        :min-width="NOTE_WORKSPACE_SIDEBAR_MIN_WIDTH"
+        :max-width="NOTE_WORKSPACE_SIDEBAR_MAX_WIDTH"
+        :label="t('note.resizePageSidebar')"
+        @resize="emit('update:sidebarWidth', $event)"
+        @reset="resetSidebarWidth"
+        @collapse="closeSidebar"
+        @collapse-pending="sidebarCollapsePending = $event"
+        @dragging="resizing = $event"
+      />
     </aside>
 
     <aside
@@ -57,24 +46,36 @@
     />
 
     <main class="note-workspace-shell__main">
-      <BButton
+      <BTooltip
         v-if="showMainSidebarTrigger"
-        class="note-workspace-shell__sidebar-boundary-toggle note-workspace-shell__sidebar-boundary-toggle--open"
-        :title="t('note.expandPageSidebar')"
-        :aria-label="t('note.expandPageSidebar')"
-        @click.stop="openSidebar"
+        class="note-workspace-shell__trigger-tooltip"
+        follow-cursor
+        :title="shortcutTitle(t('note.expandPageSidebar'), 'sidebar')"
       >
-        <SvgIcon :src="icon.arrow_right" size="15" aria-hidden="true" />
-      </BButton>
-      <BButton
+        <BButton
+          class="note-workspace-shell__sidebar-boundary-toggle note-workspace-shell__sidebar-boundary-toggle--open"
+          :aria-label="t('note.expandPageSidebar')"
+          :aria-keyshortcuts="panelShortcuts ? getWorkspacePanelAriaKeyShortcut('sidebar') : undefined"
+          @click.stop="openSidebar"
+        >
+          <SvgIcon :src="icon.arrow_right" size="15" aria-hidden="true" />
+        </BButton>
+      </BTooltip>
+      <BTooltip
         v-if="showMainAiTrigger"
-        class="note-workspace-shell__ai-boundary-toggle note-workspace-shell__ai-boundary-toggle--open"
-        :title="t('note.showAiPanel')"
-        :aria-label="t('note.showAiPanel')"
-        @click.stop="openAi"
+        class="note-workspace-shell__trigger-tooltip"
+        follow-cursor
+        :title="shortcutTitle(t('note.showAiPanel'), 'sidePanel')"
       >
-        <SvgIcon :src="icon.ai.organize" size="18" aria-hidden="true" />
-      </BButton>
+        <BButton
+          class="note-workspace-shell__ai-boundary-toggle note-workspace-shell__ai-boundary-toggle--open"
+          :aria-label="t('note.showAiPanel')"
+          :aria-keyshortcuts="panelShortcuts ? getWorkspacePanelAriaKeyShortcut('sidePanel') : undefined"
+          @click.stop="openAi"
+        >
+          <SvgIcon :src="icon.ai.organize" size="18" aria-hidden="true" />
+        </BButton>
+      </BTooltip>
       <slot />
     </main>
 
@@ -86,15 +87,7 @@
       :class="{ 'is-open': sidebarOverlayVisible }"
       :aria-hidden="!sidebarOverlayVisible"
     >
-      <slot name="sidebar" />
-      <BButton
-        class="note-workspace-shell__sidebar-boundary-toggle note-workspace-shell__sidebar-boundary-toggle--close"
-        :title="t('note.collapsePageSidebar')"
-        :aria-label="t('note.collapsePageSidebar')"
-        @click.stop="closeSidebar"
-      >
-        <SvgIcon :src="icon.arrow_left" size="15" aria-hidden="true" />
-      </BButton>
+      <slot name="sidebar" :collapse="closeSidebar" />
     </aside>
 
     <aside
@@ -102,34 +95,55 @@
       class="note-workspace-shell__ai"
       :class="[
         `note-workspace-shell__ai--${effectiveAiPresentation}`,
-        { 'is-open': aiOverlayVisible, 'is-collapsed': !aiVisible },
+        { 'is-open': aiOverlayVisible, 'is-collapsed': !aiVisible, 'is-collapse-pending': aiCollapsePending },
       ]"
       :aria-hidden="!aiVisible"
     >
-      <slot name="ai" />
-      <BButton
-        v-if="aiVisible"
-        class="note-workspace-shell__ai-boundary-toggle note-workspace-shell__ai-boundary-toggle--close"
-        :title="t('note.hideAiPanel')"
-        :aria-label="t('note.hideAiPanel')"
-        @click.stop="closeAi"
-      >
-        <SvgIcon :src="icon.arrow_right" size="15" aria-hidden="true" />
-      </BButton>
+      <div class="note-workspace-shell__ai-content">
+        <slot name="ai" :collapse="closeAi" />
+      </div>
+      <NoteWorkspaceSplitter
+        v-if="aiResizable && effectiveAiPresentation === 'dock' && aiVisible"
+        side="end"
+        :width="resolvedAiWidth"
+        :min-width="aiMinWidth"
+        :max-width="aiResizeMaxWidth"
+        :label="t('note.resizeSidePanel')"
+        @resize="emit('update:aiWidth', $event)"
+        @reset="emit('update:aiWidth', null)"
+        @collapse="closeAi"
+        @collapse-pending="aiCollapsePending = $event"
+        @dragging="resizing = $event"
+      />
     </aside>
   </div>
 </template>
 
 <script setup lang="ts">
-  import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+  import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import { useUiDensity } from '@/composables/useUiDensity';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
-  import message from '@/components/base/BasicComponents/BMessage/BMessage';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon';
-  import { NOTE_WORKSPACE_DEFAULT_SIDEBAR_WIDTH, resolveNoteWorkspaceLayout } from '@/utils/noteWorkspaceLayout';
+  import NoteWorkspaceSplitter from './NoteWorkspaceSplitter.vue';
+  import {
+    getWorkspacePanelAriaKeyShortcut,
+    getWorkspacePanelShortcutLabel,
+    matchWorkspacePanelShortcut,
+    type WorkspacePanelShortcut,
+  } from '@/config/keyboardShortcuts';
+  import {
+    NOTE_WORKSPACE_DEFAULT_SIDEBAR_WIDTH,
+    NOTE_WORKSPACE_SIDE_PANEL_DEFAULT_WIDTH,
+    NOTE_WORKSPACE_SIDE_PANEL_MIN_WIDTH,
+    NOTE_WORKSPACE_SIDEBAR_MAX_WIDTH,
+    NOTE_WORKSPACE_SIDEBAR_MIN_WIDTH,
+    clampNoteWorkspaceSidebarWidth,
+    resolveNoteWorkspaceDockedLayout,
+    resolveNoteWorkspaceLayout,
+    resolveNoteWorkspacePanelWidth,
+  } from '@/utils/noteWorkspaceLayout';
 
   const props = withDefaults(
     defineProps<{
@@ -141,9 +155,21 @@
       sidebarOverlayOpen?: boolean;
       aiOverlayOpen?: boolean;
       sidebarWidth?: number;
-      aiWidth?: number;
+      /** 用户拖动记住的右侧卡片宽度；null 时使用默认宽度。 */
+      aiWidth?: number | null;
+      aiMinWidth?: number;
+      aiMaxWidth?: number;
+      /** 未记住宽度且没有比例时使用的默认宽度。 */
+      aiDefaultWidth?: number;
+      /** 大于 0 时默认宽度按去掉页面树后的可用宽度比例计算。 */
+      aiDefaultRatio?: number;
+      aiResizable?: boolean;
+      /** 右侧卡片有参考内容时需要与编辑区并排常驻，不能作为浮层盖住正文。 */
+      preferDockedAi?: boolean;
       mainMinWidth?: number;
       forceDockedPanels?: boolean;
+      /** 启用面板快捷键：Mac ⌘ + \ / ⌃ + \，Windows / Linux Ctrl + \ / Alt + \。 */
+      panelShortcuts?: boolean;
     }>(),
     {
       mobile: false,
@@ -152,9 +178,16 @@
       sidebarOpen: true,
       aiOpen: true,
       sidebarWidth: NOTE_WORKSPACE_DEFAULT_SIDEBAR_WIDTH,
-      aiWidth: 328,
+      aiWidth: null,
+      aiMinWidth: NOTE_WORKSPACE_SIDE_PANEL_MIN_WIDTH,
+      aiMaxWidth: Number.POSITIVE_INFINITY,
+      aiDefaultWidth: NOTE_WORKSPACE_SIDE_PANEL_DEFAULT_WIDTH,
+      aiDefaultRatio: 0,
+      aiResizable: false,
+      preferDockedAi: false,
       mainMinWidth: 680,
       forceDockedPanels: false,
+      panelShortcuts: false,
     },
   );
 
@@ -164,40 +197,31 @@
     'update:sidebarOverlayOpen': [value: boolean];
     'update:aiOverlayOpen': [value: boolean];
     'update:sidebarWidth': [value: number];
+    'update:aiWidth': [value: number | null];
     layoutChange: [value: ReturnType<typeof resolveNoteWorkspaceLayout>];
   }>();
 
   const { t } = useI18n();
-  const { dimension } = useUiDensity();
   const shellRef = ref<HTMLElement | null>(null);
   // 首帧先按可见窗口推断，等 ResizeObserver 接管后再以工作区容器为准。
   // 不能用 0：那会让桌面端首帧短暂按 mobile 隐藏双侧栏，形成明显闪动。
   const containerWidth = ref(typeof window === 'undefined' ? 1420 : window.innerWidth);
+  const sidebarCollapsePending = ref(false);
+  const aiCollapsePending = ref(false);
+  const resizing = ref(false);
   let resizeObserver: ResizeObserver | null = null;
-  let resizeStartX = 0;
-  let resizeStartWidth = 0;
-  let resizePointerId: number | null = null;
-  let resizeHintShown = false;
-  const resizeHintStorageKey = 'light-note:note-sidebar-resize-hint-shown';
 
-  function showSidebarResizeHint() {
-    if (resizeHintShown) return;
-    try {
-      if (localStorage.getItem(resizeHintStorageKey) === '1') return;
-    } catch {
-      // 存储不可用时，仍允许本次页面内提示一次。
-    }
-    message.info(t('note.pageSidebarResizedHint'), 2);
-    resizeHintShown = true;
-    try {
-      localStorage.setItem(resizeHintStorageKey, '1');
-    } catch {
-      // 引导标记写入失败不能中断拖动。
-    }
-  }
-
+  const sidebarWidthPx = computed(() => clampNoteWorkspaceSidebarWidth(props.sidebarWidth));
   const layout = computed(() => {
-    const resolved = resolveNoteWorkspaceLayout(containerWidth.value, props.mobile);
+    const resolved = resolveNoteWorkspaceDockedLayout({
+      width: containerWidth.value,
+      mobile: props.mobile,
+      preferDockedAi: props.hasAi && props.preferDockedAi,
+      sidebarOpen: props.hasSidebar && props.sidebarOpen,
+      sidebarWidth: sidebarWidthPx.value,
+      aiMinWidth: props.aiMinWidth,
+      mainMinWidth: props.mainMinWidth,
+    });
     if (!props.forceDockedPanels || props.mobile) return resolved;
     return {
       mode: 'wide' as const,
@@ -227,11 +251,48 @@
   const showMainAiTrigger = computed(
     () => props.hasAi && effectiveAiPresentation.value !== 'hidden' && !aiVisible.value,
   );
+  const sidebarDockedOpen = computed(() => effectiveSidebarPresentation.value === 'dock' && props.sidebarOpen);
+  const mainMinWidthPx = computed(() => Math.max(0, props.mainMinWidth));
+  /** 去掉常驻页面树后，编辑区与右侧卡片共享的宽度。 */
+  const panelAvailableWidth = computed(
+    () => containerWidth.value - (sidebarDockedOpen.value ? sidebarWidthPx.value : 0),
+  );
+  const resolvedAiWidth = computed(() =>
+    resolveNoteWorkspacePanelWidth({
+      available: panelAvailableWidth.value,
+      preferred: props.aiWidth,
+      minWidth: props.aiMinWidth,
+      maxWidth: props.aiMaxWidth,
+      defaultWidth: props.aiDefaultWidth,
+      defaultRatio: props.aiDefaultRatio,
+      mainMinWidth: mainMinWidthPx.value,
+    }),
+  );
+  const aiResizeMaxWidth = computed(() =>
+    Math.max(props.aiMinWidth, Math.min(props.aiMaxWidth, panelAvailableWidth.value - mainMinWidthPx.value)),
+  );
+  // 网格列按实际呈现计算：常驻页面树、编辑区、常驻右侧卡片；浮层与遮罩是绝对定位，不占列。
+  const gridTemplateColumns = computed(() => {
+    const columns: string[] = [];
+    if (effectiveSidebarPresentation.value === 'dock') {
+      columns.push(props.sidebarOpen ? 'var(--note-workspace-sidebar-width)' : '0px');
+    } else if (effectiveSidebarPresentation.value === 'rail') {
+      columns.push('0px');
+    }
+    columns.push(
+      effectiveSidebarPresentation.value === 'dock' ? 'minmax(var(--note-workspace-main-min-width), 1fr)' : 'minmax(0, 1fr)',
+    );
+    if (effectiveAiPresentation.value === 'dock') {
+      columns.push(aiVisible.value ? 'var(--note-workspace-ai-width)' : '0px');
+    }
+    return columns.join(' ');
+  });
   // 用户拖动保存的侧栏宽度与正文阅读下限保持实际 CSS 像素。
   const shellStyle = computed(() => ({
-    '--note-workspace-sidebar-width': `${Math.min(360, Math.max(220, props.sidebarWidth))}px`,
-    '--note-workspace-ai-width': `${dimension(Math.max(300, props.aiWidth), 'layout')}px`,
-    '--note-workspace-main-min-width': `${Math.max(0, props.mainMinWidth)}px`,
+    '--note-workspace-sidebar-width': `${sidebarWidthPx.value}px`,
+    '--note-workspace-ai-width': `${resolvedAiWidth.value}px`,
+    '--note-workspace-main-min-width': `${mainMinWidthPx.value}px`,
+    gridTemplateColumns: gridTemplateColumns.value,
   }));
 
   function closeOverlays() {
@@ -273,69 +334,67 @@
     emit('update:aiOverlayOpen', false);
   }
 
-  function resizeSidebarBy(delta: number) {
-    emit('update:sidebarWidth', Math.min(360, Math.max(220, props.sidebarWidth + delta)));
+  function shortcutTitle(action: string, target: WorkspacePanelShortcut) {
+    return props.panelShortcuts ? `${action} · ${getWorkspacePanelShortcutLabel(target)}` : action;
+  }
+
+  function toggleSidebar() {
+    if (!props.hasSidebar || effectiveSidebarPresentation.value === 'hidden') return false;
+    const open =
+      effectiveSidebarPresentation.value === 'dock' ? props.sidebarOpen : sidebarOverlayVisible.value;
+    if (open) closeSidebar();
+    else openSidebar();
+    return true;
+  }
+
+  function toggleAi() {
+    if (!props.hasAi || effectiveAiPresentation.value === 'hidden') return false;
+    if (aiVisible.value) closeAi();
+    else openAi();
+    return true;
+  }
+
+  function handlePanelShortcut(event: KeyboardEvent) {
+    if (!props.panelShortcuts || props.mobile) return;
+    const target = matchWorkspacePanelShortcut(event);
+    if (!target) return;
+    // 弹框打开时由弹框自己处理键盘，不在背后开关面板。
+    const element = event.target instanceof Element ? event.target : null;
+    if (element?.closest('[role="dialog"], [role="alertdialog"]')) return;
+    const handled = target === 'sidebar' ? toggleSidebar() : toggleAi();
+    if (handled) event.preventDefault();
   }
 
   function resetSidebarWidth() {
     emit('update:sidebarWidth', NOTE_WORKSPACE_DEFAULT_SIDEBAR_WIDTH);
   }
 
-  function onSidebarResize(event: PointerEvent) {
-    if (event.pointerId !== resizePointerId) return;
-    emit('update:sidebarWidth', Math.min(360, Math.max(220, resizeStartWidth + event.clientX - resizeStartX)));
-  }
-
-  function stopSidebarResize() {
-    document.removeEventListener('pointermove', onSidebarResize);
-    document.removeEventListener('pointerup', finishSidebarResize);
-    document.removeEventListener('pointercancel', cancelSidebarResize);
-    window.removeEventListener('blur', stopSidebarResize);
-    resizePointerId = null;
-    document.body.style.removeProperty('user-select');
-  }
-
-  function finishSidebarResize(event: PointerEvent) {
-    if (event.pointerId !== resizePointerId) return;
-    const changed = props.sidebarWidth !== resizeStartWidth;
-    stopSidebarResize();
-    if (changed) showSidebarResizeHint();
-  }
-
-  function cancelSidebarResize(event: PointerEvent) {
-    if (event.pointerId === resizePointerId) stopSidebarResize();
-  }
-
-  function startSidebarResize(event: PointerEvent) {
-    if (event.button !== 0 || resizePointerId !== null) return;
-    resizePointerId = event.pointerId;
-    resizeStartX = event.clientX;
-    resizeStartWidth = props.sidebarWidth;
-    document.body.style.userSelect = 'none';
-    document.addEventListener('pointermove', onSidebarResize);
-    document.addEventListener('pointerup', finishSidebarResize);
-    document.addEventListener('pointercancel', cancelSidebarResize);
-    window.addEventListener('blur', stopSidebarResize);
-  }
+  // 参考内容出现或移除也会改变呈现方式，不只在容器尺寸变化时通知页面。
+  const layoutKey = computed(
+    () => `${layout.value.mode}|${layout.value.sidebarPresentation}|${layout.value.aiPresentation}`,
+  );
+  watch(layoutKey, () => emit('layoutChange', layout.value));
 
   onMounted(() => {
     const element = shellRef.value;
     if (!element) return;
     const update = (width: number) => {
       containerWidth.value = width;
-      emit('layoutChange', layout.value);
     };
     update(element.getBoundingClientRect().width);
+    emit('layoutChange', layout.value);
     resizeObserver = new ResizeObserver((entries) => {
       const entry = entries[0];
       if (entry) update(entry.contentRect.width);
     });
     resizeObserver.observe(element);
+    // 捕获阶段监听：正文编辑器（内联 TinyMCE / CodeMirror）里同样可用。
+    document.addEventListener('keydown', handlePanelShortcut, true);
   });
 
   onBeforeUnmount(() => {
     resizeObserver?.disconnect();
-    stopSidebarResize();
+    document.removeEventListener('keydown', handlePanelShortcut, true);
   });
 </script>
 
@@ -351,43 +410,9 @@
     transition: grid-template-columns 240ms cubic-bezier(0.22, 1, 0.36, 1);
   }
 
-  .note-workspace-shell.has-sidebar-dock {
-    grid-template-columns: 0 minmax(var(--note-workspace-main-min-width), 1fr);
-  }
-
-  .note-workspace-shell.has-sidebar-dock.is-sidebar-open {
-    grid-template-columns: var(--note-workspace-sidebar-width) minmax(var(--note-workspace-main-min-width), 1fr);
-  }
-
-  .note-workspace-shell.has-sidebar-rail {
-    grid-template-columns: 0 minmax(0, 1fr);
-  }
-
-  .note-workspace-shell.has-ai-dock {
-    grid-template-columns: minmax(0, 1fr) 0;
-  }
-
-  .note-workspace-shell.has-ai-dock.is-ai-open {
-    grid-template-columns: minmax(0, 1fr) var(--note-workspace-ai-width);
-  }
-
-  .note-workspace-shell.has-sidebar-dock.has-ai-dock {
-    grid-template-columns: 0 minmax(var(--note-workspace-main-min-width), 1fr) 0;
-  }
-
-  .note-workspace-shell.has-sidebar-dock.is-sidebar-open.has-ai-dock {
-    grid-template-columns: var(--note-workspace-sidebar-width) minmax(var(--note-workspace-main-min-width), 1fr) 0;
-  }
-
-  .note-workspace-shell.has-sidebar-dock.has-ai-dock.is-ai-open {
-    grid-template-columns: 0 minmax(var(--note-workspace-main-min-width), 1fr) var(--note-workspace-ai-width);
-  }
-
-  .note-workspace-shell.has-sidebar-dock.is-sidebar-open.has-ai-dock.is-ai-open {
-    grid-template-columns:
-      var(--note-workspace-sidebar-width)
-      minmax(var(--note-workspace-main-min-width), 1fr)
-      var(--note-workspace-ai-width);
+  // 拖动分隔条时列宽必须跟手，不能再叠加展开收起的过渡。
+  .note-workspace-shell.is-resizing {
+    transition: none;
   }
 
   .note-workspace-shell__sidebar,
@@ -455,39 +480,13 @@
     transform: translateX(-12px);
   }
 
-  .note-workspace-shell__resize-tooltip {
+  // 提示包装层不参与定位（跟随光标显示），按钮仍相对正文区贴边。
+  .note-workspace-shell__trigger-tooltip {
     position: static;
     display: flex;
+    flex: 0 0 0;
     width: 0;
     height: 0;
-  }
-
-  .note-workspace-shell__resizer.b_btn {
-    position: absolute;
-    z-index: 4;
-    top: 0;
-    right: -5px;
-    bottom: 0;
-    width: 10px;
-    height: 100%;
-    min-width: 10px;
-    padding: 0;
-    border: 0;
-    border-radius: 0;
-    background: transparent;
-    cursor: col-resize;
-
-    &:focus-visible {
-      outline: none;
-    }
-
-    &:focus-visible::after {
-      width: 1px;
-      height: var(--ui-layout-42, 42px);
-      border-radius: 999px;
-      background: var(--resource-note-color, #00a884);
-      content: '';
-    }
   }
 
   .note-workspace-shell__sidebar-boundary-toggle.b_btn,
@@ -513,20 +512,10 @@
     }
   }
 
-  .note-workspace-shell__sidebar-boundary-toggle--close.b_btn {
-    right: calc(var(--ui-control-28, 28px) / -2);
-    border-radius: 10px;
-  }
-
   .note-workspace-shell__sidebar-boundary-toggle--open.b_btn {
     left: 0;
     border-left: 0;
     border-radius: 0 10px 10px 0;
-  }
-
-  .note-workspace-shell__ai-boundary-toggle--close.b_btn {
-    left: calc(var(--ui-control-28, 28px) / -2);
-    border-radius: 10px;
   }
 
   .note-workspace-shell__ai-boundary-toggle.b_btn {
@@ -548,9 +537,16 @@
     border-radius: 10px 0 0 10px;
   }
 
+  .note-workspace-shell__ai-content {
+    width: 100%;
+    height: 100%;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+  }
+
   .note-workspace-shell__ai--dock {
     box-sizing: border-box;
-    overflow: hidden;
     border-left: 1px solid var(--surface-border-color, #e4e7ef);
     background: var(--workspace-panel-bg-color, #f6f7fb);
     opacity: 1;
@@ -572,6 +568,18 @@
       opacity 150ms ease,
       transform 240ms cubic-bezier(0.22, 1, 0.36, 1),
       visibility 0s linear 240ms;
+  }
+
+  // 拖过最小宽度、松手即收起：面板变暗并用虚线框提示，不只靠透明度。
+  .note-workspace-shell__sidebar--dock.is-collapse-pending .note-workspace-shell__sidebar-content,
+  .note-workspace-shell__ai--dock.is-collapse-pending .note-workspace-shell__ai-content {
+    opacity: 0.38;
+  }
+
+  .note-workspace-shell__sidebar--dock.is-collapse-pending,
+  .note-workspace-shell__ai--dock.is-collapse-pending {
+    outline: 1px dashed var(--primary-color, #615ced);
+    outline-offset: -1px;
   }
 
   .note-workspace-shell__mask {

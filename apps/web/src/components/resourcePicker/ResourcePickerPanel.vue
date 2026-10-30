@@ -93,7 +93,7 @@
           <span v-if="multiSelect" class="resource-picker-panel__check" aria-hidden="true">
             <SvgIcon v-if="resourceSelected(entry.item)" :src="icon.message.success" size="13" />
           </span>
-          <span v-if="entry.pinned" class="resource-picker-panel__pinned-tag">{{ t('ai.currentPage') }}</span>
+          <span v-if="entry.pinned" class="resource-picker-panel__pinned-tag">{{ pinnedLabel || t('ai.currentPage') }}</span>
           <slot v-else name="resource-icon" :item="entry.item"
             ><span class="resource-picker-panel__dot" :style="{ background: typeColor(entry.item.type) }"
           /></slot>
@@ -163,7 +163,7 @@
         <span v-if="multiSelect" class="resource-picker-panel__check" aria-hidden="true">
           <SvgIcon v-if="resourceSelected(item)" :src="icon.message.success" size="13" />
         </span>
-        <span class="resource-picker-panel__pinned-tag">{{ t('ai.currentPage') }}</span>
+        <span class="resource-picker-panel__pinned-tag">{{ pinnedLabel || t('ai.currentPage') }}</span>
         <span class="resource-picker-panel__copy">
           <span class="resource-picker-panel__title">{{ item.title }}</span>
         </span>
@@ -300,6 +300,8 @@
       placeholder?: string;
       /** 置顶快捷项(如「当前页面」),始终显示在结果最上方 */
       pinnedItems?: ResourcePickerItem[];
+      /** 置顶项前的标签；默认「当前页面」，其他场景（如最近参考）传入自己的含义。 */
+      pinnedLabel?: string;
       /** AI 专用：在普通笔记结果之外追加同一根页面的目录范围结果。 */
       includeNoteScopes?: boolean;
       /** 已选择的单篇资源仍保留在列表中，但不可重复选择；目录入口仍可独立使用。 */

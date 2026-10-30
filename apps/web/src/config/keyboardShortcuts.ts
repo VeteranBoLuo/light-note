@@ -48,6 +48,44 @@ export function getGlobalShortcutLabel(
   return getGlobalShortcutKeys(id, platform).join(' + ');
 }
 
+/**
+ * 笔记工作区面板开关，同用反斜杠键：
+ * macOS 用 ⌘ 开关页面树、⌃ 开关右侧面板（⌥ + \\ 会输入「«」，不占用）；
+ * Windows / Linux 用 Ctrl 开关页面树、Alt 开关右侧面板。
+ */
+export type WorkspacePanelShortcut = 'sidebar' | 'sidePanel';
+
+export function getWorkspacePanelShortcutLabel(
+  target: WorkspacePanelShortcut,
+  platform: ShortcutPlatform = getShortcutPlatform(),
+): string {
+  if (platform === 'mac') return target === 'sidebar' ? '⌘ + \\' : '⌃ + \\';
+  return target === 'sidebar' ? 'Ctrl + \\' : 'Alt + \\';
+}
+
+/** 供 aria-keyshortcuts 使用的标准写法。 */
+export function getWorkspacePanelAriaKeyShortcut(
+  target: WorkspacePanelShortcut,
+  platform: ShortcutPlatform = getShortcutPlatform(),
+): string {
+  if (platform === 'mac') return target === 'sidebar' ? 'Meta+\\' : 'Control+\\';
+  return target === 'sidebar' ? 'Control+\\' : 'Alt+\\';
+}
+
+/** 按物理按键识别，且每种组合只允许一个修饰键，避免与其他组合键混淆。 */
+export function matchWorkspacePanelShortcut(
+  event: ShortcutKeyboardEvent,
+  platform: ShortcutPlatform = getShortcutPlatform(),
+): WorkspacePanelShortcut | null {
+  if (event.defaultPrevented || event.isComposing || event.keyCode === 229 || event.shiftKey) return null;
+  const backslash = event.code === 'Backslash' || event.key === '\\' || event.keyCode === 220;
+  if (!backslash) return null;
+  const pressed = [event.ctrlKey, event.metaKey, event.altKey].filter(Boolean).length;
+  if (pressed !== 1) return null;
+  if (platform === 'mac') return event.metaKey ? 'sidebar' : event.ctrlKey ? 'sidePanel' : null;
+  return event.ctrlKey ? 'sidebar' : event.altKey ? 'sidePanel' : null;
+}
+
 export function getRepeatLastActionShortcutLabels(platform: ShortcutPlatform = getShortcutPlatform()): string[] {
   return platform === 'mac' ? ['⌘ + ⌥ + R', 'Fn + F4'] : ['Ctrl + Alt + R', 'F4'];
 }

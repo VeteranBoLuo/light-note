@@ -21,6 +21,10 @@ const readonlyPreviewSource = readFileSync(
   resolve(process.cwd(), 'src/components/noteLibrary/library/NoteReadonlyPreview.vue'),
   'utf8',
 );
+const sidePanelSource = readFileSync(
+  resolve(process.cwd(), 'src/components/noteLibrary/reference/NoteDetailSidePanel.vue'),
+  'utf8',
+);
 const noteLibrarySidebarSource = readFileSync(
   resolve(process.cwd(), 'src/components/noteLibrary/tree/NoteLibrarySidebar.vue'),
   'utf8',
@@ -195,32 +199,27 @@ describe('笔记库页面树交互接线', () => {
     expect(openFunction).not.toContain('await prefetchNoteDetail');
   });
 
-  it('目录折叠入口位于工作区分隔线中部，笔记库和详情顶栏不再重复展示', () => {
-    expect(workspaceShellSource).toContain('note-workspace-shell__sidebar-boundary-toggle--close');
-    expect(workspaceShellSource).toContain('top: 50%');
-    expect(workspaceShellSource).toContain('icon.arrow_left');
-    expect(workspaceShellSource).toContain('icon.arrow_right');
+  it('目录收起入口在侧栏标题行，边框只保留收起后的展开小标签，顶栏不重复展示', () => {
+    expect(workspaceShellSource).not.toContain('note-workspace-shell__sidebar-boundary-toggle--close');
+    expect(workspaceShellSource).toContain('note-workspace-shell__sidebar-boundary-toggle--open');
+    expect(workspaceShellSource).toContain('<slot name="sidebar" :collapse="closeSidebar" />');
+    expect(noteLibrarySidebarSource).toContain("@click=\"emit('collapse')\"");
+    expect(source).toContain('<template #sidebar="{ collapse }">');
+    expect(source).toContain('@collapse="collapse"');
+    expect(detailSource).toContain('<template #sidebar="{ collapse }">');
     expect(source).not.toContain('class="note-action-button note-sidebar-toggle"');
     expect(detailSource).not.toContain('@toggle-sidebar="toggleDetailSidebar"');
   });
 
   it('桌面目录栏常驻并平滑收展，拖拽热区不再额外绘制粗分隔线', () => {
     expect(workspaceShellSource).toContain('v-if="hasSidebar && effectiveSidebarPresentation === \'dock\'"');
-    expect(workspaceShellSource).toContain(':class="{ \'is-collapsed\': !sidebarOpen }"');
+    expect(workspaceShellSource).toContain("'is-collapsed': !sidebarOpen");
     expect(workspaceShellSource).toContain('transition: grid-template-columns 240ms');
-    expect(workspaceShellSource).toContain(
-      'grid-template-columns: 0 minmax(var(--note-workspace-main-min-width), 1fr)',
-    );
+    expect(workspaceShellSource).toContain("columns.push(props.sidebarOpen ? 'var(--note-workspace-sidebar-width)' : '0px')");
     expect(workspaceShellSource).toContain('note-workspace-shell__sidebar-content');
     expect(workspaceShellSource).not.toContain('width: 2px;\n      height: 42px;');
     expect(source).toContain('--note-workspace-divider-color: var(--note-workspace-frame-color)');
     expect(source).toMatch(/\.note-sidebar-panel\s*\{[\s\S]*?border-right: 0;/);
-  });
-
-  it('目录栏拖拽热区支持双击恢复统一默认宽度', () => {
-    expect(workspaceShellSource).toContain('@dblclick.stop.prevent="resetSidebarWidth"');
-    expect(workspaceShellSource).toContain("t('note.resetPageSidebarWidthHint')");
-    expect(workspaceShellSource).toContain("emit('update:sidebarWidth', NOTE_WORKSPACE_DEFAULT_SIDEBAR_WIDTH)");
   });
 
   it('平板笔记库使用独立临时目录覆盖层，布局切换时自动收起', () => {
@@ -233,8 +232,7 @@ describe('笔记库页面树交互接线', () => {
   });
 
   it('平板折叠目录不再保留宽轨道，仍可从内容边界重新展开', () => {
-    expect(workspaceShellSource).toContain('.note-workspace-shell.has-sidebar-rail');
-    expect(workspaceShellSource).toContain('grid-template-columns: 0 minmax(0, 1fr)');
+    expect(workspaceShellSource).toMatch(/effectiveSidebarPresentation\.value === 'rail'\) \{\s*columns\.push\('0px'\)/);
     expect(workspaceShellSource).toMatch(
       /effectiveSidebarPresentation\.value === 'overlay' \|\| effectiveSidebarPresentation\.value === 'rail'/,
     );
@@ -243,10 +241,12 @@ describe('笔记库页面树交互接线', () => {
 
   it('AI 助手使用紫色 AI 语义边界按钮，详情顶栏不再重复提供入口', () => {
     expect(workspaceShellSource).toContain('note-workspace-shell__ai-boundary-toggle--open');
-    expect(workspaceShellSource).toContain('note-workspace-shell__ai-boundary-toggle--close');
+    expect(workspaceShellSource).not.toContain('note-workspace-shell__ai-boundary-toggle--close');
     expect(workspaceShellSource).toContain('<SvgIcon :src="icon.ai.organize" size="18"');
     expect(workspaceShellSource).toContain('@click.stop="openAi"');
-    expect(workspaceShellSource).toContain('@click.stop="closeAi"');
+    expect(workspaceShellSource).toContain('<slot name="ai" :collapse="closeAi" />');
+    expect(detailSource).toContain('<template v-if="!isDrawingNote" #ai="{ collapse }">');
+    expect(sidePanelSource).toContain("@click=\"emit('collapse')\"");
     expect(workspaceShellSource).toMatch(
       /\.note-workspace-shell__ai-boundary-toggle\.b_btn\s*\{[\s\S]*?border-color: var\(--primary-color[\s\S]*?color: var\(--primary-color/,
     );
@@ -268,12 +268,7 @@ describe('笔记库页面树交互接线', () => {
   });
 
   it('宽屏 AI 侧栏以稳定零宽轨道平滑收展，不再用 display none 瞬切', () => {
-    expect(workspaceShellSource).toMatch(
-      /\.note-workspace-shell\.has-ai-dock\s*\{[\s\S]*?grid-template-columns: minmax\(0, 1fr\) 0;/,
-    );
-    expect(workspaceShellSource).toMatch(
-      /\.note-workspace-shell\.has-sidebar-dock\.has-ai-dock\s*\{[\s\S]*?grid-template-columns: 0 minmax\(var\(--note-workspace-main-min-width\), 1fr\) 0;/,
-    );
+    expect(workspaceShellSource).toContain("columns.push(aiVisible.value ? 'var(--note-workspace-ai-width)' : '0px')");
     expect(workspaceShellSource).toMatch(
       /\.note-workspace-shell__ai--dock\s*\{[\s\S]*?opacity 150ms ease[\s\S]*?transform 240ms/,
     );

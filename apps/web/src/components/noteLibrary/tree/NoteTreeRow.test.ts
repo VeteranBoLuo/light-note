@@ -554,4 +554,102 @@ describe('NoteTreeRow 显式页面操作', () => {
     expect(treeNode.classList.contains('is-drop-before')).toBe(false);
     expect(treeNode.dataset.noteTreeDropPosition).toBeUndefined();
   });
+
+  it('编辑页提供参考动作时出现参考菜单，并用参考图标标出正在参考的页面', async () => {
+    const { NOTE_TREE_REFERENCE_CONTEXT } = await import('./noteTreeReference');
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const referencedNoteId = ref<string | null>(null);
+    const reference = vi.fn((noteId: string) => {
+      referencedNoteId.value = noteId;
+    });
+    const cancelReference = vi.fn(() => {
+      referencedNoteId.value = null;
+    });
+    const openInNewWindow = vi.fn();
+    const node = (id: string, title: string) => ({
+      id,
+      parentId: null,
+      title,
+      childCount: 0,
+      hasChildren: false,
+      isTop: false,
+      sort: 0,
+    });
+    const app = createApp({
+      render: () =>
+        h('ul', [
+          h(NoteTreeRow, {
+            node: node('current', '当前页面'),
+            depth: 0,
+            activePageId: 'current',
+            childrenByParent: {},
+            expandedIds: new Set<string>(),
+            loadingKeys: new Set<string>(),
+          }),
+          h(NoteTreeRow, {
+            node: node('other', '另一页面'),
+            depth: 0,
+            activePageId: 'current',
+            childrenByParent: {},
+            expandedIds: new Set<string>(),
+            loadingKeys: new Set<string>(),
+          }),
+        ]),
+    });
+    app.provide(NOTE_TREE_REFERENCE_CONTEXT, {
+      referencedNoteId,
+      currentNoteId: ref('current'),
+      reference,
+      cancelReference,
+      openInNewWindow,
+    });
+    app.use(createI18n({ legacy: false, locale: 'zh-CN', messages: { 'zh-CN': zhCN } }));
+    app.mount(host);
+    cleanup = () => app.unmount();
+    const [currentNode, otherNode] = [...host.querySelectorAll<HTMLElement>('.note-tree-node')];
+    const labels = (element: HTMLElement) =>
+      [...element.querySelectorAll<HTMLButtonElement>('.action-menu-option')].map((item) => item.textContent);
+    expect(labels(currentNode)).not.toContain('参考此笔记');
+    expect(labels(currentNode)[0]).toBe('在新窗口打开');
+    expect(labels(otherNode).slice(0, 2)).toEqual(['参考此笔记', '在新窗口打开']);
+
+    otherNode.querySelector<HTMLButtonElement>('.action-menu-option')!.click();
+    await nextTick();
+    expect(reference).toHaveBeenCalledWith('other', '另一页面');
+    const otherRow = otherNode.querySelector<HTMLElement>('.note-tree-row')!;
+    expect(otherRow.classList.contains('is-referenced')).toBe(true);
+    expect(otherRow.querySelector('.note-tree-page-icon')?.getAttribute('data-src')).toBe(icon.noteTree.reference);
+    expect(otherRow.textContent).toContain('正在参考');
+    expect(labels(otherNode)[0]).toBe('取消参考');
+
+    otherNode.querySelector<HTMLButtonElement>('.action-menu-option')!.click();
+    await nextTick();
+    expect(cancelReference).toHaveBeenCalledTimes(1);
+    expect(otherRow.classList.contains('is-referenced')).toBe(false);
+
+    [...otherNode.querySelectorAll<HTMLButtonElement>('.action-menu-option')][1].click();
+    expect(openInNewWindow).toHaveBeenCalledWith('other');
+  });
+
+  it('笔记库页没有参考上下文时菜单保持原样', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const app = createApp({
+      render: () =>
+        h(NoteTreeRow, {
+          node: { id: 'n1', parentId: null, title: '页面', childCount: 0, hasChildren: false, isTop: false, sort: 0 },
+          depth: 0,
+          childrenByParent: {},
+          expandedIds: new Set<string>(),
+          loadingKeys: new Set<string>(),
+        }),
+    });
+    app.use(createI18n({ legacy: false, locale: 'zh-CN', messages: { 'zh-CN': zhCN } }));
+    app.mount(host);
+    cleanup = () => app.unmount();
+    const labels = [...host.querySelectorAll('.action-menu-option')].map((item) => item.textContent);
+    expect(labels).not.toContain('参考此笔记');
+    expect(labels).not.toContain('在新窗口打开');
+  });
 });

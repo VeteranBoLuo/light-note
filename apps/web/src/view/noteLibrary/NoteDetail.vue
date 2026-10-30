@@ -49,17 +49,22 @@
         :sidebar-overlay-open="detailSidebarOverlayOpen"
         :ai-overlay-open="detailAiOverlayOpen"
         :sidebar-width="noteWorkspaceSidebarWidth"
+        v-bind="sidePanelLayout"
+        ai-resizable
+        panel-shortcuts
         @update:sidebar-open="noteWorkspace.setSidebarPreferredOpen($event)"
         @update:sidebar-overlay-open="setDetailSidebarOverlayOpen"
         @update:sidebar-width="noteWorkspace.setSidebarWidth($event)"
+        @update:ai-width="updateSidePanelWidth"
         @update:ai-open="noteWorkspace.setAiPreferredOpen($event)"
         @update:ai-overlay-open="setDetailAiOverlayOpen"
         @layout-change="handleDetailLayoutChange"
       >
-        <template #sidebar>
+        <template #sidebar="{ collapse }">
           <aside class="note-detail-sidebar-panel">
             <NoteWorkspaceSidebar
               v-if="canShowPrivateNavigation"
+              collapsible
               v-model:mode="detailSidebarMode"
               surface="detail"
               :current-parent-id="null"
@@ -98,6 +103,7 @@
               @search="detailTreeSearchValue = $event"
               @drag-start="onTreeDragStart"
               @drag-end="onTreeDragEnd"
+              @collapse="collapse"
             >
               <template #outline>
                 <Catalog
@@ -238,10 +244,21 @@
             :text="dragDropHint"
           />
         </div>
-        <template v-if="!isDrawingNote" #ai>
-          <div class="note-detail-ai-slot">
-            <AiReply class="ai-panel" />
-          </div>
+        <template v-if="!isDrawingNote" #ai="{ collapse }">
+          <NoteDetailSidePanel v-model:tab="sidePanelTab" class="note-detail-ai-slot" @collapse="collapse">
+            <template #ai>
+              <AiReply class="ai-panel" />
+            </template>
+            <template #reference>
+              <NoteReferencePanel
+                :target="referenceTarget"
+                :current-note-id="note.id || ''"
+                :owner-key="referenceOwnerKey"
+                @change="setReference"
+                @swap="swapReferenceIntoEditor"
+              />
+            </template>
+          </NoteDetailSidePanel>
         </template>
       </NoteWorkspaceShell>
 
@@ -374,6 +391,9 @@
   import Editor from '@/components/noteLibrary/detail/Editor.vue';
   import NoteWorkspaceShell from '@/components/noteLibrary/workspace/NoteWorkspaceShell.vue';
   import NoteWorkspaceSidebar from '@/components/noteLibrary/workspace/NoteWorkspaceSidebar.vue';
+  import NoteDetailSidePanel, { type NoteDetailSidePanelTab } from '@/components/noteLibrary/reference/NoteDetailSidePanel.vue';
+  import NoteReferencePanel from '@/components/noteLibrary/reference/NoteReferencePanel.vue';
+  import { NOTE_TREE_REFERENCE_CONTEXT } from '@/components/noteLibrary/tree/noteTreeReference';
   import NoteOutlineList from '@/components/noteLibrary/detail/NoteOutlineList.vue';
   import NoteTreeDropFeedback from '@/components/noteLibrary/tree/NoteTreeDropFeedback.vue';
   import NoteMobileNavigationDrawer from '@/components/noteLibrary/workspace/NoteMobileNavigationDrawer.vue';
@@ -405,7 +425,18 @@
   import { buildNoteBreadcrumbDisplay } from '@/utils/noteBreadcrumb';
   import { resolveDeletedNoteFallbackId, resolveNoteDetailReturnPath, updateNotePreviewReturnPath } from '@/utils/noteDetailNavigation';
   import { hasMeaningfulNoteContent } from '@/utils/noteTree';
-  import { resolveNoteWorkspaceLayout, type NoteWorkspaceLayoutState } from '@/utils/noteWorkspaceLayout';
+  import {
+    NOTE_REFERENCE_MAIN_MIN_WIDTH,
+    NOTE_REFERENCE_PANEL_DEFAULT_RATIO,
+    resolveNoteWorkspaceLayout,
+    type NoteWorkspaceLayoutState,
+  } from '@/utils/noteWorkspaceLayout';
+  import {
+    NOTE_REFERENCE_QUERY_KEY,
+    formatNoteReferenceQuery,
+    parseNoteReferenceQuery,
+    type NoteReferenceTarget,
+  } from '@/utils/noteReference';
   import { markNoteDraftPromoted } from '@/utils/routeViewKey';
   import { discardAiNoteDraft, readAiNoteDraft } from '@/utils/aiNoteDraft';
   import { NOTE_TREE_ROOT_KEY, useNoteTree } from '@/composables/useNoteTree';
@@ -604,6 +635,7 @@
     bookmark.isMobile,
   );
   const detailWorkspaceMode = ref(initialDetailWorkspaceLayout.mode);
+  const detailAiPresentation = ref(initialDetailWorkspaceLayout.aiPresentation);
   const detailSidebarOverlayOpen = ref(false);
   const detailAiOverlayOpen = ref(false);
 
@@ -612,7 +644,9 @@
       detailSidebarOverlayOpen.value = false;
       detailAiOverlayOpen.value = false;
     }
+    if (detailAiPresentation.value !== layout.aiPresentation) detailAiOverlayOpen.value = false;
     detailWorkspaceMode.value = layout.mode;
+    detailAiPresentation.value = layout.aiPresentation;
   }
 
   function setDetailSidebarOverlayOpen(value: boolean) {
@@ -624,6 +658,68 @@
     detailAiOverlayOpen.value = value;
     if (value) detailSidebarOverlayOpen.value = false;
   }
+
+  // 参考栏：参考对象只存在于地址的 ref 参数里，刷新与页面树切换笔记时随地址保留。
+  const referenceTarget = computed<NoteReferenceTarget | null>(() => {
+    const target = parseNoteReferenceQuery(router.currentRoute.value.query[NOTE_REFERENCE_QUERY_KEY]);
+    if (!target || (target.type === 'note' && target.id === note.id)) return null;
+    return target;
+  });
+  const referenceAvailable = computed(() => !bookmark.isMobile && !isDrawingNote.value);
+  const sidePanelTab = ref<NoteDetailSidePanelTab>(referenceTarget.value ? 'reference' : 'ai');
+  const referenceOwnerKey = computed(() => String(user.id || 'guest'));
+  // 「AI 助手 / 参考」共用一个宽度，切页签时编辑区不重排；有参考内容时默认按比例加宽。
+  const sidePanelLayout = computed(() => {
+    const docked = referenceAvailable.value && Boolean(referenceTarget.value);
+    return {
+      preferDockedAi: docked,
+      mainMinWidth: docked ? NOTE_REFERENCE_MAIN_MIN_WIDTH : 680,
+      aiWidth: noteWorkspace.sidePanelWidth,
+      aiDefaultRatio: docked ? NOTE_REFERENCE_PANEL_DEFAULT_RATIO : 0,
+    };
+  });
+
+  function updateSidePanelWidth(width: number | null) {
+    noteWorkspace.setSidePanelWidth(width);
+  }
+
+  function referenceQuery(target: NoteReferenceTarget | null) {
+    const query = { ...router.currentRoute.value.query };
+    if (target) query[NOTE_REFERENCE_QUERY_KEY] = formatNoteReferenceQuery(target);
+    else delete query[NOTE_REFERENCE_QUERY_KEY];
+    return query;
+  }
+
+  async function setReference(target: NoteReferenceTarget | null) {
+    const next = target && !(target.type === 'note' && target.id === note.id) ? target : null;
+    // 切换参考内容不加入浏览器历史，返回仍回到进入编辑页之前的位置。
+    await router.replace({ path: router.currentRoute.value.path, query: referenceQuery(next) });
+    if (!next) return;
+    sidePanelTab.value = 'reference';
+    noteWorkspace.setAiPreferredOpen(true);
+    // 放不下并排（窄于 960px）时参考以浮层呈现，需要显式打开。
+    await nextTick();
+    if (detailAiPresentation.value === 'overlay') setDetailAiOverlayOpen(true);
+  }
+
+  function openNoteInNewWindow(noteId: string) {
+    window.open(router.resolve({ path: `/noteLibrary/${encodeURIComponent(noteId)}` }).href, '_blank', 'noopener');
+  }
+
+  function swapReferenceIntoEditor(noteId: string) {
+    if (!note.id) return;
+    void openNoteDetailPage(noteId, { reference: { type: 'note', id: note.id } });
+  }
+
+  provide(NOTE_TREE_REFERENCE_CONTEXT, {
+    referencedNoteId: computed(() =>
+      referenceAvailable.value && referenceTarget.value?.type === 'note' ? referenceTarget.value.id : null,
+    ),
+    currentNoteId: computed(() => note.id || null),
+    reference: (noteId: string) => void setReference({ type: 'note', id: noteId }),
+    cancelReference: () => void setReference(null),
+    openInNewWindow: openNoteInNewWindow,
+  });
 
   const {
     childrenByParent,
@@ -1495,7 +1591,7 @@
     if (currentNode?.hasChildren && !expandedIds.value.has(note.id)) await toggleExpanded(currentNode);
   }
 
-  async function openNoteDetailPage(id: string) {
+  async function openNoteDetailPage(id: string, options: { reference?: NoteReferenceTarget | null } = {}) {
     const normalizedId = String(id || '').trim();
     if (!normalizedId || normalizedId === note.id || normalizedId === openingPageId.value) return;
 
@@ -1511,9 +1607,18 @@
     }
     if (requestVersion !== noteOpenRequestVersion) return;
     try {
+      // 在编辑页内切换笔记时保留参考内容；目标就是被参考的笔记时不再参考自己。
+      const carriedReference = options.reference === undefined ? referenceTarget.value : options.reference;
+      const nextReference =
+        carriedReference && !(carriedReference.type === 'note' && carriedReference.id === normalizedId)
+          ? carriedReference
+          : null;
       const navigationFailure = await router.push({
         path: `/noteLibrary/${encodeURIComponent(normalizedId)}`,
-        query: sourceReturnPath() ? { from: updateNotePreviewReturnPath(sourceReturnPath(), normalizedId) } : {},
+        query: {
+          ...(sourceReturnPath() ? { from: updateNotePreviewReturnPath(sourceReturnPath(), normalizedId) } : {}),
+          ...(nextReference ? { [NOTE_REFERENCE_QUERY_KEY]: formatNoteReferenceQuery(nextReference) } : {}),
+        },
       });
       if (requestVersion !== noteOpenRequestVersion || isNavigationFailure(navigationFailure)) return;
     } finally {
@@ -2201,8 +2306,10 @@
     return true;
   });
 
-  onBeforeRouteUpdate(async (to) => {
+  onBeforeRouteUpdate(async (to, from) => {
     if (skipSaveOnLeave) return true;
+    // 只改地址参数（如切换参考内容）仍是同一篇笔记，不需要先落盘。
+    if (to.path === from.path) return true;
     // 新建笔记首次保存时会把 /add 替换为真实 id；此时同一草稿正在完成保存，不能反向等待自己。
     if (String(to.params.id || '') === note.id) return true;
     return await persistBeforeLeave();
@@ -2635,6 +2742,8 @@
     }
   }
   .note-body.note-workspace-shell {
+    // 与下方正文区 padding 一致，让两侧分隔条落在面板与编辑卡片之间的留白正中。
+    --note-workspace-splitter-gap: var(--ui-space-16, 16px);
     display: grid;
     padding: 0;
     box-sizing: border-box;
