@@ -22,6 +22,12 @@
   --hud-shadow: 0 6px 18px #0006;
 }
 
+/* 场景是独立文档，不继承主站全局规则；场景容器自身监听点击（画布上的麻雀等），
+   默认点按高亮会盖住整屏，因此在根节点统一关闭，由各元素自己的按压态反馈 */
+html {
+  -webkit-tap-highlight-color: transparent;
+}
+
 /* 游戏界面禁止选中文字、拖拽图片；输入框除外 */
 #shell,
 .modal-backdrop,
@@ -47,7 +53,6 @@
 #shell button,
 .dialog button {
   touch-action: manipulation;
-  -webkit-tap-highlight-color: transparent;
 }
 
 /* ---------- 顶部 HUD ---------- */

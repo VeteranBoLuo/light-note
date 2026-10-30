@@ -95,7 +95,6 @@ html .seaside-courtyard.farm-staged .rod-body {
   border: 0;
   background: none;
   pointer-events: auto;
-  -webkit-tap-highlight-color: transparent;
 }
 .farm-plot {
   cursor: pointer;
