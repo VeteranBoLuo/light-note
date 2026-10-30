@@ -15,6 +15,10 @@ DOCUMENT_WORKER_PM2="light-note-document-worker"
 BOOKMARK_ICON_WORKER_PM2="light-note-bookmark-icon-worker"
 RESOURCE_GOVERNANCE_WORKER_PM2="light-note-resource-governance-worker"
 OUT="/tmp/ln-server-deploy"
+# 停文档 Worker 到全部重启之间，服务告警读到这个标记就暂停评估，避免把部署当成故障；
+# 标记带截止时刻，部署中途失败也只暂停这一段，之后照常告警。放在 rsync 不覆盖的 .runtime/。
+DEPLOY_WINDOW_FILE="$REMOTE/.runtime/deploy-window.json"
+DEPLOY_WINDOW_SECONDS=900
 TS="$(date +%Y%m%d%H%M%S)"
 cd "$(dirname "$0")/.."
 
@@ -29,6 +33,9 @@ pnpm --filter server deploy --prod --legacy "$OUT"
 # 万一线上跑的是未提交的补丁,至少能从 ${REMOTE}_bak_* 里翻回来,而不是彻底丢失。
 echo "🗄  服务器端备份现有目录(硬链接快照,不占额外磁盘;滚动保留最新 1 份)…"
 ssh -i "$KEY" "$HOST" "{ [ -d '$REMOTE' ] && cp -al '$REMOTE' '${REMOTE}_bak_$TS'; }; ls -1dt ${REMOTE}_bak_* 2>/dev/null | tail -n +2 | xargs -r rm -rf"
+
+echo "🚧  标记部署窗口（${DEPLOY_WINDOW_SECONDS} 秒内暂停服务告警）…"
+ssh -i "$KEY" "$HOST" "mkdir -p '$REMOTE/.runtime' && printf '{\"until\":%s}\n' \$(( \$(date +%s) + $DEPLOY_WINDOW_SECONDS )) > '$DEPLOY_WINDOW_FILE'"
 
 # Old queue consumers must not run against the new image strategy or organize states.
 echo "⏸  停止旧文档 Worker，等待当前任务释放…"
@@ -162,6 +169,7 @@ ssh -i "$KEY" "$HOST" "pm2 restart $PM2 --update-env --interpreter '$REMOTE_NODE
     cd '$REMOTE' && pm2 start browserPushWorker.js --interpreter '$REMOTE_NODE' --name 'light-note-browser-push'; \
   fi && \
   pm2 save"
+ssh -i "$KEY" "$HOST" "rm -f '$DEPLOY_WINDOW_FILE'"
 
 echo "⏳  等待后端重启就绪并健康检查(重启窗口会短暂 502,属正常)…"
 code=000

@@ -1,9 +1,13 @@
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('./notification.js', () => ({ createNotification: vi.fn() }));
 vi.mock('./emailDelivery.js', () => ({ sendTrackedEmail: vi.fn() }));
 
-const { deriveAlertSignals, evaluateInfraAlerts, runInfraAlertCycle } = await import('./infraAlerts.js');
+const { deriveAlertSignals, evaluateInfraAlerts, readDeployWindow, runInfraAlertCycle } =
+  await import('./infraAlerts.js');
 
 const available = (domain) => ({ domain, state: 'available' });
 const diagnostics = (checks, sources = ['overview', 'services', 'storage', 'security'].map(available)) => ({
@@ -280,5 +284,92 @@ describe('服务器告警执行', () => {
       loadDiagnostics: async () => diagnostics([check('security.fail2ban', 'fail', { value: 'not-installed' })]),
     });
     expect(notify).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('部署窗口', () => {
+  const now = new Date('2026-10-30T07:00:00Z');
+  const epoch = (offsetMs) => Math.floor((now.getTime() + offsetMs) / 1000);
+
+  it('窗口内服务告警暂停，资源与安全项照常评估', () => {
+    const input = diagnostics([
+      check('services.health', 'fail', { unhealthy: ['lightnote-document-worker'] }, 'services'),
+      check('security.fail2ban', 'fail', { value: 'not-installed' }),
+    ]);
+    const { signals, servicesKnown } = deriveAlertSignals(input, { servicesPaused: true });
+    expect(servicesKnown).toBe(false);
+    expect([...signals.keys()].sort()).toEqual(['agent.offline', 'security.fail2ban']);
+  });
+
+  it('部署中停掉的 Worker 不累计失败次数，也不通知', async () => {
+    const queries = [];
+    const pending = {
+      alert_key: 'service.lightnote-document-worker',
+      state: 'pending',
+      channel: 'urgent',
+      fail_streak: 2,
+      pass_streak: 0,
+      title: '文档处理 Worker 未运行',
+      detail: null,
+      first_failed_at: new Date('2026-10-30T06:58:00Z'),
+      opened_at: null,
+      resolved_at: null,
+    };
+    const db = {
+      query: vi.fn(async (sql, params) => {
+        queries.push({ sql, params });
+        if (sql.startsWith('SELECT alert_key')) return [[pending]];
+        if (sql.startsWith('SELECT check_id')) return [[]];
+        return [{ affectedRows: 1 }];
+      }),
+    };
+    const notify = vi.fn();
+    const result = await runInfraAlertCycle({
+      db,
+      notify,
+      sendEmail: vi.fn(),
+      now,
+      deployWindow: async () => true,
+      loadDiagnostics: async () =>
+        diagnostics([check('services.health', 'fail', { unhealthy: ['lightnote-document-worker'] }, 'services')]),
+    });
+    expect(result.changed).toEqual([]);
+    expect(queries.some((item) => item.sql.startsWith('INSERT INTO infra_alerts'))).toBe(false);
+    expect(notify).not.toHaveBeenCalled();
+  });
+
+  it('只采信 30 分钟内到期的有效标记；缺失、损坏、过期都按不在部署中处理', async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), 'deploy-window-'));
+    const file = path.join(dir, 'deploy-window.json');
+    try {
+      expect(await readDeployWindow(now, file)).toBe(false);
+      await writeFile(file, JSON.stringify({ until: epoch(15 * 60_000) }));
+      expect(await readDeployWindow(now, file)).toBe(true);
+      await writeFile(file, JSON.stringify({ until: epoch(-1000) }));
+      expect(await readDeployWindow(now, file)).toBe(false);
+      await writeFile(file, JSON.stringify({ until: epoch(31 * 60_000) }));
+      expect(await readDeployWindow(now, file)).toBe(false);
+      await writeFile(file, '{"until":');
+      expect(await readDeployWindow(now, file)).toBe(false);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('部署脚本在停文档 Worker 前写标记，全部进程重启后、健康检查前删除', async () => {
+    const script = await readFile(new URL('../../../scripts/deploy-server.sh', import.meta.url), 'utf8');
+    const writeIndex = script.indexOf("> '$DEPLOY_WINDOW_FILE'");
+    const stopIndex = script.indexOf("pm2 stop '$DOCUMENT_WORKER_PM2'");
+    const saveIndex = script.indexOf('pm2 save');
+    const removeIndex = script.indexOf("rm -f '$DEPLOY_WINDOW_FILE'");
+    const healthIndex = script.indexOf('https://boluo66.top/api/user/me');
+    expect(script).toContain('DEPLOY_WINDOW_FILE="$REMOTE/.runtime/deploy-window.json"');
+    expect(script).toContain("--exclude '.runtime/'");
+    expect(writeIndex).toBeGreaterThan(-1);
+    expect(stopIndex).toBeGreaterThan(writeIndex);
+    expect(removeIndex).toBeGreaterThan(saveIndex);
+    expect(healthIndex).toBeGreaterThan(removeIndex);
+    // 脚本给出的窗口必须落在告警端的采信上限内，否则标记会被当成异常而失效。
+    expect(Number(script.match(/DEPLOY_WINDOW_SECONDS=(\d+)/u)?.[1]) * 1000).toBeLessThanOrEqual(30 * 60_000);
   });
 });

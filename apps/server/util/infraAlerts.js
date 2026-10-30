@@ -1,3 +1,5 @@
+import { readFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
 import pool from '../db/index.js';
 import { createNotification } from './notification.js';
 import { sendTrackedEmail } from './emailDelivery.js';
@@ -17,6 +19,21 @@ export const INFRA_ALERT_POLICY = Object.freeze({
 });
 
 const DIAGNOSTICS_LINK = '/serverManagement/diagnostics';
+
+// deploy-server.sh 停文档 Worker 前写入、全部重启后删除；脚本给 15 分钟，超过 30 分钟的截止时刻视为异常标记不予采信。
+const DEPLOY_WINDOW_FILE = fileURLToPath(new URL('../.runtime/deploy-window.json', import.meta.url));
+const DEPLOY_WINDOW_MAX_MS = 30 * 60_000;
+
+/** 部署窗口内服务进程按计划停止，服务告警暂停评估；标记缺失、损坏或过期都按不在部署中处理。 */
+export async function readDeployWindow(now, file = DEPLOY_WINDOW_FILE) {
+  try {
+    const until = Number(JSON.parse(await readFile(file, 'utf8'))?.until) * 1000;
+    const remaining = until - now.getTime();
+    return Number.isFinite(remaining) && remaining > 0 && remaining <= DEPLOY_WINDOW_MAX_MS;
+  } catch {
+    return false;
+  }
+}
 
 // 只有诊断判为“异常”的检查项才会告警；预警、采集错误与未知状态不打扰。
 const CHECK_TITLES = Object.freeze({
@@ -79,7 +96,7 @@ function checkDetail(check) {
  * 把诊断结果转成告警信号。服务按 ID 拆成独立告警，避免多个服务先后故障被同一条告警吞掉；
  * Agent 整体不可达时其他检查都是未知，由 agent.offline 单独告警。
  */
-export function deriveAlertSignals(diagnostics) {
+export function deriveAlertSignals(diagnostics, { servicesPaused = false } = {}) {
   const signals = new Map();
   const sources = diagnostics?.sources || [];
   signals.set('agent.offline', {
@@ -91,7 +108,8 @@ export function deriveAlertSignals(diagnostics) {
   let servicesKnown = false;
   for (const check of diagnostics?.checks || []) {
     if (check.id === 'services.health') {
-      if (check.state === 'unknown') continue;
+      // 部署窗口内与采集未知同样处理：服务告警既不开启也不恢复，窗口结束后按实际状态继续。
+      if (check.state === 'unknown' || servicesPaused) continue;
       servicesKnown = true;
       for (const id of check.evidence?.unhealthy || []) {
         signals.set(`service.${id}`, {
@@ -289,13 +307,19 @@ export async function runInfraAlertCycle({
   sendEmail = sendTrackedEmail,
   now = new Date(),
   siteUrl = String(process.env.SITE_URL || 'https://boluo66.top').replace(/\/$/u, ''),
+  deployWindow = readDeployWindow,
 } = {}) {
   const diagnostics = await loadDiagnostics();
+  const servicesPaused = await deployWindow(now);
   const [rows] = await db.query(
     'SELECT alert_key, state, channel, fail_streak, pass_streak, title, detail, first_failed_at, opened_at, resolved_at FROM infra_alerts',
   );
   const silences = await loadSilencesForCycle(db);
-  const result = evaluateInfraAlerts(rows.map(fromDatabaseRow), deriveAlertSignals(diagnostics), now);
+  const result = evaluateInfraAlerts(
+    rows.map(fromDatabaseRow),
+    deriveAlertSignals(diagnostics, { servicesPaused }),
+    now,
+  );
   const lifecycle = evaluateSilenceLifecycle(silences, diagnostics, now, INFRA_ALERT_POLICY);
   for (const row of result.changed) {
     await db.query(UPSERT_ALERT_SQL, [
