@@ -1,5 +1,4 @@
 import express from 'express';
-import multer from 'multer';
 
 const router = express.Router();
 
@@ -7,8 +6,9 @@ import * as bookmarkHandle from '../router_handle/bookmarkHandle.js';
 import * as tagGraphHandle from '../router_handle/tagGraphHandle.js';
 import * as tagSpaceHandle from '../router_handle/tagSpaceHandle.js';
 import { aiActionRateLimiter, expensiveFreeActionRateLimiter } from '../util/requestRateLimit.js';
+import { createBookmarkHtmlUpload } from '../util/bookmarkHtmlUpload.js';
 
-const upload = multer({ dest: '/tmp' }); // 临时目录用于上传文件
+const bookmarkHtmlUpload = createBookmarkHtmlUpload();
 
 router.post('/queryTagList', bookmarkHandle.queryTagList);
 
@@ -54,7 +54,7 @@ router.post('/updateBookmarkSort', bookmarkHandle.updateBookmarkSort);
 
 router.post('/toggleBookmarkTop', bookmarkHandle.toggleBookmarkTop);
 
-router.post('/importBookmarksHtml', upload.single('file'), bookmarkHandle.importBookmarksHtml);
+router.post('/importBookmarksHtml', bookmarkHtmlUpload, bookmarkHandle.importBookmarksHtml);
 
 router.post('/importBookmarksExcel', bookmarkHandle.importBookmarksExcel);
 

@@ -60,6 +60,33 @@ describe('书签导入描述协议', () => {
   });
 });
 
+describe('书签 HTML 导入条数上限', () => {
+  it('超过 10000 条时拒绝且不进入导入事务，临时文件照常删除', async () => {
+    const service = await import('../util/services/bookmarkImportService.js');
+    const { promises: fs } = await import('node:fs');
+    const { importBookmarksHtml } = await import('./bookmarkHandle.js');
+    const html = Array.from({ length: 10001 }, (_, i) => `<DT><A HREF="https://example.com/${i}">书签${i}</A>`).join('\n');
+    const importSpy = vi.spyOn(service, 'runBookmarkImportTransaction');
+    const read = vi.spyOn(fs, 'readFile').mockResolvedValue(html);
+    const unlink = vi.spyOn(fs, 'unlink').mockResolvedValue(undefined);
+    try {
+      const res = { send: vi.fn() };
+      await importBookmarksHtml(
+        { user: { id: 'owner', role: 'user' }, file: { path: '/tmp/bookmark-import-limit.html' } },
+        res,
+      );
+      expect(res.send.mock.calls[0][0]).toMatchObject({ status: 400 });
+      expect(res.send.mock.calls[0][0].msg).toContain('10000');
+      expect(importSpy).not.toHaveBeenCalled();
+      expect(unlink).toHaveBeenCalledWith('/tmp/bookmark-import-limit.html');
+    } finally {
+      importSpy.mockRestore();
+      read.mockRestore();
+      unlink.mockRestore();
+    }
+  });
+});
+
 describe('normalizeBookmarkUrl', () => {
   it('裸域名补 https://', () => {
     expect(normalizeBookmarkUrl('keep.com')).toBe('https://keep.com');

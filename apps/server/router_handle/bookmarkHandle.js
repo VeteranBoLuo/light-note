@@ -89,6 +89,8 @@ function resolveOrganizeAiResultOutcome(result) {
 }
 // ── 全局 ──────────────────────────────────────────────────
 const MAX_EXCEL_BOOKMARK_IMPORT_ITEMS = 1000;
+// 线上单次 HTML 导入最多约 3.7k 条；上限留足余量，同时避免单个事务无界增长。
+const MAX_HTML_BOOKMARK_IMPORT_ITEMS = 10000;
 
 /**
  * 查询指定 ID 的书签中哪些尚无图标，返回 {id, url} 列表
@@ -1182,6 +1184,11 @@ export const importBookmarksHtml = async (req, res) => {
   const parsedBookmarks = parseBookmarksFromHtml(html);
   if (!parsedBookmarks.length) {
     return res.send(resultData(null, 400, '未解析到书签数据'));
+  }
+  if (parsedBookmarks.length > MAX_HTML_BOOKMARK_IMPORT_ITEMS) {
+    return res.send(
+      resultData(null, 400, `单次最多导入 ${MAX_HTML_BOOKMARK_IMPORT_ITEMS} 条书签，请拆分文件后分批导入`),
+    );
   }
 
   // 只记条数:完整书签数组含用户收藏内容(URL/标题),不进服务器日志

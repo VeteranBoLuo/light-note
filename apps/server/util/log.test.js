@@ -164,4 +164,30 @@ describe('API 日志脱敏', () => {
     });
     expect(stored.req).not.toContain('私密');
   });
+
+  it('请求体整体超过 64KB 时只记录体积和开头预览', async () => {
+    let finish = () => {};
+    const res = {
+      statusCode: 200,
+      on: vi.fn((event, callback) => {
+        if (event === 'finish') finish = callback;
+      }),
+      send: vi.fn(),
+    };
+    const items = Array.from({ length: 2000 }, (_, index) => ({ name: `书签-${index}`, url: `https://example.com/${'x'.repeat(60)}` }));
+
+    await logFunction(
+      { user: { id: 'user-1', role: 'user' }, originalUrl: '/api/bookmark/importBookmarksExcel', method: 'POST', body: { items }, headers: {}, ip: '127.0.0.1', route: {} },
+      res,
+      vi.fn(),
+    );
+    await finish();
+    await Promise.resolve();
+
+    const stored = JSON.parse(query.mock.calls[0][1][0].req);
+    expect(stored.payloadSummary).toBe('payload_too_large');
+    expect(stored.bytes).toBeGreaterThan(64 * 1024);
+    expect(stored.preview).toHaveLength(4096);
+    expect(stored.preview.startsWith('{"items":[')).toBe(true);
+  });
 });

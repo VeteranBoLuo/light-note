@@ -89,8 +89,6 @@ app.use(HUAWEI_PUSH_RECEIPT_PATH, huaweiPushReceiptRouter);
 app.use(earlyAnonymousRateLimiter);
 app.use('/public/forms', publicFormsRouter);
 app.use(bodyParser.json({ limit: '10mb', extended: true }));
-//  解析请求体中的JSON数据
-app.use(express.json());
 
 // 还原可信登录态
 app.use(authMiddleware);
