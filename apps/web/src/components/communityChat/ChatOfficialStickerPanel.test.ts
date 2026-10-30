@@ -78,7 +78,8 @@ describe('ChatOfficialStickerPanel', () => {
     expect(buttons).toHaveLength(24);
     expect(images).toHaveLength(24);
     for (const [index, sticker] of COMMUNITY_CHAT_OFFICIAL_STICKERS.entries()) {
-      expect(images[index].getAttribute('src')).toBe(sticker.assetPath);
+      // 规范地址仍是 PNG；展示使用同名、按显示尺寸压缩的 WebP 副本。
+      expect(images[index].getAttribute('src')).toBe(sticker.assetPath.replace(/\.png$/, '.webp'));
       expect(images[index].getAttribute('alt')).toBe(zhCN.communityChat.sticker.officialItems[sticker.id]);
       buttons[index].click();
       await nextTick();

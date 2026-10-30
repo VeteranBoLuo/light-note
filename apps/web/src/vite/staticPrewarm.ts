@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import type { Plugin } from 'vite';
@@ -31,6 +31,13 @@ export function publicArtworkPaths() {
   ];
 }
 
+// 聊天表情的规范地址仍是 PNG（消息与共享协议引用它）；同名 WebP 存在时，展示与预热改用这份按显示尺寸压缩的副本。
+export function publicArtworkDisplayPath(url: string) {
+  if (!url.endsWith('.png')) return url;
+  const webp = url.slice(0, -'.png'.length) + '.webp';
+  return existsSync(path.join(publicRoot, webp)) ? webp : url;
+}
+
 /** Public canonical URLs remain available to old clients; new rendering and prewarming use the same hashed copy. */
 export function publicArtworkPlugin(): Plugin {
   let building = false;
@@ -46,9 +53,10 @@ export function publicArtworkPlugin(): Plugin {
     load(id) {
       if (id !== '\0' + virtualId) return;
       const fields = publicArtworkPaths().map((url) => {
-        const file = path.join(publicRoot, url);
+        const displayPath = publicArtworkDisplayPath(url);
+        const file = path.join(publicRoot, displayPath);
         this.addWatchFile(file);
-        if (!building) return `${JSON.stringify(url)}:${JSON.stringify(url)}`;
+        if (!building) return `${JSON.stringify(url)}:${JSON.stringify(displayPath)}`;
         const ref = this.emitFile({ type: 'asset', name: path.basename(file), source: readFileSync(file) });
         artworkRefs.add(ref);
         return `${JSON.stringify(url)}:import.meta.ROLLUP_FILE_URL_${ref}`;
