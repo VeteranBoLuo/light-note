@@ -2,7 +2,7 @@ import { computed, ref, shallowRef, watch, type Ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { AnnualReportChapter } from '@lightnote/shared/annual-report';
 import message from '@/components/base/BasicComponents/BMessage/BMessage';
-import { completeAnnualReport, getAnnualReport } from '@/api/growthApi';
+import { completeAnnualReport, getAnnualReport, getGrowthPreferences } from '@/api/growthApi';
 import { useUserStore } from '@/store';
 import { annualPosterOwnerKey, type AnnualReport } from '@/utils/annualReport';
 import { markAnnualReportSeen } from './useAnnualReportEntry';
@@ -78,7 +78,17 @@ export function useAnnualReport(year: Ref<number>) {
   const toPoster = () => go(chapters.value.length - 1);
 
   // 翻到最后一页写入纪念成就；同一账号同一年份只请求一次，失败不打断查看。
+  // 新解锁时与升级一样播放庆祝动画；成长偏好关闭了庆祝动效时退回为提示消息。
   const completedFor = new Set<string>();
+  const unlockedAchievement = ref<string | null>(null);
+  async function celebrationEnabled() {
+    try {
+      const res = await getGrowthPreferences({ silent: true });
+      return res?.data?.celebrationEnabled !== false;
+    } catch {
+      return true;
+    }
+  }
   watch(current, async (chapter) => {
     if (chapter !== 'poster' || !report.value?.available || report.value.tier === 'empty') return;
     const key = `${ownerKey.value}:${year.value}`;
@@ -87,9 +97,12 @@ export function useAnnualReport(year: Ref<number>) {
     try {
       const res = await completeAnnualReport(year.value);
       if (key !== `${ownerKey.value}:${year.value}`) return;
-      if (res?.status === 200 && res.data?.newlyUnlocked) {
-        message.success(t('annualReport.achievementUnlocked', { name: t(`growth.achName.${res.data.key}`) }));
-      }
+      if (res?.status !== 200 || !res.data?.newlyUnlocked) return;
+      const achievementKey = String(res.data.key);
+      const celebrate = await celebrationEnabled();
+      if (key !== `${ownerKey.value}:${year.value}`) return;
+      if (celebrate) unlockedAchievement.value = achievementKey;
+      else message.success(t('annualReport.achievementUnlocked', { name: t(`growth.achName.${achievementKey}`) }));
     } catch (error) {
       console.warn('记录年度回望成就失败:', error);
     }
@@ -132,6 +145,7 @@ export function useAnnualReport(year: Ref<number>) {
     ownerKey,
     showName,
     showKeywords,
+    unlockedAchievement,
   };
 }
 

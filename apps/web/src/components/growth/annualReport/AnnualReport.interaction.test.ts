@@ -11,12 +11,14 @@ const mocks = vi.hoisted(() => ({
   status: vi.fn(),
   seen: vi.fn(),
   success: vi.fn(),
+  preferences: vi.fn(),
 }));
 vi.mock('@/store', () => ({ useUserStore: () => mocks.user }));
 vi.mock('@/api/growthApi', () => ({
   getAnnualReport: mocks.getReport,
   completeAnnualReport: mocks.complete,
   getAnnualReportStatus: mocks.status,
+  getGrowthPreferences: mocks.preferences,
 }));
 vi.mock('@/api/userApi', () => ({ default: { markFeatureAnnouncementSeen: mocks.seen } }));
 vi.mock('@/api/commonApi', () => ({ recordOperation: vi.fn() }));
@@ -142,6 +144,7 @@ beforeEach(() => {
   mocks.getReport.mockReset();
   mocks.complete.mockReset();
   mocks.success.mockReset();
+  mocks.preferences.mockReset().mockResolvedValue({ status: 200, data: { celebrationEnabled: true } });
   mocks.seen.mockReset().mockResolvedValue({ status: 200 });
   mocks.status.mockResolvedValue({ status: 200, data: { available: true, eligible: true, entryActive: true } });
   window.localStorage.clear();
@@ -239,12 +242,26 @@ describe('annual report state', () => {
     expect(mocks.seen).toHaveBeenCalledTimes(1);
     api().toPoster();
     await vi.waitFor(() => expect(mocks.complete).toHaveBeenCalledTimes(1));
-    await vi.waitFor(() => expect(mocks.success).toHaveBeenCalledWith('获得纪念成就「年度回望 · 2026」'));
+    // 与升级一样播放庆祝动画，不再弹提示消息。
+    await vi.waitFor(() => expect(api().unlockedAchievement.value).toBe('annual_review_2026'));
+    expect(mocks.success).not.toHaveBeenCalled();
     api().prev();
     await nextTick();
     api().toPoster();
     await nextTick();
     expect(mocks.complete).toHaveBeenCalledTimes(1);
+    view.unmount();
+  });
+
+  it('falls back to a message when celebrations are turned off in growth preferences', async () => {
+    mocks.getReport.mockResolvedValue({ status: 200, data: FULL });
+    mocks.complete.mockResolvedValue({ status: 200, data: { key: 'annual_review_2026', newlyUnlocked: true } });
+    mocks.preferences.mockResolvedValue({ status: 200, data: { celebrationEnabled: false } });
+    const { api, view } = host();
+    await vi.waitFor(() => expect(api().state.value).toBe('ready'));
+    api().toPoster();
+    await vi.waitFor(() => expect(mocks.success).toHaveBeenCalledWith('获得纪念成就「年度回望 · 2026」'));
+    expect(api().unlockedAchievement.value).toBeNull();
     view.unmount();
   });
 

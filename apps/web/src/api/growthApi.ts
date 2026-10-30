@@ -107,7 +107,8 @@ export const claimAll = (payload?: {
   keys?: Partial<Record<'daily' | 'growthTasks' | 'achievements' | 'weekly' | 'community', string[]>>;
 }) => apiBasePost('/api/growth/claimAll', payload || {});
 
-export const getGrowthPreferences = () => apiBaseGet('/api/growth/preferences');
+export const getGrowthPreferences = (options?: { silent?: boolean }) =>
+  apiBaseGet('/api/growth/preferences', undefined, options);
 export const updateGrowthPreferences = (payload: {
   weeklyActiveTarget?: 0 | 3 | 5 | 7;
   streakReminderEnabled?: boolean;

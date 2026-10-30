@@ -16,6 +16,8 @@ export interface AnnualResourceItem {
 export interface AnnualReport {
   year: number;
   available: boolean;
+  /** 不可用原因：游客需要登录；正式账号未到开放时间。 */
+  reason?: 'login' | 'upcoming';
   openFrom?: string;
   phase?: 'preview' | 'final';
   start?: string;
@@ -122,6 +124,27 @@ export function annualChapterHasDetails(report: AnnualReport, chapter: AnnualRep
 export function formatAnnualDate(value: string | null | undefined, locale: string) {
   if (!value) return '';
   return new Intl.DateTimeFormat(locale, { month: 'short', day: 'numeric', timeZone: 'UTC' }).format(
+    Date.parse(`${value}T00:00:00Z`),
+  );
+}
+
+export type AnnualReportStateKind = 'loading' | 'failed' | 'empty' | 'upcoming' | 'login';
+
+/** 报告无法展示时显示哪种状态；桌面与手机共用。 */
+export function annualReportStateKind(
+  state: 'loading' | 'ready' | 'failed',
+  report: AnnualReport | null | undefined,
+): AnnualReportStateKind {
+  if (state === 'loading') return 'loading';
+  if (state === 'failed') return 'failed';
+  if (report?.available) return 'empty';
+  return report?.reason === 'login' ? 'login' : 'upcoming';
+}
+
+/** 带年份的日期：加入日可能早于报告年份，需要写全。 */
+export function formatAnnualFullDate(value: string | null | undefined, locale: string) {
+  if (!value) return '';
+  return new Intl.DateTimeFormat(locale, { year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC' }).format(
     Date.parse(`${value}T00:00:00Z`),
   );
 }

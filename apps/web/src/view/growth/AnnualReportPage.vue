@@ -12,6 +12,7 @@
       @retry="load"
       @back="goBack"
       @create="createNote"
+      @login="openLogin"
       @open="openTarget"
     />
     <AnnualReportDesktop
@@ -26,7 +27,17 @@
       @retry="load"
       @back="goBack"
       @create="createNote"
+      @login="openLogin"
       @open="openTarget"
+    />
+    <AchievementUnlockOverlay
+      v-if="unlockedAchievement"
+      :achievement-key="unlockedAchievement"
+      group="tenure"
+      :kicker="t('annualReport.achievementCelebration.kicker')"
+      :name="t(`growth.achName.${unlockedAchievement}`)"
+      :description="t('annualReport.achievementCelebration.sub', { year })"
+      @close="unlockedAchievement = null"
     />
   </div>
 </template>
@@ -38,9 +49,10 @@
   import icon from '@/config/icon';
   import { useAnnualReport } from '@/composables/useAnnualReport';
   import { useMobileLayout } from '@/composables/useMobileLayout';
-  import { useUserStore } from '@/store';
+  import { bookmarkStore, useUserStore } from '@/store';
   import AnnualReportDesktop from '@/components/growth/annualReport/AnnualReportDesktop.vue';
   import AnnualReportMobile from '@/components/growth/annualReport/AnnualReportMobile.vue';
+  import AchievementUnlockOverlay from '@/components/growth/AchievementUnlockOverlay.vue';
 
   const route = useRoute();
   const router = useRouter();
@@ -65,6 +77,7 @@
     ownerKey,
     showName,
     showKeywords,
+    unlockedAchievement,
   } = useAnnualReport(year);
 
   const displayName = computed(() => user.alias || user.userName || t('growth.wrUserFallback'));
@@ -89,6 +102,10 @@
   }
   function createNote() {
     void router.push('/noteLibrary');
+  }
+  // 游客：在原地登录或注册，成功后回到本页继续看自己的报告。
+  function openLogin() {
+    bookmarkStore().openAuthModal('登录', 'annual_report', route.fullPath);
   }
   function openTarget(target: RouteLocationRaw) {
     void router.push(target).catch(() => {});

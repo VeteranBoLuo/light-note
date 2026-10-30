@@ -226,13 +226,22 @@ async function summarizeGrowth(db, userId, range, userRole) {
   };
 }
 
+/**
+ * 加入日与成长中心的陪伴天数同源：注册时间、最早书签、最早笔记取最早一天。
+ * 早期账号的注册时间可能为空，只读这一列会把老用户算成「第 1 天」。
+ */
 async function loadProfile(db, userId, range) {
+  const localDay = (column) => `DATE_FORMAT(DATE_ADD(${column}, INTERVAL ? MINUTE), '%Y-%m-%d')`;
   const [[row]] = await db.query(
-    `SELECT DATE_FORMAT(DATE_ADD(create_time, INTERVAL ? MINUTE), '%Y-%m-%d') AS joinedDay
-       FROM \`user\` WHERE id = ? LIMIT 1`,
-    [range.shiftMinutes, userId],
+    `SELECT
+        (SELECT ${localDay('create_time')} FROM \`user\` WHERE id = ? LIMIT 1) AS createdDay,
+        (SELECT ${localDay('MIN(b.create_time)')} FROM bookmark b
+          WHERE b.user_id = ? AND b.del_flag = 0 AND ${SEED_FILTER.bookmark}) AS firstBookmarkDay,
+        (SELECT ${localDay('MIN(n.create_time)')} FROM note n
+          WHERE n.create_by = ? AND n.del_flag = 0 AND ${SEED_FILTER.note}) AS firstNoteDay`,
+    [range.shiftMinutes, userId, range.shiftMinutes, userId, range.shiftMinutes, userId],
   );
-  const joinedDay = row?.joinedDay || null;
+  const joinedDay = [row?.createdDay, row?.firstBookmarkDay, row?.firstNoteDay].filter(Boolean).sort()[0] || null;
   const joinDays = joinedDay
     ? Math.max(
         1,

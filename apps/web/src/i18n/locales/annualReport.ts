@@ -37,7 +37,7 @@ export const annualReportZh = {
   cover: {
     kicker: '轻笺 · 年度报告',
     joined: '{date}加入',
-    lead: '这是你在轻笺的第 {days} 天。这一年，你留下了 {total} 条记录。',
+    lead: '你在 {date}来到轻笺，今天是第 {days} 天。这一年，你留下了 {total} 条记录。',
     leadJoined: '你在 {date}来到轻笺，这是你在这里的第 {days} 天。',
     leadLight: '这一年，你在轻笺留下了 {total} 条记录。',
     start: '开始翻阅',
@@ -248,6 +248,9 @@ export const annualReportZh = {
     emptyAction: '记一条笔记',
     upcomingTitle: '{year} 年度报告还没开放',
     upcomingBody: '{date}开放，到时成长中心和「今日」都会有入口。',
+    loginTitle: '登录后查看你的 {year} 年度报告',
+    loginBody: '年度报告根据你自己的记录生成，游客模式下没有个人数据。',
+    loginAction: '登录 / 注册',
     back: '返回成长中心',
   },
   entry: {
@@ -258,6 +261,10 @@ export const annualReportZh = {
     dismiss: '不再显示',
   },
   achievementUnlocked: '获得纪念成就「{name}」',
+  achievementCelebration: {
+    kicker: '获得纪念成就',
+    sub: '{year} 年的回望，已收进你的成就墙',
+  },
 };
 
 export const annualReportEn: typeof annualReportZh = {
@@ -298,7 +305,7 @@ export const annualReportEn: typeof annualReportZh = {
   cover: {
     kicker: 'Light Note · Year in review',
     joined: 'Joined {date}',
-    lead: 'This is day {days} for you in Light Note. This year you saved {total} records.',
+    lead: 'You joined Light Note on {date}, and today is day {days}. This year you saved {total} records.',
     leadJoined: 'You joined Light Note on {date}. This is your day {days} here.',
     leadLight: 'This year you saved {total} records in Light Note.',
     start: 'Start',
@@ -510,6 +517,9 @@ export const annualReportEn: typeof annualReportZh = {
     emptyAction: 'Write a note',
     upcomingTitle: 'Your {year} report is not open yet',
     upcomingBody: 'It opens on {date}, with entries in Growth and Today.',
+    loginTitle: 'Sign in to see your {year} report',
+    loginBody: 'Your annual report is built from your own records, so guest mode has none.',
+    loginAction: 'Sign in / Sign up',
     back: 'Back to Growth',
   },
   entry: {
@@ -520,4 +530,8 @@ export const annualReportEn: typeof annualReportZh = {
     dismiss: 'Hide',
   },
   achievementUnlocked: 'Commemorative achievement unlocked: {name}',
+  achievementCelebration: {
+    kicker: 'Commemorative achievement',
+    sub: 'Your look back at {year} is now on your achievement wall',
+  },
 };

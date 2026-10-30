@@ -5,9 +5,7 @@
       <p role="status">{{ t('annualReport.states.loading', { year }) }}</p>
     </template>
     <template v-else>
-      <span class="ars-icon"
-        ><SvgIcon :src="kind === 'failed' ? icon.growth.lock : icon.todoWorkspace.star" size="26"
-      /></span>
+      <span class="ars-icon"><SvgIcon :src="stateIcon" size="26" /></span>
       <h3>{{ title }}</h3>
       <p>{{ body }}</p>
       <div class="ars-actions">
@@ -16,6 +14,9 @@
         }}</BButton>
         <BButton v-if="kind === 'empty'" type="primary" @click="emit('create')">
           {{ t('annualReport.states.emptyAction') }}
+        </BButton>
+        <BButton v-if="kind === 'login'" type="primary" @click="emit('login')">
+          {{ t('annualReport.states.loginAction') }}
         </BButton>
         <BButton @click="emit('back')">{{ t('annualReport.states.back') }}</BButton>
       </div>
@@ -29,14 +30,15 @@
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon';
+  import type { AnnualReportStateKind } from '@/utils/annualReport';
 
   const props = defineProps<{
-    kind: 'loading' | 'failed' | 'empty' | 'upcoming';
+    kind: AnnualReportStateKind;
     year: number;
     openFrom?: string;
     immersive?: boolean;
   }>();
-  const emit = defineEmits<{ retry: []; back: []; create: [] }>();
+  const emit = defineEmits<{ retry: []; back: []; create: []; login: [] }>();
   const { t, locale } = useI18n();
 
   const openDate = computed(() =>
@@ -44,14 +46,21 @@
       ? new Intl.DateTimeFormat(locale.value, { month: 'short', day: 'numeric' }).format(Date.parse(props.openFrom))
       : '',
   );
+  const stateIcon = computed(() => {
+    if (props.kind === 'failed') return icon.growth.lock;
+    if (props.kind === 'login') return icon.navigation.user;
+    return icon.todoWorkspace.star;
+  });
   const title = computed(() => {
     if (props.kind === 'failed') return t('annualReport.states.failedTitle');
     if (props.kind === 'upcoming') return t('annualReport.states.upcomingTitle', { year: props.year });
+    if (props.kind === 'login') return t('annualReport.states.loginTitle', { year: props.year });
     return t('annualReport.states.emptyTitle', { year: props.year });
   });
   const body = computed(() => {
     if (props.kind === 'failed') return t('annualReport.states.failedBody');
     if (props.kind === 'upcoming') return t('annualReport.states.upcomingBody', { date: openDate.value });
+    if (props.kind === 'login') return t('annualReport.states.loginBody');
     return t('annualReport.states.emptyBody');
   });
 </script>

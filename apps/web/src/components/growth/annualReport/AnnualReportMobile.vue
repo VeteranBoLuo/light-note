@@ -127,6 +127,7 @@
       @retry="emit('retry')"
       @back="emit('back')"
       @create="emit('create')"
+      @login="emit('login')"
     />
   </div>
 </template>
@@ -143,7 +144,7 @@
   import icon from '@/config/icon';
   import { useAnnualPosterExport } from '@/composables/useAnnualReport';
   import { closeCurrentMobileOverlayThen } from '@/utils/mobileOverlayHistory';
-  import type { AnnualReport } from '@/utils/annualReport';
+  import { annualReportStateKind, type AnnualReport } from '@/utils/annualReport';
   import AnnualPosterOptions from './AnnualPosterOptions.vue';
   import AnnualReportDetails from './AnnualReportDetails.vue';
   import AnnualReportPoster from './AnnualReportPoster.vue';
@@ -176,6 +177,7 @@
     retry: [];
     back: [];
     create: [];
+    login: [];
     open: [target: RouteLocationRaw];
   }>();
   const { t } = useI18n();
@@ -183,11 +185,7 @@
   const ready = computed(
     () => props.state === 'ready' && Boolean(props.report?.available) && props.report?.tier !== 'empty',
   );
-  const stateKind = computed(() => {
-    if (props.state === 'loading') return 'loading';
-    if (props.state === 'failed') return 'failed';
-    return props.report?.available ? 'empty' : 'upcoming';
-  });
+  const stateKind = computed(() => annualReportStateKind(props.state, props.report));
 
   /* ---------- 明细抽屉：接入移动浮层返回栈，打开资料前先让抽屉出栈 ---------- */
   const sheetOpen = ref(false);
