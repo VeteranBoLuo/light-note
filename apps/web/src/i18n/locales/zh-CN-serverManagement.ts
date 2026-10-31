@@ -371,13 +371,21 @@ export default {
           recommendation: '确保公钥认证已启用并妥善轮换授权密钥。',
         },
         firewall: { title: '主机防火墙', recommendation: '确认防火墙已启用，只允许业务所需端口。' },
-        fail2ban: { title: 'SSH 暴力破解防护', recommendation: '建议启用 Fail2ban 或等价的登录限速与封禁机制。' },
+        fail2ban: {
+          title: 'SSH 暴力破解防护',
+          recommendation:
+            '仅允许密钥登录时口令无法被爆破，Fail2ban 只用于减少扫描噪音，可以不启用；一旦开启密码登录，必须启用 Fail2ban 或等价的登录封禁。',
+        },
         'security-updates': { title: '待安装安全更新', recommendation: '在维护窗口内完成安全更新并验证服务健康。' },
         'unexpected-public-ports': {
           title: '非预期公网监听端口',
           recommendation: '确认端口用途；数据库、Redis 与内部 API 应仅监听内网或回环地址。',
         },
-        'ssh-login-failures': { title: 'SSH 失败登录尝试', recommendation: '失败次数异常时检查来源、密钥与封禁策略。' },
+        'ssh-login-failures': {
+          title: 'SSH 失败登录尝试',
+          recommendation:
+            '仅允许密钥登录时，公网扫描造成的失败登录属于常态，只作预警；开启密码登录后失败过多，须检查来源并启用登录封禁。',
+        },
         'database-backup': {
           title: '数据库备份',
           recommendation:

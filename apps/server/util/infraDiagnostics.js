@@ -62,6 +62,9 @@ export function deriveSecurityFindings(snapshot) {
   const findings = [];
   const ssh = snapshot?.ssh || {};
   const rootLoginKeyOnly = KEY_ONLY_ROOT_LOGIN.has(ssh.permitRootLogin);
+  // 密码认证明确关闭时口令爆破无法成功：未启用 Fail2ban 只是少了降噪，公网扫描造成的失败登录也是常态，
+  // 两项降为低级预警、不告警。读不到 SSH 配置或密码认证开启时仍按异常处理。
+  const passwordLoginOff = ssh.available === true && ssh.passwordAuthentication === false;
   findings.push(
     securityFinding(
       'ssh-root-login',
@@ -91,8 +94,14 @@ export function deriveSecurityFindings(snapshot) {
     ),
     securityFinding(
       'fail2ban',
-      !snapshot?.fail2ban?.available ? 'unknown' : snapshot.fail2ban.state === 'enabled' ? 'pass' : 'fail',
-      'medium',
+      !snapshot?.fail2ban?.available
+        ? 'unknown'
+        : snapshot.fail2ban.state === 'enabled'
+          ? 'pass'
+          : passwordLoginOff
+            ? 'warning'
+            : 'fail',
+      passwordLoginOff ? 'low' : 'medium',
       { value: snapshot?.fail2ban?.installed === false ? 'not-installed' : snapshot?.fail2ban?.state || 'unknown' },
     ),
   );
@@ -130,8 +139,8 @@ export function deriveSecurityFindings(snapshot) {
   findings.push(
     securityFinding(
       'ssh-login-failures',
-      failures24h == null ? 'unknown' : failures24h >= 50 ? 'fail' : 'pass',
-      'medium',
+      failures24h == null ? 'unknown' : failures24h < 50 ? 'pass' : passwordLoginOff ? 'warning' : 'fail',
+      passwordLoginOff ? 'low' : 'medium',
       { failures24h: failures24h ?? null, successes24h: ssh.successes24h ?? null },
     ),
   );

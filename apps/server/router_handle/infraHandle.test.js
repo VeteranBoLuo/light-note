@@ -138,6 +138,43 @@ describe('infraHandle', () => {
     expect(diagnostics.summary.warning).toBeGreaterThanOrEqual(1);
   });
 
+  it('密码认证明确关闭时，未启用 Fail2ban 与失败登录过多降为低级预警；开启或读不到时仍按异常', () => {
+    const snapshotOf = (ssh) => ({
+      ssh: { available: true, port: 22, successes24h: 955, failures24h: 476, ...ssh },
+      fail2ban: { available: true, state: 'disabled', installed: false },
+    });
+    const pick = (snapshot, id) => infraHandleInternals.deriveSecurityFindings(snapshot).find((item) => item.id === id);
+    const keyOnly = snapshotOf({ passwordAuthentication: false });
+    expect(pick(keyOnly, 'fail2ban')).toMatchObject({
+      state: 'warning',
+      severity: 'low',
+      evidence: { value: 'not-installed' },
+    });
+    expect(pick(keyOnly, 'ssh-login-failures')).toMatchObject({
+      state: 'warning',
+      severity: 'low',
+      evidence: { failures24h: 476, successes24h: 955 },
+    });
+    expect(pick(snapshotOf({ passwordAuthentication: false, failures24h: 49 }), 'ssh-login-failures').state).toBe(
+      'pass',
+    );
+    const diagnostics = infraHandleInternals.deriveInfraDiagnostics({ security: keyOnly }, [
+      { domain: 'security', state: 'available' },
+    ]);
+    for (const id of ['security.fail2ban', 'security.ssh-login-failures']) {
+      expect(diagnostics.checks.find((item) => item.id === id)).toMatchObject({ state: 'warning' });
+    }
+
+    for (const ssh of [
+      { passwordAuthentication: true },
+      { passwordAuthentication: null },
+      { available: false, passwordAuthentication: false },
+    ]) {
+      expect(pick(snapshotOf(ssh), 'fail2ban')).toMatchObject({ state: 'fail', severity: 'medium' });
+      expect(pick(snapshotOf(ssh), 'ssh-login-failures')).toMatchObject({ state: 'fail', severity: 'medium' });
+    }
+  });
+
   it('数据库备份按最近一次成功的时长判定，读不到时保持未知', () => {
     const { deriveSecurityFindings } = infraHandleInternals;
     const capturedAt = '2026-10-31T12:00:00.000Z';

@@ -405,7 +405,8 @@ export default {
         },
         fail2ban: {
           title: 'SSH brute-force protection',
-          recommendation: 'Enable Fail2ban or an equivalent login throttling and banning policy.',
+          recommendation:
+            'With key-only login, passwords cannot be brute-forced and Fail2ban only reduces scan noise, so it is optional. If password login is enabled, turn on Fail2ban or an equivalent banning policy.',
         },
         'security-updates': {
           title: 'Pending security updates',
@@ -418,7 +419,8 @@ export default {
         },
         'ssh-login-failures': {
           title: 'Failed SSH logins',
-          recommendation: 'Inspect sources, keys, and banning policy when failures spike.',
+          recommendation:
+            'With key-only login, failures from internet scanners are normal and only raise a warning. If password login is enabled and failures spike, check the sources and turn on login banning.',
         },
         'database-backup': {
           title: 'Database backup',
