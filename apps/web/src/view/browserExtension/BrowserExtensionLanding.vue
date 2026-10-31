@@ -262,14 +262,14 @@
     CHROME_WEB_STORE_URL,
   } from '@/config/browserExtension.ts';
   import { copyTextToClipboard } from '@/utils/clipboard.ts';
-  import localizedHome from '../../../store-assets/chrome/screenshots/localized/01-home.png';
-  import localizedBookmark from '../../../store-assets/chrome/screenshots/localized/02-bookmark.png';
-  import localizedNote from '../../../store-assets/chrome/screenshots/localized/03-note.png';
-  import localizedFile from '../../../store-assets/chrome/screenshots/localized/04-file.png';
-  import globalHome from '../../../store-assets/chrome/screenshots/global/01-home.png';
-  import globalBookmark from '../../../store-assets/chrome/screenshots/global/02-bookmark.png';
-  import globalNote from '../../../store-assets/chrome/screenshots/global/03-note.png';
-  import globalFile from '../../../store-assets/chrome/screenshots/global/04-file.png';
+  import localizedHome from '@/assets/img/browser-extension/localized/01-home.webp';
+  import localizedBookmark from '@/assets/img/browser-extension/localized/02-bookmark.webp';
+  import localizedNote from '@/assets/img/browser-extension/localized/03-note.webp';
+  import localizedFile from '@/assets/img/browser-extension/localized/04-file.webp';
+  import globalHome from '@/assets/img/browser-extension/global/01-home.webp';
+  import globalBookmark from '@/assets/img/browser-extension/global/02-bookmark.webp';
+  import globalNote from '@/assets/img/browser-extension/global/03-note.webp';
+  import globalFile from '@/assets/img/browser-extension/global/04-file.webp';
 
   const { t, locale } = useI18n();
   const router = useRouter();

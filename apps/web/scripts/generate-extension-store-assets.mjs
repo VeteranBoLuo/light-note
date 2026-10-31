@@ -8,7 +8,11 @@ import { createCanvas, loadImage } from '@napi-rs/canvas';
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const webRoot = path.resolve(scriptDirectory, '..');
 const assetRoot = path.join(webRoot, 'store-assets/chrome');
-const captureRoot = process.argv[2] ? path.resolve(process.argv[2]) : '';
+// 官网与扩展落地页展示用的 WebP 副本；商店提交仍使用 assetRoot 下的 PNG。
+const displayRoot = path.join(webRoot, 'src/assets/img/browser-extension');
+const DISPLAY_COPIES_FLAG = '--display-copies';
+const displayCopiesOnly = process.argv[2] === DISPLAY_COPIES_FLAG;
+const captureRoot = process.argv[2] && !displayCopiesOnly ? path.resolve(process.argv[2]) : '';
 const temporaryRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'light-note-store-assets-'));
 
 const screenshotViews = [
@@ -33,6 +37,23 @@ async function writeRgbPng(canvas, outputPath, temporaryName) {
   execFileSync('ffmpeg', ['-y', '-loglevel', 'error', '-i', rgbaPath, '-vf', 'format=rgb24', outputPath], {
     stdio: 'inherit',
   });
+}
+
+async function writeDisplayWebp(canvas, outputDirectory, outputName) {
+  const outputPath = path.join(displayRoot, outputDirectory, outputName.replace(/\.png$/, '.webp'));
+  await fs.mkdir(path.dirname(outputPath), { recursive: true });
+  await fs.writeFile(outputPath, await canvas.encode('webp', 85));
+}
+
+async function writeDisplayCopiesFromStorePngs() {
+  for (const outputDirectory of ['localized', 'global']) {
+    for (const [, outputName] of screenshotViews) {
+      const image = await loadImage(path.join(assetRoot, 'screenshots', outputDirectory, outputName));
+      const canvas = createCanvas(image.width, image.height);
+      canvas.getContext('2d').drawImage(image, 0, 0);
+      await writeDisplayWebp(canvas, outputDirectory, outputName);
+    }
+  }
 }
 
 async function renderSvg(sourceName, outputName, width, height) {
@@ -68,12 +89,15 @@ async function composeScreenshots({ locale, capturePrefix, brandPanelName, outpu
     context.drawImage(capture, 520, 0, 760, 800);
 
     await writeRgbPng(canvas, path.join(assetRoot, 'screenshots', outputDirectory, outputName), `${locale}-${view}`);
+    await writeDisplayWebp(canvas, outputDirectory, outputName);
   }
 }
 
-try {
+async function generateStoreAssets() {
   if (!captureRoot) {
-    throw new Error('Usage: node scripts/generate-extension-store-assets.mjs <directory-with-zh/en-*.png-captures>');
+    throw new Error(
+      `Usage: node scripts/generate-extension-store-assets.mjs <directory-with-zh/en-*.png-captures> | ${DISPLAY_COPIES_FLAG}`,
+    );
   }
 
   await composeScreenshots({
@@ -92,6 +116,16 @@ try {
   await renderSvg('promo-marquee-1400x560.svg', 'promo-marquee-1400x560.png', 1400, 560);
 
   console.log(`Generated Chrome Web Store assets in ${assetRoot}`);
+}
+
+try {
+  if (displayCopiesOnly) {
+    // 只从现有商店 PNG 重新生成落地页 WebP 副本，不需要原始截图。
+    await writeDisplayCopiesFromStorePngs();
+    console.log(`Generated landing WebP copies in ${displayRoot}`);
+  } else {
+    await generateStoreAssets();
+  }
 } finally {
   await fs.rm(temporaryRoot, { recursive: true, force: true });
 }

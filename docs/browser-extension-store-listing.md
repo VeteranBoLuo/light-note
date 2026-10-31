@@ -96,5 +96,6 @@
 - 全球通用截图：`apps/web/store-assets/chrome/screenshots/global/`
 - 小型宣传图：`apps/web/store-assets/chrome/promo-small-440x280.png`
 - 顶部宣传图：`apps/web/store-assets/chrome/promo-marquee-1400x560.png`
+- 落地页展示副本：`apps/web/src/assets/img/browser-extension/`。`generate:extension-store-assets` 生成商店截图时同步写出 WebP，只更新副本用 `--display-copies`；官网与扩展落地页只能引用副本，`check:landing-assets` 拦截直接引用商店 PNG。
 
 首次上传前至少确认：Manifest V3、版本递增、ZIP 根目录存在 `manifest.json` 且不含商店禁止的根级 `key`、48/128 图标、无远程代码、CSP 门禁、权限最小化、专属隐私页已上线、截图与当前版本一致。开发者模式目录仍保留公开 build key，以固定本地测试 ID；只能由打包器在商店 ZIP 中移除。

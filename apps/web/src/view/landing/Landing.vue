@@ -551,8 +551,8 @@
     hasPublicSecurityFiling,
   } from '@/config/siteCompliance.ts';
   import { BROWSER_EXTENSION_LANDING_PATH, CHROME_WEB_STORE_URL } from '@/config/browserExtension.ts';
-  import extensionScreenshotZh from '../../../store-assets/chrome/screenshots/localized/01-home.png';
-  import extensionScreenshotEn from '../../../store-assets/chrome/screenshots/global/01-home.png';
+  import extensionScreenshotZh from '@/assets/img/browser-extension/localized/01-home.webp';
+  import extensionScreenshotEn from '@/assets/img/browser-extension/global/01-home.webp';
 
   const { t, locale } = useI18n();
   const router = useRouter();
