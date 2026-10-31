@@ -164,7 +164,10 @@
         />
       </div>
       <div class="content-area">
-        <CloudFolderSidebar v-if="!bookmark.isMobile">
+        <CloudFolderSidebar
+          v-if="!bookmark.isMobile"
+          :current-folder="cloud.folder.id === 'all' ? '' : mobileCurrentFolderLabel"
+        >
           <CloudFolder
             :can-manage-tags="user.adminContext?.mode !== 'readonly'"
             @uploadFiles="onUploadFiles"
@@ -1362,11 +1365,37 @@
   }
 
   .content-area {
+    // 分隔条落在文件夹栏与文件列表之间的留白正中，与这里的 gap 保持一致。
+    --workspace-splitter-gap: var(--ui-space-14, 14px);
+
     flex: 1;
     min-height: 0;
     overflow: hidden;
     display: flex;
-    gap: var(--ui-space-14, 14px);
+    gap: var(--workspace-splitter-gap);
+  }
+
+  // 文件夹栏收起后，展开按钮骑在文件卡片左边框上：内容区向左扩出按钮伸出的部分作为可见区域，卡片位置不变。
+  // 伸出最多 10px：窄窗口页面留白只有 16px，也不让按钮顶到窗口边。
+  .cloud-space-page--desktop .content-area {
+    --cloud-folder-expand-size: var(--ui-control-28, 28px);
+    --cloud-folder-expand-overhang: min(var(--cloud-folder-expand-size) / 2, var(--ui-space-10, 10px));
+
+    margin-left: calc(-1 * var(--cloud-folder-expand-overhang));
+    padding-left: var(--cloud-folder-expand-overhang);
+  }
+
+  // 按钮伸进卡片的部分会压住表头和第一列卡片：收起时表头、文件行与卡片网格一起向右让出按钮的位置。
+  .content-area :deep(.cloud-folder-sidebar.is-collapsed + .field-list) {
+    --cloud-folder-expand-inset: calc(
+      var(--cloud-folder-expand-size) - var(--cloud-folder-expand-overhang) + var(--ui-space-8, 8px)
+    );
+  }
+
+  .content-area :deep(.cloud-folder-sidebar.is-collapsed + .field-list .field-header),
+  .content-area :deep(.cloud-folder-sidebar.is-collapsed + .field-list .field-item),
+  .content-area :deep(.cloud-folder-sidebar.is-collapsed + .field-list .file-card-grid) {
+    padding-left: var(--cloud-folder-expand-inset);
   }
 
   .header-handle-group {

@@ -9,8 +9,6 @@ export interface NoteWorkspaceLayoutState {
 export const NOTE_WORKSPACE_DEFAULT_SIDEBAR_WIDTH = 270;
 export const NOTE_WORKSPACE_SIDEBAR_MIN_WIDTH = 220;
 export const NOTE_WORKSPACE_SIDEBAR_MAX_WIDTH = 360;
-/** 拖过最小宽度后再多拖这段距离才松手收起，避免调宽时误收起。 */
-export const NOTE_WORKSPACE_COLLAPSE_DRAG_DISTANCE = 48;
 /**
  * 右侧卡片（AI 助手 / 参考）共用一个宽度，切页签时编辑区不重排；按实际 CSS 像素记忆。
  * 没有参考内容时默认 360px；有参考内容时默认占可用宽度的 45%，并给编辑区留足 480px。

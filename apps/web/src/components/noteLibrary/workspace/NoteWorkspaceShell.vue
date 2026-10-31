@@ -24,7 +24,7 @@
       <div class="note-workspace-shell__sidebar-content">
         <slot name="sidebar" :collapse="closeSidebar" />
       </div>
-      <NoteWorkspaceSplitter
+      <WorkspaceSplitter
         v-if="sidebarOpen"
         side="start"
         :width="sidebarWidthPx"
@@ -102,7 +102,7 @@
       <div class="note-workspace-shell__ai-content">
         <slot name="ai" :collapse="closeAi" />
       </div>
-      <NoteWorkspaceSplitter
+      <WorkspaceSplitter
         v-if="aiResizable && effectiveAiPresentation === 'dock' && aiVisible"
         side="end"
         :width="resolvedAiWidth"
@@ -126,7 +126,7 @@
   import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon';
-  import NoteWorkspaceSplitter from './NoteWorkspaceSplitter.vue';
+  import WorkspaceSplitter from '@/components/workspace/WorkspaceSplitter.vue';
   import {
     getWorkspacePanelAriaKeyShortcut,
     getWorkspacePanelShortcutLabel,

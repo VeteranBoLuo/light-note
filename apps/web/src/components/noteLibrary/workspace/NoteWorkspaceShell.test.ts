@@ -87,7 +87,7 @@ afterEach(() => {
 });
 
 function splitter(index = 0) {
-  return host.querySelectorAll<HTMLElement>('.note-workspace-splitter')[index]!;
+  return host.querySelectorAll<HTMLElement>('.workspace-splitter')[index]!;
 }
 async function pointer(type: string, x: number, index = 0) {
   const target = type === 'pointerdown' ? splitter(index) : document;
@@ -115,9 +115,9 @@ it('拖过最小宽度再多拖 48px 才收起，并恢复拖动前的宽度', a
   await pointer('pointerdown', 300);
   await pointer('pointermove', 220);
   expect(width.value).toBe(220);
-  expect(host.querySelector('.note-workspace-splitter__release')).toBeNull();
+  expect(host.querySelector('.workspace-splitter__release')).toBeNull();
   await pointer('pointermove', 150);
-  expect(host.querySelector('.note-workspace-splitter__release')).not.toBeNull();
+  expect(host.querySelector('.workspace-splitter__release')).not.toBeNull();
   expect(host.querySelector('.note-workspace-shell__sidebar--dock')?.classList.contains('is-collapse-pending')).toBe(true);
   await pointer('pointerup', 150);
   expect(sidebarOpen.value).toBe(false);

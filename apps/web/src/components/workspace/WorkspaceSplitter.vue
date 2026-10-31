@@ -1,8 +1,8 @@
 <template>
-  <BTooltip class="note-workspace-splitter__tooltip" :title="t('note.resetPageSidebarWidthHint')" :delay="1000" follow-cursor>
+  <BTooltip class="workspace-splitter__tooltip" :title="hint || t('workspacePanel.resizeHint')" :delay="1000" follow-cursor>
     <!-- 分隔条没有对应的 B 组件：按 WAI-ARIA 窗口分隔条模式实现，左右键调宽、Enter 收起。 -->
     <div
-      class="note-workspace-splitter"
+      class="workspace-splitter"
       :class="[`is-${side}`, { 'is-dragging': dragging, 'is-collapse-pending': collapsePending }]"
       role="separator"
       tabindex="0"
@@ -15,9 +15,9 @@
       @dblclick.stop.prevent="emit('reset')"
       @keydown="handleKeydown"
     >
-      <span v-if="collapsePending" class="note-workspace-splitter__release" aria-hidden="true">
+      <span v-if="collapsePending" class="workspace-splitter__release" aria-hidden="true">
         <SvgIcon :src="side === 'start' ? icon.arrow_left : icon.arrow_right" size="13" />
-        {{ t('note.releaseToCollapse') }}
+        {{ t('workspacePanel.releaseToCollapse') }}
       </span>
     </div>
   </BTooltip>
@@ -29,15 +29,20 @@
   import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon';
-  import { NOTE_WORKSPACE_COLLAPSE_DRAG_DISTANCE } from '@/utils/noteWorkspaceLayout';
 
+  /**
+   * 工作区面板分隔条：笔记页面树、右侧卡片与云空间文件夹栏共用。
+   * 拖过最小宽度后再多拖 COLLAPSE_DRAG_DISTANCE 才松手收起，避免调宽时误收起。
+   */
   const props = defineProps<{
-    /** start：面板在分隔条左侧（页面树）；end：面板在右侧（右侧卡片）。 */
+    /** start：面板在分隔条左侧（页面树、文件夹栏）；end：面板在右侧（右侧卡片）。 */
     side: 'start' | 'end';
     width: number;
     minWidth: number;
     maxWidth: number;
     label: string;
+    /** 悬停提示，默认说明拖动、双击恢复与拖到最窄收起。 */
+    hint?: string;
   }>();
 
   const emit = defineEmits<{
@@ -49,6 +54,7 @@
   }>();
 
   const KEYBOARD_STEP = 12;
+  const COLLAPSE_DRAG_DISTANCE = 48;
   const { t } = useI18n();
   const dragging = ref(false);
   const collapsePending = ref(false);
@@ -71,7 +77,7 @@
     if (event.pointerId !== pointerId) return;
     const delta = (event.clientX - startX) * (props.side === 'start' ? 1 : -1);
     const raw = startWidth + delta;
-    setCollapsePending(raw < props.minWidth - NOTE_WORKSPACE_COLLAPSE_DRAG_DISTANCE);
+    setCollapsePending(raw < props.minWidth - COLLAPSE_DRAG_DISTANCE);
     const next = clamp(raw);
     if (next !== Math.round(props.width)) emit('resize', next);
   }
@@ -119,6 +125,10 @@
 
   function startDrag(event: PointerEvent) {
     if (event.button !== 0 || pointerId !== null) return;
+    // 不让浏览器开始原生拖拽或选中文字，也不让外层的框选、拖放逻辑接手这次按下；
+    // 否则云空间这类有拖放的页面会在拖动途中收到 pointercancel，宽度被还原。
+    event.preventDefault();
+    event.stopPropagation();
     pointerId = event.pointerId;
     // 捕获指针：拖动划过页面树时不触发行上的悬停菜单与提示。
     captureTarget = event.currentTarget instanceof HTMLElement ? event.currentTarget : null;
@@ -162,14 +172,14 @@
 </script>
 
 <style scoped lang="less">
-  .note-workspace-splitter__tooltip {
+  .workspace-splitter__tooltip {
     position: static;
     display: flex;
     width: 0;
     height: 0;
   }
 
-  .note-workspace-splitter {
+  .workspace-splitter {
     position: absolute;
     z-index: 6;
     top: 0;
@@ -183,12 +193,12 @@
     // 页面在面板与内容卡片之间留白时，分隔条落在留白正中；没有留白就压在边框上。
     &.is-start {
       /* ui-density-fixed: 命中区一半宽度，叠加页面声明的留白 */
-      right: calc(-6px - var(--note-workspace-splitter-gap, 0px) / 2);
+      right: calc(-6px - var(--workspace-splitter-gap, 0px) / 2);
     }
 
     &.is-end {
       /* ui-density-fixed: 命中区一半宽度，叠加页面声明的留白 */
-      left: calc(-6px - var(--note-workspace-splitter-gap, 0px) / 2);
+      left: calc(-6px - var(--workspace-splitter-gap, 0px) / 2);
     }
 
     // 拖动时显示整条强调线。
@@ -238,7 +248,7 @@
     }
   }
 
-  .note-workspace-splitter__release {
+  .workspace-splitter__release {
     position: absolute;
     top: 50%;
     display: inline-flex;
@@ -256,35 +266,35 @@
     pointer-events: none;
   }
 
-  .note-workspace-splitter.is-start .note-workspace-splitter__release {
+  .workspace-splitter.is-start .workspace-splitter__release {
     right: calc(100% + var(--ui-space-8, 8px));
   }
 
-  .note-workspace-splitter.is-end .note-workspace-splitter__release {
+  .workspace-splitter.is-end .workspace-splitter__release {
     left: calc(100% + var(--ui-space-8, 8px));
   }
 
   // 触屏放宽命中区，视觉宽度不变；收起依赖面板标题行里的按钮。
   @media (pointer: coarse) {
-    .note-workspace-splitter {
+    .workspace-splitter {
       /* ui-density-fixed: 触控命中区按物理像素保持 */
       width: 24px;
 
       &.is-start {
         /* ui-density-fixed: 触控命中区一半宽度，叠加页面声明的留白 */
-        right: calc(-12px - var(--note-workspace-splitter-gap, 0px) / 2);
+        right: calc(-12px - var(--workspace-splitter-gap, 0px) / 2);
       }
 
       &.is-end {
         /* ui-density-fixed: 触控命中区一半宽度，叠加页面声明的留白 */
-        left: calc(-12px - var(--note-workspace-splitter-gap, 0px) / 2);
+        left: calc(-12px - var(--workspace-splitter-gap, 0px) / 2);
       }
     }
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .note-workspace-splitter::before,
-    .note-workspace-splitter::after {
+    .workspace-splitter::before,
+    .workspace-splitter::after {
       transition: none;
     }
   }

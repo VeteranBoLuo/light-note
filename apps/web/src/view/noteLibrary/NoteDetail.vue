@@ -2754,7 +2754,7 @@
   }
   .note-body.note-workspace-shell {
     // 与下方正文区 padding 一致，让两侧分隔条落在面板与编辑卡片之间的留白正中。
-    --note-workspace-splitter-gap: var(--ui-space-16, 16px);
+    --workspace-splitter-gap: var(--ui-space-16, 16px);
     display: grid;
     padding: 0;
     box-sizing: border-box;
