@@ -21,6 +21,7 @@ import {
   exampleHash,
   exampleError,
   parseExampleManifest,
+  visitorImageLocator,
 } from '../util/services/visitorExampleScheduleService.js';
 
 const args = process.argv.slice(2),
@@ -103,7 +104,7 @@ try {
         bytes,
         sha256,
         size: bytes.length,
-        locator: `note-visitor-${exampleHash(owner).slice(0, 12)}-${sha256.slice(0, 24)}.png`,
+        locator: visitorImageLocator(owner, sha256, 'png'),
       });
     }
     const definitionHash = exampleHash({

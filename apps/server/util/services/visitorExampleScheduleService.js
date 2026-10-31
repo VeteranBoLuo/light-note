@@ -26,6 +26,9 @@ export const exampleHash = (value) =>
   createHash('sha256')
     .update(JSON.stringify(normalize(value)))
     .digest('hex');
+/** 游客示例托管图片按账号与内容摘要命名；安装与换图共用，同名即同内容。 */
+export const visitorImageLocator = (owner, sha256, extension) =>
+  `note-visitor-${exampleHash(owner).slice(0, 12)}-${sha256.slice(0, 24)}.${extension}`;
 export function matchesRollingObject(entry, row) {
   if (exampleHash(row) === entry.expected) return true;
   // The board-details migration added two NULL columns to existing actions. Only this

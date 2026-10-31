@@ -14,7 +14,9 @@ import {
 import { applyOwnedNoteContentChange } from './noteService.js';
 import { sanitizePersistedNoteContent } from '../noteHtmlSanitizer.js';
 import { exampleHash } from './visitorExampleScheduleService.js';
+import { registerAsset } from '../imagePreview/references.js';
 vi.mock('./noteService.js', () => ({ applyOwnedNoteContentChange: vi.fn() }));
+vi.mock('../imagePreview/references.js', () => ({ registerAsset: vi.fn() }));
 
 const urls = Object.fromEntries(
   ['welcome', 'weekend', 'inspiration'].map((key) => [key, `https://boluo66.top/uploads/note-visitor-test-${key}.png`]),
@@ -163,6 +165,95 @@ describe('visitor note showcase', () => {
     expect(applyOwnedNoteContentChange).not.toHaveBeenCalled();
     const second = buildVisitorShowcasePlan('visitor', rows);
     expect(await applyVisitorShowcasePlan(db, second)).toHaveLength(0);
+  });
+  const webp = Object.fromEntries(
+    ['welcome', 'weekend', 'inspiration'].map((key, index) => {
+      const sha256 = String(index + 1).repeat(64);
+      return [
+        key,
+        {
+          from: urls[key],
+          to: `https://boluo66.top/uploads/note-visitor-test-${sha256.slice(0, 24)}.webp`,
+          sha256,
+          size: 1000 + index,
+        },
+      ];
+    }),
+  );
+  const images = Object.values(webp);
+  const applied = (rows, plan) => {
+    for (const n of plan.changes)
+      Object.assign(
+        rows.find((r) => r.id === n.id),
+        n.after,
+        { revision: n.before.revision + 1 },
+      );
+  };
+  it('swaps the three managed images to WebP copies without touching anything else', () => {
+    const rows = fixture();
+    applied(rows, buildVisitorShowcasePlan('visitor', rows));
+    const plan = buildVisitorShowcasePlan('visitor', rows, { images });
+    expect(validateVisitorShowcasePlan(plan)).toBe(plan);
+    expect(plan.images).toEqual(images);
+    const changed = plan.changes.filter((n) => n.before.content !== n.after.content);
+    expect(changed.length).toBeGreaterThan(0);
+    for (const item of plan.changes) {
+      const swapped = images.reduce((text, image) => text.replaceAll(image.from, image.to), item.before.content);
+      expect(item.after.content).toBe(swapped);
+      expect(item.after.content).not.toMatch(/note-visitor-test-(welcome|weekend|inspiration)\.png/);
+    }
+    applied(rows, plan);
+    const again = buildVisitorShowcasePlan('visitor', rows, { images });
+    expect(again.changes.every((n) => n.before.content === n.after.content)).toBe(true);
+    expect(buildVisitorShowcasePlan('visitor', rows).changes.every((n) => n.before.content === n.after.content)).toBe(
+      true,
+    );
+  });
+  it.each([
+    ['png target', { ...webp.welcome, to: webp.welcome.to.replace(/\.webp$/, '.png') }],
+    ['digest mismatch', { ...webp.welcome, sha256: 'f'.repeat(64) }],
+    ['foreign host', { ...webp.welcome, to: webp.welcome.to.replace('boluo66.top', 'example.com') }],
+    ['unknown source', { ...webp.welcome, from: 'https://boluo66.top/uploads/note-visitor-test-other.png' }],
+  ])('rejects an image swap with %s', (_, image) => {
+    expect(() => buildVisitorShowcasePlan('visitor', fixture(), { images: [image] })).toThrow(/VISITOR_SHOWCASE_/);
+  });
+  it('registers the WebP copies as visitor assets before rewriting notes, only when something changes', async () => {
+    const rows = fixture();
+    applied(rows, buildVisitorShowcasePlan('visitor', rows));
+    const plan = buildVisitorShowcasePlan('visitor', rows, { images });
+    const db = {
+      query: vi.fn(async (sql, params) =>
+        sql.includes('FROM user')
+          ? [[{ id: 'visitor', role: 'visitor', del_flag: 0 }]]
+          : [[rows.find((n) => n.id === params[0])]],
+      ),
+    };
+    const order = [];
+    registerAsset.mockReset().mockImplementation(async () => order.push('asset'));
+    applyOwnedNoteContentChange.mockReset().mockImplementation(async () => order.push('note'));
+    const changed = await applyVisitorShowcasePlan(db, plan);
+    expect(changed.length).toBeGreaterThan(0);
+    expect(registerAsset.mock.calls.map(([, asset]) => asset)).toEqual(
+      images.map((image) =>
+        expect.objectContaining({
+          owner: 'visitor',
+          sourceType: 'note_image',
+          storage: 'local',
+          locator: image.to.split('/').pop(),
+          version: image.sha256,
+          size: image.size,
+          reconciled: true,
+        }),
+      ),
+    );
+    expect(order.slice(0, 3)).toEqual(['asset', 'asset', 'asset']);
+    applied(rows, plan);
+    registerAsset.mockClear();
+    expect(await applyVisitorShowcasePlan(db, plan)).toHaveLength(0);
+    expect(registerAsset).not.toHaveBeenCalled();
+    const tampered = structuredClone(plan);
+    tampered.images[0].size += 1;
+    expect(() => validateVisitorShowcasePlan(tampered)).toThrow('VISITOR_SHOWCASE_PLAN_CHANGED');
   });
   it('rejects modified plans, drawing writes and non-visitor ownership', async () => {
     const plan = buildVisitorShowcasePlan('visitor', fixture());
