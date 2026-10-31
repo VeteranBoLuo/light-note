@@ -2,8 +2,18 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { createApp, h, nextTick, ref, reactive } from 'vue';
 import { createI18n } from 'vue-i18n';
 import GlobalSearch from './GlobalSearch.vue';
+import { featureShortcutZh } from '@/i18n/locales/featureShortcut';
 
-const state = vi.hoisted(() => ({ navigate: vi.fn(), locate: vi.fn(), items: [] as any[], route: null as any }));
+const state = vi.hoisted(() => ({
+  navigate: vi.fn(),
+  locate: vi.fn(),
+  runFeature: vi.fn(),
+  items: [] as any[],
+  route: null as any,
+  user: { role: 'user' },
+  guest: false,
+  featured: { items: [] as any[], loadedAt: 0, loading: false, failed: false },
+}));
 
 vi.mock('vue-router', () => ({
   useRouter: () => ({ push: vi.fn() }),
@@ -37,6 +47,16 @@ vi.mock('@/composables/useGlobalSearchSuggestions', () => ({
   }),
 }));
 vi.mock('@/components/base/SvgIcon/src/SvgIcon.vue', () => ({ default: { template: '<span />' } }));
+vi.mock('@/store', () => ({
+  bookmarkStore: () => ({ isDesktop: true, isMobile: false }),
+  useUserStore: () => state.user,
+}));
+vi.mock('@/utils/savePreference', () => ({ isGuestUser: () => state.guest }));
+vi.mock('@/composables/useFeatureShortcuts', () => ({
+  runFeatureShortcut: state.runFeature,
+  useFeaturedFeatures: () => ({ state: state.featured, ensure: vi.fn(), save: vi.fn() }),
+}));
+vi.mock('@/components/search/FeaturedFeaturesManager.vue', () => ({ default: { template: '<div class="manager" />' } }));
 vi.mock('@/components/base/BasicComponents/BTooltip.vue', () => ({ default: { template: '<span><slot /></span>' } }));
 
 let cleanup: (() => void) | undefined;
@@ -45,6 +65,9 @@ afterEach(() => {
   cleanup = undefined;
   state.items = [];
   state.route = null;
+  state.user = { role: 'user' };
+  state.guest = false;
+  state.featured.items = [];
   vi.clearAllMocks();
   vi.restoreAllMocks();
 });
@@ -258,3 +281,151 @@ it.each([{ metaKey: true }, { ctrlKey: true }])(
     expect(document.querySelector('.global-search-dialog')).toBeNull();
   },
 );
+
+function mountSearch() {
+  const host = document.createElement('div');
+  document.body.append(host);
+  const app = createApp({ render: () => h(GlobalSearch) });
+  app.directive('click-log', {});
+  app.use(
+    createI18n({
+      legacy: false,
+      locale: 'zh-CN',
+      messages: { 'zh-CN': { featureShortcut: featureShortcutZh } },
+      missingWarn: false,
+      fallbackWarn: false,
+    }),
+  );
+  cleanup = () => {
+    app.unmount();
+    host.remove();
+  };
+  app.mount(host);
+  return host;
+}
+
+async function openAndType(host: HTMLElement, value: string) {
+  host.querySelector<HTMLButtonElement>('button')!.click();
+  await nextTick();
+  const input = document.querySelector<HTMLInputElement>('#global-search-input')!;
+  input.value = value;
+  input.dispatchEvent(new Event('input', { bubbles: true }));
+  await nextTick();
+  return input;
+}
+
+function key(target: Element, name: string) {
+  target.dispatchEvent(new KeyboardEvent('keydown', { key: name, bubbles: true, cancelable: true }));
+}
+
+it('输入命中功能时功能组排在资料前，上下键先经过功能，Enter 关闭搜索并执行', async () => {
+  state.items = [{ id: 'n1', type: 'note', title: '周报导出流程', description: '' }];
+  const host = mountSearch();
+  const input = await openAndType(host, '导出');
+  const rows = [...document.querySelectorAll('.gs-feature-row')];
+  expect(rows.map((row) => row.querySelector('.gs-feature-row__title')!.textContent)).toEqual([
+    '导出笔记',
+    '备份全部资料',
+    '添加到设备日历',
+  ]);
+  expect(rows[2].querySelector('.gs-feature-row__alias')!.textContent).toContain('导出日程');
+  expect(document.querySelector('.global-search-features + .global-search-group')).not.toBeNull();
+  key(input, 'ArrowDown');
+  key(input, 'ArrowDown');
+  await nextTick();
+  expect(rows[1].classList.contains('is-active')).toBe(true);
+  key(input, 'Enter');
+  await nextTick();
+  expect(document.querySelector('.global-search-dialog')).toBeNull();
+  expect(state.runFeature).toHaveBeenCalledExactlyOnceWith(
+    expect.objectContaining({ id: 'data-backup' }),
+    expect.anything(),
+    '【桌面快捷搜索】',
+  );
+});
+
+it('只命中功能没有资料时，资料区退为一行提示', async () => {
+  const host = mountSearch();
+  await openAndType(host, '收藏夹');
+  expect(document.querySelectorAll('.gs-feature-row')).toHaveLength(1);
+  expect(document.querySelector('.global-search__empty-inline')!.textContent).toContain('没有找到包含「收藏夹」的资料');
+  expect(document.querySelector('.global-search__empty')).toBeNull();
+});
+
+it('未输入时顶部展示最近上线，最近资料每类保留 2 条；只有 Root 看到管理入口', async () => {
+  state.featured.items = [{ featureId: 'manor', description: '', publishDate: '2026-01-02' }];
+  state.items = [
+    { id: 'b1', type: 'bookmark', title: '书签一', description: '' },
+    { id: 'b2', type: 'bookmark', title: '书签二', description: '' },
+    { id: 'b3', type: 'bookmark', title: '书签三', description: '' },
+  ];
+  let host = mountSearch();
+  host.querySelector<HTMLButtonElement>('button')!.click();
+  await nextTick();
+  const featured = document.querySelector('.global-search-featured')!;
+  expect(featured.querySelector('.gs-feature-row__title')!.textContent).toBe('知识庄园');
+  expect(featured.querySelector('.gs-feature-row__badge')!.textContent).toBe('新');
+  expect(featured.querySelector('.global-search-featured__manage')).toBeNull();
+  expect(document.querySelectorAll('.global-search-result')).toHaveLength(2);
+  cleanup?.();
+
+  state.user = { role: 'root' };
+  state.featured.items = [];
+  host = mountSearch();
+  host.querySelector<HTMLButtonElement>('button')!.click();
+  await nextTick();
+  expect(document.querySelector('.global-search-featured__empty')).not.toBeNull();
+  document.querySelector<HTMLButtonElement>('.global-search-featured__manage')!.click();
+  await nextTick();
+  expect(document.querySelector('.global-search-dialog')).toBeNull();
+  expect(host.querySelector('.manager')).not.toBeNull();
+});
+
+it('有关键词时按每组最匹配的一条排组，组内顺序不变', async () => {
+  state.items = [
+    { id: 'f1', type: 'file', title: '发票-2026-10.pdf', description: '' },
+    { id: 't1', type: 'todo', title: '整理十月发票', description: '' },
+    { id: 'f2', type: 'file', title: '发票报销汇总.xlsx', description: '' },
+    { id: 'b1', type: 'bookmark', title: '发票查验平台', description: '' },
+  ];
+  const host = mountSearch();
+  await openAndType(host, '发票');
+  expect([...document.querySelectorAll('.global-search-result__title')].map((node) => node.textContent)).toEqual([
+    '发票-2026-10.pdf',
+    '发票报销汇总.xlsx',
+    '整理十月发票',
+    '发票查验平台',
+  ]);
+});
+
+it('键盘移动时滚动跟随：移出可视区的项刚好露出，回到第一项时回到顶部', async () => {
+  state.items = Array.from({ length: 6 }, (_, index) => ({
+    id: `n${index}`,
+    type: 'note',
+    title: `周会纪要${index}`,
+    description: '',
+  }));
+  const host = mountSearch();
+  // 「周会」不命中任何功能，导航只包含资料行。
+  const input = await openAndType(host, '周会');
+  expect(document.querySelector('.gs-feature-row')).toBeNull();
+  const body = document.querySelector<HTMLElement>('.global-search-dialog__body')!;
+  const scrollTo = vi.fn();
+  body.scrollTo = scrollTo as any;
+  body.getBoundingClientRect = () => ({ top: 0, bottom: 100 }) as DOMRect;
+  document.querySelectorAll<HTMLElement>('.global-search-result').forEach((row, index) => {
+    row.getBoundingClientRect = () => ({ top: index * 60, bottom: index * 60 + 58 }) as DOMRect;
+  });
+  key(input, 'ArrowDown');
+  key(input, 'ArrowDown');
+  key(input, 'ArrowDown');
+  await nextTick();
+  await nextTick();
+  expect(scrollTo).toHaveBeenLastCalledWith({ top: 78, behavior: 'auto' });
+  scrollTo.mockClear();
+  key(input, 'ArrowUp');
+  key(input, 'ArrowUp');
+  await nextTick();
+  await nextTick();
+  expect(scrollTo).toHaveBeenLastCalledWith({ top: 0 });
+});

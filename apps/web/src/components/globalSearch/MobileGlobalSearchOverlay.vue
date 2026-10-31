@@ -10,7 +10,7 @@
             id="mobile-global-search-input"
             ref="inputRef"
             v-model:value="keyword"
-            :placeholder="t('globalSearch.placeholder')"
+            :placeholder="t('featureShortcut.placeholder')"
             height="38px"
             clearable
             @enter="submitFullSearch"
@@ -27,6 +27,23 @@
       <p v-if="publicFailed" class="gs-layer__public-error" role="status">{{ t('publicResources.publicFailed') }}</p>
       <div class="gs-layer__body">
         <template v-if="!trimmedKeyword">
+          <section v-if="featuredEntries.length" class="gs-layer__section">
+            <div class="gs-layer__section-head">
+              <span>{{ t('featureShortcut.featured') }}</span>
+              <BButton class="gs-layer__text-action" @click="openUpdateLogs">
+                {{ t('featureShortcut.updateLogs') }} ›
+              </BButton>
+            </div>
+            <GlobalSearchFeatureItem
+              v-for="entry in featuredEntries"
+              :key="entry.feature.id"
+              variant="featured"
+              :feature="entry.feature"
+              :description="entry.item.description"
+              @open="openFeature(entry.feature)"
+            />
+          </section>
+
           <section v-if="recentKeywords.length" class="gs-layer__section">
             <div class="gs-layer__section-head">
               <span>{{ t('globalSearch.recent') }}</span>
@@ -50,6 +67,10 @@
                 <SvgIcon :src="typeIcons[type]" size="14" aria-hidden="true" />
                 {{ t(`resourceCenter.types.${type}`) }}
               </span>
+              <span class="gs-layer__type is-feature">
+                <SvgIcon :src="icon.toolbox.arrow" size="14" aria-hidden="true" />
+                {{ t('featureShortcut.searchable') }}
+              </span>
             </div>
           </section>
 
@@ -57,6 +78,19 @@
         </template>
 
         <template v-else>
+          <section v-if="featureMatches.length" class="gs-layer__section gs-layer__features">
+            <div class="gs-layer__section-head gs-layer__section-head--tight">
+              <span>{{ t('featureShortcut.group') }}</span>
+            </div>
+            <GlobalSearchFeatureItem
+              v-for="match in featureMatches"
+              :key="match.feature.id"
+              :feature="match.feature"
+              :alias="match.alias"
+              :keyword="trimmedKeyword"
+              @open="openFeature(match.feature)"
+            />
+          </section>
           <div v-if="loading" class="gs-layer__skeleton" aria-hidden="true">
             <span v-for="index in 5" :key="`gs-skeleton-${index}`" class="gs-layer__skeleton-row"></span>
           </div>
@@ -115,6 +149,12 @@
   import { useMobileGlobalSearch } from '@/composables/useMobileGlobalSearch';
   import { getMobileTopBarBinding } from '@/composables/useMobileTopBar';
   import { recordOperation } from '@/api/commonApi';
+  import GlobalSearchFeatureItem from '@/components/globalSearch/GlobalSearchFeatureItem.vue';
+  import { bookmarkStore } from '@/store';
+  import { isGuestUser } from '@/utils/savePreference';
+  import type { FeatureShortcutDefinition } from '@/config/featureShortcuts';
+  import { matchFeatureShortcuts, resolveFeaturedFeatures, type FeatureShortcutContext } from '@/utils/featureShortcuts';
+  import { runFeatureShortcut, useFeaturedFeatures } from '@/composables/useFeatureShortcuts';
 
   const { t } = useI18n();
   const publicScope = usePublicResourceScope();
@@ -142,6 +182,20 @@
   };
 
   const trimmedKeyword = computed(() => keyword.value.trim());
+  const bookmark = bookmarkStore();
+  const featured = useFeaturedFeatures();
+  const featureContext = computed<FeatureShortcutContext>(() => ({
+    platform: bookmark.isDesktop ? 'desktop' : 'mobile',
+    isGuest: isGuestUser(),
+  }));
+  const featureMatches = computed(() =>
+    matchFeatureShortcuts(trimmedKeyword.value, featureContext.value, (feature) =>
+      t(`featureShortcut.items.${feature.key}.title`),
+    ),
+  );
+  const featuredEntries = computed(() =>
+    trimmedKeyword.value ? [] : resolveFeaturedFeatures(featured.state.items, featureContext.value),
+  );
   const layerStyle = computed(() => ({
     top: layerTop.value,
     height: layerHeight.value || '100%',
@@ -190,6 +244,20 @@
     closeSearch(() => locateSearchResult(router, snapshot));
   }
 
+  function openFeature(feature: FeatureShortcutDefinition) {
+    rememberKeyword(trimmedKeyword.value);
+    // 先让搜索层的 history 占位出栈，再跳转目标页。
+    closeSearch(() => {
+      void runFeatureShortcut(feature, router, '【移动端快捷搜索】');
+    });
+  }
+
+  function openUpdateLogs() {
+    closeSearch(() => {
+      void router.push('/updateLogs');
+    });
+  }
+
   function openPublications() {
     recordOperation({ module: '公开管理', operation: '进入公开管理【移动端快捷搜索】' });
     closeSearch(() => {
@@ -229,6 +297,7 @@
   watch(open, (visible) => {
     if (visible) {
       void publicScope.ensure(true);
+      void featured.ensure();
       syncViewport();
       window.visualViewport?.addEventListener('resize', syncViewport);
       window.visualViewport?.addEventListener('scroll', syncViewport);
@@ -403,6 +472,16 @@
 
   .gs-layer__type.is-todo {
     color: var(--primary-color);
+  }
+
+  .gs-layer__type.is-feature {
+    border: 1px solid color-mix(in srgb, var(--primary-color) 40%, transparent);
+    color: var(--workspace-purple-text);
+    background: var(--workspace-purple-selected);
+  }
+
+  .gs-layer__features {
+    margin-bottom: var(--ui-space-16, 16px);
   }
 
   .gs-layer__hint {

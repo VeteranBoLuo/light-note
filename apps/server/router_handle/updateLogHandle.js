@@ -5,11 +5,14 @@ import { ensureNotVisitor } from '../util/auth.js';
 import { createDownloadSignedUrl, deleteObjectFromObs, putObjectToObs } from '../util/obsClient.js';
 import { stableAgentErrorCode } from '../util/agent/logSafety.js';
 import {
+  FEATURED_FEATURES_CONFIG_NAME,
   extractUpdateLogImageKeys,
+  normalizeFeaturedFeaturesInput,
   normalizeLegacyUpdateLogs,
   normalizeUpdateLogInput,
   normalizeUpdateLogRecord,
   parseJsonArray,
+  parseStoredFeaturedFeatures,
   updateLogImageObjectKey,
   updateLogImagePublicUrl,
   validateUpdateLogImage,
@@ -142,6 +145,38 @@ export async function list(req, res) {
     return res.send(resultData({ items: limit ? items.slice(0, limit) : items, source: 'config_json' }));
   } catch (error) {
     return sendServerError(req, res, 'list', error);
+  }
+}
+
+export async function featured(req, res) {
+  try {
+    const [rows] = await pool.query('SELECT json_content FROM config_json WHERE name = ? AND del_flag = 0 LIMIT 1', [
+      FEATURED_FEATURES_CONFIG_NAME,
+    ]);
+    return res.send(resultData({ items: parseStoredFeaturedFeatures(rows[0]?.json_content) }));
+  } catch (error) {
+    return sendServerError(req, res, 'featured', error);
+  }
+}
+
+export async function saveFeatured(req, res) {
+  if (!ensureRoot(req, res)) return;
+  const normalized = normalizeFeaturedFeaturesInput(req.body);
+  if (normalized.error) {
+    return res.send(
+      resultData({ code: normalized.error }, 400, L(req, '最近上线内容不合法', 'Invalid featured feature items')),
+    );
+  }
+  try {
+    // config_json.name 唯一；整份覆盖保存，最多 3 项，不需要逐项并发控制。
+    await pool.query(
+      `INSERT INTO config_json (name, json_content, del_flag) VALUES (?, ?, 0)
+       ON DUPLICATE KEY UPDATE json_content = VALUES(json_content), del_flag = 0`,
+      [FEATURED_FEATURES_CONFIG_NAME, JSON.stringify({ items: normalized.value.items })],
+    );
+    return res.send(resultData({ items: normalized.value.items }));
+  } catch (error) {
+    return sendServerError(req, res, 'save-featured', error);
   }
 }
 

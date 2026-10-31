@@ -316,9 +316,18 @@
   const isAndroidApp = isLightNoteAndroidApp();
 
   const pageRef = ref<HTMLElement | null>(null);
-  useSettingsFieldFocus(pageRef, () =>
-    route.query.section === 'general' && route.query.focus === 'todo-subitems'
-      ? '#todo-subitems-preference' : null,
+  // 深链接只接受白名单字段，不把 URL 内容当作选择器；功能直达也走这里定位主题、密度等设置项。
+  const SETTINGS_FOCUS_TARGETS: Partial<Record<string, Record<string, string>>> = {
+    general: {
+      'todo-subitems': '#todo-subitems-preference',
+      install: '#set-install',
+      shortcuts: '#set-install .shortcut-field',
+    },
+    appearance: { theme: '#set-theme', density: '#set-ui-density' },
+  };
+  useSettingsFieldFocus(
+    pageRef,
+    () => SETTINGS_FOCUS_TARGETS[String(route.query.section || '')]?.[String(route.query.focus || '')] || null,
   );
   /*
    * 桌面左侧目录和移动端「目录 + 子页」共用 route.query.section。

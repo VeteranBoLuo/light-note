@@ -5,6 +5,7 @@ import { profileAppearanceEn } from './profileAppearance';
 import { annualReportEn } from './annualReport';
 import { MAKEUP_WINDOW_DAYS } from '@lightnote/shared';
 import { noteMathEn } from './noteMath';
+import { featureShortcutEn } from './featureShortcut';
 import { extractionEn } from './extraction';
 import { comparisonTableEn } from './comparisonTable';
 import { translationEn } from './translation';
@@ -49,6 +50,7 @@ export default {
   profileAppearance: profileAppearanceEn,
   annualReport: annualReportEn,
   noteMath: noteMathEn,
+  featureShortcut: featureShortcutEn,
   nativePush: {
     title: 'App notification connection',
     retry: 'Check again',
@@ -6149,7 +6151,6 @@ export default {
     count: '{count} items',
     emptyTitle: 'No matching content',
     emptyDesc: 'Try another keyword, such as a tag, note title, file name, or URL keyword.',
-    suggestSubtitle: 'Search across bookmarks, notes, files, todos, and tags',
     viewAll: 'View All Resources',
     keyboardSelect: 'Select',
     keyboardOpen: 'Open',

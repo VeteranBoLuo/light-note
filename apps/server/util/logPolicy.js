@@ -30,6 +30,7 @@ const PASSIVE_API_PATHS = new Set([
   '/common/recordResourceOpen', // Reuse milestones are separate; never retain resource IDs in API logs.
   '/json/getConfigByName', // 公开配置读取（更新日志滚动发布兼容期间仍会回退调用）。
   '/updateLog/list', // 公开更新日志读取，页面与构建预渲染都会调用。
+  '/updateLog/featured', // 快捷搜索打开时读取「最近上线」，属于被动展示。
   '/inbox/count', // 待处理角标读取，页面加载及构建预渲染会高频调用。
   '/support/state', // 支持页与 App 前台恢复读取，不包含操作审计价值。
   '/support/afdian/webhook', // 第三方订单载荷含留言/收货信息，绝不写入通用 API 日志。

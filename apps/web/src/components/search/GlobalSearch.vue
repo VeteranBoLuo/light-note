@@ -27,7 +27,7 @@
             <div class="global-search-dialog__heading">
               <div>
                 <strong>{{ t('resourceCenter.title') }}</strong>
-                <span>{{ t('resourceCenter.suggestSubtitle') }}</span>
+                <span>{{ t('featureShortcut.subtitle') }}</span>
               </div>
               <BButton :aria-label="t('resourceCenter.cancel')" @click="close()">
                 <SvgIcon :src="icon.navigation.close" size="18" />
@@ -57,13 +57,50 @@
           <p v-if="publicFailed" class="global-search-public-error" role="status">{{
             t('publicResources.publicFailed')
           }}</p>
-          <div class="global-search-dialog__body" :class="{ 'is-loading': loading }" :aria-busy="loading">
-            <BButton v-if="workshopMatch" class="global-search__workshop" @click="openWorkshop">
-              <SvgIcon :src="icon.toolbox.home" size="20" /><span
-                ><strong>{{ t('toolbox.title') }}</strong
-                ><small>{{ t('toolbox.project.introHint') }}</small></span
-              >
-            </BButton>
+          <div
+            ref="bodyRef"
+            class="global-search-dialog__body"
+            :class="{ 'is-loading': loading }"
+            :aria-busy="loading"
+          >
+            <section v-if="featureMatches.length" class="global-search-group global-search-features" data-gs-group>
+              <h3>{{ t('featureShortcut.group') }}</h3>
+              <GlobalSearchFeatureRow
+                v-for="(match, index) in featureMatches"
+                :key="match.feature.id"
+                :feature="match.feature"
+                :alias="match.alias"
+                :keyword="trimmedKeyword"
+                :nav-index="index"
+                :active="activeIndex === index"
+                @activate="activeIndex = index"
+                @open="openFeature(match.feature)"
+              />
+            </section>
+            <section v-else-if="showFeatured" class="global-search-featured" data-gs-group>
+              <div class="global-search-featured__head">
+                <h3>{{ t('featureShortcut.featured') }}</h3>
+                <span class="global-search-featured__links">
+                  <BButton type="text" @click="openUpdateLogs">{{ t('featureShortcut.updateLogs') }} ›</BButton>
+                  <BButton v-if="isRoot" type="text" class="global-search-featured__manage" @click="openFeaturedManager">
+                    {{ t('featureShortcut.manage') }}
+                  </BButton>
+                </span>
+              </div>
+              <GlobalSearchFeatureRow
+                v-for="(entry, index) in featuredEntries"
+                :key="entry.feature.id"
+                variant="featured"
+                :feature="entry.feature"
+                :description="entry.item.description"
+                :date="formatFeaturedDate(entry.item.publishDate)"
+                :nav-index="index"
+                :active="activeIndex === index"
+                @activate="activeIndex = index"
+                @open="openFeature(entry.feature)"
+              />
+              <p v-if="!featuredEntries.length" class="global-search-featured__empty">{{ t('featureShortcut.rootEmpty') }}</p>
+            </section>
             <div v-if="loading" class="global-search__loading" aria-hidden="true">
               <section v-for="group in 3" :key="group" class="global-search-group">
                 <h3 class="global-search__skeleton global-search__skeleton-heading"></h3>
@@ -85,13 +122,14 @@
             </div>
 
             <template v-else-if="suggestGroups.length">
-              <section v-for="group in suggestGroups" :key="group.type" class="global-search-group">
+              <section v-for="group in suggestGroups" :key="group.type" class="global-search-group" data-gs-group>
                 <h3>{{ getGroupLabel(group.type) }}</h3>
                 <div
                   v-for="item in group.items"
                   :key="`${item.origin || 'personal'}-${item.type}-${item.id}`"
                   class="global-search-result"
                   :class="{ 'is-active': isActiveItem(item) }"
+                  :data-gs-nav="navIndexOf(item)"
                   @mousemove="activateItem(item)"
                 >
                   <BButton
@@ -142,6 +180,10 @@
               </section>
             </template>
 
+            <div v-else-if="featureMatches.length && trimmedKeyword && !searchError" class="global-search__empty-inline">
+              <strong>{{ t('featureShortcut.resourceNoMatch', { keyword: trimmedKeyword }) }}</strong>
+              <span>{{ t('featureShortcut.resourceNoMatchDesc') }}</span>
+            </div>
             <div v-else class="global-search__empty">
               <span class="global-search__empty-icon"><SvgIcon :src="icon.navigation.search" size="26" /></span>
               <strong>
@@ -167,6 +209,7 @@
         </section>
       </div>
     </Teleport>
+    <FeaturedFeaturesManager v-if="managerOpen" v-model:visible="managerOpen" />
   </div>
 </template>
 
@@ -191,8 +234,23 @@
   import { GLOBAL_SEARCH_HIDDEN_ROUTE_NAMES } from '@/config/navigation';
   import { getGlobalShortcutKeys, isEditableShortcutTarget, matchesGlobalShortcut } from '@/config/keyboardShortcuts';
   import icon from '@/config/icon';
+  import GlobalSearchFeatureRow from '@/components/search/GlobalSearchFeatureRow.vue';
+  import FeaturedFeaturesManager from '@/components/search/FeaturedFeaturesManager.vue';
+  import { bookmarkStore, useUserStore } from '@/store';
+  import { isGuestUser } from '@/utils/savePreference';
+  import { scrollNearestIntoContainer } from '@/utils/scrolling';
+  import type { FeatureShortcutDefinition } from '@/config/featureShortcuts';
+  import { matchFeatureShortcuts, resolveFeaturedFeatures, type FeatureShortcutContext } from '@/utils/featureShortcuts';
+  import { runFeatureShortcut, useFeaturedFeatures } from '@/composables/useFeatureShortcuts';
+
+  /** 未输入时各类最近资料只保留 2 条，给「最近上线」腾出位置。 */
+  const EMPTY_GROUP_LIMIT = 2;
+  const GROUP_ORDER = ['bookmark', 'note', 'file', 'todo', 'tag'] as const;
 
   const publicScope = usePublicResourceScope();
+  const bookmark = bookmarkStore();
+  const user = useUserStore();
+  const featured = useFeaturedFeatures();
   const router = useRouter();
   const route = useRoute();
   const { t } = useI18n();
@@ -214,13 +272,43 @@
     suggestLayout: 'grouped',
     allowPublicScope: true,
   });
-  const suggestGroups = computed(() =>
-    (['bookmark', 'note', 'file', 'todo', 'tag'] as const)
-      .map((type) => ({
-        type,
-        items: items.value.filter((item) => item.type === type),
-      }))
-      .filter((group) => group.items.length),
+  const trimmedKeyword = computed(() => keyword.value.trim());
+  /**
+   * 有关键词时，组的先后按每组最匹配的那一条排（服务端已按相关度排序），组内条数与顺序不变；
+   * 未输入时保持固定顺序，位置稳定、好记。
+   */
+  const suggestGroups = computed(() => {
+    const searching = Boolean(trimmedKeyword.value);
+    const order = searching
+      ? [...new Set([...items.value.map((item) => item.type), ...GROUP_ORDER])]
+      : [...GROUP_ORDER];
+    return order
+      .filter((type): type is (typeof GROUP_ORDER)[number] => (GROUP_ORDER as readonly string[]).includes(type))
+      .map((type) => {
+        const groupItems = items.value.filter((item) => item.type === type);
+        return { type, items: searching ? groupItems : groupItems.slice(0, EMPTY_GROUP_LIMIT) };
+      })
+      .filter((group) => group.items.length);
+  });
+  const isRoot = computed(() => user.role === 'root');
+  const featureContext = computed<FeatureShortcutContext>(() => ({
+    platform: bookmark.isDesktop ? 'desktop' : 'mobile',
+    isGuest: isGuestUser(),
+  }));
+  const featureMatches = computed(() =>
+    matchFeatureShortcuts(trimmedKeyword.value, featureContext.value, (feature) =>
+      t(`featureShortcut.items.${feature.key}.title`),
+    ),
+  );
+  const featuredEntries = computed(() =>
+    trimmedKeyword.value ? [] : resolveFeaturedFeatures(featured.state.items, featureContext.value),
+  );
+  // Root 在没有展示项时也要看到区块标题，才能进入「管理」。
+  const showFeatured = computed(() => !trimmedKeyword.value && (featuredEntries.value.length > 0 || isRoot.value));
+  const featureNavItems = computed<FeatureShortcutDefinition[]>(() =>
+    trimmedKeyword.value
+      ? featureMatches.value.map((match) => match.feature)
+      : featuredEntries.value.map((entry) => entry.feature),
   );
   const activeIndex = ref(-1);
   let previousBodyOverflow = '';
@@ -228,18 +316,18 @@
   const routeName = computed(() => String(route.name || ''));
   const isSearchAvailable = computed(() => !GLOBAL_SEARCH_HIDDEN_ROUTE_NAMES.includes(routeName.value));
   const placeholder = computed(() =>
-    route.path.includes('/search') ? t('resourceCenter.continueSearch') : t('resourceCenter.searchPlaceholder'),
+    route.path.includes('/search') ? t('resourceCenter.continueSearch') : t('featureShortcut.placeholder'),
   );
-  const workshopMatch = computed(() =>
-    /工坊|项目|研究|学习|写作|资料|提取|表格|图片|扫描|workshop|project|research|study|learn|writ|extract|table|pdf|ocr/i.test(
-      keyword.value,
-    ),
-  );
-  function openWorkshop() {
-    close({ restoreFocus: false });
-    void router.push('/toolbox');
-  }
   const flatItems = computed(() => suggestGroups.value.flatMap((group) => group.items));
+  /** 键盘导航顺序：功能（或最近上线）在前，资料在后。 */
+  const navCount = computed(() => featureNavItems.value.length + flatItems.value.length);
+  function navIndexOf(item: SearchResultItem) {
+    const index = flatItems.value.indexOf(item);
+    return index < 0 ? -1 : featureNavItems.value.length + index;
+  }
+  function formatFeaturedDate(date: string) {
+    return date.slice(5);
+  }
 
   function escapeHtml(input: string) {
     return String(input ?? '').replace(
@@ -285,10 +373,10 @@
     return Number.isFinite(size) && size > 0 ? `${(size / 1024 / 1024).toFixed(2)} MB` : '';
   }
   function isActiveItem(item: SearchResultItem) {
-    return activeIndex.value >= 0 && flatItems.value[activeIndex.value] === item;
+    return activeIndex.value >= 0 && navIndexOf(item) === activeIndex.value;
   }
   function activateItem(item: SearchResultItem) {
-    const index = flatItems.value.indexOf(item);
+    const index = navIndexOf(item);
     if (index >= 0) activeIndex.value = index;
   }
 
@@ -303,6 +391,7 @@
     if (visible.value) return;
     visible.value = true;
     void publicScope.ensure(true);
+    void featured.ensure();
     activeIndex.value = -1;
     previousBodyOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
@@ -324,9 +413,27 @@
     if (restoreFocus) nextTick(() => triggerElement()?.focus());
   }
   const handleCloseSearch = () => close();
+  const bodyRef = ref<HTMLElement | null>(null);
+  /** 只在键盘移动时滚动：选中项刚好完整露出；移到组内第一项时把组标题一起露出。 */
+  function revealActive() {
+    const container = bodyRef.value;
+    if (!container || activeIndex.value < 0) return;
+    if (activeIndex.value === 0) {
+      container.scrollTo({ top: 0 });
+      return;
+    }
+    const row = container.querySelector<HTMLElement>(`[data-gs-nav="${activeIndex.value}"]`);
+    if (!row) return;
+    scrollNearestIntoContainer(container, row);
+    const group = row.closest<HTMLElement>('[data-gs-group]');
+    const heading = group?.querySelector<HTMLElement>('h3');
+    if (heading && group?.querySelector('[data-gs-nav]') === row) scrollNearestIntoContainer(container, heading);
+  }
   function moveActive(offset: number) {
-    const length = flatItems.value.length;
-    if (length) activeIndex.value = (activeIndex.value + offset + length) % length;
+    const length = navCount.value;
+    if (!length) return;
+    activeIndex.value = (activeIndex.value + offset + length) % length;
+    void nextTick(revealActive);
   }
   function onResultKeydown(event: KeyboardEvent) {
     if (event.key === 'ArrowDown') {
@@ -340,9 +447,28 @@
     }
   }
   function onEnter() {
-    const item = flatItems.value[activeIndex.value];
+    const featureCount = featureNavItems.value.length;
+    if (activeIndex.value >= 0 && activeIndex.value < featureCount) {
+      openFeature(featureNavItems.value[activeIndex.value]);
+      return;
+    }
+    const item = flatItems.value[activeIndex.value - featureCount];
     if (item) openItem(item);
     else goSearch();
+  }
+  function openFeature(feature: FeatureShortcutDefinition) {
+    close({ restoreFocus: false });
+    void runFeatureShortcut(feature, router, '【桌面快捷搜索】');
+  }
+  function openUpdateLogs() {
+    close({ restoreFocus: false });
+    void router.push('/updateLogs');
+  }
+  // 管理弹框层级低于搜索浮层，先收起搜索再打开。
+  const managerOpen = ref(false);
+  function openFeaturedManager() {
+    close({ restoreFocus: false });
+    managerOpen.value = true;
   }
   function handleDialogKeydown(event: KeyboardEvent) {
     if (event.key === 'Escape') {
@@ -425,7 +551,7 @@
       close();
     },
   );
-  watch(suggestGroups, () => {
+  watch([suggestGroups, featureNavItems], () => {
     activeIndex.value = -1;
   });
   watch(
@@ -485,23 +611,6 @@
   .global-search__trigger[aria-expanded='true'] {
     color: var(--primary-color);
     background: color-mix(in srgb, var(--primary-color) 10%, var(--background-color));
-  }
-  .global-search__workshop.b_btn {
-    width: 100%;
-    height: auto;
-    padding: var(--ui-space-12, 12px);
-    gap: var(--ui-space-12, 12px);
-    text-align: left;
-    white-space: normal;
-    margin-bottom: var(--ui-space-12, 12px);
-    border: 1px solid var(--surface-border-color);
-  }
-  .global-search__workshop span {
-    display: grid;
-    gap: var(--ui-space-4, 4px);
-  }
-  .global-search__workshop small {
-    color: var(--desc-color);
   }
 </style>
 
@@ -721,8 +830,69 @@
     flex-direction: column;
     overflow: hidden;
   }
-  .global-search-dialog__body.is-loading > .global-search__workshop {
+  .global-search-dialog__body.is-loading > .global-search-features {
     flex-shrink: 0;
+  }
+  .global-search-featured {
+    margin-top: var(--ui-space-8, 8px);
+    padding: var(--ui-space-8, 8px) var(--ui-space-4, 4px) var(--ui-space-4, 4px);
+    border-radius: 14px;
+    background: color-mix(in srgb, var(--primary-color) 5%, transparent);
+  }
+  .global-search-featured__head {
+    margin: 0 var(--ui-space-8, 8px) var(--ui-space-4, 4px);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--ui-space-10, 10px);
+  }
+  .global-search-featured__head h3 {
+    margin: 0;
+    color: var(--desc-color);
+    font-size: var(--ui-font-11, 11px);
+    font-weight: 700;
+    letter-spacing: 0.04em;
+  }
+  .global-search-featured__links {
+    display: flex;
+    align-items: center;
+    gap: var(--ui-space-4, 4px);
+  }
+  .global-search-featured__links .b_btn {
+    height: var(--ui-control-24, 24px);
+    padding: 0 var(--ui-space-6, 6px);
+    color: var(--workspace-purple-text);
+    font-size: var(--ui-font-11, 11px);
+  }
+  .global-search-featured__links .global-search-featured__manage {
+    border: 1px dashed color-mix(in srgb, var(--primary-color) 50%, transparent);
+    border-radius: 999px;
+  }
+  .global-search-featured__empty {
+    margin: 0;
+    padding: var(--ui-space-8, 8px) var(--ui-space-8, 8px) var(--ui-space-10, 10px);
+    color: var(--desc-color);
+    font-size: var(--ui-font-12, 12px);
+  }
+  .global-search-featured + .global-search__empty {
+    min-height: auto;
+    padding: var(--ui-space-32, 32px) 0;
+  }
+  .global-search__empty-inline {
+    margin: var(--ui-space-14, 14px) var(--ui-space-8, 8px) 0;
+    padding: var(--ui-space-14, 14px);
+    display: grid;
+    gap: var(--ui-space-4, 4px);
+    border: 1px dashed var(--surface-border-color);
+    border-radius: 12px;
+    color: var(--desc-color);
+    font-size: var(--ui-font-12, 12px);
+    line-height: 1.6;
+  }
+  .global-search__empty-inline strong {
+    color: var(--text-color);
+    font-size: var(--ui-font-13, 13px);
+    font-weight: 650;
   }
   .global-search__loading {
     flex: 1 1 0;

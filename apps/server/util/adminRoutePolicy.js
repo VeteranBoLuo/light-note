@@ -510,10 +510,12 @@ declare(ADMIN_POLICIES.ACCOUNT_WRITE, 'toolbox', [
 declare(ADMIN_POLICIES.READ, 'app', [['GET', '/app/android/latest.apk']]);
 declare(ADMIN_POLICIES.READ, 'update_log', [
   ['POST', '/updateLog/list'],
+  ['POST', '/updateLog/featured'],
   ['GET', '/updateLog/image/:logId/:fileName'],
 ]);
 declare(ADMIN_POLICIES.ADMIN_ONLY, 'update_log', [
   ['POST', '/updateLog/manageList'],
+  ['POST', '/updateLog/saveFeatured'],
   ['POST', '/updateLog/createDraft'],
   ['POST', '/updateLog/save'],
   ['POST', '/updateLog/delete'],

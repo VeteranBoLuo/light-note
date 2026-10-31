@@ -1,6 +1,6 @@
 <template>
   <div class="settings-section-stack" id="set-appearance">
-    <SettingsSectionCard :title="t('settings.theme')" :description="t('settings.themeDesc')">
+    <SettingsSectionCard id="set-theme" :title="t('settings.theme')" :description="t('settings.themeDesc')">
       <div class="theme-previews" role="group" :aria-label="t('settings.theme')">
         <BButton
           v-for="option in themes"
@@ -40,6 +40,7 @@
       />
       <SettingsPreferenceField
         v-if="bookmark.isDesktop"
+        id="set-ui-density"
         pref-key="uiScale"
         :label="t('settings.uiScale')"
         :description="t('settings.uiScaleDesc')"

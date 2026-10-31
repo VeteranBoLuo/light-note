@@ -1,4 +1,5 @@
 import { apiBasePost } from '@/http/request';
+import type { FeaturedFeatureItem } from '@/utils/featureShortcuts';
 
 export type UpdateLogStatus = 'draft' | 'published';
 
@@ -163,4 +164,13 @@ export async function uploadUpdateLogImage(id: string, file: File, onProgress?: 
       onProgress?.(Math.min(100, Math.round((event.loaded / event.total) * 100)));
     },
   });
+}
+
+/** 快捷搜索「最近上线」：所有人可读，只有 Root 可以整份覆盖保存。 */
+export function getFeaturedFeatures() {
+  return apiBasePost('/api/updateLog/featured', undefined, { silent: true });
+}
+
+export function saveFeaturedFeatures(items: FeaturedFeatureItem[]) {
+  return apiBasePost('/api/updateLog/saveFeatured', { items }, { silent: true });
 }

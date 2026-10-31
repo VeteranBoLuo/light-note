@@ -615,10 +615,24 @@
             <SvgIcon :src="icon.resource.tag" size="16" aria-hidden="true" />
             {{ $t('resourceCenter.batch.manageTags') }}
           </BButton>
-          <BButton :disabled="!selectedRows.length" @click="openSelectedAiOrganize">
-            <SvgIcon :src="icon.ai.organize" size="16" aria-hidden="true" />
-            {{ $t('bookmarkMg.aiOrganizeBtn') }}
-          </BButton>
+          <BPopover v-model:open="aiOrganizeGuideOpen" trigger="manual" placement="bottom-right">
+            <BButton
+              :class="{ 'is-feature-guide': aiOrganizeGuideOpen }"
+              :disabled="!selectedRows.length"
+              @click="openSelectedAiOrganize"
+            >
+              <SvgIcon :src="icon.ai.organize" size="16" aria-hidden="true" />
+              {{ $t('bookmarkMg.aiOrganizeBtn') }}
+            </BButton>
+            <template #content>
+              <div class="feature-guide-bubble" role="status">
+                <p>{{ $t('featureShortcut.items.aiOrganize.hint') }}</p>
+                <BButton type="primary" size="small" @click="closeAiOrganizeGuide">
+                  {{ $t('featureShortcut.guideDismiss') }}
+                </BButton>
+              </div>
+            </template>
+          </BPopover>
           <BButton class="batch-action-delete" :disabled="!selectedRows.length" @click="handleBatchDelete">
             <SvgIcon :src="icon.table_delete" size="16" aria-hidden="true" />
             {{ $t('bookmarkMg.batchDelete') }}
@@ -640,7 +654,7 @@
   import { vRangeSelect } from '@/directives/rangeSelection';
   import { useResourceSelection } from '@/composables/useResourceSelection';
   import { bookmarkStore, useUserStore } from '@/store';
-  import { computed, defineAsyncComponent, ref, onMounted, onUnmounted, watch } from 'vue';
+  import { computed, defineAsyncComponent, nextTick, ref, onMounted, onUnmounted, watch } from 'vue';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import { apiBasePost, apiQueryPost } from '@/http/request.ts';
   import { batchDeleteSearchResources, clearGlobalSearchCache } from '@/api/search.ts';
@@ -685,6 +699,8 @@
   import TagDirectoryRow from '@/components/tagSpace/TagDirectoryRow.vue';
   import BookmarkAiDialog from '@/components/manage/bookmarkMg/BookmarkAiDialog.vue';
   import ResourceBatchActionBar from '@/components/resourceActions/ResourceBatchActionBar.vue';
+  import BPopover from '@/components/base/BasicComponents/BPopover.vue';
+  import { useFeatureIntent } from '@/composables/useFeatureShortcuts';
   import { summarizeBookmarkCoverage } from '@/utils/bookmarkCoverage';
   import ResourceOutcomeDrawer, {
     type ResourceOutcomeQuickAction,
@@ -890,6 +906,34 @@
       outcomeDrawerOpen.value = false;
     }
     selectionMode.value = !selectionMode.value;
+  }
+
+  // 功能直达「智能打标签」：进入多选并用气泡指出批量操作里的按钮；勾选内容或退出多选后自动收起。
+  const AI_ORGANIZE_GUIDE_MS = 8000;
+  const aiOrganizeGuideOpen = ref(false);
+  let aiOrganizeGuideTimer = 0;
+  function closeAiOrganizeGuide() {
+    aiOrganizeGuideOpen.value = false;
+    window.clearTimeout(aiOrganizeGuideTimer);
+  }
+  async function startAiOrganizeGuide() {
+    if (!selectionMode.value) toggleSelectionMode();
+    await nextTick();
+    aiOrganizeGuideOpen.value = true;
+    window.clearTimeout(aiOrganizeGuideTimer);
+    aiOrganizeGuideTimer = window.setTimeout(closeAiOrganizeGuide, AI_ORGANIZE_GUIDE_MS);
+  }
+  watch(
+    () => selectedRows.value.length > 0 || !selectionMode.value,
+    (done) => {
+      if (done) closeAiOrganizeGuide();
+    },
+  );
+  onUnmounted(closeAiOrganizeGuide);
+  // 首页内嵌的书签表不接功能直达，避免跳转前被即将卸载的实例抢先接住。
+  if (!props.embedded) {
+    useFeatureIntent('bookmark-import', () => showImportExportModal());
+    useFeatureIntent('ai-organize', () => startAiOrganizeGuide());
   }
 
   function toggleBookmarkSelection(id: string) {
@@ -2688,6 +2732,32 @@
 
     .hero-stats {
       grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  // 功能直达「智能打标签」：实色描边 + 外圈，按钮未勾选内容时仍处于禁用态，但位置要一眼可见。
+  .is-feature-guide.b_btn,
+  .is-feature-guide.b_btn.disabled {
+    border: 1px solid var(--primary-color);
+    color: var(--workspace-purple-text);
+    // 未勾选时仍是禁用态，但引导期间不淡化，保证描边与外圈清晰可见。
+    opacity: 1;
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary-color) 22%, transparent);
+  }
+
+  .feature-guide-bubble {
+    max-width: var(--ui-layout-240, 240px);
+    padding: var(--ui-space-12, 12px);
+    display: grid;
+    gap: var(--ui-space-10, 10px);
+    justify-items: end;
+
+    p {
+      margin: 0;
+      justify-self: stretch;
+      color: var(--text-color);
+      font-size: var(--ui-font-13, 13px);
+      line-height: 1.6;
     }
   }
 </style>

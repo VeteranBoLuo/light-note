@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest';
 import {
   extractUpdateLogImageKeys,
   formatDateOnly,
+  normalizeFeaturedFeaturesInput,
   normalizeLegacyUpdateLogs,
   normalizeUpdateLogInput,
+  parseStoredFeaturedFeatures,
   updateLogImagePublicUrl,
   validateUpdateLogImage,
 } from './updateLog.js';
@@ -69,5 +71,48 @@ describe('更新日志 OBS 图片', () => {
     expect(validateUpdateLogImage({ mimetype: 'image/png', size: 6 * 1024 * 1024 })).toEqual({
       error: 'IMAGE_SIZE_INVALID',
     });
+  });
+});
+
+describe('featured features', () => {
+  const valid = { featureId: 'note-reference', description: ' 编辑时 <b>并排</b>参考 ', publishDate: '2026-10-30' };
+
+  it('规整描述并保留合法条目', () => {
+    expect(normalizeFeaturedFeaturesInput({ items: [valid] })).toEqual({
+      value: { items: [{ featureId: 'note-reference', description: '编辑时 并排参考', publishDate: '2026-10-30' }] },
+    });
+  });
+
+  it.each([
+    [{ items: 'x' }, 'INVALID_ITEMS'],
+    [{ items: [valid, { ...valid, featureId: 'manor' }, { ...valid, featureId: 'workshop' }, { ...valid, featureId: 'trash' }] }, 'TOO_MANY_ITEMS'],
+    [{ items: [{ ...valid, featureId: 'Bad Id' }] }, 'INVALID_FEATURE_ID'],
+    [{ items: [{ ...valid, description: '字'.repeat(31) }] }, 'DESCRIPTION_TOO_LONG'],
+    [{ items: [{ ...valid, publishDate: '2026-02-30' }] }, 'INVALID_PUBLISH_DATE'],
+    [{ items: [valid, valid] }, 'DUPLICATE_FEATURE'],
+  ])('拒绝不合法输入 %#', (body, error) => {
+    expect(normalizeFeaturedFeaturesInput(body)).toEqual({ error });
+  });
+
+  it('没有展示天数，旧数据里的 days 字段读取时丢弃', () => {
+    expect(parseStoredFeaturedFeatures(JSON.stringify({ items: [{ ...valid, days: 30 }] }))).toEqual([
+      { featureId: 'note-reference', description: '编辑时 并排参考', publishDate: '2026-10-30' },
+    ]);
+  });
+
+  it('读取时跳过坏条目、重复项并限制 3 项', () => {
+    const stored = JSON.stringify({
+      items: [
+        { featureId: 'Bad' },
+        valid,
+        valid,
+        { ...valid, featureId: 'manor' },
+        { ...valid, featureId: 'workshop' },
+        { ...valid, featureId: 'trash' },
+      ],
+    });
+    expect(parseStoredFeaturedFeatures(stored).map((item) => item.featureId)).toEqual(['note-reference', 'manor', 'workshop']);
+    expect(parseStoredFeaturedFeatures('{bad json')).toEqual([]);
+    expect(parseStoredFeaturedFeatures(null)).toEqual([]);
   });
 });

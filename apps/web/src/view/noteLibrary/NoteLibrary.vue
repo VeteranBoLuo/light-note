@@ -681,6 +681,7 @@
     else if (key === 'templates') void openTemplateManager();
   }
   const transferDialog = ref<InstanceType<typeof NoteTransferDialog> | null>(null);
+  useFeatureIntent('note-import', () => handleTransferMenu('import'));
   const { canJoinProject, joinProject } = useProjectResourceAction();
   import { MAX_NOTE_BATCH_ACTION_ITEMS } from '@lightnote/shared/resource-selection';
   import icon from '@/config/icon.ts';
@@ -688,6 +689,7 @@
   import { useRouter } from 'vue-router';
   import { useNoteLibraryNavigation } from '@/composables/useNoteLibraryNavigation';
   import { useResourceSelection } from '@/composables/useResourceSelection';
+  import { useFeatureIntent } from '@/composables/useFeatureShortcuts';
   import type { SelectionOperation } from '@/store/resourceSelection';
   import { runOrderedBatch } from '@/utils/orderedBatch';
   import { apiBasePost } from '@/http/request.ts';

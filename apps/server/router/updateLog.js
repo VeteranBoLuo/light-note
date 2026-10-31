@@ -21,6 +21,8 @@ function requireRoot(req, res, next) {
 }
 
 router.post('/list', updateLogHandle.list);
+router.post('/featured', updateLogHandle.featured);
+router.post('/saveFeatured', updateLogHandle.saveFeatured);
 router.post('/manageList', updateLogHandle.manageList);
 router.post('/createDraft', updateLogHandle.createDraft);
 router.post('/save', updateLogHandle.save);

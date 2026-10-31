@@ -38,7 +38,7 @@ vi.mock('../util/obsClient.js', () => ({
 }));
 vi.mock('../util/agent/logSafety.js', () => ({ stableAgentErrorCode: () => 'TEST_ERROR' }));
 
-const { image, list, save } = await import('./updateLogHandle.js');
+const { featured, image, list, save, saveFeatured } = await import('./updateLogHandle.js');
 
 function mockRes() {
   const res = {
@@ -251,5 +251,38 @@ describe('updateLogHandle', () => {
     expect(connection.query.mock.calls[1][1][6]).toBe(JSON.stringify([keptKey]));
     expect(mocks.deleteObjectFromObs).toHaveBeenCalledWith(removedKey);
     expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ status: 200 }));
+  });
+
+  it('公开读取「最近上线」时跳过坏条目', async () => {
+    mocks.poolQuery.mockResolvedValueOnce([
+      [{ json_content: JSON.stringify({ items: [{ featureId: 'manor', publishDate: '2026-10-30' }, { featureId: 'x' }] }) }],
+    ]);
+    const res = mockRes();
+    await featured({ headers: {} }, res);
+    expect(res.send.mock.calls[0][0]).toEqual({
+      data: { items: [{ featureId: 'manor', description: '', publishDate: '2026-10-30' }] },
+      status: 200,
+      msg: '',
+    });
+  });
+
+  it('只有 Root 可以保存「最近上线」，合法内容整份覆盖写入', async () => {
+    const body = { items: [{ featureId: 'manor', description: '种田', publishDate: '2026-10-30' }] };
+    const denied = mockRes();
+    await saveFeatured({ headers: {}, user: { role: 'user' }, body }, denied);
+    expect(denied.send.mock.calls[0][0].status).toBe(403);
+    expect(mocks.poolQuery).not.toHaveBeenCalled();
+
+    const invalid = mockRes();
+    await saveFeatured({ headers: {}, user: { role: 'root' }, body: { items: [{ featureId: 'manor' }] } }, invalid);
+    expect(invalid.send.mock.calls[0][0]).toMatchObject({ status: 400, data: { code: 'INVALID_PUBLISH_DATE' } });
+
+    mocks.poolQuery.mockResolvedValueOnce([{ affectedRows: 1 }]);
+    const ok = mockRes();
+    await saveFeatured({ headers: {}, user: { role: 'root' }, body }, ok);
+    const [sql, values] = mocks.poolQuery.mock.calls[0];
+    expect(sql).toContain('ON DUPLICATE KEY UPDATE');
+    expect(values).toEqual(['quick_search_featured', JSON.stringify(body)]);
+    expect(ok.send.mock.calls[0][0]).toMatchObject({ status: 200, data: body });
   });
 });

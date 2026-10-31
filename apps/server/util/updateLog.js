@@ -212,3 +212,54 @@ export function validateUpdateLogImage(file) {
   }
   return { value: { extension, size, contentType: String(file.mimetype).toLowerCase() } };
 }
+
+/**
+ * 快捷搜索「最近上线」：Root 从前端功能清单里挑选的少量功能，存于 config_json。
+ * 没有到期时间，Root 移除前一直展示；服务端只校验形态与上限，功能 ID 是否存在由前端按当前清单判断。
+ */
+export const FEATURED_FEATURES_CONFIG_NAME = 'quick_search_featured';
+export const FEATURED_FEATURES_MAX_ITEMS = 3;
+export const FEATURED_FEATURE_DESCRIPTION_MAX = 30;
+const FEATURED_FEATURE_ID_PATTERN = /^[a-z][a-z0-9-]{1,47}$/;
+
+function normalizeFeaturedFeatureItem(item = {}) {
+  const featureId = String(item?.featureId || '').trim();
+  const description = stripLegacyHtml(item?.description || '').replace(/\s+/g, ' ');
+  const publishDate = formatDateOnly(item?.publishDate);
+  if (!FEATURED_FEATURE_ID_PATTERN.test(featureId)) return { error: 'INVALID_FEATURE_ID' };
+  if (Array.from(description).length > FEATURED_FEATURE_DESCRIPTION_MAX) return { error: 'DESCRIPTION_TOO_LONG' };
+  if (!publishDate) return { error: 'INVALID_PUBLISH_DATE' };
+  return { value: { featureId, description, publishDate } };
+}
+
+export function normalizeFeaturedFeaturesInput(body = {}) {
+  if (!Array.isArray(body?.items)) return { error: 'INVALID_ITEMS' };
+  if (body.items.length > FEATURED_FEATURES_MAX_ITEMS) return { error: 'TOO_MANY_ITEMS' };
+  const items = [];
+  for (const raw of body.items) {
+    const normalized = normalizeFeaturedFeatureItem(raw);
+    if (normalized.error) return normalized;
+    if (items.some((item) => item.featureId === normalized.value.featureId)) return { error: 'DUPLICATE_FEATURE' };
+    items.push(normalized.value);
+  }
+  return { value: { items } };
+}
+
+/** 读取时宽松处理：历史或手工写坏的条目直接跳过，不让一条坏数据清空整个区块。 */
+export function parseStoredFeaturedFeatures(rawContent) {
+  let parsed;
+  try {
+    parsed = typeof rawContent === 'string' ? JSON.parse(rawContent) : rawContent;
+  } catch {
+    return [];
+  }
+  const rawItems = Array.isArray(parsed?.items) ? parsed.items : [];
+  const items = [];
+  for (const raw of rawItems) {
+    const normalized = normalizeFeaturedFeatureItem(raw);
+    if (normalized.error || items.some((item) => item.featureId === normalized.value.featureId)) continue;
+    items.push(normalized.value);
+    if (items.length >= FEATURED_FEATURES_MAX_ITEMS) break;
+  }
+  return items;
+}

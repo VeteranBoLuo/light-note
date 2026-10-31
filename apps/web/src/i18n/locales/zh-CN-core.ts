@@ -5,6 +5,7 @@ import { profileAppearanceZh } from './profileAppearance';
 import { annualReportZh } from './annualReport';
 import { MAKEUP_WINDOW_DAYS } from '@lightnote/shared';
 import { noteMathZh } from './noteMath';
+import { featureShortcutZh } from './featureShortcut';
 import { extractionZh } from './extraction';
 import { comparisonTableZh } from './comparisonTable';
 import { translationZh } from './translation';
@@ -49,6 +50,7 @@ export default {
   profileAppearance: profileAppearanceZh,
   annualReport: annualReportZh,
   noteMath: noteMathZh,
+  featureShortcut: featureShortcutZh,
   nativePush: {
     title: 'App 通知连接',
     retry: '重新检查',
@@ -5828,7 +5830,6 @@ export default {
     count: '{count} 条',
     emptyTitle: '没有找到匹配内容',
     emptyDesc: '换一个关键词试试，比如标签名、笔记标题、文件名或者网址里的关键字。',
-    suggestSubtitle: '从书签、笔记、文件、待办和标签里一起找',
     viewAll: '查看全部资源',
     keyboardSelect: '选择',
     keyboardOpen: '打开',
