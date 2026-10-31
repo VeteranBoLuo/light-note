@@ -133,6 +133,7 @@ export const featureShortcutZh = {
       location: '笔记 › 右侧面板 › 参考',
       description: '编辑笔记时，在右侧并排参考另一篇笔记或云文件',
       hint: '打开一篇笔记，在右侧面板切到「参考」；也可以在页面树里右键笔记，选择「参考此笔记」。',
+      emptyHint: '还没有可以参考的笔记，先新建一篇；打开笔记后在右侧面板切到「参考」。',
     },
   },
 };
@@ -271,6 +272,7 @@ export const featureShortcutEn: typeof featureShortcutZh = {
       location: 'Note › Side panel › Reference',
       description: 'Keep another note or cloud file open beside the editor',
       hint: 'Open a note and switch the side panel to “Reference”, or right-click a note in the page tree and choose “Reference this note”.',
+      emptyHint: 'You have no notes to reference yet. Create one, then switch its side panel to “Reference”.',
     },
   },
 };

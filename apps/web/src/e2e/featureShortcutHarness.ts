@@ -15,7 +15,8 @@ import BButton from '@/components/base/BasicComponents/BButton.vue';
 import '@/assets/css/index.less';
 
 // 功能直达与「最近上线」验收：真实搜索组件与书签管理页，内存假接口，不访问业务后端。
-// 参数：surface=desktop|mobile|manager、role=user|root|visitor、theme=day|night、density、locale=en-US、featured=0
+// 参数：surface=desktop|mobile|manager、role=user|root|visitor、theme=day|night、density、locale=en-US、featured=0、
+// notes=0（没有笔记）、entry=/noteLibrary/n2（从笔记详情开始）
 const params = new URLSearchParams(location.search);
 const surface = params.get('surface') || 'desktop';
 const role = params.get('role') || 'user';
@@ -57,6 +58,28 @@ const featuredItems =
         { featureId: 'note-reference', description: '', publishDate: localDateKey() },
       ];
 
+// 页面树根层顺序：置顶的手绘笔记在最前，参考栏直达应跳过它打开第一篇文字笔记。
+const notes =
+  params.get('notes') === '0'
+    ? []
+    : [
+        { id: 'd1', title: '手绘草图', type: 'drawing', content: '{"elements":[]}' },
+        { id: 'n1', title: '体重记录', type: 'html', content: '<p>2026年10月29日 61.0</p>' },
+        { id: 'n2', title: '读书笔记', type: 'markdown', content: '# 读书笔记\n\n第三章摘录。' },
+      ].map((note) => ({
+        ...note,
+        revision: 1,
+        createBy: 'feature-shortcut-fixture-user',
+        createTime: '2026-10-18 10:00:00',
+        updateTime: '2026-10-30 10:00:00',
+        parentId: null,
+        tags: [],
+        hasContent: true,
+        childCount: 0,
+        descendantCount: 0,
+      }));
+const noteFeatures = { noteTreeRead: true, noteTreeWrite: true, noteTreeMobile: true };
+
 function suggest(keyword: string) {
   if (!keyword) {
     return ['bookmark', 'note', 'file', 'todo'].flatMap((type) => library.filter((item) => item.type === type).slice(0, 3));
@@ -87,6 +110,18 @@ request.defaults.adapter = async (config) => {
     data = { items, total: items.length, page: 1, hasMore: false };
   } else if (url.endsWith('/queryTagList')) {
     data = [];
+  } else if (url === '/api/note/queryNoteList') {
+    document.body.dataset.noteListScope = 'parentId' in body ? 'tree-root' : 'flat';
+    data = { items: notes, total: notes.length, page: 1, hasMore: false };
+  } else if (url === '/api/note/getNoteDetail') {
+    const note = notes.find((item) => item.id === body.id);
+    data = note ? { ...note, breadcrumb: [note], noteTreeFeatures: noteFeatures } : null;
+  } else if (url === '/api/note/getNoteTreeFeatures') {
+    data = { features: noteFeatures };
+  } else if (url === '/api/note/queryNoteTree') {
+    data = { items: body.parentId ? [] : notes, total: notes.length, hasMore: false };
+  } else if (url === '/api/note/queryNoteBreadcrumb') {
+    data = notes.filter((note) => note.id === body.noteId);
   }
   return { data: { status: 200, data, msg: '' }, status: 200, statusText: 'OK', headers: {}, config };
 };
@@ -95,6 +130,7 @@ const { default: GlobalSearch } = await import('@/components/search/GlobalSearch
 const { default: MobileGlobalSearchOverlay } = await import('@/components/globalSearch/MobileGlobalSearchOverlay.vue');
 const { default: FeaturedFeaturesManager } = await import('@/components/search/FeaturedFeaturesManager.vue');
 const { default: BookmarkMg } = await import('@/view/manage/BookmarkMg.vue');
+const { default: NoteDetail } = await import('@/view/noteLibrary/NoteDetail.vue');
 const Placeholder = {
   setup() {
     const route = useRoute();
@@ -105,10 +141,11 @@ const router = createRouter({
   history: createWebHashHistory(),
   routes: [
     { path: '/manage/bookmarkMg', name: 'bookmarkMg', component: BookmarkMg },
+    { path: '/noteLibrary/:id', name: 'noteDetail', component: NoteDetail },
     { path: '/:pathMatch(.*)*', name: 'fixture', component: Placeholder },
   ],
 });
-await router.replace('/workbenches');
+await router.replace(params.get('entry') || '/workbenches');
 router.afterEach((to) => {
   document.body.dataset.fixtureRoute = to.fullPath;
 });

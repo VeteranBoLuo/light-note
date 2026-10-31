@@ -2,6 +2,7 @@ import { onActivated, onBeforeUnmount, onDeactivated, onMounted, reactive, ref, 
 import type { Router } from 'vue-router';
 import message from '@/components/base/BasicComponents/BMessage/BMessage';
 import { recordOperation } from '@/api/commonApi';
+import { apiBasePost } from '@/http/request';
 import { getFeaturedFeatures, saveFeaturedFeatures } from '@/api/updateLogApi';
 import i18n from '@/i18n';
 import type { FeatureShortcutDefinition, FeatureShortcutIntent } from '@/config/featureShortcuts';
@@ -50,30 +51,79 @@ function translate(key: string) {
   return String(i18n.global.t(key));
 }
 
+type FeatureRoute = FeatureShortcutDefinition['route'];
+interface FeatureRouteResolution {
+  route: FeatureRoute;
+  /** 覆盖默认提示，例如没有可用目标时。 */
+  hintKey?: string;
+}
+
+/**
+ * 笔记库第一篇可参考的笔记：与笔记库根层顺序一致（置顶优先、最近更新），跳过没有右侧面板的手绘笔记。
+ * 返回 null 表示没有可用笔记；undefined 表示读取失败。
+ */
+async function firstReferenceableNoteId(): Promise<string | null | undefined> {
+  // 先按页面树根层读取；未开启页面树时服务端会拒绝 parentId，退回不分层列表。
+  for (const scope of [{ parentId: null }, {}]) {
+    try {
+      const response = await apiBasePost(
+        '/api/note/queryNoteList',
+        { page: 1, pageSize: 20, previewVersion: 2, ...scope },
+        { silent: true, feedback: false },
+      );
+      if (response?.status !== 200 || !Array.isArray(response.data?.items)) continue;
+      const target = response.data.items.find((item: { type?: string }) => (item?.type || 'html') !== 'drawing');
+      return target?.id ? String(target.id) : null;
+    } catch {
+      // 继续尝试下一种读取方式。
+    }
+  }
+  return undefined;
+}
+
+const ROUTE_RESOLVERS: Partial<
+  Record<string, (feature: FeatureShortcutDefinition) => Promise<FeatureRouteResolution>>
+> = {
+  // 笔记详情页不显示快捷搜索，所以总是从别处进入：打开第一篇可参考的笔记，由详情页切到「参考」。
+  'note-reference': async (feature) => {
+    const noteId = await firstReferenceableNoteId();
+    if (noteId) return { route: { path: `/noteLibrary/${encodeURIComponent(noteId)}` } };
+    if (noteId === null) return { route: feature.route, hintKey: `featureShortcut.items.${feature.key}.emptyHint` };
+    return { route: feature.route };
+  },
+};
+
+/** 显示可关闭的引导提示。 */
+function showFeatureShortcutHint(feature: FeatureShortcutDefinition, hintKey?: string) {
+  message.open({
+    type: 'info',
+    content: translate(hintKey || `featureShortcut.items.${feature.key}.hint`),
+    duration: HINT_DURATION_S,
+    key: `feature-shortcut-hint-${feature.id}`,
+    closable: true,
+  });
+}
+
 /** 统一执行一项功能：调用方先关闭自己的搜索浮层，再调用这里跳转。 */
 export async function runFeatureShortcut(feature: FeatureShortcutDefinition, router: Router, source: string) {
   recordOperation({ module: '全局搜索', operation: `打开功能直达【${feature.id}】${source}` });
+  const resolver = ROUTE_RESOLVERS[feature.id];
+  const resolution: FeatureRouteResolution = resolver ? await resolver(feature) : { route: feature.route };
   const token = ++intentToken;
   pendingIntent.value = feature.intent ? { id: feature.intent, token, at: Date.now() } : null;
   try {
-    await router.push(feature.route);
+    await router.push(resolution.route);
   } catch {
     // 守卫拦截或重复导航时仍保留后续提示逻辑；目标页可能已经在当前路由。
   }
-  if (!feature.hint) return;
+  if (!feature.hint && !resolution.hintKey) return;
   window.setTimeout(() => {
     if (feature.intent) {
       // 目标页已经接住（如电脑端书签页用气泡指出按钮），就不再重复提示。
       if (pendingIntent.value?.token !== token) return;
       pendingIntent.value = null;
     }
-    message.open({
-      type: 'info',
-      content: translate(`featureShortcut.items.${feature.key}.hint`),
-      duration: HINT_DURATION_S,
-      key: `feature-shortcut-hint-${feature.id}`,
-      closable: true,
-    });
+    showFeatureShortcutHint(feature, resolution.hintKey);
   }, INTENT_FALLBACK_DELAY_MS);
 }
 

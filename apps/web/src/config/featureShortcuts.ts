@@ -11,7 +11,7 @@ export type FeatureShortcutPlatform = 'desktop' | 'mobile';
 export type FeatureShortcutMode = 'open' | 'guide';
 
 /** 目标页面通过 useFeatureIntent 登记的一次性动作。 */
-export type FeatureShortcutIntent = 'bookmark-import' | 'note-import' | 'ai-organize';
+export type FeatureShortcutIntent = 'bookmark-import' | 'note-import' | 'ai-organize' | 'note-reference';
 
 export interface FeatureShortcutDefinition {
   id: string;
@@ -226,7 +226,9 @@ export const FEATURE_SHORTCUTS: readonly FeatureShortcutDefinition[] = [
     mode: 'guide',
     platforms: DESKTOP,
     requiresLogin: false,
+    // 实际目标由 useFeatureShortcuts 解析：打开笔记库第一篇可参考的笔记，没有笔记时进入笔记库。
     route: { path: '/noteLibrary' },
+    intent: 'note-reference',
     hint: true,
     aliases: ['参考', '分屏', '并排', '拆分视图', '对照', '两篇笔记', 'split view', 'side by side', 'reference'],
   },

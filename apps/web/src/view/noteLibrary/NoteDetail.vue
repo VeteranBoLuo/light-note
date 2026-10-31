@@ -416,6 +416,7 @@
   } from '@/api/noteTree';
   import { normalizeNoteContentResourceUrls } from '@/utils/common.ts';
   import { useGuestGuard } from '@/composables/useGuestGuard';
+  import { useFeatureIntent } from '@/composables/useFeatureShortcuts';
   import { useInboxOrganizer } from '@/composables/useInboxOrganizer';
   import { useInboxEnqueue } from '@/composables/useInboxEnqueue';
   import { resolveNoteResourceRefs, type ResolvedResourceReference } from '@/api/noteReferences';
@@ -701,6 +702,16 @@
     await nextTick();
     if (detailAiPresentation.value === 'overlay') setDetailAiOverlayOpen(true);
   }
+
+  // 功能直达「笔记参考栏」：打开右侧面板并切到「参考」。目标笔记已跳过没有右侧面板的手绘笔记。
+  async function openReferencePanelFromShortcut() {
+    if (!referenceAvailable.value) return;
+    sidePanelTab.value = 'reference';
+    noteWorkspace.setAiPreferredOpen(true);
+    await nextTick();
+    if (detailAiPresentation.value === 'overlay') setDetailAiOverlayOpen(true);
+  }
+  useFeatureIntent('note-reference', () => openReferencePanelFromShortcut());
 
   function openNoteInNewWindow(noteId: string) {
     window.open(router.resolve({ path: `/noteLibrary/${encodeURIComponent(noteId)}` }).href, '_blank', 'noopener');

@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   open: vi.fn(),
   getFeatured: vi.fn(),
   saveFeatured: vi.fn(),
+  post: vi.fn(),
 }));
 
 vi.mock('@/components/base/BasicComponents/BMessage/BMessage', () => ({ default: { open: mocks.open } }));
@@ -15,16 +16,20 @@ vi.mock('@/api/updateLogApi', () => ({
   saveFeaturedFeatures: mocks.saveFeatured,
 }));
 vi.mock('@/i18n', () => ({ default: { global: { t: (key: string) => key } } }));
+vi.mock('@/http/request', () => ({ apiBasePost: mocks.post }));
 
 const { runFeatureShortcut, useFeatureIntent, useFeaturedFeatures } = await import('./useFeatureShortcuts');
 
 const router = { push: vi.fn(async () => undefined) } as any;
 let cleanup: (() => void) | undefined;
 
-function mountWithIntent(handler: () => void, options: { keepAlive?: boolean } = {}) {
+function mountWithIntent(
+  handler: () => void,
+  options: { keepAlive?: boolean; intent?: 'ai-organize' | 'note-reference' } = {},
+) {
   const Page = defineComponent({
     setup() {
-      useFeatureIntent('ai-organize', handler);
+      useFeatureIntent(options.intent || 'ai-organize', handler);
       return () => h('div', 'page');
     },
   });
@@ -104,6 +109,53 @@ describe('功能直达动作', () => {
     vi.advanceTimersByTime(1000);
     expect(router.push).toHaveBeenCalledWith({ path: '/trash' });
     expect(mocks.open).not.toHaveBeenCalled();
+  });
+});
+
+describe('笔记参考栏直达', () => {
+  const feature = getFeatureShortcut('note-reference')!;
+  const routerAt = (name: string) => ({ push: vi.fn(async () => undefined), currentRoute: { value: { name } } }) as any;
+
+  it('打开笔记库根层第一篇非手绘笔记，并由详情页切到参考', async () => {
+    mocks.post.mockResolvedValueOnce({
+      status: 200,
+      data: { items: [{ id: 'd1', type: 'drawing' }, { id: 'n 2', type: 'markdown' }, { id: 'n3', type: 'html' }] },
+    });
+    const listRouter = routerAt('workbenches');
+    await runFeatureShortcut(feature, listRouter, '');
+    expect(mocks.post).toHaveBeenCalledWith(
+      '/api/note/queryNoteList',
+      expect.objectContaining({ page: 1, parentId: null }),
+      expect.anything(),
+    );
+    expect(listRouter.push).toHaveBeenCalledWith({ path: '/noteLibrary/n%202' });
+    const handler = vi.fn();
+    mountWithIntent(handler, { intent: 'note-reference' });
+    await nextTick();
+    expect(handler).toHaveBeenCalledTimes(1);
+    vi.advanceTimersByTime(1000);
+    expect(mocks.open).not.toHaveBeenCalled();
+  });
+
+  it('未开启页面树时退回不分层列表', async () => {
+    mocks.post
+      .mockResolvedValueOnce({ status: 403, data: null })
+      .mockResolvedValueOnce({ status: 200, data: { items: [{ id: 'n1' }] } });
+    const listRouter = routerAt('home');
+    await runFeatureShortcut(feature, listRouter, '');
+    expect(mocks.post.mock.calls[1][1]).not.toHaveProperty('parentId');
+    expect(listRouter.push).toHaveBeenCalledWith({ path: '/noteLibrary/n1' });
+  });
+
+  it('没有可参考的笔记时进入笔记库并提示先新建', async () => {
+    mocks.post.mockResolvedValueOnce({ status: 200, data: { items: [{ id: 'd1', type: 'drawing' }] } });
+    const listRouter = routerAt('home');
+    await runFeatureShortcut(feature, listRouter, '');
+    expect(listRouter.push).toHaveBeenCalledWith({ path: '/noteLibrary' });
+    vi.advanceTimersByTime(700);
+    expect(mocks.open).toHaveBeenCalledWith(
+      expect.objectContaining({ content: 'featureShortcut.items.noteReference.emptyHint', closable: true }),
+    );
   });
 });
 
