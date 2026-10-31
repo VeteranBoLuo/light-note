@@ -178,6 +178,13 @@
 /* The composter uses single-frame art; existing machines retain their native sprites. */
 .r18-sprite.composter-art > img {position:static;width:100%;height:100%;object-fit:contain;transform:none;}
 .compost-tier-row .composter-art {width:calc(68px * var(--d));height:calc(68px * var(--d));max-width:100%;}
-.compost-clock {color:#52773b;font-weight:700;font-size:calc(14px * var(--d));}
+.compost-clock {color:#52773b;font-weight:700;font-size:calc(14px * var(--d));text-align:center;}
+/* 堆肥箱比其他设施多两块面板：并排放到图和数据下方，列宽与上方对齐，电脑端整页放得下不用滚动 */
+.compost-detail-panels {display:grid;grid-template-columns:42% minmax(0,1fr);gap:calc(20px * var(--d));margin-top:calc(12px * var(--d));}
+.compost-detail-panels > .facility-recipe-panel + .facility-recipe-panel {margin-top:0;}
+.compost-detail-panels > .facility-recipe-panel {display:flex;flex-direction:column;}
+.compost-detail-panels > .facility-recipe-panel > h4 + * {margin-top:auto;}
+.compost-detail-panels > .facility-recipe-panel > :last-child {margin-bottom:auto;}
+.light-note-mobile-rendering .compost-detail-panels {grid-template-columns:1fr;gap:calc(10px * var(--d));}
 
 .composter-recipe .fert-sack {width:calc(37px * var(--d));height:calc(37px * var(--d));}
