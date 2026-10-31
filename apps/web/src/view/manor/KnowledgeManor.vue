@@ -206,7 +206,8 @@
         return;
       }
       else if (data.action === 'loading') { clearTimeout(bootTimer); frameShown.value = true; interactive.value = false; return; }
-      else if (data.action === 'ready') { clearTimeout(bootTimer); frameShown.value = true; interactive.value = true; return; }
+      // Hand keyboard focus to the scene so manor shortcuts work without a first click.
+      else if (data.action === 'ready') { clearTimeout(bootTimer); frameShown.value = true; interactive.value = true; frame.value?.focus({ preventScroll: true }); return; }
       else if (data.action === 'get') {
         if (initialRead) await initialRead;
         if (!current(g)) return;

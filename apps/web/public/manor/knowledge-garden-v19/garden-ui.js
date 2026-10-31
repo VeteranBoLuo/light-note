@@ -166,21 +166,45 @@ function resPill(action, res, icon, value, label) {
 function tankIcon() {
   return `<svg viewBox="0 0 48 48" aria-hidden="true"><rect x="6" y="12" width="36" height="26" rx="5" fill="#bfeaf2" stroke="#5aa6b8" stroke-width="2.5"/><path d="M7 20h34" stroke="#ffffff" stroke-width="2" opacity=".7"/><path d="M15 29c3-4 8-4 11 0-3 4-8 4-11 0Zm11 0 5-3v6Z" fill="#f08a3c"/><rect x="10" y="38" width="28" height="4" rx="2" fill="#c9b48c"/></svg>`;
 }
+// 电脑端快捷键沿用常见游戏键位：B 背包、P 商店、C 图鉴（Collection）、J 任务（Journal）。
+// 按物理键位匹配，中文输入法开着也能用；面板开着时同键收起、异键切换。
+const HOTKEYS = [
+{ code: "KeyB", key: "B", action: "bag", name: "背包", shown: (d) => d.dataset.family === "inventory-dialog", open: () => FarmUI.bagDialog(state.discoveryGuide === "place" ? "fish" : undefined, null) },
+{ code: "KeyP", key: "P", action: "stall", name: "商店", shown: (d) => d.dataset.family === "farm-shop-dialog", open: () => FarmUI.shopDialog() },
+{ code: "KeyC", key: "C", action: "atlas", name: "图鉴", shown: (d) => d.dataset.family === "atlas-dialog" || !!d.querySelector('.dialog-close[data-dialog-back="atlas"]'), open: () => atlasDialog() },
+{ code: "KeyJ", key: "J", action: "daily", name: "每日任务", shown: (d) => d.dataset.syncView === "daily", open: () => dailyDialog() }];
+
+const hotkeyOf = (action) => HOTKEYS.find((h) => h.action === action)?.key;
+function manorHotkey(e) {
+  const hotkey = HOTKEYS.find((h) => h.code === e.code);
+  if (!hotkey || e.repeat || e.ctrlKey || e.metaKey || e.altKey || e.shiftKey || e.isComposing) return false;
+  if (view !== "tree" || e.target.closest?.("input,textarea,select,[contenteditable]")) return false;
+  // 引导、抛竿和收获展示期间点击也不响应这些入口，按键保持一致
+  if (!state.adopted || state.guide || state.casting || $(".catch-reveal")) return false;
+  e.preventDefault();
+  if (!$("#modal").hidden) {
+    const shown = hotkey.shown($("#dialog"));
+    closeDialog();
+    if (shown) return true;
+  }
+  hotkey.open();
+  return true;
+}
 function hudHTML() {
   const info = M.levelInfo(state.xp);
   const done = state.dailyDone.filter(Boolean).length;
   const rewardReady = M.pendingDailyWater(state).length;
   const pending = M.pendingLevelRewards(state).length;
   const pct = info.next ? (state.xp - info.at) / (info.next - info.at) * 100 : 100;
-  return `<button class="hud-back" data-action="exit" title="返回轻笺" aria-label="返回轻笺"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></button><div class="hud-identity"><button class="hud-stage" data-action="level" title="${pending ? pending + " 级奖励待领取" : "查看成长奖励"}" aria-label="庄园 Lv.${info.lv}，查看等级"><span class="hud-stage-name"><span class="hud-garden-badge" aria-hidden="true">${FarmArt.ui("crest")}</span><span id="phaseLabel"><span class="hud-manor-name">庄园 </span>Lv.${info.lv}</span>${pending ? `<span class="level-hud-pending" aria-label="${pending} 级奖励待领取">${pending}</span>` : ""}</span><span class="hud-growth"><span class="hud-growth-bar"><i id="hudGrowthBar" style="width:${pct}%"></i></span><span class="hud-growth-num">${info.next ? `<b id="hudGrowthNum">${state.xp - info.at}</b> / ${info.next - info.at}` : "已满级"}</span></span></button></div>${!isMobileView() ? `<nav class="game-dock" aria-label="庄园操作" id="gameTools">${dockHTML()}</nav>` : ""}<div class="hud-right"><div class="hud-resources" role="group" aria-label="资源"><button class="res-pill water" data-action="daily" aria-label="水滴 ${state.water} / ${R.waterCap}，通过每日任务和海水过滤器补水">${toolSprite("water")}<b id="waterCount">${state.water}</b><small>/ ${R.waterCap}</small></button><button class="res-pill" data-action="ledger" data-res="points" aria-label="积分 ${state.wallet}">${FarmArt.ui("coin", "res-icon")}<b id="wallet">${state.wallet}</b><small>积分</small></button></div><div class="hud-utils"><button class="util-btn ${rewardReady ? "has-reward" : ""}" data-action="daily" aria-label="每日任务 ${done}/3${rewardReady ? "，有奖励可领取" : ""}">${toolSprite("daily")}<span>任务</span><b>${done}/3</b></button><button class="util-btn plain" data-action="memories" aria-label="庄园日记，相伴 ${M.day(state)} 天"><span class="util-days"><b id="companionDays">${M.day(state)}</b> 天</span><span>相伴</span></button><button class="util-btn round" data-action="rules" aria-label="庄园玩法说明">?</button></div></div>${document.getElementById("manor-icon-assets") && GardenLive.canTest ? `<button class="hud-reset util-btn round${GardenLive.testing ? " is-testing" : ""}" data-action="reset-test" aria-label="重置测试庄园" title="${GardenLive.testing ? "测试存档：重置或返回正式庄园" : "从初始引导开始测试"}"><img src="${manorIcons.reset}" alt="" draggable="false">${GardenLive.testing ? "<small>测试中</small>" : ""}</button>` : ""}<button class="hud-more" data-action="manor-menu" aria-label="更多：任务、日记和帮助">${manorIcons?.more ? `<img src="${manorIcons.more}" alt="" draggable="false">` : "···"}${rewardReady ? '<i aria-hidden="true"></i>' : ""}</button>`;
+  return `<button class="hud-back" data-action="exit" title="返回轻笺" aria-label="返回轻笺"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></button><div class="hud-identity"><button class="hud-stage" data-action="level" title="${pending ? pending + " 级奖励待领取" : "查看成长奖励"}" aria-label="庄园 Lv.${info.lv}，查看等级"><span class="hud-stage-name"><span class="hud-garden-badge" aria-hidden="true">${FarmArt.ui("crest")}</span><span id="phaseLabel"><span class="hud-manor-name">庄园 </span>Lv.${info.lv}</span>${pending ? `<span class="level-hud-pending" aria-label="${pending} 级奖励待领取">${pending}</span>` : ""}</span><span class="hud-growth"><span class="hud-growth-bar"><i id="hudGrowthBar" style="width:${pct}%"></i></span><span class="hud-growth-num">${info.next ? `<b id="hudGrowthNum">${state.xp - info.at}</b> / ${info.next - info.at}` : "已满级"}</span></span></button></div>${!isMobileView() ? `<nav class="game-dock" aria-label="庄园操作" id="gameTools">${dockHTML()}</nav>` : ""}<div class="hud-right"><div class="hud-resources" role="group" aria-label="资源"><button class="res-pill water" data-action="daily" aria-label="水滴 ${state.water} / ${R.waterCap}，通过每日任务和海水过滤器补水">${toolSprite("water")}<b id="waterCount">${state.water}</b><small>/ ${R.waterCap}</small></button><button class="res-pill" data-action="ledger" data-res="points" aria-label="积分 ${state.wallet}">${FarmArt.ui("coin", "res-icon")}<b id="wallet">${state.wallet}</b><small>积分</small></button></div><div class="hud-utils"><button class="util-btn ${rewardReady ? "has-reward" : ""}" data-action="daily" title="每日任务（${hotkeyOf("daily")}）" aria-keyshortcuts="${hotkeyOf("daily")}" aria-label="每日任务 ${done}/3${rewardReady ? "，有奖励可领取" : ""}">${toolSprite("daily")}<span>任务</span><b>${done}/3</b></button><button class="util-btn plain" data-action="memories" aria-label="庄园日记，相伴 ${M.day(state)} 天"><span class="util-days"><b id="companionDays">${M.day(state)}</b> 天</span><span>相伴</span></button><button class="util-btn round" data-action="rules" aria-label="庄园玩法说明">?</button></div></div>${document.getElementById("manor-icon-assets") && GardenLive.canTest ? `<button class="hud-reset util-btn round${GardenLive.testing ? " is-testing" : ""}" data-action="reset-test" aria-label="重置测试庄园" title="${GardenLive.testing ? "测试存档：重置或返回正式庄园" : "从初始引导开始测试"}"><img src="${manorIcons.reset}" alt="" draggable="false">${GardenLive.testing ? "<small>测试中</small>" : ""}</button>` : ""}<button class="hud-more" data-action="manor-menu" aria-label="更多：任务、日记和帮助">${manorIcons?.more ? `<img src="${manorIcons.more}" alt="" draggable="false">` : "···"}${rewardReady ? '<i aria-hidden="true"></i>' : ""}</button>`;
 }
 // 底栏：图标 + 名称两层；养鱼舱入住数写在图标右下角的小牌子上（背包不写数字：种子和仓库两种数会被误读），
 // 完整说明在按钮的读屏标签里
 const dockArt = (kind) => `<img class="dock-art" src="knowledge-garden-v19/incoming/dock-r3/${kind}.webp" alt="" draggable="false">`;
 function dockHTML() {
   const waiting = state.fish.filter((f) => !activeFishIds().includes(f.id)).length;
-  const btn = (action, dock, icon, title, detail, chip = "", dot = false) =>
-  `<button class="dock-btn" data-action="${action}" data-dock="${dock}" title="${title}" aria-label="${title}，${detail}${dot ? "，有待处理的内容" : ""}"${dock === "farm" ? ` aria-controls="tankProduction" aria-expanded="${!!$("#tankProduction") && !$("#tankProduction").hidden}" aria-haspopup="dialog"` : ""}><span class="dock-disc">${icon}${chip !== "" ? `<b class="dock-chip" aria-hidden="true">${chip}</b>` : ""}${dot ? '<i class="dock-dot" aria-hidden="true"></i>' : ""}</span><span class="dock-title">${title}</span></button>`;
+  const btn = (action, dock, icon, title, detail, chip = "", dot = false, key = hotkeyOf(action)) =>
+  `<button class="dock-btn" data-action="${action}" data-dock="${dock}" title="${title}${key ? `（${key}）` : ""}"${key ? ` aria-keyshortcuts="${key}"` : ""} aria-label="${title}，${detail}${dot ? "，有待处理的内容" : ""}"${dock === "farm" ? ` aria-controls="tankProduction" aria-expanded="${!!$("#tankProduction") && !$("#tankProduction").hidden}" aria-haspopup="dialog"` : ""}><span class="dock-disc">${icon}${chip !== "" ? `<b class="dock-chip" aria-hidden="true">${chip}</b>` : ""}${dot ? '<i class="dock-dot" aria-hidden="true"></i>' : ""}</span><span class="dock-title">${title}</span></button>`;
   const seeds = Object.values(state.seeds).reduce((a, b) => a + b, 0),
     crops = Object.values(state.crops).reduce((a, b) => a + b, 0);
   const dex = Object.keys(state.discoveries).length + Object.keys(state.cropDex).length,
@@ -233,7 +257,9 @@ function workbenchPage() {
 }
 let helpTab = "plant";
 function rulesContent() {
-  const tabs = [["plant", "种植"], ["fish", "钓鱼"], ["tank", "养鱼"], ["facilities", "设施"], ["points", "积分"], ["collection", "收藏"]];
+  // 手机没有实体键盘，按键页只在电脑端出现
+  const tabs = [["plant", "种植"], ["fish", "钓鱼"], ["tank", "养鱼"], ["facilities", "设施"], ["points", "积分"], ["collection", "收藏"], ...(isMobileView() ? [] : [["keys", "按键"]])];
+  const tab = tabs.some(([key]) => key === helpTab) ? helpTab : "plant";
   const card = (n, title, body) => `<section class="help-step"><span>${n}</span><div><h3>${title}</h3><p>${body}</p></div></section>`;
   const cropCards = Object.values(M.CROPS).map((c) => `<article class="help-crop"><strong>${c.name}</strong><span>${c.first} 小时${c.sell === null ? "盛开" : "首收"}${c.harvests > 1 ? ` · 每 ${c.every} 小时再收，共 ${c.harvests} 轮` : ""}</span><small>${c.price === null ? "奖励种子" : `种子 ${c.price} 积分 · Lv.${c.unlock}`} · ${c.sell === null ? "长久观赏" : `每份卖 ${c.sell} 积分`}</small></article>`).join("");
   const pages = {
@@ -242,9 +268,10 @@ function rulesContent() {
     tank: card("1", "安排入住", `6 个产肥位住鱼，3 个观赏位住其他水族。产肥鱼每 ${R.productionHours} 小时产 1 份，最多储存 ${R.storageLimit} 份，存满暂停。`) + card("2", "打开养鱼管理", "点菜单或场景中的养鱼舱展开管理面板，查看产肥进度并领取；再点一次即可收起。") + card("3", "把肥料撒在正在长的作物上", "常见 / 稀有 / 珍稀 / 传说鱼分别产 1 / 2 / 3 / 4 小时催熟肥。每轮最多缩短一半生长时间；换鱼会重置该位进度。") + `<p class="help-note">兔子每天留一份有机肥，可催熟 30 分钟；麻雀每天带一颗小萝卜种子。点小路上的礼物拾取，未领取的天数不累积。</p>`,
     points: card("1", "日常任务补水", `轻笺每日任务每完成 1 项可领取 ${R.dailyWater} 滴水，三项全部完成再领 ${R.dailyWaterBonus} 滴，每天共 ${R.dailyWater * 3 + R.dailyWaterBonus} 滴。水滴不单独出售，最多存 ${R.waterCap} 滴；装不下的部分可在当日稍后领取。商店可建造一台海水过滤器，随等级每天另收 ${R.purifierWater}–${R.purifierLevels[2].water} 滴水，未领的旧水不跨天累积。`) + card("2", "种子花积分，收获赚积分", "商店出售基础和进阶种子。稀有种子来自等级、连签、挑战、收藏等奖励；收获后的作物和多余水族可卖积分。") + card("3", "按自己的节奏经营", "没有每日、每周积分上限。收益受土地、水滴、生长与产肥时间约束；多照看可以多收一些。玉米也能留着换鱼饵。") + `<p class="help-note">当前 ${state.wallet} 积分 · 具体收支可点顶部积分查看。</p>`,
     facilities: card("1", "诱饵工坊 · Lv.6", `180 积分建造。每份普通鱼饵加一份小番茄或生菜，分别制作果香引鱼饵或草木觅贝饵，偏向鱼类或底栖水族，基础上钩率仍为 ${R.success * 100}%，参与连续空竿保底。每批 1–3 份，用时 2 小时，完成后留在工坊等你收好。`) + card("2", "花园蜂箱 · Lv.6", `160 积分建造。薰衣草一束补 ${M.FACILITY_RULES.flowerPollen.lavender} 份花粉，向日葵 ${M.FACILITY_RULES.flowerPollen.sunflower} 份，迷迭香 ${M.FACILITY_RULES.flowerPollen.rosemary} 份，最多存 ${M.FACILITY_RULES.pollenCapacity} 份。每天可选一株浇过水、正在生长的普通复收作物，消耗 1 份花粉，让下一次收获多 1 份；每株仅一次，不额外增加经验。`) + card("3", "海水过滤器 · Lv.8", "240 积分建造，每天收 6 滴水。Lv.12 可花 180 积分并消耗 4 只常见海水底栖水族，升为每天 8 滴；Lv.18 再花 360 积分并消耗 2 只稀有海水底栖水族，升为每天 10 滴。材料从待养区手动选择，可混种，图鉴保留。") + '<p class="help-note">每种设施限建一台，未建时封存。制作鱼饵和补充花粉会消耗材料；每天先用免费垂钓次数，之后才消耗选定的鱼饵。</p>',
-    collection: card("1", "认识作物和水族", "首次收获作物、发现水族会点亮图鉴，也会增加庄园经验。买种子、浇水和铲除不增加经验。") + card("2", "每升一级都有礼物", "每级一份成长补给，每 5 级一份丰盛礼包。点顶部等级看奖励用途，再去背包使用。") + card("3", "留意庄园的小伙伴", "轻触兔子会回应，点附近草地可以引它跳过去；码头的青蛙也能互动。图鉴的庄园成就还有种子与称号奖励。")
+    collection: card("1", "认识作物和水族", "首次收获作物、发现水族会点亮图鉴，也会增加庄园经验。买种子、浇水和铲除不增加经验。") + card("2", "每升一级都有礼物", "每级一份成长补给，每 5 级一份丰盛礼包。点顶部等级看奖励用途，再去背包使用。") + card("3", "留意庄园的小伙伴", "轻触兔子会回应，点附近草地可以引它跳过去；码头的青蛙也能互动。图鉴的庄园成就还有种子与称号奖励。"),
+    keys: `<div class="help-keys">${HOTKEYS.map((h) => `<div><kbd>${h.key}</kbd><span>打开${h.name}</span></div>`).join("")}<div class="wide"><kbd>Esc</kbd><span>关闭弹窗，或放下手里的工具</span></div></div><p class="help-note">面板开着时再按同一个键收起，按其他键直接切换。鼠标停在顶部的背包、商店、图鉴和任务按钮上，也会显示对应按键。</p>`
   };
-  return `<nav class="help-tabs" aria-label="玩法分类">${tabs.map(([key, label]) => `<button data-action="help-tab" data-tab="${key}" aria-pressed="${helpTab === key}">${label}</button>`).join("")}</nav><div class="help-content">${pages[helpTab]}</div><p class="help-demo">${GardenLive.testing ? "测试庄园使用独立积分和库存，可随时返回正式庄园。" : "庄园与轻笺共用积分，购买与出售实时记账。"}</p>`;
+  return `<nav class="help-tabs" aria-label="玩法分类">${tabs.map(([key, label]) => `<button data-action="help-tab" data-tab="${key}" aria-pressed="${tab === key}">${label}</button>`).join("")}</nav><div class="help-content">${pages[tab]}</div><p class="help-demo">${GardenLive.testing ? "测试庄园使用独立积分和库存，可随时返回正式庄园。" : "庄园与轻笺共用积分，购买与出售实时记账。"}</p>`;
 }
 function discoveryStep() {
   const step = state.discoveryGuide === "observe" && state.fishSlots.some((slot) => farmFish(slot)) ? "observe" :
@@ -1298,7 +1325,7 @@ function init() {
         break;
       case "manor-menu":manorMenu();break;
       case "help-tab":
-        if (!["plant", "fish", "tank", "facilities", "points", "collection"].includes(b.dataset.tab)) break;
+        if (!["plant", "fish", "tank", "facilities", "points", "collection", "keys"].includes(b.dataset.tab)) break;
         helpTab = b.dataset.tab;
         if (view === "rules") render();else {rulesDialog();$("#dialog .dialog-body").scrollTop = 0;}
         break;
@@ -1526,6 +1553,7 @@ function init() {
     if (e.target === $("#modal")) backFromDialog();
   });
   document.addEventListener("keydown", (e) => {
+    if (manorHotkey(e)) return;
     if ($("#modal").hidden) {
       if (e.key === "Escape") {
         document.documentElement.classList.remove("kbd-nav");

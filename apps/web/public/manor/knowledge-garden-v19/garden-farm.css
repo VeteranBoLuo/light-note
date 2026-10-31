@@ -1379,6 +1379,11 @@ html.light-note-mobile-rendering .seaside-courtyard.farm-staged .hud-more { disp
 .help-crop { display: flex; flex-direction: column; gap: calc(4px * var(--d)); border-top: 1px solid #e8d8b7; padding-top: calc(8px * var(--d)); color: #7b6340; font-size: calc(12px * var(--d)); line-height: 1.6; }
 .help-crop strong { font-size: calc(14px * var(--d)); color: #614a27; }
 .help-crop small { font-size: inherit; }
+/* 按键页：键帽加厚下沿，像实体按键；每格一个入口，Esc 独占一行 */
+.help-keys { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: calc(10px * var(--d)); }
+.help-keys > div { display: flex; align-items: center; gap: calc(12px * var(--d)); padding: calc(10px * var(--d)) calc(12px * var(--d)); border: 1px solid #e1c99b; border-radius: calc(10px * var(--d)); background: #fffaf0; color: #63451f; font-size: calc(14px * var(--d)); }
+.help-keys > .wide { grid-column: 1 / -1; }
+.help-keys kbd { display: inline-grid; place-items: center; box-sizing: border-box; min-width: calc(34px * var(--d)); height: calc(32px * var(--d)); padding: 0 calc(8px * var(--d)); border: 1px solid #c9a86c; border-bottom-width: calc(3px * var(--d)); border-radius: calc(7px * var(--d)); background: #fff; color: #63451f; font: 700 calc(14px * var(--d))/1 ui-monospace, SFMono-Regular, Menlo, monospace; }
 .help-demo { margin: auto 0 0; padding-top: calc(20px * var(--d)); color: #9a8a6a; font-size: calc(11px * var(--d)); }
 .light-note-mobile-rendering #modal .help-dialog .dialog-body { padding: 14px; }
 .light-note-mobile-rendering .help-tabs { gap: 5px; }
