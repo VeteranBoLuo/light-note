@@ -799,7 +799,7 @@ const GardenCritters = (() => {
       if(waterAnimals()){
         ctx.save();
         ctx.translate(fly.x, fly.y);
-        const FL = unit() * 0.75;
+        const FL = unit() * 0.55;
         ctx.scale(FL, FL);
         drawDragonfly(ctx, fly, t);
         ctx.restore();
