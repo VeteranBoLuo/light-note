@@ -12,8 +12,19 @@ export function normalizeOrganizableResourceType(value, { allowAll = true } = {}
   return allowAll ? 'all' : '';
 }
 
+/**
+ * resource_tag_relations.resource_id 是 utf8 列；note.id（utf8mb4）和 files.id（int）直接比较会让 idx_resource 失效，
+ * 每个资源都要遍历用户全部标签。转换写法与每日回顾候选查询一致。
+ */
+function relationResourceIdExpression(resourceType, alias) {
+  if (resourceType === 'note') return `CONVERT(${alias}.id USING utf8)`;
+  if (resourceType === 'file') return `CONVERT(CAST(${alias}.id AS CHAR) USING utf8)`;
+  return `${alias}.id`;
+}
+
 /** 资源中心与整理中心共用同一份“有效标签 / 无标签”判定。 */
 export function appendResourceTagFilters({ where, params, alias, resourceType, tagNames, untagged, userId }) {
+  const resourceId = relationResourceIdExpression(resourceType, alias);
   if (tagNames.length) {
     where.push(`
       EXISTS (
@@ -21,7 +32,7 @@ export function appendResourceTagFilters({ where, params, alias, resourceType, t
         FROM resource_tag_relations selected_rel
         INNER JOIN tag selected_tag ON selected_tag.id = selected_rel.tag_id
         WHERE selected_rel.resource_type = ?
-          AND selected_rel.resource_id = ${alias}.id
+          AND selected_rel.resource_id = ${resourceId}
           AND selected_rel.user_id = ?
           AND selected_tag.user_id = ?
           AND selected_tag.del_flag = 0
@@ -37,7 +48,7 @@ export function appendResourceTagFilters({ where, params, alias, resourceType, t
         FROM resource_tag_relations untagged_rel
         INNER JOIN tag untagged_tag ON untagged_tag.id = untagged_rel.tag_id
         WHERE untagged_rel.resource_type = ?
-          AND untagged_rel.resource_id = ${alias}.id
+          AND untagged_rel.resource_id = ${resourceId}
           AND untagged_rel.user_id = ?
           AND untagged_tag.user_id = ?
           AND untagged_tag.del_flag = 0

@@ -71,7 +71,12 @@ describe('resourceInbox', () => {
     expect(pageSql).toContain('r.user_id = i.user_id');
     expect(pageSql).toContain('LIMIT ? OFFSET ?');
     expect(pageSql).not.toContain('r.title, r.summary, r.detail');
-    expect(connection.query.mock.calls[0][1]).toEqual(['u1', 'note', '%会议%', '%会议%', 2, 0]);
+    // 联合子查询的每个分支先按所有者过滤，不读取其他用户的资源。
+    expect(pageSql).toContain('b.user_id = ? AND b.del_flag = 0');
+    expect(pageSql).toContain('n.create_by = ? AND n.del_flag = 0');
+    expect(pageSql).toContain('f.create_by = ? AND f.del_flag = 0');
+    expect(connection.query.mock.calls[0][1]).toEqual(['u1', 'u1', 'u1', 'u1', 'note', '%会议%', '%会议%', 2, 0]);
+    expect(connection.query.mock.calls[1][1]).toEqual(['u1', 'u1', 'u1', 'u1', 'note', '%会议%', '%会议%']);
     expect(result).toEqual({
       items: [
         {
@@ -118,7 +123,7 @@ describe('resourceInbox', () => {
 
     expect(connection.query).toHaveBeenCalledTimes(1);
     expect(connection.query.mock.calls[0][0]).not.toContain('r.title, r.summary, r.detail');
-    expect(connection.query.mock.calls[0][1]).toEqual(['u1', 6, 0]);
+    expect(connection.query.mock.calls[0][1]).toEqual(['u1', 'u1', 'u1', 'u1', 6, 0]);
     expect(result).toEqual({
       items: [
         {

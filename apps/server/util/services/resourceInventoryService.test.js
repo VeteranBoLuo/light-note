@@ -37,6 +37,10 @@ describe('resourceInventoryService.listUntaggedResources', () => {
     expect(sql).toContain('n.create_by = ?');
     expect(sql).toContain('f.create_by = ?');
     expect(sql).toContain('untagged_tag.del_flag = 0');
+    // 关系表 resource_id 是 utf8：笔记与文件 ID 要转换后比较，idx_resource 才能命中。
+    expect(sql).toContain('untagged_rel.resource_id = b.id');
+    expect(sql).toContain('untagged_rel.resource_id = CONVERT(n.id USING utf8)');
+    expect(sql).toContain('untagged_rel.resource_id = CONVERT(CAST(f.id AS CHAR) USING utf8)');
     expect(sql).toContain("suppression.issue_type = 'untagged.ignore'");
     expect(sql).toContain('b.create_time AS updated_at');
     expect(sql).not.toContain('b.update_time');

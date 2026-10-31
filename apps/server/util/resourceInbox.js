@@ -17,6 +17,8 @@ const INBOX_SORT_SQL = Object.freeze({
   newest: 'i.create_time DESC, i.id DESC',
   oldest: 'i.create_time ASC, i.id ASC',
 });
+// 三个分支各带一个所有者占位符：MySQL 5.7 会物化 UNION 派生表，
+// 不在分支内限定用户就会每次读取全站书签、笔记正文与文件。
 const RESOURCE_UNION_SQL = `
   SELECT CONVERT('bookmark' USING utf8) COLLATE utf8_general_ci AS resource_type,
          CONVERT(CAST(b.id AS CHAR) USING utf8) COLLATE utf8_general_ci AS resource_id,
@@ -25,7 +27,7 @@ const RESOURCE_UNION_SQL = `
          CONVERT(LEFT(COALESCE(b.description, ''), 1000) USING utf8mb4) COLLATE utf8mb4_unicode_ci AS summary,
          CONVERT(b.url USING utf8mb4) COLLATE utf8mb4_unicode_ci AS detail,
          b.create_time AS resource_create_time
-    FROM bookmark b WHERE b.del_flag = 0
+    FROM bookmark b WHERE b.user_id = ? AND b.del_flag = 0
   UNION ALL
   SELECT CONVERT('note' USING utf8) COLLATE utf8_general_ci,
          CONVERT(CAST(n.id AS CHAR) USING utf8) COLLATE utf8_general_ci,
@@ -34,7 +36,7 @@ const RESOURCE_UNION_SQL = `
          CONVERT(LEFT(COALESCE(n.content, ''), 1000) USING utf8mb4) COLLATE utf8mb4_unicode_ci,
          CONVERT(n.type USING utf8mb4) COLLATE utf8mb4_unicode_ci,
          n.create_time
-    FROM note n WHERE n.del_flag = 0
+    FROM note n WHERE n.create_by = ? AND n.del_flag = 0
   UNION ALL
   SELECT CONVERT('file' USING utf8) COLLATE utf8_general_ci,
          CONVERT(CAST(f.id AS CHAR) USING utf8) COLLATE utf8_general_ci,
@@ -43,7 +45,7 @@ const RESOURCE_UNION_SQL = `
          CONVERT(COALESCE(f.file_type, '') USING utf8mb4) COLLATE utf8mb4_unicode_ci,
          CONVERT(CAST(COALESCE(f.folder_id, '') AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci,
          f.create_time
-    FROM files f WHERE f.del_flag = 0`;
+    FROM files f WHERE f.create_by = ? AND f.del_flag = 0`;
 
 const RESOURCE_OWNERSHIP = Object.freeze({
   bookmark: { table: 'bookmark', owner: 'user_id' },
@@ -146,13 +148,14 @@ export async function listInboxResources(db, { userId, ...input } = {}) {
       : `i.resource_type AS resourceType, i.resource_id AS resourceId,
           i.source, i.create_time AS collectedAt,
           r.title, r.summary, r.detail, r.resource_create_time AS resourceCreatedAt`;
+  const fromParams = [ownerId, ownerId, ownerId, ...params];
   const pageSql = `SELECT ${selectedFields}
        ${fromSql}
       ORDER BY ${INBOX_SORT_SQL[sort]}${paginated ? ' LIMIT ? OFFSET ?' : ''}`;
-  const pageParams = paginated ? [...params, limit + 1, offset] : params;
+  const pageParams = paginated ? [...fromParams, limit + 1, offset] : fromParams;
   const [[rows], countResult, counts] = await Promise.all([
     db.query(pageSql, pageParams),
-    includeTotal ? db.query(`SELECT COUNT(*) AS total ${fromSql}`, params) : null,
+    includeTotal ? db.query(`SELECT COUNT(*) AS total ${fromSql}`, fromParams) : null,
     includeCounts ? queryPendingCount(db, ownerId) : null,
   ]);
   const hasMore = paginated && rows.length > limit;
