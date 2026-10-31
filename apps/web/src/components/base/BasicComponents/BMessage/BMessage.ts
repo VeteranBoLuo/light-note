@@ -89,7 +89,7 @@ const message = {
 
   open(config: MessageOpenConfig): () => void {
     ensureMounted();
-    const { content, type = 'info', duration, key, onClose } = config;
+    const { content, type = 'info', duration, key, onClose, closable } = config;
 
     // Dedup by key
     if (key) {
@@ -107,6 +107,7 @@ const message = {
       duration: resolveDuration(type, duration),
       key,
       onClose,
+      closable,
     };
     messageState.messages.push(item);
     if (item.duration > 0) {

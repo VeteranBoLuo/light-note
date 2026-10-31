@@ -17,6 +17,15 @@
             <SvgIcon :src="messageIcons[msg.type]" size="17" />
           </span>
           <span class="b-message-content">{{ msg.content }}</span>
+          <BButton
+            v-if="msg.closable"
+            class="b-message-close"
+            icon-only
+            :aria-label="closeLabel"
+            @click.stop="removeMessage(msg.id)"
+          >
+            <SvgIcon :src="icon.navigation.close" size="14" aria-hidden="true" />
+          </BButton>
         </template>
       </div>
     </div>
@@ -25,12 +34,16 @@
 
 <script lang="ts" setup>
   import BLoading from '../BLoading.vue';
+  import BButton from '../BButton.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon.ts';
+  import i18n from '@/i18n';
   import { messageState, removeMessage } from './messageState';
   import { onBeforeUnmount, onMounted } from 'vue';
 
   const messageIcons = icon.message;
+  // 容器通过 render() 独立挂载，拿不到应用的 i18n 实例，直接读全局实例。
+  const closeLabel = String(i18n.global.t('common.close'));
   const overlayBodyClasses = {
     '.guest-nudge': 'light-note-has-guest-nudge',
     '.guest-browse-nudge': 'light-note-has-guest-browse-nudge',
@@ -148,6 +161,17 @@
   .b-message-info,
   .b-message-loading {
     --message-accent: var(--message-info-color, #615ced);
+  }
+
+  .b-message-close.b_btn {
+    width: var(--ui-control-24, 24px);
+    height: var(--ui-control-24, 24px);
+    flex-shrink: 0;
+    align-self: flex-start;
+    margin: calc(-1 * var(--ui-space-2, 2px)) calc(-1 * var(--ui-space-4, 4px)) 0 0;
+    padding: 0;
+    color: var(--desc-color);
+    background: transparent;
   }
 
   .b-message-content {

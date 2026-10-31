@@ -10,7 +10,8 @@ import type { FeaturedFeatureItem } from '@/utils/featureShortcuts';
 /** 目标页晚于该时长仍未接住动作，就视为该页面不处理（如手机端没有对应按钮），改为显示提示。 */
 const INTENT_TTL_MS = 8000;
 const INTENT_FALLBACK_DELAY_MS = 600;
-const HINT_DURATION_MS = 7000;
+/** 提示要读完再动手，停留更久并提供关闭按钮。 */
+const HINT_DURATION_S = 10;
 const FEATURED_CACHE_MS = 5 * 60 * 1000;
 
 interface PendingIntent {
@@ -66,7 +67,13 @@ export async function runFeatureShortcut(feature: FeatureShortcutDefinition, rou
       if (pendingIntent.value?.token !== token) return;
       pendingIntent.value = null;
     }
-    message.info(translate(`featureShortcut.items.${feature.key}.hint`), HINT_DURATION_MS);
+    message.open({
+      type: 'info',
+      content: translate(`featureShortcut.items.${feature.key}.hint`),
+      duration: HINT_DURATION_S,
+      key: `feature-shortcut-hint-${feature.id}`,
+      closable: true,
+    });
   }, INTENT_FALLBACK_DELAY_MS);
 }
 

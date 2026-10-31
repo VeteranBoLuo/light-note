@@ -3,12 +3,12 @@ import { createApp, defineComponent, h, KeepAlive, nextTick, ref } from 'vue';
 import { getFeatureShortcut } from '@/config/featureShortcuts';
 
 const mocks = vi.hoisted(() => ({
-  info: vi.fn(),
+  open: vi.fn(),
   getFeatured: vi.fn(),
   saveFeatured: vi.fn(),
 }));
 
-vi.mock('@/components/base/BasicComponents/BMessage/BMessage', () => ({ default: { info: mocks.info } }));
+vi.mock('@/components/base/BasicComponents/BMessage/BMessage', () => ({ default: { open: mocks.open } }));
 vi.mock('@/api/commonApi', () => ({ recordOperation: vi.fn() }));
 vi.mock('@/api/updateLogApi', () => ({
   getFeaturedFeatures: mocks.getFeatured,
@@ -65,13 +65,19 @@ describe('功能直达动作', () => {
     expect(router.push).toHaveBeenCalledWith({ path: '/manage/bookmarkMg' });
     expect(handler).toHaveBeenCalledTimes(1);
     vi.advanceTimersByTime(1000);
-    expect(mocks.info).not.toHaveBeenCalled();
+    expect(mocks.open).not.toHaveBeenCalled();
   });
 
-  it('没有页面接住时显示提示，之后挂载的页面不会再补执行', async () => {
+  it('没有页面接住时显示可关闭的提示（时长单位是秒），之后挂载的页面不会再补执行', async () => {
     await runFeatureShortcut(getFeatureShortcut('ai-organize')!, router, '');
     vi.advanceTimersByTime(700);
-    expect(mocks.info).toHaveBeenCalledWith('featureShortcut.items.aiOrganize.hint', 7000);
+    expect(mocks.open).toHaveBeenCalledWith({
+      type: 'info',
+      content: 'featureShortcut.items.aiOrganize.hint',
+      duration: 10,
+      key: 'feature-shortcut-hint-ai-organize',
+      closable: true,
+    });
     const handler = vi.fn();
     mountWithIntent(handler);
     await nextTick();
@@ -97,7 +103,7 @@ describe('功能直达动作', () => {
     await runFeatureShortcut(getFeatureShortcut('trash')!, router, '');
     vi.advanceTimersByTime(1000);
     expect(router.push).toHaveBeenCalledWith({ path: '/trash' });
-    expect(mocks.info).not.toHaveBeenCalled();
+    expect(mocks.open).not.toHaveBeenCalled();
   });
 });
 
