@@ -171,6 +171,7 @@
         :quests="dailyGrowthQuests"
         :bonus="dailyGrowthBonus"
         :read-only="growthReadOnly"
+        :manor="dailyQuestManor"
         :show-claim-action="false"
         @go="handleDailyQuestAction"
       />
@@ -219,6 +220,7 @@
   import { useAndroidPullRefresh } from '@/composables/useAndroidPullRefresh';
   import { useForegroundRefresh } from '@/composables/useForegroundRefresh';
   import { resolveDailyQuestRoute } from '@/utils/growthNavigation';
+  import { useManorAttention } from '@/composables/useManorAttention';
 
   interface TodayInboxItem {
     resourceType: 'bookmark' | 'note' | 'file';
@@ -236,6 +238,7 @@
   }
 
   const { t, locale } = useI18n();
+  const { visibleAttention: dailyQuestManor } = useManorAttention();
   const router = useRouter();
   const inbox = inboxStore();
   const organizer = organizeStore();

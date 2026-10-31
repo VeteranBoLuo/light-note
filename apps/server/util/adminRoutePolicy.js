@@ -22,6 +22,7 @@ declare(ADMIN_POLICIES.ADMIN_ONLY, 'manor_admin', [
 // Manor actions always use the real account and its shared points balance.
 declare(ADMIN_POLICIES.ACCOUNT_WRITE, 'manor', [
   ['GET', '/growth/manor'],
+  ['GET', '/growth/manor/attention'],
   ['POST', '/growth/manor/commands'],
 ]);
 

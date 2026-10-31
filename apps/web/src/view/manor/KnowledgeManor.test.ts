@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
   save: vi.fn(),
   growth: vi.fn(async (_force?: boolean) => {}),
   inventory: vi.fn(async () => {}),
+  attention: vi.fn(async (_force?: boolean) => {}),
 }));
 vi.mock('@/store', () => ({ useUserStore: () => mocks.user, bookmarkStore: () => mocks.bookmark }));
 vi.mock('@/api/manorApi', () => ({ getManor: mocks.read, runManorCommand: mocks.command }));
@@ -22,6 +23,7 @@ vi.mock('@/composables/useGrowth', () => ({
   useGrowth: () => ({ load: mocks.growth, loadInventory: mocks.inventory }),
 }));
 vi.mock('@/composables/useMobileTopBar', () => ({ useMobileTopBar: () => {} }));
+vi.mock('@/composables/useManorAttention', () => ({ refreshManorAttention: mocks.attention }));
 vi.mock('@/components/home/navigation/Navigation.vue', () => ({ default: { render: () => h('nav', { 'aria-label': '轻笺导航' }, '轻笺导航') } }));
 vi.mock('vue-i18n', () => ({ useI18n: () => ({ t: (key: string) => key }) }));
 vi.mock('@/utils/manorPending', async importOriginal => ({
@@ -94,6 +96,12 @@ describe('庄园加载与主站导航', () => {
     const notice=document.querySelector('.knowledge-manor__maintenance');
     expect(notice?.textContent).toBe('<b>测试维护</b>');
     expect(notice?.querySelector('b')).toBeNull();
+  });
+  it('离开庄园时强制复读入口提醒，刚领完的水滴和收获不会继续亮红点',async()=>{
+    await mount();
+    expect(mocks.attention).not.toHaveBeenCalled();
+    app?.unmount();app=undefined;
+    expect(mocks.attention).toHaveBeenCalledWith(true);
   });
   it('服务端规则与当前页面不兼容时明确要求刷新页面',async()=>{
     mocks.read.mockRejectedValueOnce({code:'MANOR_VERSION_UNSUPPORTED',status:409});

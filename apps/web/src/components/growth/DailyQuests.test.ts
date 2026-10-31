@@ -28,6 +28,9 @@ function mountBonus(
     dailyCapReached?: boolean;
     showClaimAction?: boolean;
     allDone?: boolean;
+    manor?: Record<string, unknown> | null;
+    readOnly?: boolean;
+    onGo?: (key: string) => void;
   } = {},
 ) {
   const host = document.createElement('div');
@@ -54,6 +57,9 @@ function mountBonus(
         dailyCap: options.dailyCap ?? 200,
         dailyCapReached: options.dailyCapReached ?? false,
         showClaimAction: options.showClaimAction ?? true,
+        manor: options.manor ?? null,
+        readOnly: options.readOnly ?? false,
+        onGo: options.onGo,
       }),
   });
   app.directive('click-log', {});
@@ -188,6 +194,40 @@ describe('每日任务阶梯奖励', () => {
   it('外层已提供一键领取时可以隐藏重复的单项领取入口', () => {
     const result = mountBonus({ exp: 0, points: 15, claimed: false, claimable: true }, { showClaimAction: false });
     expect(result.claimAction).toBeNull();
+  });
+});
+
+describe('每日任务里的庄园水滴', () => {
+  const bonus = { exp: 0, points: 0, claimed: false, claimable: false };
+  const manor = { fresh: false, water: 0, ripe: 0, rewards: 0, perTask: 5, bonus: 5 };
+  const manorRow = () => document.querySelector('.dq-manor');
+
+  it('没有庄园提醒数据时不显示水滴行', () => {
+    mountBonus(bonus);
+    expect(manorRow()).toBeNull();
+  });
+
+  it('说明每项任务换多少水滴，没有可领时不放按钮', () => {
+    mountBonus(bonus, { manor });
+    expect(manorRow()?.textContent).toContain('每完成 1 项 +5 滴，全部完成再 +5 滴');
+    expect(manorRow()?.querySelector('.dq-go')).toBeNull();
+  });
+
+  it('有可领水滴时按钮写明数量，点击交给页面跳转到庄园', () => {
+    const onGo = vi.fn();
+    mountBonus(bonus, { manor: { ...manor, water: 10 }, onGo });
+    expect(manorRow()?.classList.contains('claimable')).toBe(true);
+    expect(manorRow()?.querySelector('.dq-go')?.textContent?.trim()).toBe('领取 10 滴');
+    (manorRow()?.querySelector('.dq-go') as HTMLButtonElement).click();
+    expect(onGo).toHaveBeenCalledWith('manor');
+  });
+
+  it('从没进过庄园时邀请去看看；只读视图不放按钮', () => {
+    mountBonus(bonus, { manor: { ...manor, fresh: true } });
+    expect(manorRow()?.querySelector('.dq-go')?.textContent?.trim()).toBe('去看看');
+    cleanup?.();
+    mountBonus(bonus, { manor: { ...manor, water: 10 }, readOnly: true });
+    expect(manorRow()?.querySelector('.dq-go')).toBeNull();
   });
 });
 

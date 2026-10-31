@@ -31,6 +31,7 @@
   import { closeCurrentMobileOverlayThen, registerMobileOverlayHistory, releaseMobileOverlayHistory, type MobileOverlayHistoryHandle } from '@/utils/mobileOverlayHistory';
   import { randomRequestId } from '@/utils/randomRequestId';
   import { manorBrowserSupported } from '@/utils/manorAccess';
+  import { refreshManorAttention } from '@/composables/useManorAttention';
 
   const user = useUserStore(), bookmark = bookmarkStore(), router = useRouter(), growth = useGrowth();
   const { t } = useI18n();
@@ -301,6 +302,8 @@
   watch(() => [user.id, user.role, Boolean(user.adminContext)], () => { void initialise(); });
   onMounted(() => { window.addEventListener('message', message); document.addEventListener('visibilitychange', armBootTimer); void initialise(); });
   onBeforeUnmount(() => { navigationCheck?.resolve(false); disposed = true; ++generation; readController.abort(); clearTimeout(bootTimer); window.removeEventListener('message', message); document.removeEventListener('visibilitychange', armBootTimer); releaseMobileOverlayHistory(overlay); });
+  // Water, harvests and gifts collected inside change the entry badge; re-read it on the way out.
+  onBeforeUnmount(() => void refreshManorAttention(true));
 </script>
 
 <style scoped>

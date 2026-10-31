@@ -9,6 +9,7 @@ vi.mock('../points.js', () => ({ earnPoints: vi.fn() }));
 vi.mock('../growthPreferences.js', () => ({ getGrowthCalendarContext: async () => ({ dayKey:'20261024', weekKey:'202643', utcOffsetMinutes:480 }) }));
 vi.mock('../weeklyChallenge.js', () => ({ getWeeklyChallenges: async () => ({ challenges: [{ done:false }] }) }));
 import { createKnowledgeManorService } from './knowledgeManorService.js';
+import { createManor, executeManorCommand, manorModel as M } from '@lightnote/shared/manor';
 
 describe('庄园沿用真实成长进度', () => {
   beforeEach(() => Object.assign(facts, { growth: { points:60, streak:0 }, milestones:[], role:'root', deleted:0 }));
@@ -49,5 +50,36 @@ describe('庄园沿用真实成长进度', () => {
     await expect(read()).resolves.toMatchObject({ revision:0 });
     facts.role='visitor';
     await expect(read()).rejects.toMatchObject({code:'MANOR_ACCOUNT_UNAVAILABLE'});
+  });
+});
+
+describe('庄园入口提醒只统计现在就能收的东西', () => {
+  const NOW = new Date('2026-10-24T02:00:00Z'), calendar = { dayKey:'20261024', weekKey:'202643', utcOffsetMinutes:480 };
+  beforeEach(() => Object.assign(facts, { growth: { points:60, streak:0 }, milestones:[], role:'root', deleted:0 }));
+  const adopted = () => executeManorCommand(createManor({ now:NOW, calendar, points:60 }), { action:'adopt', args:[] },
+    { now:NOW, calendar, points:60, dailyDone:[true,false,false], random:() => 0 }).state;
+  const attention = saved => {
+    const conn = { beginTransaction:vi.fn(), commit:vi.fn(), rollback:vi.fn(), release:vi.fn(), query:async sql => {
+      if(sql.includes('FROM knowledge_manors')) return [saved ? [{ state_json:JSON.stringify(saved) }] : []];
+      if(sql.includes('FROM user WHERE')) return [[{role:facts.role,del_flag:facts.deleted}]];
+      if(sql.includes('FROM points_log')) return [[]];
+      throw new Error('Unexpected SQL');
+    } };
+    return createKnowledgeManorService({ db:{ getConnection:async()=>conn }, now:()=>NOW }).attention('owner');
+  };
+  it('还没领见面礼时只标记新开放，不读成长进度', async () => {
+    await expect(attention(null)).resolves.toEqual({ fresh:true, water:0, ripe:0, rewards:0, perTask:M.RULES.dailyWater, bonus:M.RULES.dailyWaterBonus });
+  });
+  it('已完成任务的水滴按水桶余量计算，成熟地块与等级礼物分别计数', async () => {
+    const s = adopted();
+    s.seeds.radish = 1; M.plant(s, 0, 'radish'); M.water(s, [0]); s.plots[0].next = s.now - 1;
+    s.water = M.RULES.waterCap - 2; s.xp = M.RULES.levels[1];
+    await expect(attention(s)).resolves.toEqual({ fresh:false, water:2, ripe:1, rewards:1, perTask:M.RULES.dailyWater, bonus:M.RULES.dailyWaterBonus });
+  });
+  it('水桶已满或水滴已领完时不再提醒领水', async () => {
+    const full = adopted(); full.water = M.RULES.waterCap;
+    expect((await attention(full)).water).toBe(0);
+    const claimed = adopted(); claimed.dailyWaterClaims = [M.RULES.dailyWater, 0, 0];
+    expect((await attention(claimed)).water).toBe(0);
   });
 });

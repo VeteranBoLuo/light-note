@@ -47,6 +47,10 @@ vi.mock('@/store', () => ({
 }));
 vi.mock('@/composables/useGrowth', () => ({ useGrowth: () => ({ growth, load: loadGrowth }) }));
 vi.mock('@/composables/useMobileGlobalSearch', () => ({ useMobileGlobalSearch: () => ({ openSearch: vi.fn() }) }));
+vi.mock('@/composables/useManorAttention', async () => {
+  const { ref } = await import('vue');
+  return { refreshManorAttention: vi.fn(), useManorAttention: () => ({ reasons: ref([]), entryLabel: ref('manor.title') }) };
+});
 vi.mock('@/components/notification/NotificationBell.vue', () => ({
   default: { name: 'NotificationBellStub', template: '<span class="notification-bell-stub" />' },
 }));

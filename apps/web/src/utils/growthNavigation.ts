@@ -48,5 +48,7 @@ export function resolveDailyQuestRoute(key: string, isMobile: boolean): RouteLoc
     return { path: '/inbox', query: { tab: 'todo' } };
   }
   if (key === 'daily_organize') return resolvePendingResourcesRoute(isMobile);
+  // 每日任务卡里的庄园水滴行：完成任务得到的水滴在庄园里领取。
+  if (key === 'manor') return '/knowledge-manor';
   return null;
 }

@@ -1,13 +1,14 @@
 import express from 'express';
 import * as growthHandle from '../router_handle/growthHandle.js';
 import * as annualReportHandle from '../router_handle/annualReportHandle.js';
-import { getKnowledgeManor, runKnowledgeManorCommand } from '../router_handle/knowledgeManorHandle.js';
+import { getKnowledgeManor, getKnowledgeManorAttention, runKnowledgeManorCommand } from '../router_handle/knowledgeManorHandle.js';
 import * as manorAdmin from '../router_handle/manorAdminHandle.js';
 import { manorReadLimit, manorCommandLimit, manorAdminWriteLimit } from '../util/manorRateLimit.js';
 
 const router = express.Router();
 
 router.get('/manor', manorReadLimit, getKnowledgeManor);
+router.get('/manor/attention', manorReadLimit, getKnowledgeManorAttention);
 router.post('/manor/commands', manorCommandLimit, runKnowledgeManorCommand);
 router.get('/admin/manor/status', manorReadLimit, manorAdmin.getManorAdminStatus);
 router.get('/admin/manor/overview', manorReadLimit, manorAdmin.getManorAdminOverview);

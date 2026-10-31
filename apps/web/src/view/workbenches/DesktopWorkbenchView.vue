@@ -287,6 +287,7 @@
                 :bonus="dailyGrowthBonus"
                 :read-only="growthReadOnly"
                 compact
+                :manor="dailyQuestManor"
                 :show-claim-action="false"
                 @go="handleDailyQuestAction"
               />
@@ -524,6 +525,7 @@
   import type { ActionCaptureType } from '@/store/inbox.ts';
   import { openNotificationPanel } from '@/utils/notificationEntry';
   import { resolveDailyQuestRoute } from '@/utils/growthNavigation';
+  import { useManorAttention } from '@/composables/useManorAttention';
 
   type ContinueTab = 'projects' | 'notes' | 'files' | 'bookmarks';
   type ContinueItemType = 'note' | 'file' | 'bookmark';
@@ -540,6 +542,7 @@
 
   const FilePreview = defineAsyncComponent(() => import('@/components/FilePreview.vue'));
   const { t } = useI18n();
+  const { visibleAttention: dailyQuestManor } = useManorAttention();
   const router = useRouter();
   const user = useUserStore();
   const bookmark = bookmarkStore();

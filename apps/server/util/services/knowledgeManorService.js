@@ -1,6 +1,6 @@
 import { createHash, randomInt } from 'node:crypto';
 import pool from '../../db/index.js';
-import { createManor, executeManorCommand, projectManor, ManorError, MANOR_VERSION } from '@lightnote/shared/manor';
+import { createManor, executeManorCommand, projectManor, ManorError, MANOR_VERSION, manorModel } from '@lightnote/shared/manor';
 import { getGrowth, getDailyQuestState, lockGrowthAccount } from '../growth.js';
 import { earnPoints } from '../points.js';
 import { getGrowthCalendarContext } from '../growthPreferences.js';
@@ -113,7 +113,39 @@ export function createKnowledgeManorService({ db = pool, context = accountContex
       conn.release();
     }
   }
-  return { get, execute };
+  /**
+   * Entry badge summary. It only counts what a returning player can collect right now:
+   * daily-task water that still fits the bucket, ripe plots and level gifts. Steady trickles
+   * such as fish fertilizer stay out so the badge does not glow all day.
+   */
+  async function attention(userId) {
+    const conn = await db.getConnection();
+    try {
+      await conn.beginTransaction();
+      const [[row]] = await conn.query('SELECT state_json FROM knowledge_manors WHERE user_id=?', [userId]);
+      const saved = row ? parsed(row.state_json) : null;
+      // The daily-task card explains the water rule with these numbers instead of copying it.
+      const rule = { perTask: manorModel.RULES.dailyWater, bonus: manorModel.RULES.dailyWaterBonus };
+      if (!saved?.adopted) {
+        await conn.commit();
+        return { fresh: true, water: 0, ripe: 0, rewards: 0, ...rule };
+      }
+      const s = projectManor(saved, await context(conn, userId, now()));
+      await conn.commit();
+      const pending = manorModel.pendingDailyWater(s).reduce((sum, reward) => sum + reward.water, 0);
+      return {
+        fresh: false,
+        water: Math.min(pending, Math.max(0, manorModel.RULES.waterCap - s.water)),
+        ripe: s.plots.filter((_, i) => manorModel.plotState(s, i) === 'ripe').length,
+        rewards: manorModel.pendingLevelRewards(s).length,
+        ...rule,
+      };
+    } catch (error) {
+      await conn.rollback();
+      throw error;
+    } finally { conn.release(); }
+  }
+  return { get, execute, attention };
 }
 
 export const knowledgeManorService = createKnowledgeManorService();

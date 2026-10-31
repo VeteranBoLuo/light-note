@@ -4,9 +4,10 @@
     :class="{ 'phone-top-menu': bookmark.isMobile }"
     :style="{ marginLeft: 'auto', gap: bookmark.isMobile ? '15px' : 'var(--ui-space-5, 5px)' }"
   >
-    <BTooltip v-if="showManorEntry(growth, user.adminContext, locale)" :title="t('manor.title')">
-      <BButton class="workshop-entry-btn" :aria-label="t('manor.title')" @click="manorRouter.push('/knowledge-manor')">
+    <BTooltip v-if="manorEntryVisible" :title="manorEntryLabel">
+      <BButton class="workshop-entry-btn" :aria-label="manorEntryLabel" @click="manorRouter.push('/knowledge-manor')">
         <SvgIcon size="30" :src="icon.manor.entry" />
+        <span v-if="manorReasons.length" class="entry-attention-dot" aria-hidden="true"></span>
       </BButton>
     </BTooltip>
     <GlobalSearch />
@@ -92,7 +93,9 @@
   import { blockGuestWrite } from '@/composables/useGuestGuard';
   import { useI18n } from 'vue-i18n';
   import { showManorEntry } from '@/utils/manorAccess';
-  import { computed, onMounted } from 'vue';
+  import { computed, onMounted, watch } from 'vue';
+  import { refreshManorAttention, useManorAttention } from '@/composables/useManorAttention';
+  import { useForegroundRefresh } from '@/composables/useForegroundRefresh';
   import { useGrowth } from '@/composables/useGrowth.ts';
   import { frameVariant } from '@/config/growthFrames';
   import { isMobileHomeRoute } from '@/utils/preferences.ts';
@@ -108,6 +111,11 @@
     const id = growth.value?.equippedFrame;
     return frameVariant(id) ? id : null;
   });
+  const { reasons: manorReasons, entryLabel: manorEntryLabel } = useManorAttention();
+  const manorEntryVisible = computed(() => showManorEntry(growth.value, user.adminContext, locale.value));
+  // 切页面时顺带复读（组合函数内有间隔），完成每日任务后换个页面就能看到水滴提醒。
+  watch([manorEntryVisible, () => route.path], ([visible]) => visible && void refreshManorAttention(), { immediate: true });
+  useForegroundRefresh({ refresh: () => refreshManorAttention(), staleMs: 60 * 1000, enabled: manorEntryVisible });
   const showQuickCapture = computed(() => !bookmark.isMobile && Boolean(user.id) && user.role !== 'visitor');
   const showMobileHomeExtra = computed(() => bookmark.isMobile && isMobileHomeRoute(route.name, user.preferences));
   const showGuestRegister = computed(() => !user.adminContext && !user.visitorWorkspace && user.role === 'visitor');
@@ -251,6 +259,18 @@
   }
   .workshop-entry-btn.is-active {
     color: var(--primary-color);
+  }
+  /* 庄园有水滴、成熟作物或等级礼物可收时的提醒点，与通知角标同一套实色加底色描边。 */
+  .entry-attention-dot {
+    position: absolute;
+    top: var(--ui-space-3, 3px);
+    right: var(--ui-space-3, 3px);
+    width: var(--ui-space-9, 9px);
+    height: var(--ui-space-9, 9px);
+    border-radius: 50%;
+    background: var(--danger-fill-bg, #d93b3b);
+    box-shadow: 0 0 0 2px var(--background-color);
+    pointer-events: none;
   }
   .quick-capture-btn {
     position: relative;

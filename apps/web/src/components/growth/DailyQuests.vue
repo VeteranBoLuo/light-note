@@ -61,6 +61,23 @@
           }}
         </span>
       </div>
+      <!-- 完成每日任务的另一份奖励在庄园里领取；放进阶梯奖励，让人在做任务的地方就知道水滴从哪来。 -->
+      <div v-if="manor && quests.length" class="dq-stage dq-manor" :class="{ claimable: manor.water > 0 }">
+        <span class="dq-manor-icon" aria-hidden="true"><SvgIcon :src="icon.manor.entry" size="20" /></span>
+        <span class="dq-stage-main">
+          <b>{{ t('growth.questManorTitle') }}</b>
+          <small>{{ t('growth.questManorRule', { n: manor.perTask, bonus: manor.bonus }) }}</small>
+        </span>
+        <BButton
+          v-if="manorAction && !readOnly"
+          size="small"
+          class="dq-go"
+          v-click-log="{ module: '成长', operation: '每日任务前往庄园' }"
+          @click="$emit('go', 'manor')"
+        >
+          {{ manorAction }}
+        </BButton>
+      </div>
     </div>
 
     <aside v-if="showExperienceSources && quests.length" class="dq-exp-guide" role="note">
@@ -140,6 +157,7 @@
   import { computed } from 'vue';
   import { useI18n } from 'vue-i18n';
   import type { Quest, QuestBonus } from '@/composables/useGrowth.ts';
+  import type { ManorAttention } from '@/composables/useManorAttention';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BProgress from '@/components/base/BasicComponents/BProgress.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
@@ -158,6 +176,8 @@
       dailyCap?: number;
       dailyCapReached?: boolean;
       compact?: boolean;
+      /** 庄园入口可见时的提醒数据；为空则不显示庄园水滴行。 */
+      manor?: ManorAttention | null;
     }>(),
     {
       readOnly: false,
@@ -167,6 +187,7 @@
       dailyCap: 0,
       dailyCapReached: false,
       compact: false,
+      manor: null,
     },
   );
   defineEmits<{ (e: 'claim'): void; (e: 'go', key: string): void }>();
@@ -188,6 +209,11 @@
   };
 
   const doneCount = computed(() => props.quests.filter((q) => q.done).length);
+  const manorAction = computed(() => {
+    if (!props.manor) return '';
+    if (props.manor.water > 0) return t('growth.questManorCollect', { n: props.manor.water });
+    return props.manor.fresh ? t('growth.questManorVisit') : '';
+  });
   const allDone = computed(() => props.quests.length > 0 && doneCount.value === props.quests.length);
 
   // 奖励文案同时兼容只有积分的策略版本，避免出现「可领 +0 经验」。
@@ -380,6 +406,19 @@
   .dq-stage-main small {
     color: var(--desc-color);
     font-size: var(--ui-font-10_5, 10.5px);
+  }
+  .dq-manor {
+    grid-column: 1 / -1;
+  }
+  /* 与阶梯奖励的紧凑任务图标同尺寸，标题和上方两行左对齐。 */
+  .dq-manor-icon {
+    display: grid;
+    flex: 0 0 auto;
+    place-items: center;
+    width: var(--ui-layout-26, 26px);
+    height: var(--ui-layout-26, 26px);
+    border-radius: 8px;
+    background: var(--chip-success-bg);
   }
   .dq-stage-state {
     flex: 0 0 auto;

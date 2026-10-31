@@ -58,8 +58,9 @@
     </BButton>
 
     <div v-if="showActions" class="mobile-top-bar__actions">
-      <BButton v-if="!isSecondary && showManorEntry(growthInfo, user.adminContext, locale)" class="mobile-top-bar__action" :aria-label="t('manor.title')" @click="router.push('/knowledge-manor')">
+      <BButton v-if="manorEntryVisible" class="mobile-top-bar__action" :aria-label="manorEntryLabel" @click="router.push('/knowledge-manor')">
         <SvgIcon :src="icon.manor.entry" size="24" aria-hidden="true" />
+        <span v-if="manorReasons.length" class="mobile-top-bar__action-dot" aria-hidden="true"></span>
       </BButton>
       <!-- AI 等自带标题区的页面不放完整搜索框,只给一个放大镜打开同一个搜索层 -->
       <BButton
@@ -111,7 +112,7 @@
 </template>
 
 <script setup lang="ts">
-  import { computed, onMounted } from 'vue';
+  import { computed, onMounted, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { showManorEntry } from '@/utils/manorAccess';
   import { useRoute, useRouter } from 'vue-router';
@@ -123,6 +124,8 @@
   import { frameVariant } from '@/config/growthFrames';
   import { useAndroidAppUpdate } from '@/composables/useAndroidAppUpdate';
   import { useGrowth } from '@/composables/useGrowth';
+  import { useForegroundRefresh } from '@/composables/useForegroundRefresh';
+  import { refreshManorAttention, useManorAttention } from '@/composables/useManorAttention';
   import { getMobileTopBarBinding } from '@/composables/useMobileTopBar';
   import { useMobileGlobalSearch } from '@/composables/useMobileGlobalSearch';
   import { useUserStore } from '@/store';
@@ -148,6 +151,13 @@
   const leadingActionLabel = computed(() => activeBinding.value?.leadingActionLabel?.() || '');
   const showSearch = computed(() => !isSecondary.value && activeBinding.value?.searchMode !== 'icon');
   const showNotification = computed(() => activeBinding.value?.showNotification !== false);
+  const { reasons: manorReasons, entryLabel: manorEntryLabel } = useManorAttention();
+  const manorEntryVisible = computed(
+    () => !isSecondary.value && showManorEntry(growthInfo.value, user.adminContext, locale.value),
+  );
+  // 与 PC 顶栏同一份提醒：切页面顺带复读（组合函数内有间隔），回到前台时补读。
+  watch([manorEntryVisible, () => route.path], ([visible]) => visible && void refreshManorAttention(), { immediate: true });
+  useForegroundRefresh({ refresh: () => refreshManorAttention(), staleMs: 60 * 1000, enabled: manorEntryVisible });
   const showAdd = computed(() => activeBinding.value?.showAdd?.() !== false);
   const showActions = computed(() =>
     Boolean(
@@ -289,6 +299,7 @@
   }
 
   .mobile-top-bar__action {
+    position: relative;
     width: 44px;
     min-width: 44px;
     height: 44px;
@@ -296,6 +307,20 @@
     border-radius: 11px;
     color: var(--text-color);
     background: transparent !important;
+  }
+
+  /* 贴着 24px 庄园图标右上角，与头像提醒点同一套实色加底色描边。 */
+  .mobile-top-bar__action-dot {
+    position: absolute;
+    top: var(--ui-space-8, 8px);
+    right: var(--ui-space-8, 8px);
+    width: var(--ui-space-9, 9px);
+    height: var(--ui-space-9, 9px);
+    box-sizing: border-box;
+    border: 2px solid var(--surface-page-bg, var(--background-color));
+    border-radius: 50%;
+    background: var(--danger-fill-bg, #d93b3b);
+    pointer-events: none;
   }
 
   .mobile-top-bar__action--text {

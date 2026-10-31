@@ -38,3 +38,4 @@ async function respond(req, res, action) {
 
 export const getKnowledgeManor = (req, res) => respond(req, res, () => knowledgeManorService.get(req.user.id));
 export const runKnowledgeManorCommand = (req, res) => respond(req, res, () => knowledgeManorService.execute(req.user.id, req.body));
+export const getKnowledgeManorAttention = (req, res) => respond(req, res, () => knowledgeManorService.attention(req.user.id));

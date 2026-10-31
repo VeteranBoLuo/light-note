@@ -209,6 +209,7 @@
                   :daily-cap="growth?.dailyCap || 0"
                   :daily-cap-reached="Boolean(growth?.dailyCapReached)"
                   compact
+                  :manor="dailyQuestManor"
                   :show-claim-action="false"
                   @claim="onClaim"
                   @go="handleQuestAction"
@@ -503,6 +504,7 @@
   import { useUiDensity } from '@/composables/useUiDensity';
   import { resolveDailyQuestClaimFeedback } from '@/utils/dailyQuestClaim';
   import { resolveDailyQuestRoute, resolveGrowthActionRoute } from '@/utils/growthNavigation';
+  import { useManorAttention } from '@/composables/useManorAttention';
   import {
     findVerticalScrollContainer,
     scrollIntoContainer,
@@ -530,6 +532,7 @@
   };
 
   const { t } = useI18n();
+  const { visibleAttention: dailyQuestManor } = useManorAttention();
   const route = useRoute();
   const router = useRouter();
   const user = useUserStore();

@@ -102,6 +102,10 @@ export const updateRecapState = (payload: { type: 'bookmark' | 'note'; id: strin
   apiBasePost('/api/growth/recap/state', payload);
 
 export const getClaimable = () => apiBaseGet('/api/growth/claimable');
+
+// 庄园入口提醒：只读计数，不加载庄园规则模型，顶栏引用也不会把庄园打进主包。
+export const getManorAttention = () =>
+  apiBaseGet('/api/growth/manor/attention', undefined, { silent: true, activity: 'background' });
 export const claimAll = (payload?: {
   scopes?: Array<'daily' | 'growthTasks' | 'achievements' | 'weekly' | 'community'>;
   keys?: Partial<Record<'daily' | 'growthTasks' | 'achievements' | 'weekly' | 'community', string[]>>;
