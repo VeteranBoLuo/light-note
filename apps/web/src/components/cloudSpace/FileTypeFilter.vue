@@ -189,10 +189,16 @@
     display: none;
   }
 
+  /* 角标挂在按钮右上角、不占宽度：选了类型后按钮不变宽，页头操作区不会因此换行。 */
   .filter-badge {
+    position: absolute;
+    top: calc(-1 * var(--ui-space-7, 7px));
+    right: calc(-1 * var(--ui-space-7, 7px));
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    box-shadow: 0 0 0 2px var(--background-color);
+    pointer-events: none;
     min-width: var(--ui-layout-18, 18px);
     height: var(--ui-layout-18, 18px);
     padding: 0 var(--ui-space-5, 5px);

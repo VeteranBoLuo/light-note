@@ -1195,10 +1195,12 @@
 
   .cloud-space-page--desktop :deep(.resource-page-heading) {
     flex: 1 1 var(--ui-layout-320, 320px);
+    container-type: inline-size;
   }
 
   .cloud-space-page--desktop :deep(.resource-page-title-row) {
     flex-wrap: wrap;
+    row-gap: var(--ui-space-2, 2px);
   }
 
   .cloud-space-page--desktop :deep(.resource-page-title-row h1) {
@@ -1206,14 +1208,26 @@
     max-width: 100%;
   }
 
+  // 数量默认独占标题下的一行，与「云空间」字样和说明文字左对齐。是否与标题同行只看标题区宽度、不看文字长短，
+  // 筛选或加载时「加载中」「找到 N 个文件」长短变化不会让标题区在一行和两行之间来回切换、带着整页跳动。
   .cloud-header-count {
-    flex: 0 1 auto;
+    flex: 1 1 100%;
     min-width: 0;
-    max-width: 100%;
+    margin-left: var(--ui-space-17, 17px);
+    overflow: hidden;
     color: var(--desc-color);
     font-size: var(--ui-font-12, 12px);
     line-height: 1.5;
+    white-space: nowrap;
+    text-overflow: ellipsis;
     font-variant-numeric: tabular-nums;
+  }
+
+  @container (min-width: 560px) {
+    .cloud-header-count {
+      flex: 0 1 auto;
+      margin-left: 0;
+    }
   }
 
   .cloud-view-toggle {
