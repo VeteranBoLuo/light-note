@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import {
   buildResourceHref,
+  buildFileResourceHref,
+  readResourceHrefPage,
   parseResourceHref,
   dedupeResourceRefs,
   buildResourceAnchorAttrs,
@@ -45,6 +47,23 @@ describe('noteResourceRefs', () => {
     });
     it('空 id 返回空串', () => {
       expect(buildResourceHref({ type: 'note', id: '' })).toBe('');
+    });
+  });
+
+  describe('文件链接页码', () => {
+    it('带页码的链接仍指向同一文件，并能读出页码', () => {
+      const href = buildFileResourceHref('f-7', 12);
+      expect(href).toBe('/cloudSpace?fileId=f-7&page=12');
+      expect(parseResourceHref(href)).toEqual({ type: 'file', id: 'f-7' });
+      expect(readResourceHrefPage(href)).toBe(12);
+    });
+    it('页码不合法时退回 canonical 链接，其它类型和无页码链接读不到页码', () => {
+      expect(buildFileResourceHref('f-7', 0)).toBe('/cloudSpace?fileId=f-7');
+      expect(buildFileResourceHref('f-7', 1.5)).toBe('/cloudSpace?fileId=f-7');
+      expect(buildFileResourceHref('', 3)).toBe('');
+      expect(readResourceHrefPage('/cloudSpace?fileId=f-7')).toBeNull();
+      expect(readResourceHrefPage('/noteLibrary/n1')).toBeNull();
+      expect(readResourceHrefPage(null)).toBeNull();
     });
   });
 

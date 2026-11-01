@@ -179,9 +179,11 @@
     collectResourceRefsFromHtml,
     parseResourceHref,
     presentResourceReferenceChips,
+    readResourceHrefPage,
     resourceRefKey,
     type ResourceRef,
   } from '@/utils/noteResourceRefs';
+  import { rememberPdfPage } from '@/utils/pdfExcerptHandoff';
   import { handleNoteContentImagePreviewEvent, prepareNoteContentPreviewImages } from '@/utils/noteImagePreview';
   import { normalizeReferencedFilePreviewInfo, type ReferencedFilePreviewInfo } from '@/utils/noteResourceNavigation';
   import { closeCurrentMobileOverlayThen } from '@/utils/mobileOverlayHistory';
@@ -372,6 +374,9 @@
     event.preventDefault();
     event.stopPropagation();
     if (props.variant === 'reference' && (ref.type === 'note' || ref.type === 'file')) {
+      // PDF 摘录的来源链接带页码：换到这个文件时从摘录所在页开始。
+      const page = ref.type === 'file' ? readResourceHrefPage(anchor.getAttribute('href')) : null;
+      if (page) rememberPdfPage(ref.id, page);
       emit('openReference', { type: ref.type, id: ref.id });
       return;
     }

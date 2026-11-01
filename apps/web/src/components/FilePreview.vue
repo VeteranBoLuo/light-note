@@ -110,6 +110,9 @@
             :key="previewAttempt"
             :src="effectiveFileUrl"
             :file-name="fileInfo.fileName"
+            :initial-page="pdfStartPage || undefined"
+            :excerpt="!previewAccess || previewAccess.kind === 'owner' ? pdfExcerpt : undefined"
+            @excerpt-docked="pdfExcerptDocked = $event"
             class="preview-pdf-viewer"
             @rendered="onRendered"
             @error="onPdfError"
@@ -316,7 +319,11 @@
         </div>
 
         <!-- 预览控制栏：悬浮在内容区内，避免额外占用预览高度 -->
-        <div v-if="!loading && !isHtmlFullscreen && (showNext || sourceDownloadUrl)" class="preview-controls">
+        <!-- 手机上 PDF 底部摘录条出现时先让开，选区消失后恢复。 -->
+        <div
+          v-if="!loading && !isHtmlFullscreen && !pdfExcerptDocked && (showNext || sourceDownloadUrl)"
+          class="preview-controls"
+        >
           <div v-if="showNext" class="preview-control-group">
             <BTooltip :title="t('cloudSpace.previewPanel.previous')">
               <BButton size="small" @click="handlePrev" class="action-btn">
@@ -377,6 +384,8 @@
   import { isImagePreviewCandidate } from '@lightnote/shared/file-category';
   import VideoPreview from '@/components/base/VideoPreview.vue';
   import PdfPreview from '@/components/cloudSpace/PdfPreview.vue';
+  import { takeRememberedPdfPage } from '@/utils/pdfExcerptHandoff';
+  import type { PdfExcerptHandler } from '@/utils/pdfExcerpt';
   import ArchivePreview from '@/components/cloudSpace/ArchivePreview.vue';
   import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
@@ -444,6 +453,10 @@
      * Esc 与左右键交给宿主页面；标题与关闭由宿主自行提供。
      */
     embedded?: boolean;
+    /** PDF 打开后先跳到这一页；不传时沿用摘录时记下的页码。 */
+    initialPage?: number;
+    /** PDF 选中文字后除复制外还能做什么，由宿主决定；只对自己的文件生效。 */
+    pdfExcerpt?: PdfExcerptHandler;
   }>();
 
   const emit = defineEmits<{
@@ -461,6 +474,8 @@
   const loading = ref(false);
   useForegroundLoading(() => props.visible && loading.value);
   const previewAttempt = ref(0);
+  const pdfStartPage = ref(0);
+  const pdfExcerptDocked = ref(false);
   const error = ref(false);
   const errorMessage = ref('');
   const previewFailureCode = ref('');
@@ -766,6 +781,8 @@
       captureResourceOpen()('file', file.id);
     }
     const requestAttempt = ++previewAttempt.value;
+    if (!retryDerived) pdfStartPage.value = props.initialPage || (file?.id ? takeRememberedPdfPage(String(file.id)) : 0) || 0;
+    pdfExcerptDocked.value = false;
     cancelPreviewPolling();
     htmlAbortController?.abort();
     htmlAbortController = null;

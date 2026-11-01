@@ -154,7 +154,7 @@
               @geometry-change="mdScrollSync.refresh()"
               @keydown="onMarkdownEditorKeydown"
               @command="runMarkdownToolbarAction"
-              @selection-change="syncMarkdownInlineMenus"
+              @selection-change="onMarkdownSelectionChange"
               @history-change="markdownHistoryState = $event"
               @ready="handleMarkdownRuntimeReady"
               @paste="onMarkdownPaste"
@@ -731,6 +731,7 @@
       v-if="inlineFilePreviewInfo"
       v-model:visible="inlineFilePreviewVisible"
       :file-info="inlineFilePreviewInfo"
+      :initial-page="inlineFilePreviewPage || undefined"
       @close="closeReferencedFileInlinePreview"
     />
   </div>
@@ -844,10 +845,12 @@
     decorateInternalResourceLinks,
     parseResourceHref,
     presentResourceReferenceChips,
+    readResourceHrefPage,
     resourceRefKey,
     serializeResourceReferenceSnapshots,
     type ResourceRef,
   } from '@/utils/noteResourceRefs';
+  import { rememberPdfPage } from '@/utils/pdfExcerptHandoff';
   import type { ResolvedResourceReference } from '@/api/noteReferences';
   import { loadMarkdownRuntime, loadTinyMceRuntime, preloadNoteEditorRuntime } from './editorRuntimeLoader';
   import { closeCurrentMobileOverlayThen } from '@/utils/mobileOverlayHistory';
@@ -1296,10 +1299,12 @@
   const inlineMentionHasResults = ref(false);
   const inlineMentionQuery = ref('');
   const mobileResourcePreviewVisible = ref(false);
-  const mobileResourcePreview = ref<{ ref: ResourceRef; title: string } | null>(null);
+  // page：PDF 摘录来源链接里的页码，预览和打开文件时从这一页开始。
+  const mobileResourcePreview = ref<{ ref: ResourceRef; title: string; page: number | null } | null>(null);
   const inlineFilePreviewVisible = ref(false);
   const inlineFilePreviewLoading = ref(false);
   const inlineFilePreviewInfo = ref<ReferencedFilePreviewInfo | null>(null);
+  const inlineFilePreviewPage = ref(0);
   let inlineFilePreviewRequestId = 0;
   const inlineMentionAnchorStyle = ref<Record<string, string>>({});
   const inlineMentionSuggestionsRef = ref<{ moveActive: (offset: number) => void; chooseActive: () => void } | null>(
@@ -1511,6 +1516,7 @@
     mobileResourcePreview.value = {
       ref,
       title: String(anchor?.textContent || '').trim() || ref.id,
+      page: readResourceHrefPage(anchor?.getAttribute('href')),
     };
     mobileResourcePreviewVisible.value = true;
   }
@@ -1529,6 +1535,7 @@
       message.warning(mobileResourcePreviewStatus.value);
       return;
     }
+    if (preview.ref.type === 'file' && preview.page) rememberPdfPage(preview.ref.id, preview.page);
     await closeCurrentMobileOverlayThen(closeMobileResourcePreview, () => navigateResourceRef(preview.ref));
   }
 
@@ -1562,6 +1569,7 @@
       }
       await closeCurrentMobileOverlayThen(closeMobileResourcePreview, () => {
         inlineFilePreviewInfo.value = fileInfo;
+        inlineFilePreviewPage.value = preview.page || 0;
         inlineFilePreviewVisible.value = true;
         recordResourceMentionOperation('在笔记内预览引用文件');
       });
@@ -2821,6 +2829,133 @@
   function insertInlineResourceMention(item: ResourceRef & { title: string }) {
     insertResourceMention(item);
     inlineMentionVisible.value = false;
+  }
+
+  // ---- PDF 摘录：参考栏里插到光标处，或从云空间跳来后追加到末尾 ----
+  // 用户去 PDF 里选字时浏览器选区会离开编辑器，所以记住编辑器里最后一次的光标；
+  // 从没把光标放进编辑器时插到末尾，避免落到正文开头。
+  let lastRichExcerptRange: Range | null = null;
+  let markdownCaretTouched = false;
+  let lastExcerptResult: { kind: 'html' } | { kind: 'markdown'; before: string; after: string } | null = null;
+
+  function rememberRichExcerptRange(editor: any) {
+    if (!editor?.hasFocus?.()) return;
+    const range = editor.selection?.getRng?.() as Range | null;
+    if (range && rangeBelongsToTinyMce(editor, range)) lastRichExcerptRange = range.cloneRange();
+  }
+
+  function onMarkdownSelectionChange() {
+    markdownCaretTouched = true;
+    syncMarkdownInlineMenus();
+  }
+
+  function flashInsertedExcerpt(element: HTMLElement) {
+    element.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
+    try {
+      element.animate(
+        [
+          { backgroundColor: 'color-mix(in srgb, var(--primary-color) 14%, transparent)' },
+          { backgroundColor: 'transparent' },
+        ],
+        { duration: 1500, delay: 300, easing: 'ease-out', fill: 'backwards' },
+      );
+    } catch {
+      // 旧 WebView 不支持 Web Animations 时只是没有高亮，插入本身已经完成。
+    }
+  }
+
+  function insertMarkdownExcerpt(markdown: string, position: 'cursor' | 'end') {
+    const markdownEditor = mdCodeMirrorRef.value;
+    const source = String(markdownEditor?.getValue() ?? mdContent.value ?? '');
+    const selection = position === 'cursor' && markdownCaretTouched ? markdownEditor?.getSelection() : null;
+    const from = selection ? selection.from : source.length;
+    const to = selection ? selection.to : source.length;
+    const before = source.slice(0, from);
+    const after = source.slice(to);
+    // 引用块前后各留空行，不和相邻段落粘在一起；光标停在引用块下方单独的空行，
+    // 紧贴引用的下一行在 Markdown 里会被当成引用的延续。
+    const lead = !before || before.endsWith('\n\n') ? '' : before.endsWith('\n') ? '\n' : '\n\n';
+    const body = `${lead}${markdown}\n\n`;
+    const tail = !after || after.startsWith('\n\n') ? '' : after.startsWith('\n') ? '\n' : '\n\n';
+    const text = body + tail;
+    const next = before + text + after;
+    if (markdownEditor) {
+      markdownEditor.replaceRange(from, to, text, from + body.length, from + body.length);
+    } else {
+      onMdInput(next);
+    }
+    lastExcerptResult = { kind: 'markdown', before: source, after: next };
+    return true;
+  }
+
+  async function insertExcerpt(excerpt: { html: string; markdown: string }, position: 'cursor' | 'end' = 'cursor') {
+    if (props.readonly) return false;
+    await nextTick();
+    if (currentType.value === 'markdown') return insertMarkdownExcerpt(excerpt.markdown, position);
+    const editor = editorRef.value;
+    const body = editor?.getBody?.() as HTMLElement | null;
+    if (!editor || !body) return false;
+    // 临时 id 只用来找回刚插入的引用块，在同一个撤销步骤里就去掉，不会存进正文。
+    const marker = `ln-excerpt-${Date.now().toString(36)}`;
+    let inserted: HTMLElement | null = null;
+    try {
+      editor.undoManager.transact(() => {
+        editor.focus();
+        const range = lastRichExcerptRange;
+        if (position === 'cursor' && range && rangeBelongsToTinyMce(editor, range)) {
+          editor.selection.setRng(range);
+        } else {
+          editor.selection.select(body, true);
+          editor.selection.collapse(false);
+        }
+        editor.insertContent(excerpt.html.replace('<blockquote>', `<blockquote id="${marker}">`));
+        inserted = body.querySelector<HTMLElement>(`#${marker}`);
+        if (!inserted) return;
+        inserted.removeAttribute('id');
+        // 光标放到引用块后面的空段落，接着打字不会续进来源行。
+        let after = inserted.nextElementSibling as HTMLElement | null;
+        const reusable = after?.tagName === 'P' && !after.textContent?.trim() && !after.querySelector('img,video,iframe');
+        if (!reusable) {
+          after = editor.dom.create('p', {}, '<br data-mce-bogus="1">');
+          editor.dom.insertAfter(after, inserted);
+        }
+        editor.selection.setCursorLocation(after, 0);
+      });
+    } catch {
+      return false;
+    }
+    if (!inserted) return false;
+    lastExcerptResult = { kind: 'html' };
+    // TinyMCE 的插入事件不一定同步 v-model；显式更新正文事实源，再刷新资源引用胶囊。
+    content.value = editor.getContent({ format: 'html' });
+    window.setTimeout(() => {
+      publishResourceRefs(editor.getContent({ format: 'html' }));
+      decorateTinyMceResourceRefs();
+    }, 0);
+    editor.nodeChanged?.();
+    flashInsertedExcerpt(inserted);
+    return true;
+  }
+
+  /** 撤销刚插入的摘录；之后又有别的编辑时不撤，避免误删用户新写的内容。 */
+  function undoLastExcerpt() {
+    const result = lastExcerptResult;
+    lastExcerptResult = null;
+    if (!result) return false;
+    if (result.kind === 'markdown') {
+      const markdownEditor = mdCodeMirrorRef.value;
+      if (String(markdownEditor?.getValue() ?? mdContent.value ?? '') !== result.after) return false;
+      if (markdownEditor) markdownEditor.undo();
+      else onMdInput(result.before);
+      return true;
+    }
+    const editor = editorRef.value;
+    if (!editor?.undoManager?.hasUndo?.()) return false;
+    editor.undoManager.undo();
+    content.value = editor.getContent({ format: 'html' });
+    window.setTimeout(() => publishResourceRefs(editor.getContent({ format: 'html' })), 0);
+    return true;
   }
 
   const mdScrollSync = useMarkdownScrollSync(
@@ -4904,6 +5039,8 @@
 
   defineExpose({
     focusToEnd,
+    insertExcerpt,
+    undoLastExcerpt,
     replaceContentWithUndo,
     scrollToMarkdownHeading,
     scrollToResourceRef,
@@ -5107,6 +5244,11 @@
       };
       editor.on('contexttoolbar-show', handleContextToolbarShow);
       editor.on('SelectionChange', scheduleContextToolbarAdjustment);
+      editor.on('SelectionChange NodeChange', () => rememberRichExcerptRange(editor));
+      // 摘录插入后又产生了新的撤销步骤（继续输入、其它编辑），「撤销」就不再针对这次插入。
+      editor.on('AddUndo', () => {
+        if (lastExcerptResult?.kind === 'html') lastExcerptResult = null;
+      });
       editor.on('contexttoolbar-hide', clearContextToolbarAdjustments);
 
       const resolveSelectedRichImage = () => {

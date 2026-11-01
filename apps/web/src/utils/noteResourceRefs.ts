@@ -8,6 +8,8 @@
 import {
   parseResourceHref,
   buildResourceHref,
+  buildFileResourceHref,
+  readResourceHrefPage,
   buildResourceAnchorAttrs,
   dedupeResourceRefs,
   normalizeNoteType,
@@ -21,6 +23,8 @@ import {
 export {
   parseResourceHref,
   buildResourceHref,
+  buildFileResourceHref,
+  readResourceHrefPage,
   buildResourceAnchorAttrs,
   dedupeResourceRefs,
   normalizeNoteType,

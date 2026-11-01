@@ -10,7 +10,7 @@
       />
     </aside>
 
-    <section class="pdf-preview__workspace">
+    <section ref="workspaceRef" class="pdf-preview__workspace">
       <div class="pdf-preview__toolbar" role="toolbar">
         <div class="pdf-preview__tool-group">
           <BTooltip :title="t('cloudSpace.previewPanel.pdfToggleNavigator')">
@@ -153,6 +153,9 @@
         @touchmove="handleTouchMove"
         @touchend="handleTouchEnd"
         @touchcancel="handleTouchEnd"
+        @pointerdown="handleViewerPointerDown"
+        @pointermove="handleViewerPointerMove"
+        @contextmenu="handleViewerContextMenu"
       >
         <div ref="pagesRef" class="pdf-preview__pages" :class="`is-${viewMode}`" :style="pagesGestureStyle">
           <div
@@ -164,9 +167,30 @@
             :data-page-number="pageNumber"
           >
             <canvas :ref="(element) => setPageCanvas(pageNumber, element)" class="pdf-preview__canvas" />
+            <div :ref="(element) => setPageTextLayer(pageNumber, element)" class="pdf-preview__text-layer" />
             <span class="pdf-preview__page-number" aria-hidden="true">{{ pageNumber }} / {{ pageCount }}</span>
           </div>
         </div>
+      </div>
+
+      <PdfExcerptBar
+        v-if="excerptVisible && selectedExcerpt"
+        ref="excerptBarRef"
+        :style="excerptBarStyle"
+        :mode="excerptMode"
+        :status="excerptStatus"
+        :mobile="isMobileLayout"
+        :excerpt="selectedExcerpt"
+        :file="excerpt?.file"
+        :busy="excerptBusy"
+        @copy="copyExcerpt"
+        @insert="insertExcerpt"
+        @undo="undoExcerpt"
+        @hold-change="excerptHeld = $event"
+      />
+      <div v-if="scanTip" class="pdf-preview__scan-tip" role="status" :style="{ left: `${scanTip.left}px`, top: `${scanTip.top}px` }">
+        <SvgIcon :src="icon.message.info" size="14" aria-hidden="true" />
+        <span>{{ t('cloudSpace.previewPanel.pdfScannedPage') }}</span>
       </div>
     </section>
 
@@ -203,9 +227,16 @@
   import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import PdfPageNavigator, { type PdfOutlineItem } from './PdfPageNavigator.vue';
+  import PdfExcerptBar from './PdfExcerptBar.vue';
+  import message from '@/components/base/BasicComponents/BMessage/BMessage';
+  import { copyTextToClipboard } from '@/utils/clipboard';
+  import { normalizePdfSelectionText, type PdfExcerpt, type PdfExcerptHandler } from '@/utils/pdfExcerpt';
   import icon from '@/config/icon';
   import { useMobileLayout } from '@/composables/useMobileLayout';
   import { loadPdfJsRuntime } from '@/utils/pdfJsRuntime';
+
+  type PdfJsRuntime = Awaited<ReturnType<typeof loadPdfJsRuntime>>;
+  type PdfTextLayer = InstanceType<PdfJsRuntime['TextLayer']>;
 
   type PdfViewMode = 'single' | 'spread';
   type FitMode = 'width' | 'page';
@@ -222,11 +253,17 @@
   const props = defineProps<{
     src?: string;
     fileName?: string;
+    /** 打开后先跳到这一页（摘录来源链接、回到摘录所在页）。 */
+    initialPage?: number;
+    /** 选中文字后除复制外还能做什么；不传时只能复制。 */
+    excerpt?: PdfExcerptHandler;
   }>();
 
   const emit = defineEmits<{
     rendered: [];
     error: [error: Error];
+    /** 手机底部摘录条显示时为 true，宿主据此让开同在底部的悬浮控制栏。 */
+    'excerpt-docked': [docked: boolean];
   }>();
 
   const { t } = useI18n();
@@ -260,6 +297,26 @@
   const renderRevisions = new Map<number, number>();
   const renderedPages = new Set<number>();
   const renderingPages = new Set<number>();
+  // 文字层：页面画完后空闲时生成，随页面一起释放；没有文字的页（扫描件）单独记下。
+  const pageTextLayers = new Map<number, HTMLDivElement>();
+  const textLayerTasks = new Map<number, PdfTextLayer>();
+  const textlessPages = new Set<number>();
+  const workspaceRef = ref<HTMLElement | null>(null);
+  const excerptBarRef = ref<ComponentPublicInstance | null>(null);
+  const selectedExcerpt = shallowRef<PdfExcerpt | null>(null);
+  const excerptStatus = ref<'idle' | 'copied' | 'inserted'>('idle');
+  const excerptBarPosition = ref<{ left: number; top: number } | null>(null);
+  const excerptBusy = ref(false);
+  const excerptHeld = ref(false);
+  const scanTip = ref<{ left: number; top: number } | null>(null);
+  let TextLayerClass: PdfJsRuntime['TextLayer'] | null = null;
+  let excerptStatusTimer: number | null = null;
+  let scanTipTimer: number | null = null;
+  let scanTipShown = false;
+  let selectionFrame: number | null = null;
+  let mouseSelecting = false;
+  let scanDragStart: { x: number; y: number } | null = null;
+  let pendingInitialPage = 0;
 
   let pdfDocument: PDFDocumentProxy | null = null;
   let loadingTask: PDFDocumentLoadingTask | null = null;
@@ -290,6 +347,20 @@
         },
   );
 
+  const excerptMode = computed(() => props.excerpt?.mode ?? 'copy');
+  // 双指缩放时页面正在变形，先隐藏摘录条；电脑上要算出位置后才显示，避免先闪在角落。
+  const excerptVisible = computed(
+    () =>
+      Boolean(selectedExcerpt.value) &&
+      pinchPreviewScale.value === 1 &&
+      (isMobileLayout.value || Boolean(excerptBarPosition.value)),
+  );
+  const excerptBarStyle = computed<CSSProperties | undefined>(() =>
+    isMobileLayout.value || !excerptBarPosition.value
+      ? undefined
+      : { left: `${excerptBarPosition.value.left}px`, top: `${excerptBarPosition.value.top}px` },
+  );
+
   function normalizeElement<T extends Element>(element: Element | ComponentPublicInstance | null): T | null {
     return element instanceof Element ? (element as T) : null;
   }
@@ -304,6 +375,12 @@
     const canvas = normalizeElement<HTMLCanvasElement>(element);
     if (canvas) pageCanvases.set(pageNumber, canvas);
     else pageCanvases.delete(pageNumber);
+  }
+
+  function setPageTextLayer(pageNumber: number, element: Element | ComponentPublicInstance | null) {
+    const layer = normalizeElement<HTMLDivElement>(element);
+    if (layer) pageTextLayers.set(pageNumber, layer);
+    else pageTextLayers.delete(pageNumber);
   }
 
   function pageStyle(pageNumber: number): CSSProperties {
@@ -323,7 +400,55 @@
     return error instanceof Error && error.name === 'RenderingCancelledException';
   }
 
+  function cancelTextLayer(pageNumber: number) {
+    textLayerTasks.get(pageNumber)?.cancel();
+    textLayerTasks.delete(pageNumber);
+    pageTextLayers.get(pageNumber)?.replaceChildren();
+  }
+
+  async function renderTextLayer(
+    pageNumber: number,
+    page: PDFPageProxy,
+    viewport: ReturnType<PDFPageProxy['getViewport']>,
+    isCurrent: () => boolean,
+  ) {
+    const container = pageTextLayers.get(pageNumber);
+    const TextLayer = TextLayerClass;
+    if (!container || !TextLayer || !isCurrent()) return;
+    cancelTextLayer(pageNumber);
+    container.style.setProperty('--scale-factor', String(viewport.scale));
+    const layer = new TextLayer({ textContentSource: page.streamTextContent(), container, viewport });
+    textLayerTasks.set(pageNumber, layer);
+    try {
+      await layer.render();
+    } catch {
+      return; // 页面释放、缩放或旋转时会取消重建，不算错误
+    }
+    if (!isCurrent() || textLayerTasks.get(pageNumber) !== layer) return;
+    textLayerTasks.delete(pageNumber);
+    // pdf.js 查看器的做法：拖选时把它铺满整页，避免选区跳到页面其它位置。
+    const endOfContent = document.createElement('div');
+    endOfContent.className = 'endOfContent';
+    container.append(endOfContent);
+    if (layer.textDivs.length) textlessPages.delete(pageNumber);
+    else textlessPages.add(pageNumber);
+  }
+
+  /** 文字层不影响首屏：等这一页画完、浏览器空闲时再生成。 */
+  function scheduleTextLayer(
+    pageNumber: number,
+    page: PDFPageProxy,
+    viewport: ReturnType<PDFPageProxy['getViewport']>,
+    isCurrent: () => boolean,
+  ) {
+    if (!TextLayerClass || typeof page.streamTextContent !== 'function') return;
+    const run = () => void renderTextLayer(pageNumber, page, viewport, isCurrent);
+    if (typeof window.requestIdleCallback === 'function') window.requestIdleCallback(run, { timeout: 400 });
+    else window.setTimeout(run, 30);
+  }
+
   function releaseRenderedPage(pageNumber: number, clearCanvas = true) {
+    cancelTextLayer(pageNumber);
     renderRevisions.set(pageNumber, (renderRevisions.get(pageNumber) || 0) + 1);
     renderTasks.get(pageNumber)?.cancel();
     renderTasks.delete(pageNumber);
@@ -421,6 +546,8 @@
       visibleContext.drawImage(renderCanvas, 0, 0);
       renderedPages.add(pageNumber);
       pageElement.dataset.rendered = 'true';
+      scheduleTextLayer(pageNumber, page, viewport, () => isCurrentRender() && renderedPages.has(pageNumber));
+      alignInitialPage();
       if (!firstPageRendered) {
         firstPageRendered = true;
         emit('rendered');
@@ -522,6 +649,8 @@
         }
       });
       if (closestPage !== currentPage.value) currentPage.value = closestPage;
+      // 选笔记浮层打开期间选区已移到搜索框，不能按选区重算，否则摘录条和浮层会被关掉。
+      if (selectedExcerpt.value && excerptStatus.value === 'idle' && !excerptHeld.value) updateExcerptBarPosition();
     });
   }
 
@@ -623,7 +752,208 @@
     rerenderDisplayedPages();
   }
 
+  /** 指定起始页时，前面的页还是占位尺寸；相邻页画完会改变高度，在用户动手前保持对准。 */
+  function alignInitialPage() {
+    const viewer = viewerRef.value;
+    const pageElement = pendingInitialPage ? pageElements.get(pendingInitialPage) : null;
+    if (viewer && pageElement) viewer.scrollTop = Math.max(0, pageElement.offsetTop - 10);
+  }
+
+  function closestTextLayer(node: Node | null) {
+    const element = node instanceof Element ? node : node?.parentElement;
+    return element?.closest<HTMLElement>('.pdf-preview__text-layer') || null;
+  }
+
+  function textLayerPageNumber(layer: HTMLElement) {
+    return Number(layer.closest<HTMLElement>('[data-page-number]')?.dataset.pageNumber || 0);
+  }
+
+  /** 只认落在本预览文字层里的选区；跨到工具栏、其它页面区域的选择不算摘录。 */
+  function readSelectedExcerpt() {
+    const selection = window.getSelection();
+    if (!selection || selection.isCollapsed || !selection.rangeCount) return null;
+    const range = selection.getRangeAt(0);
+    const startLayer = closestTextLayer(range.startContainer);
+    const endLayer = closestTextLayer(range.endContainer);
+    const pages = pagesRef.value;
+    if (!pages || !startLayer || !endLayer || !pages.contains(startLayer) || !pages.contains(endLayer)) return null;
+    const text = normalizePdfSelectionText(selection.toString());
+    const first = textLayerPageNumber(startLayer);
+    const last = textLayerPageNumber(endLayer);
+    if (!text || !first || !last) return null;
+    return { range, excerpt: { text, pageStart: Math.min(first, last), pageEnd: Math.max(first, last) } };
+  }
+
+  function clearExcerptStatusTimer() {
+    if (excerptStatusTimer !== null) window.clearTimeout(excerptStatusTimer);
+    excerptStatusTimer = null;
+  }
+
+  function clearExcerpt() {
+    clearExcerptStatusTimer();
+    selectedExcerpt.value = null;
+    excerptStatus.value = 'idle';
+    excerptBarPosition.value = null;
+  }
+
+  function showExcerptStatus(status: 'copied' | 'inserted', duration: number) {
+    clearExcerptStatusTimer();
+    excerptStatus.value = status;
+    excerptStatusTimer = window.setTimeout(clearExcerpt, duration);
+  }
+
+  /** 电脑上摘录条浮在选区上方，上方放不下时放到下方；选区滚出可视区时隐藏。手机固定在底部。 */
+  function updateExcerptBarPosition(range?: Range | null) {
+    if (isMobileLayout.value) return;
+    const workspace = workspaceRef.value;
+    const viewer = viewerRef.value;
+    const activeRange = range ?? readSelectedExcerpt()?.range;
+    const rects =
+      typeof activeRange?.getClientRects === 'function'
+        ? Array.from(activeRange.getClientRects()).filter((rect) => rect.width && rect.height)
+        : [];
+    if (!workspace || !viewer || !rects.length) {
+      excerptBarPosition.value = null;
+      return;
+    }
+    const base = workspace.getBoundingClientRect();
+    const view = viewer.getBoundingClientRect();
+    const top = Math.min(...rects.map((rect) => rect.top));
+    const bottom = Math.max(...rects.map((rect) => rect.bottom));
+    const left = Math.min(...rects.map((rect) => rect.left));
+    const right = Math.max(...rects.map((rect) => rect.right));
+    if (bottom < view.top || top > view.bottom) {
+      excerptBarPosition.value = null;
+      return;
+    }
+    const bar = excerptBarRef.value?.$el as HTMLElement | undefined;
+    const width = bar?.offsetWidth || 220;
+    const height = bar?.offsetHeight || 42;
+    const gap = 8;
+    const y = top - height - gap >= view.top ? top - height - gap : Math.min(bottom + gap, view.bottom - height - 4);
+    const x = Math.min(Math.max(8, (left + right) / 2 - width / 2 - base.left), Math.max(8, base.width - width - 8));
+    excerptBarPosition.value = { left: Math.round(x), top: Math.round(y - base.top) };
+  }
+
+  function handleSelectionChange() {
+    if (selectionFrame !== null) return;
+    selectionFrame = requestAnimationFrame(() => {
+      selectionFrame = null;
+      // 选笔记浮层打开、插入或跳转进行中时，焦点离开了 PDF，保留这次摘录；鼠标拖选中途也先不弹出。
+      if (excerptHeld.value || excerptBusy.value || mouseSelecting) return;
+      const result = readSelectedExcerpt();
+      if (!result) {
+        if (excerptStatus.value === 'idle') clearExcerpt();
+        return;
+      }
+      clearExcerptStatusTimer();
+      excerptStatus.value = 'idle';
+      selectedExcerpt.value = result.excerpt;
+      updateExcerptBarPosition(result.range);
+      void nextTick(() => updateExcerptBarPosition());
+    });
+  }
+
+  function showScanTip(clientX: number, clientY: number) {
+    const workspace = workspaceRef.value;
+    scanDragStart = null;
+    if (!workspace) return;
+    scanTipShown = true;
+    const base = workspace.getBoundingClientRect();
+    scanTip.value = {
+      left: Math.round(Math.max(8, Math.min(clientX - base.left + 12, base.width - 280))),
+      top: Math.round(Math.max(8, Math.min(clientY - base.top + 16, base.height - 48))),
+    };
+    if (scanTipTimer !== null) window.clearTimeout(scanTipTimer);
+    scanTipTimer = window.setTimeout(() => {
+      scanTip.value = null;
+      scanTipTimer = null;
+    }, 2000);
+  }
+
+  function pageNumberAt(target: EventTarget | null) {
+    const element = target instanceof Element ? target : null;
+    return Number(element?.closest<HTMLElement>('[data-page-number]')?.dataset.pageNumber || 0);
+  }
+
+  function handleViewerPointerDown(event: PointerEvent) {
+    pendingInitialPage = 0;
+    scanDragStart = null;
+    if (event.pointerType !== 'mouse' || event.button !== 0) return;
+    mouseSelecting = true;
+    closestTextLayer(event.target as Node | null)?.classList.add('selecting');
+    const pageNumber = pageNumberAt(event.target);
+    if (!scanTipShown && textlessPages.has(pageNumber)) scanDragStart = { x: event.clientX, y: event.clientY };
+  }
+
+  function handleViewerPointerMove(event: PointerEvent) {
+    if (!scanDragStart || !(event.buttons & 1)) return;
+    if (Math.hypot(event.clientX - scanDragStart.x, event.clientY - scanDragStart.y) < 8) return;
+    showScanTip(event.clientX, event.clientY);
+  }
+
+  // 手机长按会触发 contextmenu：扫描页上长按选不到字时同样提示一次。
+  function handleViewerContextMenu(event: MouseEvent) {
+    if (!scanTipShown && isMobileLayout.value && textlessPages.has(pageNumberAt(event.target))) {
+      showScanTip(event.clientX, event.clientY);
+    }
+  }
+
+  function handleDocumentPointerUp() {
+    scanDragStart = null;
+    if (!mouseSelecting) return;
+    mouseSelecting = false;
+    pageTextLayers.forEach((layer) => layer.classList.remove('selecting'));
+    handleSelectionChange();
+  }
+
+  // 复制时合并 PDF 的硬折行，快捷键、系统菜单和摘录条的「复制」得到同样的文字。
+  function handleDocumentCopy(event: ClipboardEvent) {
+    const result = readSelectedExcerpt();
+    if (!result || !event.clipboardData) return;
+    event.clipboardData.setData('text/plain', result.excerpt.text);
+    event.preventDefault();
+  }
+
+  async function copyExcerpt() {
+    const excerpt = selectedExcerpt.value;
+    if (!excerpt) return;
+    if (!(await copyTextToClipboard(excerpt.text))) {
+      message.warning(t('cloudSpace.previewPanel.pdfExcerptCopyFailed'));
+      return;
+    }
+    showExcerptStatus('copied', 2000);
+  }
+
+  async function insertExcerpt() {
+    const handler = props.excerpt;
+    const excerpt = selectedExcerpt.value;
+    if (handler?.mode !== 'insert' || !excerpt || excerptBusy.value) return;
+    excerptBusy.value = true;
+    let inserted = false;
+    try {
+      inserted = await handler.insert(excerpt, handler.file);
+    } catch {
+      inserted = false;
+    } finally {
+      excerptBusy.value = false;
+    }
+    if (!inserted) {
+      message.error(t('cloudSpace.previewPanel.pdfExcerptInsertFailed'));
+      return;
+    }
+    showExcerptStatus('inserted', 4000);
+    // 插入后焦点通常已回到编辑器；只有选区还留在 PDF 上时才清掉，不能顺手清掉编辑器里的光标。
+    if (readSelectedExcerpt()) window.getSelection()?.removeAllRanges();
+  }
+
+  function undoExcerpt() {
+    if (props.excerpt?.mode === 'insert') props.excerpt.undo();
+    clearExcerpt();
+  }
+
   function handleWheel(event: WheelEvent) {
+    pendingInitialPage = 0;
     if (!event.ctrlKey && !event.metaKey) return;
     event.preventDefault();
     changeZoom(event.deltaY > 0 ? -ZOOM_STEP : ZOOM_STEP);
@@ -636,6 +966,7 @@
   }
 
   function handleTouchStart(event: TouchEvent) {
+    pendingInitialPage = 0;
     if (event.touches.length !== 2) return;
     pinchStartDistance = touchDistance(event.touches);
     pinchStartZoom = zoomScale.value;
@@ -727,6 +1058,13 @@
     scrollFrame = null;
     renderTasks.forEach((task) => task.cancel());
     renderTasks.clear();
+    textLayerTasks.forEach((layer) => layer.cancel());
+    textLayerTasks.clear();
+    textlessPages.clear();
+    clearExcerpt();
+    scanTipShown = false;
+    scanTip.value = null;
+    pendingInitialPage = 0;
     renderRevisions.clear();
     renderingPages.clear();
     pageProxies.forEach((page) => page.cleanup());
@@ -734,6 +1072,7 @@
     renderedPages.clear();
     pageElements.clear();
     pageCanvases.clear();
+    pageTextLayers.clear();
     pageAspectRatios.value = new Map();
     pageSizes.value = new Map();
     pageCount.value = 0;
@@ -769,6 +1108,7 @@
         if (!response.ok) throw new Error(`PDF request failed with status ${response.status}`);
         const data = new Uint8Array(await response.arrayBuffer());
         if (generation !== loadGeneration) return;
+        TextLayerClass = 'TextLayer' in pdfjs ? pdfjs.TextLayer : null;
         loadingTask = pdfjs.getDocument({ data, isEvalSupported: false });
         pdfDocument = await loadingTask.promise;
         if (generation !== loadGeneration) return;
@@ -779,6 +1119,16 @@
         pageInput.value = '1';
         await nextTick();
         if (generation !== loadGeneration) return;
+        // 先滚到起始页再开始观察，避免把第一页也白画一遍。
+        const startPage = clampPage(props.initialPage || 1);
+        if (startPage > 1) {
+          pendingInitialPage = startPage;
+          currentPage.value = startPage;
+          alignInitialPage();
+          window.setTimeout(() => {
+            if (generation === loadGeneration) pendingInitialPage = 0;
+          }, 3000);
+        }
         setupPageObserver();
         setupResizeObserver();
         void loadOutline(generation);
@@ -809,10 +1159,33 @@
     if (!mobile) mobileNavigatorOpen.value = false;
   });
 
-  onMounted(() => window.addEventListener('resize', syncViewportSize, { passive: true }));
+  watch(
+    () => excerptVisible.value && isMobileLayout.value,
+    (docked) => emit('excerpt-docked', docked),
+  );
+
+  watch(excerptHeld, (held) => {
+    if (!held) handleSelectionChange();
+  });
+
+  onMounted(() => {
+    window.addEventListener('resize', syncViewportSize, { passive: true });
+    document.addEventListener('selectionchange', handleSelectionChange);
+    document.addEventListener('pointerup', handleDocumentPointerUp);
+    document.addEventListener('pointercancel', handleDocumentPointerUp);
+    document.addEventListener('copy', handleDocumentCopy);
+  });
 
   onBeforeUnmount(() => {
     window.removeEventListener('resize', syncViewportSize);
+    document.removeEventListener('selectionchange', handleSelectionChange);
+    document.removeEventListener('pointerup', handleDocumentPointerUp);
+    document.removeEventListener('pointercancel', handleDocumentPointerUp);
+    document.removeEventListener('copy', handleDocumentCopy);
+    if (selectionFrame !== null) cancelAnimationFrame(selectionFrame);
+    selectionFrame = null;
+    if (scanTipTimer !== null) window.clearTimeout(scanTipTimer);
+    scanTipTimer = null;
     void destroyPdf();
   });
 </script>
@@ -838,6 +1211,7 @@
   }
 
   .pdf-preview__workspace {
+    position: relative;
     display: flex;
     flex: 1;
     flex-direction: column;
@@ -849,6 +1223,8 @@
     display: flex;
     align-items: center;
     justify-content: center;
+    // 窄宽度（参考栏）里内容超宽时从左侧开始，避免左边的缩略图开关和翻页被挤出可滚动区域。
+    justify-content: safe center;
     min-height: var(--ui-layout-46, 46px);
     padding: var(--ui-space-6, 6px) var(--ui-space-10, 10px);
     gap: var(--ui-space-6, 6px);
@@ -981,6 +1357,25 @@
     font-size: var(--ui-font-11, 11px);
     line-height: 1.2;
     pointer-events: none;
+    user-select: none;
+    z-index: 2;
+  }
+
+  .pdf-preview__scan-tip {
+    position: absolute;
+    z-index: 7;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--ui-space-6, 6px);
+    max-width: calc(100% - var(--ui-space-16, 16px));
+    padding: var(--ui-space-7, 7px) var(--ui-space-10, 10px);
+    border-radius: 8px;
+    background: rgb(20 22 30 / 88%);
+    color: #fff;
+    font-size: var(--ui-font-12, 12px);
+    line-height: 1.4;
+    pointer-events: none;
+    box-shadow: 0 6px 18px rgb(0 0 0 / 22%);
   }
 
   @media (max-width: 600px) {
@@ -1006,5 +1401,75 @@
       border-radius: 2px;
       box-shadow: 0 1px 3px rgb(15 23 42 / 9%);
     }
+  }
+</style>
+
+<style lang="less">
+  // pdf.js 文字层（spans 由 pdf.js 生成，不带 scoped 属性）。取自 pdf_viewer.css 的最小子集：
+  // 文字透明叠在画布上，只负责选择和复制；旋转随 data-main-rotation 变换。
+  .pdf-preview__text-layer {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    overflow: hidden;
+    overflow: clip;
+    line-height: 1;
+    text-align: initial;
+    text-size-adjust: none;
+    forced-color-adjust: none;
+    transform-origin: 0 0;
+  }
+
+  .pdf-preview__text-layer span,
+  .pdf-preview__text-layer br {
+    position: absolute;
+    color: transparent;
+    white-space: pre;
+    cursor: text;
+    transform-origin: 0% 0%;
+  }
+
+  // 文字片段要压在 endOfContent 之上：拖选时 endOfContent 铺满整页，否则鼠标移动会落到它上面选不到字。
+  .pdf-preview__text-layer > :not(.markedContent),
+  .pdf-preview__text-layer .markedContent span:not(.markedContent) {
+    z-index: 1;
+  }
+
+  .pdf-preview__text-layer span.markedContent {
+    top: 0;
+    height: 0;
+  }
+
+  .pdf-preview__text-layer ::selection {
+    background: rgb(97 92 237 / 28%);
+  }
+
+  .pdf-preview__text-layer br::selection {
+    background: transparent;
+  }
+
+  .pdf-preview__text-layer .endOfContent {
+    position: absolute;
+    inset: 100% 0 0;
+    z-index: 0;
+    display: block;
+    cursor: default;
+    user-select: none;
+  }
+
+  .pdf-preview__text-layer.selecting .endOfContent {
+    top: 0;
+  }
+
+  .pdf-preview__text-layer[data-main-rotation='90'] {
+    transform: rotate(90deg) translateY(-100%);
+  }
+
+  .pdf-preview__text-layer[data-main-rotation='180'] {
+    transform: rotate(180deg) translate(-100%, -100%);
+  }
+
+  .pdf-preview__text-layer[data-main-rotation='270'] {
+    transform: rotate(270deg) translateX(-100%);
   }
 </style>

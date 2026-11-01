@@ -91,6 +91,7 @@
         embedded
         :visible="true"
         :file-info="fileInfo"
+        :pdf-excerpt="pdfExcerpt"
       />
     </div>
   </section>
@@ -117,6 +118,7 @@
     type NoteReferenceRecent,
     type NoteReferenceTarget,
   } from '@/utils/noteReference';
+  import type { PdfExcerpt, PdfExcerptFile, PdfExcerptHandler } from '@/utils/pdfExcerpt';
 
   const FilePreview = defineAsyncComponent(() => import('@/components/FilePreview.vue'));
 
@@ -124,6 +126,9 @@
     target: NoteReferenceTarget | null;
     currentNoteId: string;
     ownerKey: string;
+    /** 左侧笔记可写时提供：PDF 选中文字后插到编辑器光标处。 */
+    excerptInsert?: (excerpt: PdfExcerpt, file: PdfExcerptFile) => boolean | Promise<boolean>;
+    excerptUndo?: () => void;
   }>();
 
   const emit = defineEmits<{
@@ -140,6 +145,17 @@
   const fileInfo = ref<ReferencedFilePreviewInfo | null>(null);
   const fileLoading = ref(false);
   let fileRequestId = 0;
+
+  const pdfExcerpt = computed<PdfExcerptHandler | undefined>(() =>
+    props.excerptInsert && fileInfo.value
+      ? {
+          mode: 'insert',
+          file: { fileId: String(fileInfo.value.id), fileName: fileInfo.value.fileName },
+          insert: props.excerptInsert,
+          undo: () => props.excerptUndo?.(),
+        }
+      : undefined,
+  );
 
   const displayTitle = computed(() => {
     if (!props.target) return '';

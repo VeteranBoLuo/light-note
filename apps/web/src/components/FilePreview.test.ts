@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp, h, nextTick, ref } from 'vue';
+import { rememberPdfPage } from '@/utils/pdfExcerptHandoff';
 import FilePreview from './FilePreview.vue';
 import { requestActivitySnapshot } from '@/http/requestActivity';
 import { HTML_PREVIEW_REFERRER_POLICY, HTML_PREVIEW_SANDBOX } from '@/utils/htmlPreview';
@@ -24,6 +25,11 @@ vi.mock('@/composables/useAndroidDownloadProgress', () => ({ announceNativeDownl
 
 vi.mock('vue-i18n', () => ({
   useI18n: () => ({ t: (key: string) => key }),
+}));
+
+// 全局消息容器会导入应用级 i18n 实例；这里只验证预览外壳，用桩替代消息提示。
+vi.mock('@/components/base/BasicComponents/BMessage/BMessage.ts', () => ({
+  default: { success: vi.fn(), warning: vi.fn(), error: vi.fn(), info: vi.fn(), loading: vi.fn() },
 }));
 
 vi.mock('@/components/base/VideoPreview.vue', () => ({
@@ -54,15 +60,15 @@ vi.mock('@/components/noteLibrary/detail/ResourceBacklinks.vue', () => ({
 
 vi.mock('@/components/cloudSpace/PdfPreview.vue', () => ({
   default: {
-    props: ['src', 'fileName'],
-    emits: ['error'],
+    props: ['src', 'fileName', 'initialPage', 'excerpt'],
+    emits: ['error', 'excerpt-docked', 'rendered'],
     mounted() {
       pdfLifecycle.mounted();
     },
     unmounted() {
       pdfLifecycle.unmounted();
     },
-    template: `<div class="pdf-preview-stub" :data-src="src" :data-file-name="fileName"><button class="pdf-fail" @click="$emit('error', new Error('invalid PDF'))" /></div>`,
+    template: `<div class="pdf-preview-stub" :data-src="src" :data-file-name="fileName" :data-initial-page="initialPage" :data-excerpt-mode="excerpt?.mode || 'copy'"><button class="pdf-fail" @click="$emit('error', new Error('invalid PDF'))" /><button class="pdf-dock" @click="$emit('excerpt-docked', true)" /><button class="pdf-rendered" @click="$emit('rendered')" /></div>`,
   },
 }));
 
@@ -205,7 +211,7 @@ async function mountHtmlPreview() {
   return { fileUrl };
 }
 
-async function mountPdfPreview() {
+async function mountPdfPreview(extraProps: Record<string, unknown> = {}) {
   const host = document.createElement('div');
   document.body.append(host);
   const fileUrl = 'https://files.example/preview.pdf?signature=test';
@@ -213,6 +219,7 @@ async function mountPdfPreview() {
     setup() {
       return () =>
         h(FilePreview, {
+          ...extraProps,
           visible: true,
           showNext: true,
           fileInfo: {
@@ -505,6 +512,28 @@ describe('FilePreview PDF preview', () => {
     expect(preview?.dataset.src).toBe(fileUrl);
     expect(preview?.dataset.fileName).toBe('preview.pdf');
     expect(document.body.querySelector('iframe.preview-iframe')).toBeNull();
+  });
+
+  it('从摘录记下的页码开始，并把摘录能力交给 PDF 预览；手机底部摘录条出现时让开悬浮控制栏', async () => {
+    rememberPdfPage('pdf-1', 7);
+    await mountPdfPreview({ pdfExcerpt: { mode: 'pick', file: { fileId: 'pdf-1', fileName: 'preview.pdf' } } });
+    const preview = document.body.querySelector<HTMLElement>('.pdf-preview-stub');
+    expect(preview?.dataset.initialPage).toBe('7');
+    expect(preview?.dataset.excerptMode).toBe('pick');
+    document.body.querySelector<HTMLButtonElement>('.pdf-rendered')?.click();
+    await nextTick();
+    expect(document.body.querySelector('.preview-controls')).not.toBeNull();
+    document.body.querySelector<HTMLButtonElement>('.pdf-dock')?.click();
+    await nextTick();
+    expect(document.body.querySelector('.preview-controls')).toBeNull();
+  });
+
+  it('别人分享的文件只能复制，不交出摘录能力', async () => {
+    await mountPdfPreview({
+      previewAccess: { kind: 'share', token: 'token-1' },
+      pdfExcerpt: { mode: 'pick', file: { fileId: 'pdf-1', fileName: 'preview.pdf' } },
+    });
+    expect(document.body.querySelector<HTMLElement>('.pdf-preview-stub')?.dataset.excerptMode).toBe('copy');
   });
 });
 

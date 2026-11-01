@@ -227,6 +227,12 @@ export declare function parseResourceHref(href: unknown): ResourceRef | null;
 /** 由 { type, id } 构造 canonical href;非法输入返回 ''。 */
 export declare function buildResourceHref(ref: ResourceRef): string;
 
+/** 文件引用链接里的页码(仅 `/cloudSpace?fileId=…&page=N`);没有或不合法时返回 null。 */
+export declare function readResourceHrefPage(href: unknown): number | null;
+
+/** 构造指向文件某一页的引用链接;页码不合法时退回 canonical href。 */
+export declare function buildFileResourceHref(id: string, page?: number | null): string;
+
 /** 由安全 ref 生成 HTML anchor 增强属性。 */
 export declare function buildResourceAnchorAttrs(ref: ResourceRef): {
   'data-ln-resource-type': string;

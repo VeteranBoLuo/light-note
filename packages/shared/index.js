@@ -643,7 +643,7 @@ export function resolveBookmarkUrlInput(
 // 笔记内联提及(N0)· 站内资源引用 canonical 协议(D3)。前后端唯一事实源:
 //   note     -> /noteLibrary/{id}
 //   bookmark -> /manage/editBookmark/{id}
-//   file     -> /cloudSpace?fileId={id}
+//   file     -> /cloudSpace?fileId={id}(PDF 摘录来源可追加 &page={1..99999},仍解析为同一文件)
 //   todo     -> /inbox?tab=todo&todoId={id}
 //   tag      -> /tag/{id}
 // 纯字符串处理,无 DOM / DB / marked / cheerio 依赖。exact + safe:
@@ -771,9 +771,10 @@ export function parseResourceHref(href) {
   }
   if (path === '/cloudSpace') {
     if (!query) return null;
-    // 只接受恰好一个 fileId 参数,拒绝额外 / 重复参数
+    // 只接受 fileId,PDF 摘录的来源链接可在其后带一个页码;拒绝其它 / 重复参数
     const pairs = query.split('&');
-    if (pairs.length !== 1) return null;
+    if (pairs.length > 2) return null;
+    if (pairs.length === 2 && readFileHrefPage(pairs[1]) === null) return null;
     const eq = pairs[0].indexOf('=');
     if (eq === -1) return null;
     if (pairs[0].slice(0, eq) !== 'fileId') return null;
@@ -781,6 +782,34 @@ export function parseResourceHref(href) {
     return id ? { type: 'file', id } : null;
   }
   return null;
+}
+
+const MAX_FILE_HREF_PAGE = 99999;
+
+function readFileHrefPage(pair) {
+  const match = /^page=([1-9]\d{0,4})$/.exec(pair);
+  if (!match) return null;
+  const page = Number(match[1]);
+  return page <= MAX_FILE_HREF_PAGE ? page : null;
+}
+
+/** 文件引用链接里的页码(仅 `/cloudSpace?fileId=…&page=N`);没有或不合法时返回 null。 */
+export function readResourceHrefPage(href) {
+  const ref = parseResourceHref(href);
+  if (ref?.type !== 'file') return null;
+  const query = href.trim().split('?')[1] || '';
+  const pairs = query.split('&');
+  return pairs.length === 2 ? readFileHrefPage(pairs[1]) : null;
+}
+
+/** 构造指向文件某一页的引用链接;页码不合法时退回 canonical href。 */
+export function buildFileResourceHref(id, page) {
+  const href = buildResourceHref({ type: 'file', id });
+  if (!href) return '';
+  const normalizedPage = Number(page);
+  return Number.isInteger(normalizedPage) && normalizedPage >= 1 && normalizedPage <= MAX_FILE_HREF_PAGE
+    ? `${href}&page=${normalizedPage}`
+    : href;
 }
 
 /** 由 { type, id } 构造 canonical href;id 缺失/超长/含危险字符时返回 ''(与 parse 对称)。 */
@@ -872,6 +901,13 @@ export const RESOURCE_REF_TEST_VECTORS = Object.freeze([
   { href: '/cloudSpace?folderId=x&fileId=f8', ref: null },
   { href: '/cloudSpace?fileId=', ref: null },
   { href: '/cloudSpace?fileId=f1#frag', ref: null },
+  // file 可带一个页码(PDF 摘录来源),页码必须是 1–99999 且位于 fileId 之后
+  { href: '/cloudSpace?fileId=f1&page=12', ref: { type: 'file', id: 'f1' } },
+  { href: '/cloudSpace?fileId=f1&page=0', ref: null },
+  { href: '/cloudSpace?fileId=f1&page=012', ref: null },
+  { href: '/cloudSpace?fileId=f1&page=100000', ref: null },
+  { href: '/cloudSpace?fileId=f1&page=2&page=3', ref: null },
+  { href: '/cloudSpace?page=2&fileId=f1', ref: null },
   // 编码错误 / 分段逃逸 / 超长 id
   { href: '/noteLibrary/%ZZ', ref: null },
   { href: '/noteLibrary/id-with%2Fslash', ref: null },

@@ -231,6 +231,7 @@
       v-if="previewVisible"
       v-model:visible="previewVisible"
       :file-info="previewFileInfo"
+      :pdf-excerpt="previewPdfExcerpt"
       :show-next="cloud.fileTotal > 1"
       @prev="previewPrevFile"
       @next="previewNextFile"
@@ -285,6 +286,7 @@
   import FileTypeFilter from '@/components/cloudSpace/FileTypeFilter.vue';
   import MoveFile from '@/components/cloudSpace/MoveFile.vue';
   import { recordOperation } from '@/api/commonApi.ts';
+  import type { PdfExcerptHandler } from '@/utils/pdfExcerpt';
   import { updatePreference } from '@/utils/savePreference';
   import { useRoute, useRouter } from 'vue-router';
   import { useI18n } from 'vue-i18n';
@@ -976,6 +978,13 @@
 
   // 预览相关状态
   const previewVisible = ref(false);
+  // 登录用户预览自己的 PDF 时可以摘录到笔记；游客看的是示例账号的文件，只能复制。
+  const previewPdfExcerpt = computed<PdfExcerptHandler | undefined>(() =>
+    user.role && user.role !== 'visitor' && previewFileInfo.id
+      ? { mode: 'pick', file: { fileId: String(previewFileInfo.id), fileName: previewFileInfo.fileName } }
+      : undefined,
+  );
+
   const previewFileInfo = reactive<FileItem>({
     id: '',
     fileName: '',

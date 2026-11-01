@@ -45,6 +45,18 @@ describe('noteReferenceService', () => {
     }
   });
 
+  describe('extractOwnedResourceRefs · PDF 摘录来源带页码', () => {
+    it('同一文件不同页的来源链接只产生一条文件引用', () => {
+      const content =
+        '<blockquote><p>原文</p><p>— <a href="/cloudSpace?fileId=f9&amp;page=12">指南.pdf</a> · 第 12 页</p></blockquote>' +
+        '<blockquote><p>又一段</p><p>— <a href="/cloudSpace?fileId=f9&amp;page=30">指南.pdf</a> · 第 30 页</p></blockquote>';
+      expect(extractOwnedResourceRefs({ content, type: 'html' })).toEqual([{ type: 'file', id: 'f9' }]);
+      expect(extractOwnedResourceRefs({ content: '> 原文\n>\n> — [指南.pdf](/cloudSpace?fileId=f9&page=12) · 第 12 页', type: 'markdown' })).toEqual([
+        { type: 'file', id: 'f9' },
+      ]);
+    });
+  });
+
   describe('extractOwnedResourceRefs · HTML 走 cheerio 只取 a[href]', () => {
     it('三类型 + 去重 + 外链/危险协议过滤', () => {
       const content =

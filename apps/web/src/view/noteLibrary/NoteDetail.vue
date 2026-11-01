@@ -185,6 +185,7 @@
             </BButton>
           </div>
           <div :key="noteContentKey" class="note-detail-content">
+            <NotePdfExcerptReturn v-if="pdfExcerptReturnTarget" @back="returnToPdf" />
             <div class="note-body-title n-title">
               <BInput
                 v-if="bookmark.isMobile"
@@ -251,6 +252,8 @@
             </template>
             <template #reference>
               <NoteReferencePanel
+                :excerpt-insert="referenceExcerptInsert"
+                :excerpt-undo="undoReferenceExcerpt"
                 :target="referenceTarget"
                 :current-note-id="note.id || ''"
                 :owner-key="referenceOwnerKey"
@@ -393,6 +396,8 @@
   import NoteWorkspaceSidebar from '@/components/noteLibrary/workspace/NoteWorkspaceSidebar.vue';
   import NoteDetailSidePanel, { type NoteDetailSidePanelTab } from '@/components/noteLibrary/reference/NoteDetailSidePanel.vue';
   import NoteReferencePanel from '@/components/noteLibrary/reference/NoteReferencePanel.vue';
+  import NotePdfExcerptReturn from '@/components/noteLibrary/detail/NotePdfExcerptReturn.vue';
+  import { useNotePdfExcerpt, type NotePdfExcerptEditor } from '@/composables/useNotePdfExcerpt';
   import { NOTE_TREE_REFERENCE_CONTEXT } from '@/components/noteLibrary/tree/noteTreeReference';
   import NoteOutlineList from '@/components/noteLibrary/detail/NoteOutlineList.vue';
   import NoteTreeDropFeedback from '@/components/noteLibrary/tree/NoteTreeDropFeedback.vue';
@@ -812,7 +817,7 @@
     logLabel: 'note-detail',
   });
   let detailTreeSearchTimer = 0;
-  interface NoteEditorHandle {
+  interface NoteEditorHandle extends NotePdfExcerptEditor {
     focusToEnd?: () => void;
     replaceContentWithUndo?: (content: string, type?: 'html' | 'markdown' | 'drawing') => boolean | Promise<boolean>;
     scrollToMarkdownHeading?: (index: number, sourceOffset?: number) => void;
@@ -821,6 +826,22 @@
     triggerUndoSwitch?: () => void | Promise<void>;
   }
   const editorRef = ref<NoteEditorHandle | null>(null);
+  const {
+    returnTarget: pdfExcerptReturnTarget,
+    insertReferenceExcerpt,
+    undoReferenceExcerpt,
+    consumeArrival: consumePdfExcerptArrival,
+    returnToPdf,
+  } = useNotePdfExcerpt({
+    editor: editorRef,
+    noteId: () => note.id || '',
+    noteTitle: () => note.title || '',
+    canInsert: () => !readonly.value && !isDrawingNote.value,
+  });
+  // 参考栏里 PDF 选中文字后的「插入笔记」：编辑器就绪且笔记可写时才提供。
+  const referenceExcerptInsert = computed(() =>
+    editorRuntimeReady.value && !readonly.value && !isDrawingNote.value ? insertReferenceExcerpt : undefined,
+  );
   const noteContentKey = ref('note-content:initial');
   const isNoteSwitching = ref(false);
   const openingPageId = ref<string | null>(null);
@@ -1367,6 +1388,7 @@
     editorRuntimeReady.value = true;
     contentAutosaveReady.value = true;
     isNoteSwitching.value = false;
+    void consumePdfExcerptArrival();
     if (currentRouteId === 'add' && pendingNewNoteTitleFocus) {
       pendingNewNoteTitleFocus = false;
       await nextTick();
