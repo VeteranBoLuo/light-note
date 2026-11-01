@@ -7,6 +7,11 @@ export declare const CARD_IMAGE_PROFILE: Readonly<{
 export declare const IMAGE_PREVIEW_SOURCES: readonly ["note", "cloud_file"];
 export declare const VIDEO_COVER_EXTENSIONS: readonly string[];
 export declare function isVideoCoverFile(name: unknown): boolean;
+export declare function isPdfCoverFile(name: unknown): boolean;
+export declare const HEAVY_PREVIEW_FORMATS: readonly ["video-card", "pdf-card"];
+export declare function cloudPreviewFormat(
+  name: unknown,
+): "card" | "video-card" | "pdf-card";
 export type ImagePreviewSource = {
   sourceType: "note" | "cloud_file";
   sourceId: string;

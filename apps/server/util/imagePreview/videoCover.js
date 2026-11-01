@@ -1,14 +1,13 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { createHash } from 'node:crypto';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { buildFilePreviewChildEnv } from '../filePreview/runtime.js';
 import { compressCardImage, imageError, validateSource } from './compress.js';
+import { copySourceToFile } from './sourceCopy.js';
 
 export const VIDEO_COVER_MAX_BYTES = 512 * 1024 * 1024;
-const CHUNK_BYTES = 4 * 1024 * 1024;
 const FORMATS = 'mov,matroska,webm,avi,asf,flv,ogg';
 const binaries = () => ({
   probe: process.env.VIDEO_PREVIEW_FFPROBE_BIN || 'ffprobe',
@@ -24,7 +23,6 @@ export async function readVideoCover(locator, metadata, readRange, { runner = pr
   const input = path.join(dir, 'source');
   const output = path.join(dir, 'frame.png');
   const deadline = Date.now() + 75_000;
-  const sourceHash = createHash('sha256');
   const run = async (bin, args, timeout) => {
     const remaining = Math.min(timeout, deadline - Date.now());
     if (remaining <= 0) throw imageError('IMAGE_PROCESS_TIMEOUT');
@@ -45,21 +43,7 @@ export async function readVideoCover(locator, metadata, readRange, { runner = pr
     }
   };
   try {
-    const handle = await fs.open(input, 'wx', 0o600);
-    try {
-      const signal = AbortSignal.timeout(30_000);
-      for (let start = 0; start < size; start += CHUNK_BYTES) {
-        signal.throwIfAborted();
-        const end = Math.min(size - 1, start + CHUNK_BYTES - 1);
-        const chunk = await readRange(locator, start, end, { signal });
-        signal.throwIfAborted();
-        if (!Buffer.isBuffer(chunk) || chunk.length !== end - start + 1) throw imageError('IMAGE_SOURCE_CHANGED');
-        sourceHash.update(chunk);
-        await handle.writeFile(chunk);
-      }
-    } finally {
-      await handle.close();
-    }
+    const revision = await copySourceToFile(locator, size, readRange, input);
     const { probe, encoder } = binaries();
     const { stdout } = await run(
       probe,
@@ -164,7 +148,7 @@ export async function readVideoCover(locator, metadata, readRange, { runner = pr
       body,
       preview: { ...preview, presentation: 'full' },
       durationSeconds,
-      revision: sourceHash.digest('hex'),
+      revision,
       version: metadata.version,
       sourceSize: size,
     };

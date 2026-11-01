@@ -13,6 +13,7 @@ import '@/assets/css/index.less';
 const p = new URLSearchParams(location.search);
 const audioMode = p.get('audio') === 'true';
 const videoMode = p.get('video') === 'true';
+const pdfMode = p.get('pdf') === 'true';
 const realFormats = p.has('realFormats');
 const heicMode = p.has('heic');
 // Browser fixture uses a real WebP decoded from our synthetic HEIC.
@@ -53,6 +54,19 @@ cropCanvas.width = 480;
 cropCanvas.height = 720;
 cropCanvas.getContext('2d')!.drawImage(tallCanvas, 0, 0, 600, 900, 0, 0, 480, 720);
 const tallThumbnail = cropCanvas.toDataURL('image/webp');
+// A portrait first page, as pdftoppm -scale-to 720 renders an A4 document.
+const pageCanvas = document.createElement('canvas');
+pageCanvas.width = 509;
+pageCanvas.height = 720;
+const pageContext = pageCanvas.getContext('2d')!;
+pageContext.fillStyle = '#ffffff';
+pageContext.fillRect(0, 0, 509, 720);
+pageContext.fillStyle = '#1f2937';
+pageContext.font = 'bold 30px sans-serif';
+pageContext.fillText('季度复盘报告', 48, 86);
+pageContext.fillStyle = '#9ca3af';
+for (let y = 130; y < 680; y += 26) pageContext.fillRect(48, y, y % 130 === 0 ? 260 : 413, 8);
+const pdfPage = pageCanvas.toDataURL('image/webp', 0.86);
 const states = ['ready', 'processing', 'failed', 'unsupported', 'failed', 'ready'] as const;
 const metrics = { batches: 0, items: 0, unexpected: 0, retries: 0 };
 const retried = new Set<string>();
@@ -241,18 +255,20 @@ request.defaults.adapter = async (config) => {
                       : 'IMAGE_SOURCE_MISSING'
                     : null,
             retryable: state === 'failed' && index === 4,
-            presentation: !videoMode && index === 5 ? 'long_top' : 'full',
+            presentation: !videoMode && !pdfMode && index === 5 ? 'long_top' : 'full',
             durationSeconds: videoMode && state === 'ready' ? 12.5 : null,
             assetId: item.sourceId,
             url:
               state === 'ready'
                 ? heicMode
                   ? heicPreview
-                  : realFormats && index === 4
-                    ? '/fixture-broken-thumbnail.webp'
-                    : index === 5
-                      ? tallThumbnail
-                      : small
+                  : pdfMode
+                    ? pdfPage
+                    : realFormats && index === 4
+                      ? '/fixture-broken-thumbnail.webp'
+                      : index === 5
+                        ? tallThumbnail
+                        : small
                 : null,
             expiresAt: Date.now() + 600000,
           };
@@ -361,23 +377,30 @@ cloudSpaceStore(pinia).fileList = states.map((state, i) => ({
   id: `cloud-${i}`,
   fileName: heicMode
     ? `HEIC-${i}.heic`
-    : videoMode
-      ? `视频-${state}.${i % 2 ? 'MOV' : 'mp4'}`
-      : audioMode
-        ? `音频-${state}.mp3`
-        : realFormats && i === 0
-          ? 'JPEG内容但名称为HEIC.heic'
-          : `图片-${state}.png`,
+    : pdfMode
+      ? `文档-${state}.pdf`
+      : videoMode
+        ? `视频-${state}.${i % 2 ? 'MOV' : 'mp4'}`
+        : audioMode
+          ? `音频-${state}.mp3`
+          : realFormats && i === 0
+            ? 'JPEG内容但名称为HEIC.heic'
+            : `图片-${state}.png`,
   fileType: heicMode
     ? 'image/heic'
-    : videoMode
-      ? 'video/quicktime'
-      : audioMode
-        ? 'audio/mpeg'
-        : realFormats && i === 0
-          ? 'image/heic'
-          : 'image/png',
-  category: videoMode ? 'video' : audioMode ? 'audio' : 'image',
+    : pdfMode
+      ? 'application/pdf'
+      : videoMode
+        ? 'video/quicktime'
+        : audioMode
+          ? 'audio/mpeg'
+          : realFormats && i === 0
+            ? 'image/heic'
+            : 'image/png',
+  category: pdfMode ? 'pdf' : videoMode ? 'video' : audioMode ? 'audio' : 'image',
+  imagePreview: pdfMode
+    ? { sourceType: 'cloud_file', sourceId: `cloud-${i}`, profile: 'card', status: 'queued' }
+    : undefined,
   fileSize: realFormats || (p.has('originalFallback') && i === 3) ? 11 * 1024 * 1024 : 2000000,
   fileUrl: heicMode
     ? heicOriginalUrl

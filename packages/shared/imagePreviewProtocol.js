@@ -16,7 +16,16 @@ export const VIDEO_COVER_EXTENSIONS = Object.freeze([
   "flv",
   "ogv",
 ]);
+const extensionOf = (name) => String(name || "").match(/\.([^.]+)$/)?.[1]?.toLowerCase();
 export function isVideoCoverFile(name) {
-  const extension = String(name || "").match(/\.([^.]+)$/)?.[1]?.toLowerCase();
+  const extension = extensionOf(name);
   return Boolean(extension && VIDEO_COVER_EXTENSIONS.includes(extension));
+}
+export function isPdfCoverFile(name) {
+  return extensionOf(name) === "pdf";
+}
+/** Formats rendered from a full source copy by an external decoder; they share one serial worker lane. */
+export const HEAVY_PREVIEW_FORMATS = Object.freeze(["video-card", "pdf-card"]);
+export function cloudPreviewFormat(name) {
+  return isVideoCoverFile(name) ? "video-card" : isPdfCoverFile(name) ? "pdf-card" : "card";
 }

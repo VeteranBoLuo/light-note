@@ -81,6 +81,11 @@ export async function readSource(asset) {
     const { readVideoCover } = await import('./videoCover.js');
     return readVideoCover(asset.source_locator, meta, getObjectRangeFromObs);
   }
+  if (asset.preview_format === 'pdf-card') {
+    if (asset.storage_kind !== 'obs') throw imageError('IMAGE_SOURCE_INVALID');
+    const { readPdfCover } = await import('./pdfCover.js');
+    return readPdfCover(asset.source_locator, meta, getObjectRangeFromObs);
+  }
   if (asset.source_type === 'cloud_file' && /\.mp3$/i.test(asset.source_file_name || '')) {
     const { body, tag } = await readAudioCover(asset.source_locator, Number(meta.size), getObjectRangeFromObs);
     return { body, noCover: !body, version: meta.version, sourceSize: Number(meta.size), revision: hash(tag) };

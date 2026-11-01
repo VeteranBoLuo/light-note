@@ -11,7 +11,7 @@ import {
   removeImageReferences,
 } from './references.js';
 import { resolveImagePreviews, validateResolveItems, retryImagePreview } from './service.js';
-import { runSingleImagePreviewJob, runSingleVideoPreviewJob, cleanupImageAssets } from './worker.js';
+import { runSingleImagePreviewJob, runSingleHeavyPreviewJob, cleanupImageAssets } from './worker.js';
 import { hash } from './sources.js';
 import { relocateCloudImage } from './relocate.js';
 import { loadAsyncJobSummary } from '../adminAsyncJobHealth.js';
@@ -136,9 +136,9 @@ describe.skipIf(!socket)('image lifecycle on isolated local MySQL', () => {
     const deps = { db, read, compress, put: vi.fn(), remove: vi.fn(), metadata: async () => ({ version: 'metadata' }) };
     expect(await runSingleImagePreviewJob('image-lane', deps)).toBe(false);
     expect(read).not.toHaveBeenCalled();
-    expect(await runSingleVideoPreviewJob('video-lane', deps)).toBe(true);
+    expect(await runSingleHeavyPreviewJob('video-lane', deps)).toBe(true);
     expect(compress).not.toHaveBeenCalled();
-    expect(await runSingleVideoPreviewJob('video-lane', deps)).toBe(false);
+    expect(await runSingleHeavyPreviewJob('video-lane', deps)).toBe(false);
     const [[artifact]] = await db.query('SELECT * FROM file_preview_artifacts');
     expect(artifact.source_size).toBe(9000000);
     const [ready] = await resolveImagePreviews('u1', [source], { db, sign });
@@ -153,17 +153,58 @@ describe.skipIf(!socket)('image lifecycle on isolated local MySQL', () => {
       durationSeconds: 12.5,
     });
     expect((await db.query('SELECT * FROM file_preview_artifacts'))[0]).toHaveLength(1);
-    expect(await runSingleVideoPreviewJob('video-lane', deps)).toBe(false);
+    expect(await runSingleHeavyPreviewJob('video-lane', deps)).toBe(false);
     await transaction((c) => removeImageReferences(c, 'cloud_file', ['1']));
     await db.query(
       'UPDATE image_assets SET cleanup_after=DATE_SUB(NOW(),INTERVAL 1 DAY),delete_started_at=DATE_SUB(NOW(),INTERVAL 2 DAY)',
     );
     const remove = vi.fn(),
       removeSource = vi.fn();
+    // A file row that still names the original (here: not yet purged from the trash) keeps it.
+    await cleanupImageAssets({ db, remove, removeSource });
+    expect(removeSource).not.toHaveBeenCalled();
+    expect((await db.query('SELECT status FROM image_assets'))[0][0].status).toBe('pending_delete');
+    await db.query('DELETE FROM files WHERE id=1');
     await cleanupImageAssets({ db, remove, removeSource });
     expect(remove).toHaveBeenCalledWith(artifact.artifact_object_key);
     expect(removeSource).toHaveBeenCalledWith(expect.objectContaining({ source_locator: 'renamed-key' }));
     expect((await db.query('SELECT * FROM image_assets'))[0]).toHaveLength(0);
+  });
+
+  it('renders PDF first pages in the heavy lane without media duration', async () => {
+    await db.query("INSERT INTO files VALUES (1,'u1',0,'Report.PDF','pdf-key',3000000)");
+    const source = { sourceType: 'cloud_file', sourceId: '1' };
+    const sign = () => ({ url: 'page.webp' });
+    expect((await resolveImagePreviews('u1', [source], { db, sign }))[0].status).toBe('queued');
+    const read = vi.fn(async (job) => {
+      expect(job.preview_format).toBe('pdf-card');
+      return {
+        body: Buffer.from('webp'),
+        preview: { body: Buffer.from('webp'), width: 509, height: 720, presentation: 'full' },
+        version: 'metadata',
+        revision: hash('pdf-bytes'),
+        sourceSize: 3000000,
+      };
+    });
+    const deps = {
+      db,
+      read,
+      compress: vi.fn(),
+      put: vi.fn(),
+      remove: vi.fn(),
+      metadata: async () => ({ version: 'metadata' }),
+    };
+    expect(await runSingleImagePreviewJob('image-lane', deps)).toBe(false);
+    expect(await runSingleHeavyPreviewJob('video-only', { ...deps, formats: ['video-card'] })).toBe(false);
+    expect(read).not.toHaveBeenCalled();
+    expect(await runSingleHeavyPreviewJob('heavy-lane', deps)).toBe(true);
+    const [[artifact]] = await db.query('SELECT * FROM file_preview_artifacts');
+    expect(JSON.parse(artifact.preview_metadata_json)).toEqual({ presentation: 'full' });
+    expect((await resolveImagePreviews('u1', [source], { db, sign }))[0]).toMatchObject({
+      status: 'ready',
+      url: 'page.webp',
+      durationSeconds: null,
+    });
   });
 
   it.each([false, true])('persists MP3 cover outcome and preserves audio size (absent=%s)', async (noCover) => {
@@ -302,6 +343,7 @@ describe.skipIf(!socket)('image lifecycle on isolated local MySQL', () => {
   });
   it('retains cleanup records when object deletion fails and deletes only after grace', async () => {
     await asset();
+    await db.query('DELETE FROM files WHERE id=1');
     const removeSource = vi.fn().mockRejectedValueOnce(new Error('OBS_BUSY'));
     await cleanupImageAssets({ db, removeSource, remove: vi.fn() });
     expect(removeSource).not.toHaveBeenCalled();

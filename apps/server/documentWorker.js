@@ -9,8 +9,9 @@ import {
 } from './util/services/organizeProcessingPipeline.js';
 import { runRuleBatch } from './util/services/organizeSuggestionLifecycle.js';
 import { inspectImagePreviewRuntime } from './util/imagePreview/runtime.js';
-import { runSingleImagePreviewJob, runSingleVideoPreviewJob, cleanupImageAssets } from './util/imagePreview/worker.js';
+import { runSingleImagePreviewJob, runSingleHeavyPreviewJob, cleanupImageAssets } from './util/imagePreview/worker.js';
 import { inspectVideoPreviewRuntime } from './util/imagePreview/videoCover.js';
+import { inspectPdfPreviewRuntime } from './util/imagePreview/pdfCover.js';
 import { runOrganizeCompletionNotifications } from './util/services/organizeCompletionNotification.js';
 import os from 'node:os';
 import pool from './db/index.js';
@@ -93,6 +94,10 @@ async function run() {
   if (!imageRuntime.ready) console.warn('[image-preview] runtime unavailable');
   const videoRuntime = await inspectVideoPreviewRuntime();
   if (!videoRuntime.ready) console.warn('[video-preview] runtime unavailable');
+  const pdfRuntime = await inspectPdfPreviewRuntime();
+  if (!pdfRuntime.ready) console.warn('[pdf-preview] runtime unavailable');
+  // Formats without a decoder stay queued instead of failing; they resume once the runtime is installed.
+  const heavyFormats = [...(videoRuntime.ready ? ['video-card'] : []), ...(pdfRuntime.ready ? ['pdf-card'] : [])];
   const previewRuntime = await inspectAllFilePreviewRuntimes();
   for (const [name, state] of Object.entries({ archive: previewRuntime.archive, office: previewRuntime.office })) {
     if (state.errorCode === 'FILE_PREVIEW_DISABLED') console.log('[文件预览] %s 预览已通过配置关闭', name);
@@ -100,11 +105,11 @@ async function run() {
   }
   console.log(`[AI 文档/文件预览/知识工具箱/整理建议] 解析 Worker 已启动: ${workerId}`);
   pipelineLoops.push(
-    ...(videoRuntime.ready
+    ...(heavyFormats.length
       ? [
           pipelineLoop('video', () =>
             runMedia(
-              () => runSingleVideoPreviewJob(workerId),
+              () => runSingleHeavyPreviewJob(workerId, { formats: heavyFormats }),
               () => stopping,
             ),
           ),

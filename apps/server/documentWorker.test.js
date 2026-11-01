@@ -99,12 +99,15 @@ it('启动失败也释放连接池', async () => {
 
 vi.mock('./util/imagePreview/worker.js', () => ({
   runSingleImagePreviewJob: vi.fn(async () => false),
-  runSingleVideoPreviewJob: vi.fn(async () => false),
+  runSingleHeavyPreviewJob: vi.fn(async () => false),
   cleanupImageAssets: vi.fn(),
 }));
 vi.mock('./util/imagePreview/runtime.js', () => ({ inspectImagePreviewRuntime: vi.fn(async () => ({ ready: true })) }));
 vi.mock('./util/imagePreview/videoCover.js', () => ({
   inspectVideoPreviewRuntime: vi.fn(async () => ({ ready: true })),
+}));
+vi.mock('./util/imagePreview/pdfCover.js', () => ({
+  inspectPdfPreviewRuntime: vi.fn(async () => ({ ready: true })),
 }));
 
 it('数据库关闭失败仍释放 Redis 连接', async () => {
@@ -138,17 +141,33 @@ it('V3 AI proceeds while the document parser is still occupied', async () => {
   expect(mocks.item.mock.calls.some(([, , options]) => options.pipeline === 'v3')).toBe(true);
 });
 
-it('does not claim video jobs when the decoder runtime is unavailable', async () => {
+it('does not claim heavy preview jobs when no decoder runtime is available', async () => {
   const { inspectVideoPreviewRuntime } = await import('./util/imagePreview/videoCover.js');
-  const { runSingleVideoPreviewJob } = await import('./util/imagePreview/worker.js');
+  const { inspectPdfPreviewRuntime } = await import('./util/imagePreview/pdfCover.js');
+  const { runSingleHeavyPreviewJob } = await import('./util/imagePreview/worker.js');
   inspectVideoPreviewRuntime.mockResolvedValueOnce({ ready: false });
+  inspectPdfPreviewRuntime.mockResolvedValueOnce({ ready: false });
   mocks.item.mockImplementation(async () => {
     process.emit('SIGTERM');
     return false;
   });
   await import('./documentWorker.js');
   await vi.waitFor(() => expect(mocks.end).toHaveBeenCalledOnce());
-  expect(runSingleVideoPreviewJob).not.toHaveBeenCalled();
+  expect(runSingleHeavyPreviewJob).not.toHaveBeenCalled();
+});
+
+it('claims only the heavy formats whose decoder runtime is available', async () => {
+  const { inspectVideoPreviewRuntime } = await import('./util/imagePreview/videoCover.js');
+  const { runSingleHeavyPreviewJob } = await import('./util/imagePreview/worker.js');
+  inspectVideoPreviewRuntime.mockResolvedValueOnce({ ready: false });
+  runSingleHeavyPreviewJob.mockImplementationOnce(async () => {
+    process.emit('SIGTERM');
+    return false;
+  });
+  mocks.item.mockResolvedValue(false);
+  await import('./documentWorker.js');
+  await vi.waitFor(() => expect(mocks.end).toHaveBeenCalledOnce());
+  expect(runSingleHeavyPreviewJob).toHaveBeenCalledWith(expect.any(String), { formats: ['pdf-card'] });
 });
 
 it('serves image previews while a document and toolbox model remain in flight, then drains on stop', async () => {

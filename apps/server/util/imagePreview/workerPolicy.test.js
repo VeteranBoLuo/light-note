@@ -15,10 +15,10 @@ afterEach(() => vi.unstubAllEnvs());
 it('local workers neither claim nor clean up remote image jobs', async () => {
   vi.stubEnv('LIGHTNOTE_RUNTIME_ENV', 'local');
   vi.stubEnv('DB_HOST', 'db.example');
-  const { runSingleImagePreviewJob, runSingleVideoPreviewJob, cleanupImageAssets } = await import('./worker.js');
+  const { runSingleImagePreviewJob, runSingleHeavyPreviewJob, cleanupImageAssets } = await import('./worker.js');
   const db = { getConnection: vi.fn(), query: vi.fn() };
   expect(await runSingleImagePreviewJob('local-worker', { db })).toBe(false);
-  expect(await runSingleVideoPreviewJob('local-worker', { db })).toBe(false);
+  expect(await runSingleHeavyPreviewJob('local-worker', { db })).toBe(false);
   await cleanupImageAssets({ db });
   expect(db.getConnection).not.toHaveBeenCalled();
   expect(db.query).not.toHaveBeenCalled();

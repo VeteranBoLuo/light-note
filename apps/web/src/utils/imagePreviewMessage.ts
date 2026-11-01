@@ -3,6 +3,8 @@ export function imagePreviewMessageKey(code?: string | null): string {
     IMAGE_VIDEO_DECODE_FAILED: 'videoDecode',
     IMAGE_VIDEO_SIZE_LIMIT: 'videoSize',
     IMAGE_VIDEO_RESOURCE_LIMIT: 'videoResource',
+    IMAGE_PDF_RENDER_FAILED: 'pdfRender',
+    IMAGE_PDF_SIZE_LIMIT: 'pdfSize',
     IMAGE_SOURCE_MISSING: 'sourceMissing',
     IMAGE_SOURCE_UNSUPPORTED: 'unsupported',
     IMAGE_DECODE_FAILED: 'decode',

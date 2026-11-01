@@ -1,5 +1,5 @@
 import { imagePreviewWorkerEnabled } from './workerPolicy.js';
-import { CARD_IMAGE_PROFILE } from '@lightnote/shared';
+import { CARD_IMAGE_PROFILE, HEAVY_PREVIEW_FORMATS } from '@lightnote/shared';
 import { classifyImageError, imageFailure } from './errors.js';
 import { randomUUID } from 'node:crypto';
 import pool from '../../db/index.js';
@@ -21,10 +21,10 @@ export async function runSingleImagePreviewJob(
     put = putObjectBodyToObs,
     remove = deleteObjectFromObs,
     metadata = (asset) => storageAdapters[asset.storage_kind].metadata(asset.source_locator),
-    video = false,
+    heavyFormats = null,
   } = {},
 ) {
-  if (!imagePreviewWorkerEnabled() || !generationEnabled()) return false;
+  if (!imagePreviewWorkerEnabled() || !generationEnabled() || heavyFormats?.length === 0) return false;
   const connection = await db.getConnection();
   let job;
   let stage = 'processing';
@@ -34,11 +34,11 @@ export async function runSingleImagePreviewJob(
       a.source_type AS queue_source_type,a.file_id AS queue_source_id,a.file_id,a.format_id AS preview_format,
       i.* FROM file_preview_jobs j JOIN file_preview_artifacts a ON a.id=j.artifact_id
       JOIN image_assets i ON i.id=a.file_id AND a.source_type='image_asset'
-      WHERE a.strategy='image_thumbnail' AND a.format_id${video ? '=' : '<>'}'video-card' AND a.strategy_version=${CARD_IMAGE_PROFILE.version} AND a.source_revision=i.source_version AND i.status<>'deleting' AND j.attempts<3 AND
+      WHERE a.strategy='image_thumbnail' AND a.format_id${heavyFormats ? '' : ' NOT'} IN (?) AND a.strategy_version=${CARD_IMAGE_PROFILE.version} AND a.source_revision=i.source_version AND i.status<>'deleting' AND j.attempts<3 AND
       ((j.status='queued' AND j.available_at<=NOW()) OR
        (j.status='processing' AND j.locked_at<DATE_SUB(NOW(),INTERVAL 2 MINUTE)))
       `;
-    job = await withNextPreviewJob(connection, query, [], async (c, current) => {
+    job = await withNextPreviewJob(connection, query, [heavyFormats || HEAVY_PREVIEW_FORMATS], async (c, current) => {
       await c.query("UPDATE file_preview_artifacts SET status='processing',error_code=NULL WHERE id=?", [
         current.artifact_id,
       ]);
@@ -118,7 +118,7 @@ export async function runSingleImagePreviewJob(
               ? { cover: 'absent' }
               : {
                   presentation: output.presentation || 'full',
-                  ...(video ? { durationSeconds: source.durationSeconds ?? null } : {}),
+                  ...(job.preview_format === 'video-card' ? { durationSeconds: source.durationSeconds ?? null } : {}),
                 },
           ),
           version,
@@ -168,8 +168,9 @@ export async function runSingleImagePreviewJob(
   }
 }
 
-export function runSingleVideoPreviewJob(workerId, options = {}) {
-  return runSingleImagePreviewJob(workerId, { ...options, video: true });
+/** Video and PDF covers copy the whole source and run an external decoder, so they share one serial lane. */
+export function runSingleHeavyPreviewJob(workerId, { formats = HEAVY_PREVIEW_FORMATS, ...options } = {}) {
+  return runSingleImagePreviewJob(workerId, { ...options, heavyFormats: [...formats] });
 }
 
 export async function cleanupImageAssets({
@@ -247,7 +248,12 @@ export async function cleanupImageAssets({
             asset.id,
           ])
         : [[]];
-      if (!asset || refs.length || running || shared.length || !asset.reconciled) {
+      // References are the contract, but a cloud original that any file row (including the trash) still names is never removed.
+      const [files] =
+        asset?.storage_kind === 'obs'
+          ? await c.query('SELECT id FROM files WHERE obs_key=? LIMIT 1', [asset.source_locator])
+          : [[]];
+      if (!asset || refs.length || running || shared.length || files.length || !asset.reconciled) {
         await c.rollback();
         continue;
       }

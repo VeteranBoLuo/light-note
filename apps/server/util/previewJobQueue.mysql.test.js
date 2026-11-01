@@ -24,7 +24,7 @@ vi.mock('./filePreview/office.js', () => ({ convertOfficeToPdf: async () => Buff
 
 import { imageSchemaStatements } from './imagePreview/schema.js';
 import { registerCloudImage, queuePreview } from './imagePreview/references.js';
-import { runSingleImagePreviewJob, runSingleVideoPreviewJob } from './imagePreview/worker.js';
+import { runSingleImagePreviewJob, runSingleHeavyPreviewJob } from './imagePreview/worker.js';
 import { runSingleFilePreviewJob } from './filePreview/service.js';
 
 import { expirePreviewLeases } from './previewJobQueue.js';
@@ -238,7 +238,7 @@ describe.skipIf(!socket)('preview queue concurrency on isolated MySQL', () => {
         await upload.query('SELECT id FROM image_assets WHERE id=? FOR UPDATE', [asset.id]);
         const deps = dependencies(trackedDatabase(workerIds));
         pending = settle(
-          format === 'card' ? runSingleImagePreviewJob('worker', deps) : runSingleVideoPreviewJob('worker', deps),
+          format === 'card' ? runSingleImagePreviewJob('worker', deps) : runSingleHeavyPreviewJob('worker', deps),
         );
         await waitForWorkerLock(workerIds, pending);
         const queued = await settle(queuePreview(upload, { ...asset, preview_format: format }));
@@ -274,7 +274,7 @@ describe.skipIf(!socket)('preview queue concurrency on isolated MySQL', () => {
         await holder.query('SELECT id FROM image_assets WHERE id=? FOR UPDATE', [asset.id]);
         const deps = dependencies(trackedDatabase(workerIds));
         pending = settle(
-          format === 'card' ? runSingleImagePreviewJob('stale', deps) : runSingleVideoPreviewJob('stale', deps),
+          format === 'card' ? runSingleImagePreviewJob('stale', deps) : runSingleHeavyPreviewJob('stale', deps),
         );
         await waitForWorkerLock(workerIds, pending);
         await holder.query("UPDATE image_assets SET status='deleting' WHERE id=?", [asset.id]);
@@ -333,7 +333,7 @@ describe.skipIf(!socket)('preview queue concurrency on isolated MySQL', () => {
       pending = settle(
         Promise.all([
           runSingleFilePreviewJob('empty-document'),
-          runSingleVideoPreviewJob('empty-video', dependencies()),
+          runSingleHeavyPreviewJob('empty-video', dependencies()),
         ]),
       );
       const result = await Promise.race([pending, pause(800).then(() => ({ timedOut: true }))]);
@@ -387,8 +387,8 @@ describe.skipIf(!socket)('preview queue concurrency on isolated MySQL', () => {
       const outcomes = await Promise.allSettled([
         runSingleImagePreviewJob('image-1', dependencies()),
         runSingleImagePreviewJob('image-2', dependencies()),
-        runSingleVideoPreviewJob('video-1', dependencies()),
-        runSingleVideoPreviewJob('video-2', dependencies()),
+        runSingleHeavyPreviewJob('video-1', dependencies()),
+        runSingleHeavyPreviewJob('video-2', dependencies()),
         runSingleFilePreviewJob('file-1'),
         runSingleFilePreviewJob('file-2'),
       ]);
@@ -478,7 +478,7 @@ describe.skipIf(!socket)('preview queue concurrency on isolated MySQL', () => {
   it('document and video lanes leave an eligible queued image untouched', async () => {
     await image();
     expect(
-      await Promise.all([runSingleFilePreviewJob('document'), runSingleVideoPreviewJob('video', dependencies())]),
+      await Promise.all([runSingleFilePreviewJob('document'), runSingleHeavyPreviewJob('video', dependencies())]),
     ).toEqual([false, false]);
     const [[job]] = await db.query(
       "SELECT status,attempts FROM file_preview_jobs WHERE artifact_id=(SELECT id FROM file_preview_artifacts WHERE owner_user_id='owner')",

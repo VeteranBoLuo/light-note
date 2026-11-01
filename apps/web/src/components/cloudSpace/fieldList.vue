@@ -89,6 +89,22 @@
                 </div>
               </template>
             </ManagedImagePreview>
+            <ManagedImagePreview
+              v-else-if="isPdfCover(item)"
+              :source="{ sourceType: 'cloud_file', sourceId: String(item.id) }"
+              :initial="item.imagePreview"
+              class="file-card-thumb file-card-pdf-cover"
+              :alt="item.fileName"
+            >
+              <template #fallback>
+                <div class="file-card-placeholder file-card-placeholder--pdf">
+                  <div class="file-card-placeholder-inner">
+                    <SvgIcon :src="icon.cloudSpace.fileIcon.pdf" size="34" />
+                    <span>{{ getFilePreviewLabel(item) }}</span>
+                  </div>
+                </div>
+              </template>
+            </ManagedImagePreview>
             <div v-else-if="getFileCategory(item) === 'video'" class="file-card-video-preview">
               <ManagedImagePreview
                 class="file-card-thumb file-card-video-thumb"
@@ -143,13 +159,19 @@
                 :aria-label="$t('common.more')"
                 @select="handleFileAction(item, $event)"
               >
-                <BButton class="file-more-button" :aria-label="$t('common.more')" icon-only>
+                <BButton
+                  class="file-more-button"
+                  :class="{ 'file-more--on-cover': hasMediaCover(item) }"
+                  :aria-label="$t('common.more')"
+                  icon-only
+                >
                   <SvgIcon :src="icon.common.more" size="20" />
                 </BButton>
               </BActionMenu>
               <BButton
                 v-else
                 class="mobile-file-more"
+                :class="{ 'file-more--on-cover': hasMediaCover(item) }"
                 :aria-label="$t('common.more')"
                 @click="openMobileFileActions(item)"
               >
@@ -1659,6 +1681,21 @@
     return getFileCategory(file) === 'image' && !!file.fileUrl;
   }
 
+  // Older servers send no descriptor for PDFs; those cards keep the plain placeholder.
+  function isPdfCover(file: any): boolean {
+    return getFileCategory(file) === 'pdf' && !!file.imagePreview;
+  }
+
+  // Media covers can be any colour, and PDF pages are almost always white; keep the action readable on them.
+  function hasMediaCover(file: any): boolean {
+    return (
+      isPreviewableImage(file) ||
+      isPdfCover(file) ||
+      getFileCategory(file) === 'video' ||
+      /\.mp3$/i.test(file?.fileName || '')
+    );
+  }
+
   function formatMediaDuration(value?: number | null): string {
     const duration = Number(value);
     if (!Number.isFinite(duration) || duration <= 0) return '';
@@ -3128,7 +3165,11 @@
   .file-card-audio-cover :deep(img) {
     object-fit: contain;
   }
-  .file-card-audio-cover > .file-card-placeholder {
+  .file-card-pdf-cover :deep(img) {
+    object-position: center top;
+  }
+  .file-card-audio-cover > .file-card-placeholder,
+  .file-card-pdf-cover > .file-card-placeholder {
     width: 100%;
     height: 100%;
   }
@@ -3267,6 +3308,14 @@
     border: 0;
     background: transparent;
     color: var(--text-color);
+  }
+  .file-more--on-cover.b_btn {
+    border-radius: 50%;
+    background: color-mix(in srgb, var(--card-background) 86%, transparent);
+    background-clip: content-box;
+  }
+  .mobile-file-more.file-more--on-cover.b_btn {
+    padding: var(--ui-space-8, 8px);
   }
   .file-card-more .more-icon {
     color: rgba(255, 255, 255, 0.7);

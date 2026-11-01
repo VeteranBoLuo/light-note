@@ -1,4 +1,4 @@
-import { CARD_IMAGE_PROFILE, isVideoCoverFile } from '@lightnote/shared';
+import { CARD_IMAGE_PROFILE, cloudPreviewFormat } from '@lightnote/shared';
 import { isImagePreviewCandidate } from '@lightnote/shared/file-category';
 import { extractManagedImages } from './extract.js';
 import { localImageLocator, hash } from './sources.js';
@@ -131,9 +131,9 @@ export async function syncNoteImageReferences(db, noteId) {
 }
 export async function registerCloudImage(db, file) {
   const name = file.file_name || file.fileName || '';
-  const video = isVideoCoverFile(name);
+  const previewFormat = cloudPreviewFormat(name);
   const image = isImagePreviewCandidate({ fileName: name, fileType: file.file_type || file.fileType });
-  if ((!image && !/\.mp3$/i.test(name) && !video) || !file.obs_key) return null;
+  if ((!image && !/\.mp3$/i.test(name) && previewFormat === 'card') || !file.obs_key) return null;
   const asset = await registerAsset(db, {
     owner: file.create_by,
     sourceType: 'cloud_file',
@@ -142,7 +142,7 @@ export async function registerCloudImage(db, file) {
     storage: 'obs',
     size: Number(file.file_size || 0),
     reconciled: true,
-    previewFormat: video ? 'video-card' : 'card',
+    previewFormat,
   });
   await replaceReferences(db, 'cloud_file', file.id, [asset.id]);
   return asset;
