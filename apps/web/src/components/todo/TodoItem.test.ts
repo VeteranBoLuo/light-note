@@ -463,9 +463,13 @@ describe('TodoItem card preview', () => {
     expect(onPreview).toHaveBeenCalledTimes(1);
   });
   it('子事项编辑携带定位目标且不触发详情预览', async () => {
+    vi.useFakeTimers({ now: new Date('2026-11-01T12:00:00Z') });
     const { host, onEdit, onPreview } = mountTodoItem();
+    // Vue 会过滤与监听器挂载同毫秒的冒泡事件；两次用户点击分别使用独立时刻。
+    vi.advanceTimersByTime(1);
     host.querySelector<HTMLButtonElement>('.todo-subitems > button')!.click();
     await nextTick();
+    vi.advanceTimersByTime(1);
     host.querySelector<HTMLButtonElement>('.todo-subitems__edit')!.click();
     expect(onEdit).toHaveBeenCalledWith('checklist');
     expect(onPreview).not.toHaveBeenCalled();

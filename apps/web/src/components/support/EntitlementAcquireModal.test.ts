@@ -5,12 +5,15 @@ import { createI18n } from 'vue-i18n';
 import zhCN from '@/i18n/locales/zh-CN';
 
 const mocks = vi.hoisted(() => ({
+  apiBasePost: vi.fn().mockResolvedValue({ status: 200, data: { used: 0, quota: 0, remaining: 0 } }),
   push: vi.fn(() => Promise.resolve()),
   closeCurrentMobileOverlayThen: vi.fn(async (close: () => void, next: () => unknown) => {
     close();
     return next();
   }),
 }));
+
+vi.mock('@/http/request', () => ({ apiBasePost: mocks.apiBasePost }));
 
 vi.mock('vue-router', async (importOriginal) => {
   const original = await importOriginal<typeof import('vue-router')>();
@@ -56,6 +59,7 @@ afterEach(() => {
   host?.remove();
   app = null;
   host = null;
+  mocks.apiBasePost.mockClear();
   mocks.push.mockClear();
   mocks.closeCurrentMobileOverlayThen.mockClear();
 });

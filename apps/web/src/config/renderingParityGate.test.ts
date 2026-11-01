@@ -213,10 +213,11 @@ describe('移动浏览器与 App 渲染一致性门禁', () => {
       .map((path) => relative(sourceRoot, path))
       .sort();
 
-    expect(containerQueryFiles).toEqual([]);
+    expect(containerQueryFiles).toEqual(['view/cloudSpace/cloudSpace.vue']);
     expect(containerTypeFiles).toEqual([
       'components/cloudSpace/fieldList.vue',
       'components/home/CardPanel.vue',
+      'view/cloudSpace/cloudSpace.vue',
       'view/noteLibrary/NoteLibrary.vue',
     ]);
     expect(baselineStyles).not.toContain('.field-list .mobile-batch-actions');
@@ -226,6 +227,81 @@ describe('移动浏览器与 App 渲染一致性门禁', () => {
     expect(readFileSync(resolve(sourceRoot, 'view/settings/Settings.vue'), 'utf8')).toContain(
       "'is-mobile-sub': isMobileSubPage",
     );
+  });
+
+  it('云空间容器查询只增强桌面数量排版，无查询时仍有完整的独立行回退', () => {
+    const filename = resolve(sourceRoot, 'view/cloudSpace/cloudSpace.vue');
+    const { descriptor } = parse(readFileSync(filename, 'utf8'), { filename });
+    const style = descriptor.styles.find((item) => item.scoped);
+    expect(style).toBeDefined();
+    const compiled = compileStyle({
+      source: style!.content.replace(/(['"])@\//g, `$1${sourceRoot.replaceAll('\\', '/')}/`),
+      filename,
+      id: 'data-v-cloud-fallback',
+      scoped: true,
+      preprocessLang: style!.lang,
+    });
+    expect(compiled.errors).toEqual([]);
+
+    const fallback = new Map<string, Map<string, string>>();
+    const querySelectors = new Set<string>();
+    const containerOwners = new Set<string>();
+    compiled.rawResult!.root.walkRules((rule) => {
+      let conditional = false;
+      let containerQuery = false;
+      for (let parent = rule.parent; parent; parent = parent.parent) {
+        if (parent.type !== 'atrule') continue;
+        conditional = true;
+        containerQuery ||= parent.name === 'container';
+      }
+      const declarations = new Map<string, string>();
+      rule.walkDecls((declaration) => {
+        declarations.set(declaration.prop, declaration.value);
+        if (/^container-(?:type|name)$/u.test(declaration.prop)) containerOwners.add(rule.selector);
+      });
+      if (!conditional) fallback.set(rule.selector, declarations);
+      if (containerQuery) {
+        querySelectors.add(rule.selector);
+        // The query may compact a working layout, but cannot hide content or provide its only sizing rules.
+        expect([...declarations.keys()].sort()).toEqual(['flex', 'margin-left']);
+      }
+    });
+    const countSelector = '.cloud-header-count[data-v-cloud-fallback]';
+    expect([...querySelectors]).toEqual([countSelector]);
+    expect([...containerOwners]).toEqual(['.cloud-space-page--desktop[data-v-cloud-fallback] .resource-page-heading']);
+    expect(
+      fallback.get('.cloud-space-page--desktop[data-v-cloud-fallback] .resource-page-title-row')?.get('flex-wrap'),
+    ).toBe('wrap');
+    const countFallback = fallback.get(countSelector);
+    expect(countFallback?.get('flex')?.trim().split(/\s+/u).at(-1)).toBe('100%');
+    expect(countFallback?.get('min-width')).toBe('0');
+    expect(countFallback?.get('white-space')).toBe('nowrap');
+    expect(countFallback?.get('overflow')).toBe('hidden');
+    expect(countFallback?.get('text-overflow')).toBe('ellipsis');
+
+    const template = descriptor.template!.ast!;
+    const countGuards: string[][] = [];
+    const visit = (nodes: typeof template.children, guards: string[]) => {
+      for (const node of nodes) {
+        if (node.type !== 1) continue;
+        const conditions = node.props.flatMap((prop) =>
+          prop.type === 7 && prop.name === 'if' && prop.exp?.type === 4 ? [prop.exp.content] : [],
+        );
+        const activeGuards = [...guards, ...conditions];
+        if (
+          node.tag === 'CloudFileCountSummary' &&
+          node.props.some(
+            (prop) => prop.type === 6 && prop.name === 'class' && prop.value?.content === 'cloud-header-count',
+          )
+        ) {
+          countGuards.push(activeGuards);
+        }
+        visit(node.children, activeGuards);
+      }
+    };
+    visit(template.children, []);
+    expect(countGuards).toHaveLength(1);
+    expect(countGuards[0]).toContain('!bookmark.isMobile');
   });
 
   it('动态视口单位同时覆盖 CSS 声明和组件内联高度', () => {

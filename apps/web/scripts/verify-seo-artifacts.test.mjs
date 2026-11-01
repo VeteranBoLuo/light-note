@@ -37,8 +37,10 @@ function fixture(t) {
 <meta name="robots" content="index, follow">
 <link rel="canonical" href="${origin}${route}">
 <meta property="og:url" content="${origin}${route}">
+<script data-light-note-landing-early-intent="true"></script>
 </head><body>
 <h1 class="${heading}">轻笺使用指南</h1>
+${route === '/' ? '<button data-landing-early-action="primary:landing_primary">开始使用</button><button data-landing-early-action="account:landing_account">登录</button>' : ''}
 <p>${'使用轻笺保存网页、笔记和文件，并整理自己的数字资料。'.repeat(40)}</p>
 <section class="log-card"><h2>轻笺更新日志</h2><p>更新说明与使用方法。</p></section>
 <a href="https://chromewebstore.google.com/detail/hfdpgaiggloacopnkihfkloicjepldig">安装扩展</a>
@@ -52,8 +54,32 @@ function fixture(t) {
 
 test('四个公共页面正文、索引指令与 canonical 均正确时完成 SEO 验收', async (t) => {
   const f = fixture(t);
+  // 捕获并核对诊断输出，避免 Node 22 测试进程的非 ASCII stdout 解析缺陷。
+  const log = t.mock.method(console, 'log', () => {});
   assert.deepEqual(await verifySeoArtifacts({ dist: f.dist, skipPrerender: false }), { complete: true });
+  assert.equal(log.mock.callCount(), 1);
+  assert.match(log.mock.calls[0].arguments[0], /^✅ 完整 SEO 产物校验通过：/u);
 });
+
+test('根官网缺少接管前点击记录脚本时拒绝完整验收', async (t) => {
+  const f = fixture(t);
+  const file = '__seo/root/index.html';
+  f.write(file, f.htmlByFile[file].replace(' data-light-note-landing-early-intent="true"', ''));
+  await assert.rejects(verifySeoArtifacts({ dist: f.dist, skipPrerender: false }), {
+    message: '根官网缺少接管前主按钮点击记录',
+  });
+});
+
+for (const action of ['primary:landing_primary', 'account:landing_account']) {
+  test(`根官网缺少 ${action} 接管前点击标记时拒绝完整验收`, async (t) => {
+    const f = fixture(t);
+    const file = '__seo/root/index.html';
+    f.write(file, f.htmlByFile[file].replace(` data-landing-early-action="${action}"`, ''));
+    await assert.rejects(verifySeoArtifacts({ dist: f.dist, skipPrerender: false }), {
+      message: `根官网首屏主按钮缺少接管前点击标记：${action}`,
+    });
+  });
+}
 
 for (const page of pages) {
   for (const scenario of ['缺失', '空壳', '禁止索引', '错误 canonical']) {
@@ -79,9 +105,12 @@ for (const page of pages) {
 
 test('CI/debug 跳过只返回基础检查状态，同一产物不能通过完整 SEO 验收', async (t) => {
   const f = fixture(t);
+  const log = t.mock.method(console, 'log', () => {});
   for (const { file } of pages) rmSync(path.join(f.dist, file));
   assert.deepEqual(await verifySeoArtifacts({ dist: f.dist, skipPrerender: true }), { complete: false });
   await assert.rejects(verifySeoArtifacts({ dist: f.dist, skipPrerender: false }));
+  assert.equal(log.mock.callCount(), 1);
+  assert.match(log.mock.calls[0].arguments[0], /^⏭\s+SKIP_PRERENDER=1：.*未完成生产 SEO 验收$/u);
 });
 
 test('命令行在 Android 产物缺失时以失败退出，阻断后续发布流程', (t) => {

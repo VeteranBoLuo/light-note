@@ -1,0 +1,63 @@
+--- a/lib/utils/stream-buf.js
++++ b/lib/utils/stream-buf.js
+@@ -345,6 +345,7 @@
+     if (!this.paused && this.buffers.length) {
+       this.end();
+     }
++    return destination;
+   },
+   unpipe(destination) {
+     // remove destination from pipe list
+--- a/lib/utils/iterate-stream.js
++++ b/lib/utils/iterate-stream.js
+@@ -1,48 +1,3 @@
+-module.exports = async function* iterateStream(stream) {
+-  const contents = [];
+-  stream.on('data', data => contents.push(data));
+-
+-  let resolveStreamEndedPromise;
+-  const streamEndedPromise = new Promise(resolve => (resolveStreamEndedPromise = resolve));
+-
+-  let ended = false;
+-  stream.on('end', () => {
+-    ended = true;
+-    resolveStreamEndedPromise();
+-  });
+-
+-  let error = false;
+-  stream.on('error', err => {
+-    error = err;
+-    resolveStreamEndedPromise();
+-  });
+-
+-  while (!ended || contents.length > 0) {
+-    if (contents.length === 0) {
+-      stream.resume();
+-      // eslint-disable-next-line no-await-in-loop
+-      await Promise.race([once(stream, 'data'), streamEndedPromise]);
+-    } else {
+-      stream.pause();
+-      const data = contents.shift();
+-      yield data;
+-    }
+-    if (error) throw error;
+-  }
+-  resolveStreamEndedPromise();
++module.exports = function iterateStream(stream) {
++  return stream.iterator({destroyOnReturn: false});
+ };
+-
+-function once(eventEmitter, type) {
+-  // TODO: Use require('events').once when node v10 is dropped
+-  return new Promise(resolve => {
+-    let fired = false;
+-    const handler = () => {
+-      if (!fired) {
+-        fired = true;
+-        eventEmitter.removeListener(type, handler);
+-        resolve();
+-      }
+-    };
+-    eventEmitter.addListener(type, handler);
+-  });
+-}

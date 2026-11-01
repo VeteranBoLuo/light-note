@@ -4,6 +4,9 @@ import Discussion from './CommunityPostDiscussion.vue';
 const mocks = vi.hoisted(() => ({ get: vi.fn(), query: { comment: 'target' } }));
 vi.mock('@/api/communityFeedApi', () => ({ feedGet: mocks.get, feedOperation: vi.fn() }));
 vi.mock('@/components/base/BasicComponents/BModal/Alert', () => ({ default: { alert: vi.fn() } }));
+vi.mock('@/components/base/BasicComponents/BMessage/BMessage', () => ({
+  default: { success: vi.fn(), error: vi.fn() },
+}));
 vi.mock('@/utils/mobileOverlayHistory', () => ({ closeCurrentMobileOverlayThen: vi.fn() }));
 vi.mock('@/store', () => ({ useUserStore: () => ({ id: 'viewer' }) }));
 vi.mock('vue-router', () => ({ useRoute: () => ({ query: mocks.query }), useRouter: () => ({ push: vi.fn() }) }));

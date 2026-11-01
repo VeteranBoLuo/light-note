@@ -27,10 +27,16 @@
       "source-map-js@<1.2.2": "1.2.2",
       "browserslist@<4.28.7": "4.28.7",
       "baseline-browser-mapping@>=2.0.0 <2.11.0": "2.11.0",
-      "katex@<0.18.2": "0.18.2"
+      "katex@<0.18.2": "0.18.2",
+      "exceljs>archiver": "7.0.1",
+      "exceljs>unzipper": "0.12.5",
+      "archiver>readdir-glob": "3.0.0",
+      "glob@>=9.0.0 <14.0.2": "14.0.3",
+      "minimatch@<11.0.1": "11.0.3"
     },
     "patchedDependencies": {
-      "@vue-office/excel@1.7.14": "patches/@vue-office__excel@1.7.14.patch"
+      "@vue-office/excel@1.7.14": "patches/@vue-office__excel@1.7.14.patch",
+      "exceljs@4.4.0": "patches/exceljs@4.4.0.patch"
     }
   },
   "scripts": {
