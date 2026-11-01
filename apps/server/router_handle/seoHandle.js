@@ -20,17 +20,25 @@
  *
  * 安全：文章 content 是 root 在知识库管理后台写的富文本（可信），直出；
  * title/category/description 等短字段一律 escapeHtml；:id 走参数化查询。
+ *
+ * 公开范围与站内帮助一致（PUBLIC_HELP_ARTICLE_CONDITION），按 help_section 分栏目；
+ * FAQ、系统行为等只供 AI 检索的知识不进入公开页面和站点地图。
  */
 
 import pool from '../db/index.js';
 import { marked } from 'marked';
-import { formatDateTime } from '../util/common.js';
-import { getStaticSitemapUrls, renderSitemapXml } from '../util/seoSitemap.js';
+import { formatDateTime } from '../util/dateTime.js';
+import { normalizeKnowledgeHelpSection, PUBLIC_HELP_ARTICLE_CONDITION } from '../util/helpKnowledge.js';
+import {
+  HELP_CENTER_PATH as HELP_PATH,
+  helpArticleUrl,
+  loadSitemapEntries,
+  renderSitemapXml,
+  SEO_SITE_ORIGIN as SITE,
+} from '../util/seoSitemap.js';
 import { SITE_COMPLIANCE } from '@lightnote/shared';
 
-const SITE = 'https://boluo66.top';
 const BRAND = SITE_COMPLIANCE.productName;
-const HELP_PATH = '/helpCenter'; // 单一来源，避免路径散落在各处手改漏改
 const PUBLIC_SECURITY_FILING_HTML =
   SITE_COMPLIANCE.publicSecurityFilingNumber &&
   SITE_COMPLIANCE.publicSecurityQueryUrl &&
@@ -62,6 +70,33 @@ const formatDate = (d) => {
   // 本地时区(复用 formatDateTime),避免凌晨 toISOString 取 UTC 把 lastmod/日期算成昨天
   return formatDateTime(isNaN(t.getTime()) ? new Date() : t).slice(0, 10);
 };
+
+const LEADING_HEADING_PATTERN = /^\s*<h([1-3])\b[^>]*>([\s\S]*?)<\/h\1>/i;
+
+/**
+ * 帮助正文通常以与标题相同或更短的小标题开头；页面已有 h1，去掉这一段，
+ * 避免一页两个同名标题，也避免 meta description 以重复标题开头。
+ */
+export function stripLeadingTitleHeading(contentHtml, title) {
+  const html = String(contentHtml || '');
+  const match = html.match(LEADING_HEADING_PATTERN);
+  if (!match) return html;
+  const heading = toPlainText(match[2], 200);
+  const normalizedTitle = String(title || '').trim();
+  if (!heading || !normalizedTitle.includes(heading)) return html;
+  return html.slice(match[0].length);
+}
+
+/** 栏目顺序继承文章维护顺序：首篇文章出现的位置决定栏目位置。 */
+export function groupHelpArticlesBySection(rows) {
+  const groups = new Map();
+  for (const row of rows) {
+    const section = normalizeKnowledgeHelpSection(row.help_section);
+    if (!groups.has(section)) groups.set(section, []);
+    groups.get(section).push(row);
+  }
+  return [...groups.entries()];
+}
 
 /** 公共页面骨架：极简内联样式，兼容移动端，不依赖前端资源 */
 const pageShell = ({ title, description, canonical, jsonLd, body }) => `<!doctype html>
@@ -122,22 +157,14 @@ ${body}
 export const helpIndexPage = async (req, res) => {
   try {
     const [rows] = await pool.query(
-      `SELECT id, title, category, updated_at FROM knowledge_base
-       WHERE status = 'public' ORDER BY category, sort, updated_at DESC`,
+      `SELECT id, title, help_section, updated_at FROM knowledge_base
+       WHERE ${PUBLIC_HELP_ARTICLE_CONDITION} ORDER BY sort ASC, created_at ASC`,
     );
-
-    // 按分类分组
-    const groups = new Map();
-    for (const r of rows) {
-      const cat = r.category || '其他';
-      if (!groups.has(cat)) groups.set(cat, []);
-      groups.get(cat).push(r);
-    }
 
     const body = `
 <h1>${BRAND}帮助中心</h1>
 <p class="meta">共 ${rows.length} 篇使用指南与常见问题，覆盖书签管理、云笔记、云空间与标签体系。</p>
-${[...groups.entries()]
+${groupHelpArticlesBySection(rows)
   .map(
     ([cat, arts]) => `<div class="cat">${escapeHtml(cat)}</div>
 <ul class="art">
@@ -180,8 +207,8 @@ export const helpArticlePage = async (req, res) => {
   try {
     const { id } = req.params;
     const [rows] = await pool.query(
-      `SELECT id, title, content, category, type, created_at, updated_at
-       FROM knowledge_base WHERE id = ? AND status = 'public' LIMIT 1`,
+      `SELECT id, title, content, help_section, type, created_at, updated_at
+       FROM knowledge_base WHERE id = ? AND ${PUBLIC_HELP_ARTICLE_CONDITION} LIMIT 1`,
       [id],
     );
     const art = rows[0];
@@ -200,14 +227,15 @@ export const helpArticlePage = async (req, res) => {
         );
     }
 
-    const contentHtml = art.type === 'markdown' ? marked.parse(String(art.content || '')) : String(art.content || '');
+    const renderedHtml = art.type === 'markdown' ? marked.parse(String(art.content || '')) : String(art.content || '');
+    const contentHtml = stripLeadingTitleHeading(renderedHtml, art.title);
     const description = toPlainText(contentHtml, 150) || `${BRAND}帮助中心文章：${art.title}`;
-    const canonical = `${SITE}${HELP_PATH}/${encodeURIComponent(art.id)}`;
+    const canonical = helpArticleUrl(art.id);
 
     const body = `
 <article>
 <h1>${escapeHtml(art.title)}</h1>
-<p class="meta">${escapeHtml(art.category || '帮助中心')} · 更新于 ${formatDate(art.updated_at)}</p>
+<p class="meta">${escapeHtml(normalizeKnowledgeHelpSection(art.help_section))} · 更新于 ${formatDate(art.updated_at)}</p>
 <div class="content">
 ${contentHtml}
 </div>
@@ -245,18 +273,7 @@ ${contentHtml}
 /** GET /sitemap.xml —— 动态 sitemap（静态页 + 全部公开文章） */
 export const sitemapXml = async (req, res) => {
   try {
-    const [rows] = await pool.query(
-      `SELECT id, updated_at FROM knowledge_base WHERE status = 'public' ORDER BY updated_at DESC`,
-    );
-    const staticUrls = getStaticSitemapUrls(SITE, HELP_PATH);
-    const articleUrls = rows.map((r) => ({
-      loc: `${SITE}${HELP_PATH}/${encodeURIComponent(r.id)}`,
-      priority: '0.6',
-      changefreq: 'monthly',
-      lastmod: formatDate(r.updated_at),
-    }));
-
-    const xml = renderSitemapXml([...staticUrls, ...articleUrls]);
+    const xml = renderSitemapXml(await loadSitemapEntries(pool));
 
     res.set('Content-Type', 'application/xml; charset=utf-8').set('Cache-Control', 'public, max-age=3600').send(xml);
   } catch (e) {

@@ -61,6 +61,7 @@ import { ensureAfdianSupportOrderPurposeBackfill, ensureAfdianSupportSchema } fr
 import { ensureAfdianSupportRewardSchema } from './util/afdianSupportRewardSchema.js';
 import { ensureAfdianSupportPackageSchema } from './util/afdianSupportPackageSchema.js';
 import { startAfdianReconciliationScheduler } from './util/afdianSupportService.js';
+import { startSeoPushScheduler } from './util/services/seoPushService.js';
 import { ensureAiBonusWalletSchema } from './util/aiBonusWalletSchema.js';
 import { ensureToolboxSchema } from './util/toolboxSchema.js';
 import { ensureDailyBriefSchema } from './util/dailyBriefSchema.js';
@@ -211,6 +212,8 @@ ensureCommunityChatSchema()
     );
   })
   .catch((err) => console.error('社区客厅基础数据表初始化失败 code=%s', stableAgentErrorCode(err)));
+// 搜索引擎主动提交：每天把新增或更新的公开帮助地址推给百度与 IndexNow（仅生产运行时）。
+startSeoPushScheduler({ db: pool });
 startAiProductEventRetentionScheduler().catch((err) =>
   console.error('AI 产品事件清理调度启动失败 code=%s', stableAgentErrorCode(err)),
 );
