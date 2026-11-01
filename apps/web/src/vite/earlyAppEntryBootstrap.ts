@@ -15,8 +15,14 @@ import {
   RENDER_PROFILE_QUERY_KEY,
   RENDER_PROFILE_SESSION_KEY,
 } from '../config/renderingProfile';
+import {
+  LANDING_EARLY_ACTION_ATTRIBUTE,
+  LANDING_EARLY_INTENT_KEY,
+  LANDING_EARLY_PENDING_ATTRIBUTE,
+} from '../config/landingEarlyIntent';
 
 export const EARLY_APP_ENTRY_SCRIPT_ATTRIBUTE = 'data-light-note-early-app-entry';
+export const LANDING_EARLY_INTENT_SCRIPT_ATTRIBUTE = 'data-light-note-landing-early-intent';
 
 /**
  * 这个脚本必须作为经典内联脚本放在 <head> 顶部执行，不能等 Vue/main.ts：
@@ -190,6 +196,47 @@ export function createEarlyAppEntryScript(): string {
 })();`;
 }
 
+/**
+ * 预渲染官网在应用脚本接管前没有点击逻辑：这里只记下第一次点到带标记主按钮的动作，
+ * 并把按钮置为按下态；官网挂载时调用 take() 取走记录、停止监听，再按原处理函数补执行。
+ * 只认带标记的元素，接管后的点击不受影响；任何异常都放弃记录，页面行为与没有该脚本时一致。
+ */
+export function createLandingEarlyIntentScript(): string {
+  const config = JSON.stringify({
+    actionAttribute: LANDING_EARLY_ACTION_ATTRIBUTE,
+    pendingAttribute: LANDING_EARLY_PENDING_ATTRIBUTE,
+    key: LANDING_EARLY_INTENT_KEY,
+  });
+
+  return `(function () {
+  var config = ${config};
+  try {
+    var recorded = null;
+    var capture = function (event) {
+      if (recorded) return;
+      var element = event.target;
+      if (element && element.nodeType !== 1) element = element.parentElement;
+      while (element && !element.hasAttribute(config.actionAttribute)) element = element.parentElement;
+      if (!element) return;
+      recorded = element.getAttribute(config.actionAttribute);
+      element.setAttribute(config.pendingAttribute, 'true');
+      element.setAttribute('aria-busy', 'true');
+    };
+    document.addEventListener('click', capture, true);
+    window[config.key] = {
+      take: function () {
+        document.removeEventListener('click', capture, true);
+        var value = recorded;
+        recorded = null;
+        return value;
+      },
+    };
+  } catch (error) {
+    // 记录失败时保持原有行为：接管后用户再次点击仍可使用。
+  }
+})();`;
+}
+
 export default function earlyAppEntryBootstrap(): Plugin {
   return {
     name: 'light-note-early-app-entry-bootstrap',
@@ -203,6 +250,14 @@ export default function earlyAppEntryBootstrap(): Plugin {
               [EARLY_APP_ENTRY_SCRIPT_ATTRIBUTE]: 'true',
             },
             children: createEarlyAppEntryScript(),
+            injectTo: 'head-prepend',
+          },
+          {
+            tag: 'script',
+            attrs: {
+              [LANDING_EARLY_INTENT_SCRIPT_ATTRIBUTE]: 'true',
+            },
+            children: createLandingEarlyIntentScript(),
             injectTo: 'head-prepend',
           },
         ];

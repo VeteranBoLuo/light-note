@@ -3,6 +3,8 @@ import { createApp, h, nextTick, provide, ref } from 'vue';
 import { createI18n } from 'vue-i18n';
 import { LANDING_AUTH_CONTEXT } from './landingAuth.ts';
 import landingSource from './Landing.vue?raw';
+import { LANDING_EARLY_ACTIONS, LANDING_EARLY_INTENT_KEY } from '@/config/landingEarlyIntent.ts';
+import { trackConversion } from '@/utils/conversion';
 
 const mocks = vi.hoisted(() => ({
   routerPush: vi.fn(() => Promise.resolve()),
@@ -186,7 +188,58 @@ afterEach(() => {
   mocks.prefetchResolvedRoute.mockClear();
   mocks.bookmark.openAuthModal.mockClear();
   mocks.messageWarning.mockClear();
+  vi.mocked(trackConversion).mockClear();
+  delete (window as unknown as Record<string, unknown>)[LANDING_EARLY_INTENT_KEY];
   vi.useRealTimers();
+});
+
+describe('Landing 接管前点击补执行', () => {
+  const recordEarlyClick = (value: string) => {
+    (window as unknown as Record<string, unknown>)[LANDING_EARLY_INTENT_KEY] = { take: vi.fn(() => value) };
+  };
+
+  it('四个主按钮都带接管前点击标记，预渲染页可识别', async () => {
+    const host = await mountLanding('anonymous');
+    const marks = Array.from(host.querySelectorAll('button[data-landing-early-action]')).map((button) =>
+      button.getAttribute('data-landing-early-action'),
+    );
+    expect(marks).toEqual([
+      LANDING_EARLY_ACTIONS.heroPrimary,
+      LANDING_EARLY_ACTIONS.account,
+      LANDING_EARLY_ACTIONS.finalPrimary,
+      LANDING_EARLY_ACTIONS.account,
+    ]);
+  });
+
+  it('接管前点过开始使用：挂载后补执行一次，进入示例并按 _early 来源记转化', async () => {
+    mocks.hasLoginHint = false;
+    recordEarlyClick(LANDING_EARLY_ACTIONS.finalPrimary);
+    await mountLanding('anonymous');
+
+    await vi.waitFor(() => expect(mocks.routerPush).toHaveBeenCalledWith('/workbenches'));
+    expect(mocks.routerPush).toHaveBeenCalledTimes(1);
+    expect(trackConversion).toHaveBeenCalledWith('demo_enter', 'landing_final_early');
+    expect(mocks.bookmark.openAuthModal).not.toHaveBeenCalled();
+  });
+
+  it('接管前点过注册/登录：挂载后打开注册弹窗并带 _early 来源', async () => {
+    mocks.hasLoginHint = false;
+    recordEarlyClick(LANDING_EARLY_ACTIONS.account);
+    await mountLanding('anonymous');
+
+    await vi.waitFor(() => expect(mocks.bookmark.openAuthModal).toHaveBeenCalledWith('注册', 'landing_account_early'));
+    expect(mocks.routerPush).not.toHaveBeenCalled();
+  });
+
+  it('接管前没有点击时挂载不触发任何跳转；正常点击仍用原来源', async () => {
+    mocks.hasLoginHint = false;
+    const host = await mountLanding('anonymous');
+    await nextTick();
+    expect(mocks.routerPush).not.toHaveBeenCalled();
+
+    host.querySelector<HTMLButtonElement>('.s-cover .btn-ghost')?.click();
+    await vi.waitFor(() => expect(mocks.bookmark.openAuthModal).toHaveBeenCalledWith('注册', 'landing_account'));
+  });
 });
 
 describe('Landing CTA', () => {

@@ -42,6 +42,7 @@
                 <BButton
                   type="primary"
                   class="btn-primary"
+                  :data-landing-early-action="LANDING_EARLY_ACTIONS.heroPrimary"
                   :disabled="navigationPending"
                   :aria-busy="startingApp || undefined"
                   @pointerdown="prefetchPrimaryIntent"
@@ -58,11 +59,12 @@
                 </BButton>
                 <BButton
                   class="btn-ghost"
+                  :data-landing-early-action="LANDING_EARLY_ACTIONS.account"
                   :disabled="navigationPending"
                   :aria-busy="openingAccount || undefined"
                   @pointerdown="prefetchAccountIntent"
                   @focus="prefetchAccountIntent"
-                  @click="handleAccountAction"
+                  @click="handleAccountAction()"
                 >
                   <span :class="['btn-ghost__loading-indicator', { 'is-visible': openingAccount }]" aria-hidden="true">
                     <SvgIcon :src="icon.message.loading" size="18" />
@@ -361,6 +363,7 @@
               <BButton
                 type="primary"
                 class="btn-primary btn-large"
+                :data-landing-early-action="LANDING_EARLY_ACTIONS.finalPrimary"
                 :disabled="navigationPending"
                 :aria-busy="startingApp || undefined"
                 @pointerdown="prefetchPrimaryIntent"
@@ -377,11 +380,12 @@
               </BButton>
               <BButton
                 class="btn-ghost"
+                :data-landing-early-action="LANDING_EARLY_ACTIONS.account"
                 :disabled="navigationPending"
                 :aria-busy="openingAccount || undefined"
                 @pointerdown="prefetchAccountIntent"
                 @focus="prefetchAccountIntent"
-                @click="handleAccountAction"
+                @click="handleAccountAction()"
               >
                 <span :class="['btn-ghost__loading-indicator', { 'is-visible': openingAccount }]" aria-hidden="true">
                   <SvgIcon :src="icon.message.loading" size="18" />
@@ -551,6 +555,7 @@
     hasPublicSecurityFiling,
   } from '@/config/siteCompliance.ts';
   import { BROWSER_EXTENSION_LANDING_PATH, CHROME_WEB_STORE_URL } from '@/config/browserExtension.ts';
+  import { LANDING_EARLY_ACTIONS, takeLandingEarlyIntent } from '@/config/landingEarlyIntent.ts';
   import extensionScreenshotZh from '@/assets/img/browser-extension/localized/01-home.webp';
   import extensionScreenshotEn from '@/assets/img/browser-extension/global/01-home.webp';
 
@@ -814,8 +819,8 @@
     return navigateWithIdentity('primary', source);
   }
 
-  function handleAccountAction() {
-    return navigateWithIdentity('account', 'landing_account');
+  function handleAccountAction(source = 'landing_account') {
+    return navigateWithIdentity('account', source);
   }
 
   function isPlainLeftClick(event: MouseEvent) {
@@ -978,6 +983,12 @@
     }
     disposeLandingStartupPreload = scheduleLandingStartupPreload(router, isLoggedIn.value ? applicationEntryTarget() : '/workbenches');
     window.addEventListener('pageshow', handlePageShow);
+    // 预渲染官网在脚本接管前被点过主按钮：按原处理函数补执行一次，来源加 _early 便于统计救回的点击。
+    const earlyIntent = takeLandingEarlyIntent();
+    if (earlyIntent) {
+      const source = `${earlyIntent.source}_early`;
+      void (earlyIntent.action === 'primary' ? handlePrimaryAction(source) : handleAccountAction(source));
+    }
 
     const canvas = canvasRef.value;
     if (!canvas) return;
@@ -1731,6 +1742,12 @@
   .btn-primary.disabled {
     opacity: 0.78;
     cursor: wait;
+  }
+  /* 预渲染页在脚本接管前被点击：保持按下的等待态（与悬停同权重、靠后生效），接管后由真实加载状态接替。 */
+  .btn-primary.b_btn[data-landing-early-pending] {
+    opacity: 0.78;
+    cursor: wait;
+    transform: scale(0.97);
   }
   .btn-arrow--loading {
     animation: landing-btn-spin 0.8s linear infinite;

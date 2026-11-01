@@ -16,6 +16,11 @@ const EVENTS = new Set([
 const SOURCES = new Set([
   'landing_primary',
   'landing_final',
+  'landing_account',
+  // 官网脚本接管前被点击、接管后补执行的同一按钮
+  'landing_primary_early',
+  'landing_final_early',
+  'landing_account_early',
   'landing_demo',
   'nav',
   'home_demo_hint',
