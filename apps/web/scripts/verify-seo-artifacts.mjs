@@ -9,6 +9,8 @@ const SITE = 'https://boluo66.top/';
 const EXTENSION_SITE = 'https://boluo66.top/browser-extension';
 const EXTENSION_STORE = 'https://chromewebstore.google.com/detail/hfdpgaiggloacopnkihfkloicjepldig';
 const EARLY_APP_ENTRY_MARKER = 'data-light-note-early-app-entry';
+const LANDING_EARLY_INTENT_MARKER = 'data-light-note-landing-early-intent';
+const LANDING_EARLY_ACTION_MARKERS = ['primary:landing_primary', 'account:landing_account'];
 const MOBILE_LANDING_VISIT_MARKER = 'ln-mobile-landing-visited';
 
 function assert(condition, message) {
@@ -114,6 +116,9 @@ export async function verifySeoArtifacts({ dist = DIST, skipPrerender = process.
   assert(bodyText(rootHtml).length >= 500, '根官网正文过短，疑似预渲染空壳');
   assert(rootHtml.includes(EARLY_APP_ENTRY_MARKER), '根官网缺少移动端首屏前应用入口守卫');
   assert(rootHtml.includes(MOBILE_LANDING_VISIT_MARKER), '根官网入口守卫缺少移动浏览器首访记录');
+  assert(rootHtml.includes(LANDING_EARLY_INTENT_MARKER), '根官网缺少接管前主按钮点击记录');
+  for (const marker of LANDING_EARLY_ACTION_MARKERS)
+    assert(rootHtml.includes(`data-landing-early-action="${marker}"`), `根官网首屏主按钮缺少接管前点击标记：${marker}`);
   assert(!/googlebot|baiduspider|bingbot/i.test(rootHtml), '根官网不得按搜索引擎 UA 分流');
 
   const extensionRobots = findTag(

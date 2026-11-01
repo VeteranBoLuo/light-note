@@ -81,6 +81,10 @@ describe('normalizeConversionSource(渠道 source 白名单)', () => {
     expect(normalizeConversionSource('nav')).toBe('nav');
     expect(normalizeConversionSource('auth_switch')).toBe('auth_switch');
   });
+  it('官网账号入口与接管前补执行的按钮来源单独计数', () => {
+    for (const source of ['landing_account', 'landing_primary_early', 'landing_final_early', 'landing_account_early'])
+      expect(normalizeConversionSource(source)).toBe(source);
+  });
   it('非白名单/脏值/空/超长一律降级 unknown', () => {
     expect(normalizeConversionSource('/api/bookmark/add?token=x')).toBe('unknown'); // URL 不落库
     expect(normalizeConversionSource('add-bookmark')).toBe('unknown'); // 撞墙操作名不是渠道 source
