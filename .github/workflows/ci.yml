@@ -148,6 +148,9 @@ jobs:
       - name: 运行测试
         run: pnpm test
 
+      - name: 校验公开 SEO 产物门禁
+        run: node --test apps/web/scripts/verify-seo-artifacts.test.mjs
+
       - name: 校验 AI 模型访问边界
         run: pnpm --filter server check:ai-model-access
 

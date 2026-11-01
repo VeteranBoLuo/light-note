@@ -20,7 +20,8 @@ cd "$(dirname "$0")/.."
 
 echo "🏗  构建前端(增量)…"
 node scripts/ensure-android-release-apk.mjs
-pnpm --filter web build
+# CI/debug 可跳过预渲染；生产发布必须生成并校验全部公开 SEO 页面。
+SKIP_PRERENDER=0 pnpm --filter web build
 node scripts/ensure-android-release-apk.mjs --verify-dist
 PDF_WORKER_RELATIVE="$(node apps/web/scripts/verify-pdf-worker-artifact.mjs --print-path)"
 

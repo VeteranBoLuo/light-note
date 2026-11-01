@@ -14,7 +14,8 @@
  *   - /browser-extension  浏览器扩展公开介绍页（critical：商店与官网长期入口不能发布空壳）
  *   - /updateLogs  更新日志（数据来自后端 API，默认通过 /api 代理到生产后端取真实数据；
  *                  本地验收可由 PRERENDER_API_ORIGIN 指向本机后端；
- *                  非 critical：失败只警告，页面退回 SPA 空壳，不阻塞部署）
+ *                  抓取正文失败时阻止构建，不发布缺少正文的更新日志）
+ *   - /download/android  Android 下载页（critical：版本与安装说明必须可直接抓取）
  *
  * 每页顺带重写 head（通用 SPA 空壳不带 canonical，公开页必须在预渲染成功后
  * 写入自引用 canonical）：
@@ -25,7 +26,7 @@
  * 用 playwright-core + 系统 Chrome（不下载捆绑浏览器）：
  *   - 优先读 PRERENDER_CHROME 环境变量
  *   - macOS 默认路径 / Linux(CI) 常见命令名依次探测
- * SKIP_PRERENDER=1 仅供排查；完整 build 后的 SEO 产物校验会拒绝缺失官网首页的产物。
+ * SKIP_PRERENDER=1 保留给 CI/排查，仅执行基础产物检查，不代表完成生产 SEO 验收。
  */
 
 import { createServer } from 'node:http';
@@ -70,7 +71,7 @@ const PAGES = [
   {
     route: '/updateLogs',
     waitSelector: '.log-card',
-    critical: false,
+    critical: true,
     head: {
       title: '更新日志 - 轻笺 | 版本更新历史与功能改进',
       description: '轻笺（Light Note）版本更新历史：书签管理、云笔记、云空间与 AI 功能的每一次迭代改进记录，持续更新。',
@@ -82,7 +83,7 @@ const PAGES = [
     // 不影响正文可索引内容(版本、备案号、校验值、权限、安装说明均在静态 HTML 里)。
     route: '/download/android',
     waitSelector: '.dl-hero-title',
-    critical: false,
+    critical: true,
     head: {
       title: '下载轻笺 Android 版 - 官网直发 APK | 轻笺',
       description:
@@ -107,7 +108,7 @@ const PRERENDER_API_BLACKHOLES = Object.freeze([
 ]);
 
 if (process.env.SKIP_PRERENDER === '1') {
-  console.log('⏭  SKIP_PRERENDER=1，跳过预渲染（该产物不能通过完整 SEO 构建校验）');
+  console.log('⏭  SKIP_PRERENDER=1，跳过预渲染；仅供 CI/排查，未完成生产 SEO 验收');
   process.exit(0);
 }
 
@@ -134,7 +135,7 @@ function resolveChrome() {
     }
   }
   throw new Error(
-    '未找到可用的 Chrome/Chromium。请安装 Chrome，或用 PRERENDER_CHROME=/path/to/chrome 指定；紧急部署可 SKIP_PRERENDER=1 跳过。',
+    '未找到可用的 Chrome/Chromium。请安装 Chrome，或用 PRERENDER_CHROME=/path/to/chrome 指定；CI/排查可 SKIP_PRERENDER=1 跳过，但不能作为完整生产 SEO 验收。',
   );
 }
 
@@ -319,7 +320,7 @@ async function main() {
     }
   } finally {
     await browser.close();
-    // 代理接口的 keep-alive 连接可能在非关键页超时后继续占住事件循环。
+    // 代理接口的 keep-alive 连接可能在页面超时后继续占住事件循环。
     // 先主动断开存量连接，再等待监听器完全关闭，避免构建已经完成却一直无法退出。
     await new Promise((resolve) => {
       server.close(resolve);
@@ -330,6 +331,6 @@ async function main() {
 
 main().catch((err) => {
   console.error('❌  预渲染失败:', err.message);
-  console.error('    官网首页是关键 SEO 产物，失败时禁止发布空壳根页。');
+  console.error('    首页、浏览器扩展、Android 下载与更新日志均为关键 SEO 产物，失败时禁止发布空壳。');
   process.exit(1);
 });

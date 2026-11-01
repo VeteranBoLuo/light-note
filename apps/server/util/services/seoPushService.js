@@ -1,6 +1,12 @@
 import { formatDateTime } from '../dateTime.js';
 import { notificationSchedulerEnabled } from '../notificationSchedulerPolicy.js';
-import { loadSitemapEntries, SEO_SITE_ORIGIN } from '../seoSitemap.js';
+import {
+  getStaticSitemapUrls,
+  HELP_CENTER_PATH,
+  helpArticleUrl,
+  loadSitemapEntries,
+  SEO_SITE_ORIGIN,
+} from '../seoSitemap.js';
 
 /**
  * 搜索引擎主动提交：把站点地图里新增或更新的地址推给百度普通收录与 IndexNow（Bing 等）。
@@ -8,7 +14,8 @@ import { loadSitemapEntries, SEO_SITE_ORIGIN } from '../seoSitemap.js';
  * - 只在生产运行时启动；每个引擎每个自然日最多跑一轮，推送记录存 config_json，不另建表。
  * - 百度按每日额度推送：先推一条读出剩余额度，再按额度补推。令牌只来自 BAIDU_PUSH_TOKEN，不写日志。
  * - IndexNow 密钥按协议公开在站点根目录（apps/web/public/<key>.txt），不是凭据。
- * - 记录的是每个地址提交时的版本（文章 updated_at），文章更新后重新提交；删除的地址从记录中清掉。
+ * - 百度记录已受理版本；IndexNow 首次建立当前版本快照，之后只通知真实新增、更新或删除。
+ * - IndexNow 密钥待验证或请求失败保留原快照，下一自然日重试，不密集轮询。
  */
 
 export const SEO_PUSH_STATE_CONFIG_NAME = 'seo_push_state';
@@ -20,6 +27,7 @@ const INDEXNOW_MAX_URLS = 10_000;
 const REQUEST_TIMEOUT_MS = 15_000;
 const START_DELAY_MS = 10 * 60_000;
 const CHECK_INTERVAL_MS = 60 * 60_000;
+const STATIC_SEO_URLS = new Set(getStaticSitemapUrls(SEO_SITE_ORIGIN, HELP_CENTER_PATH).map(({ loc }) => loc));
 
 /** 启用的引擎：SEO_PUSH_ENABLED=false 全部停用；百度另需配置推送令牌。 */
 export function seoPushEngines(env = process.env) {
@@ -71,11 +79,29 @@ async function postBaidu(urls, { token, fetcher }) {
     if (/quota/i.test(String(body?.message || ''))) return { error: 'BAIDU_PUSH_OVER_QUOTA' };
     return { error: `BAIDU_PUSH_HTTP_${Number(body?.error) || response.status}` };
   }
-  const rejected = new Set([...(body.not_same_site || []), ...(body.not_valid || [])].map(String));
+  const rejectedLists = [body.not_same_site, body.not_valid];
+  if (
+    !Number.isInteger(body.success) ||
+    body.success < 0 ||
+    !Number.isInteger(body.remain) ||
+    body.remain < 0 ||
+    rejectedLists.some((list) => list !== undefined && !Array.isArray(list))
+  )
+    return { error: 'BAIDU_PUSH_INVALID_RESPONSE' };
+  const rejectedUrls = rejectedLists.flatMap((list) => list || []);
+  const rejected = new Set(rejectedUrls);
+  const requested = new Set(urls);
+  const accepted = urls.filter((url) => !rejected.has(url));
+  if (
+    rejected.size !== rejectedUrls.length ||
+    rejectedUrls.some((url) => typeof url !== 'string' || !requested.has(url)) ||
+    body.success !== accepted.length
+  )
+    return { error: 'BAIDU_PUSH_INVALID_RESPONSE' };
   return {
-    accepted: urls.filter((url) => !rejected.has(url)),
+    accepted,
     rejected: urls.filter((url) => rejected.has(url)),
-    remain: Number.isFinite(Number(body.remain)) ? Number(body.remain) : 0,
+    remain: body.remain,
   };
 }
 
@@ -86,7 +112,12 @@ export async function pushToBaidu(urls, { token, fetcher = fetch } = {}) {
   if (first.error) return { accepted: [], rejected: [], error: first.error };
   const rest = urls.slice(1, 1 + Math.max(0, first.remain));
   if (!rest.length) return first;
-  const second = await postBaidu(rest, { token, fetcher });
+  let second;
+  try {
+    second = await postBaidu(rest, { token, fetcher });
+  } catch (error) {
+    return { accepted: first.accepted, rejected: first.rejected, remain: 0, error: seoPushErrorCode(error) };
+  }
   if (second.error) return { accepted: first.accepted, rejected: first.rejected, remain: 0, error: second.error };
   return {
     accepted: [...first.accepted, ...second.accepted],
@@ -95,7 +126,7 @@ export async function pushToBaidu(urls, { token, fetcher = fetch } = {}) {
   };
 }
 
-/** IndexNow：Bing、Yandex 等共享的提交协议；200 为已受理，202 为密钥仍在校验，都算提交成功。 */
+/** IndexNow：200 确认受理；202 密钥仍待校验，保留变更供下一自然日重试。 */
 export async function pushToIndexNow(urls, { fetcher = fetch } = {}) {
   if (!urls.length) return { accepted: [], rejected: [] };
   const batch = urls.slice(0, INDEXNOW_MAX_URLS);
@@ -111,13 +142,16 @@ export async function pushToIndexNow(urls, { fetcher = fetch } = {}) {
     redirect: 'error',
     signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   });
-  if (response.status !== 200 && response.status !== 202) {
+  if (response.status === 202) {
+    return { accepted: [], rejected: [], error: 'INDEXNOW_KEY_VALIDATION_PENDING' };
+  }
+  if (response.status !== 200) {
     return { accepted: [], rejected: [], error: `INDEXNOW_HTTP_${response.status}` };
   }
   return { accepted: batch, rejected: [] };
 }
 
-/** 读取时宽松处理：手工写坏的记录只丢弃对应部分，最坏情况是重新提交。 */
+/** 损坏记录只丢弃对应部分；IndexNow 缺少有效基线时安全重建历史快照。 */
 export function parseSeoPushState(rawContent) {
   let parsed = null;
   try {
@@ -126,11 +160,19 @@ export function parseSeoPushState(rawContent) {
     parsed = null;
   }
   const engines = {};
-  for (const [name, value] of Object.entries(parsed?.engines || {})) {
-    if (!value || typeof value !== 'object') continue;
-    const pushed = Object.entries(value.pushed && typeof value.pushed === 'object' ? value.pushed : {}).filter(
-      ([, version]) => typeof version === 'string',
-    );
+  const records = parsed?.engines;
+  if (!records || typeof records !== 'object' || Array.isArray(records)) return { engines };
+  for (const [name, value] of Object.entries(records)) {
+    if (
+      !value ||
+      typeof value !== 'object' ||
+      Array.isArray(value) ||
+      !value.pushed ||
+      typeof value.pushed !== 'object' ||
+      Array.isArray(value.pushed)
+    )
+      continue;
+    const pushed = Object.entries(value.pushed).filter(([, version]) => typeof version === 'string');
     engines[name] = {
       lastRunDate: typeof value.lastRunDate === 'string' ? value.lastRunDate : '',
       pushed: Object.fromEntries(pushed),
@@ -154,6 +196,22 @@ async function saveSeoPushState(db, state) {
   );
 }
 
+function isOwnedSeoUrl(value) {
+  if (STATIC_SEO_URLS.has(value)) return true;
+  try {
+    const url = new URL(value);
+    if (url.origin !== SEO_SITE_ORIGIN || url.username || url.password || url.search || url.hash || url.href !== value)
+      return false;
+    const prefix = `${HELP_CENTER_PATH}/`;
+    if (!url.pathname.startsWith(prefix)) return false;
+    const id = decodeURIComponent(url.pathname.slice(prefix.length));
+    // 只接收由公共文章地址构造器生成的单层路径，拒绝解码后再次引入分隔符或控制字符。
+    return !!id && !/[\/\\?#%\u0000-\u001f\u007f]/u.test(id) && helpArticleUrl(id) === value;
+  } catch {
+    return false;
+  }
+}
+
 /** 执行一轮：今天已跑过的引擎跳过；返回每个引擎的低敏摘要。 */
 export async function runSeoPush({ db, env = process.env, fetcher = fetch, now = new Date() } = {}) {
   const engines = seoPushEngines(env);
@@ -167,10 +225,23 @@ export async function runSeoPush({ db, env = process.env, fetcher = fetch, now =
   const live = new Set(entries.map((entry) => entry.loc));
   const results = [];
   for (const engine of due) {
+    // IndexNow 用来通知发生的变更，首次启用只建立历史基线，避免把所有旧 URL 当成新增。
+    // 旧版已保存的引擎记录继续作为快照使用，无需迁移或重新推送全站。
+    const initializeIndexNow = engine === 'indexnow' && !state.engines.indexnow;
+    const previous = state.engines[engine]?.pushed || {};
     const pushed = Object.fromEntries(
-      Object.entries(state.engines[engine]?.pushed || {}).filter(([loc]) => live.has(loc)),
+      Object.entries(previous).filter(([loc]) => engine === 'indexnow' || live.has(loc)),
     );
-    const pending = selectPendingEntries(entries, pushed);
+    if (initializeIndexNow) {
+      for (const entry of entries) pushed[entry.loc] = entry.version;
+    }
+    const removed =
+      engine === 'indexnow'
+        ? Object.keys(pushed)
+            .filter((loc) => !live.has(loc) && isOwnedSeoUrl(loc))
+            .map((loc) => ({ loc, removed: true }))
+        : [];
+    const pending = initializeIndexNow ? [] : [...selectPendingEntries(entries, pushed), ...removed];
     let outcome = { accepted: [], rejected: [] };
     if (pending.length) {
       const urls = pending.map((entry) => entry.loc);
@@ -185,7 +256,14 @@ export async function runSeoPush({ db, env = process.env, fetcher = fetch, now =
     }
     // 被判定无效的地址同样记下版本，避免每天重复消耗额度；文章更新后会再次提交。
     const versionByLoc = new Map(pending.map((entry) => [entry.loc, entry.version]));
-    for (const loc of [...outcome.accepted, ...outcome.rejected]) pushed[loc] = versionByLoc.get(loc);
+    for (const loc of [...outcome.accepted, ...outcome.rejected]) {
+      if (live.has(loc)) pushed[loc] = versionByLoc.get(loc);
+      else delete pushed[loc];
+    }
+    // 手工损坏、非公开路径或非规范 URL 不能作为删除通知外发，也不永久留在快照里。
+    for (const loc of Object.keys(pushed)) {
+      if (!live.has(loc) && !isOwnedSeoUrl(loc)) delete pushed[loc];
+    }
     state.engines[engine] = { lastRunDate: today, pushed };
     results.push({
       engine,

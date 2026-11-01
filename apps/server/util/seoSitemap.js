@@ -1,5 +1,6 @@
+import { createHash } from 'node:crypto';
 import { formatDateTime } from './dateTime.js';
-import { PUBLIC_HELP_ARTICLE_CONDITION } from './helpKnowledge.js';
+import { normalizeKnowledgeHelpSection, PUBLIC_HELP_ARTICLE_CONDITION } from './helpKnowledge.js';
 
 export const SEO_SITE_ORIGIN = 'https://boluo66.top';
 export const HELP_CENTER_PATH = '/helpCenter'; // 单一来源，避免路径散落在各处手改漏改
@@ -30,29 +31,46 @@ export function helpArticleUrl(id) {
 
 /**
  * 站点地图与搜索引擎主动提交共用的地址清单：静态页在前，公开帮助文章按帮助中心维护顺序。
- * `version` 精确到秒，文章更新后据此重新提交；静态页只提交一次。
+ * 文章版本精确到秒；帮助目录按有序条目的可见内容生成稳定版本，其余静态页只提交一次。
  */
 export async function loadSitemapEntries(db) {
   const [rows] = await db.query(
-    `SELECT id, updated_at FROM knowledge_base
+    `SELECT id, title, help_section, updated_at, created_at FROM knowledge_base
       WHERE ${PUBLIC_HELP_ARTICLE_CONDITION}
       ORDER BY sort ASC, created_at ASC`,
   );
-  const staticEntries = getStaticSitemapUrls(SEO_SITE_ORIGIN, HELP_CENTER_PATH).map((entry) => ({
-    ...entry,
-    version: 'static',
-  }));
   const articleEntries = rows.map((row) => {
-    const updatedAt = formatDateTime(row.updated_at ? new Date(row.updated_at) : new Date());
+    const modified = [row.updated_at, row.created_at]
+      .filter(Boolean)
+      .map((value) => new Date(value))
+      .find((value) => Number.isFinite(value.getTime()));
+    // 缺少真实时间时不伪造“今天更新”，否则每次检查都会制造新版本并重复推送。
+    const updatedAt = modified ? formatDateTime(modified) : null;
     return {
       loc: helpArticleUrl(row.id),
       priority: '0.6',
       changefreq: 'monthly',
       // 本地时区日期，避免凌晨用 UTC 把 lastmod 算成昨天。
-      lastmod: updatedAt.slice(0, 10),
-      version: updatedAt,
+      ...(updatedAt ? { lastmod: updatedAt.slice(0, 10) } : {}),
+      version: updatedAt || 'undated',
     };
   });
+  const helpIndexVersion = createHash('sha256')
+    .update(
+      JSON.stringify(
+        rows.map((row, index) => [
+          String(row.id ?? ''),
+          String(row.title ?? ''),
+          normalizeKnowledgeHelpSection(row.help_section),
+          articleEntries[index].lastmod || null,
+        ]),
+      ),
+    )
+    .digest('hex');
+  const staticEntries = getStaticSitemapUrls(SEO_SITE_ORIGIN, HELP_CENTER_PATH).map((entry) => ({
+    ...entry,
+    version: entry.loc === `${SEO_SITE_ORIGIN}${HELP_CENTER_PATH}` ? `help-index:${helpIndexVersion}` : 'static',
+  }));
   return [...staticEntries, ...articleEntries];
 }
 
