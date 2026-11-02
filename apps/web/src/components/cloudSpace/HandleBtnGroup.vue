@@ -1,8 +1,17 @@
 <template>
   <BSpace :size="15">
     <CloudStorageBar v-if="showControls && !bookmark.isMobile" ref="cloudStorageBar" />
-    <div v-if="showControls" class="upload-container">
-      <BUpload ref="uploadPicker" multiple raw-file :disabled="busy" :max-total-size="null" @change="handleChange">
+    <BUpload
+      ref="uploadPicker"
+      multiple
+      raw-file
+      :triggerless="!showControls"
+      :disabled="busy"
+      :max-count="selectionLimit"
+      :max-total-size="null"
+      @change="handleChange"
+    >
+      <div v-if="showControls" class="upload-container">
         <BButton
           type="primary"
           class="upload-action"
@@ -14,8 +23,8 @@
           <SvgIcon :src="icon.file_upload" size="17" />
           {{ bookmark.isDesktop ? t('cloudSpace.uploadFile') : '' }}
         </BButton>
-      </BUpload>
-    </div>
+      </div>
+    </BUpload>
     <Teleport to="body">
       <section
         v-if="uploadProgress"
@@ -75,6 +84,12 @@
         <p v-if="remaining" class="queue-hint">{{
           t(uploadProgress.running ? 'cloudSpace.uploadQueueKeepOpen' : 'cloudSpace.uploadQueueRetryHint')
         }}</p>
+        <p class="queue-hint">{{
+          t(selectionLimit ? 'cloudSpace.uploadQueueAppendMobileHint' : 'cloudSpace.uploadQueueAppendHint', { count: selectionLimit })
+        }}</p>
+        <BButton class="retry-upload" :loading="checking" @click="openFileDialog(lastUploadFolderId)">
+          {{ t('cloudSpace.uploadQueueAppend') }}
+        </BButton>
         <BButton v-if="remaining && !uploadProgress.running" type="primary" class="retry-upload" @click="retryUploads">
           {{ t('cloudSpace.uploadQueueRetry', { count: remaining }) }}
         </BButton>
@@ -93,7 +108,12 @@
   import { buildNoteDetailRequestScope } from '@/api/noteDetailPrefetch';
   import { recordOperation } from '@/api/commonApi';
   import { autoRename, formatStorageSize } from '@/utils/common';
-  import { createCloudUploadQueue, type CloudUploadSnapshot } from '@/utils/cloudUploadQueue';
+  import {
+    createCloudUploadQueue,
+    CLOUD_UPLOAD_MOBILE_SELECTION_LIMIT,
+    type CloudUploadSnapshot,
+  } from '@/utils/cloudUploadQueue';
+  import { isLightNoteAndroidApp } from '@/utils/androidBridge';
   import { getUploadStorageShortfall } from './cloudStorageCapacity';
   import { blockGuestWrite } from '@/composables/useGuestGuard';
   import Alert from '@/components/base/BasicComponents/BModal/Alert';
@@ -115,7 +135,11 @@
   const pendingUploadFolderId = ref<string | null>(null);
   const uploadProgress = shallowRef<CloudUploadSnapshot | null>(null);
   const checking = ref(false);
-  const busy = computed(() => checking.value || uploadProgress.value?.running === true);
+  const busy = computed(() => checking.value);
+  const selectionLimit = computed(() =>
+    bookmark.isMobileDevice || isLightNoteAndroidApp() ? CLOUD_UPLOAD_MOBILE_SELECTION_LIMIT : null,
+  );
+  const lastUploadFolderId = ref<string | null>(null);
   const remaining = computed(() =>
     uploadProgress.value ? uploadProgress.value.total - uploadProgress.value.success : 0,
   );
@@ -161,11 +185,11 @@
     if (cloudStorageBar.value) cloudStorageBar.value.openDetails(shortfallMb);
     else emit('storageQuota', shortfallMb);
   }
-  async function runQueue(current: NonNullable<typeof queue>) {
-    const before = new Set(current.results().map((item) => item.fileId));
-    await current.run();
+  async function runQueue(current: NonNullable<typeof queue>, retryFailed = true) {
+    const before = new Set(current.results().map((item) => item.taskId));
+    await current.run(retryFailed);
     if (queue !== current) return;
-    const added = current.results().filter((item) => !before.has(item.fileId));
+    const added = current.results().filter((item) => !before.has(item.taskId));
     // 确认成功才汇总记录；列表刷新失败不把已保存文件改成上传失败。
     if (added.length) {
       void recordOperation({ module: '云空间', operation: `上传文件成功【${added.length}个】` }).catch(() => {});
@@ -187,7 +211,7 @@
     }
   }
   async function retryUploads() {
-    if (blockGuestWrite('upload-file') || busy.value || !queue) return;
+    if (blockGuestWrite('upload-file') || busy.value || !queue || queue.snapshot().running) return;
     await runQueue(queue);
   }
   // 兼容粘贴图片等旧入口；选择器直接保留原始 File，绝不把几千张图片转成 Base64。
@@ -205,10 +229,6 @@
       message.info(t('cloudSpace.uploading'));
       return;
     }
-    const requestedScope = scope();
-    const requestedGeneration = generation;
-    if (!(await confirmDiscard()) || scope() !== requestedScope || generation !== requestedGeneration) return;
-    clearQueue();
     let normalized: File[];
     try {
       normalized = files.map(normalizeFile);
@@ -219,22 +239,33 @@
     if (!normalized.length) return;
     const owner = scope();
     const currentGeneration = generation;
-    queue = createCloudUploadQueue(normalized, folderId, (state) => {
-      if (generation === currentGeneration && scope() === owner) uploadProgress.value = state;
-    });
-    await runQueue(queue);
+    lastUploadFolderId.value = folderId;
+    if (queue) queue.append(normalized, folderId);
+    else {
+      queue = createCloudUploadQueue(normalized, folderId, (state) => {
+        if (generation === currentGeneration && scope() === owner) uploadProgress.value = state;
+      });
+    }
+    if (!queue.snapshot().running) await runQueue(queue, false);
   }
   async function handleChange(input: any) {
     if (blockGuestWrite('upload-file') || busy.value) return;
     const files: any[] = Array.isArray(input) ? input : [];
-    if (!files.length) return;
     const folderId = pendingUploadFolderId.value;
     pendingUploadFolderId.value = null;
+    if (!files.length) return;
+    if (selectionLimit.value && files.length > selectionLimit.value) {
+      message.warning(t('cloudSpace.uploadSelectionLimit', { count: selectionLimit.value }));
+      return;
+    }
     const owner = scope();
     const currentGeneration = generation;
     checking.value = true;
-    checkController = new AbortController();
+    const controller = new AbortController();
+    checkController = controller;
     try {
+      // 请求期间上一批可能刚好保存成功，先预留当下的待传名称，避免旧响应漏掉新保存文件。
+      const reserved = new Set(queue?.reservedFileNames() || []);
       const fileNames = files.map((file) =>
         String(file instanceof File ? file.name : file.fileName || '')
           .normalize('NFC')
@@ -244,13 +275,13 @@
       const res = await apiBasePost(
         '/api/file/checkFileNames',
         { fileNames },
-        { silent: true, signal: checkController.signal },
+        { silent: true, signal: controller.signal },
       );
       if (res.status !== 200) throw new Error('CHECK_FILE_NAMES_FAILED');
       if (generation !== currentGeneration || scope() !== owner) return;
       const checks = Array.isArray(res.data) ? res.data : res.data?.check;
       if (!Array.isArray(checks)) throw new Error('CHECK_FILE_NAMES_FAILED');
-      const localDuplicates = new Set(fileNames).size !== fileNames.length;
+      const localDuplicates = new Set(fileNames).size !== fileNames.length || fileNames.some((name) => reserved.has(name));
       const duplicates = checks.filter((item: any) => item.exists).map((item: any) => item.fileName);
       let selected = files;
       if (localDuplicates || duplicates.length) {
@@ -296,7 +327,7 @@
         );
         if (choice === 'cancel' || generation !== currentGeneration || scope() !== owner) return;
         if (choice === 'rename') {
-          const existing = new Set<string>([...(res.data?.allNames || []), ...duplicates]);
+          const existing = new Set<string>([...(res.data?.allNames || []), ...duplicates, ...reserved]);
           // 预留本批原名，避免 a.jpg 的序号名抢占后面的 a (1).jpg。
           fileNames.forEach((name) => existing.add(name));
           selected = files.map((file, index) => {
@@ -309,11 +340,15 @@
         }
       }
       checking.value = false;
-      await uploadFiles(selected, folderId);
+      // 校验在入队时结束；不能等整个队列结束后再释放校验状态，否则会覆盖下一批正在进行的校验。
+      return uploadFiles(selected, folderId);
     } catch {
       if (generation === currentGeneration && scope() === owner) message.error(t('cloudSpace.uploadQueueCheckFailed'));
     } finally {
-      if (generation === currentGeneration) checking.value = false;
+      if (checkController === controller) {
+        checkController = undefined;
+        checking.value = false;
+      }
     }
   }
   async function uploadSelectedFiles(files: File[], folderId: string | null = null) {

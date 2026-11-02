@@ -32,12 +32,15 @@
         </div>
       </div>
       <div v-if="pendingShare && (captureType === 'file' || pendingShare.skippedFiles)" class="share-file-report">
-        <p>{{
-          t('inbox.shareLimits', {
-            count: pendingShare.limits?.files ?? INCOMING_SHARE_MAX_FILES,
-            size: (pendingShare.limits?.bytes ?? MAX_FILE_TOTAL_SIZE) / (1024 * 1024),
-          })
-        }}</p>
+        <MobileNoticeStrip
+          v-if="pendingShare.skippedFiles"
+          class="share-file-warning"
+          tone="warning"
+          role="alert"
+          :title="t(files.length ? 'inbox.shareSomeFilesNotAdded' : 'inbox.shareFilesNotAdded')"
+          :description="[...shareSkipSummary, shareLimitsText].join(locale.startsWith('zh') ? '' : ' ')"
+        />
+        <p v-else>{{ shareLimitsText }}</p>
         <BButton
           v-if="pendingShare.skippedFileDetails?.length"
           type="text"
@@ -114,6 +117,7 @@
                 :multiple="true"
                 :raw-file="true"
                 :disabled="submitting"
+                :max-count="INCOMING_SHARE_MAX_FILES"
                 :max-total-size="MAX_FILE_TOTAL_SIZE"
                 @change="(selected) => addFiles(selected, 'picker')"
               >
@@ -395,6 +399,12 @@
     pendingShare.value ? t('inbox.shareCaptureEyebrow') : t('inbox.quickCaptureEyebrow'),
   );
   const skipReasons: ShareSkipReason[] = ['count_limit', 'size_limit', 'unreadable', 'unknown'];
+  const shareLimitsText = computed(() =>
+    t('inbox.shareLimits', {
+      count: pendingShare.value?.limits?.files ?? INCOMING_SHARE_MAX_FILES,
+      size: (pendingShare.value?.limits?.bytes ?? MAX_FILE_TOTAL_SIZE) / (1024 * 1024),
+    }),
+  );
   const shareSkipSummary = computed(() => {
     const share = pendingShare.value;
     if (!share?.skippedFiles) return [];
@@ -413,10 +423,10 @@
     if (captureType.value === 'todo') return t('inbox.todoCaptureHint');
     const share = pendingShare.value;
     if (!share) return t('inbox.captureHint');
+    if (share.skippedFiles && !files.value.length && !share.hasText) return t('inbox.shareNoFilesToUpload');
     return (
       [
         t('inbox.shareCaptureHint'),
-        ...shareSkipSummary.value,
         share.textTruncated ? t('inbox.shareTextTruncated') : '',
         share.hasText && captureType.value === 'file' ? t('inbox.shareTextKept') : '',
       ]
@@ -488,6 +498,7 @@
 
   function applyShareDraft(draft: QuickCaptureShareDraft | null) {
     if (!draft) return;
+    shareDetailsOpen.value = !draft.files.length;
     shareCapture.value = {
       id: draft.id,
       limits: draft.limits,
@@ -1005,10 +1016,28 @@
 
 <style scoped lang="less">
   .share-file-report {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--ui-space-8, 8px);
     color: var(--desc-color);
     font-size: var(--ui-font-12, 12px);
     p {
       margin: 0;
+    }
+  }
+  .share-file-warning {
+    align-self: stretch;
+    flex-shrink: 0;
+    min-height: var(--ui-layout-48, 48px);
+    gap: var(--ui-space-10, 10px);
+    padding: var(--ui-space-9, 9px) var(--ui-space-12, 12px);
+    :deep(.mobile-notice-strip__copy) {
+      gap: var(--ui-space-2, 2px);
+      font-size: var(--ui-font-12, 12px);
+    }
+    :deep(strong) {
+      font-size: var(--ui-font-13, 13px);
     }
   }
   .share-file-report__details {

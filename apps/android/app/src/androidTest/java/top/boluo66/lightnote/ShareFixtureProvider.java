@@ -19,10 +19,12 @@ public final class ShareFixtureProvider extends ContentProvider {
     @Override public String getType(Uri uri) { return "text/plain"; }
     @Override public Cursor query(Uri uri, String[] projection, String selection, String[] args, String sort) {
         MatrixCursor cursor = new MatrixCursor(new String[]{OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE});
-        cursor.addRow(new Object[]{uri.getLastPathSegment() + ".txt", 4L});
+        long size = uri.getPath().contains("8gb") ? 8L * 1024L * 1024L * 1024L : 4L;
+        cursor.addRow(new Object[]{uri.getLastPathSegment() + ".txt", size});
         return cursor;
     }
     @Override public ParcelFileDescriptor openFile(Uri uri, String mode) throws FileNotFoundException {
+        if (uri.getPath().contains("8gb")) throw new FileNotFoundException("Oversized metadata must be rejected before opening");
         if (uri.getPath().contains("broken")) throw new FileNotFoundException("fixture unreadable");
         SystemClock.sleep(uri.getPath().contains("slow") ? 120 : 10);
         File file = new File(getContext().getCacheDir(), "share-fixture.txt");
