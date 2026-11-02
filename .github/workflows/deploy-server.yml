@@ -17,6 +17,8 @@ concurrency:
 
 jobs:
   deploy-server:
+    # 线上只从 main（已发布版本）部署；develop 是待发版集成分支。
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
       - name: 读取仓库内容
