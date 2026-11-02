@@ -98,7 +98,8 @@ async function bindSubscription(userId, subscription, locale, db, previousBindin
       return { id: previous.id, generation: previous.generation, userId };
     }
     const [[count]] = await conn.query(
-      'SELECT COUNT(*) AS total FROM browser_push_subscriptions WHERE user_id = ? AND active IN (1, 2)',
+      `SELECT COUNT(*) AS total FROM browser_push_subscriptions WHERE user_id = ? AND active IN (1, 2)
+       AND endpoint ${isHuaweiEndpoint(subscription.endpoint) ? 'LIKE' : 'NOT LIKE'} 'huawei:%'`,
       [userId],
     );
     if (Number(count.total) >= 20 && (previous?.user_id !== userId || ![1, 2].includes(Number(previous?.active))))
