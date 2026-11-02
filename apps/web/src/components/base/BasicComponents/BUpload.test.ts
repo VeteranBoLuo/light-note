@@ -3,6 +3,7 @@ import { createApp, h, nextTick } from 'vue';
 import { createI18n } from 'vue-i18n';
 import { createPinia } from 'pinia';
 import BUpload from './BUpload.vue';
+import message from './BMessage/BMessage';
 
 let cleanup: (() => void) | undefined;
 
@@ -21,7 +22,9 @@ function mountUpload(props: Record<string, unknown> = {}) {
     },
   });
   app.use(createPinia());
-  app.use(createI18n({ legacy: false, locale: 'en', messages: { en: { cloudSpace: { uploadFile: 'Upload file' } } } }));
+  app.use(createI18n({ legacy: false, locale: 'en', messages: { en: { cloudSpace: {
+    uploadFile: 'Upload file', uploadSelectionLimit: 'Select up to {count} files at a time',
+  } } } }));
   app.mount(host);
   cleanup = () => {
     app.unmount();
@@ -98,6 +101,35 @@ describe('BUpload semantics', () => {
     input.dispatchEvent(new Event('change'));
 
     expect(onChange).toHaveBeenCalledWith([file]);
+  });
+
+  it.each([101, 3000])('rejects %i selections before enumerating files or reading metadata and resets the input', async (count) => {
+    const warning = vi.spyOn(message, 'warning').mockImplementation(() => {});
+    const onChange = vi.fn();
+    mountUpload({ rawFile: true, maxCount: 100, maxTotalSize: null, onChange });
+    await nextTick();
+    const input = document.body.querySelector<HTMLInputElement>('.b-upload-native-input')!;
+    const enumerate = vi.fn(() => { throw new Error('Oversized selection must not be enumerated'); });
+    Object.defineProperty(input, 'files', { configurable: true, value: { length: count, [Symbol.iterator]: enumerate } });
+    const reset = vi.spyOn(input, 'value', 'set');
+    input.dispatchEvent(new Event('change'));
+    expect(enumerate).not.toHaveBeenCalled();
+    expect(onChange).not.toHaveBeenCalled();
+    expect(warning).toHaveBeenCalledWith('Select up to 100 files at a time');
+    expect(reset).toHaveBeenCalledWith('');
+  });
+
+  it('accepts exactly 100 raw files in order without using FileReader', async () => {
+    const read = vi.spyOn(FileReader.prototype, 'readAsDataURL');
+    const onChange = vi.fn();
+    mountUpload({ rawFile: true, maxCount: 100, maxTotalSize: null, onChange });
+    await nextTick();
+    const files = Array.from({ length: 100 }, (_, i) => new File(['photo'], `photo-${i}.jpg`));
+    const input = document.body.querySelector<HTMLInputElement>('.b-upload-native-input')!;
+    Object.defineProperty(input, 'files', { configurable: true, value: files });
+    input.dispatchEvent(new Event('change'));
+    expect(onChange).toHaveBeenCalledWith(files);
+    expect(read).not.toHaveBeenCalled();
   });
 
   it('removes disabled triggers from the tab order', () => {

@@ -186,6 +186,38 @@ try {
       console.log('PASS share', width, theme);
       await page.close();
     }
+  if (!process.env.CLOUD_ONLY && !process.env.EDGE_ONLY) {
+    for (const scenario of ['oversized', 'oversized-legacy']) {
+      for (const [width, density, locale = 'zh-CN'] of [[1440, 'small'], [1440, 'medium'], [1440, 'large'], [390, 'medium'], [320, 'medium', 'en-US']]) {
+        for (const theme of ['day', 'night']) {
+          const { page, errors } = await open(
+            `/e2e/android-share-capture.html?scenario=${scenario}&theme=${theme}&density=${density}&locale=${locale}&renderProfile=${width < 768 ? 'mobile' : 'desktop'}`,
+            width,
+          );
+          const warning = page.locator('.share-file-warning[role=alert]');
+          await warning.waitFor();
+          assert.match(await warning.innerText(), /分享文件未加入|Shared files were not added/);
+          assert.match(await warning.innerText(), /500MB/);
+          assert.equal(await page.getByRole('button', { name: /^(加入待整理|Add to inbox)$/ }).isDisabled(), true);
+          assert.equal(await page.locator('.file-list__item').count(), 0);
+          if (scenario === 'oversized') {
+            assert.match(await warning.innerText(), /超出总大小上限|exceeded the total size limit/);
+            await page.locator('#share-skipped-details').getByText('8GB-video.mp4', { exact: true }).waitFor();
+          } else assert.match(await warning.innerText(), /无法读取或超出单次上限|could not be read or exceeded/);
+          assert.equal(await page.locator('[data-testid=bridge-log]').getByText(/读取分享文件|上传文件/).count(), 0);
+          await page.waitForTimeout(400);
+          const bounds = await warning.boundingBox();
+          assert(bounds && bounds.width > 0 && bounds.x >= 0 && bounds.x + bounds.width <= width);
+          assert.equal(await warning.evaluate((el) => el.scrollWidth <= el.clientWidth), true);
+          await page.screenshot({ path: `${output}/${scenario}-${width}-${theme}-${density}-${locale}.png` });
+          assert.deepEqual(errors, []);
+          results.push({ flow: scenario, width, theme, density, locale, status: 'passed' });
+          console.log('PASS share warning', scenario, width, theme, density, locale);
+          await page.close();
+        }
+      }
+    }
+  }
 } finally {
   await writeFile(
     `${output}/${process.env.SHARE_ONLY ? 'share-results' : process.env.CLOUD_ONLY ? 'cloud-results' : 'results'}.json`,
