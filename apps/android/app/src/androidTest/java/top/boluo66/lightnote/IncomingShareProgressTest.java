@@ -31,6 +31,26 @@ public class IncomingShareProgressTest {
             .putParcelableArrayListExtra(Intent.EXTRA_STREAM, uris);
     }
 
+    @Test public void eightGigabyteShareSkipsReadingAndKeepsSizeLimitReport() throws Exception {
+        CountDownLatch done = new CountDownLatch(1);
+        IncomingShareStore.ProgressListener listener = progress -> {
+            if (progress.result != null) done.countDown();
+        };
+        try {
+            main(() -> {
+                IncomingShareStore.accept(context, files("8gb-video", 1));
+                IncomingShareStore.addProgressListener(listener);
+            });
+            assertTrue(done.await(5, TimeUnit.SECONDS));
+            org.json.JSONObject share = IncomingShareStore.peek(context).getJSONObject("share");
+            assertEquals(0, share.getJSONArray("files").length());
+            assertEquals(1, share.getInt("skippedFiles"));
+            assertEquals(1, share.getJSONObject("skippedFileCounts").getInt("size_limit"));
+            assertEquals("8gb-video0.txt", share.getJSONArray("skippedFileDetails").getJSONObject(0).getString("name"));
+            assertEquals(500L * 1024L * 1024L, share.getJSONObject("limits").getLong("bytes"));
+        } finally { main(() -> IncomingShareStore.removeProgressListener(listener)); }
+    }
+
     @Test public void startsImmediatelyCountsSkippedAndStopsAtLimit() throws Exception {
         List<IncomingShareStore.Progress> events = new CopyOnWriteArrayList<>();
         CountDownLatch done = new CountDownLatch(1);

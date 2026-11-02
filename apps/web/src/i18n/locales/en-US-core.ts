@@ -5626,6 +5626,9 @@ export default {
     shareCaptureEyebrow: 'Shared to Light Note',
     shareCaptureHint: 'Review it, then tap “Add to inbox”. Tags and locations can wait.',
     shareLimits: 'Share up to {count} files, totaling no more than {size}MB.',
+    shareFilesNotAdded: 'Shared files were not added',
+    shareSomeFilesNotAdded: 'Some shared files were not added',
+    shareNoFilesToUpload: 'No files to upload. Check the reasons below, then share again or select other files.',
     shareShowSkipped: 'View files not added',
     shareHideSkipped: 'Hide files not added',
     shareMoreSkipped: '{count} more files are not listed.',
@@ -7679,6 +7682,11 @@ export default {
     uploadQueueRetryHint:
       'Saved files will not be uploaded again. Remaining files stay on this page; closing or refreshing requires selecting them again.',
     uploadQueueRetry: 'Retry {count} remaining files',
+    uploadQueueAppend: 'Add more files',
+    uploadQueueAppendHint: 'Add more files to this queue. They will use the previous batch’s folder.',
+    uploadQueueAppendMobileHint: 'Select up to {count} files at a time. Add more to this queue using the previous batch’s folder.',
+    uploadSelectionLimit: 'Select up to {count} files at a time. Nothing was added. Select fewer files and add them in batches.',
+    uploadMobileSelectionHint: 'Up to {count} files at a time. Add more batches while uploading.',
     uploadQueueDiscard:
       'Some files are unfinished. Leaving or closing clears this queue. Saved files will remain. Continue?',
     uploadQueueCancelConfirm:
@@ -7687,7 +7695,7 @@ export default {
     uploadQueueCheckFailed: 'Could not check file names. Upload has not started. Please retry.',
     uploadQueueDuplicateTitle: 'Duplicate file names',
     uploadQueueLocalDuplicates:
-      'Your selection contains duplicate names. Rename automatically to keep every photo without overwriting another.',
+      'Your selection or pending queue contains duplicate names. Rename automatically to keep every photo without overwriting another.',
     uploadQueueDuplicates: '{count} files already exist, including “{names}”. Choose how to proceed.',
     uploadQueueOverwrite: 'Overwrite all',
     uploadQueueRename: 'Rename automatically',

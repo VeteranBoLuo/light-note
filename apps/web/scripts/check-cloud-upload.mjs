@@ -130,7 +130,7 @@ try {
     window.__cloudUploadFixture.controls.fail = false;
     void window.__cloudUploadFixture.start(2, ['same.jpg', 'same.jpg']);
   });
-  await duplicates.getByText('本次选择中包含同名文件。自动改名后可全部保留，避免照片相互覆盖。').waitFor();
+  await duplicates.getByText('本次选择或待上传队列中存在同名文件。自动改名后可全部保留，避免照片相互覆盖。').waitFor();
   assert.equal(await duplicates.getByRole('button', { name: '全部覆盖', exact: true }).count(), 0);
   await duplicates.getByRole('button', { name: '全部自动改名', exact: true }).click();
   await duplicates.getByText('上传完成', { exact: true }).waitFor();
@@ -206,13 +206,90 @@ try {
     'picked-b.jpg',
   ]);
   await picker.close();
+
+  const mobile = await open({ width: 390, renderProfile: 'mobile' });
+  await mobile.evaluate(() => window.__cloudUploadFixture.start(3000));
+  await mobile.getByText(/每次最多选择 100 个文件。本次未添加/).waitFor();
+  assert.equal(await mobile.evaluate(() => window.__cloudUploadFixture.controls.checks), 0);
+  assert.equal(await mobile.locator('.upload-progress').count(), 0);
+  await mobile.locator('input[type=file]').setInputFiles(Array.from({ length: 101 }, (_, i) => ({
+    name: `oversized-${i}.jpg`, mimeType: 'image/jpeg', buffer: Buffer.from('fixture'),
+  })));
+  assert.equal(await mobile.evaluate(() => window.__cloudUploadFixture.controls.checks), 0);
+  assert.equal(await mobile.locator('input[type=file]').inputValue(), '');
+  await mobile.evaluate(() => {
+    window.__cloudUploadFixture.controls.putDelay = 40;
+    void window.__cloudUploadFixture.start(100);
+  });
+  await mobile.waitForFunction(() => window.__cloudUploadFixture.controls.active === 3);
+  const choosing = mobile.waitForEvent('filechooser');
+  await mobile.getByRole('button', { name: '继续添加文件', exact: true }).click();
+  await (await choosing).setFiles(Array.from({ length: 100 }, (_, i) => ({
+    name: `photo-${i + 100}.jpg`, mimeType: 'image/jpeg', buffer: Buffer.from('fixture'),
+  })));
+  await mobile.locator('.progress-summary').filter({ hasText: /共 200 个/ }).waitFor();
+  await mobile.evaluate(() => { void window.__cloudUploadFixture.start(3, undefined, 'album-b', 200); });
+  await settled(mobile, 202);
+  assert.equal(await mobile.evaluate(() => window.__cloudUploadFixture.controls.puts.length), 203);
+  assert.match(await mobile.locator('.progress-summary').textContent(), /共 203 个/);
+  assert.equal(await mobile.evaluate(() => window.__cloudUploadFixture.controls.peak), 3);
+  const targets = await mobile.evaluate(() => window.__cloudUploadFixture.controls.targets);
+  assert.deepEqual([...new Set(targets)], ['album-a', 'album-b']);
+  await mobile.evaluate(() => {
+    window.__cloudUploadFixture.controls.fail = false;
+    void window.__cloudUploadFixture.start(2, undefined, 'album-c', 203);
+  });
+  await settled(mobile, 204);
+  assert.equal(await mobile.evaluate(() => window.__cloudUploadFixture.controls.puts.length), 205);
+  await mobile.screenshot({ path: join(output, 'mobile-append-failed.png') });
+  await mobile.getByRole('button', { name: /重试剩余 1 个文件/ }).click();
+  await mobile.getByText('上传完成', { exact: true }).waitFor();
+  assert.equal(await mobile.evaluate(() => window.__cloudUploadFixture.controls.puts.length), 206);
+  assert.equal(await mobile.evaluate(() => window.__cloudUploadFixture.controls.targets.at(-1)), 'album-a');
+  await mobile.close();
+
+  const collision = await open({ width: 390, renderProfile: 'mobile' });
+  await collision.evaluate(() => {
+    Object.assign(window.__cloudUploadFixture.controls, { putDelay: 150, fail: false });
+    void window.__cloudUploadFixture.start(1, ['same.jpg']);
+  });
+  await collision.waitForFunction(() => window.__cloudUploadFixture.controls.active === 1);
+  await collision.evaluate(() => {
+    window.__cloudUploadFixture.controls.delayCheck = 400;
+    void window.__cloudUploadFixture.start(1, ['same.jpg']);
+  });
+  await collision.getByText(/本次选择或待上传队列中存在同名文件/).waitFor();
+  assert.equal(await collision.getByRole('button', { name: '全部覆盖', exact: true }).count(), 0);
+  await collision.getByRole('button', { name: '全部自动改名', exact: true }).click();
+  await collision.getByText('上传完成', { exact: true }).waitFor();
+  assert.deepEqual(await collision.evaluate(() => window.__cloudUploadFixture.controls.puts), ['same.jpg', 'same (1).jpg']);
+  await collision.close();
+
+  const checkingAppend = await open({ width: 390, renderProfile: 'mobile' });
+  await checkingAppend.evaluate(() => {
+    Object.assign(window.__cloudUploadFixture.controls, { putDelay: 150, fail: false });
+    void window.__cloudUploadFixture.start(1);
+  });
+  await checkingAppend.waitForFunction(() => window.__cloudUploadFixture.controls.active === 1);
+  await checkingAppend.evaluate(() => {
+    window.__cloudUploadFixture.controls.delayCheck = 600;
+    void window.__cloudUploadFixture.start(1, undefined, 'album-b', 1);
+  });
+  await checkingAppend.waitForFunction(() => window.__cloudUploadFixture.controls.confirmed.size === 1);
+  await checkingAppend.evaluate(() => { void window.__cloudUploadFixture.start(1, undefined, null, 2); });
+  assert.equal(await checkingAppend.evaluate(() => window.__cloudUploadFixture.controls.checks), 2,
+    'Completion of the previous upload must not unlock an unfinished name check');
+  await checkingAppend.waitForFunction(() => window.__cloudUploadFixture.controls.confirmed.size === 2);
+  await checkingAppend.getByText('上传完成', { exact: true }).waitFor();
+  assert.deepEqual(await checkingAppend.evaluate(() => window.__cloudUploadFixture.controls.puts), ['photo-0.jpg', 'photo-1.jpg']);
+  await checkingAppend.close();
   assert.deepEqual(errors, []);
   await writeFile(
     join(output, 'report.json'),
     JSON.stringify({ profiles: report, largeBatch: result, errors }, null, 2),
   );
   console.log(
-    `Cloud upload browser checks passed: ${profiles.length} profiles, 3000 files, retry, cancellation and quota. Screenshots: ${output}`,
+    `Cloud upload browser checks passed: ${profiles.length} profiles, desktop 3000, mobile 100 limit and queue append, retry, cancellation and quota. Screenshots: ${output}`,
   );
 } finally {
   await browser.close();

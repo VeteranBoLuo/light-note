@@ -49,18 +49,24 @@ async function finish(queue: ReturnType<typeof createCloudUploadQueue>) {
 }
 
 describe('云空间批量上传队列', () => {
-  it('3000 张照片的传输并发始终不超过 3，元信息和确认按 20 项分批，进度预览有界', async () => {
+  it('上传中连续追加 30 批各 100 张，并发始终不超过 3，签名/确认每批最多 20 项，预览有界', async () => {
     let active = 0,
       peak = 0,
       previewPeak = 0;
+    const files = photos(3000);
+    let appended = false;
     put.mockImplementation(async (_url, _file, options) => {
       peak = Math.max(peak, ++active);
+      if (!appended) {
+        appended = true;
+        for (let offset = 100; offset < files.length; offset += 100) queue.append(files.slice(offset, offset + 100), 'album-a');
+      }
       options?.onUploadProgress?.({ loaded: 3, total: 5 } as any);
       await new Promise((resolve) => setTimeout(resolve, 1));
       active--;
       return {} as any;
     });
-    const queue = createCloudUploadQueue(photos(3000), 'album-a', (state) => {
+    const queue = createCloudUploadQueue(files.slice(0, 100), 'album-a', (state) => {
       previewPeak = Math.max(previewPeak, state.preview.length);
     });
     await finish(queue);
@@ -84,6 +90,29 @@ describe('云空间批量上传队列', () => {
     expect(post).toHaveBeenCalledTimes(300);
   });
 
+  it('上传中追加的批次各自保留目标文件夹，确认请求不会跨文件夹合批', async () => {
+    const first = photos(7);
+    const second = photos(26).map((file) => new File([file], `second-${file.name}`));
+    const third = photos(3).map((file) => new File([file], `third-${file.name}`));
+    const queue = createCloudUploadQueue(first, 'first-folder', () => {});
+    put.mockImplementationOnce(async () => {
+      queue.append(second, 'second-folder');
+      queue.append(third, null);
+      return {} as any;
+    });
+    await finish(queue);
+    expect(queue.snapshot()).toMatchObject({ total: 36, success: 36, failed: 0 });
+    const confirms = post.mock.calls.filter(([url]) => url.endsWith('/confirmUpload')).map(([, data]) => data);
+    expect(confirms.map((data) => [data.folderId, data.files.length])).toEqual([
+      ['first-folder', 7], ['second-folder', 20], ['second-folder', 6], [null, 3],
+    ]);
+    for (const data of confirms) {
+      expect(data.files.every((file: any) => data.folderId === 'first-folder' ? file.fileName.startsWith('photo-')
+        : data.folderId === 'second-folder' ? file.fileName.startsWith('second-') : file.fileName.startsWith('third-'))).toBe(true);
+    }
+    expect(new Set(queue.results().map((item) => item.taskId)).size).toBe(36);
+  });
+
   it('短暂传输失败自动退避重试，只在确认入库后报告成功', async () => {
     let state = '';
     put.mockRejectedValueOnce(network()).mockImplementation(async () => {
@@ -99,7 +128,7 @@ describe('云空间批量上传队列', () => {
     expect(queue.snapshot().success).toBe(1);
   });
 
-  it('自动重试耗尽后保留失败项，手动重试不重传已保存项', async () => {
+  it('自动重试耗尽后追加新批次不会重试失败项，显式重试只传剩余文件并保留原目标', async () => {
     let failing = true;
     put.mockImplementation(async (_url, file) => {
       if ((file as File).name === 'photo-1.jpg' && failing) throw network();
@@ -109,11 +138,19 @@ describe('云空间批量上传队列', () => {
     await finish(queue);
     expect(queue.snapshot()).toMatchObject({ success: 2, failed: 1 });
     expect(put).toHaveBeenCalledTimes(5);
+    expect(queue.reservedFileNames()).toEqual(['photo-1.jpg']);
+    queue.append([new File(['new'], 'new.jpg')], 'new-folder');
+    await queue.run(false);
+    expect(queue.snapshot()).toMatchObject({ total: 4, success: 3, failed: 1 });
+    expect(put).toHaveBeenCalledTimes(6);
+    expect(post.mock.calls.at(-1)![1].folderId).toBe('new-folder');
     failing = false;
     await finish(queue);
-    expect(queue.snapshot()).toMatchObject({ success: 3, failed: 0 });
-    expect(put).toHaveBeenCalledTimes(6);
-    expect(confirmed).toHaveLength(3);
+    expect(queue.snapshot()).toMatchObject({ success: 4, failed: 0 });
+    expect(put).toHaveBeenCalledTimes(7);
+    expect(confirmed).toHaveLength(4);
+    expect(post.mock.calls.at(-1)![1].folderId).toBe('original-folder');
+    expect(queue.reservedFileNames()).toEqual([]);
   });
 
   it('确认响应丢失且重试耗尽，手动重试只确认相同对象、不重新签名或 PUT', async () => {
