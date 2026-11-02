@@ -52,6 +52,8 @@ import androidx.webkit.WebViewFeature;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -1249,10 +1251,25 @@ public final class MainActivity extends Activity {
         fileIntent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, params.getMode() == WebChromeClient.FileChooserParams.MODE_OPEN_MULTIPLE);
 
         Intent chooser = Intent.createChooser(fileIntent, getString(R.string.app_name));
+        List<Intent> alternatives = new ArrayList<>();
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && acceptsImages(params.getAcceptTypes())) {
+            Intent photos = new Intent(MediaStore.ACTION_PICK_IMAGES);
+            if (params.getMode() == WebChromeClient.FileChooserParams.MODE_OPEN_MULTIPLE) {
+                photos.putExtra(MediaStore.EXTRA_PICK_IMAGES_MAX,
+                    Math.min(FileChooserSelection.MAX_FILES, MediaStore.getPickImagesMaxLimit()));
+            }
+            // 精确类型约束仍由原请求决定；文件选择器继续保留，不能只允许选照片。
+            if (acceptsOnlyImages(params.getAcceptTypes())) photos.setType("image/*");
+            if ((acceptsOnlyImages(params.getAcceptTypes()) || acceptsAllFiles(params.getAcceptTypes()))
+                && photos.resolveActivity(getPackageManager()) != null) {
+                alternatives.add(photos);
+            }
+        }
         Intent cameraIntent = createCameraIntent();
         if (cameraIntent != null && acceptsImages(params.getAcceptTypes())) {
-            chooser.putExtra(Intent.EXTRA_INITIAL_INTENTS, new Intent[]{cameraIntent});
+            alternatives.add(cameraIntent);
         }
+        if (!alternatives.isEmpty()) chooser.putExtra(Intent.EXTRA_INITIAL_INTENTS, alternatives.toArray(new Intent[0]));
 
         pendingFileChooserLaunch = () -> {
             pendingFileChooserLaunch = null;
@@ -1312,6 +1329,18 @@ public final class MainActivity extends Activity {
         return false;
     }
 
+    private boolean acceptsOnlyImages(String[] types) {
+        if (types == null || types.length == 0) return false;
+        for (String type : types) if (!"image/*".equals(type)) return false;
+        return true;
+    }
+
+    private boolean acceptsAllFiles(String[] types) {
+        if (types == null || types.length == 0) return true;
+        for (String type : types) if (WebViewSupport.isBlank(type) || "*/*".equals(type)) return true;
+        return false;
+    }
+
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
@@ -1337,18 +1366,27 @@ public final class MainActivity extends Activity {
                 }
             } else if (data.getClipData() != null) {
                 ClipData clipData = data.getClipData();
-                result = new Uri[clipData.getItemCount()];
-                for (int index = 0; index < clipData.getItemCount(); index += 1) {
-                    result[index] = clipData.getItemAt(index).getUri();
+                List<Uri> selected = FileChooserSelection.collect(clipData.getItemCount(), index -> clipData.getItemAt(index).getUri());
+                if (selected == null) {
+                    // 兼容选择器可能忽略选择上限。先取消整批，绝不交给 Chromium 枚举数千个 URI。
+                    ValueCallback<Uri[]> callback = fileCallback;
+                    fileCallback = null;
+                    cameraOutputUri = null;
+                    hideFileChooserOverlay();
+                    callback.onReceiveValue(null);
+                    Toast.makeText(this, getString(R.string.file_chooser_too_many, FileChooserSelection.MAX_FILES), Toast.LENGTH_LONG).show();
+                    return;
                 }
+                result = selected.toArray(new Uri[0]);
             } else if (data.getData() != null) {
                 result = new Uri[]{data.getData()};
             }
         }
 
-        fileCallback.onReceiveValue(result);
+        ValueCallback<Uri[]> callback = fileCallback;
         fileCallback = null;
         cameraOutputUri = null;
+        callback.onReceiveValue(result);
         hideFileChooserOverlayWhenWebViewReady();
     }
 
