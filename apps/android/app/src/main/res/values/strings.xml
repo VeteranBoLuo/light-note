@@ -22,6 +22,7 @@
     <string name="file_chooser_opening">正在打开系统文件选择器…</string>
     <string name="file_chooser_processing">正在读取所选文件…</string>
     <string name="file_chooser_returning">正在返回轻笺…</string>
+    <string name="file_chooser_too_many">每次最多选择 %1$d 个文件。本次未添加，请减少选择后重试；可分批追加。</string>
     <string name="cannot_open_link">当前设备无法打开这个链接</string>
     <!-- 系统分享菜单里的轻笺入口；接收后由网页「快速添加」预填，用户确认才会保存 -->
     <string name="share_target_label">保存到轻笺</string>

@@ -48,6 +48,15 @@ function manifestFor(name: string) {
     { index: 0, name: 'Screenshot_20261015.png', mimeType: 'image/png', size: sampleBlobs[0].size },
     { index: 1, name: '会议白板.jpg', mimeType: 'image/jpeg', size: sampleBlobs[1].size },
   ];
+  if (name === 'oversized') return {
+    id: shareId, text: '', subject: '', textTruncated: false, files: [],
+    skippedFiles: 1,
+    skippedFileCounts: { size_limit: 1 },
+    skippedFileDetails: [{ name: '8GB-video.mp4', reason: 'size_limit' }],
+  };
+  if (name === 'oversized-legacy') return {
+    id: shareId, text: '', subject: '', textTruncated: false, files: [], skippedFiles: 1,
+  };
   if (name === 'bulk')
     return {
       id: shareId,

@@ -5,6 +5,7 @@ import type { CloudUploadResult } from '@/api/cloudFileUploadApi';
 
 export const CLOUD_UPLOAD_CONCURRENCY = 3;
 export const CLOUD_UPLOAD_BATCH_SIZE = 20;
+export const CLOUD_UPLOAD_MOBILE_SELECTION_LIMIT = 100;
 const AUTO_RETRIES = 2;
 const PREVIEW_SIZE = 8;
 
@@ -23,6 +24,7 @@ type Task = {
   name: string;
   size: number;
   type: string;
+  folderId: string | null;
   status: CloudUploadStatus;
   progress: number;
   info?: UploadInfo;
@@ -92,6 +94,7 @@ export function createCloudUploadQueue(
     name: file.name,
     size: file.size,
     type: file.type,
+    folderId,
     status: 'queued',
     progress: 0,
   }));
@@ -103,6 +106,7 @@ export function createCloudUploadQueue(
   let progressTimer: ReturnType<typeof setTimeout> | undefined;
   let startedAt = 0;
   let transferred = 0;
+  let roundTasks: Task[] | undefined;
 
   function snapshot(): CloudUploadSnapshot {
     let success = 0,
@@ -283,7 +287,7 @@ export function createCloudUploadQueue(
                 fileSize: task.size,
                 objectKey: task.info!.objectKey,
               })),
-              folderId,
+              folderId: group[0].folderId,
             },
             { silent: true },
           );
@@ -315,7 +319,7 @@ export function createCloudUploadQueue(
       } else markError(group, error);
     }
   }
-  async function run() {
+  async function run(retryFailed = true) {
     if (running || disposed) return;
     running = true;
     blocked = '';
@@ -323,16 +327,25 @@ export function createCloudUploadQueue(
     startedAt = Date.now();
     transferred = 0;
     controller = new AbortController();
-    // 重试范围冻结；成功项不参与，也不重新签名。
-    const remaining = tasks.filter((task) => task.status !== 'success');
+    // 本轮只领取等待项；只有显式重试才重置失败项。上传中追加的批次进入同一轮。
+    const remaining = tasks.filter((task) => task.status === 'queued' || (retryFailed && task.status === 'error'));
+    roundTasks = remaining;
     remaining.forEach((task) => {
       task.status = 'queued';
     });
     notify(true);
     try {
-      for (let offset = 0; offset < remaining.length && !blocked; offset += CLOUD_UPLOAD_BATCH_SIZE) {
+      for (let offset = 0; offset < remaining.length && !blocked;) {
         assertActive();
-        const group = remaining.slice(offset, offset + CLOUD_UPLOAD_BATCH_SIZE);
+        // 不同批次可以选择不同文件夹；一个确认请求只能含同一目标。
+        let end = offset + 1;
+        while (
+          end < remaining.length &&
+          end - offset < CLOUD_UPLOAD_BATCH_SIZE &&
+          remaining[end].folderId === remaining[offset].folderId
+        ) end++;
+        const group = remaining.slice(offset, end);
+        offset = end;
         // 先恢复上轮已传完但确认失败的对象，不能再次 PUT 或申请新对象键。
         await confirm(group.filter((task) => task.uploaded));
         if (blocked) break;
@@ -363,6 +376,7 @@ export function createCloudUploadQueue(
         );
     } finally {
       running = false;
+      roundTasks = undefined;
       tasks.forEach((task) => {
         if (!['success', 'error'].includes(task.status)) task.status = 'queued';
       });
@@ -371,6 +385,25 @@ export function createCloudUploadQueue(
   }
   return {
     run,
+    append(additions: File[], targetFolderId: string | null) {
+      if (disposed) throw new Error('UPLOAD_QUEUE_DISPOSED');
+      const start = tasks.length;
+      const added: Task[] = additions.map((file, index) => ({
+        id: start + index,
+        file,
+        name: file.name,
+        size: file.size,
+        type: file.type,
+        folderId: targetFolderId,
+        status: 'queued',
+        progress: 0,
+      }));
+      tasks.push(...added);
+      roundTasks?.push(...added);
+      notify(true);
+    },
+    reservedFileNames: () =>
+      tasks.filter((task) => task.status !== 'success').map((task) => task.name.normalize('NFC').trim()),
     snapshot,
     cancel: () => controller?.abort(),
     dispose: () => {
@@ -378,7 +411,7 @@ export function createCloudUploadQueue(
       controller?.abort();
       if (progressTimer) clearTimeout(progressTimer);
     },
-    results: () => tasks.flatMap((task) => (task.result ? [task.result] : [])),
+    results: () => tasks.flatMap((task) => (task.result ? [{ ...task.result, taskId: task.id }] : [])),
     shortfallMB: () => shortfallMB,
   };
 }
