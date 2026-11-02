@@ -54,6 +54,9 @@ const states: NativeNotificationState[] = [
   'accountRequired',
   'serviceDisabled',
   'storageUnavailable',
+  'updateRequired',
+  'applicationMismatch',
+  'installationRetired',
 ];
 const state = params.get('state') as NativeNotificationState;
 updateNativeNotificationStatus(states.includes(state) ? state : 'connected', 'fixture-user');

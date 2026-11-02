@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import pool from '../db/index.js';
 import { knowledgeManorSchemaReady } from '../util/services/knowledgeManorSchema.js';
 import { knowledgeManorAdminSchemaReady } from '../util/services/knowledgeManorAdminSchema.js';
+import { assertHuaweiPushInstallationSchema } from '../util/huaweiPushInstallationSchema.js';
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const assertionPath = path.resolve(scriptDir, '../migrations/schema-assertions.sql');
@@ -21,6 +22,7 @@ function splitStatements(source) {
 let failed = false;
 try {
   const source = await readFile(assertionPath, 'utf8');
+  if (process.env.HUAWEI_PUSH_INSTALLATION_V2_ENABLED === 'true') await assertHuaweiPushInstallationSchema(pool);
   if (process.env.KNOWLEDGE_MANOR_ENABLED === 'true' && (!(await knowledgeManorSchemaReady(pool)) || !(await knowledgeManorAdminSchemaReady(pool)))) {
     throw new Error('KNOWLEDGE_MANOR_SCHEMA_MISSING');
   }

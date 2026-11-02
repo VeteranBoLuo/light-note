@@ -10,6 +10,21 @@ export interface NativeNotificationReply {
   pushSupport?: NativePushSupport;
   since?: string;
   open?: boolean;
+  pushProtocolVersion?: number;
+  installation?: HuaweiInstallation;
+  binding?: HuaweiBinding;
+  storageUnavailable?: boolean;
+  superseded?: boolean;
+}
+export interface HuaweiInstallation {
+  id: string;
+  key: string;
+  revision: number;
+  packageName: string;
+  pushAppId: string;
+  deviceLabel: string;
+  identityKind: 'scoped' | 'installation';
+  expectedCurrentId?: string | null;
 }
 export type NativeNotificationState =
   | 'idle'
@@ -22,6 +37,9 @@ export type NativeNotificationState =
   | 'deviceLimit'
   | 'accountRequired'
   | 'serviceDisabled'
+  | 'updateRequired'
+  | 'applicationMismatch'
+  | 'installationRetired'
   | 'storageUnavailable';
 
 export type NativePushSupport = 'supported' | 'unsupported' | 'unknown';
@@ -93,7 +111,7 @@ export function createNativeNotificationSync(deps: {
     huaweiBinding?: HuaweiBinding;
   }) => Promise<NativeNotificationPage>;
   remote?: {
-    bind: (token: string, previousBinding?: HuaweiBinding) => Promise<HuaweiBinding>;
+    bind: (token: string, previousBinding?: HuaweiBinding, installation?: HuaweiInstallation) => Promise<HuaweiBinding>;
     activate: (binding: HuaweiBinding) => Promise<void>;
     unbind: (binding: HuaweiBinding) => Promise<void>;
   };
@@ -107,6 +125,8 @@ export function createNativeNotificationSync(deps: {
     epoch = '',
     generation = 0;
   let remoteBinding: HuaweiBinding | undefined;
+  let nativeStorage = false;
+  let nativeEpoch = '';
   let remoteToken = '';
   let boundToken = '';
   let remoteActivated = false;
@@ -135,13 +155,75 @@ export function createNativeNotificationSync(deps: {
     const delay = [1000, 2000, 5000, 10000, 30000, 60000][Math.min(failures++, 5)];
     const state = (error as { connectionState?: NativeNotificationState })?.connectionState;
     const specific =
-      state && ['deviceLimit', 'accountRequired', 'serviceDisabled', 'storageUnavailable'].includes(state);
-    remoteNextAt = Date.now() + (specific ? 60000 : delay);
+      state &&
+      [
+        'deviceLimit',
+        'accountRequired',
+        'serviceDisabled',
+        'storageUnavailable',
+        'updateRequired',
+        'applicationMismatch',
+        'installationRetired',
+      ].includes(state);
+    remoteNextAt =
+      state && ['updateRequired', 'applicationMismatch', 'installationRetired'].includes(state)
+        ? Infinity
+        : Date.now() + (specific ? 60000 : delay);
     report(specific ? state : 'retrying');
   }
   async function unbind(binding: HuaweiBinding) {
+    const useNative = nativeStorage;
+    const epoch = nativeEpoch;
     await deps.remote?.unbind(binding);
-    deps.bindingStore?.remove(binding);
+    if (useNative) {
+      await deps.bridge({ action: 'receiptRemove', owner: binding.userId, epoch, binding });
+      try {
+        deps.bindingStore?.remove(binding);
+      } catch {
+        /* Optional legacy receipt only. */
+      }
+    } else deps.bindingStore?.remove(binding);
+  }
+  const storageFailure = () =>
+    Object.assign(new Error('NATIVE_PUSH_STORAGE_UNAVAILABLE'), { connectionState: 'storageUnavailable' });
+  async function readBinding(uid: string, nonce: string): Promise<HuaweiBinding | undefined> {
+    if (!nativeStorage) return deps.bindingStore?.read(uid);
+    const result = await deps.bridge({ action: 'receiptRead', owner: uid, epoch: nonce });
+    if (!result.ok) throw storageFailure();
+    const binding = result.binding;
+    if (binding && (binding.userId !== uid || typeof binding.id !== 'string' || typeof binding.generation !== 'string'))
+      throw storageFailure();
+    // Legacy web receipts are candidates only. The API validates them before native persistence.
+    if (binding) return binding;
+    try {
+      return deps.bindingStore?.read(uid);
+    } catch {
+      return undefined;
+    }
+  }
+  async function saveBinding(binding: HuaweiBinding, nonce: string, installation?: HuaweiInstallation) {
+    if (!nativeStorage || !installation) {
+      deps.bindingStore?.save(binding);
+      return;
+    }
+    const result = await deps.bridge({
+      action: 'receiptSave',
+      owner: binding.userId,
+      epoch: nonce,
+      binding,
+      installationId: installation.id,
+      revision: installation.revision,
+    });
+    if (!result.ok) {
+      if (result.superseded) throw Object.assign(new Error('NATIVE_PUSH_SUPERSEDED'), { superseded: true });
+      throw storageFailure();
+    }
+    try {
+      const legacy = deps.bindingStore?.read(binding.userId);
+      if (legacy) deps.bindingStore?.remove(legacy);
+    } catch {
+      /* Native persistence is authoritative after migration. */
+    }
   }
   let cursor: Cursor | null = null;
   let busy: number | null = null;
@@ -155,6 +237,8 @@ export function createNativeNotificationSync(deps: {
     const shouldClear = !next || Boolean(owner);
     if (remoteBinding) void unbind(remoteBinding).catch(() => {});
     remoteBinding = undefined;
+    nativeStorage = false;
+    nativeEpoch = '';
     remoteToken = '';
     boundToken = '';
     remoteActivated = false;
@@ -175,6 +259,8 @@ export function createNativeNotificationSync(deps: {
     deps.onDeviceState?.(null, owner);
     epoch = '';
     remoteBinding = undefined;
+    nativeStorage = false;
+    nativeEpoch = '';
     remoteToken = '';
     boundToken = '';
     remoteActivated = false;
@@ -200,9 +286,11 @@ export function createNativeNotificationSync(deps: {
       if (!state.ok) {
         deps.onDeviceState?.(null, uid);
         remoteNextAt = 0;
-        report('unavailable');
+        report(state.storageUnavailable ? 'storageUnavailable' : 'unavailable');
         return;
       }
+      nativeStorage = state.pushProtocolVersion === 2;
+      nativeEpoch = nonce;
       deps.onDeviceState?.(
         {
           systemEnabled: typeof state.systemEnabled === 'boolean' ? state.systemEnabled : null,
@@ -223,7 +311,7 @@ export function createNativeNotificationSync(deps: {
         boundToken = '';
         remoteActivated = false;
         try {
-          const previous = remoteBinding || deps.bindingStore?.read(uid);
+          const previous = remoteBinding || (await readBinding(uid, nonce));
           if (previous) {
             await unbind(previous);
             if (current()) remoteBinding = undefined;
@@ -247,8 +335,36 @@ export function createNativeNotificationSync(deps: {
         if (Date.now() >= remoteNextAt) {
           if (!remoteBinding) report('connecting');
           try {
-            remoteBinding ||= deps.bindingStore?.read(uid);
-            const binding = await deps.remote.bind(state.huaweiToken, remoteBinding);
+            const previousBinding = remoteBinding || (await readBinding(uid, nonce));
+            if (!current()) return;
+            remoteBinding = previousBinding;
+            if (nativeStorage && !state.installation) throw storageFailure();
+            let binding: HuaweiBinding;
+            try {
+              binding = nativeStorage
+                ? await deps.remote.bind(state.huaweiToken, remoteBinding, state.installation)
+                : await deps.remote.bind(state.huaweiToken, remoteBinding);
+            } catch (error) {
+              const expectedCurrentId = (error as { challengeCurrentId?: string | null })?.challengeCurrentId;
+              if (!nativeStorage || !state.installation || expectedCurrentId === undefined) throw error;
+              if (!current()) return;
+              const confirmation = await deps.bridge({ action: 'bind', owner: uid, epoch: nonce });
+              if (!current()) return;
+              if (confirmation.storageUnavailable) throw storageFailure();
+              if (
+                !confirmation.ok ||
+                !confirmation.enabled ||
+                confirmation.huaweiToken !== state.huaweiToken ||
+                confirmation.installation?.id !== state.installation.id ||
+                confirmation.installation.key !== state.installation.key ||
+                confirmation.installation.revision !== state.installation.revision
+              )
+                throw Object.assign(new Error('NATIVE_PUSH_SUPERSEDED'), { superseded: true });
+              binding = await deps.remote.bind(state.huaweiToken, remoteBinding, {
+                ...state.installation,
+                expectedCurrentId,
+              });
+            }
             if (!current() || binding.userId !== uid) {
               await unbind(binding);
               if (current()) failed();
@@ -262,7 +378,8 @@ export function createNativeNotificationSync(deps: {
               boundToken === state.huaweiToken;
             remoteBinding = binding;
             boundToken = state.huaweiToken;
-            deps.bindingStore?.save(binding);
+            await saveBinding(binding, nonce, state.installation);
+            if (!current()) return;
             await deps.remote.activate(binding);
             // Account changes already unbind the saved receipt. A page unload keeps background delivery alive.
             if (!current()) return;
@@ -276,9 +393,21 @@ export function createNativeNotificationSync(deps: {
             // Do not present a stale successful check as the current connection state.
             // Keep the last binding for deduplication on transient network failures.
             failed(error);
+            if ((error as { superseded?: boolean })?.superseded) {
+              remoteBinding = undefined;
+              remoteActivated = false;
+              remoteNextAt = 0;
+            }
             if ((error as { staleBinding?: boolean })?.staleBinding && remoteBinding) {
               try {
-                deps.bindingStore?.remove(remoteBinding);
+                if (nativeStorage) {
+                  await deps.bridge({ action: 'receiptRemove', owner: uid, epoch: nonce, binding: remoteBinding });
+                  try {
+                    deps.bindingStore?.remove(remoteBinding);
+                  } catch {
+                    /* Optional legacy receipt only. */
+                  }
+                } else deps.bindingStore?.remove(remoteBinding);
               } catch (storageError) {
                 failed(storageError);
               }

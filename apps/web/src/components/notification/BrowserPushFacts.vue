@@ -2,9 +2,7 @@
   <div class="push-facts" :class="{ 'push-facts--stacked': stacked }">
     <div
       ><span>{{ t('settingsRefine.push.permission') }}</span
-      ><strong>{{
-        t(`settingsRefine.push.${diagnostics.stale ? 'unknown' : diagnostics.permission || 'unknown'}`)
-      }}</strong></div
+      ><strong>{{ t(`settingsRefine.push.${diagnostics.permission || 'unknown'}`) }}</strong></div
     >
     <div
       ><span>{{ t('settingsRefine.push.subscription') }}</span

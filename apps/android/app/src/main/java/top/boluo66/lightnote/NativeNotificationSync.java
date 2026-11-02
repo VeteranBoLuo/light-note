@@ -26,6 +26,7 @@ final class NativeNotificationSync {
     private final Activity activity;
     private final SharedPreferences prefs;
     private final NotificationManager manager;
+    private final NativePushInstallation pushInstallation;
     private String owner = "";
     private String epoch = "";
     private String openOwner = "";
@@ -34,6 +35,7 @@ final class NativeNotificationSync {
         this.activity = activity;
         prefs = activity.getSharedPreferences("native_notification_sync", Activity.MODE_PRIVATE);
         manager = activity.getSystemService(NotificationManager.class);
+        pushInstallation = new NativePushInstallation(activity);
     }
     void pageChanged() { epoch = ""; }
     void open(Intent intent) {
@@ -41,6 +43,7 @@ final class NativeNotificationSync {
         if (openOwner == null) openOwner = "";
     }
     void clear() {
+        pushInstallation.advance(prefs.getString("owner", owner));
         owner = ""; epoch = ""; openOwner = "";
         remote("clear");
         prefs.edit().remove("owner").remove("since").remove("seen").apply();
@@ -168,6 +171,21 @@ final class NativeNotificationSync {
             offerPermission();
         }
         if (!owner.equals(requestedOwner) || !epoch.equals(requestedEpoch)) return reply;
+        if (BuildConfig.HUAWEI_PUSH && "receiptRead".equals(action))
+            return reply.put("ok", true).put("binding", pushInstallation.read(owner));
+        if (BuildConfig.HUAWEI_PUSH && "receiptSave".equals(action)) {
+            String currentToken = enabled() ? remote("token") : "";
+            if (currentToken.isEmpty()) return reply.put("superseded", true);
+            // SDK callbacks may rotate the token while the web request is in flight.
+            pushInstallation.describe(owner, currentToken, remote("appId"));
+            boolean saved = pushInstallation.save(owner, request.optJSONObject("binding"),
+                request.optString("installationId"), request.optLong("revision", -1));
+            return reply.put("ok", saved).put("superseded", !saved);
+        }
+        if (BuildConfig.HUAWEI_PUSH && "receiptRemove".equals(action)) {
+            pushInstallation.remove(owner, request.optJSONObject("binding"));
+            return reply.put("ok", true);
+        }
         if ("resetRemote".equals(action)) remote("clear");
         if ("deliver".equals(action)) {
             String since = request.optString("since");
@@ -229,6 +247,13 @@ final class NativeNotificationSync {
         boolean shouldOpen = "bind".equals(action) && owner.equals(openOwner);
         if ("bind".equals(action)) openOwner = "";
         String remoteToken = enabled() ? remote("token") : "";
+        if (BuildConfig.HUAWEI_PUSH) {
+            reply.put("pushProtocolVersion", 2);
+            if (!remoteToken.isEmpty()) {
+                try { reply.put("installation", pushInstallation.describe(owner, remoteToken, remote("appId"))); }
+                catch (Exception ignored) { return reply.put("storageUnavailable", true); }
+            }
+        }
         // Keep the registration attempt above: a working compatibility token overrides HMS diagnostics.
         String pushSupport = BuildConfig.HUAWEI_PUSH ? remote("support") : "unsupported";
         if (pushSupport.isEmpty()) pushSupport = "unknown";
