@@ -1,889 +1,464 @@
 <template>
-  <b-space :size="15">
+  <BSpace :size="15">
     <CloudStorageBar v-if="showControls && !bookmark.isMobile" ref="cloudStorageBar" />
-    <!-- 上传按钮及提示 -->
-    <div v-if="showControls" class="upload-container" :class="{ 'upload-container--mobile': bookmark.isMobile }">
-      <b-upload ref="uploadPicker" multiple raw-file class="upload-btn" @change="handleChange" :max-total-size="null">
-        <b-button
+    <div v-if="showControls" class="upload-container">
+      <BUpload ref="uploadPicker" multiple raw-file :disabled="busy" :max-total-size="null" @change="handleChange">
+        <BButton
           type="primary"
           class="upload-action"
-          :loading="uploadProgress.visible"
+          :class="{ 'upload-action--mobile': bookmark.isMobile }"
+          :loading="busy"
+          :aria-label="t('cloudSpace.uploadFile')"
           @click.stop="openFileDialog(cloud.folder.id === 'all' ? null : cloud.folder.id)"
         >
           <SvgIcon :src="icon.file_upload" size="17" />
-          {{ bookmark.isDesktop ? $t('cloudSpace.uploadFile') : '' }}
-          <div class="upload-tip" v-if="bookmark.isDesktop">
-            <div class="tip-content">{{ $t('cloudSpace.uploadTip') }}</div>
-          </div>
-        </b-button>
-      </b-upload>
+          {{ bookmark.isDesktop ? t('cloudSpace.uploadFile') : '' }}
+        </BButton>
+      </BUpload>
     </div>
-    <!-- 移动端会隐藏桌面操作区，进度浮层必须脱离该容器显示。 -->
     <Teleport to="body">
-      <div v-if="uploadProgress.visible" class="upload-progress">
+      <section
+        v-if="uploadProgress"
+        class="upload-progress"
+        :class="{ 'upload-progress--mobile': bookmark.isMobile }"
+        :aria-label="t('cloudSpace.uploadFile')"
+      >
         <div class="progress-header">
-          <span class="progress-title">{{ $t('cloudSpace.uploading') }}</span>
-          <div class="progress-actions">
-            <span class="progress-percent">{{ Math.round(uploadProgress.overall) }}%</span>
-            <span class="progress-speed">{{ formatSpeed(uploadProgress.speed) }}</span>
-            <BButton
-              size="small"
-              class="cancel-btn"
-              :title="$t('cloudSpace.cancelUpload')"
-              @click="confirmCancelUpload"
-            >
-              <SvgIcon :src="icon.common.close" size="15" />
-            </BButton>
-          </div>
+          <span class="progress-title">{{
+            t(
+              uploadProgress.running
+                ? 'cloudSpace.uploading'
+                : remaining
+                  ? 'cloudSpace.uploadQueueStopped'
+                  : 'cloudSpace.uploadQueueDone',
+            )
+          }}</span>
+          <BButton v-if="uploadProgress.running" size="small" @click="confirmCancelUpload">{{
+            t('cloudSpace.cancelUpload')
+          }}</BButton>
+          <BButton v-else size="small" :aria-label="t('common.close')" @click="closeQueue">
+            <SvgIcon :src="icon.common.close" size="15" />
+          </BButton>
+        </div>
+        <p class="progress-summary" role="status">{{ t('cloudSpace.uploadQueueSummary', uploadProgress) }}</p>
+        <div class="progress-header progress-metrics">
+          <span>{{ Math.floor(uploadProgress.overall) }}%</span>
+          <span v-if="uploadProgress.running">{{ formatSpeed(uploadProgress.speed) }}</span>
         </div>
         <div
           class="progress-track overall-progress"
           role="progressbar"
           aria-valuemin="0"
           aria-valuemax="100"
-          :aria-valuenow="Math.round(uploadProgress.overall)"
+          :aria-label="t('cloudSpace.uploadFile')"
+          :aria-valuenow="Math.floor(uploadProgress.overall)"
         >
           <span :style="{ width: `${uploadProgress.overall}%` }"></span>
         </div>
-        <div class="file-progress-list" v-if="uploadProgress.files.length > 0">
-          <div v-for="(file, index) in uploadProgress.files" :key="index" class="file-progress-item">
-            <span class="file-name">{{ file.name }}</span>
-            <div class="progress-track file-progress-track" :class="`file-progress-track--${file.status}`">
+        <p v-if="uploadProgress.blocked" class="queue-error" role="alert">
+          {{ t(uploadProgress.blocked === 'quota' ? 'cloudSpace.uploadQueueQuota' : 'cloudSpace.uploadQueueAuth') }}
+        </p>
+        <div class="file-progress-list">
+          <div v-for="file in uploadProgress.preview" :key="file.id" class="file-progress-item">
+            <span class="file-name" :title="file.name">{{ file.name }}</span>
+            <span class="file-status" :class="{ 'queue-error': file.status === 'error' }">{{
+              t(`cloudSpace.uploadQueueStates.${file.status}`)
+            }}</span>
+            <div
+              class="progress-track file-progress-track"
+              :class="{ 'file-progress-track--error': file.status === 'error' }"
+            >
               <span :style="{ width: `${file.progress}%` }"></span>
             </div>
           </div>
         </div>
-      </div>
+        <p v-if="remaining" class="queue-hint">{{
+          t(uploadProgress.running ? 'cloudSpace.uploadQueueKeepOpen' : 'cloudSpace.uploadQueueRetryHint')
+        }}</p>
+        <BButton v-if="remaining && !uploadProgress.running" type="primary" class="retry-upload" @click="retryUploads">
+          {{ t('cloudSpace.uploadQueueRetry', { count: remaining }) }}
+        </BButton>
+      </section>
     </Teleport>
-  </b-space>
+  </BSpace>
 </template>
 
 <script lang="ts" setup>
-  import { withForegroundActivity } from '@/http/requestActivity';
-  import CloudStorageBar from '@/components/cloudSpace/CloudStorageBar.vue';
-  import { bookmarkStore, cloudSpaceStore } from '@/store';
-  import { apiBasePost } from '@/http/request.ts';
-  import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
-  import axios from 'axios';
-  import { reactive, ref } from 'vue';
-  import icon from '@/config/icon';
-  import { recordOperation } from '@/api/commonApi.ts';
-  import { autoRename, formatStorageSize } from '@/utils/common.ts';
-  import { getUploadStorageShortfall } from './cloudStorageCapacity';
-  import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
-  import BButton from '@/components/base/BasicComponents/BButton.vue';
-  import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
+  import { computed, onBeforeUnmount, ref, shallowRef, watch } from 'vue';
+  import { onBeforeRouteLeave } from 'vue-router';
   import { useI18n } from 'vue-i18n';
+  import CloudStorageBar from './CloudStorageBar.vue';
+  import { bookmarkStore, cloudSpaceStore, useUserStore } from '@/store';
+  import { apiBasePost } from '@/http/request';
+  import { buildNoteDetailRequestScope } from '@/api/noteDetailPrefetch';
+  import { recordOperation } from '@/api/commonApi';
+  import { autoRename, formatStorageSize } from '@/utils/common';
+  import { createCloudUploadQueue, type CloudUploadSnapshot } from '@/utils/cloudUploadQueue';
+  import { getUploadStorageShortfall } from './cloudStorageCapacity';
   import { blockGuestWrite } from '@/composables/useGuestGuard';
+  import Alert from '@/components/base/BasicComponents/BModal/Alert';
+  import message from '@/components/base/BasicComponents/BMessage/BMessage';
+  import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import BUpload from '@/components/base/BasicComponents/BUpload.vue';
+  import BSpace from '@/components/base/BasicComponents/BSpace.vue';
+  import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
+  import icon from '@/config/icon';
+
   const bookmark = bookmarkStore();
   const cloud = cloudSpaceStore();
+  const user = useUserStore();
   const { t } = useI18n();
   const { showControls = true } = defineProps<{ showControls?: boolean }>();
   const emit = defineEmits<{ storageQuota: [shortfallMb: number] }>();
   const uploadPicker = ref<{ open: () => void } | null>(null);
   const cloudStorageBar = ref<{ openDetails: (shortfallMb?: number) => void } | null>(null);
   const pendingUploadFolderId = ref<string | null>(null);
-  const MIN_PROGRESS_VISIBLE_MS = 800;
-  // 格式化速度
-  const formatSpeed = (speed: number) => {
-    if (speed < 1024) return `${speed.toFixed(0)} B/s`;
-    if (speed < 1024 * 1024) return `${(speed / 1024).toFixed(1)} KB/s`;
-    return `${(speed / (1024 * 1024)).toFixed(1)} MB/s`;
-  };
+  const uploadProgress = shallowRef<CloudUploadSnapshot | null>(null);
+  const checking = ref(false);
+  const busy = computed(() => checking.value || uploadProgress.value?.running === true);
+  const remaining = computed(() =>
+    uploadProgress.value ? uploadProgress.value.total - uploadProgress.value.success : 0,
+  );
+  let queue: ReturnType<typeof createCloudUploadQueue> | undefined;
+  let generation = 0;
+  let checkController: AbortController | undefined;
+  const scope = () => buildNoteDetailRequestScope(user);
+  const formatSpeed = (speed: number) =>
+    speed < 1024 * 1024 ? `${(speed / 1024).toFixed(1)} KB/s` : `${(speed / 1024 / 1024).toFixed(1)} MB/s`;
 
-  // 上传进度状态
-  const uploadProgress = reactive({
-    visible: false,
-    overall: 0,
-    speed: 0,
-    totalLoaded: 0,
-    files: [] as Array<{
-      name: string;
-      progress: number;
-      status: 'active' | 'success' | 'exception';
-    }>,
-  });
-
-  // 上传控制器
-  let uploadController = ref<AbortController | null>(null);
-
-  async function showStorageQuotaDetails(filesData: Array<{ fileSize: number }>, serverShortfallMb = 0) {
-    await cloud.getUsedSpace();
-    const incomingMb =
-      filesData.reduce((total, file) => total + Math.max(0, Number(file.fileSize) || 0), 0) / 1024 / 1024;
-    const shortfallMb = Math.max(
-      0.1,
-      Number(serverShortfallMb) ||
-        getUploadStorageShortfall(incomingMb, Number(cloud.usedSpace || 0), Number(cloud.maxSpace || 0)),
-    );
-    message.warning(
-      t('cloudSpace.storageUploadBlocked', {
-        capacity: formatStorageSize(shortfallMb),
+  function clearQueue() {
+    generation++;
+    checkController?.abort();
+    checkController = undefined;
+    queue?.dispose();
+    queue = undefined;
+    uploadProgress.value = null;
+    checking.value = false;
+  }
+  function confirmDiscard(): Promise<boolean> {
+    if (!remaining.value) return Promise.resolve(true);
+    return new Promise((resolve) =>
+      Alert.alert({
+        title: t('cloudSpace.cancelUpload'),
+        content: t('cloudSpace.uploadQueueDiscard'),
+        onOk: () => resolve(true),
+        onCancel: () => resolve(false),
       }),
     );
-    if (cloudStorageBar.value) {
-      cloudStorageBar.value.openDetails(shortfallMb);
-    } else {
-      emit('storageQuota', shortfallMb);
+  }
+  async function closeQueue() {
+    const current = queue;
+    if ((await confirmDiscard()) && queue === current) clearQueue();
+  }
+  async function showStorageQuotaDetails(current: NonNullable<typeof queue>) {
+    await cloud.getUsedSpace();
+    if (queue !== current) return;
+    const shortfallMb = Math.max(
+      0.1,
+      current.shortfallMB() || getUploadStorageShortfall(0, Number(cloud.usedSpace || 0), Number(cloud.maxSpace || 0)),
+    );
+    message.warning(t('cloudSpace.storageUploadBlocked', { capacity: formatStorageSize(shortfallMb) }));
+    if (cloudStorageBar.value) cloudStorageBar.value.openDetails(shortfallMb);
+    else emit('storageQuota', shortfallMb);
+  }
+  async function runQueue(current: NonNullable<typeof queue>) {
+    const before = new Set(current.results().map((item) => item.fileId));
+    await current.run();
+    if (queue !== current) return;
+    const added = current.results().filter((item) => !before.has(item.fileId));
+    // 确认成功才汇总记录；列表刷新失败不把已保存文件改成上传失败。
+    if (added.length) {
+      void recordOperation({ module: '云空间', operation: `上传文件成功【${added.length}个】` }).catch(() => {});
+      const overwritten = added.filter((item) => item.status === '已覆盖');
+      overwritten.forEach((item) => cloud.cacheImgArr.push(item.fileId));
+      try {
+        if (!(await cloud.refreshAfterFileMutation({ preserveLoaded: true })) && queue === current)
+          message.warning(t('cloudSpace.refreshPartialFailed'));
+      } catch {
+        if (queue === current) message.warning(t('cloudSpace.refreshPartialFailed'));
+      }
+    }
+    if (queue === current && current.snapshot().blocked === 'quota') {
+      try {
+        await showStorageQuotaDetails(current);
+      } catch {
+        /* 浮层已保留容量不足状态与重试入口。 */
+      }
     }
   }
-
-  const uploadFiles = async (files, folderId = null) => {
+  async function retryUploads() {
+    if (blockGuestWrite('upload-file') || busy.value || !queue) return;
+    await runQueue(queue);
+  }
+  // 兼容粘贴图片等旧入口；选择器直接保留原始 File，绝不把几千张图片转成 Base64。
+  function normalizeFile(file: any): File {
+    if (file instanceof File) return file;
+    if (!file?.isImg || typeof file.file !== 'string') throw new Error('UPLOAD_SOURCE_INVALID');
+    const [header, encoded] = file.file.split(';base64,');
+    const mime = header.split(':')[1] || 'application/octet-stream';
+    const bytes = Uint8Array.from(atob(encoded), (char) => char.charCodeAt(0));
+    return new File([bytes], file.fileName || `converted-image.${mime.split('/')[1]}`, { type: mime });
+  }
+  async function uploadFiles(files: any[], folderId: string | null = null) {
     if (blockGuestWrite('upload-file')) return;
-    if (uploadProgress.visible) {
+    if (busy.value) {
       message.info(t('cloudSpace.uploading'));
       return;
     }
-    uploadProgress.visible = true;
-    uploadProgress.overall = 0;
-    uploadProgress.speed = 0;
-    uploadProgress.totalLoaded = 0;
-    uploadProgress.files = [];
-
-    // 创建上传控制器
-    uploadController.value = new AbortController();
-
-    const startTime = Date.now();
-
-    let filesData = [];
-    let invalidFiles = [];
-
-    // 遍历所有选中的文件
-    for (let file of files) {
-      try {
-        // 处理Base64文件
-        let processedFile;
-        if (file.isImg) {
-          // Base64转Blob
-          const base64String = file.file.split(';base64,').pop();
-          const mimeType = file.file.split(';base64,')[0].split(':')[1]; // 提取MIME类型
-          const byteCharacters = atob(base64String);
-          const byteNumbers = new Array(byteCharacters.length);
-
-          for (let i = 0; i < byteCharacters.length; i++) {
-            byteNumbers[i] = byteCharacters.charCodeAt(i);
-          }
-
-          const byteArray = new Uint8Array(byteNumbers);
-          processedFile = new Blob([byteArray], {
-            type: mimeType, // 使用实际的MIME类型
-          });
-          processedFile.name = file.fileName || `converted-image.${mimeType.split('/')[1]}`;
-        } else {
-          // 原始文件
-          processedFile = file;
-        }
-        filesData.push({
-          fileName: processedFile.name,
-          fileType: processedFile.type || 'application/octet-stream',
-          fileSize: processedFile.size,
-          file: processedFile,
-        });
-      } catch (error) {
-        invalidFiles.push({ name: file.name, error: '文件处理失败' });
-      }
-    }
-
-    // 初始化进度条
-    uploadProgress.files = filesData.map((file) => ({
-      name: file.fileName,
-      progress: 0,
-      status: 'active' as const,
-    }));
-
-    if (filesData.length === 0) {
-      uploadProgress.visible = false;
-      uploadController.value = null;
-      if (invalidFiles.length > 0) {
-        message.warning(`以下文件无法处理：${invalidFiles.map((f) => f.name + ' - ' + f.error).join(', ')}`);
-      }
+    const requestedScope = scope();
+    const requestedGeneration = generation;
+    if (!(await confirmDiscard()) || scope() !== requestedScope || generation !== requestedGeneration) return;
+    clearQueue();
+    let normalized: File[];
+    try {
+      normalized = files.map(normalizeFile);
+    } catch {
+      message.error(t('cloudSpace.uploadQueueInvalid'));
       return;
     }
-
-    try {
-      // 第一步：调用后端获取预签名上传URL
-      const uploadRes = await apiBasePost('/api/file/uploadFiles', { files: filesData });
-      if (Number(uploadRes.status) === 413) {
-        await showStorageQuotaDetails(filesData, Number(uploadRes.data?.shortfallMB || 0));
-        return;
-      }
-      if (uploadRes.status !== 200) {
-        throw new Error(uploadRes.msg || t('cloudSpace.uploadFailed'));
-      }
-
-      const uploadInfos = uploadRes.data; // 数组，每个文件有 uploadUrl, headers 等
-
-      // 第二步：逐个上传到OBS
-      const uploadPromises = uploadInfos.map(async (info, index) => {
-        if (info.status === '处理失败') {
-          uploadProgress.files[index].status = 'exception';
-          return { ...info, uploadStatus: 'failed' };
-        }
-        try {
-          const fileData = filesData[index].file;
-          await withForegroundActivity(() => axios.put(info.uploadUrl, fileData, {
-            headers: {
-              ...info.headers,
-              'Content-Type': info.fileType,
-            },
-            signal: uploadController.value?.signal,
-            onUploadProgress: (progressEvent) => {
-              // 部分 Android 浏览器不会提供 total，使用文件实际大小兜底。
-              const progressTotal = progressEvent.total || fileData.size;
-              const percent =
-                progressTotal > 0 ? Math.min(100, Math.round((progressEvent.loaded / progressTotal) * 100)) : 0;
-              uploadProgress.files[index].progress = percent;
-              // 计算总体进度
-              const totalProgress = uploadProgress.files.reduce((sum, file) => sum + file.progress, 0);
-              uploadProgress.overall = totalProgress / uploadProgress.files.length;
-              // 计算总上传字节数
-              uploadProgress.totalLoaded = uploadProgress.files.reduce((sum, file, idx) => {
-                const fileSize = filesData[idx].fileSize;
-                return sum + (file.progress / 100) * fileSize;
-              }, 0);
-              // 计算速度
-              const now = Date.now();
-              const elapsed = (now - startTime) / 1000;
-              if (elapsed > 0) {
-                uploadProgress.speed = uploadProgress.totalLoaded / elapsed;
-              }
-            },
-          }));
-          // 很小的文件可能没有触发可用的进度事件，完成后确保进度收口到 100%。
-          uploadProgress.files[index].progress = 100;
-          uploadProgress.overall =
-            uploadProgress.files.reduce((sum, file) => sum + file.progress, 0) / uploadProgress.files.length;
-          uploadProgress.files[index].status = 'success';
-          return { ...info, uploadStatus: 'success' };
-        } catch (error) {
-          console.error('上传失败:', error);
-          // 如果是用户取消的请求，不显示错误信息
-          if (error.name !== 'AbortError') {
-            uploadProgress.files[index].status = 'exception';
-          }
-          return { ...info, uploadStatus: 'failed', error: error.message };
-        }
-      });
-
-      const uploadResults = await Promise.all(uploadPromises);
-
-      // 第三步：上传成功后，调用confirmUpload写入数据库
-      const confirmFiles = uploadResults
-        .filter((result) => result.uploadStatus === 'success')
-        .map((result) => ({
-          fileName: result.filename,
-          ...(result.objectKey ? { objectKey: result.objectKey } : {}),
-          fileType: result.fileType,
-          fileSize: filesData.find((f) => f.fileName === result.filename)?.fileSize || 0,
-        }));
-
-      if (confirmFiles.length > 0) {
-        const confirmRes = await apiBasePost('/api/file/confirmUpload', { files: confirmFiles, folderId });
-        if (Number(confirmRes.status) === 413) {
-          await showStorageQuotaDetails(filesData, Number(confirmRes.data?.shortfallMB || 0));
-          return;
-        }
-        if (confirmRes.status === 200) {
-          // 处理确认结果
-          const successFiles = confirmRes.data.filter((item) => item.status === '已上传');
-          const existedFiles = confirmRes.data.filter((item) => item.status === '已覆盖');
-          const failedFiles = confirmRes.data.filter((item) => item.status === '处理失败');
-
-          if (successFiles.length > 0) {
-            recordOperation({ module: '云空间', operation: `上传文件成功【${successFiles.length}个】` });
-            message.success(`成功上传 ${successFiles.length} 个文件`);
-          }
-
-          if (existedFiles.length > 0) {
-            recordOperation({ module: '云空间', operation: `覆盖已有文件成功【${existedFiles.length}个】` });
-            message.warning(`覆盖了 ${existedFiles.length} 个已有文件`);
-            existedFiles.forEach((item) => cloud.cacheImgArr.push(item.fileId));
-          }
-
-          if (failedFiles.length > 0) {
-            message.error(`以下文件确认失败：${failedFiles.map((f) => f.filename).join(', ')}`);
-          }
-
-          if (successFiles.length > 0 || existedFiles.length > 0) {
-            // 保留已加载的分页，向下浏览时虚拟列表才能恢复原来的文件锚点。
-            await cloud.refreshAfterFileMutation({ preserveLoaded: true });
-          }
-        } else {
-          throw new Error(confirmRes.msg || t('cloudSpace.confirmUploadFailed'));
-        }
-      }
-
-      // 处理上传失败的文件
-      const failedUploads = uploadResults.filter((result) => result.uploadStatus === 'failed');
-      if (failedUploads.length > 0) {
-        message.error(`以下文件上传失败：${failedUploads.map((f) => f.filename).join(', ')}`);
-      }
-    } catch (error) {
-      // 如果是用户取消的请求，不显示错误信息
-      if (error.name !== 'AbortError') {
-        message.error(t('cloudSpace.uploadError', { message: error.message }));
-      }
-    } finally {
-      const visibleDuration = Date.now() - startTime;
-      if (visibleDuration < MIN_PROGRESS_VISIBLE_MS && uploadProgress.visible) {
-        await new Promise((resolve) => window.setTimeout(resolve, MIN_PROGRESS_VISIBLE_MS - visibleDuration));
-      }
-      uploadProgress.visible = false;
-      uploadController.value = null;
-
-      // 显示预检错误信息
-      if (invalidFiles.length > 0) {
-        message.warning(`以下文件无法处理：${invalidFiles.map((f) => f.name + ' - ' + f.error).join(', ')}`);
-      }
-    }
-  };
-
-  async function handleChange(e) {
-    const files = Array.isArray(e) ? e : [];
-    if (files.length === 0) return;
+    if (!normalized.length) return;
+    const owner = scope();
+    const currentGeneration = generation;
+    queue = createCloudUploadQueue(normalized, folderId, (state) => {
+      if (generation === currentGeneration && scope() === owner) uploadProgress.value = state;
+    });
+    await runQueue(queue);
+  }
+  async function handleChange(input: any) {
+    if (blockGuestWrite('upload-file') || busy.value) return;
+    const files: any[] = Array.isArray(input) ? input : [];
+    if (!files.length) return;
     const folderId = pendingUploadFolderId.value;
     pendingUploadFolderId.value = null;
-
-    // 提取文件名
-    const fileNames = files.map((f) => (f instanceof File ? f.name : f.fileName)).filter(Boolean);
-    if (fileNames.length === 0) {
-      await uploadFiles(files, folderId);
-      return;
-    }
-
-    // 预检查重名
-    let dupItems: { fileName: string; exists: boolean }[] = [];
-    let allExistingNames: string[] = [];
+    const owner = scope();
+    const currentGeneration = generation;
+    checking.value = true;
+    checkController = new AbortController();
     try {
-      const checkRes = await apiBasePost('/api/file/checkFileNames', { fileNames });
-      if (checkRes.status === 200) {
-        const data = checkRes.data;
-        if (Array.isArray(data)) {
-          // 旧格式：数组 [{ fileName, exists }]
-          dupItems = data.filter((d: any) => d.exists);
-        } else {
-          // 新格式：{ check: [{ fileName, exists }], allNames: [...] }
-          dupItems = data.check.filter((d: any) => d.exists);
-          allExistingNames = data.allNames || [];
+      const fileNames = files.map((file) =>
+        String(file instanceof File ? file.name : file.fileName || '')
+          .normalize('NFC')
+          .trim(),
+      );
+      // 只传元信息；失败关闭，不能在查重失败时静默覆盖旧照片。
+      const res = await apiBasePost(
+        '/api/file/checkFileNames',
+        { fileNames },
+        { silent: true, signal: checkController.signal },
+      );
+      if (res.status !== 200) throw new Error('CHECK_FILE_NAMES_FAILED');
+      if (generation !== currentGeneration || scope() !== owner) return;
+      const checks = Array.isArray(res.data) ? res.data : res.data?.check;
+      if (!Array.isArray(checks)) throw new Error('CHECK_FILE_NAMES_FAILED');
+      const localDuplicates = new Set(fileNames).size !== fileNames.length;
+      const duplicates = checks.filter((item: any) => item.exists).map((item: any) => item.fileName);
+      let selected = files;
+      if (localDuplicates || duplicates.length) {
+        const choice = await new Promise<'overwrite' | 'rename' | 'cancel'>((resolve) =>
+          Alert.alert({
+            title: t('cloudSpace.uploadQueueDuplicateTitle'),
+            content: localDuplicates
+              ? t('cloudSpace.uploadQueueLocalDuplicates')
+              : t('cloudSpace.uploadQueueDuplicates', {
+                  names: duplicates.slice(0, 3).join('、'),
+                  count: duplicates.length,
+                }),
+            onCancel: () => resolve('cancel'),
+            footer: [
+              ...(!localDuplicates
+                ? [
+                    {
+                      label: t('cloudSpace.uploadQueueOverwrite'),
+                      function: () => {
+                        Alert.destroy();
+                        resolve('overwrite');
+                      },
+                    },
+                  ]
+                : []),
+              {
+                label: t('cloudSpace.uploadQueueRename'),
+                type: 'primary' as const,
+                function: () => {
+                  Alert.destroy();
+                  resolve('rename');
+                },
+              },
+              {
+                label: t('common.cancel'),
+                function: () => {
+                  Alert.destroy();
+                  resolve('cancel');
+                },
+              },
+            ],
+          }),
+        );
+        if (choice === 'cancel' || generation !== currentGeneration || scope() !== owner) return;
+        if (choice === 'rename') {
+          const existing = new Set<string>([...(res.data?.allNames || []), ...duplicates]);
+          // 预留本批原名，避免 a.jpg 的序号名抢占后面的 a (1).jpg。
+          fileNames.forEach((name) => existing.add(name));
+          selected = files.map((file, index) => {
+            const name = autoRename(fileNames[index], existing);
+            existing.add(name);
+            return file instanceof File
+              ? new File([file], name, { type: file.type, lastModified: file.lastModified })
+              : { ...file, fileName: name };
+          });
         }
       }
+      checking.value = false;
+      await uploadFiles(selected, folderId);
     } catch {
-      // 查重失败就正常上传
-      await uploadFiles(files, folderId);
-      return;
+      if (generation === currentGeneration && scope() === owner) message.error(t('cloudSpace.uploadQueueCheckFailed'));
+    } finally {
+      if (generation === currentGeneration) checking.value = false;
     }
-
-    if (dupItems.length === 0) {
-      await uploadFiles(files, folderId);
-      return;
-    }
-
-    // 有重名 → 弹框让用户选择
-    const dupNames = dupItems.map((d) => d.fileName);
-    const shortList = dupNames.slice(0, 3).join('、');
-    const more = dupNames.length > 3 ? `等${dupNames.length}个文件` : '';
-    Alert.alert({
-      title: '文件已存在',
-      content: `「${shortList}」${more}已存在，请选择处理方式：`,
-      footer: [
-        {
-          label: '全部覆盖',
-          type: 'primary',
-          function() {
-            Alert.destroy();
-            uploadFiles(files, folderId);
-          },
-        },
-        {
-          label: '全部自动改名',
-          function() {
-            Alert.destroy();
-            const existingSet = new Set(fileNames);
-            allExistingNames.forEach((name) => existingSet.add(name));
-            const renamedFiles = files.map((f) => {
-              const oldName = f instanceof File ? f.name : f.fileName;
-              const newName = autoRename(oldName, existingSet);
-              existingSet.add(newName);
-              if (f instanceof File) {
-                return new File([f], newName, { type: f.type });
-              }
-              return { ...f, fileName: newName };
-            });
-            uploadFiles(renamedFiles, folderId);
-          },
-        },
-        {
-          label: '取消',
-          function() {
-            Alert.destroy();
-          },
-        },
-      ],
-    });
   }
-
   async function uploadSelectedFiles(files: File[], folderId: string | null = null) {
+    if (busy.value) {
+      message.info(t('cloudSpace.uploading'));
+      return;
+    }
     pendingUploadFolderId.value = folderId;
     await handleChange(files);
   }
-
   function openFileDialog(folderId: string | null = null) {
-    if (blockGuestWrite('upload-file')) return;
-    if (uploadProgress.visible) {
-      message.info(t('cloudSpace.uploading'));
-      return;
-    }
+    if (blockGuestWrite('upload-file') || busy.value) return;
     pendingUploadFolderId.value = folderId;
     uploadPicker.value?.open();
   }
-
-  // 取消上传确认
-  const handleCancelConfirm = () => {
-    if (uploadController.value) {
-      recordOperation({ module: '云空间', operation: '取消上传文件' });
-      uploadController.value.abort();
-      uploadController.value = null;
-      uploadProgress.visible = false;
-      message.info('上传已取消');
-    }
-  };
-
-  const confirmCancelUpload = () => {
+  function confirmCancelUpload() {
+    const current = queue;
     Alert.alert({
       title: t('cloudSpace.cancelUpload'),
-      content: t('cloudSpace.cancelUploadConfirm'),
-      onOk: handleCancelConfirm,
+      content: t('cloudSpace.uploadQueueCancelConfirm'),
+      onOk: () => {
+        if (queue === current) current?.cancel();
+      },
     });
-  };
-
-  defineExpose({ uploadFiles, uploadSelectedFiles, openFileDialog });
+  }
+  function beforeUnload(event: BeforeUnloadEvent) {
+    if (remaining.value || checking.value) {
+      event.preventDefault();
+      event.returnValue = '';
+    }
+  }
+  window.addEventListener('beforeunload', beforeUnload);
+  onBeforeRouteLeave(async () => {
+    const currentGeneration = generation;
+    if (!(await confirmDiscard()) || generation !== currentGeneration) return false;
+    clearQueue();
+  });
+  watch(scope, clearQueue, { flush: 'sync' });
+  onBeforeUnmount(() => {
+    clearQueue();
+    window.removeEventListener('beforeunload', beforeUnload);
+  });
+  defineExpose({ uploadFiles: uploadSelectedFiles, uploadSelectedFiles, openFileDialog });
 </script>
+
 <style lang="less" scoped>
-  .upload-btn {
-    position: relative;
-    :deep(.ant-btn) {
-      height: var(--ui-layout-48, 48px);
-      padding: 0 var(--ui-space-24, 24px);
-      font-size: var(--ui-font-16, 16px);
-      font-weight: 600;
-      border-radius: 12px;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      border: none;
-      box-shadow: 0 4px 16px rgba(102, 126, 234, 0.3);
-      transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-      position: relative;
-      overflow: hidden;
-      color: white;
-      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: var(--ui-space-8, 8px);
-
-      &::before {
-        content: '';
-        position: absolute;
-        top: 0;
-        left: -100%;
-        width: 100%;
-        height: 100%;
-        background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
-        transition: left 0.6s;
-      }
-
-      &:hover {
-        transform: translateY(-2px) scale(1.02);
-        box-shadow: 0 8px 24px rgba(102, 126, 234, 0.4);
-        background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
-
-        &::before {
-          left: 100%;
-        }
-      }
-
-      &:active {
-        transform: translateY(0) scale(0.98);
-        box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
-      }
-
-      // 图标样式
-      .anticon {
-        margin-right: var(--ui-space-8, 8px);
-        font-size: var(--ui-font-18, 18px);
-        transition: transform 0.3s ease;
-      }
-
-      &:hover .anticon {
-        transform: scale(1.1);
-      }
-    }
-
-    // 整体悬停效果
-    &:hover {
-      transition: transform 0.3s ease;
-    }
-
-    // 拖拽状态样式
-    &.dragging {
-      :deep(.ant-btn) {
-        animation: pulse 1.5s infinite;
-        background: linear-gradient(135deg, #52c41a 0%, #73d13d 100%);
-
-        &:hover {
-          background: linear-gradient(135deg, #73d13d 0%, #52c41a 100%);
-          box-shadow: 0 8px 24px rgba(82, 196, 26, 0.4);
-        }
-      }
-    }
-  }
-
-  .upload-container--mobile {
-    .upload-btn {
-      :deep(.ant-btn) {
-        width: var(--ui-layout-34, 34px);
-        height: var(--ui-layout-32, 32px);
-        padding: 0;
-        border-radius: 8px;
-        box-shadow: none;
-        text-shadow: none;
-
-        .anticon {
-          margin-right: 0;
-          font-size: var(--ui-font-16, 16px);
-        }
-      }
-    }
-  }
-
-  // 脉冲动画
-  @keyframes pulse {
-    0%,
-    100% {
-      transform: scale(1);
-      box-shadow: 0 4px 16px rgba(102, 126, 234, 0.3);
-    }
-    50% {
-      transform: scale(1.05);
-      box-shadow: 0 8px 24px rgba(102, 126, 234, 0.5);
-    }
-  }
-
-  .upload-progress {
-    position: fixed;
-    top: 70px;
-    right: 20px;
-    z-index: 300;
-    width: var(--ui-layout-320, 320px);
-    padding: var(--ui-space-20, 20px);
-    background: rgba(255, 255, 255, 0.95);
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
-    border-radius: 12px;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-
-    .progress-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: var(--ui-space-12, 12px);
-
-      .progress-title {
-        font-weight: 600;
-        color: #1890ff;
-        font-size: var(--ui-font-16, 16px);
-      }
-
-      .progress-actions {
-        display: flex;
-        align-items: center;
-        gap: var(--ui-space-8, 8px);
-
-        .progress-percent {
-          font-size: var(--ui-font-14, 14px);
-          color: #666;
-          font-weight: 500;
-        }
-
-        .progress-speed {
-          font-size: var(--ui-font-14, 14px);
-          color: #666;
-          font-weight: 500;
-        }
-
-        .cancel-btn {
-          color: #666;
-
-          &:hover {
-            color: #ff4d4f;
-            background: rgba(255, 77, 79, 0.1);
-          }
-        }
-      }
-    }
-
-    .overall-progress {
-      margin-bottom: var(--ui-space-16, 16px);
-
-      :deep(.ant-progress-bg) {
-        background: linear-gradient(90deg, #1890ff 0%, #36cfc9 100%);
-      }
-    }
-
-    .file-progress-list {
-      max-height: var(--ui-layout-230, 230px);
-      overflow-y: auto;
-
-      .file-progress-item {
-        margin-bottom: var(--ui-space-12, 12px);
-        padding: var(--ui-space-8, 8px) var(--ui-space-12, 12px);
-        background: rgba(249, 250, 251, 0.8);
-        border-radius: 6px;
-        border: 1px solid rgba(229, 231, 235, 0.5);
-
-        &:last-child {
-          margin-bottom: 0;
-        }
-
-        .file-name {
-          display: block;
-          font-size: var(--ui-font-13, 13px);
-          color: #374151;
-          margin-bottom: var(--ui-space-6, 6px);
-          font-weight: 500;
-          overflow: hidden;
-          text-overflow: ellipsis;
-          white-space: nowrap;
-        }
-
-        .file-progress-wrapper {
-          display: flex;
-          align-items: center;
-          gap: var(--ui-space-8, 8px);
-
-          :deep(.ant-progress) {
-            flex: 1;
-          }
-
-          .file-cancel-btn {
-            flex-shrink: 0;
-            color: #ef4444;
-            padding: var(--ui-space-2, 2px);
-
-            &:hover {
-              color: #dc2626;
-              background-color: rgba(239, 68, 68, 0.1);
-            }
-          }
-        }
-
-        :deep(.ant-progress-bg) {
-          background: linear-gradient(90deg, #52c41a 0%, #73d13d 100%);
-        }
-
-        :deep(.ant-progress-status-exception .ant-progress-bg) {
-          background: #ff4d4f;
-        }
-      }
-    }
-  }
-
-  // 深色主题样式
-  [data-theme='night'] {
-    .upload-progress {
-      background: rgba(53, 56, 63, 0.95);
-      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.7);
-      border: 1px solid rgba(77, 77, 84, 0.3);
-
-      .progress-header {
-        .progress-title {
-          color: #ffffff;
-        }
-
-        .progress-actions {
-          .progress-percent,
-          .progress-speed {
-            color: #ffffff;
-          }
-
-          .cancel-btn {
-            color: #ffffff;
-
-            &:hover {
-              background: rgba(255, 77, 79, 0.2);
-            }
-          }
-        }
-      }
-
-      .file-progress-list {
-        .file-progress-item {
-          background: rgba(60, 63, 65, 0.9);
-          border: 1px solid rgba(77, 77, 84, 0.3);
-
-          .file-name {
-            color: #ffffff;
-          }
-
-          :deep(.ant-progress-text) {
-            color: #ffffff !important;
-          }
-        }
-      }
-
-      .overall-progress {
-        :deep(.ant-progress-text) {
-          color: #ffffff !important;
-        }
-      }
-    }
-  }
-
-  // 上传容器样式
-  .upload-container {
-    position: relative;
-    display: inline-block;
-  }
-
-  // 上传提示样式
-  .upload-tip {
-    position: absolute;
-    left: -120px;
-    top: 35px;
-    background-color: rgba(14, 8, 8, 0.8);
-    color: white;
-    padding: var(--ui-space-12, 12px);
-    border-radius: 8px;
-    font-size: var(--ui-font-12, 12px);
-    line-height: 1.6;
-    white-space: pre-wrap;
-    width: var(--ui-layout-200, 200px);
-    z-index: 300;
-    opacity: 0;
-    transition: opacity 0.3s ease;
-    pointer-events: none;
-
-    &::before {
-      content: '';
-      position: absolute;
-      top: -6px;
-      right: 12px;
-    }
-  }
-
-  .upload-container:hover .upload-tip {
-    opacity: 1;
-  }
-
-  // 深色主题样式
-  [data-theme='night'] {
-    .upload-tip {
-      border: 1px solid rgba(231, 222, 222, 0.603) !important;
-    }
-  }
-
-  // 响应式设计
-  @media (max-width: 768px) {
-    .upload-btn {
-      :deep(.ant-btn) {
-        height: var(--ui-layout-44, 44px);
-        padding: 0 var(--ui-space-20, 20px);
-        font-size: var(--ui-font-14, 14px);
-
-        .anticon {
-          font-size: var(--ui-font-16, 16px);
-          margin-right: var(--ui-space-6, 6px);
-        }
-      }
-    }
-
-    .upload-tip {
-      bottom: -90px;
-      max-width: var(--ui-layout-250, 250px);
-      font-size: var(--ui-font-11, 11px);
-    }
-
-    .upload-progress {
-      position: fixed;
-      top: 10px;
-      left: 10px;
-      right: 10px;
-      width: auto;
-      max-width: none;
-      z-index: 301;
-    }
-  }
-
-  /* 资源页统一的紧凑上传入口；BButton 不依赖 Ant 内部结构。 */
   .upload-action {
     height: var(--ui-layout-36, 36px);
     padding: 0 var(--ui-space-14, 14px);
     gap: var(--ui-space-7, 7px);
     border-radius: 10px;
-    background: var(--resource-file-color, #ff8a00);
-    box-shadow: 0 5px 14px color-mix(in srgb, var(--resource-file-color, #ff8a00) 22%, transparent);
-
-    &:hover {
-      background: color-mix(in srgb, var(--resource-file-color, #ff8a00) 88%, #ffffff);
-    }
+    background: var(--resource-file-color);
   }
-
-  .upload-container--mobile .upload-action {
+  .upload-action--mobile {
     width: var(--ui-layout-34, 34px);
     min-width: var(--ui-layout-34, 34px);
     height: var(--ui-layout-34, 34px);
     padding: 0;
-    border-radius: 9px;
-    box-shadow: none;
   }
-
+  .upload-progress {
+    position: fixed;
+    top: var(--ui-layout-70, 70px);
+    right: var(--ui-space-20, 20px);
+    z-index: 300;
+    box-sizing: border-box;
+    width: var(--ui-layout-360, 360px);
+    max-height: calc(100vh - var(--ui-layout-80, 80px));
+    overflow-y: auto;
+    padding: var(--ui-space-16, 16px);
+    color: var(--text-color);
+    background: var(--menu-body-bg-color);
+    border: 1px solid var(--card-border-color);
+    border-radius: 12px;
+    box-shadow: var(--surface-card-shadow);
+  }
+  .progress-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--ui-space-8, 8px);
+  }
+  .progress-title {
+    min-width: 0;
+    font-size: var(--ui-font-15, 15px);
+    font-weight: 600;
+  }
+  .progress-summary,
+  .queue-hint {
+    margin: var(--ui-space-10, 10px) 0;
+    font-size: var(--ui-font-12, 12px);
+    color: var(--desc-color);
+  }
+  .progress-metrics {
+    font-size: var(--ui-font-12, 12px);
+    margin-bottom: var(--ui-space-6, 6px);
+  }
   .progress-track {
-    position: relative;
     overflow: hidden;
-    width: 100%;
-    height: 5px;
+    height: var(--ui-layout-6, 6px);
     border-radius: 999px;
-    background: color-mix(in srgb, var(--card-border-color) 68%, transparent);
-
+    background: var(--card-border-color);
     > span {
       display: block;
       height: 100%;
-      border-radius: inherit;
-      background: var(--resource-file-color, #ff8a00);
-      transition: width 0.2s ease;
+      background: var(--resource-file-color);
     }
   }
-
   .overall-progress {
-    margin-bottom: var(--ui-space-14, 14px);
+    margin-bottom: var(--ui-space-12, 12px);
   }
-
-  .file-progress-track--success > span {
-    background: var(--resource-note-color, #00a884);
+  .file-progress-item {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: var(--ui-space-6, 6px) var(--ui-space-8, 8px);
+    padding: var(--ui-space-8, 8px) 0;
+    border-bottom: 1px solid var(--card-border-color);
   }
-
-  .file-progress-track--exception > span {
-    background: #ef4444;
+  .file-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: var(--ui-font-12, 12px);
   }
-
-  .upload-progress {
-    color: var(--text-color);
-    background: color-mix(in srgb, var(--menu-body-bg-color) 94%, transparent);
-    border-color: color-mix(in srgb, var(--card-border-color) 76%, transparent);
-
-    .progress-header .progress-title {
-      color: var(--resource-file-color, #ff8a00);
-    }
-
-    .progress-header .progress-actions .progress-percent,
-    .progress-header .progress-actions .progress-speed,
-    .file-progress-list .file-progress-item .file-name {
-      color: var(--text-color);
-    }
-
-    .file-progress-list .file-progress-item {
-      background: color-mix(in srgb, var(--card-border-color) 22%, transparent);
-      border-color: color-mix(in srgb, var(--card-border-color) 65%, transparent);
-    }
+  .file-status {
+    font-size: var(--ui-font-11, 11px);
+    color: var(--desc-color);
+  }
+  .file-progress-track {
+    grid-column: 1 / -1;
+  }
+  .queue-error {
+    color: var(--danger-color);
+    font-size: var(--ui-font-12, 12px);
+  }
+  .file-progress-track--error > span {
+    background: var(--danger-color);
+  }
+  .retry-upload {
+    width: 100%;
+  }
+  .upload-progress--mobile {
+    top: var(--ui-space-10, 10px);
+    left: var(--ui-space-10, 10px);
+    right: var(--ui-space-10, 10px);
+    width: auto;
+    max-height: calc(100vh - var(--ui-space-20, 20px));
   }
 </style>

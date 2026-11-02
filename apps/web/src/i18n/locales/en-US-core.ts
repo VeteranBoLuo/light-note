@@ -7663,6 +7663,36 @@ export default {
   },
   cloudSpace: {
     ...cloudFileScopeEn,
+    uploadQueueStopped: 'Upload stopped',
+    uploadQueueDone: 'Upload complete',
+    uploadQueueSummary: '{total} total · {success} saved · {failed} failed · {pending} waiting/processing',
+    uploadQueueQuota: 'Cloud Space is full. Further uploads have stopped. Free up space or expand storage, then retry.',
+    uploadQueueAuth: 'Your login or permissions changed. Check your account before retrying.',
+    uploadQueueKeepOpen: 'Uploading and saving in batches. Keep this page open. Only some files are shown below.',
+    uploadQueueRetryHint:
+      'Saved files will not be uploaded again. Remaining files stay on this page; closing or refreshing requires selecting them again.',
+    uploadQueueRetry: 'Retry {count} remaining files',
+    uploadQueueDiscard:
+      'Some files are unfinished. Leaving or closing clears this queue. Saved files will remain. Continue?',
+    uploadQueueCancelConfirm:
+      'Stop further uploads? Saved files will remain. Files being saved will be checked first; you can retry the others on this page.',
+    uploadQueueInvalid: 'Some files could not be read. Please select the files again.',
+    uploadQueueCheckFailed: 'Could not check file names. Upload has not started. Please retry.',
+    uploadQueueDuplicateTitle: 'Duplicate file names',
+    uploadQueueLocalDuplicates:
+      'Your selection contains duplicate names. Rename automatically to keep every photo without overwriting another.',
+    uploadQueueDuplicates: '{count} files already exist, including “{names}”. Choose how to proceed.',
+    uploadQueueOverwrite: 'Overwrite all',
+    uploadQueueRename: 'Rename automatically',
+    uploadQueueStates: {
+      queued: 'Waiting',
+      preparing: 'Preparing',
+      uploading: 'Uploading',
+      confirming: 'Saving',
+      retrying: 'Waiting to retry',
+      success: 'Saved',
+      error: 'Failed, retry available',
+    },
     batchPreview: 'Preview',
     previewFile: 'Preview {name}',
     pinFailed: 'Could not update pin. Try again later.',
