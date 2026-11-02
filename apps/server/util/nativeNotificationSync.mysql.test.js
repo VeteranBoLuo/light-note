@@ -16,6 +16,7 @@ import {
 } from './huaweiPushMaintenance.js';
 import {
   bindHuaweiSubscription,
+  bindPushSubscription,
   activatePushSubscription,
   unbindPushSubscription,
   expandPushOutbox,
@@ -112,6 +113,46 @@ describe.skipIf(!socketPath)('native notification real SQL', () => {
       );
     }
   };
+  it('isolates browser capacity from Huawei history while retaining both limits and full-capacity token rotation', async () => {
+    await db.query("INSERT INTO user (id) VALUES ('alice')");
+    const tokens = Array.from({ length: 20 }, (_, i) => `huawei_history_${i}_` + 'x'.repeat(64));
+    for (const token of tokens) {
+      const binding = await bindHuaweiSubscription('alice', token, null, db);
+      await activatePushSubscription('alice', binding.id, binding.generation, db);
+    }
+    const browser = (i) => ({
+      endpoint: `https://fcm.googleapis.com/fcm/send/browser_${i}`,
+      keys: {
+        p256dh: Buffer.concat([Buffer.from([4]), Buffer.alloc(64, 1)]).toString('base64url'),
+        auth: Buffer.alloc(16, 2).toString('base64url'),
+      },
+    });
+    for (let i = 0; i < 20; i++) await bindPushSubscription('alice', browser(i), 'zh-CN', db);
+    await expect(bindPushSubscription('alice', browser(20), 'zh-CN', db)).rejects.toMatchObject({
+      code: 'PUSH_DEVICE_LIMIT',
+    });
+    await expect(bindHuaweiSubscription('alice', 'new_huawei_' + 'y'.repeat(64), null, db)).rejects.toMatchObject({
+      code: 'PUSH_DEVICE_LIMIT',
+    });
+    const identity = installation();
+    const enrolled = await bindHuaweiInstallation(
+      'alice',
+      tokens[0],
+      { ...identity, expectedCurrentId: null },
+      db,
+      managedEnv,
+    );
+    await activatePushSubscription('alice', enrolled.id, enrolled.generation, db);
+    const rotated = await managedBind('r', { ...identity, revision: 2 });
+    await activatePushSubscription('alice', rotated.id, rotated.generation, db);
+    const [counts] = await db.query(
+      "SELECT CASE WHEN endpoint LIKE 'huawei:%' THEN 'huawei' ELSE 'browser' END AS provider,COUNT(*) AS total FROM browser_push_subscriptions WHERE active IN(1,2) GROUP BY provider ORDER BY provider",
+    );
+    expect(counts).toEqual([
+      { provider: 'browser', total: 20 },
+      { provider: 'huawei', total: 20 },
+    ]);
+  });
 
   it('requires a live round trip and rejects a delayed first-install claim after a newer install connects', async () => {
     await db.query("INSERT INTO user (id) VALUES ('alice')");
