@@ -160,7 +160,7 @@ export async function bindHuaweiInstallation(userId, token, raw, db, env = proce
       [1, 2].includes(Number(existing.active)) &&
       (!existing.installation_id || existing.installation_id === installation.id);
     const [[count]] = await connection.query(
-      'SELECT COUNT(*) total FROM browser_push_subscriptions WHERE user_id = ? AND active IN (1,2)',
+      "SELECT COUNT(*) total FROM browser_push_subscriptions WHERE user_id = ? AND active IN (1,2) AND endpoint LIKE 'huawei:%'",
       [userId],
     );
     if (!reuse && Number(count.total) >= 20) throw failure('PUSH_DEVICE_LIMIT');
