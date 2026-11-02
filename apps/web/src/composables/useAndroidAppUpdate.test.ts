@@ -102,6 +102,16 @@ describe('useAndroidAppUpdate', () => {
     expect(update.showBadge.value).toBe(false);
   });
 
+  it('同版本修订替换安装包地址后，现有用户不出现更新提示', () => {
+    userAgent = APP_UA.replace('LightNoteAndroid/1.0.0', 'LightNoteAndroid/1.0.4');
+    release.versionName = '1.0.4';
+    release.downloadPath = '/downloads/android/light-note-1.0.4-revised.apk';
+    const update = useAndroidAppUpdate();
+    expect(update.updateAvailable.value).toBe(false);
+    expect(update.showBadge.value).toBe(false);
+    expect(update.apkUrl.value).toBe('https://boluo66.top/downloads/android/light-note-1.0.4-revised.apk');
+  });
+
   it('released 为 false 时不提示 —— 那时线上还没有可下载的包', () => {
     release.versionName = '1.0.1';
     release.released = false;
