@@ -146,6 +146,14 @@ pnpm --filter server check:schema
 
 华为 App 通知推送复用同一 Worker 与订阅/任务表；启用前给 API 和 Worker 配置 `HUAWEI_PUSH_*`，应用密钥仅保存在服务端，`HUAWEI_PUSH_APPROVED_CATEGORIES` 只能填写控制台实际获批的类型，未获批消息显式归入 MARKETING 并受频控；运行 `check:browser-push` 检查共同运行条件。仅发布服务端不会开启手机接收，须配套显式华为 APK 与 Web；实际待办来源、前后台、点击、退出/换号及失效恢复须真机验收。关闭华为开关保留站内及前台同步；队列只由生产环境消费，不能启动本地 Worker 验证线上发送。正式候选包必须使用正式包名的 AGC Android 应用和正式签名，逐项核对 SDK 披露、隐私版本与 APK 实际权限；详见 [Android 推送说明](../apps/android/README.md#华为通知正式候选包)。
 
+### 华为安装协议与历史连接
+
+安装协议默认关闭。先经授权运行 `pnpm --filter server migrate:huawei-push-installations --apply` 安装增量结构；不加 `--apply` 只检查结构，不回填、回收或重发历史数据。显式开启 API、Worker 的 `HUAWEI_PUSH_INSTALLATION_V2_ENABLED=true` 前，必须通过该命令的只读断言、`check:schema` 和 `check:browser-push`，并配套新版 Web、包含新版政策与原生桥的同签名 APK；启动和 Worker 不执行 DDL。范围标识、旧客户端限制与兼容环境降级见 [Android 说明](../apps/android/README.md#华为通知正式候选包)。
+
+旧数据没有可信设备标识，不能按机型、最近注册时间、无回执或受理成功批量合并。首次迁移需经账号实际设备情况和当前 Token/绑定证据确认保留项，再运行 `pnpm --filter server cleanup:huawei-push-bindings --user-id=账号ID --keep-id=确认保留的绑定ID`；多个保留项重复 `--keep-id`。默认只输出数量、脱敏引用和状态指纹。线上执行另需数据修复授权，使用相同参数加 `--apply --expected=预览指纹`；账号及候选行加锁、状态变化即中止，只退休未保留的旧协议华为绑定并取消未发任务，浏览器与新版设备不动。原始旧 Token 清除，哈希清理标记长期保留，GC 与停用新协议均不得使其复活。已经受理的消息不能保证即时撤回。
+
+首次发布须用目标正式签名、真实华为配置验证覆盖升级、同设备连续卸载重装、Token 变化、另一台设备保留、退出/切号、关闭权限与恢复、响应丢失和锁屏/划掉 App 的实际通知及验签回执。没有范围标识的兼容层须单独记录降级事实；模拟桥和临时客户端配置构建不能替代真机。启用后不回退到忽略安装世代或清理标记的旧注册实现；需要暂停时关闭华为推送开关并保留新结构、协议门禁和退休标记，修复后向前发布。
+
 ### 华为送达回执
 
 发布含回执的后端前，执行 `pnpm --filter server migrate:huawei-push-delivery` 幂等安装 `20261022_huawei_push_delivery.sql` 的两张诊断表，再运行 `check:schema` 与 `check:browser-push`。部署脚本在 Schema 门禁前执行同一入口；应用和 Worker 启动不执行 DDL。只新增结构，不重发或回填历史消息，旧任务保留期与账号注销通过外键级联清理诊断记录。回滚代码可保留新表。
@@ -153,6 +161,8 @@ pnpm --filter server check:schema
 在正式 Android 应用的 AGC 推送配置中选择应用回执，配置 HTTPS 地址 `/api/notification/huawei/receipt`，优先 V2。将同一回调用户名与新版本 Base64 密钥仅配置到 API、Worker 的服务端环境：`HUAWEI_PUSH_RECEIPTS_ENABLED=true`、`HUAWEI_PUSH_RECEIPT_USERNAME`、`HUAWEI_PUSH_RECEIPT_SECRET`；`HUAWEI_PUSH_PACKAGE_NAME` 与 APK 包名一致。需要指定某个配置时设置 `HUAWEI_PUSH_RECEIPT_ID`，否则使用 AGC 默认应用回执。不要混用 HarmonyOS 原生应用或联调包，也不要把回执版本与发送 API 版本混淆。
 
 先验证无签名请求被拒绝，再使用控制台「测试回执」确认验签和 HTTPS 连通；固定测试样本不计入设备送达。真实通知通过正常队列携带 attempt 标记，使用 `pnpm --filter server inspect:huawei-push-delivery` 查看最近 24 小时的分类、受理和送达结果，可加 `--notification-id=通知ID` 缩小范围。结果 0 才是设备送达，6 表示通知权限问题，256 表示资讯营销限制；无回执只表示尚无设备证据，不能判成送达或 Token 失效。普通系统消息归为 MARKETING；卓易通不支持其后台转发，真实待办 WORK 和获批订阅互动 SUBSCRIPTION 须分别真机确认。关闭回执开关只停止接收回执，推送与站内通知继续按原通道运行。
+
+华为推送开启时，服务器诊断与现有分钟告警同时检查业务回执样本；规则见[架构说明](./architecture.md#华为-app-通知推送)。关闭或损坏回执配置会产生异常，低流量与数据库不可读不报告健康；告警发邮件兜底，不能只靠可能故障的推送提醒维护者。
 
 FCM 备用出口使用 `scripts/browser-push-relay/worker.mjs`，以独立托管实例配置主、备用地址与各自的服务端凭据（`BROWSER_PUSH_RELAYS`）。实例需设置 `RELAY_TOKEN`，关闭请求正文与凭据日志；示例 `wrangler.jsonc` 只提供部署结构，不含线上地址或密钥。每条出口上线前分别验证生产服务器到实际中转域名、中转到厂商以及真实设备展示；官网可访问或模拟测试不算出口验收。未配置中转保持直连，停用中转清空该配置即可；不得为验证而重开本地队列消费者。
 

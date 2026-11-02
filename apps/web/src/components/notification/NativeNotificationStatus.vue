@@ -88,7 +88,15 @@
       : `nativePush.description.${state.value}`,
   );
   const specificFailure = computed(() =>
-    ['deviceLimit', 'accountRequired', 'serviceDisabled', 'storageUnavailable'].includes(state.value),
+    [
+      'deviceLimit',
+      'accountRequired',
+      'serviceDisabled',
+      'storageUnavailable',
+      'updateRequired',
+      'applicationMismatch',
+      'installationRetired',
+    ].includes(state.value),
   );
   const openingSettings = ref(false);
   const settingsError = ref(false);

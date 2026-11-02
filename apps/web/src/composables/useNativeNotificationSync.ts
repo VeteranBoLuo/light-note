@@ -25,10 +25,14 @@ export function useNativeNotificationSync(owner: Ref<string | null>, open: () =>
       return response.data;
     },
     remote: {
-      bind: async (deviceToken, previousBinding) => {
+      bind: async (deviceToken, previousBinding, installation) => {
         const response = await apiBasePost(
           '/api/notification/huawei/subscribe',
-          { deviceToken, ...(previousBinding ? { previousBinding } : {}) },
+          {
+            deviceToken,
+            ...(previousBinding ? { previousBinding } : {}),
+            ...(installation ? { protocolVersion: 2, installation } : {}),
+          },
           { silent: true, timeout: 5000 },
         ).catch((error) => {
           throw connectionError(error);
@@ -144,17 +148,30 @@ export function useNativeNotificationSync(owner: Ref<string | null>, open: () =>
   });
 }
 
-function connectionError(response: { status?: number; msg?: string } | null | undefined) {
+function connectionError(
+  response: { status?: number; msg?: string; data?: { currentInstallationId?: string | null } } | null | undefined,
+) {
   return Object.assign(new Error('HUAWEI_PUSH_UNAVAILABLE'), {
+    challengeCurrentId:
+      response?.msg === 'HUAWEI_PUSH_INSTALLATION_CHALLENGE_REQUIRED'
+        ? response.data?.currentInstallationId
+        : undefined,
     connectionState:
       response?.msg === 'HUAWEI_PUSH_DEVICE_LIMIT'
         ? 'deviceLimit'
-        : response?.msg === 'HUAWEI_PUSH_DISABLED'
-          ? 'serviceDisabled'
-          : [401, 403].includes(response?.status || 0)
-            ? 'accountRequired'
-            : undefined,
+        : response?.msg === 'HUAWEI_PUSH_CLIENT_UPGRADE_REQUIRED'
+          ? 'updateRequired'
+          : response?.msg === 'HUAWEI_PUSH_APPLICATION_MISMATCH'
+            ? 'applicationMismatch'
+            : response?.msg === 'HUAWEI_PUSH_INSTALLATION_RETIRED'
+              ? 'installationRetired'
+              : ['HUAWEI_PUSH_DISABLED', 'HUAWEI_PUSH_INSTALLATION_UNAVAILABLE'].includes(response?.msg || '')
+                ? 'serviceDisabled'
+                : [401, 403].includes(response?.status || 0)
+                  ? 'accountRequired'
+                  : undefined,
     invalidToken: response?.status === 410 || response?.msg === 'HUAWEI_PUSH_TOKEN_INVALID',
     staleBinding: ['HUAWEI_PUSH_BINDING_EXPIRED', 'HUAWEI_PUSH_BINDING_INVALID'].includes(response?.msg || ''),
+    superseded: response?.msg === 'HUAWEI_PUSH_INSTALLATION_SUPERSEDED',
   });
 }

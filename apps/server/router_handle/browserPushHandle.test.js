@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({ query: vi.fn(), bind: vi.fn(), activate: vi.fn(), unbind: vi.fn() }));
 vi.mock('../db/index.js', () => ({ default: { query: mocks.query } }));
 vi.mock('../util/common.js', () => ({ resultData: (data = null, status = 200, msg = '') => ({ data, status, msg }) }));
@@ -14,12 +14,27 @@ const req = () => ({
   get: (key) => (key === 'origin' ? 'https://light.test' : 'same-origin'),
 });
 const res = () => ({ send: vi.fn() });
+afterEach(() => vi.unstubAllEnvs());
 beforeEach(() => {
   vi.clearAllMocks();
   vi.stubEnv('BROWSER_PUSH_ORIGIN', 'https://light.test');
   vi.stubEnv('BROWSER_PUSH_ENABLED', 'false');
 });
 describe('browser push API', () => {
+  it('returns a stable quota reason instead of a generic operation failure', async () => {
+    for (const [key, value] of Object.entries({
+      LIGHTNOTE_RUNTIME_ENV: 'production',
+      BROWSER_PUSH_ENABLED: 'true',
+      BROWSER_PUSH_VAPID_PUBLIC_KEY: 'fixture',
+      BROWSER_PUSH_VAPID_PRIVATE_KEY: 'fixture',
+      BROWSER_PUSH_VAPID_SUBJECT: 'mailto:fixture@example.invalid',
+    }))
+      vi.stubEnv(key, value);
+    mocks.bind.mockRejectedValueOnce(Object.assign(new Error('quota'), { code: 'PUSH_DEVICE_LIMIT' }));
+    const response = res();
+    await subscribe(req(), response);
+    expect(response.send).toHaveBeenCalledWith({ data: null, status: 409, msg: 'BROWSER_PUSH_DEVICE_LIMIT' });
+  });
   it.each([config, subscribe, activate, unsubscribe])('rejects visitors and administrator preview', async (handler) => {
     for (const request of [
       { ...req(), user: { id: 'guest', role: 'visitor' } },

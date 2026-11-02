@@ -6,6 +6,7 @@ import { browserPushTableSql } from './browserPushSchema.js';
 import { ensureHuaweiPushDeliverySchema } from './huaweiPushDeliverySchema.js';
 import { beginHuaweiPushAttempt, finishHuaweiPushAttempt, recordHuaweiReceipts } from './huaweiPushDelivery.js';
 import { huaweiReceiptTokenHash, parseHuaweiReceipts } from './huaweiPushReceiptPolicy.js';
+import { loadHuaweiReceiptCheck } from './huaweiPushHealth.js';
 
 const socketPath = process.env.LIGHTNOTE_TEST_MYSQL_SOCKET;
 const schema = 'huawei_delivery_' + randomUUID().replaceAll('-', '');
@@ -84,6 +85,41 @@ describe.skipIf(!socketPath)('Huawei delivery evidence real SQL', () => {
       delivered_at: null,
     });
     expect((await row(id)).accepted_at).toBeInstanceOf(Date);
+  });
+  it('monitors only aged business acceptances and counts verified failure receipts as callback health, not delivery', async () => {
+    const healthEnv = {
+      LIGHTNOTE_RUNTIME_ENV: 'production',
+      HUAWEI_PUSH_ENABLED: 'true',
+      HUAWEI_PUSH_APP_ID: '123',
+      HUAWEI_PUSH_PROJECT_ID: '456',
+      HUAWEI_PUSH_APP_SECRET: 'fixture',
+      HUAWEI_PUSH_ORIGIN: 'https://fixture.invalid',
+      HUAWEI_PUSH_RECEIPTS_ENABLED: 'true',
+      HUAWEI_PUSH_RECEIPT_USERNAME: 'fixture',
+      HUAWEI_PUSH_RECEIPT_SECRET: Buffer.alloc(32, 1).toString('base64'),
+    };
+    const first = await attempt();
+    const ids = [first.id];
+    for (let i = 1; i < 6; i++) {
+      const id = randomUUID();
+      ids.push(id);
+      await beginHuaweiPushAttempt(db, id, { id: first.jobId }, first.subscription, 'MARKETING', 'system');
+    }
+    for (const id of ids) await finishHuaweiPushAttempt(db, id, 'accepted', null, 'provider-request');
+    await db.query(
+      'UPDATE huawei_push_delivery_attempts SET created_at=DATE_SUB(NOW(),INTERVAL 20 MINUTE),accepted_at=DATE_SUB(NOW(),INTERVAL 20 MINUTE) WHERE id<>?',
+      [ids[5]],
+    );
+    expect(await loadHuaweiReceiptCheck({ db, env: healthEnv })).toMatchObject({
+      state: 'fail',
+      evidence: { accepted: 5, receipts: 0 },
+    });
+    await recordHuaweiReceipts(db, [receipt(first.id, 6)]);
+    expect(await loadHuaweiReceiptCheck({ db, env: healthEnv })).toMatchObject({
+      state: 'pass',
+      evidence: { accepted: 5, receipts: 1 },
+    });
+    expect((await row(first.id)).delivered_at).toBeNull();
   });
   it('accepts an early receipt and preserves it when the send response arrives later', async () => {
     const { id } = await attempt();

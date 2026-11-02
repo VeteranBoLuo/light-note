@@ -4,6 +4,7 @@ import { pathToFileURL } from 'node:url';
 import pool from './db/index.js';
 import { browserPushEnabled } from './util/browserPushPolicy.js';
 import { expandPushOutbox, processNextPush } from './util/browserPushService.js';
+import { pruneInactivePushSubscriptions } from './util/huaweiPushMaintenance.js';
 export async function mainLoop() {
   let running = true;
   const stop = () => {
@@ -36,9 +37,7 @@ export async function mainLoop() {
         for (const key of Object.keys(counts)) delete counts[key];
         lastReport = Date.now();
         // Keep provider-invalid bindings as tombstones: dormant clients may still hold those endpoints.
-        await pool.query(
-          'DELETE FROM browser_push_subscriptions WHERE active IN (0, 2) AND enabled_at < DATE_SUB(NOW(), INTERVAL 7 DAY) LIMIT 1000',
-        );
+        await pruneInactivePushSubscriptions(pool);
         await pool.query(
           "DELETE FROM browser_push_jobs WHERE status NOT IN ('pending', 'sending') AND expires_at < DATE_SUB(NOW(), INTERVAL 7 DAY) LIMIT 1000",
         );

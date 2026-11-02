@@ -58,9 +58,48 @@ afterEach(() => {
   vi.useRealTimers();
 });
 describe('foreground notification connection scheduling', () => {
+  it('completes installation negotiation automatically through the API and native bridge', async () => {
+    const installation = {
+      id: 'install-a',
+      key: 'a'.repeat(64),
+      revision: 1,
+      packageName: 'app.test',
+      pushAppId: '123',
+      deviceLabel: 'phone',
+      identityKind: 'scoped',
+    };
+    mocks.bridge.mockImplementation(async (input) =>
+      input.action === 'bind'
+        ? { ok: true, enabled: true, huaweiToken: 'token', pushProtocolVersion: 2, installation }
+        : { ok: true },
+    );
+    const normalApi = mocks.api.getMockImplementation()!;
+    mocks.api.mockImplementation(async (url, body, config) => {
+      if (url.endsWith('/subscribe') && !Object.hasOwn(body.installation, 'expectedCurrentId'))
+        return {
+          status: 409,
+          msg: 'HUAWEI_PUSH_INSTALLATION_CHALLENGE_REQUIRED',
+          data: { currentInstallationId: null },
+        };
+      return normalApi(url, body, config);
+    });
+    mount();
+    await flush();
+    expect(nativeNotificationStatus.value.state).toBe('connected');
+    const subscriptions = mocks.api.mock.calls.filter(([url]) => url.endsWith('/subscribe'));
+    expect(subscriptions).toHaveLength(2);
+    expect(subscriptions[1][1]).toMatchObject({
+      protocolVersion: 2,
+      installation: { expectedCurrentId: null, id: 'install-a' },
+    });
+    const saveIndex = mocks.bridge.mock.calls.findIndex(([input]) => input.action === 'receiptSave');
+    expect(saveIndex).toBeGreaterThan(-1);
+    expect(mocks.api.mock.calls.filter(([url]) => url.endsWith('/activate'))).toHaveLength(1);
+  });
   it.each([
     [409, 'HUAWEI_PUSH_DEVICE_LIMIT', 'deviceLimit'],
     [503, 'HUAWEI_PUSH_DISABLED', 'serviceDisabled'],
+    [503, 'HUAWEI_PUSH_INSTALLATION_UNAVAILABLE', 'serviceDisabled'],
     [403, 'HUAWEI_PUSH_ACCOUNT_REQUIRED', 'accountRequired'],
     [500, 'HUAWEI_PUSH_BIND_FAILED', 'retrying'],
   ])('maps API %s/%s to an accurate connection state', async (status, msg, expected) => {
