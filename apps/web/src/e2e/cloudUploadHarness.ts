@@ -39,6 +39,7 @@ const fixture = {
   duplicate: false,
   delayCheck: 0,
   failCheck: false,
+  checks: 0,
   targets: [] as Array<string | null>,
 };
 const cloud = cloudSpaceStore();
@@ -56,6 +57,7 @@ request.defaults.adapter = async (config) => {
   let data: any = [];
   let status = 200;
   if (url.endsWith('/checkFileNames')) {
+    fixture.checks++;
     if (fixture.delayCheck) await new Promise((resolve) => setTimeout(resolve, fixture.delayCheck));
     if (fixture.failCheck) status = 500;
     data = {
@@ -144,13 +146,13 @@ Object.assign(window, {
     controls: fixture,
     user,
     router,
-    start: (count = 60, names?: string[]) =>
+    start: (count = 60, names?: string[], folderId: string | null = 'album-a', offset = 0) =>
       panel.value!.uploadSelectedFiles(
         Array.from(
           { length: count },
-          (_, i) => new File(['fixture photo'], names?.[i] || `photo-${i}.jpg`, { type: 'image/jpeg' }),
+          (_, i) => new File(['fixture photo'], names?.[i] || `photo-${i + offset}.jpg`, { type: 'image/jpeg' }),
         ),
-        'album-a',
+        folderId,
       ),
   },
 });

@@ -80,6 +80,16 @@ describe('incomingShare', () => {
 
 describe('分享数量与大小边界', () => {
   const entry = (index: number, size: number) => ({ index, name: `${index}.jpg`, mimeType: 'image/jpeg', size });
+  it('8GB 单文件在生成上传源前被排除，保留大小超限原因与文件名', () => {
+    const result = parseIncomingShareManifest({
+      id, limits: { files: 100, bytes: INCOMING_SHARE_MAX_BYTES },
+      files: [{ ...entry(0, 8 * 1024 ** 3), name: '8GB-video.mp4' }],
+    })!;
+    expect(result.files).toEqual([]);
+    expect(result.skippedFiles).toBe(1);
+    expect(result.skippedFileCounts?.size_limit).toBe(1);
+    expect(result.skippedFileDetails).toEqual([{ name: '8GB-video.mp4', reason: 'size_limit' }]);
+  });
   it('完整接收 100 个、共 500MiB，第 101 个报告超数量', () => {
     const files = Array.from({ length: 101 }, (_, i) => entry(i, 5 * 1024 * 1024));
     const result = parseIncomingShareManifest({ id, files })!;
