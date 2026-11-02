@@ -63,6 +63,12 @@ it.each([
   ['PUSH_BINDING_EXPIRED', 409, 'HUAWEI_PUSH_BINDING_EXPIRED'],
   ['INVALID_PUSH_BINDING', 400, 'HUAWEI_PUSH_BINDING_INVALID'],
   ['PUSH_ACCOUNT_UNAVAILABLE', 403, 'HUAWEI_PUSH_ACCOUNT_REQUIRED'],
+  ['INVALID_HUAWEI_INSTALLATION', 400, 'HUAWEI_PUSH_INSTALLATION_INVALID'],
+  ['HUAWEI_PUSH_APPLICATION_MISMATCH', 409, 'HUAWEI_PUSH_APPLICATION_MISMATCH'],
+  ['HUAWEI_PUSH_CLIENT_UPGRADE_REQUIRED', 409, 'HUAWEI_PUSH_CLIENT_UPGRADE_REQUIRED'],
+  ['HUAWEI_PUSH_INSTALLATION_UNAVAILABLE', 503, 'HUAWEI_PUSH_INSTALLATION_UNAVAILABLE'],
+  ['PUSH_INSTALLATION_RETIRED', 409, 'HUAWEI_PUSH_INSTALLATION_RETIRED'],
+  ['PUSH_INSTALLATION_SUPERSEDED', 409, 'HUAWEI_PUSH_INSTALLATION_SUPERSEDED'],
   ['UNKNOWN_DATABASE_FAILURE', 500, 'HUAWEI_PUSH_BIND_FAILED'],
 ])('reports %s with a stable, non-sensitive result', async (code, status, msg) => {
   bindHuaweiSubscription.mockRejectedValue(Object.assign(new Error(token), { code }));
@@ -75,4 +81,35 @@ it('passes the replacement receipt while keeping the authenticated account autho
   request.body.previousBinding = { id: 'old', generation: 'g', userId: 'bob' };
   await subscribe(request, res());
   expect(bindHuaweiSubscription).toHaveBeenCalledWith('alice', token, request.body.previousBinding);
+});
+it('routes protocol two through server-owned installation handling and rejects incomplete protocol negotiation', async () => {
+  const request = req();
+  request.body.protocolVersion = 2;
+  request.body.installation = { id: 'native-installation' };
+  await subscribe(request, res());
+  expect(bindHuaweiSubscription).toHaveBeenCalledWith(
+    'alice',
+    token,
+    null,
+    expect.anything(),
+    request.body.installation,
+  );
+  vi.clearAllMocks();
+  delete request.body.installation;
+  const response = res();
+  await subscribe(request, response);
+  expect(response.send).toHaveBeenCalledWith({ data: null, status: 400, msg: 'HUAWEI_PUSH_INSTALLATION_INVALID' });
+  expect(bindHuaweiSubscription).not.toHaveBeenCalled();
+});
+it('returns a scoped handshake without exposing device tokens', async () => {
+  bindHuaweiSubscription.mockRejectedValueOnce(
+    Object.assign(new Error(token), { code: 'PUSH_INSTALLATION_CHALLENGE_REQUIRED', currentInstallationId: null }),
+  );
+  const response = res();
+  await subscribe(req(), response);
+  expect(response.send).toHaveBeenCalledWith({
+    data: { currentInstallationId: null },
+    status: 409,
+    msg: 'HUAWEI_PUSH_INSTALLATION_CHALLENGE_REQUIRED',
+  });
 });

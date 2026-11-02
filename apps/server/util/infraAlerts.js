@@ -51,6 +51,7 @@ const CHECK_TITLES = Object.freeze({
   'security.unexpected-public-ports': '出现非预期的公网监听端口',
   'security.ssh-login-failures': 'SSH 失败登录尝试过多',
   'security.database-backup': '数据库备份中断',
+  'services.huaweiReceipts': '华为推送送达回执异常',
 });
 
 // 备份中断关系到数据能否恢复，虽归在安全检查里，也和服务故障一样发邮件。
@@ -76,6 +77,10 @@ function percentText(value) {
 function checkDetail(check) {
   const evidence = check.evidence || {};
   switch (check.id) {
+    case 'services.huaweiReceipts':
+      return evidence.configured === false
+        ? '华为推送已开启，但送达回执配置不可用，请核对服务端配置与华为控制台回执鉴权。'
+        : `24 小时内有 ${evidence.accepted ?? '—'} 次已受理超过 15 分钟的业务推送，没有匹配的验签回执。请检查回调、应用配置与设备兼容性；受理成功不能证明设备送达。`;
     case 'system.cpu':
     case 'storage.ioBusy':
       return `当前 ${percentText(evidence.percent)}`;

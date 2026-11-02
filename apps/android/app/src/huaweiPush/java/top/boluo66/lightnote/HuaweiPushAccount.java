@@ -13,6 +13,7 @@ public final class HuaweiPushAccount {
     public static synchronized String handle(Context context, String action) {
         Context app = context.getApplicationContext();
         SharedPreferences state = app.getSharedPreferences("huawei_push_account", Context.MODE_PRIVATE);
+        if ("appId".equals(action)) return PrivacyConsentStore.isAccepted(app) ? HuaweiPushProbe.appId(app) : "";
         if ("support".equals(action)) {
             if (!PrivacyConsentStore.isAccepted(app)) return "unknown";
             SharedPreferences probe = HuaweiPushProbe.prefs(app);

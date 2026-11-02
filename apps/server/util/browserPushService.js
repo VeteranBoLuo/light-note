@@ -18,6 +18,11 @@ import { randomUUID } from 'node:crypto';
 import pool from '../db/index.js';
 import { deliverBrowserPush } from './browserPushTransport.js';
 import {
+  bindHuaweiInstallation,
+  bindLegacyHuaweiInstallation,
+  huaweiInstallationsEnabled,
+} from './huaweiPushInstallations.js';
+import {
   browserPushEnabled,
   validatePushSubscription,
   endpointHash,
@@ -29,7 +34,9 @@ export async function bindPushSubscription(userId, raw, locale, db = pool) {
   return bindSubscription(userId, validatePushSubscription(raw), locale, db);
 }
 
-export async function bindHuaweiSubscription(userId, token, previousBinding = null, db = pool) {
+export async function bindHuaweiSubscription(userId, token, previousBinding = null, db = pool, installation = null) {
+  if (installation) return bindHuaweiInstallation(userId, token, installation, db);
+  if (huaweiInstallationsEnabled()) return bindLegacyHuaweiInstallation(userId, token, db);
   if (
     previousBinding !== null &&
     (!previousBinding ||
@@ -58,7 +65,11 @@ async function bindSubscription(userId, subscription, locale, db, previousBindin
     );
     const previous = existing[0];
     // Provider-invalid endpoints must never be reactivated, even by an older client.
-    if (Number(previous?.active) === 3 || Number(previous?.invalid) === 1)
+    if (
+      Number(previous?.active) === 3 ||
+      Number(previous?.invalid) === 1 ||
+      previous?.retired_reason === 'legacy_cleanup'
+    )
       throw Object.assign(new Error('PUSH_SUBSCRIPTION_INVALID'), { code: 'PUSH_SUBSCRIPTION_INVALID' });
     if (previousBinding && !(previous?.id === previousBinding.id && previous.user_id === userId)) {
       const [[replaced]] = await conn.query(

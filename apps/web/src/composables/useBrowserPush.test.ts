@@ -68,6 +68,25 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 describe('browser subscription lifecycle', () => {
+  it('preserves granted permission on quota failures and backs off automatic retries', async () => {
+    permission = 'granted';
+    const basePost = post.getMockImplementation()!;
+    post.mockImplementation(async (url, body) =>
+      url.endsWith('/subscribe') ? { status: 409, msg: 'BROWSER_PUSH_DEVICE_LIMIT' } : basePost(url, body),
+    );
+    const module = await import('./useBrowserPush');
+    await module.syncBrowserPushOwner('u1');
+    expect(module.useBrowserPush().state.value).toBe('deviceLimit');
+    expect(module.useBrowserPush().diagnostics.value.permission).toBe('granted');
+    expect(module.useBrowserPush().enabled.value).toBe(false);
+    const subscriptions = () => post.mock.calls.filter(([url]) => url.endsWith('/subscribe')).length;
+    expect(subscriptions()).toBe(1);
+    await module.refreshBrowserPush();
+    expect(subscriptions()).toBe(1);
+    await module.useBrowserPush().setEnabled(true, 'zh-CN');
+    expect(subscriptions()).toBe(2);
+    expect(requestPermission).not.toHaveBeenCalled();
+  });
   it('does not request permission or subscribe while reading state', async () => {
     const module = await import('./useBrowserPush');
     await module.refreshBrowserPush();

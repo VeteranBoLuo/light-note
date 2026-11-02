@@ -19,7 +19,7 @@
       class="browser-push-status"
       :class="{
         'is-ready': !restricted && !guest && state === 'on',
-        'is-error': !restricted && !guest && ['error', 'invalid'].includes(state),
+        'is-error': !restricted && !guest && ['error', 'invalid', 'deviceLimit'].includes(state),
       }"
       role="status"
     >
@@ -42,7 +42,9 @@
     <BrowserPushFacts v-if="!restricted && !guest" />
     <div class="browser-push-actions">
       <BButton
-        v-if="!restricted && !guest && preferred && (busy || ['pending', 'error', 'invalid'].includes(state))"
+        v-if="
+          !restricted && !guest && preferred && (busy || ['pending', 'error', 'invalid', 'deviceLimit'].includes(state))
+        "
         type="primary"
         :loading="busy"
         :disabled="busy"
@@ -92,7 +94,12 @@
     )
       return refresh();
   };
-  useForegroundRefresh({ refresh: async () => { await refreshWhenVisible(); }, staleMs: 30_000 });
+  useForegroundRefresh({
+    refresh: async () => {
+      await refreshWhenVisible();
+    },
+    staleMs: 30_000,
+  });
   let timer: number | undefined;
   onMounted(() => {
     refreshWhenVisible();

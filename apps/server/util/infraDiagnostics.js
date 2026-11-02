@@ -4,6 +4,7 @@ import {
   getHostAgentServices,
   getHostAgentStorage,
 } from './hostAgentClient.js';
+import { loadHuaweiReceiptCheck } from './huaweiPushHealth.js';
 
 // 服务器诊断的唯一判定源：诊断接口与后台告警共用，阈值和安全规则只在这里维护。
 function securityFinding(id, state, severity, evidence = {}) {
@@ -288,14 +289,17 @@ export function summarizeDiagnosticChecks(checks) {
  * 采集 Host Agent 四个域的快照并推导诊断。单个域失败只标为不可用，不中断其他域；
  * 失败日志交给调用方决定，后台告警按分钟评估时不应在 Agent 离线期间刷屏。
  */
-export async function loadInfraDiagnostics({ onSourceError } = {}) {
+export async function loadInfraDiagnostics({ onSourceError, loadPushCheck = loadHuaweiReceiptCheck } = {}) {
   const definitions = [
     ['overview', () => getHostAgentDashboard()],
     ['services', () => getHostAgentServices()],
     ['storage', () => getHostAgentStorage()],
     ['security', () => getHostAgentSecurity()],
   ];
-  const settled = await Promise.allSettled(definitions.map(([, loader]) => loader()));
+  const [settled, pushCheck] = await Promise.all([
+    Promise.allSettled(definitions.map(([, loader]) => loader())),
+    loadPushCheck(),
+  ]);
   const snapshots = {};
   const sources = settled.map((result, index) => {
     const domain = definitions[index][0];
@@ -322,5 +326,10 @@ export async function loadInfraDiagnostics({ onSourceError } = {}) {
       code,
     };
   });
-  return deriveInfraDiagnostics(snapshots, sources);
+  const diagnostics = deriveInfraDiagnostics(snapshots, sources);
+  if (pushCheck) {
+    diagnostics.checks.push(pushCheck);
+    Object.assign(diagnostics, summarizeDiagnosticChecks(diagnostics.checks));
+  }
+  return diagnostics;
 }
