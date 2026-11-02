@@ -61,6 +61,7 @@
       multiple: boolean;
       // null 表示不在文件选择器层设置固定上限，由业务层按动态配额统一校验。
       maxTotalSize?: number | null;
+      maxCount?: number | null;
       // 直传场景(如云空间→OBS)开启:图片也按原始 File 透传,不转 Base64。
       // 默认 false 保持旧行为({isImg, file: base64}),避免影响依赖 Base64 预览的调用方(如意见反馈)。
       rawFile?: boolean;
@@ -77,6 +78,7 @@
       accept: '',
       multiple: false,
       maxTotalSize: 10 * 1024 * 1024,
+      maxCount: null,
       rawFile: false,
       disabled: false,
       ariaLabel: '',
@@ -111,6 +113,12 @@
 
   function handleFileChange(event: Event) {
     const input = event.target as HTMLInputElement;
+    // 先看数量，不遍历 File.size、读原件或创建 FileReader；超量不截断。
+    if (props.maxCount != null && (input.files?.length || 0) > props.maxCount) {
+      resetNativeInput();
+      message.warning(t('cloudSpace.uploadSelectionLimit', { count: props.maxCount }));
+      return;
+    }
     const files = Array.from(input.files ?? []);
     // File 对象已复制出来，可以立即清空 input，确保再次选择同一文件仍会触发 change。
     resetNativeInput();

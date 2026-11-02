@@ -14,7 +14,7 @@
         </span>
         <span>
           <strong>{{ t('mobileNavigation.createHub.file') }}</strong>
-          <small>{{ t('mobileNavigation.createHub.fileDescription') }}</small>
+          <small>{{ t('cloudSpace.uploadMobileSelectionHint', { count: CLOUD_UPLOAD_MOBILE_SELECTION_LIMIT }) }}</small>
         </span>
       </div>
       <label class="mobile-cloud-upload__folder">
@@ -28,7 +28,14 @@
         />
         <small>{{ t('cloudSpace.uploadDestinationHint') }}</small>
       </label>
-      <BUpload block multiple raw-file :max-total-size="null" @change="handleFiles">
+      <BUpload
+        block
+        multiple
+        raw-file
+        :max-count="CLOUD_UPLOAD_MOBILE_SELECTION_LIMIT"
+        :max-total-size="null"
+        @change="handleFiles"
+      >
         <BButton block type="primary" class="mobile-cloud-upload__button">
           <SvgIcon :src="icon.file_upload" size="17" aria-hidden="true" />
           {{ t('cloudSpace.chooseFiles') }}
@@ -49,6 +56,7 @@
   import icon from '@/config/icon';
   import type { CloudFolderNode } from '@/types/cloudFolder';
   import { flattenCloudFolderTree } from '@/utils/cloudFolderTree';
+  import { CLOUD_UPLOAD_MOBILE_SELECTION_LIMIT } from '@/utils/cloudUploadQueue';
 
   const props = withDefaults(
     defineProps<{
