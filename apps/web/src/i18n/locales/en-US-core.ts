@@ -1795,6 +1795,8 @@ export default {
       openToolAgain: 'Open tool again',
       pinTool: 'Pin to Everyday tools in Workshop overview',
       unpinTool: 'Unpin from Everyday tools in Workshop overview',
+      pinLoadFailed: 'Could not load pinned tools. Click a pin button to retry.',
+      pinSaveFailed: 'Could not save pinned tools. Please try again.',
       pinLimit: 'You can pin up to {count} tools',
       developerToolbox: 'Developer toolkit',
       developerToolboxDescription: 'Standalone tools for web extraction, encoding conversion, and network queries.',

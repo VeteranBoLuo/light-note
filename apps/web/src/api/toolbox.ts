@@ -715,3 +715,17 @@ export async function reviewToolboxComparison(
   if (response.status !== 200) throw apiFailure(response, 'TOOLBOX_COMPARISON_FAILED');
   return response.data;
 }
+
+export type ToolboxPinnedTools = { initialized: boolean; toolIds: string[] };
+export async function fetchToolboxPinnedTools(): Promise<ToolboxPinnedTools> {
+  const response = await apiBaseGet('/api/toolbox/pinned-tools', undefined, { silent: true });
+  if (response.status !== 200) throw apiFailure(response, 'TOOLBOX_PINS_LOAD_FAILED');
+  return response.data as ToolboxPinnedTools;
+}
+export async function saveToolboxPinnedTools(
+  input: { action: 'migrate'; toolIds: string[] } | { toolId: string; pinned: boolean },
+): Promise<ToolboxPinnedTools> {
+  const response = await apiBasePost('/api/toolbox/pinned-tools', input, { silent: true });
+  if (response.status !== 200) throw apiFailure(response, 'TOOLBOX_PINS_SAVE_FAILED');
+  return response.data as ToolboxPinnedTools;
+}

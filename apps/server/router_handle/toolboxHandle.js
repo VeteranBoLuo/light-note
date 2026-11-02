@@ -1,3 +1,4 @@
+import { getToolboxPinnedTools, updateToolboxPinnedTools } from '../util/services/toolboxPinnedToolsService.js';
 import { listToolboxTaskPage } from '../util/toolbox/taskList.js';
 import pool from '../db/index.js';
 import { reviewComparisonCell } from '../util/toolbox/comparisonReview.js';
@@ -562,6 +563,23 @@ export async function reviewComparison(req, res) {
       input: req.body,
     });
     return res.send(resultData(receipt));
+  } catch (error) {
+    return sendError(res, error);
+  }
+}
+
+export async function getPinnedTools(req, res) {
+  if (!requireRead(req, res)) return;
+  try {
+    return res.send(resultData(await getToolboxPinnedTools({ user: req.resourceUser || req.user })));
+  } catch (error) {
+    return sendError(res, error);
+  }
+}
+export async function savePinnedTools(req, res) {
+  if (!requireWrite(req, res)) return;
+  try {
+    return res.send(resultData(await updateToolboxPinnedTools({ user: req.user, input: req.body })));
   } catch (error) {
     return sendError(res, error);
   }

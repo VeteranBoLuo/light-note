@@ -259,7 +259,6 @@ describe('知识工具箱前端边界', () => {
     expect(home).toContain('overviewFailed');
     expect(home).toContain('class="toolbox-guest-guide"');
     expect(home).toContain('readToolboxRecentUses');
-    expect(home).toContain('readToolboxPinnedTools');
     expect(home).toContain('TOOLBOX_DEFAULT_QUICK_TOOL_IDS');
     expect(home).toContain('resolveToolboxQuickToolIds(pinnedToolIds.value)');
     expect(TOOLBOX_DEFAULT_QUICK_TOOL_IDS[0]).toBe('material_to_note');

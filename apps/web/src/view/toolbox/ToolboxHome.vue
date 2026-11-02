@@ -417,13 +417,15 @@
                       @open="openTool(tool)"
                     />
                     <BTooltip
-                      v-if="!isGuest"
+                      v-if="!user.adminContext"
                       class="toolbox-card__pin-wrap"
                       :class="{ 'is-pinned': isPinned(tool.id) }"
                       :title="t(isPinned(tool.id) ? 'toolbox.home.unpinTool' : 'toolbox.home.pinTool')"
                     >
                       <BButton
                         class="toolbox-card__pin"
+                        :disabled="pinsLoading || (!!savingToolId && savingToolId !== tool.id)"
+                        :loading="savingToolId === tool.id"
                         icon-only
                         type="text"
                         :class="{ 'is-pinned': isPinned(tool.id) }"
@@ -507,11 +509,8 @@
     type ToolboxRecentUse,
   } from '@/utils/toolboxRecentUse';
   import { restoreToolboxScrollSnapshot, saveToolboxScrollSnapshot } from '@/utils/toolboxNavigation';
-  import {
-    readToolboxPinnedTools,
-    toggleToolboxPinnedTool,
-    TOOLBOX_PINNED_TOOL_LIMIT,
-  } from '@/utils/toolboxPinnedTools';
+  import { useToolboxPinnedTools } from '@/composables/useToolboxPinnedTools';
+  import { TOOLBOX_PINNED_TOOL_LIMIT } from '@/utils/toolboxPinnedTools';
 
   import {
     toolboxTaskTitle,
@@ -553,7 +552,6 @@
   const tools = ref<ToolboxCatalogItem[]>([]);
   const overview = ref<ToolboxHomeOverview | null>(null);
   const localRecentUses = ref<ToolboxRecentUse[]>([]);
-  const pinnedToolIds = ref<string[]>([]);
   const viewScrollOffsets = new Map<string, number>();
   const homeView = computed({
     get: () => (route.query.view === 'catalog' ? 'catalog' : 'work'),
@@ -977,16 +975,18 @@
     rememberHomeScroll();
     void router.push(toolboxToolPath(entry.toolId as ToolboxToolId));
   }
-  function refreshPinnedTools() {
-    pinnedToolIds.value = readToolboxPinnedTools(user, { allowedToolIds: enabledToolIds.value });
-  }
+  const {
+    toolIds: pinnedToolIds,
+    savingToolId,
+    loading: pinsLoading,
+    refresh: refreshPinnedTools,
+    toggle: togglePinnedTool,
+  } = useToolboxPinnedTools(user, enabledToolIds, (kind) => {
+    if (kind === 'limit') message.warning(t('toolbox.home.pinLimit', { count: TOOLBOX_PINNED_TOOL_LIMIT }));
+    else message.error(t(kind === 'load' ? 'toolbox.home.pinLoadFailed' : 'toolbox.home.pinSaveFailed'));
+  });
   function isPinned(toolId: string) {
     return pinnedToolIds.value.includes(toolId);
-  }
-  function togglePinnedTool(toolId: string) {
-    const result = toggleToolboxPinnedTool(user, toolId, { allowedToolIds: enabledToolIds.value });
-    pinnedToolIds.value = result.toolIds;
-    if (result.limitReached) message.warning(t('toolbox.home.pinLimit', { count: TOOLBOX_PINNED_TOOL_LIMIT }));
   }
   function refreshLocalRecentUses() {
     localRecentUses.value = readToolboxRecentUses(user, { allowedToolIds: enabledToolIds.value });
@@ -1000,7 +1000,7 @@
         (tool) => tool.availability.enabled || (import.meta.env.DEV && tool.id === 'extraction'),
       );
       refreshLocalRecentUses();
-      refreshPinnedTools();
+      void refreshPinnedTools();
     } catch {
       tools.value = TOOLBOX_TOOL_CATALOG.filter(
         (tool) => tool.availability.enabled && tool.executionMode === 'browser' && tool.billingMedium === 'free',
@@ -1011,7 +1011,7 @@
       catalogDegraded.value = true;
       catalogFailed.value = tools.value.length === 0;
       refreshLocalRecentUses();
-      refreshPinnedTools();
+      void refreshPinnedTools();
     } finally {
       catalogLoading.value = false;
     }
@@ -1044,7 +1044,7 @@
   watch(identityKey, () => {
     viewScrollOffsets.clear();
     refreshLocalRecentUses();
-    refreshPinnedTools();
+    void refreshPinnedTools();
     overview.value = null;
     void loadOverview();
     if (!isGuest.value) void Promise.all([loadGrowth(), loadAiQuota()]);

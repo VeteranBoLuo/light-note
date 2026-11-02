@@ -384,7 +384,24 @@ const summaryJob: ToolboxJob = {
 };
 let entryDismissed = false;
 const comparisonFixture = createComparisonFixture(params);
+const pinAccountKey = 'lightnote.fixture.account-pins';
+(window as any).pinFixture = { fail: false, delay: 0, requests: [] as any[] };
 request.defaults.adapter = async (config) => {
+  if (config.url === '/api/toolbox/pinned-tools') {
+    const fixture = (window as any).pinFixture;
+    const input = typeof config.data === 'string' ? JSON.parse(config.data) : config.data;
+    fixture.requests.push({ method: config.method, input });
+    if (fixture.delay) await new Promise(resolve => setTimeout(resolve, fixture.delay));
+    if (fixture.fail) throw new Error('fixture pins unavailable');
+    let saved = JSON.parse(sessionStorage.getItem(pinAccountKey) || 'null') as string[] | null;
+    if (config.method === 'post') {
+      if (input.action === 'migrate') saved ??= input.toolIds;
+      else saved = input.pinned ? [...new Set([...(saved || []), input.toolId])] : (saved || []).filter(id => id !== input.toolId);
+      sessionStorage.setItem(pinAccountKey, JSON.stringify(saved));
+    }
+    return response(config, { initialized: saved !== null, toolIds: saved || [] });
+  }
+
   const feedbackPath = params.get('feedbackPath');
   if (feedbackPath && String(config.url).includes(feedbackPath) && (!params.get('feedbackMethod') || config.method === params.get('feedbackMethod'))) {
     const feedback = (window as any).toolboxFeedbackFixture ||= {

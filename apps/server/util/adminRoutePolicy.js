@@ -468,6 +468,7 @@ declare(ADMIN_POLICIES.AI_USE, 'ai_skill', [
 ]);
 declare(ADMIN_POLICIES.READ, 'toolbox', [
   ['GET', '/toolbox/catalog'],
+  ['GET', '/toolbox/pinned-tools'],
   ['GET', '/toolbox/home'],
   ['GET', '/toolbox/project-entry'],
   ['GET', '/toolbox/knowledge-overview'],
@@ -486,6 +487,7 @@ declare(ADMIN_POLICIES.READ, 'toolbox', [
 // 代管上下文中替数据主体执行，哪怕当前模式是 maintain。
 declare(ADMIN_POLICIES.ACCOUNT_WRITE, 'toolbox', [
   ['POST', '/toolbox/quotes'],
+  ['POST', '/toolbox/pinned-tools'],
   ['POST', '/toolbox/translation/stream'],
   ['POST', '/toolbox/translation/history/delete'],
   ['POST', '/toolbox/project-entry/dismiss'],

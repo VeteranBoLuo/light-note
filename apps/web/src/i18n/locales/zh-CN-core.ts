@@ -1724,6 +1724,8 @@ export default {
       openToolAgain: '重新打开工具',
       pinTool: '固定到工坊概览的常用工具',
       unpinTool: '从工坊概览的常用工具中取消固定',
+      pinLoadFailed: '置顶工具加载失败，点击置顶按钮重试',
+      pinSaveFailed: '置顶保存失败，请重试',
       pinLimit: '最多固定 {count} 个工具',
       developerToolbox: '开发者工具箱',
       developerToolboxDescription: '网页提取、编码转换、网络查询等独立工具。',
