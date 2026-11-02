@@ -84,6 +84,9 @@ export default {
       accountRequired: '请重新确认登录',
       serviceDisabled: '后台通知服务未开启',
       storageUnavailable: '通知连接信息无法保存',
+      updateRequired: '请更新 App 以恢复通知',
+      applicationMismatch: '安装包的通知配置不匹配',
+      installationRetired: '旧安装的通知连接已自动替换',
     },
     description: {
       idle: '登录并允许通知后自动连接。',
@@ -94,10 +97,13 @@ export default {
       retrying: '通知连接请求失败，App 打开时会自动重试。后台通知尚不可用，站内通知仍可使用。',
       unavailable: '尚未确认此设备支持后台通知。App 打开时会继续检查，站内通知仍可使用。',
       offline: '联网后会自动检查并恢复连接，无需重新登录。',
-      deviceLimit: '当前账号已达到通知设备数量上限。请联系管理员清理不再使用的设备，再点击「重新检查」。站内通知仍可使用。',
+      deviceLimit: '通知连接数量已达上限，暂时无法连接。站内通知仍可使用。',
       accountRequired: '当前登录状态无法绑定通知，请重新登录后再检查。站内已有通知仍可查看。',
       serviceDisabled: '服务器尚未开启 App 后台通知，请联系管理员检查服务配置。站内通知仍可使用。',
       storageUnavailable: 'App 无法保存当前设备的通知连接信息，请检查存储空间后重试。站内通知仍可使用。',
+      updateRequired: '请安装最新版轻笺。升级后会自动恢复通知连接，无需管理设备。',
+      applicationMismatch: '请安装与当前服务匹配的轻笺版本，通知连接会自动恢复。站内通知仍可使用。',
+      installationRetired: '这次安装已被同一设备的较新安装替换。请使用当前安装，站内通知仍可使用。',
     },
   },
 
@@ -307,6 +313,7 @@ export default {
       unsupported: '当前环境不支持浏览器推送。iPhone / iPad 请添加到主屏幕后打开',
       unavailable: '浏览器推送服务暂未开启',
       error: '操作失败，请重新检查后重试',
+      deviceLimit: '通知连接数量已达上限，暂时无法连接。站内通知仍可使用。',
     },
   },
   organizeWizard: {

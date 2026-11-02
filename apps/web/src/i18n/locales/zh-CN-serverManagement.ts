@@ -268,6 +268,7 @@ export default {
           ioBusy: { title: '磁盘 IO 忙碌度', recommendation: '结合吞吐趋势判断是否有持续写入、备份或队列积压。' },
         },
         services: {
+          huaweiReceipts: { title: '华为业务回执', recommendation: '核对华为控制台回调地址、鉴权与应用配置，再用真实设备验证；厂商受理不代表设备送达。' },
           health: { title: '固定服务健康', recommendation: '先查看目标服务日志；仅对允许的 Worker 执行带审计的重启。' },
         },
         security: {
@@ -279,6 +280,8 @@ export default {
         },
       },
       evidence: {
+        huaweiReceipts: '24 小时内受理超过 15 分钟：{accepted} 次 · 已匹配验签回执：{receipts} 次',
+        huaweiReceiptsUnconfigured: '华为推送已开启，送达回执配置不可用',
         percent: '当前 {percent}%',
         memory: '当前 {percent}% · {used} / {total}',
         capacity: '{mount} 已使用 {percent}% · 剩余 {free}',

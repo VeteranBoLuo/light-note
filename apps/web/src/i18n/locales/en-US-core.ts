@@ -84,6 +84,9 @@ export default {
       accountRequired: 'Sign in again to connect',
       serviceDisabled: 'Background notification service is off',
       storageUnavailable: 'Unable to save notification connection',
+      updateRequired: 'Update the app to restore notifications',
+      applicationMismatch: 'App notification configuration does not match',
+      installationRetired: 'This old installation was replaced automatically',
     },
     description: {
       idle: 'Sign in and allow notifications to connect automatically.',
@@ -96,10 +99,13 @@ export default {
       unavailable:
         'Background notification support is not confirmed on this device. We keep checking while the app is open. In-app notifications remain available.',
       offline: 'Connection will be checked and restored when you are back online. No need to sign in again.',
-      deviceLimit: 'This account has reached its notification device limit. Ask an administrator to remove unused devices, then select Check again. In-app notifications remain available.',
+      deviceLimit: 'The notification connection limit has been reached. In-app notifications remain available.',
       accountRequired: 'The current sign-in cannot connect notifications. Sign in again and check the connection. Existing in-app notifications remain available.',
       serviceDisabled: 'App background notifications are not enabled on the server. Ask an administrator to check the service settings. In-app notifications remain available.',
       storageUnavailable: 'The app cannot save this device’s notification connection. Check available storage and try again. In-app notifications remain available.',
+      updateRequired: 'Install the latest Light Note app. Notifications reconnect automatically after the update; no device management is needed.',
+      applicationMismatch: 'Install the Light Note version matching this service. Notifications reconnect automatically. In-app notifications remain available.',
+      installationRetired: 'A newer installation on this device has replaced this one. Use the current installation; in-app notifications remain available.',
     },
   },
 
@@ -312,6 +318,7 @@ export default {
       unsupported: 'Push is unavailable here. On iPhone / iPad, add this site to your Home Screen and open it',
       unavailable: 'Browser push service is not enabled yet',
       error: 'The operation failed. Check again and retry',
+      deviceLimit: 'The notification connection limit has been reached. In-app notifications remain available.',
     },
   },
   organizeWizard: {

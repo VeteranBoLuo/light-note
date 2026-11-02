@@ -384,6 +384,13 @@
   }
   function evidenceText(check: InfraDiagnosticCheck) {
     const evidence = check.evidence || {};
+    if (check.id === 'services.huaweiReceipts')
+      return evidence.configured === false
+        ? t('serverManagement.diagnosticsPage.evidence.huaweiReceiptsUnconfigured')
+        : t('serverManagement.diagnosticsPage.evidence.huaweiReceipts', {
+            accepted: evidence.accepted ?? '—',
+            receipts: evidence.receipts ?? '—',
+          });
     if (check.state === 'unknown' && !Object.values(evidence).some((value) => value != null))
       return t('serverManagement.diagnosticsPage.evidence.unavailable');
     if (check.id === 'system.cpu' || check.id === 'storage.ioBusy')

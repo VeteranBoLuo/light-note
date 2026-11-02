@@ -15,6 +15,7 @@ import { isMobileViewport, usesMobileDeviceLayout } from '@/config/responsive';
 import { applyUiDensity } from '@/composables/useUiDensity';
 import request from '@/http/request';
 import globalDirect from '@/config/globalDirect';
+import type { InfraDiagnosticCheck } from '@/api/infraApi';
 import zh from '@/i18n/locales/zh-CN';
 import en from '@/i18n/locales/en-US';
 import '@/assets/css/index.less';
@@ -208,7 +209,7 @@ const diagnostics = {
       domain: 'security',
       target: { module: 'security', findingId: f.id },
     })),
-  ],
+  ] as InfraDiagnosticCheck[],
   sources: ['overview', 'services', 'storage', 'security'].map((domain) => ({
     domain,
     state: 'available',
@@ -216,6 +217,14 @@ const diagnostics = {
     collectionErrorCount: 0,
   })),
 };
+if (params.has('huaweiReceipts')) {
+  diagnostics.checks.push({
+    id: 'services.huaweiReceipts', domain: 'services', state: 'fail', severity: 'high',
+    evidence: { configured: true, accepted: 12, receipts: 0 },
+    target: { module: 'services', serviceId: 'lightnote-browser-push-worker' },
+  });
+  diagnostics.summary.failed++;
+}
 if (state === 'healthy') {
   services.forEach((service) => (service.state = 'running'));
   findings.forEach((finding) => (finding.state = 'pass'));
