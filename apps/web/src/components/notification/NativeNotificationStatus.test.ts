@@ -37,10 +37,13 @@ function mount() {
   app.mount(host);
 }
 it.each([
-  ['deviceLimit', '通知设备数量已满', '清理不再使用的设备'],
+  ['deviceLimit', '通知设备数量已满', '通知连接数量已达上限'],
   ['accountRequired', '请重新确认登录', '重新登录后再检查'],
   ['serviceDisabled', '后台通知服务未开启', '联系管理员检查服务配置'],
   ['storageUnavailable', '通知连接信息无法保存', '检查存储空间后重试'],
+  ['updateRequired', '请更新 App 以恢复通知', '请安装最新版轻笺'],
+  ['applicationMismatch', '安装包的通知配置不匹配', '当前服务匹配'],
+  ['installationRetired', '旧安装的通知连接已自动替换', '较新安装替换'],
 ] as const)('explains %s while keeping system permission independent', (state, title, description) => {
   updateNativeNotificationStatus(state, 'alice');
   updateNativeNotificationDevice({ systemEnabled: true, settingsAvailable: true }, 'alice');
@@ -51,6 +54,7 @@ it.each([
   expect(host.querySelector('[role="switch"]')?.getAttribute('aria-checked')).toBe('true');
   expect(host.querySelector('section')?.classList.contains('is-error')).toBe(true);
   expect(host.textContent).toContain('重新检查');
+  expect(host.textContent).not.toContain('清理不再使用的设备');
 });
 it('shows confirmed status, offline state and local notification preference independently', async () => {
   mount();

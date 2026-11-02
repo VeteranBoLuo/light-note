@@ -9,7 +9,7 @@ interface Binding {
   userId: string;
 }
 export type BrowserPushState =
-  'loading' | 'pending' | 'off' | 'on' | 'denied' | 'unsupported' | 'unavailable' | 'error' | 'invalid';
+  'loading' | 'pending' | 'off' | 'on' | 'denied' | 'unsupported' | 'unavailable' | 'error' | 'invalid' | 'deviceLimit';
 const state = ref<BrowserPushState>('loading');
 export interface PushDiagnostics {
   permission: NotificationPermission | null;
@@ -54,6 +54,7 @@ let config: { available: boolean; publicKey: string; userId: string; enabled: bo
 let currentOwner = '';
 let generation = 0;
 let ownerGeneration = 0;
+let subscribeRetryAt = 0;
 const platformSupported = () =>
   typeof window !== 'undefined' &&
   window.isSecureContext &&
@@ -106,7 +107,11 @@ async function bindingMessage(type: string, binding?: Binding | null): Promise<B
 async function post(path: string, body: unknown = {}) {
   const response = await apiBasePost(`/api/notification/browser/${path}`, body, { silent: true });
   if (response?.status !== 200)
-    throw new Error(response?.msg === 'PUSH_SUBSCRIPTION_INVALID' ? response.msg : 'PUSH_REQUEST_FAILED');
+    throw new Error(
+      ['PUSH_SUBSCRIPTION_INVALID', 'BROWSER_PUSH_DEVICE_LIMIT'].includes(response?.msg)
+        ? response.msg
+        : 'PUSH_REQUEST_FAILED',
+    );
   return response.data;
 }
 export async function clearBrowserPush(): Promise<void> {
@@ -147,6 +152,7 @@ export async function clearBrowserPush(): Promise<void> {
 }
 export async function syncBrowserPushOwner(userId: string) {
   const ownerEpoch = ++ownerGeneration;
+  subscribeRetryAt = 0;
   diagnostics.value = emptyDiagnostics();
   currentOwner = userId;
   config = null;
@@ -217,13 +223,29 @@ export async function refreshBrowserPush() {
         next.enabled && binding?.userId === next.userId && subscription && Notification.permission === 'granted'
           ? 'on'
           : 'pending';
-    if (preferred.value && !enabled.value && !next.invalid && next.available && Notification.permission === 'granted') {
+    if (
+      preferred.value &&
+      !enabled.value &&
+      !next.invalid &&
+      next.available &&
+      Notification.permission === 'granted' &&
+      Date.now() < subscribeRetryAt
+    )
+      state.value = 'deviceLimit';
+    if (
+      preferred.value &&
+      !enabled.value &&
+      !next.invalid &&
+      next.available &&
+      Notification.permission === 'granted' &&
+      Date.now() >= subscribeRetryAt
+    ) {
       await setEnabled(true, navigator.language, false);
     }
   } catch {
     if (requestGeneration === generation) {
       state.value = 'error';
-      diagnostics.value = { ...diagnostics.value, stale: true };
+      diagnostics.value = { ...diagnostics.value, permission: Notification.permission, stale: true };
     }
   } finally {
     if (refreshingGeneration === requestGeneration) refreshingGeneration = null;
@@ -290,6 +312,7 @@ async function setEnabled(nextEnabled: boolean, locale: string, requestPermissio
     }
     if (config) config.invalid = false;
     enabled.value = true;
+    subscribeRetryAt = 0;
     diagnostics.value = {
       permission,
       subscription: 'present',
@@ -303,9 +326,11 @@ async function setEnabled(nextEnabled: boolean, locale: string, requestPermissio
   } catch (error) {
     if (owner === currentOwner && requestGeneration === generation) {
       const invalid = error instanceof Error && error.message === 'PUSH_SUBSCRIPTION_INVALID';
+      const deviceLimit = error instanceof Error && error.message === 'BROWSER_PUSH_DEVICE_LIMIT';
+      if (deviceLimit) subscribeRetryAt = Date.now() + 60000;
       if (invalid && config) config.invalid = true;
       enabled.value = false;
-      state.value = invalid ? 'invalid' : 'error';
+      state.value = invalid ? 'invalid' : deviceLimit ? 'deviceLimit' : 'error';
       diagnostics.value = {
         ...diagnostics.value,
         invalid: invalid || diagnostics.value.invalid,

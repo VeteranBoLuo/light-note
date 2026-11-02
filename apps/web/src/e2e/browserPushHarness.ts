@@ -23,6 +23,7 @@ if (params.has('native')) {
 }
 let fixtureInvalid = scenario === 'invalid' || scenario === 'error';
 let fixtureBinding: any = { id: 'fixture-subscription', generation: 'fixture-generation', userId: 'fixture-user' };
+if (scenario === 'deviceLimit') fixtureBinding = null;
 let fixtureSubscription: any;
 if (scenario) {
   const makeSubscription = (endpoint: string): any => ({
@@ -115,6 +116,8 @@ request.defaults.adapter = async (config) => {
       userId: 'fixture-user',
       publicKey: 'B' + 'A'.repeat(86),
     });
+  if (url.endsWith('/notification/browser/subscribe') && scenario === 'deviceLimit')
+    return { ...ok(null), data: { status: 409, data: null, msg: 'BROWSER_PUSH_DEVICE_LIMIT' } };
   if (url.endsWith('/notification/browser/subscribe'))
     return ok({ id: 'fixture-subscription', generation: 'new-generation', userId: 'fixture-user' });
   if (url.endsWith('/notification/browser/activate')) {

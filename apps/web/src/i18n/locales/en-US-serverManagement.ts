@@ -287,6 +287,7 @@ export default {
           },
         },
         services: {
+          huaweiReceipts: { title: 'Huawei business receipts', recommendation: 'Verify the Huawei callback URL, authentication and app settings, then test on a real device. Provider acceptance does not prove delivery.' },
           health: {
             title: 'Fixed-service health',
             recommendation: 'Inspect the target logs first; restart only allowlisted workers with audit.',
@@ -304,6 +305,8 @@ export default {
         },
       },
       evidence: {
+        huaweiReceipts: 'Accepted over 15 minutes ago in 24h: {accepted} · Matched authenticated receipts: {receipts}',
+        huaweiReceiptsUnconfigured: 'Huawei push is enabled but receipt configuration is unavailable',
         percent: 'Current: {percent}%',
         memory: 'Current: {percent}% · {used} / {total}',
         capacity: '{mount}: {percent}% used · {free} free',

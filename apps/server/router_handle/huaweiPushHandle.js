@@ -1,5 +1,6 @@
 import { resultData } from '../util/common.js';
 import { huaweiPushEnabled } from '../util/huaweiPushPolicy.js';
+import pool from '../db/index.js';
 import {
   bindHuaweiSubscription,
   activatePushSubscription,
@@ -25,8 +26,24 @@ export async function subscribe(req, res) {
   if (!uid) return;
   if (!huaweiPushEnabled()) return res.send(resultData(null, 503, 'HUAWEI_PUSH_DISABLED'));
   try {
-    res.send(resultData(await bindHuaweiSubscription(uid, req.body?.deviceToken, req.body?.previousBinding ?? null)));
+    if (req.body?.protocolVersion !== undefined && ![1, 2].includes(req.body.protocolVersion))
+      return res.send(resultData(null, 400, 'HUAWEI_PUSH_INSTALLATION_INVALID'));
+    const installation = req.body?.protocolVersion === 2 ? req.body?.installation : null;
+    if (req.body?.protocolVersion === 2 && !installation)
+      return res.send(resultData(null, 400, 'HUAWEI_PUSH_INSTALLATION_INVALID'));
+    const binding = installation
+      ? await bindHuaweiSubscription(uid, req.body?.deviceToken, req.body?.previousBinding ?? null, pool, installation)
+      : await bindHuaweiSubscription(uid, req.body?.deviceToken, req.body?.previousBinding ?? null);
+    res.send(resultData(binding));
   } catch (error) {
+    if (error?.code === 'PUSH_INSTALLATION_CHALLENGE_REQUIRED')
+      return res.send(
+        resultData(
+          { currentInstallationId: error.currentInstallationId },
+          409,
+          'HUAWEI_PUSH_INSTALLATION_CHALLENGE_REQUIRED',
+        ),
+      );
     const failures = {
       PUSH_DEVICE_LIMIT: [409, 'HUAWEI_PUSH_DEVICE_LIMIT'],
       PUSH_BINDING_EXPIRED: [409, 'HUAWEI_PUSH_BINDING_EXPIRED'],
@@ -34,6 +51,13 @@ export async function subscribe(req, res) {
       INVALID_PUSH_BINDING: [400, 'HUAWEI_PUSH_BINDING_INVALID'],
       INVALID_HUAWEI_TOKEN: [400, 'HUAWEI_PUSH_TOKEN_INVALID'],
       PUSH_SUBSCRIPTION_INVALID: [410, 'HUAWEI_PUSH_TOKEN_INVALID'],
+      INVALID_HUAWEI_INSTALLATION: [400, 'HUAWEI_PUSH_INSTALLATION_INVALID'],
+      HUAWEI_PUSH_APPLICATION_MISMATCH: [409, 'HUAWEI_PUSH_APPLICATION_MISMATCH'],
+      HUAWEI_PUSH_TOKEN_OWNER_MISMATCH: [410, 'HUAWEI_PUSH_TOKEN_INVALID'],
+      HUAWEI_PUSH_CLIENT_UPGRADE_REQUIRED: [409, 'HUAWEI_PUSH_CLIENT_UPGRADE_REQUIRED'],
+      HUAWEI_PUSH_INSTALLATION_UNAVAILABLE: [503, 'HUAWEI_PUSH_INSTALLATION_UNAVAILABLE'],
+      PUSH_INSTALLATION_RETIRED: [409, 'HUAWEI_PUSH_INSTALLATION_RETIRED'],
+      PUSH_INSTALLATION_SUPERSEDED: [409, 'HUAWEI_PUSH_INSTALLATION_SUPERSEDED'],
     };
     const [status, code] = failures[error?.code] || [500, 'HUAWEI_PUSH_BIND_FAILED'];
     res.send(resultData(null, status, code));

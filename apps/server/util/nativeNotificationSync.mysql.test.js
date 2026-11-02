@@ -5,7 +5,18 @@ import * as feedSchema from './communityFeed/schema.js';
 import { browserPushTableSql } from './browserPushSchema.js';
 import { ensureHuaweiPushDeliverySchema } from './huaweiPushDeliverySchema.js';
 import {
+  installHuaweiPushInstallationSchema,
+  assertHuaweiPushInstallationSchema,
+} from './huaweiPushInstallationSchema.js';
+import { bindHuaweiInstallation, bindLegacyHuaweiInstallation } from './huaweiPushInstallations.js';
+import {
+  previewLegacyHuaweiCleanup,
+  applyLegacyHuaweiCleanup,
+  pruneInactivePushSubscriptions,
+} from './huaweiPushMaintenance.js';
+import {
   bindHuaweiSubscription,
+  bindPushSubscription,
   activatePushSubscription,
   unbindPushSubscription,
   expandPushOutbox,
@@ -34,6 +45,7 @@ describe.skipIf(!socketPath)('native notification real SQL', () => {
     db = mysql.createPool({ socketPath, user: 'root', database: schema });
     for (const sql of COMMUNITY_CHAT_TABLE_SQL) await db.query(sql);
     for (const sql of browserPushTableSql) await db.query(sql);
+    await installHuaweiPushInstallationSchema(db);
     await ensureHuaweiPushDeliverySchema(db);
     await db.query(
       "CREATE TABLE user (id char(36) PRIMARY KEY, del_flag tinyint DEFAULT 0, role varchar(20) DEFAULT 'user', preferences json)",
@@ -61,6 +73,7 @@ describe.skipIf(!socketPath)('native notification real SQL', () => {
     vi.unstubAllEnvs();
     await db.query('DELETE FROM notification');
     await db.query('DELETE FROM browser_push_subscriptions');
+    await db.query('DELETE FROM huawei_push_installations');
     await db.query('DELETE FROM browser_push_jobs');
     await db.query('DELETE FROM user');
     await db.query('DELETE FROM todo_items');
@@ -71,6 +84,303 @@ describe.skipIf(!socketPath)('native notification real SQL', () => {
     await connection.query('INSERT INTO notification SET ?,browser_push_created_at=NOW(6)', [row]);
     return row.id;
   }
+  const managedEnv = {
+    HUAWEI_PUSH_INSTALLATION_V2_ENABLED: 'true',
+    HUAWEI_PUSH_APP_ID: '123',
+    HUAWEI_PUSH_PACKAGE_NAME: 'top.boluo66.lightnote',
+  };
+  const installation = (values = {}) => ({
+    id: randomUUID(),
+    key: 'a'.repeat(64),
+    revision: 1,
+    packageName: 'top.boluo66.lightnote',
+    pushAppId: '123',
+    deviceLabel: 'test-device',
+    identityKind: 'scoped',
+    ...values,
+  });
+  const managedBind = async (token, identity, owner = 'alice', connection = db) => {
+    try {
+      return await bindHuaweiInstallation(owner, token.repeat(100), identity, connection, managedEnv);
+    } catch (error) {
+      if (error.code !== 'PUSH_INSTALLATION_CHALLENGE_REQUIRED') throw error;
+      return bindHuaweiInstallation(
+        owner,
+        token.repeat(100),
+        { ...identity, expectedCurrentId: error.currentInstallationId },
+        connection,
+        managedEnv,
+      );
+    }
+  };
+  it('isolates browser capacity from Huawei history while retaining both limits and full-capacity token rotation', async () => {
+    await db.query("INSERT INTO user (id) VALUES ('alice')");
+    const tokens = Array.from({ length: 20 }, (_, i) => `huawei_history_${i}_` + 'x'.repeat(64));
+    for (const token of tokens) {
+      const binding = await bindHuaweiSubscription('alice', token, null, db);
+      await activatePushSubscription('alice', binding.id, binding.generation, db);
+    }
+    const browser = (i) => ({
+      endpoint: `https://fcm.googleapis.com/fcm/send/browser_${i}`,
+      keys: {
+        p256dh: Buffer.concat([Buffer.from([4]), Buffer.alloc(64, 1)]).toString('base64url'),
+        auth: Buffer.alloc(16, 2).toString('base64url'),
+      },
+    });
+    for (let i = 0; i < 20; i++) await bindPushSubscription('alice', browser(i), 'zh-CN', db);
+    await expect(bindPushSubscription('alice', browser(20), 'zh-CN', db)).rejects.toMatchObject({
+      code: 'PUSH_DEVICE_LIMIT',
+    });
+    await expect(bindHuaweiSubscription('alice', 'new_huawei_' + 'y'.repeat(64), null, db)).rejects.toMatchObject({
+      code: 'PUSH_DEVICE_LIMIT',
+    });
+    const identity = installation();
+    const enrolled = await bindHuaweiInstallation(
+      'alice',
+      tokens[0],
+      { ...identity, expectedCurrentId: null },
+      db,
+      managedEnv,
+    );
+    await activatePushSubscription('alice', enrolled.id, enrolled.generation, db);
+    const rotated = await managedBind('r', { ...identity, revision: 2 });
+    await activatePushSubscription('alice', rotated.id, rotated.generation, db);
+    const [counts] = await db.query(
+      "SELECT CASE WHEN endpoint LIKE 'huawei:%' THEN 'huawei' ELSE 'browser' END AS provider,COUNT(*) AS total FROM browser_push_subscriptions WHERE active IN(1,2) GROUP BY provider ORDER BY provider",
+    );
+    expect(counts).toEqual([
+      { provider: 'browser', total: 20 },
+      { provider: 'huawei', total: 20 },
+    ]);
+  });
+
+  it('requires a live round trip and rejects a delayed first-install claim after a newer install connects', async () => {
+    await db.query("INSERT INTO user (id) VALUES ('alice')");
+    const delayed = installation();
+    await expect(bindHuaweiInstallation('alice', 'a'.repeat(100), delayed, db, managedEnv)).rejects.toMatchObject({
+      code: 'PUSH_INSTALLATION_CHALLENGE_REQUIRED',
+      currentInstallationId: null,
+    });
+    const [[before]] = await db.query('SELECT COUNT(*) total FROM huawei_push_installations');
+    expect(Number(before.total)).toBe(0);
+    const current = await managedBind('b', installation());
+    await activatePushSubscription('alice', current.id, current.generation, db);
+    await expect(
+      bindHuaweiInstallation('alice', 'a'.repeat(100), { ...delayed, expectedCurrentId: null }, db, managedEnv),
+    ).rejects.toMatchObject({ code: 'PUSH_INSTALLATION_SUPERSEDED' });
+    const [[preserved]] = await db.query('SELECT active,generation FROM browser_push_subscriptions WHERE id=?', [
+      current.id,
+    ]);
+    expect(preserved).toEqual({ active: 1, generation: current.generation });
+  });
+
+  it('installs and checks the additive installation schema idempotently without changing legacy rows', async () => {
+    await db.query("INSERT INTO user (id) VALUES ('alice')");
+    const legacy = await bindHuaweiSubscription('alice', 'legacy'.repeat(20), null, db);
+    await installHuaweiPushInstallationSchema(db);
+    await assertHuaweiPushInstallationSchema(db);
+    const [[row]] = await db.query('SELECT installation_id,active FROM browser_push_subscriptions WHERE id=?', [
+      legacy.id,
+    ]);
+    expect(row).toEqual({ installation_id: null, active: 2 });
+  });
+  it('refuses startup when the device uniqueness constraint or generated predicate is wrong', async () => {
+    await db.query('ALTER TABLE huawei_push_installations DROP INDEX uk_huawei_current_device');
+    try {
+      await expect(assertHuaweiPushInstallationSchema(db)).rejects.toMatchObject({
+        code: 'HUAWEI_INSTALLATION_SCHEMA_INVALID',
+      });
+    } finally {
+      await db.query(
+        'ALTER TABLE huawei_push_installations ADD UNIQUE KEY uk_huawei_current_device(user_id,provider_app_id,current_device_key)',
+      );
+    }
+    await db.query(
+      'ALTER TABLE browser_push_subscriptions MODIFY active_installation_id char(36) GENERATED ALWAYS AS (IF(active=1,installation_id,NULL)) STORED',
+    );
+    try {
+      await expect(assertHuaweiPushInstallationSchema(db)).rejects.toMatchObject({
+        code: 'HUAWEI_INSTALLATION_SCHEMA_INVALID',
+      });
+    } finally {
+      await db.query(
+        'ALTER TABLE browser_push_subscriptions MODIFY active_installation_id char(36) GENERATED ALWAYS AS (IF(active IN(1,2),installation_id,NULL)) STORED',
+      );
+    }
+    await assertHuaweiPushInstallationSchema(db);
+  });
+  it('previews cleanup without writes and rejects a changed plan before retiring anything', async () => {
+    await db.query("INSERT INTO user (id) VALUES ('alice')");
+    const keep = await bindHuaweiSubscription('alice', 'k'.repeat(100), null, db);
+    const old = await bindHuaweiSubscription('alice', 'o'.repeat(100), null, db);
+    await activatePushSubscription('alice', keep.id, keep.generation, db);
+    const plan = await previewLegacyHuaweiCleanup(db, 'alice', [keep.id]);
+    expect(plan.candidates.map((row) => row.id)).toEqual([old.id]);
+    const [[untouched]] = await db.query('SELECT active FROM browser_push_subscriptions WHERE id=?', [old.id]);
+    expect(untouched.active).toBe(2);
+    await activatePushSubscription('alice', old.id, old.generation, db);
+    await expect(applyLegacyHuaweiCleanup(db, 'alice', [keep.id], plan.fingerprint)).rejects.toMatchObject({
+      code: 'HUAWEI_CLEANUP_STATE_CHANGED',
+    });
+    await expect(previewLegacyHuaweiCleanup(db, 'alice', [randomUUID()])).rejects.toMatchObject({
+      code: 'HUAWEI_CLEANUP_KEEP_INVALID',
+    });
+    const [[stillActive]] = await db.query('SELECT active FROM browser_push_subscriptions WHERE id=?', [old.id]);
+    expect(stillActive.active).toBe(1);
+  });
+  it('cleans only selected legacy history, cancels jobs, and keeps tombstones across GC and feature rollback', async () => {
+    await db.query("INSERT INTO user (id) VALUES ('alice'),('bob')");
+    const keep = await managedBind('k', installation());
+    const otherPhone = await managedBind('m', installation({ key: 'b'.repeat(64) }));
+    const bob = await bindHuaweiSubscription('bob', 'b'.repeat(100), null, db);
+    const old = await bindHuaweiSubscription('alice', 'o'.repeat(100), null, db);
+    for (const [owner, binding] of [
+      ['alice', keep],
+      ['alice', otherPhone],
+      ['bob', bob],
+      ['alice', old],
+    ])
+      await activatePushSubscription(owner, binding.id, binding.generation, db);
+    const browser = randomUUID();
+    await db.query(
+      "INSERT INTO browser_push_subscriptions (id,user_id,endpoint_hash,endpoint,p256dh,auth,generation,locale,active) VALUES (?,'alice',?,'https://fcm.googleapis.com/test','','',?,'zh-CN',1)",
+      [browser, 'c'.repeat(64), randomUUID()],
+    );
+    await db.query(
+      'INSERT INTO browser_push_jobs (notification_id,subscription_id,generation,expires_at) VALUES (?,?,?,DATE_ADD(NOW(),INTERVAL 1 DAY))',
+      [randomUUID(), old.id, old.generation],
+    );
+    const plan = await previewLegacyHuaweiCleanup(db, 'alice', [keep.id]);
+    expect(plan.candidates.map((row) => row.id)).toEqual([old.id]);
+    expect(await applyLegacyHuaweiCleanup(db, 'alice', [keep.id], plan.fingerprint)).toEqual({
+      retiredCount: 1,
+      keptCount: 1,
+    });
+    vi.stubEnv('HUAWEI_PUSH_INSTALLATION_V2_ENABLED', 'false');
+    await expect(bindHuaweiSubscription('alice', 'o'.repeat(100), null, db)).rejects.toMatchObject({
+      code: 'PUSH_SUBSCRIPTION_INVALID',
+    });
+    await db.query('UPDATE browser_push_subscriptions SET enabled_at=DATE_SUB(NOW(),INTERVAL 8 DAY) WHERE id=?', [
+      old.id,
+    ]);
+    await pruneInactivePushSubscriptions(db);
+    const [[retired]] = await db.query(
+      'SELECT active,endpoint,retired_reason FROM browser_push_subscriptions WHERE id=?',
+      [old.id],
+    );
+    expect(retired).toEqual({ active: 0, endpoint: 'huawei:retired', retired_reason: 'legacy_cleanup' });
+    const [preserved] = await db.query('SELECT id FROM browser_push_subscriptions WHERE active=1');
+    expect(preserved.map((row) => row.id).sort()).toEqual([keep.id, otherPhone.id, bob.id, browser].sort());
+    const [[job]] = await db.query('SELECT status FROM browser_push_jobs WHERE subscription_id=?', [old.id]);
+    expect(job.status).toBe('cancelled');
+  });
+  it('automatically replaces token rotations and reinstalls at the limit while preserving another device', async () => {
+    await db.query("INSERT INTO user (id) VALUES ('alice')");
+    const first = installation();
+    const old = await managedBind('a', first);
+    await activatePushSubscription('alice', old.id, old.generation, db);
+    const other = await managedBind('b', installation({ key: 'b'.repeat(64) }));
+    await activatePushSubscription('alice', other.id, other.generation, db);
+    for (let i = 2; i < 20; i++) {
+      const binding = await bindHuaweiSubscription('alice', `legacy_${i}_` + 'x'.repeat(64), null, db);
+      await activatePushSubscription('alice', binding.id, binding.generation, db);
+    }
+    await db.query(
+      'INSERT INTO browser_push_jobs (notification_id,subscription_id,generation,expires_at) VALUES (?,?,?,DATE_ADD(NOW(),INTERVAL 1 DAY))',
+      [randomUUID(), old.id, old.generation],
+    );
+    const rotated = await managedBind('c', { ...first, revision: 2 });
+    await activatePushSubscription('alice', rotated.id, rotated.generation, db);
+    const fresh = installation();
+    const reinstalled = await managedBind('d', fresh);
+    await activatePushSubscription('alice', reinstalled.id, reinstalled.generation, db);
+    const [[count]] = await db.query('SELECT COUNT(*) total FROM browser_push_subscriptions WHERE active IN(1,2)');
+    expect(Number(count.total)).toBe(20);
+    const [[preserved]] = await db.query('SELECT active,generation FROM browser_push_subscriptions WHERE id=?', [
+      other.id,
+    ]);
+    expect(preserved).toEqual({ active: 1, generation: other.generation });
+    expect(await activatePushSubscription('alice', old.id, old.generation, db)).toBe(false);
+    await expect(managedBind('e', { ...first, revision: 3 })).rejects.toMatchObject({
+      code: 'PUSH_INSTALLATION_RETIRED',
+    });
+    const [[job]] = await db.query('SELECT status FROM browser_push_jobs WHERE subscription_id=?', [old.id]);
+    expect(job.status).toBe('cancelled');
+  });
+  it('reuses an unchanged provider token across reinstalls without losing the retired epoch', async () => {
+    await db.query("INSERT INTO user (id) VALUES ('alice')");
+    const first = installation();
+    const old = await managedBind('a', first);
+    await activatePushSubscription('alice', old.id, old.generation, db);
+    const fresh = installation();
+    const next = await managedBind('a', fresh);
+    expect(next.id).toBe(old.id);
+    expect(next.generation).not.toBe(old.generation);
+    await expect(managedBind('b', first)).rejects.toMatchObject({ code: 'PUSH_INSTALLATION_RETIRED' });
+  });
+  it('deduplicates concurrent responses, rejects stale revisions, and enforces database uniqueness', async () => {
+    await db.query("INSERT INTO user (id) VALUES ('alice')");
+    const identity = installation();
+    const [a, b] = await Promise.all([managedBind('a', identity), managedBind('a', identity)]);
+    expect(a).toEqual(b);
+    const next = await managedBind('b', { ...identity, revision: 2 });
+    await expect(managedBind('a', identity)).rejects.toMatchObject({ code: 'PUSH_INSTALLATION_SUPERSEDED' });
+    await expect(managedBind('c', { ...identity, revision: 2 })).rejects.toMatchObject({
+      code: 'PUSH_INSTALLATION_SUPERSEDED',
+    });
+    await expect(
+      db.query(
+        "INSERT INTO browser_push_subscriptions (id,user_id,endpoint_hash,endpoint,p256dh,auth,generation,active,installation_id,provider_app_id) VALUES (?,'alice',?,'huawei:fixture','','',?,2,?,'123')",
+        [randomUUID(), 'f'.repeat(64), randomUUID(), identity.id],
+      ),
+    ).rejects.toMatchObject({ code: 'ER_DUP_ENTRY' });
+    expect(await activatePushSubscription('alice', next.id, next.generation, db)).toBe(true);
+  });
+  it('adopts exact legacy endpoints, gates legacy additions, and never revives provider-invalid endpoints', async () => {
+    await db.query("INSERT INTO user (id) VALUES ('alice'),('bob')");
+    const old = await bindHuaweiSubscription('alice', 'a'.repeat(100), null, db);
+    await activatePushSubscription('alice', old.id, old.generation, db);
+    const identity = installation();
+    expect(await managedBind('a', identity)).toEqual(old);
+    expect(await bindLegacyHuaweiInstallation('alice', 'a'.repeat(100), db)).toEqual(old);
+    await expect(bindLegacyHuaweiInstallation('alice', 'b'.repeat(100), db)).rejects.toMatchObject({
+      code: 'HUAWEI_PUSH_CLIENT_UPGRADE_REQUIRED',
+    });
+    await expect(managedBind('a', installation({ key: 'c'.repeat(64) }), 'bob')).rejects.toMatchObject({
+      code: 'HUAWEI_PUSH_TOKEN_OWNER_MISMATCH',
+    });
+    await db.query('UPDATE browser_push_subscriptions SET active=3 WHERE id=?', [old.id]);
+    await expect(managedBind('a', { ...identity, revision: 2 })).rejects.toMatchObject({
+      code: 'PUSH_SUBSCRIPTION_INVALID',
+    });
+    const renewed = await managedBind('b', { ...identity, revision: 2 });
+    expect(renewed.id).not.toBe(old.id);
+  });
+  it('rolls back an automatic reinstall when the replacement cannot be saved', async () => {
+    await db.query("INSERT INTO user (id) VALUES ('alice')");
+    const first = installation();
+    const old = await managedBind('a', first);
+    await activatePushSubscription('alice', old.id, old.generation, db);
+    const failing = {
+      getConnection: async () => {
+        const connection = await db.getConnection();
+        return {
+          beginTransaction: () => connection.beginTransaction(),
+          commit: () => connection.commit(),
+          rollback: () => connection.rollback(),
+          release: () => connection.release(),
+          query: (sql, args) =>
+            sql.startsWith('INSERT INTO browser_push_subscriptions')
+              ? Promise.reject(new Error('fixture failure'))
+              : connection.query(sql, args),
+        };
+      },
+    };
+    await expect(managedBind('b', installation(), 'alice', failing)).rejects.toThrow('fixture failure');
+    const [[row]] = await db.query('SELECT active,generation FROM browser_push_subscriptions WHERE id=?', [old.id]);
+    expect(row).toEqual({ active: 1, generation: old.generation });
+    expect(await managedBind('a', first)).toEqual(old);
+  });
   it('replaces a rotated Huawei token at the device limit and cancels only the replaced generation', async () => {
     await db.query("INSERT INTO user (id) VALUES ('alice')");
     const old = await bindHuaweiSubscription('alice', 'a'.repeat(100), null, db);
@@ -179,7 +489,10 @@ describe.skipIf(!socketPath)('native notification real SQL', () => {
     expect(count.total).toBe(2);
     const send = vi.fn(async (_subscription, payload) => {
       const attemptId = payload.huawei.biTag.slice(3);
-      const [[attempt]] = await db.query('SELECT send_status,provider_request_id FROM huawei_push_delivery_attempts WHERE id=?', [attemptId]);
+      const [[attempt]] = await db.query(
+        'SELECT send_status,provider_request_id FROM huawei_push_delivery_attempts WHERE id=?',
+        [attemptId],
+      );
       expect(attempt).toMatchObject({ send_status: 'sending', provider_request_id: null });
       return { requestId: 'provider-' + payload.notificationId };
     });
@@ -188,10 +501,17 @@ describe.skipIf(!socketPath)('native notification real SQL', () => {
     expect(send.mock.calls[0][1].notificationId).toBe(n);
     expect((await processNextPush({ db, env, send })).status).toBe('accepted');
     expect(send.mock.calls[1][1].huawei.category).toBe('MARKETING');
-    const [attempts] = await db.query('SELECT category,send_status,provider_request_id,delivered_at FROM huawei_push_delivery_attempts ORDER BY job_id');
+    const [attempts] = await db.query(
+      'SELECT category,send_status,provider_request_id,delivered_at FROM huawei_push_delivery_attempts ORDER BY job_id',
+    );
     expect(attempts).toEqual([
       { category: 'WORK', send_status: 'accepted', provider_request_id: 'provider-' + n, delivered_at: null },
-      { category: 'MARKETING', send_status: 'accepted', provider_request_id: 'provider-' + send.mock.calls[1][1].notificationId, delivered_at: null },
+      {
+        category: 'MARKETING',
+        send_status: 'accepted',
+        provider_request_id: 'provider-' + send.mock.calls[1][1].notificationId,
+        delivered_at: null,
+      },
     ]);
     expect(await processNextPush({ db, env, send })).toBeNull();
     await add({ type: 'todo_reminder', source_type: 'todo_reminder_job', source_id: 'j', browser_push_pending: 1 });

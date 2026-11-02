@@ -157,7 +157,7 @@ cleanup() {
   fi
 
   if verify_no_leftovers; then
-    [ "$failed" -eq 0 ] && log "已确认 mysqld 退出并删除 $BASE；无残留进程或被占用的已删除文件"
+    [ "$failed" -eq 0 ] && log "已确认 mysqld 退出并删除 ${BASE}；无残留进程或被占用的已删除文件"
   else
     [ "$status" -ne 0 ] || status=1
   fi

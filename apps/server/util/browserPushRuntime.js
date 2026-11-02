@@ -3,7 +3,10 @@ import webpush from 'web-push';
 import { browserPushRelays } from './browserPushTransport.js';
 import { browserPushEnabled } from './browserPushPolicy.js';
 import { huaweiReceiptConfig } from './huaweiPushReceiptPolicy.js';
+import { assertHuaweiPushInstallationSchema } from './huaweiPushInstallationSchema.js';
+import { huaweiInstallationsEnabled } from './huaweiPushInstallations.js';
 export async function assertBrowserPushRuntime(db, env = process.env) {
+  if (huaweiInstallationsEnabled(env)) await assertHuaweiPushInstallationSchema(db);
   await db.query('SELECT browser_push_pending, browser_push_created_at FROM notification LIMIT 0');
   await db.query('SELECT id, generation, enabled_at FROM browser_push_subscriptions LIMIT 0');
   await db.query('SELECT id, generation, lease_token, lease_until, expires_at FROM browser_push_jobs LIMIT 0');

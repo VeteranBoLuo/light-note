@@ -28,6 +28,7 @@ const COMPLETED_RECORD_CLEANUP_BATCH_SIZE = 500;
 const DIRECT_DELETE_TABLES = Object.freeze([
   ['collection_submissions', 'respondent_user_id'],
   ['browser_push_subscriptions', 'user_id'],
+  ['huawei_push_installations', 'user_id'],
   ['notification', 'user_id'],
   ['account_email_health_notices', 'user_id'],
   ['opinion', 'user_id'],

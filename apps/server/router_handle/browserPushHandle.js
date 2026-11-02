@@ -57,8 +57,16 @@ export async function subscribe(req, res) {
     res.send(
       resultData(
         null,
-        error?.code === 'PUSH_SUBSCRIPTION_INVALID' ? 409 : error?.code === 'INVALID_PUSH_SUBSCRIPTION' ? 400 : 500,
-        error?.code === 'PUSH_SUBSCRIPTION_INVALID' ? 'PUSH_SUBSCRIPTION_INVALID' : 'BROWSER_PUSH_SUBSCRIBE_FAILED',
+        ['PUSH_SUBSCRIPTION_INVALID', 'PUSH_DEVICE_LIMIT'].includes(error?.code)
+          ? 409
+          : error?.code === 'INVALID_PUSH_SUBSCRIPTION'
+            ? 400
+            : 500,
+        error?.code === 'PUSH_SUBSCRIPTION_INVALID'
+          ? 'PUSH_SUBSCRIPTION_INVALID'
+          : error?.code === 'PUSH_DEVICE_LIMIT'
+            ? 'BROWSER_PUSH_DEVICE_LIMIT'
+            : 'BROWSER_PUSH_SUBSCRIBE_FAILED',
       ),
     );
   }
