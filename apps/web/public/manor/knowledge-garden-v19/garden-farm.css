@@ -1230,6 +1230,19 @@ html #app .garden-play .seaside-courtyard .tank-caption .tank-collect {
 .seed-discovery { color: #486b33; font-size: max(11px,calc(11px * var(--d))); line-height: 1.5; }
 .seed-discovery.known { color: #867357; }
 #modal .inventory-dialog .seed-copy .seed-use { color: #71542e; }
+/* 背包种子沿用商店种子卡：鱼饵徽标挂在种子袋下沿，产肥说明在收益下方。 */
+#modal .inventory-dialog .seed-card .seed-bait-badge { z-index: 2; bottom: calc(2px * var(--d)); }
+/* 商店卡让种子袋图片铺满画框，徽标里的小图标要恢复成行内尺寸。 */
+#modal .inventory-dialog .seed-card .seed-bait-badge { white-space: nowrap; }
+#modal .inventory-dialog .seed-card .seed-bait-badge img { position: static; inset: auto; width: calc(17px * var(--d)); height: calc(17px * var(--d)); }
+.light-note-mobile-rendering #modal .inventory-dialog .seed-card .seed-bait-badge img { width: 14px; height: 14px; }
+.light-note-mobile-rendering #modal .inventory-dialog .seed-card .seed-bait-badge { bottom: 8px; }
+#modal .inventory-dialog .seed-card .seed-output-note { display: block; margin: calc(2px * var(--d)) 0 calc(6px * var(--d)); color: #6c7e3c; font-size: calc(11px * var(--d)); }
+#modal .inventory-dialog .seed-card .plant-seed-cue { margin: 0 0 calc(6px * var(--d)); }
+#modal .inventory-dialog .seed-card .market-estimate { margin-bottom: calc(8px * var(--d)); }
+/* 电脑端与商店同为每行 3 张；手机沿用商店的两列。 */
+html:not(.light-note-mobile-rendering) #modal .inventory-dialog .seed-market-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+#modal .inventory-dialog .seed-card .market-actions .tile-btn { flex: 1 1 auto; }
 .replant-row { display: flex; align-items: center; gap: calc(12px * var(--d)); padding: calc(10px * var(--d)); margin-bottom: calc(14px * var(--d)); background: #eef1d5; border: 1px solid #b2bf83; border-radius: calc(10px * var(--d)); }
 .replant-art { width: calc(42px * var(--d)); height: calc(42px * var(--d)); flex: none; }
 .replant-art img { width: 100%; height: 100%; object-fit: contain; }
@@ -1356,7 +1369,8 @@ html.light-note-mobile-rendering .seaside-courtyard.farm-staged .hud-more { disp
 .light-note-mobile-rendering #modal .inventory-dialog .seed-choice .seed-copy { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; min-width: 0; }
 .light-note-mobile-rendering #modal .inventory-dialog .seed-choice strong { font-size: 15px; line-height: 1.4; padding-right: 22px; }
 .light-note-mobile-rendering #modal .inventory-dialog .seed-choice small { font-size: 11px; line-height: 1.5; }
-.light-note-mobile-rendering #modal .inventory-dialog .seed-choice :is(.seed-use,.seed-discovery) { display: none; }
+/* 手机卡片保留轮数与收益，只省去图鉴提示。 */
+.light-note-mobile-rendering #modal .inventory-dialog .seed-choice .seed-discovery { display: none; }
 .light-note-mobile-rendering #modal .inventory-dialog .seed-choice .seed-count { position: static; padding: 0; border: 0; background: none; box-shadow: none; font-size: 11px; color: #9b783e; line-height: 1.3; }
 .light-note-mobile-rendering #modal .inventory-dialog .seed-choice > .tile-btn { align-self: center; box-sizing: border-box; min-width: 0; width: calc(72px * var(--d)); height: 44px; min-height: 44px; margin: 0; padding: 0; border-radius: 9px; box-shadow: 0 2px 0 #4c7c36; font-size: 13px; }
 
@@ -1481,6 +1495,8 @@ html.light-note-mobile-rendering #app .garden-play .seaside-courtyard .tank-capt
 .manor-quest small { font-size: calc(12px * var(--d)); color: #967b51; }
 .manor-quest.done { background: #f0f1dc; border-color: #c0cca0; }
 .manor-quest.done small { color: #67804b; }
+.manor-quest.ready { background: #fff3d2; border: 2px solid #e2a63c; }
+.manor-quest.ready small { color: #a8650f; font-weight: 700; }
 .quest-art { width: calc(40px * var(--d)); height: calc(42px * var(--d)); display: grid; place-items: center; }
 .quest-art > :is(img,.game-sprite) { width: 100%; height: 100%; object-fit: contain; }
 .util-btn.has-reward { position: relative; }

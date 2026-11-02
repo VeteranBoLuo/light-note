@@ -275,6 +275,30 @@ describe('庄园加载与主站导航', () => {
     expect(mocks.command).not.toHaveBeenCalled();
   });
 
+  it('去完成每日任务后回到庄园，场景就绪即打开任务列表，且只打开一次', async () => {
+    mocks.read.mockResolvedValue({ quests: [{ key: 'checkin', done: false }], state: {}, revision: 0, version: 'fixture' } as never);
+    const router = await mount();
+    const ready = async () => {
+      const frame = document.querySelector('iframe')!, reply = vi.spyOn(frame.contentWindow!, 'postMessage');
+      window.dispatchEvent(new MessageEvent('message', { source: frame.contentWindow, origin: location.origin, data: { type: 'lightnote-manor', nonce: new URL(frame.src).searchParams.get('bridge'), id: 1, action: 'ready' } }));
+      await flush();
+      return { frame, opened: reply.mock.calls.some(([data]) => (data as { action?: string })?.action === 'open-daily') };
+    };
+    const first = await ready();
+    expect(first.opened).toBe(false);
+    const arrived = new Promise<void>(resolve => { const stop = router.afterEach(to => { if (to.path === '/growth') { stop(); resolve(); } }); });
+    window.dispatchEvent(new MessageEvent('message', { source: first.frame.contentWindow, origin: location.origin,
+      data: { type: 'lightnote-manor', nonce: new URL(first.frame.src).searchParams.get('bridge'), id: 11, action: 'tasks', payload: { index: 0 } } }));
+    await arrived;
+    await router.push('/knowledge-manor');
+    await flush();
+    expect((await ready()).opened).toBe(true);
+    // 再进一次庄园（不经过任务）不再重复打开。
+    app?.unmount(); app = undefined;
+    await mount();
+    expect((await ready()).opened).toBe(false);
+  });
+
   it.each([-1, 1, '0', 0.5])('拒绝无效任务序号 %s，不允许场景任意导航', async index => {
     mocks.read.mockResolvedValue({ quests: [{ key: 'daily_note', done: false }], state: {}, revision: 0, version: 'fixture' } as never);
     const router = await mount(), frame = document.querySelector('iframe')!, reply = vi.spyOn(frame.contentWindow!, 'postMessage');

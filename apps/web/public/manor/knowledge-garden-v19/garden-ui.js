@@ -707,7 +707,9 @@ function dailyDialog() {
   const arts = [toolSprite("daily"), `<img src="knowledge-garden-v19/incoming/dock-r3/atlas.webp" alt="">`, `<img src="knowledge-garden-v19/incoming/dock-r3/backpack.webp" alt="">`];
   const tasks = names.map((name, i) => {
     const received = state.dailyWaterClaims?.[i] || 0,complete = state.dailyDone[i],remaining = R.dailyWater - received;
-    return `<article class="manor-quest ${complete ? "done" : ""}"><div class="quest-art">${arts[i]}</div><div><h3>${name}</h3><small>${complete ? remaining ? "已完成 · 待领取" : "✓ 水滴已领取" : "在轻笺完成"}</small></div><span class="quest-water">${toolSprite("water")}<b>${remaining || R.dailyWater}</b><small>滴</small></span><button class="tile-btn ${!complete || remaining && state.water < R.waterCap ? "primary" : ""}" data-action="${complete ? "claim-daily-water" : "complete-daily"}" data-index="${i}" ${complete && (!remaining || state.water >= R.waterCap) ? "disabled" : ""}>${!complete ? "去完成" : !remaining ? "已领取" : state.water >= R.waterCap ? "水桶已满" : "领取"}</button></article>`;
+    // 三种状态分开配色：未完成用次级按钮去轻笺做；已完成待领取用琥珀描边 + 绿色领取；已领取转为绿色并置灰按钮。
+    const status = !complete ? "todo" : remaining ? "ready" : "done";
+    return `<article class="manor-quest ${status}"><div class="quest-art">${arts[i]}</div><div><h3>${name}</h3><small>${complete ? remaining ? "● 已完成 · 待领取" : "✓ 水滴已领取" : "在轻笺完成"}</small></div><span class="quest-water">${toolSprite("water")}<b>${remaining || R.dailyWater}</b><small>滴</small></span><button class="tile-btn ${complete && remaining && state.water < R.waterCap ? "primary" : !complete ? "quest-go" : ""}" data-action="${complete ? "claim-daily-water" : "complete-daily"}" data-index="${i}" ${complete && (!remaining || state.water >= R.waterCap) ? "disabled" : ""}>${!complete ? "去完成" : !remaining ? "已领取" : state.water >= R.waterCap ? "水桶已满" : "领取"}</button></article>`;
   }).join("");
   const bonusRemaining=R.dailyWaterBonus-(state.dailyWaterBonusClaimed || 0),bonusReady=done===3&&bonusRemaining>0;
   const bonusHint=done<3 ? `再完成 ${3-done} 项解锁` : !bonusRemaining ? "✓ 今日奖励已领取" : state.dailyWaterBonusClaimed ? `余下 ${bonusRemaining} 滴可续领` : "额外奖励已解锁";

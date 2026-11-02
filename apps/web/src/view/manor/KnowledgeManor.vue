@@ -78,6 +78,19 @@
     knowledge_action_1: 'growth.quest_knowledge_action_1', knowledge_action_2: 'growth.quest_knowledge_action_2',
   };
   const current = (g: number) => !disposed && g === generation && owner === user.id && accountEligible();
+  // Leaving for a daily task brings the player back to the task list instead of the bare scene.
+  const DAILY_RESUME_MS = 30 * 60 * 1000;
+  const dailyResumeKey = () => `light-note-manor-daily-resume:${user.id}`;
+  function markDailyResume() {
+    try { sessionStorage.setItem(dailyResumeKey(), String(Date.now())); } catch { /* storage may be blocked */ }
+  }
+  function takeDailyResume() {
+    try {
+      const at = Number(sessionStorage.getItem(dailyResumeKey()));
+      sessionStorage.removeItem(dailyResumeKey());
+      return Number.isFinite(at) && at > 0 && Date.now() - at < DAILY_RESUME_MS;
+    } catch { return false; }
+  }
   const control = (action: string, requestId?: number) => frame.value?.contentWindow?.postMessage({ type: 'lightnote-manor-control', nonce: nonce.value, action, requestId }, location.origin);
   let deliberateLeave = false, navigationSequence = 0;
   let navigationCheck: { id: number; resolve: (allow: boolean) => void } | null = null;
@@ -208,7 +221,11 @@
       }
       else if (data.action === 'loading') { clearTimeout(bootTimer); frameShown.value = true; interactive.value = false; return; }
       // Hand keyboard focus to the scene so manor shortcuts work without a first click.
-      else if (data.action === 'ready') { clearTimeout(bootTimer); frameShown.value = true; interactive.value = true; frame.value?.focus({ preventScroll: true }); return; }
+      else if (data.action === 'ready') {
+        clearTimeout(bootTimer); frameShown.value = true; interactive.value = true; frame.value?.focus({ preventScroll: true });
+        if (takeDailyResume()) control('open-daily');
+        return;
+      }
       else if (data.action === 'get') {
         if (initialRead) await initialRead;
         if (!current(g)) return;
@@ -251,6 +268,7 @@
         const index = data.payload?.index;
         if (index !== undefined && (!Number.isInteger(index) || index < 0 || !snapshot?.quests[index])) throw new Error('quest');
         const key = snapshot?.quests[index]?.key;
+        markDailyResume();
         deliberateLeave = true;
         try { await router.push(key ? resolveDailyQuestRoute(key, bookmark.isMobile) || { path: '/growth', query: { section: key === 'checkin' ? 'overview' : 'tasks' } } : '/growth#growth-daily'); }
         finally { deliberateLeave = false; }

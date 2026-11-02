@@ -183,6 +183,8 @@ function createManorRefreshInput(doc) {
     if (data?.type === 'lightnote-manor-control' && ready) {
       if (data.action === 'close-dialog') backOverlay();
       else if (data.action === 'open-ledger') ledgerDialog();
+      // 从每日任务跳去完成后回到庄园：直接打开任务列表，进度已按最新任务刷新。
+      else if (data.action === 'open-daily') { if (!overlayOpen && !state.guide) dailyDialog(); }
       else if (data.action === 'navigation-back') {
         const allow = !overlayOpen && confirmManorExit();
         if (overlayOpen) backOverlay();
