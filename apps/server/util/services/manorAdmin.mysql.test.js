@@ -201,6 +201,40 @@ describe.skipIf(!socketPath)('庄园后台只读、维护并发与统计（隔�
       VALUES (?,?,?,?,1,'{}',?,?)`,
       [userId, randomUUID(), 'f'.repeat(64), MANOR_VERSION, delta, at],
     );
+  it('每日摘要按自然日统计积分，活跃去重且包含零积分玩法，排除无效与历史操作', async () => {
+    await db.query("UPDATE knowledge_manor_runtime SET coverage_started_at='2026-10-01 00:00:00' WHERE id=1");
+    await db.query("INSERT INTO user VALUES ('b','昨日玩家','user',0),('future','明日玩家','user',0),('legacy','旧客户端','user',0)");
+    const action = async (id, at, name = 'water', effectful = 1) => {
+      const requestId = randomUUID();
+      await db.query(`INSERT INTO knowledge_manor_operations
+        (user_id,request_id,command_hash,model_version,revision,result_json,points_delta,created_at,action,effectful)
+        VALUES (?,?,?,?,1,'{}',0,?,?,?)`, [id, requestId, 'f'.repeat(64), MANOR_VERSION, at, name, effectful]);
+    };
+    await action('a', '2026-10-29 00:00:00');
+    await action('a', '2026-10-29 09:00:00');
+    await action('b', '2026-10-28 23:59:59');
+    await action('future', '2026-10-30 00:00:00');
+    await action('empty', '2026-10-29 09:00:00', 'water', 0);
+    await action('legacy', '2026-10-29 09:00:00', null, null);
+    await action('root', '2026-10-29 09:00:00');
+    await action('disabled', '2026-10-29 09:00:00');
+    await db.query(`INSERT INTO points_log (user_id,delta,reason,create_time) VALUES
+      ('a',200,'manor_sale','2026-10-29 00:00:00'),('a',-300,'manor_cost','2026-10-29 09:00:00'),
+      ('a',20,'manor_sale','2026-10-28 23:59:59'),('a',999,'manor_sale','2026-10-30 00:00:00'),
+      ('a',100,'checkin','2026-10-29 09:00:00'),('root',50,'manor_sale','2026-10-29 09:00:00'),
+      ('disabled',999,'manor_sale','2026-10-29 09:00:00')`);
+    const result = await admin.summary();
+    expect(result.activeToday).toBe(1);
+    expect(result.activityPartialToday).toBe(false);
+    expect(result.daily.at(-1)).toEqual({ day: '2026-10-29', issued: 200, spent: 300, net: -100 });
+    expect(result.daily.at(-2)).toEqual({ day: '2026-10-28', issued: 20, spent: 0, net: 20 });
+    const all = await admin.summary({ hideInternal: false });
+    expect(all.activeToday).toBe(2);
+    expect(all.daily.at(-1)).toEqual({ day: '2026-10-29', issued: 250, spent: 300, net: -50 });
+    expect((await db.query('SELECT * FROM knowledge_manors'))[0]).toEqual([]);
+    await db.query('UPDATE knowledge_manor_runtime SET coverage_started_at=NULL WHERE id=1');
+    expect((await admin.summary()).activeToday).toBeNull();
+  });
   it('账号收入按滚动 7 天汇总收支与净额，400 不标记、401 标记，默认排除内部与停用账号', async () => {
     await db.query("INSERT INTO user VALUES ('b','薄荷','user',0),('c','松果','user',0),('t','测试号','test',0)");
     // 时钟为北京时间 10-29 10:00，窗口起点 10-22 10:00（含）。
