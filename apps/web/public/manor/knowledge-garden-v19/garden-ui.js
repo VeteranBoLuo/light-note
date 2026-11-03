@@ -202,14 +202,14 @@ function hudHTML() {
 // 完整说明在按钮的读屏标签里
 const dockArt = (kind) => `<img class="dock-art" src="knowledge-garden-v19/incoming/dock-r3/${kind}.webp" alt="" draggable="false">`;
 function dockHTML() {
-  const waiting = state.fish.filter((f) => !activeFishIds().includes(f.id)).length;
+  const waiting = state.fish.filter((f) => !activeFishIds().includes(f.id) && f.id !== revealPending?.id).length;
   const btn = (action, dock, icon, title, detail, chip = "", dot = false, key = hotkeyOf(action)) =>
   `<button class="dock-btn" data-action="${action}" data-dock="${dock}" title="${title}${key ? `（${key}）` : ""}"${key ? ` aria-keyshortcuts="${key}"` : ""} aria-label="${title}，${detail}${dot ? "，有待处理的内容" : ""}"${dock === "farm" ? ` aria-controls="tankProduction" aria-expanded="${!!$("#tankProduction") && !$("#tankProduction").hidden}" aria-haspopup="dialog"` : ""}><span class="dock-disc">${icon}${chip !== "" ? `<b class="dock-chip" aria-hidden="true">${chip}</b>` : ""}${dot ? '<i class="dock-dot" aria-hidden="true"></i>' : ""}</span><span class="dock-title">${title}</span></button>`;
   const seeds = Object.values(state.seeds).reduce((a, b) => a + b, 0),
     crops = Object.values(state.crops).reduce((a, b) => a + b, 0);
   const dex = Object.keys(state.discoveries).length + Object.keys(state.cropDex).length,
     dexAll = Object.keys(FISH).length + Object.keys(M.CROPS).length;
-  const living = activeFishIds().filter(Boolean).length,ready = farmReady(),unread = M.atlasUnreadEntries(state, FISH).length;
+  const living = activeFishIds().filter(Boolean).length,ready = farmReady(),unread = M.atlasUnreadEntries(state, FISH).filter((item) => !(revealPending && item.type === "fish" && item.key === revealPending.kind)).length;
   return (
     '<div class="farm-destinations">' + (
     isMobileView() && FarmStage.cal().area === "garden" ? btn("area-garden", "garden", FarmArt.packet("radish"), "菜园", "当前区域") : "") +
@@ -765,8 +765,19 @@ function focusFishing() {
   $("#pondSpot")?.scrollIntoView({ behavior: "smooth", block: "center" });
   $(".pond-hit")?.focus({ preventScroll: true });
 }
+// 抛竿动画期间仍可在场景里点一下就完成的操作：收菜、浇水、捡礼物、领过滤器的水、领养鱼舱肥料。
+// 会弹框的操作等收竿后再做，避免挡住水面和钓获揭晓。
+const CAST_FREE_ACTIONS = new Set(["plot", "bird-seed", "poop", "purifier-collect", "tank-manage", "production-tab", "production-close", "collect"]);
+const fishingBusy = () => state.casting || fishingPhase !== "idle";
+// 动画结束前不让角标透露这一竿钓到了什么（服务端在抛竿时已结算并写进存档）。
+let revealPending = null;
+function castFreeAction(a, b) {
+  if (!CAST_FREE_ACTIONS.has(a)) return false;
+  // 点地块只放行直接收菜和浇水；空地选种、看生长详情都会弹框。
+  return a !== "plot" || ["ripe", "dry"].includes(M.plotState(state, +b.dataset.plot));
+}
 async function cast(event, choice = null) {
-  if (state.casting) {if (fishingPhase === "bite") finishReel?.();return;}
+  if (fishingBusy()) {if (fishingPhase === "bite") finishReel?.();return;}
   // 在 click 阶段再锁定一次落点，避免 focus 顺序、触控或悬停位置不同步。
   if (event?.detail > 0) GardenCourtyard.aimAtPointer(event);
   const selected = choice || state.preferredBait || "bait";
@@ -779,13 +790,16 @@ async function cast(event, choice = null) {
   const pondEl = $("#pondSpot");
   // 抛竿时就确定结果：只有真的上钩才播放咬钩，空竿只有轻轻一碰
   const result = await M.resolveCast(state, FISH, Math.random, forced === "random" ? null : forced);
+  revealPending = result.fish ? { id: result.fish.id, kind: result.fish.kind } : null;
   state.casting = true;
   catchResult = null;
   fishingPhase = "cast";
   const inputSession = FishingInput.start({
     target: $(".garden-scene"),
     canReel: () => state === session && fishingPhase === "bite",
-    onReel: () => finishReel?.()
+    onReel: () => finishReel?.(),
+    // 点到可操作的东西就交给它处理（放行或提示稍后），只有空地、水面和空格算收竿。
+    passThrough: (el) => {const b = el.closest?.("[data-action]");return !!b && b.dataset.action !== "cast";}
   });
   updatePond();
   lockToolbar(true);
@@ -828,6 +842,7 @@ async function cast(event, choice = null) {
     fishingPhase = "idle";
     fishingSpot = "sea";
     const caught = result.fish;
+    revealPending = null;
     update();
     if (!caught) {
       // 保底仍由服务端结算，水面只提示今天还剩几次免费
@@ -844,6 +859,7 @@ async function cast(event, choice = null) {
     // 重置演示场景后，旧动画不得清除新一轮垂钓的收竿回调或操作锁。
     if (state === session) {
       state.casting = false;
+      revealPending = null;
       fishingPhase = "idle";
       fishingSpot = "sea";
       updatePond();
@@ -1306,7 +1322,7 @@ function init() {
       catch { b.disabled = false; toast("暂时无法重置，请稍后重试"); }
       return;
     }
-    if (state.casting && a !== "close" && a !== "cast") return;
+    if (fishingBusy() && a !== "close" && a !== "cast" && !castFreeAction(a, b)) {toast("等这一竿收完再操作", { topCenter: true });return;}
     if (!["plot", "fert-select", "fert-cancel", "tool-select", "tools-toggle", "tool-cancel"].includes(a)) FarmUI.cancelTool();
     // 引导期间只响应引导里的操作和第 1 块地
     if (state.guide && !["guide-adopt", "plot", "close"].includes(a) && !(state.guide === "plant" && a === "plant-seed")) return;

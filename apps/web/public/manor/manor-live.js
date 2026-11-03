@@ -73,8 +73,12 @@ function createManorRefreshInput(doc) {
     syncOverlay(true);
   };
   const apply = (target, next) => {
+    // 服务端在抛竿时就结算完了；动画期间收菜或后台校准带回的「不在钓鱼」不能打断水面动画，
+    // 由动画结束时按原流程清除。
+    const animating = target.casting && typeof fishingPhase !== 'undefined' && fishingPhase !== 'idle';
     for (const name of Object.keys(target)) if (!(name in next)) delete target[name];
     Object.assign(target, next);
+    if (animating) target.casting = true;
   };
   const send = (target, action, args) => {
     if (busy) return Promise.reject(new Error('庄园操作正在处理中'));
