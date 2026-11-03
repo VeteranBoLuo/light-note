@@ -1,3 +1,4 @@
+import { Readable } from 'node:stream';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const axiosGet = vi.hoisted(() => vi.fn());
@@ -5,6 +6,32 @@ vi.mock('axios', () => ({ default: { get: (...args) => axiosGet(...args) } }));
 
 const { checkUrlLiveness, classifyWebPageSnapshot, extractReadableBodyText, fetchWebMeta } =
   await import('./fetchWebMeta.js');
+
+/** 模拟按需下载的超大网页：头部与正文在前，其后是大量内联脚本，记录实际被读取的字节数。 */
+function largeHtmlStream({ head, article, paddingBytes }) {
+  const prefix = Buffer.from(`<html><head>${head}</head><body>${article}<script>`);
+  const chunk = Buffer.alloc(64 * 1024, 'x');
+  let served = 0;
+  let sentPrefix = false;
+  const stream = new Readable({
+    read() {
+      if (!sentPrefix) {
+        sentPrefix = true;
+        served += prefix.length;
+        this.push(prefix);
+        return;
+      }
+      if (served >= prefix.length + paddingBytes) {
+        this.push(Buffer.from('</script></body></html>'));
+        this.push(null);
+        return;
+      }
+      served += chunk.length;
+      this.push(chunk);
+    },
+  });
+  return { stream, bytesServed: () => served };
+}
 
 describe('fetchWebMeta', () => {
   beforeEach(() => {
@@ -142,37 +169,165 @@ describe('fetchWebMeta', () => {
     expect(classifyWebPageSnapshot({ status: 503, title: 'Error', bodyText: 'Unavailable' })).toBe('FETCH_FAILED');
   });
 
-  it('把响应体超过预算与普通网络失败区分开', async () => {
+  it('超过读取预算的长网页按预算截断后照常提取，不再整篇失败', async () => {
+    const page = largeHtmlStream({
+      head: '<meta property="og:title" content="图很多的长文章"><meta property="og:description" content="文章开头的分享描述">',
+      article: '<article><p>位于预算之内的真实正文内容，足够用于识别网页。</p></article>',
+      paddingBytes: 3 * 1024 * 1024,
+    });
+    axiosGet.mockResolvedValueOnce({ headers: { 'content-type': 'text/html; charset=utf-8' }, data: page.stream });
+
+    await expect(fetchWebMeta('https://large.example.com/article')).resolves.toMatchObject({
+      ok: true,
+      title: '图很多的长文章',
+      description: '文章开头的分享描述',
+      bodyText: expect.stringContaining('真实正文内容'),
+      source: 'static_html',
+    });
+    expect(axiosGet.mock.calls[0][1]).toMatchObject({ responseType: 'stream' });
+    expect(axiosGet.mock.calls[0][1]).not.toHaveProperty('maxContentLength');
+    // 默认 1.5MB 预算：读到预算即停止并销毁响应，不继续下载剩余内容。
+    expect(page.bytesServed()).toBeLessThan(2 * 1024 * 1024);
+    expect(page.stream.destroyed).toBe(true);
+  });
+
+  it('显式正文读取可提高预算，但不超过 4MB 绝对上限', async () => {
+    const page = largeHtmlStream({
+      head: '<title>长文章</title>',
+      article: '<article><p>有效正文内容，足够用于识别网页的长度。</p></article>',
+      paddingBytes: 8 * 1024 * 1024,
+    });
+    axiosGet.mockResolvedValueOnce({ headers: { 'content-type': 'text/html; charset=utf-8' }, data: page.stream });
+
+    await expect(
+      fetchWebMeta('https://example.com/bounded-article', { maxContentBytes: 20 * 1024 * 1024 }),
+    ).resolves.toMatchObject({ ok: true, title: '长文章' });
+    expect(page.bytesServed()).toBeGreaterThanOrEqual(4 * 1024 * 1024);
+    expect(page.bytesServed()).toBeLessThan(5 * 1024 * 1024);
+  });
+
+  it('响应头到达后正文迟迟读不完时按原时限返回超时', async () => {
+    const stream = new Readable({ read() {} });
+    stream.push('<html><head><title>慢网页</title>');
+    axiosGet.mockResolvedValueOnce({ headers: { 'content-type': 'text/html' }, data: stream });
+
+    await expect(fetchWebMeta('https://slow.example.com/article', { timeout: 30 })).resolves.toEqual({
+      ok: false,
+      reason: 'TIMEOUT',
+    });
+    expect(stream.destroyed).toBe(true);
+  });
+
+  it('读取正文期间用户取消时继续向上传播取消', async () => {
+    const controller = new AbortController();
+    const stream = new Readable({ read() {} });
+    stream.push('<html><head><title>读取中</title>');
+    axiosGet.mockResolvedValueOnce({ headers: { 'content-type': 'text/html' }, data: stream });
+
+    const pending = fetchWebMeta('https://example.com/article', { signal: controller.signal });
+    setTimeout(() => controller.abort(), 5);
+    await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+    expect(stream.destroyed).toBe(true);
+  });
+
+  it('按流读取非标准状态码的错误页并判型', async () => {
     axiosGet.mockRejectedValueOnce({
-      code: 'ERR_BAD_RESPONSE',
-      message: 'maxContentLength size of 1572864 exceeded',
+      response: {
+        status: 850,
+        headers: { 'content-type': 'text/html' },
+        data: Readable.from([Buffer.from('<html><title>Access verification</title><body>Checking your browser</body></html>')]),
+      },
+    });
+    expect(await fetchWebMeta('https://example.com')).toEqual({ ok: false, reason: 'ACCESS_CHALLENGE' });
+  });
+
+  it('不读取的错误响应会被销毁，不占用连接', async () => {
+    const stream = new Readable({ read() {} });
+    axiosGet.mockRejectedValueOnce({ response: { status: 404, headers: { 'content-type': 'text/html' }, data: stream } });
+    expect(await fetchWebMeta('https://example.com/missing')).toEqual({ ok: false, reason: 'NOT_FOUND' });
+    expect(stream.destroyed).toBe(true);
+  });
+
+  it('带分享标题的图文短文章不因页面脚本里的 Cookie/跳转代码被判为验证页', async () => {
+    axiosGet.mockResolvedValueOnce({
+      headers: { 'content-type': 'text/html; charset=utf-8' },
+      data: Buffer.from(`
+        <html><head>
+          <meta property="og:title" content="周末出游的十张照片">
+          <meta property="og:description" content="随手拍">
+          <script>if (document.cookie.indexOf('lang') < 0) { setLang(); } function go(u) { location.href = u; }</script>
+        </head><body>
+          <div id="js_content"><p>${'这一段是图片之间的简短配文。'.repeat(8)}</p><img data-src="a.jpg"><img data-src="b.jpg"></div>
+        </body></html>`),
     });
 
-    await expect(fetchWebMeta('https://large.example.com/article')).resolves.toEqual({
-      ok: false,
-      reason: 'CONTENT_TOO_LARGE',
+    await expect(fetchWebMeta('https://example.com/s/photo-post')).resolves.toMatchObject({
+      ok: true,
+      title: '周末出游的十张照片',
+      source: 'static_html',
     });
   });
 
-  it('允许显式正文读取提高响应预算，但不超过 4MB 绝对上限', async () => {
-    axiosGet.mockResolvedValue({
+  it('带分享标题但正文显示验证文案时仍判为访问验证', async () => {
+    axiosGet.mockResolvedValueOnce({
       headers: { 'content-type': 'text/html; charset=utf-8' },
-      data: Buffer.from('<html><head><title>长文章</title></head><body><article>有效正文</article></body></html>'),
+      data: Buffer.from(`
+        <html><head><meta property="og:title" content="站点首页"></head>
+        <body><p>当前环境异常，完成验证后即可继续访问。</p>
+        <script>document.cookie = 'token=' + sign(); location.reload();</script></body></html>`),
     });
 
-    await expect(
-      fetchWebMeta('https://example.com/large-article', { maxContentBytes: 4 * 1024 * 1024 }),
-    ).resolves.toMatchObject({ ok: true, title: '长文章' });
-    expect(axiosGet).toHaveBeenLastCalledWith(
-      'https://example.com/large-article',
-      expect.objectContaining({ maxContentLength: 4 * 1024 * 1024 }),
-    );
+    await expect(fetchWebMeta('https://example.com/s/verify')).resolves.toEqual({
+      ok: false,
+      reason: 'ACCESS_CHALLENGE',
+    });
+  });
 
-    await fetchWebMeta('https://example.com/bounded-article', { maxContentBytes: 20 * 1024 * 1024 });
-    expect(axiosGet).toHaveBeenLastCalledWith(
-      'https://example.com/bounded-article',
-      expect.objectContaining({ maxContentLength: 4 * 1024 * 1024 }),
-    );
+  it('渲染结果带分享标题时同样不被页面脚本特征误判', async () => {
+    axiosGet.mockResolvedValueOnce({
+      headers: { 'content-type': 'text/html; charset=utf-8' },
+      data: Buffer.from('<html><body><div id="app"></div><script src="/app.js"></script></body></html>'),
+    });
+    const renderer = vi.fn().mockResolvedValue({
+      ok: true,
+      url: 'https://example.com/post/1',
+      status: 200,
+      documentTitle: '页面标题',
+      meta: { 'og:title': '渲染后的分享标题' },
+      jsonLd: [],
+      bodyText: '图片之间的简短配文。'.repeat(10),
+      signals: { scriptCount: 6, diagnosticText: "document.cookie = 'a=1'; window.location.hash = '#top';" },
+    });
+
+    await expect(fetchWebMeta('https://example.com/post/1', { renderFallback: true, renderer })).resolves.toMatchObject({
+      ok: true,
+      title: '渲染后的分享标题',
+      source: 'rendered_dom',
+    });
+    expect(renderer).toHaveBeenCalledOnce();
+  });
+
+  it('内容已被删除的提示页判为不存在，而不是访问验证', () => {
+    expect(
+      classifyWebPageSnapshot({
+        bodyText: '该内容已被发布者删除',
+        scriptCount: 5,
+        diagnosticText: "document.cookie = 'a=1'; location.href = '/';",
+      }),
+    ).toBe('NOT_FOUND');
+    expect(
+      classifyWebPageSnapshot({
+        title: '如何恢复误删的文件',
+        bodyText: `如果文件已被删除，可以先检查回收站。${'接着按照步骤逐项排查并恢复备份。'.repeat(20)}`,
+      }),
+    ).toBe('');
+    expect(
+      classifyWebPageSnapshot({
+        title: '这条视频已被平台删除',
+        description: '平台回应了用户的质疑',
+        bodyText: '平台今日回应称，相关视频因违反社区规范下架，用户可通过申诉渠道反馈。',
+      }),
+    ).toBe('');
   });
 
   it('识别微信公众号环境验证页，不把验证文案当成文章正文', async () => {

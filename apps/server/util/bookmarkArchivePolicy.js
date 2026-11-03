@@ -14,7 +14,7 @@ const messages = {
   AUTH_REQUIRED: '该页面需要登录，服务器无法读取你的站点登录状态',
   ACCESS_CHALLENGE: '网站要求访问验证，请在浏览器中打开后查看',
   ACCESS_DENIED: '网站拒绝自动读取，请在浏览器中查看',
-  NOT_FOUND: '该页面返回 404 或 410，请检查书签网址',
+  NOT_FOUND: '该页面已不存在或内容已被删除，请检查书签网址',
   TIMEOUT: '读取网页超时，可稍后重试',
   DNS_FAILED: '暂时无法解析网站地址，可稍后重试',
   TLS_FAILED: '网站证书验证失败，请检查原网站',

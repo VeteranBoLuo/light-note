@@ -12431,7 +12431,7 @@ export default {
       ACCESS_CHALLENGE:
         'This website requires verification. Open the original page to complete it and read the page. Browser verification is not shared with the content reading service.',
       ACCESS_DENIED: 'This website blocks automated reading. Open the original page to read it.',
-      NOT_FOUND: 'This page no longer exists (404 or 410). Please check the bookmark URL.',
+      NOT_FOUND: 'This page no longer exists or its content was deleted. Please check the bookmark URL.',
       TIMEOUT: 'Reading the page timed out. Retry later or open the original page.',
       DNS_FAILED: 'The website address could not be resolved. Please retry later.',
       TLS_FAILED: 'The website certificate could not be verified. Please check the original website.',

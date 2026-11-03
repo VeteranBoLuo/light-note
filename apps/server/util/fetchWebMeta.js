@@ -63,8 +63,58 @@ function normalizeMaxContentBytes(value) {
   return Math.min(Math.trunc(parsed), ABSOLUTE_MAX_CONTENT_BYTES);
 }
 
-function isContentLimitError(error) {
-  return /maxContentLength size of \d+ exceeded/i.test(String(error?.message || ''));
+function discardResponseBody(body) {
+  if (typeof body?.destroy === 'function' && !body.destroyed) body.destroy();
+}
+
+/**
+ * 只读取响应的前 maxBytes 字节：超出预算的网页截断后照常解析，不整篇失败。
+ * 标题与 Open Graph 等元信息位于文档开头，长网页的正文通常也在预算之内；内存上限与原预算相同。
+ * axios 流式响应在响应头到达后不再计时，正文读取由这里按剩余时限约束。
+ */
+function readBoundedBody(body, { maxBytes, timeoutMs, signal }) {
+  if (typeof body?.on !== 'function') {
+    const buffer =
+      typeof body === 'string' || ArrayBuffer.isView(body) || body instanceof ArrayBuffer
+        ? Buffer.from(body)
+        : Buffer.alloc(0);
+    return Promise.resolve(buffer.subarray(0, maxBytes));
+  }
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    let total = 0;
+    let settled = false;
+    let timer;
+    const finish = (error, stop = false) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      signal?.removeEventListener('abort', onAbort);
+      if (stop) discardResponseBody(body);
+      if (error) reject(error);
+      else resolve(Buffer.concat(chunks, total));
+    };
+    function onAbort() {
+      finish(Object.assign(new Error('请求已取消'), { name: 'AbortError' }), true);
+    }
+    timer = setTimeout(
+      () => finish(Object.assign(new Error(`timeout of ${timeoutMs}ms exceeded`), { code: 'ECONNABORTED' }), true),
+      Math.max(1, timeoutMs),
+    );
+    if (signal?.aborted) return onAbort();
+    signal?.addEventListener('abort', onAbort, { once: true });
+    body.on('data', (chunk) => {
+      if (settled) return;
+      const part = chunk.length > maxBytes - total ? chunk.subarray(0, maxBytes - total) : chunk;
+      chunks.push(part);
+      total += part.length;
+      if (total >= maxBytes) finish(null, true);
+    });
+    body.on('end', () => finish(null));
+    // 截断后主动销毁仍会触发 close/error，保留监听以免出现未处理的流错误。
+    body.on('error', (error) => finish(error));
+    body.on('close', () => finish(Object.assign(new Error('网页响应提前结束'), { code: 'ECONNRESET' })));
+  });
 }
 
 function isXiaohongshuHost(hostname) {
@@ -259,10 +309,13 @@ const LOADING_SHELL_PATTERNS = Object.freeze([
   /(?:视频|直播|页面|内容|数据)?(?:正在)?加载中/u,
   /\b(?:loading|please wait)\b/iu,
 ]);
+const DELETED_CONTENT_PATTERN = /已被(?:发布者|作者|原作者|用户|管理员|平台)?删除/u;
 
 /**
  * 不按站点名判断，而按页面可观察特征区分脚本空壳、环境验证、登录门槛与真空页。
  * 只有正文/元信息不足时才把通用 captcha 脚本等信号当成拦截，避免误伤正文里提到验证的文章。
+ * hasShareTitle 表示页面带 Open Graph / Twitter 分享标题：这是站点为该页面编写的元信息，
+ * 不能只凭页面脚本里常见的 Cookie/跳转代码判为验证页；可见的验证文案仍然生效。
  */
 export function classifyWebPageSnapshot({
   title = '',
@@ -272,6 +325,7 @@ export function classifyWebPageSnapshot({
   noscriptText = '',
   scriptCount = 0,
   passwordInput = false,
+  hasShareTitle = false,
   status = 200,
   minimumBodyLength = 0,
 } = {}) {
@@ -300,9 +354,12 @@ export function classifyWebPageSnapshot({
     return 'NOT_FOUND';
   if (normalizedBody.length < 600 && /请求存在异常|暂时限制本次访问|访问过于频繁/iu.test(normalizedBody))
     return 'ACCESS_DENIED';
+  // 只看短页面的正文：标题或长文里提到“已被删除”的文章不能当成删除提示页。
+  if (normalizedBody.length < 240 && DELETED_CONTENT_PATTERN.test(normalizedBody)) return 'NOT_FOUND';
   const hasUsefulMetadata = normalizedTitle.length >= 3 && normalizedDescription.length >= 8;
   const hasUsefulBody = normalizedBody.length >= 40;
-  const lowInformation = normalizedBody.length < 600 && !hasUsefulMetadata;
+  const lowInformation =
+    normalizedBody.length < 600 && !hasUsefulMetadata && !(hasShareTitle && normalizedTitle.length >= 3);
   const visibleChallenge = VISIBLE_ACCESS_CHALLENGE_PATTERNS.some((pattern) =>
     pattern.test(`${normalizedTitle}\n${normalizedBody}`),
   );
@@ -466,8 +523,9 @@ function extractStaticPageSnapshot(html, bodyLimit) {
   const jsonLd = extractJsonLdFields(jsonLdSources, bodyLimit);
   const readableBody = extractReadableBodyText(html, bodyLimit);
   const bodyText = readableBody.length >= 40 ? readableBody : jsonLd.bodyText || readableBody;
+  const shareTitle = extractMeta(html, 'og:title') || extractMeta(html, 'twitter:title');
   return {
-    title: extractMeta(html, 'og:title') || extractMeta(html, 'twitter:title') || extractTitle(html) || jsonLd.title,
+    title: shareTitle || extractTitle(html) || jsonLd.title,
     description:
       extractMeta(html, 'og:description') ||
       extractMeta(html, 'twitter:description') ||
@@ -482,6 +540,7 @@ function extractStaticPageSnapshot(html, bodyLimit) {
       noscriptText,
       scriptCount,
       passwordInput,
+      hasShareTitle: Boolean(shareTitle),
     },
   };
 }
@@ -499,10 +558,8 @@ function renderedMetaValue(meta, ...keys) {
 function normalizeRenderedPageSnapshot(snapshot, { originalUrl, bodyLimit, minimumBodyLength }) {
   if (!snapshot?.ok) return snapshot || { ok: false, reason: 'RENDERER_FAILED' };
   const jsonLd = extractJsonLdFields(snapshot.jsonLd, bodyLimit);
-  const title =
-    renderedMetaValue(snapshot.meta, 'og:title', 'twitter:title') ||
-    String(snapshot.documentTitle || '').trim() ||
-    jsonLd.title;
+  const shareTitle = renderedMetaValue(snapshot.meta, 'og:title', 'twitter:title');
+  const title = shareTitle || String(snapshot.documentTitle || '').trim() || jsonLd.title;
   const description =
     renderedMetaValue(snapshot.meta, 'og:description', 'twitter:description', 'description') || jsonLd.description;
   const siteName = renderedMetaValue(snapshot.meta, 'og:site_name', 'application-name') || jsonLd.siteName;
@@ -519,6 +576,7 @@ function normalizeRenderedPageSnapshot(snapshot, { originalUrl, bodyLimit, minim
     noscriptText: snapshot.signals?.noscriptText,
     scriptCount: snapshot.signals?.scriptCount,
     passwordInput: snapshot.signals?.passwordInput,
+    hasShareTitle: Boolean(shareTitle),
     status: snapshot.status,
     minimumBodyLength,
   });
@@ -597,12 +655,14 @@ export async function fetchWebMeta(
   let responseUrl = target.href;
   let staticFailure = '';
   const contentBudget = normalizeMaxContentBytes(maxContentBytes);
+  const started = Date.now();
+  const remainingTimeout = () => Math.max(1, timeout - (Date.now() - started));
   try {
     const requestOptions = {
       timeout,
       maxRedirects: MAX_REDIRECTS,
-      maxContentLength: contentBudget,
-      responseType: 'arraybuffer',
+      // 流式读取并在预算处截断；正文由 readBoundedBody 读取。
+      responseType: 'stream',
       httpAgent: guardedHttpAgent,
       httpsAgent: guardedHttpsAgent,
       validateStatus: (s) => s >= 200 && s < 400,
@@ -616,7 +676,6 @@ export async function fetchWebMeta(
       },
       signal,
     };
-    const started = Date.now();
     let resp;
     try {
       resp = await axios.get(target.href, requestOptions);
@@ -644,10 +703,10 @@ export async function fetchWebMeta(
     contentType = resp.headers?.['content-type'] || '';
     // 只处理 HTML/文本，二进制（PDF/图片等）直接放弃
     if (contentType && !/text\/html|application\/xhtml|text\/plain|application\/xml/i.test(contentType)) {
+      discardResponseBody(resp.data);
       return { ok: false, reason: 'NOT_HTML' };
     }
-    buf = Buffer.from(resp.data);
-    if (buf.length > contentBudget) return { ok: false, reason: 'CONTENT_TOO_LARGE' };
+    buf = await readBoundedBody(resp.data, { maxBytes: contentBudget, timeoutMs: remainingTimeout(), signal });
   } catch (e) {
     // 用户主动停止或上游超时时必须继续向上传播，不能降级成 FETCH_FAILED 后又调用模型，
     // 否则界面虽然显示“已停止”，服务器仍会在后台继续消耗资源。
@@ -657,27 +716,36 @@ export async function fetchWebMeta(
     if (String(e?.message || '').includes('BLOCKED_PRIVATE_IP')) {
       return { ok: false, reason: 'BLOCKED_HOST' };
     }
-    if (isContentLimitError(e)) return { ok: false, reason: 'CONTENT_TOO_LARGE' };
     const status = Number(e?.response?.status || 0);
+    const errorBody = e?.response?.data;
     if (status === 401 || status === 403) staticFailure = 'ACCESS_DENIED';
-    if (status === 404 || status === 410) return { ok: false, reason: 'NOT_FOUND' };
-    if (status === 429) return { ok: false, reason: 'RATE_LIMITED' };
-    if (
-      status >= 400 &&
-      (typeof e.response?.data === 'string' || ArrayBuffer.isView(e.response?.data)) &&
-      !staticFailure
-    ) {
-      const errorType = e.response.headers?.['content-type'] || '';
-      const errorBuffer = Buffer.from(e.response.data);
-      if (errorBuffer.length > contentBudget) return { ok: false, reason: 'CONTENT_TOO_LARGE' };
-      if (/text\/html|application\/xhtml/i.test(errorType)) {
+    if (status === 404 || status === 410) {
+      discardResponseBody(errorBody);
+      return { ok: false, reason: 'NOT_FOUND' };
+    }
+    if (status === 429) {
+      discardResponseBody(errorBody);
+      return { ok: false, reason: 'RATE_LIMITED' };
+    }
+    const errorType = e?.response?.headers?.['content-type'] || '';
+    if (status >= 400 && !staticFailure && /text\/html|application\/xhtml/i.test(errorType)) {
+      try {
+        const errorBuffer = await readBoundedBody(errorBody, {
+          maxBytes: contentBudget,
+          timeoutMs: remainingTimeout(),
+          signal,
+        });
         const snapshot = extractStaticPageSnapshot(
           decodeBuffer(errorBuffer, detectCharset(errorType, errorBuffer)),
           bodyLimit,
         );
         staticFailure = classifyWebPageSnapshot({ ...snapshot, ...snapshot.signals, status, minimumBodyLength });
+      } catch (readError) {
+        if (signal?.aborted) throw readError;
+        // 错误页正文读不到时，按下方状态码与网络错误继续判定。
       }
     }
+    discardResponseBody(errorBody);
     if (
       !staticFailure &&
       (e?.code === 'ECONNABORTED' || e?.code === 'ETIMEDOUT' || String(e?.message || '').includes('timeout'))
@@ -706,6 +774,7 @@ export async function fetchWebMeta(
       noscriptText: snapshot.signals.noscriptText,
       scriptCount: snapshot.signals.scriptCount,
       passwordInput: snapshot.signals.passwordInput,
+      hasShareTitle: snapshot.signals.hasShareTitle,
       minimumBodyLength,
     });
     if (!staticFailure) {
