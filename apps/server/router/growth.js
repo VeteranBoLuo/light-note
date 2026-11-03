@@ -12,6 +12,7 @@ router.get('/manor/attention', manorReadLimit, getKnowledgeManorAttention);
 router.post('/manor/commands', manorCommandLimit, runKnowledgeManorCommand);
 router.get('/admin/manor/status', manorReadLimit, manorAdmin.getManorAdminStatus);
 router.get('/admin/manor/overview', manorReadLimit, manorAdmin.getManorAdminOverview);
+router.get('/admin/manor/summary', manorReadLimit, manorAdmin.getManorAdminSummary);
 router.get('/admin/manor/players', manorReadLimit, manorAdmin.getManorAdminPlayers);
 router.get('/admin/manor/players/:userId', manorReadLimit, manorAdmin.getManorAdminPlayer);
 router.get('/admin/manor/operations', manorReadLimit, manorAdmin.getManorAdminOperations);

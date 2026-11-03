@@ -70,6 +70,24 @@ export interface ManorOverview {
   recent: ManorOperation[] | null;
   failures: string[];
 }
+export interface ManorDailyPoints {
+  day: string;
+  issued: number;
+  spent: number;
+  /** 产出减消耗；正数为净投放，负数为净回收。 */
+  net: number;
+}
+export interface ManorSummary {
+  day: string;
+  hideInternal: boolean;
+  runtime: ManorRuntime;
+  /** 固定近 7 个北京时间自然日，包含今天；null 表示查询失败。 */
+  daily: ManorDailyPoints[] | null;
+  /** 当天有有效庄园操作的去重账号数；覆盖未知或查询失败时为 null。 */
+  activeToday: number | null;
+  activityPartialToday: boolean;
+  failures: string[];
+}
 export interface ManorAdminFilters {
   days?: number;
   hideInternal?: boolean;
@@ -88,6 +106,8 @@ async function read<T>(path: string, query?: ManorAdminFilters, signal?: AbortSi
 export const getManorAdminStatus = (signal?: AbortSignal) => read<ManorRuntime>('status', undefined, signal);
 export const getManorAdminOverview = (query: ManorAdminFilters, signal?: AbortSignal) =>
   read<ManorOverview>('overview', query, signal);
+export const getManorAdminSummary = (hideInternal: boolean, signal?: AbortSignal) =>
+  read<ManorSummary>('summary', { hideInternal }, signal);
 export const getManorAdminPlayers = (query: ManorAdminFilters, signal?: AbortSignal) =>
   read<{ items: ManorPlayerRow[]; total: number; page: number }>('players', query, signal);
 export const getManorAdminPlayer = (id: string, signal?: AbortSignal) =>

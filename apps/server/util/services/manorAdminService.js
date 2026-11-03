@@ -54,6 +54,37 @@ const userParams = (hide) => (hide ? [...INTERNAL_ROLES] : []);
 const timed = (sql) => sql.replace(/^SELECT /, 'SELECT /*+ MAX_EXECUTION_TIME(5000) */ ');
 const beijingTime = (date) => new Date(date.getTime() + 28_800_000).toISOString().slice(0, 19).replace('T', ' ');
 
+async function readFinances(conn, range) {
+  const { rows } = await readManorPoints(conn, range);
+  const start = new Date(range.start.replace(' ', 'T') + '+08:00').getTime();
+  const trend = Array.from({ length: range.days }, (_, i) => {
+    const day = dateString(new Date(start + i * 86_400_000));
+    const row = rows.find((r) => r.day === day);
+    return { day, issued: Number(row?.issued || 0), spent: Number(row?.spent || 0) };
+  });
+  return {
+    issued: trend.reduce((n, row) => n + row.issued, 0),
+    spent: trend.reduce((n, row) => n + row.spent, 0),
+    trend,
+  };
+}
+
+async function readActivityCounts(conn, range, coverageStartedAt, groups) {
+  const observed = beijingTime(new Date(coverageStartedAt));
+  const start = observed > range.start ? observed : range.start;
+  const counts = {};
+  for (const [group, actions] of Object.entries(groups)) {
+    const [[row]] = await conn.query(
+      timed(`SELECT COUNT(DISTINCT o.user_id) AS count FROM knowledge_manor_operations o
+        JOIN user u ON u.id=o.user_id WHERE ${users(range.hideInternal)} AND o.created_at>=? AND o.created_at<?
+        AND o.effectful=1 AND o.action IN (${actions.map(() => '?').join(',')})`),
+      [...userParams(range.hideInternal), start, range.end, ...actions],
+    );
+    counts[group] = Number(row.count);
+  }
+  return counts;
+}
+
 /** Range on created_at keeps the scan on idx_manor_ops_time (created_at,user_id,request_id). */
 export function manorEarnersQuery({ since, hideInternal }) {
   return {
@@ -207,41 +238,11 @@ export function createManorAdminService({
         );
         return Number(row.count);
       });
-      const finances = await section('finances', async () => {
-        const { rows } = await readManorPoints(conn, range);
-        const trend = Array.from({ length: range.days }, (_, i) => {
-          const day = dateString(
-            new Date(new Date(range.start.replace(' ', 'T') + '+08:00').getTime() + i * 86_400_000),
-          );
-          const row = rows.find((r) => r.day === day);
-          return { day, issued: Number(row?.issued || 0), spent: Number(row?.spent || 0) };
-        });
-        return {
-          issued: trend.reduce((n, r) => n + r.issued, 0),
-          spent: trend.reduce((n, r) => n + r.spent, 0),
-          trend,
-        };
-      });
+      const finances = await section('finances', () => readFinances(conn, range));
       const activity = runtime.coverageStartedAt
-        ? await section('activity', async () => {
-            const counts = {};
-            const all = MANOR_COMMANDS;
-            const observed = new Date(new Date(runtime.coverageStartedAt).getTime() + 28_800_000)
-              .toISOString()
-              .slice(0, 19)
-              .replace('T', ' ');
-            const start = observed > range.start ? observed : range.start;
-            for (const [group, actions] of Object.entries({ all, ...MANOR_ACTIVITY_GROUPS })) {
-              const [[row]] = await conn.query(
-                timed(`SELECT COUNT(DISTINCT o.user_id) AS count FROM knowledge_manor_operations o
-            JOIN user u ON u.id=o.user_id WHERE ${users(range.hideInternal)} AND o.created_at>=? AND o.created_at<?
-            AND o.effectful=1 AND o.action IN (${actions.map(() => '?').join(',')})`),
-                [...userParams(range.hideInternal), start, range.end, ...actions],
-              );
-              counts[group] = Number(row.count);
-            }
-            return counts;
-          })
+        ? await section('activity', () =>
+            readActivityCounts(conn, range, runtime.coverageStartedAt, { all: MANOR_COMMANDS, ...MANOR_ACTIVITY_GROUPS }),
+          )
         : null;
       const earners = await section('earners', async () => {
         const since = beijingTime(new Date(now().getTime() - MANOR_EARNER_WINDOW_DAYS * 86_400_000));
@@ -259,6 +260,43 @@ export function createManorAdminService({
         async () => (await operations({ ...input, limit: 5, resourceOnly: true }, conn)).items,
       );
       return { range, runtime, opened, finances, activity, earners, recent, failures };
+    });
+  }
+
+  async function summary(input = {}) {
+    // 总览卡只取积分与今日活跃，不读取玩家存档、账号排行或操作列表。
+    const snapshotAt = now();
+    const range = manorAdminRange({ hideInternal: input.hideInternal }, snapshotAt);
+    const day = dateString(snapshotAt);
+    return read(async (conn) => {
+      const runtime = await status(conn);
+      const failures = [];
+      let daily = null;
+      try {
+        const finances = await readFinances(conn, range);
+        daily = finances.trend.map((row) => ({ ...row, net: row.issued - row.spent }));
+      } catch {
+        failures.push('finances');
+      }
+      const coverageAt = runtime.coverageStartedAt ? new Date(runtime.coverageStartedAt).getTime() : NaN;
+      const covered = Number.isFinite(coverageAt) && coverageAt <= snapshotAt.getTime();
+      const todayStart = `${day} 00:00:00`;
+      const activityPartialToday = covered && beijingTime(new Date(coverageAt)) > todayStart;
+      let activeToday = null;
+      if (covered) {
+        try {
+          const activity = await readActivityCounts(
+            conn,
+            { ...range, start: todayStart },
+            runtime.coverageStartedAt,
+            { all: MANOR_COMMANDS },
+          );
+          activeToday = activity.all;
+        } catch {
+          failures.push('activity');
+        }
+      }
+      return { day, hideInternal: range.hideInternal, runtime, daily, activeToday, activityPartialToday, failures };
     });
   }
   async function players(input = {}) {
@@ -394,7 +432,7 @@ export function createManorAdminService({
       conn?.release();
     }
   }
-  return { status, overview, players, player, operations, updateRuntime };
+  return { status, overview, summary, players, player, operations, updateRuntime };
 }
 
 export const manorAdminService = createManorAdminService();

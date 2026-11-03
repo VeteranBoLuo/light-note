@@ -2,11 +2,29 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp, h, nextTick } from 'vue';
 import AdminOverview from './AdminOverview.vue';
 
-const mocks = vi.hoisted(() => ({ snapshot: vi.fn(), post: vi.fn(), push: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+  snapshot: vi.fn(),
+  post: vi.fn(),
+  push: vi.fn(),
+  manorRefresh: vi.fn(),
+  user: { role: 'admin', adminContext: null as null | object },
+}));
 vi.mock('@/api/adminOverview', () => ({ getAdminOverviewSnapshot: mocks.snapshot }));
 vi.mock('@/http/request.ts', () => ({ apiBasePost: mocks.post }));
 vi.mock('@/router', () => ({ default: { push: mocks.push } }));
-vi.mock('@/store', () => ({ bookmarkStore: () => ({ isMobile: false, isTablet: false }) }));
+vi.mock('@/store', () => ({
+  bookmarkStore: () => ({ isMobile: false, isTablet: false }),
+  useUserStore: () => mocks.user,
+}));
+vi.mock('./AdminManorSummaryCard.vue', () => ({
+  default: {
+    props: ['hideInternal', 'mobile'],
+    setup: (props: any, { expose }: any) => {
+      expose({ refresh: mocks.manorRefresh });
+      return () => h('aside', { 'data-manor-summary': '' }, String(props.hideInternal));
+    },
+  },
+}));
 vi.mock('vue-i18n', () => ({
   useI18n: () => ({
     t: (key: string, values?: Record<string, unknown>) => key + (values ? ':' + JSON.stringify(values) : ''),
@@ -87,6 +105,8 @@ const button = (host: HTMLElement, label: string) =>
   [...host.querySelectorAll('button')].find((node) => node.textContent?.includes(label))!;
 
 beforeEach(() => {
+  mocks.user.role = 'admin';
+  mocks.user.adminContext = null;
   mocks.snapshot.mockResolvedValue({ status: 200, data: snapshot() });
   mocks.post.mockImplementation(async (url: string) => ({
     status: 200,
@@ -101,6 +121,21 @@ afterEach(() => {
 });
 
 describe('后台总览的真实指标与下钻', () => {
+  it('庄园卡只对 Root 本人展示，独立于核心快照并跟随手动刷新', async () => {
+    mocks.user.role = 'root';
+    mocks.snapshot.mockResolvedValueOnce({ status: 503 });
+    const host = await mount();
+    expect(host.querySelector('[data-manor-summary]')?.textContent).toBe('true');
+    button(host, 'common.refresh').click();
+    await settle();
+    expect(mocks.manorRefresh).toHaveBeenCalledOnce();
+  });
+  it('代管上下文不展示 Root 的庄园运营卡', async () => {
+    mocks.user.role = 'root';
+    mocks.user.adminContext = { mode: 'readonly' };
+    const host = await mount();
+    expect(host.querySelector('[data-manor-summary]')).toBeNull();
+  });
   it('首屏按真实数据展示活跃与资源汇总，并继续读取趋势和最近新增', async () => {
     const host = await mount();
     expect(button(host, 'adminWorkspace.active').textContent).toContain('64');
