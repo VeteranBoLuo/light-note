@@ -432,7 +432,7 @@
   .cloud-transfer-dock--mobile .upload-progress {
     width: 100%;
   }
-  :global(html.light-note-mobile-rendering) .upload-progress {
+  html.light-note-mobile-rendering .upload-progress {
     box-shadow: none;
     border-color: var(--card-border-color);
   }
