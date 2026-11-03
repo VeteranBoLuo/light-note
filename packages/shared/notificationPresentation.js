@@ -17,6 +17,16 @@ export const notificationMessages = {
       14: "文宗",
       15: "文圣",
     },
+    manor: {
+      digestTitle: "庄园有收获在等你",
+      waterTitle: "有 {n} 滴任务水即将到期",
+      waterContent: "{date} 的任务水滴将在账号时区次日 00:00 重置，请前往庄园领取",
+      ripe: "{n} 块地已成熟",
+      tankFull: "养鱼舱有产肥位存满了",
+      compostFull: "堆肥箱存满了",
+      crafted: "工坊鱼饵做好了",
+      rewards: "有等级礼物待领取",
+    },
     levelUpTitle: "升级到 Lv.{level} · {name}",
     opinionReplyTitle: "你的反馈收到新回复",
     emailHealthTitle: "请检查账号邮箱",
@@ -67,6 +77,16 @@ export const notificationMessages = {
       13: "Literary Master",
       14: "Literary Leader",
       15: "Literary Sage",
+    },
+    manor: {
+      digestTitle: "Your manor has rewards waiting",
+      waterTitle: "{n} task water drops expire soon",
+      waterContent: "Task water for {date} resets at 00:00 the next day in your account timezone. Collect it in your manor",
+      ripe: "{n} plots are ripe",
+      tankFull: "A fish tank fertilizer slot is full",
+      compostFull: "Compost bin is full",
+      crafted: "Workshop bait is ready",
+      rewards: "Level gifts are ready to collect",
     },
     levelUpTitle: "Leveled up to Lv.{level} · {name}",
     opinionReplyTitle: "Your feedback got a reply",
@@ -155,6 +175,24 @@ export function notificationPresentation(item, locale = "zh-CN") {
       .replace("{level}", String(meta.level || ""))
       .replace("{name}", messages.ranks[meta.level] || meta.name || "");
   if (item.type === "opinion_reply") title = messages.opinionReplyTitle;
+  if (["manor_digest", "manor_water_expiring"].includes(item.type) &&
+      typeof meta?.manor?.dayKey === "string" &&
+      /^\d{8}$/.test(meta?.manor?.dayKey || "") &&
+      ["water", "ripe", "tankFull", "rewards"].every(key => Number.isSafeInteger(meta.manor[key]) && meta.manor[key] >= 0) &&
+      ["compostFull", "crafted"].every(key => typeof meta.manor[key] === "boolean")) {
+    const manor = meta.manor, copy = messages.manor;
+    const date = `${manor.dayKey.slice(0, 4)}-${manor.dayKey.slice(4, 6)}-${manor.dayKey.slice(6)}`;
+    const reasons = [
+      manor.ripe ? copy.ripe.replace("{n}", String(manor.ripe)) : "",
+      manor.tankFull ? copy.tankFull : "",
+      manor.compostFull ? copy.compostFull : "",
+      manor.crafted ? copy.crafted : "",
+      manor.rewards ? copy.rewards : "",
+    ].filter(Boolean);
+    const water = item.type === "manor_water_expiring";
+    title = water ? copy.waterTitle.replace("{n}", String(manor.water)) : copy.digestTitle;
+    content = [water ? copy.waterContent.replace("{date}", date) : date, ...reasons].join(" · ");
+  }
   if (
     item.type === "signup_source_survey" &&
     Number.isSafeInteger(meta.points) &&

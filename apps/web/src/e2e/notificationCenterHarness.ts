@@ -73,6 +73,32 @@ if (params.has('readToggle')) {
     },
   );
 }
+if (params.has('manor')) {
+  items.splice(
+    0,
+    items.length,
+    ...['manor_water_expiring', 'manor_digest'].map((type, index) => ({
+      id: `manor-notice-${index}`,
+      type,
+      title: '庄园通知',
+      content: '',
+      link: '/knowledge-manor',
+      isRead: 0,
+      createTime: new Date().toISOString(),
+      meta: {
+        manor: {
+          dayKey: '20261102',
+          water: index === 0 ? 10 : 0,
+          ripe: 3,
+          tankFull: 1,
+          compostFull: true,
+          crafted: true,
+          rewards: 1,
+        },
+      },
+    })),
+  );
+}
 const counts: Record<string, number> = {
   todo_reminder: 21,
   system: 3,
@@ -87,9 +113,14 @@ function syncFixtureUnread() {
   unread.byType = byType;
   unread.unreadTotal = Object.values(byType).reduce((total, count) => total + count, 0);
 }
-if (params.has('readToggle')) syncFixtureUnread();
+if (params.has('readToggle') || params.has('manor')) syncFixtureUnread();
 const matchesType = (item: NotificationItem, type: string) =>
-  !type || type === 'all' || type === item.type || (type === 'system_group' && item.type === 'system');
+  !type ||
+  type === 'all' ||
+  type === item.type ||
+  (type === 'system_group' && item.type === 'system') ||
+  (type === 'growth' &&
+    ['level_up', 'streak_risk', 'collection_form_reward', 'manor_digest', 'manor_water_expiring'].includes(item.type));
 // Keep mock responses consistent with count changes while the popover remains open.
 window.addEventListener('fixture-notification-unread', (event) => {
   const count = Number((event as CustomEvent<number>).detail) || 0;
@@ -133,7 +164,7 @@ request.defaults.adapter = async (config) => {
     items.forEach((item) => {
       if (matchesType(item, input.type)) item.isRead = 1;
     });
-    if (params.has('readToggle')) syncFixtureUnread();
+    if (params.has('readToggle') || params.has('manor')) syncFixtureUnread();
     else if (!input.type || input.type === 'all') {
       unread.unreadTotal = 0;
       unread.byType = {};
@@ -154,17 +185,22 @@ request.defaults.adapter = async (config) => {
 };
 const router = createRouter({
   history: createMemoryHistory(),
-  routes: [{ path: '/', name: 'fixture', component: NotificationBell }],
+  routes: [
+    { path: '/', name: 'fixture', component: NotificationBell },
+    { path: '/knowledge-manor', component: { render: () => null } },
+  ],
 });
 const app = createApp({
   render: () =>
-    h(
-      'main',
-      {
-        style: page ? 'height:100vh' : 'display:flex;justify-content:flex-end;padding:var(--ui-space-24,24px)',
-      },
-      [h(NotificationBell, { page })],
-    ),
+    router.currentRoute.value.path === '/knowledge-manor'
+      ? h('main', [h('h1', '已进入庄园路由（隔离夹具）')])
+      : h(
+          'main',
+          {
+            style: page ? 'height:100vh' : 'display:flex;justify-content:flex-end;padding:var(--ui-space-24,24px)',
+          },
+          [h(NotificationBell, { page })],
+        ),
 });
 app.use(pinia);
 app.use(createI18n({ legacy: false, locale: params.get('locale') || 'zh-CN', messages: { 'zh-CN': zh, 'en-US': en } }));

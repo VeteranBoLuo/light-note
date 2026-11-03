@@ -84,6 +84,8 @@ pnpm preview
 
 庄园后台启用前显式运行 `pnpm --filter server migrate:knowledge-manor-admin`，增加操作摘要列、查询索引和运行状态表，不回填历史类型或调整玩家资产。部署脚本只在已授权且设置 `LIGHTNOTE_APPLY_KNOWLEDGE_MANOR_ADMIN_MIGRATION=1` 时安装；`--check` 只读验证，启动路径不执行安装。API 与后台验证通过后，再显式运行 `pnpm --filter server migrate:knowledge-manor-admin --start-observation` 登记统计覆盖边界；结构安装本身不证明新采集已经运行。验证维护切换与新操作并发、已有收据恢复、已有钓鱼结算、审计失败回滚及普通账号的独立限流。回退保留摘要、收据和审计；不识别维护模式的旧 API 必须配合关闭部署开关，已产生 v3 存档时不能直接回退到不识别 v3 的规则版本。
 
+庄园晚间提醒复用现有通知来源键与推送任务到期列，不新增迁移。涉及该功能的发布须先更新推送 Worker 的账号日历截止与发送前复核，再更新 API 生产者，最后发布 Web；旧 App 前台通知同步须保留庄园类型的排除，站内历史仍可读取。回退前核对新类型及未发任务的兼容，不能让旧 Worker 或旧前台同步按通用 24 小时窗口补发已失效的庄园提醒。
+
 邮箱健康检查启用前显式运行 `pnpm --filter server migrate:account-email-health`，安装 `20261023_account_email_health.sql` 的月度续跑与独立通知去重表，并补齐邮件收件地址查询索引，再通过 `check:schema`。迁移不扫描或修改历史账号，不回填邮箱验证状态。调度随 API 启动，仅生产运行环境消费；结构缺失时跳过新调度，不影响注册登录。API 与前端需同步保留专用更换邮箱协议；回滚保留去重事实，不能恢复个人资料直接修改邮箱。验证码与近期 GitHub 身份证明仅存短时 Redis，不能记录到日志或跨用途复用。
 
 站内公开资源启用前显式运行 `pnpm --filter server migrate:public-resources-schema`，安装加法迁移 `20261021_public_resources.sql`（包括副本来源表），通过 `check:schema` 与 MySQL 5.7 事务门禁，再部署同版本 API 和前端。帮助内容通过独立 `20261021_public_resources_help.sql` 幂等更新。`PUBLIC_RESOURCES_ENABLED`、`PUBLIC_RESOURCES_SUBMISSIONS_ENABLED`、`PUBLIC_RESOURCES_AI_ENABLED` 均默认关闭；首期即使开放资源与投稿，也保持 AI 预审关闭，用户显示“提交审核”，Root 终审、通知及失效任务收尾继续运行。AI 预算由 `PUBLIC_RESOURCES_AI_DAILY_BUDGET_TOKENS` 控制，关闭 Kernel 同时降级入口文案。新表缺失仅关闭新域，不能影响个人搜索和原资源删除。

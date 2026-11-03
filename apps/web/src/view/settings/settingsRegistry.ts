@@ -144,7 +144,7 @@ export function groupSettingsSections<T extends { group: SettingsSectionGroup }>
  * 通知开关清单。免打扰(notificationsDnd)故意不算在内：它开着是「少收通知」，
  * 混进「已开启 N 项」会把含义算反，所以单独作为后缀提示。
  * 每项默认值与 Settings.vue 模板里 BSwitch 的 :checked 口径保持一致
- * （多数默认开，浏览器通知默认关）；加通知开关时两处要一起改。
+ * （多数默认开，浏览器与庄园提醒默认关）；加通知开关时两处要一起改。
  */
 export const NOTIFICATION_TOGGLE_KEYS: { key: string; defaultOn: boolean }[] = [
   { key: 'notificationsInApp', defaultOn: true },
@@ -156,12 +156,13 @@ export const NOTIFICATION_TOGGLE_KEYS: { key: string; defaultOn: boolean }[] = [
   { key: 'notifyOpinionReply', defaultOn: true },
   { key: 'notifyFeatureRequest', defaultOn: true },
   { key: 'notifyStreakRisk', defaultOn: true },
+  { key: 'notifyManor', defaultOn: false },
 ];
 
 /** 已开启的通知项数。总数取自清单长度而不是写死，加减开关时摘要自动跟着变。 */
 export function countEnabledNotifications(
   preferences: Record<string, unknown> | null | undefined,
-  scope: { browserPush?: boolean; guest?: boolean } = {},
+  scope: { browserPush?: boolean; guest?: boolean; manor?: boolean } = {},
 ): {
   on: number;
   total: number;
@@ -170,7 +171,8 @@ export function countEnabledNotifications(
   const visible = NOTIFICATION_TOGGLE_KEYS.filter(
     ({ key }) =>
       (scope.browserPush !== false || key !== 'notificationsBrowser') &&
-      (!scope.guest || key !== 'notificationsOrganize'),
+      (!scope.guest || key !== 'notificationsOrganize') &&
+      (scope.manor !== false || key !== 'notifyManor'),
   );
   const on = visible.filter(({ key, defaultOn }) => (defaultOn ? prefs[key] !== false : prefs[key] === true)).length;
   return { on, total: visible.length };

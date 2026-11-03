@@ -161,6 +161,7 @@ function createManorRefreshInput(doc) {
     exit: () => request('exit'),
     tasks: index => request('tasks', { index }),
     ledger: () => request('ledger'),
+    reminders: () => request('reminders'),
     dismissGuide: target => send(target, 'dismissGuide', []),
     claimSupply: (target, id) => send(target, 'claimSupply', [id]),
   };

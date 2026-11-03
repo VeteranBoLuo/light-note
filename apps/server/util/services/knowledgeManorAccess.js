@@ -5,11 +5,11 @@ const AUDIENCE_ROLES = Object.freeze({
   all: Object.freeze(['root', 'user', 'test']),
 });
 
-export const knowledgeManorEnabled = () => process.env.KNOWLEDGE_MANOR_ENABLED === 'true';
+export const knowledgeManorEnabled = (env = process.env) => env.KNOWLEDGE_MANOR_ENABLED === 'true';
 
 /** Unknown values fall back to internal accounts, never to a wider audience. */
-export function manorAudience() {
-  return process.env.KNOWLEDGE_MANOR_AUDIENCE === 'all' ? 'all' : 'internal';
+export function manorAudience(env = process.env) {
+  return env.KNOWLEDGE_MANOR_AUDIENCE === 'all' ? 'all' : 'internal';
 }
 
-export const canEnterManor = role => AUDIENCE_ROLES[manorAudience()].includes(role);
+export const canEnterManor = (role, env = process.env) => AUDIENCE_ROLES[manorAudience(env)].includes(role);

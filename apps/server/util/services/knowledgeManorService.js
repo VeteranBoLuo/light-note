@@ -115,8 +115,8 @@ export function createKnowledgeManorService({ db = pool, context = accountContex
   }
   /**
    * Entry badge summary. It only counts what a returning player can collect right now:
-   * daily-task water that still fits the bucket, ripe plots and level gifts. Steady trickles
-   * such as fish fertilizer stay out so the badge does not glow all day.
+   * earned daily water that fits, awaited harvests/crafts, stopped full storage and gifts.
+   * Unfilled production and free daily supplies stay out so the badge does not glow all day.
    */
   async function attention(userId) {
     const conn = await db.getConnection();
@@ -128,7 +128,7 @@ export function createKnowledgeManorService({ db = pool, context = accountContex
       const rule = { perTask: manorModel.RULES.dailyWater, bonus: manorModel.RULES.dailyWaterBonus };
       if (!saved?.adopted) {
         await conn.commit();
-        return { fresh: true, water: 0, ripe: 0, rewards: 0, ...rule };
+        return { fresh: true, water: 0, ripe: 0, rewards: 0, tankFull: 0, compostFull: false, crafted: false, ...rule };
       }
       const s = projectManor(saved, await context(conn, userId, now()));
       await conn.commit();
@@ -138,6 +138,9 @@ export function createKnowledgeManorService({ db = pool, context = accountContex
         water: Math.min(pending, Math.max(0, manorModel.RULES.waterCap - s.water)),
         ripe: s.plots.filter((_, i) => manorModel.plotState(s, i) === 'ripe').length,
         rewards: manorModel.pendingLevelRewards(s).length,
+        tankFull: s.fishSlots.filter(slot => manorModel.production(s, slot).ready >= manorModel.RULES.storageLimit).length,
+        compostFull: manorModel.composterStatus(s).phase === 'full',
+        crafted: manorModel.workshopStatus(s).phase === 'ready',
         ...rule,
       };
     } catch (error) {

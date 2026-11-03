@@ -13,6 +13,7 @@ import { deliverHuaweiPush } from './huaweiPushTransport.js';
 import { beginHuaweiPushAttempt, finishHuaweiPushAttempt } from './huaweiPushDelivery.js';
 import { huaweiAttemptTag } from './huaweiPushReceiptPolicy.js';
 import { browserPushQuietUntil } from './browserPushQuietHours.js';
+import { isManorNudge, manorNudgeMeta } from './services/knowledgeManorNudgePolicy.js';
 import { browserNotificationPresentation } from '@lightnote/shared/notification-presentation';
 import { randomUUID } from 'node:crypto';
 import pool from '../db/index.js';
@@ -174,18 +175,26 @@ export async function unbindPushSubscription(userId, id, generation, db = pool) 
 
 // Transactional outbox expansion: the notification row and this pending marker were
 // inserted together. Subscription generation/time prevent re-enable and late binding replay.
-export async function expandPushOutbox(db = pool, env = process.env) {
+export async function expandPushOutbox(db = pool, env = process.env, now = new Date()) {
   if (!browserPushEnabled(env) && !huaweiPushEnabled(env)) return 0;
   const conn = await db.getConnection();
   try {
     await conn.beginTransaction();
-    const [rows] = await conn.query(`SELECT id FROM notification WHERE browser_push_pending = 1
+    const [rows] = await conn.query(`SELECT id,user_id,type,source_type,source_id,meta FROM notification WHERE browser_push_pending = 1
       ORDER BY browser_push_created_at, id LIMIT 50 FOR UPDATE`);
     for (const row of rows) {
+      const manor = isManorNudge(row);
+      const meta = manor ? manorNudgeMeta(row) : null;
+      if (manor && (!meta || new Date(meta.expiresAt).getTime() <= now.getTime())) {
+        await conn.query('UPDATE notification SET browser_push_pending = 0 WHERE id = ?', [row.id]);
+        continue;
+      }
+      const expiry = manor ? 'LEAST(DATE_ADD(n.browser_push_created_at, INTERVAL 24 HOUR),FROM_UNIXTIME(?))'
+        : 'DATE_ADD(n.browser_push_created_at, INTERVAL 24 HOUR)';
       await conn.query(
         `INSERT IGNORE INTO browser_push_jobs
         (notification_id, subscription_id, generation, expires_at)
-        SELECT n.id, s.id, s.generation, DATE_ADD(n.browser_push_created_at, INTERVAL 24 HOUR)
+        SELECT n.id, s.id, s.generation, ${expiry}
         FROM notification n JOIN browser_push_subscriptions s
           ON s.user_id = CONVERT(n.user_id USING utf8mb4) COLLATE utf8mb4_general_ci
         WHERE n.id = ? AND s.active = 1 AND s.enabled_at <= n.browser_push_created_at
@@ -193,7 +202,7 @@ export async function expandPushOutbox(db = pool, env = process.env) {
           AND n.del_flag = 0 AND n.recalled = 0
           AND ((s.endpoint NOT LIKE 'huawei:%' AND ? = 1 AND n.type <> 'community_feed') OR
             (s.endpoint LIKE 'huawei:%' AND ? = 1))`,
-        [row.id, Number(browserPushEnabled(env)), Number(huaweiPushEnabled(env))],
+        [...(manor ? [new Date(meta.expiresAt).getTime() / 1000] : []), row.id, Number(browserPushEnabled(env)), Number(huaweiPushEnabled(env))],
       );
       await conn.query('UPDATE notification SET browser_push_pending = 0 WHERE id = ?', [row.id]);
     }
@@ -213,7 +222,16 @@ export async function sendWebPush(subscription, payload, ttl, env = process.env)
     : deliverBrowserPush(subscription, payload, ttl, env);
 }
 
-export async function processNextPush({ db = pool, send = sendWebPush, env = process.env } = {}) {
+async function finishPushJob(db, job, lease, status, code = null) {
+  await db.query(
+    `UPDATE browser_push_jobs SET status = ?, last_code = ?, lease_until = NULL,
+    available_at = DATE_ADD(NOW(6), INTERVAL ? SECOND) WHERE id = ? AND lease_token = ? AND status = 'sending'`,
+    [status, code, Math.min(3600, 10 * 2 ** Math.min(job.attempts, 8)), job.id, lease],
+  );
+  return { status, delaySeconds: Number(job.delay_seconds || 0) };
+}
+
+export async function processNextPush({ db = pool, send = sendWebPush, env = process.env, now = () => new Date(), manorNudges = null } = {}) {
   if (!browserPushEnabled(env) && !huaweiPushEnabled(env)) return null;
   const lease = randomUUID();
   // Atomic MySQL 5.7 claim, one job at a time: a network timeout cannot outlive the lease.
@@ -253,7 +271,7 @@ export async function processNextPush({ db = pool, send = sendWebPush, env = pro
     const visible = huawei
       ? `del_flag = 0 AND recalled = 0 AND type NOT IN ('public_resource', 'email_health', 'signup_source_survey') AND ${COMMUNITY_CHAT_DELIVERY_NOTIFICATION_SQL} AND ${feedNotificationVisibleSql(await communityFeedSchemaReady(db).catch(() => false))}`
       : notificationVisibleSql;
-    const [[notification]] = await db.query(`SELECT * FROM notification WHERE id = ? AND user_id = ? AND ${visible}`, [
+    let [[notification]] = await db.query(`SELECT * FROM notification WHERE id = ? AND user_id = ? AND ${visible}`, [
       job.notification_id,
       subscription?.user_id || '',
     ]);
@@ -307,10 +325,20 @@ export async function processNextPush({ db = pool, send = sendWebPush, env = pro
           preferences = {};
         }
       }
-      const quietUntil = browserPushQuietUntil(preferences);
+      let manorExpiry = null;
+      if (isManorNudge(notification)) {
+        // Load the domain only for manor jobs; other notification producers retain their dependencies.
+        manorNudges ||= (await import('./services/knowledgeManorNudges.js')).createManorNudgeService({ db, now, env });
+        const check = await manorNudges.preparePush(notification);
+        if (check.status !== 'ready') return finishPushJob(db, job, lease, check.status, check.code);
+        manorExpiry = check.expiresAtMs;
+        job.ttl = Math.min(job.ttl, Math.floor((manorExpiry - now().getTime()) / 1000));
+        if (job.ttl <= 0) return finishPushJob(db, job, lease, 'expired', 'MANOR_NUDGE_EXPIRED');
+      }
+      const quietUntil = browserPushQuietUntil(preferences, now());
       if (quietUntil) {
         // Quiet hours are not a transport attempt. Recheck preferences at least once a minute.
-        const delay = Math.max(1, Math.min(60, job.ttl, Math.ceil((quietUntil.getTime() - Date.now()) / 1000)));
+        const delay = Math.max(1, Math.min(60, job.ttl, Math.ceil((quietUntil.getTime() - now().getTime()) / 1000)));
         await db.query(
           `UPDATE browser_push_jobs SET status = 'pending', last_code = 'QUIET_HOURS',
           attempts = GREATEST(0, attempts - 1), lease_until = NULL,
@@ -320,11 +348,22 @@ export async function processNextPush({ db = pool, send = sendWebPush, env = pro
         );
         return { status: 'deferred', delaySeconds: Number(job.delay_seconds || 0) };
       }
+      if (isManorNudge(notification)) {
+        // Full statistics are unnecessary during every quiet-hours retry.
+        const check = await manorNudges.preparePush(notification, { full: true });
+        if (check.status !== 'ready') return finishPushJob(db, job, lease, check.status, check.code);
+        notification = check.notification;
+        manorExpiry = Math.min(manorExpiry, check.expiresAtMs);
+      }
       const [[owned]] = await db.query(
         "SELECT id FROM browser_push_jobs WHERE id = ? AND lease_token = ? AND status = 'sending' AND lease_until > NOW(6)",
         [job.id, lease],
       );
       if (!owned) return { status: 'cancelled', delaySeconds: Number(job.delay_seconds || 0) };
+      if (manorExpiry !== null) {
+        job.ttl = Math.min(job.ttl, Math.floor((manorExpiry - now().getTime()) / 1000));
+        if (job.ttl <= 0) return finishPushJob(db, job, lease, 'expired', 'MANOR_NUDGE_EXPIRED');
+      }
       const presentation = huawei ? huaweiNotificationPresentation(notification, env, verifiedTodo, verifiedChat) : null;
       if (huawei) {
         // Save the correlation before sending: an early receipt can arrive while
@@ -355,7 +394,7 @@ export async function processNextPush({ db = pool, send = sendWebPush, env = pro
     providerRequestId = error?.providerRequestId || null;
     const httpCode = Number(error?.statusCode || 0);
     status = error?.code === 'PUSH_EXPIRED' ? 'expired' : pushFailure(httpCode, job.attempts);
-    code = /^HUAWEI_[A-Z_]+$/.test(error?.code || '')
+    code = /^(HUAWEI_|MANOR_NUDGE_)[A-Z_]+$/.test(error?.code || '')
       ? error.code
       : httpCode
         ? `HTTP_${httpCode}`
@@ -373,10 +412,5 @@ export async function processNextPush({ db = pool, send = sendWebPush, env = pro
       console.error('[huawei-push] code=HUAWEI_ATTEMPT_RESULT_STORE_FAILED');
     }
   }
-  await db.query(
-    `UPDATE browser_push_jobs SET status = ?, last_code = ?, lease_until = NULL,
-    available_at = DATE_ADD(NOW(6), INTERVAL ? SECOND) WHERE id = ? AND lease_token = ? AND status = 'sending'`,
-    [status, code, Math.min(3600, 10 * 2 ** Math.min(job.attempts, 8)), job.id, lease],
-  );
-  return { status, delaySeconds: Number(job.delay_seconds || 0) };
+  return finishPushJob(db, job, lease, status, code);
 }

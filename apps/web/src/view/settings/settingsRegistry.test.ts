@@ -99,19 +99,21 @@ describe('countEnabledNotifications', () => {
     expect(countEnabledNotifications({}).total).toBe(NOTIFICATION_TOGGLE_KEYS.length);
   });
 
-  it('空偏好按各项默认值计数（浏览器通知默认关）', () => {
+  it('空偏好按各项默认值计数（浏览器和庄园提醒默认关）', () => {
     const { on, total } = countEnabledNotifications({});
-    expect(on).toBe(total - 1);
+    expect(on).toBe(total - 2);
   });
 
   it('显式关掉的项不计入', () => {
     expect(countEnabledNotifications({ notificationsEmail: false, weeklyReport: false }).on).toBe(
-      NOTIFICATION_TOGGLE_KEYS.length - 3,
+      NOTIFICATION_TOGGLE_KEYS.length - 4,
     );
   });
 
-  it('打开浏览器通知后可以全开', () => {
-    expect(countEnabledNotifications({ notificationsBrowser: true }).on).toBe(NOTIFICATION_TOGGLE_KEYS.length);
+  it('明确打开浏览器和庄园提醒后可以全开', () => {
+    expect(countEnabledNotifications({ notificationsBrowser: true, notifyManor: true }).on).toBe(
+      NOTIFICATION_TOGGLE_KEYS.length,
+    );
   });
 
   it('免打扰不参与计数：它开着是「少收通知」，混进来会把含义算反', () => {
@@ -122,4 +124,19 @@ describe('countEnabledNotifications', () => {
     expect(() => countEnabledNotifications(undefined)).not.toThrow();
     expect(countEnabledNotifications(null).total).toBe(NOTIFICATION_TOGGLE_KEYS.length);
   });
+});
+
+it('庄园只计总开关，分组隐藏时不计入摘要', () => {
+  const visible = countEnabledNotifications({ notifyManor: true }, { manor: true });
+  const hidden = countEnabledNotifications({ notifyManor: true }, { manor: false });
+  expect(hidden).toEqual({ on: visible.on - 1, total: visible.total - 1 });
+  expect(countEnabledNotifications({}, { manor: true }).on).toBe(visible.on - 1);
+  expect(countEnabledNotifications({ notifyManor: true, manorEntryDot: false }, { manor: true })).toEqual(visible);
+  expect(countEnabledNotifications({ notifyManor: false }, { manor: true }).on).toBe(visible.on - 1);
+  expect(
+    countEnabledNotifications(
+      { notifyManor: true, notifyManorDigest: false, notifyManorWater: false },
+      { manor: true },
+    ),
+  ).toEqual(visible);
 });

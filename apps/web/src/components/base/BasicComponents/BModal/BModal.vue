@@ -52,7 +52,7 @@
         <div class="modal-content" :class="props.contentClass">
           <slot name="default"></slot>
         </div>
-        <slot name="footer" v-if="showFooter">
+        <slot name="footer" v-if="showFooter" :close="handleClose">
           <div class="modal-footer">
             <b-space>
               <b-button type="primary" @click="$emit('ok')">{{ t('common.confirm') }}</b-button>

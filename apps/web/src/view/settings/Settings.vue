@@ -271,6 +271,8 @@
   import { useRoute, useRouter, type LocationQueryRaw } from 'vue-router';
   import { bookmarkStore, useUserStore } from '@/store';
   import { isGuestUser } from '@/utils/savePreference';
+  import { useGrowth } from '@/composables/useGrowth';
+  import { canOpenManor } from '@/utils/manorAccess';
   import { recordOperation } from '@/api/commonApi.ts';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon.ts';
@@ -307,6 +309,10 @@
   const route = useRoute();
   const bookmark = bookmarkStore();
   const user = useUserStore();
+  const { growth: manorGrowth, load: loadManorGrowth } = useGrowth();
+  watch(() => [user.id, user.role, user.adminContext?.id], () => {
+    if (!isGuestUser() && !user.adminContext) void loadManorGrowth(true);
+  }, { immediate: true });
   const dataExportControl = ref<InstanceType<typeof DataExportControl> | null>(null);
   async function openDataExport() {
     await router.push({ query: { ...route.query, section: 'export' } });
@@ -527,7 +533,7 @@
       'settings.notificationSummary',
       countEnabledNotifications(
         { ...prefs, notificationsBrowser: browserPush.enabled.value },
-        { browserPush: !bookmark.isMobileDevice, guest: isGuestUser() },
+        { browserPush: !bookmark.isMobileDevice, guest: isGuestUser(), manor: !isGuestUser() && canOpenManor(manorGrowth.value, user.adminContext) },
       ),
     );
     return !bookmark.isMobileDevice && prefs.notificationsDnd === true

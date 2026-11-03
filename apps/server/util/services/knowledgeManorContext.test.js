@@ -9,7 +9,7 @@ vi.mock('../points.js', () => ({ earnPoints: vi.fn() }));
 vi.mock('../growthPreferences.js', () => ({ getGrowthCalendarContext: async () => ({ dayKey:'20261024', weekKey:'202643', utcOffsetMinutes:480 }) }));
 vi.mock('../weeklyChallenge.js', () => ({ getWeeklyChallenges: async () => ({ challenges: [{ done:false }] }) }));
 import { createKnowledgeManorService } from './knowledgeManorService.js';
-import { createManor, executeManorCommand, manorModel as M } from '@lightnote/shared/manor';
+import { createManor, executeManorCommand, manorModel as M, MANOR_SPECIES as F } from '@lightnote/shared/manor';
 
 describe('庄园沿用真实成长进度', () => {
   beforeEach(() => Object.assign(facts, { growth: { points:60, streak:0 }, milestones:[], role:'root', deleted:0 }));
@@ -68,13 +68,13 @@ describe('庄园入口提醒只统计现在就能收的东西', () => {
     return createKnowledgeManorService({ db:{ getConnection:async()=>conn }, now:()=>NOW }).attention('owner');
   };
   it('还没领见面礼时只标记新开放，不读成长进度', async () => {
-    await expect(attention(null)).resolves.toEqual({ fresh:true, water:0, ripe:0, rewards:0, perTask:M.RULES.dailyWater, bonus:M.RULES.dailyWaterBonus });
+    await expect(attention(null)).resolves.toEqual({ fresh:true, water:0, ripe:0, rewards:0, tankFull:0, compostFull:false, crafted:false, perTask:M.RULES.dailyWater, bonus:M.RULES.dailyWaterBonus });
   });
   it('已完成任务的水滴按水桶余量计算，成熟地块与等级礼物分别计数', async () => {
     const s = adopted();
     s.seeds.radish = 1; M.plant(s, 0, 'radish'); M.water(s, [0]); s.plots[0].next = s.now - 1;
     s.water = M.RULES.waterCap - 2; s.xp = M.RULES.levels[1];
-    await expect(attention(s)).resolves.toEqual({ fresh:false, water:2, ripe:1, rewards:1, perTask:M.RULES.dailyWater, bonus:M.RULES.dailyWaterBonus });
+    await expect(attention(s)).resolves.toEqual({ fresh:false, water:2, ripe:1, rewards:1, tankFull:0, compostFull:false, crafted:false, perTask:M.RULES.dailyWater, bonus:M.RULES.dailyWaterBonus });
   });
   it('水桶已满或水滴已领完时不再提醒领水', async () => {
     const full = adopted(); full.water = M.RULES.waterCap;
@@ -82,4 +82,25 @@ describe('庄园入口提醒只统计现在就能收的东西', () => {
     const claimed = adopted(); claimed.dailyWaterClaims = [M.RULES.dailyWater, 0, 0];
     expect((await attention(claimed)).water).toBe(0);
   });
+  it.each([M.RULES.storageLimit - 1, M.RULES.storageLimit, M.RULES.storageLimit + 2])('只有存满停止产出的产肥位进入提醒，经过 %s 份产出周期', async cycles => {
+    const s = adopted(), fish = M.addFish(s, 'clown');
+    expect(M.place(s, fish.id, 0, F)).toBe(true);
+    s.fishSlots[0].started = s.now - M.RULES.productionHours * cycles;
+    expect(await attention(s)).toMatchObject({ tankFull: cycles >= M.RULES.storageLimit ? 1 : 0, compostFull:false, crafted:false });
+    M.collect(s, F);
+    expect((await attention(s)).tankFull).toBe(0);
+  });
+  it('未建、未满和在制设施不提醒；满仓和成品领取后清除', async () => {
+    const s = adopted();
+    expect(await attention(s)).toMatchObject({tankFull:0,compostFull:false,crafted:false});
+    s.composter = {purchasedAt:s.now,level:1,residue:0,stock:1,nextReady:null};
+    s.workshop = {purchasedAt:s.now,nextJobId:2,job:{id:1,recipe:'fruit',count:1,started:s.now,readyAt:s.now+1}};
+    expect(await attention(s)).toMatchObject({compostFull:false,crafted:false});
+    s.composter.stock = M.composterStatus(s).storage;
+    s.workshop.job.readyAt = s.now;
+    expect(await attention(s)).toMatchObject({compostFull:true,crafted:true});
+    M.collectCompost(s); M.collectCraft(s, 1);
+    expect(await attention(s)).toMatchObject({compostFull:false,crafted:false});
+  });
+
 });

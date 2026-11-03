@@ -9,6 +9,7 @@ import {
   unbindPushSubscription,
 } from './browserPushService.js';
 import { createNotification } from './notification.js';
+import { createManorNudgeService } from './services/knowledgeManorNudges.js';
 const env = {
   LIGHTNOTE_RUNTIME_ENV: 'production',
   BROWSER_PUSH_ORIGIN: 'https://light.test',
@@ -129,7 +130,14 @@ describe('transactional notification outbox', () => {
     expect(conn.commit).toHaveBeenCalledOnce();
   });
 });
-function workerDb({ ttl = 300, active = true, ownerEligible = true, preferences = {} } = {}) {
+function workerDb({
+  ttl = 300,
+  active = true,
+  ownerEligible = true,
+  preferences = {},
+  notification = { id: 'n1', type: 'todo_reminder', title: '待办提醒', content: '做事' },
+  endpoint = subscription.endpoint,
+} = {}) {
   return {
     query: vi.fn(async (sql) => {
       if (sql.startsWith("UPDATE browser_push_jobs SET status = 'sending'")) return [{ affectedRows: 1 }];
@@ -156,7 +164,7 @@ function workerDb({ ttl = 300, active = true, ownerEligible = true, preferences 
                   id: 's1',
                   generation: 'g1',
                   user_id: 'u1',
-                  endpoint: subscription.endpoint,
+                  endpoint,
                   ...subscription.keys,
                   locale: 'zh-CN',
                   push_preferences: JSON.stringify(preferences),
@@ -164,8 +172,7 @@ function workerDb({ ttl = 300, active = true, ownerEligible = true, preferences 
               ]
             : [],
         ];
-      if (sql.startsWith('SELECT * FROM notification'))
-        return [[{ id: 'n1', type: 'todo_reminder', title: '待办提醒', content: '做事' }]];
+      if (sql.startsWith('SELECT * FROM notification')) return [[notification]];
       if (sql.includes('FROM user WHERE id'))
         return [ownerEligible ? [{ push_preferences: JSON.stringify(preferences) }] : []];
       return [{ affectedRows: 1 }];
@@ -293,3 +300,199 @@ it.each([{ active: 3 }, { active: 0, invalid: 1 }])(
     expect(conn.rollback).toHaveBeenCalledOnce();
   },
 );
+
+const manorClock = new Date('2026-11-02T13:00:00Z');
+const manorNotice = () => ({
+  id: 'n1',
+  user_id: 'u1',
+  type: 'manor_water_expiring',
+  source_type: 'manor_daily',
+  source_id: 'u1:20261102',
+  meta: {
+    manor: {
+      dayKey: '20261102',
+      timezone: 'Asia/Shanghai',
+      expiresAt: '2026-11-02T16:00:00.000Z',
+      water: 10,
+      ripe: 2,
+      tankFull: 0,
+      compostFull: false,
+      crafted: false,
+      rewards: 0,
+    },
+  },
+});
+const manorEnv = { ...env, KNOWLEDGE_MANOR_ENABLED: 'true', KNOWLEDGE_MANOR_AUDIENCE: 'all' };
+function manorWorker({ preferences = {}, endpoint, summary = { fresh: false, water: 2, ripe: 1 } } = {}) {
+  const state = { clock: manorClock, preferences: { notifyManor: true, ...preferences }, summary };
+  const notification = manorNotice(),
+    db = workerDb({ ttl: 86400, preferences: state.preferences, notification, endpoint });
+  const base = db.query.getMockImplementation();
+  db.query.mockImplementation(async (sql, params) => {
+    if (sql.startsWith('SELECT id,role,del_flag,preferences FROM user'))
+      return [[{ id: 'u1', role: 'user', del_flag: '0', preferences: state.preferences }]];
+    if (sql.includes('FROM knowledge_manors WHERE user_id='))
+      return [[{ updatedAtMs: manorClock.getTime() - 24 * 3600000, revision: 1 }]];
+    if (sql.includes('FROM user_growth_preferences WHERE user_id=')) return [[{ timezone: 'Asia/Shanghai' }]];
+    return base(sql, params);
+  });
+  const attention = vi.fn(async () => state.summary);
+  const service = createManorNudgeService({
+    db,
+    env: manorEnv,
+    now: () => state.clock,
+    attention,
+    runtimeReader: async () => ({ mode: 'open' }),
+  });
+  return { state, db, attention, service, notification };
+}
+
+describe('庄园推送沿用队列且最晚当晚零点失效', () => {
+  it.each(['browser', 'huawei'])('%s 不向未明确开启庄园提醒的账号投递已有任务', async (channel) => {
+    const f = manorWorker({
+        preferences: { notifyManor: undefined },
+        endpoint: channel === 'huawei' ? 'huawei:fixture-token' : undefined,
+      }),
+      send = vi.fn();
+    const pushEnv =
+      channel === 'huawei'
+        ? {
+            ...manorEnv,
+            HUAWEI_PUSH_ENABLED: 'true',
+            HUAWEI_PUSH_APP_ID: '123',
+            HUAWEI_PUSH_PROJECT_ID: '456',
+            HUAWEI_PUSH_APP_SECRET: 'fixture',
+            HUAWEI_PUSH_ORIGIN: 'https://light.test',
+          }
+        : manorEnv;
+    expect(
+      (await processNextPush({ db: f.db, send, env: pushEnv, now: () => f.state.clock, manorNudges: f.service }))
+        .status,
+    ).toBe('cancelled');
+    expect(send).not.toHaveBeenCalled();
+    expect(f.attention).not.toHaveBeenCalled();
+  });
+  it('outbox 裁剪为账号零点与原 24 小时上限的较早值', async () => {
+    const conn = {
+      beginTransaction: vi.fn(),
+      commit: vi.fn(),
+      rollback: vi.fn(),
+      release: vi.fn(),
+      query: vi
+        .fn()
+        .mockResolvedValueOnce([[manorNotice()]])
+        .mockResolvedValue([{ affectedRows: 1 }]),
+    };
+    await expandPushOutbox({ getConnection: async () => conn }, manorEnv, manorClock);
+    expect(conn.query.mock.calls[1][0]).toContain(
+      'LEAST(DATE_ADD(n.browser_push_created_at, INTERVAL 24 HOUR),FROM_UNIXTIME(?))',
+    );
+    expect(conn.query.mock.calls[1][1][0]).toBe(new Date('2026-11-02T16:00:00Z').getTime() / 1000);
+  });
+  it.each(['expired', 'invalid-source', 'invalid-meta'])('不展开 %s 的庄园通知，仍清除待处理标记', async (reason) => {
+    const notice = manorNotice();
+    if (reason === 'invalid-source') notice.source_type = 'wrong';
+    if (reason === 'invalid-meta') notice.meta = {};
+    const conn = {
+      beginTransaction: vi.fn(),
+      commit: vi.fn(),
+      rollback: vi.fn(),
+      release: vi.fn(),
+      query: vi
+        .fn()
+        .mockResolvedValueOnce([[notice]])
+        .mockResolvedValue([{ affectedRows: 1 }]),
+    };
+    await expandPushOutbox(
+      { getConnection: async () => conn },
+      manorEnv,
+      reason === 'expired' ? new Date('2026-11-02T16:00:00Z') : manorClock,
+    );
+    expect(conn.query.mock.calls).toHaveLength(2);
+    expect(conn.query.mock.calls[1][0]).toContain('browser_push_pending = 0');
+    expect(conn.commit).toHaveBeenCalledOnce();
+  });
+  it('发送当前可收数量，缩短厂商 TTL，并保留原通知中心点击入口', async () => {
+    const f = manorWorker(),
+      send = vi.fn();
+    expect(
+      (await processNextPush({ db: f.db, send, env: manorEnv, now: () => f.state.clock, manorNudges: f.service }))
+        .status,
+    ).toBe('accepted');
+    expect(send.mock.calls[0][1]).toMatchObject({ title: '有 2 滴任务水即将到期', notificationId: 'n1' });
+    expect(send.mock.calls[0][1]).not.toHaveProperty('link');
+    expect(send.mock.calls[0][2]).toBe(3 * 3600);
+    expect(f.notification.meta.manor.water).toBe(10);
+    expect(f.attention).toHaveBeenCalledOnce();
+  });
+  it('免打扰不反复统计，延到次日就过期且不外发', async () => {
+    const f = manorWorker({
+        preferences: {
+          notificationsDnd: true,
+          notificationsDndStart: '20:00',
+          notificationsDndEnd: '08:00',
+          notificationsTimezoneOffset: -480,
+        },
+      }),
+      send = vi.fn();
+    const options = { db: f.db, send, env: manorEnv, now: () => f.state.clock, manorNudges: f.service };
+    expect((await processNextPush(options)).status).toBe('deferred');
+    expect(f.attention).not.toHaveBeenCalled();
+    f.state.clock = new Date('2026-11-03T00:00:00Z');
+    expect((await processNextPush(options)).status).toBe('expired');
+    expect(send).not.toHaveBeenCalled();
+    expect(f.db.query.mock.calls.at(-1)[1][0]).toBe('expired');
+  });
+  it.each(['browser', 'huawei'])('%s 在领取后取消，不向厂商发送', async (channel) => {
+    const f = manorWorker({
+        endpoint: channel === 'huawei' ? 'huawei:fixture-token' : undefined,
+        summary: { fresh: false, water: 0, ripe: 2 },
+      }),
+      send = vi.fn();
+    const pushEnv =
+      channel === 'huawei'
+        ? {
+            ...manorEnv,
+            HUAWEI_PUSH_ENABLED: 'true',
+            HUAWEI_PUSH_APP_ID: '123',
+            HUAWEI_PUSH_PROJECT_ID: '456',
+            HUAWEI_PUSH_APP_SECRET: 'fixture',
+            HUAWEI_PUSH_ORIGIN: 'https://light.test',
+          }
+        : manorEnv;
+    expect(
+      (await processNextPush({ db: f.db, send, env: pushEnv, now: () => f.state.clock, manorNudges: f.service }))
+        .status,
+    ).toBe('cancelled');
+    expect(send).not.toHaveBeenCalled();
+  });
+  it('华为仍使用 MARKETING 及统一文案，不借用待办分类', async () => {
+    const f = manorWorker({ endpoint: 'huawei:fixture-token' }),
+      send = vi.fn();
+    const pushEnv = {
+      ...manorEnv,
+      HUAWEI_PUSH_ENABLED: 'true',
+      HUAWEI_PUSH_APP_ID: '123',
+      HUAWEI_PUSH_PROJECT_ID: '456',
+      HUAWEI_PUSH_APP_SECRET: 'fixture',
+      HUAWEI_PUSH_ORIGIN: 'https://light.test',
+    };
+    expect(
+      (await processNextPush({ db: f.db, send, env: pushEnv, now: () => f.state.clock, manorNudges: f.service }))
+        .status,
+    ).toBe('accepted');
+    expect(send.mock.calls[0][1].huawei).toMatchObject({ category: 'MARKETING', title: '轻笺通知' });
+    expect(send.mock.calls[0][2]).toBe(10800);
+  });
+  it('资格读取失败有限重试，不能当作空结果取消或直接发出', async () => {
+    const f = manorWorker(),
+      send = vi.fn();
+    f.attention.mockRejectedValueOnce({ code: 'ECONNRESET' });
+    expect(
+      (await processNextPush({ db: f.db, send, env: manorEnv, now: () => f.state.clock, manorNudges: f.service }))
+        .status,
+    ).toBe('pending');
+    expect(send).not.toHaveBeenCalled();
+    expect(f.db.query.mock.calls.at(-1)[1][0]).toBe('pending');
+  });
+});

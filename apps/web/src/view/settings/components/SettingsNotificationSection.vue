@@ -31,14 +31,24 @@
         />
       </div>
     </SettingsSectionCard>
+    <SettingsSectionCard
+      v-if="manorVisible"
+      :title="t('settings.manorTitle')"
+      :description="t('settings.manorDescription')"
+    >
+      <ManorReminderPreferences />
+    </SettingsSectionCard>
   </div>
 </template>
 <script setup lang="ts">
   import { computed } from 'vue';
   import NativeNotificationStatus from '@/components/notification/NativeNotificationStatus.vue';
   import { useI18n } from 'vue-i18n';
-  import { bookmarkStore } from '@/store';
+  import { bookmarkStore, useUserStore } from '@/store';
+  import { useGrowth } from '@/composables/useGrowth';
+  import { canOpenManor } from '@/utils/manorAccess';
   import { isGuestUser } from '@/utils/savePreference';
+  import ManorReminderPreferences from '@/components/manor/ManorReminderPreferences.vue';
   import { useBrowserPushDesktop } from '@/utils/browserPushPlatform';
   import BrowserPushSettings from '@/components/notification/BrowserPushSettings.vue';
   import BrowserPushQuietHoursSettings from '@/components/notification/BrowserPushQuietHoursSettings.vue';
@@ -46,6 +56,9 @@
   import SettingsSectionCard from './SettingsSectionCard.vue';
   import SettingsPreferenceField from './SettingsPreferenceField.vue';
   const { t } = useI18n();
+  const user = useUserStore();
+  const { growth } = useGrowth();
+  const manorVisible = computed(() => !isGuestUser() && canOpenManor(growth.value, user.adminContext));
   const desktop = useBrowserPushDesktop(),
     bookmark = bookmarkStore();
   const types = computed(() => [

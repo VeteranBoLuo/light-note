@@ -30,7 +30,7 @@ const COMMUNITY_CHAT_EXCLUDED_SQL =
   "type <> 'community_chat' AND COALESCE(source_type, '') <> 'community_chat_message'";
 const NOTIFICATION_TYPE_GROUPS = Object.freeze({
   system: Object.freeze(['system', 'collection_form_submission', 'signup_source_survey']),
-  growth: Object.freeze(['level_up', 'streak_risk', 'collection_form_reward']),
+  growth: Object.freeze(['level_up', 'streak_risk', 'collection_form_reward', 'manor_digest', 'manor_water_expiring']),
   ai_routine: Object.freeze(['daily_brief', 'ai_routine']),
 });
 const PRIMARY_NOTIFICATION_TYPES = Object.freeze([

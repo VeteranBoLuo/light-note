@@ -27,10 +27,12 @@ export async function readNativeNotifications(db, userId, input = {}) {
   const ready = await communityFeedSchemaReady(db).catch(() => false);
   const until = input.cursor?.until || clock.now;
   const after = input.cursor;
+  // Manor system alerts must use the expiring, revalidated push queue. Legacy
+  // foreground polling has no per-notification deadline; inbox rows stay visible.
   const [rows] = await db.query(
     `SELECT id, type, source_type, source_id, meta,
       DATE_FORMAT(browser_push_created_at,'%Y-%m-%d %H:%i:%s.%f') AS time
-    FROM notification WHERE user_id=? AND del_flag=0 AND COALESCE(recalled,0)=0 AND type NOT IN ('public_resource', 'email_health', 'signup_source_survey')
+    FROM notification WHERE user_id=? AND del_flag=0 AND COALESCE(recalled,0)=0 AND type NOT IN ('public_resource', 'email_health', 'signup_source_survey', 'manor_digest', 'manor_water_expiring')
       AND create_time >= DATE_SUB(NOW(), INTERVAL 24 HOUR)
       AND browser_push_created_at>=? AND browser_push_created_at<=?
       AND ${COMMUNITY_CHAT_DELIVERY_NOTIFICATION_SQL} AND ${feedNotificationVisibleSql(ready)}

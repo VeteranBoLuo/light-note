@@ -27,6 +27,7 @@
       :disabled="disabled || pending(prefKey)"
       @update:value="save"
     />
+    <slot v-if="kind === 'switch'" name="switch-label" :checked="Boolean(value)" />
   </SettingsFieldRow>
 </template>
 <script setup lang="ts">

@@ -198,3 +198,62 @@ it("来源调查邀请按语言显示发出时的奖励，不显示名额限制"
     "50 points",
   );
 });
+
+
+it("庄园两种内容共享中英文、事件日期和合并原因，历史不使用今天", () => {
+  const item = {
+    type: "manor_water_expiring",
+    meta: {
+      manor: {
+        dayKey: "20261102",
+        water: 15,
+        ripe: 3,
+        tankFull: 1,
+        compostFull: true,
+        crafted: true,
+        rewards: 1,
+      },
+    },
+  };
+  const zh = notificationPresentation(item);
+  expect(zh.title).toBe("有 15 滴任务水即将到期");
+  expect(zh.content).toContain("2026-11-02");
+  expect(zh.content).toContain(
+    "3 块地已成熟 · 养鱼舱有产肥位存满了 · 堆肥箱存满了 · 工坊鱼饵做好了 · 有等级礼物待领取",
+  );
+  expect(zh.content).not.toContain("今天");
+  expect(browserNotificationPresentation(item, "en-US").title).toBe(
+    "15 task water drops expire soon",
+  );
+  const digest = notificationPresentation(
+    {
+      ...item,
+      type: "manor_digest",
+      meta: { manor: { ...item.meta.manor, water: 0 } },
+    },
+    "en-US",
+  );
+  expect(digest.title).toBe("Your manor has rewards waiting");
+  expect(digest.content).toContain("2026-11-02 · 3 plots are ripe");
+  expect(
+    notificationPresentation({
+      ...item,
+      title: "fallback",
+      meta: { manor: { water: -1 } },
+    }).title,
+  ).toBe("fallback");
+  expect(
+    notificationPresentation({
+      ...item,
+      title: "fallback",
+      meta: { manor: { ...item.meta.manor, dayKey: 20261102 } },
+    }).title,
+  ).toBe("fallback");
+  expect(
+    notificationPresentation({
+      ...item,
+      title: "fallback",
+      meta: { manor: { ...item.meta.manor, compostFull: "false" } },
+    }).title,
+  ).toBe("fallback");
+});

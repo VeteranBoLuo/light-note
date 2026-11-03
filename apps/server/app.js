@@ -29,6 +29,7 @@ import { ensureDailyReviewSchema } from './util/dailyReviewSchema.js';
 import { assertPointsEarningActivationReady, getPointsEarningRuntime } from './util/pointsEarningPolicy.js';
 import { getPointsCampaignRuntime } from './util/pointsCampaignService.js';
 import { generateGrowthNudges } from './util/growth.js';
+import { startManorNudgeScheduler } from './util/services/knowledgeManorNudges.js';
 import { ensureOrganizeSchema } from './util/organizeSchema.js';
 import { startTodoReminderScheduler } from './util/todoReminder.js';
 import { startTodoReminderV2Scheduler } from './util/todoReminderV2.js';
@@ -311,6 +312,7 @@ function scheduleGrowthNudges() {
   console.log(`[成长提醒] 定时已注册,首次执行: ${next.toLocaleString('zh-CN')}`);
 }
 scheduleGrowthNudges();
+startManorNudgeScheduler();
 // 年度报告开放通知（开放后第一周每天 10:00 检查，同一账号最多一条）
 scheduleAnnualReportNotices();
 // 资料较多且从未备份的账号收到一次备份提醒（每天 10:30 检查，同一账号只发一次）

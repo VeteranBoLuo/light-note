@@ -244,7 +244,7 @@
 
   const WIDE_NOTIFICATION_GROUPS = Object.freeze({
     system: ['system', 'collection_form_submission', 'signup_source_survey'],
-    growth: ['level_up', 'streak_risk', 'collection_form_reward'],
+    growth: ['level_up', 'streak_risk', 'collection_form_reward', 'manor_digest', 'manor_water_expiring'],
     ai_routine: ['daily_brief', 'ai_routine'],
   });
   const WIDE_PRIMARY_TYPES = new Set([

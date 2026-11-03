@@ -69,6 +69,10 @@ interface UserInfo {
     notifyOpinionReply?: boolean; // 反馈回复通知推送
     notifyFeatureRequest?: boolean; // 共建轻笺建议进度通知
     notificationsOrganize?: boolean; // 长时间整理完成后的站内通知，默认开启
+    manorEntryDot?: boolean; // 顶栏庄园入口小红点，默认开启，与通知偏好独立
+    notifyManor?: boolean; // 庄园通知总开关，默认关闭，不控制入口红点
+    notifyManorDigest?: boolean; // 无当日庄园操作时的收获汇总
+    notifyManorWater?: boolean; // 未领取的任务水滴到期提醒
     notificationsInApp?: boolean; // 待办等站内通知总开关
     notificationsEmail?: boolean; // 待办等邮件通知总开关
     notificationsBrowser?: boolean; // 旧版账号偏好，仅保留兼容；设备推送状态由订阅接口提供
