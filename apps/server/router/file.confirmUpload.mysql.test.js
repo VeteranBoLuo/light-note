@@ -5,6 +5,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 
 const mocks = vi.hoisted(() => ({
   realLifecycle: false,
+  multipartHead: vi.fn(),
   putObjectToObs: vi.fn(),
   copyObjectInObs: vi.fn(),
   routes: new Map(),
@@ -53,6 +54,7 @@ vi.mock('../util/obsClient.js', () => ({
   putObjectToObs: mocks.putObjectToObs,
   copyObjectInObs: mocks.copyObjectInObs,
 }));
+vi.mock('../util/cloudMultipartObs.js', () => ({ headCloudMultipart: (...args) => mocks.multipartHead(...args) }));
 vi.mock('../util/fileCategory.js', () => ({
   FILE_CATEGORY_ORDER: ['pdf', 'image'],
   buildFileCategorySql: () => 'files.category',
@@ -162,6 +164,9 @@ describe.skipIf(!socketPath)('ordinary upload integrity with real MySQL transact
       'utf8',
     );
     await db.query(migration);
+    await db.query(
+      await readFile(new URL('../migrations/20261102_cloud_multipart_uploads.sql', import.meta.url), 'utf8'),
+    );
     mocks.pool.query.mockImplementation((...args) => db.query(...args));
     mocks.pool.getConnection.mockImplementation(() => db.getConnection());
   });
@@ -171,6 +176,8 @@ describe.skipIf(!socketPath)('ordinary upload integrity with real MySQL transact
     await db.query('DELETE FROM files');
     await db.query('DELETE FROM image_assets');
     await db.query('DELETE FROM cloud_legacy_object_lifecycle');
+    await db.query('DELETE FROM cloud_multipart_uploads');
+    mocks.multipartHead.mockReset();
     mocks.getObjectMetadataFromObs.mockReset().mockResolvedValue({ contentLength: 12 });
     mocks.deleteObjectFromObs.mockReset().mockResolvedValue({});
     mocks.getUserSpaceMb.mockResolvedValue(1024);
@@ -236,10 +243,9 @@ describe.skipIf(!socketPath)('ordinary upload integrity with real MySQL transact
   it('replays a saved file after its disposable upload object has been retired', async () => {
     const objectKey = key();
     const first = await confirm(objectKey, 'a.pdf');
-    await db.query(
-      "UPDATE cloud_legacy_object_lifecycle SET state='retired',available_at=NULL WHERE object_key=?",
-      [objectKey],
-    );
+    await db.query("UPDATE cloud_legacy_object_lifecycle SET state='retired',available_at=NULL WHERE object_key=?", [
+      objectKey,
+    ]);
     mocks.getObjectMetadataFromObs.mockRejectedValue(new Error('Temporary object no longer exists'));
     const retry = await confirm(objectKey, 'old-name.pdf', 999);
     expect(retry.status).toBe(200);
@@ -348,7 +354,9 @@ describe.skipIf(!socketPath)('ordinary upload integrity with real MySQL transact
     });
     expect(await cleanupLegacyCloudObject({ database: db, remove, env: { LIGHTNOTE_RUNTIME_ENV: 'test' } })).toBe(true);
     expect(remove).toHaveBeenCalledWith(objectKey);
-    expect((await db.query('SELECT state FROM cloud_legacy_object_lifecycle WHERE object_key=?', [objectKey]))[0]).toEqual([{ state: 'retired' }]);
+    expect(
+      (await db.query('SELECT state FROM cloud_legacy_object_lifecycle WHERE object_key=?', [objectKey]))[0],
+    ).toEqual([{ state: 'retired' }]);
   });
   it('publication winning first protects the object from later cleanup', async () => {
     const objectKey = key();
@@ -378,6 +386,83 @@ describe.skipIf(!socketPath)('ordinary upload integrity with real MySQL transact
     const objectKey = key();
     await abortManagedCloudUpload({ userId: 'user-1', objectKey });
     expect((await confirm(objectKey)).status).toBe(409);
+  });
+  async function multipartReady() {
+    const sessionId = randomUUID(),
+      objectKey = `files/user-1/published/multipart/${sessionId}`,
+      size = 6 * 1024 ** 3;
+    await db.query(
+      `INSERT INTO cloud_multipart_uploads
+      (id,request_id,user_id,object_key,upload_id,file_name,file_type,file_size,folder_id,state,final_etag,expires_at)
+      VALUES (?,?,'user-1',?,'upload-id','backup.zip','application/zip',?,1,'ready','final',DATE_ADD(NOW(),INTERVAL 1 HOUR))`,
+      [sessionId, sessionId, objectKey, size],
+    );
+    mocks.multipartHead.mockResolvedValue({ size, etag: 'final', sessionId });
+    return { sessionId, objectKey, size };
+  }
+  async function confirmMultipart(item, folderId = 1, extra = []) {
+    let result;
+    await mocks.routes.get('/confirmUpload').at(-1)(
+      {
+        user: { id: 'user-1', role: 'user' },
+        suppressUserRewards: true,
+        body: {
+          files: [{ multipartSessionId: item.sessionId, fileName: 'untrusted.zip', fileSize: 1 }, ...extra],
+          folderId,
+        },
+      },
+      {
+        send: (r) => {
+          result = r;
+        },
+      },
+    );
+    return result;
+  }
+  it('multipart confirmation uses server metadata, preserves overwrite identity and never copies the large object', async () => {
+    const item = await multipartReady();
+    mocks.getUserSpaceMb.mockResolvedValue(20000);
+    await db.query(
+      "INSERT INTO files (id,create_by,file_name,file_size,obs_key) VALUES (91,'user-1','backup.zip',5,'files/user-1/old')",
+    );
+    const response = await confirmMultipart(item);
+    expect(response.status).toBe(200);
+    expect(response.data[0]).toMatchObject({ fileId: 91, status: '已覆盖' });
+    const [[saved]] = await db.query('SELECT file_name,file_size,obs_key,folder_id FROM files WHERE id=91');
+    expect(saved).toMatchObject({
+      file_name: 'backup.zip',
+      file_size: item.size,
+      obs_key: item.objectKey,
+      folder_id: 1,
+    });
+    expect(mocks.copyObjectInObs).not.toHaveBeenCalled();
+    const again = await confirmMultipart(item, 2);
+    expect(again.data[0]).toMatchObject({ fileId: 91, alreadyConfirmed: true });
+    await db.query("UPDATE files SET obs_key='files/user-1/newer',file_name='newer.zip',file_size=17 WHERE id=91");
+    const newer = await confirmMultipart(item);
+    expect(newer.data[0]).toMatchObject({ fileId: 91, filename: 'newer.zip', alreadyConfirmed: true });
+    expect((await db.query('SELECT file_size FROM files WHERE id=91'))[0][0].file_size).toBe(17);
+    const { cloudMultipartUploads } = await import('../util/services/cloudMultipartUploadService.js');
+    expect(await cloudMultipartUploads.abort({ userId: 'user-1', sessionId: item.sessionId })).toMatchObject({
+      alreadyConfirmed: true,
+      fileId: 91,
+    });
+  });
+  it('multipart quota is checked at save; a later retry only saves, and mixed direct files still freeze normally', async () => {
+    const item = await multipartReady();
+    const denied = await confirmMultipart(item);
+    expect(denied.status).toBe(413);
+    expect((await db.query('SELECT state FROM cloud_multipart_uploads WHERE id=?', [item.sessionId]))[0][0].state).toBe(
+      'ready',
+    );
+    mocks.getUserSpaceMb.mockResolvedValue(20000);
+    const response = await confirmMultipart(item, 1, [
+      { objectKey: key(), fileName: 'small.pdf', fileType: 'application/pdf' },
+    ]);
+    expect(response.status).toBe(200);
+    expect(response.data).toHaveLength(2);
+    expect(mocks.copyObjectInObs).toHaveBeenCalledTimes(1);
+    expect(Number((await db.query('SELECT SUM(file_size) AS n FROM files'))[0][0].n)).toBe(item.size + 12);
   });
   it('managed confirmation cannot republish a retired ordinary upload', async () => {
     const objectKey = key();

@@ -4466,3 +4466,25 @@ FROM (
 ) required LEFT JOIN information_schema.columns present
   ON present.table_schema=DATABASE() AND present.table_name='infra_alert_silences' AND present.column_name=required.name
 WHERE present.column_name IS NULL;
+
+-- Cloud multipart uploads are an additive capability; never auto-create during requests.
+SELECT 'cloud_multipart_schema' AS check_name, 'cloud_multipart_uploads' AS detail
+FROM DUAL WHERE NOT EXISTS (
+ SELECT 1 FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='cloud_multipart_uploads'
+);
+SELECT 'cloud_multipart_column' AS check_name, required.name AS detail
+FROM (
+ SELECT 'id' AS name UNION ALL SELECT 'request_id' UNION ALL SELECT 'user_id' UNION ALL SELECT 'object_key'
+ UNION ALL SELECT 'upload_id' UNION ALL SELECT 'file_name' UNION ALL SELECT 'file_type' UNION ALL SELECT 'file_size'
+ UNION ALL SELECT 'folder_id' UNION ALL SELECT 'state' UNION ALL SELECT 'cancel_requested' UNION ALL SELECT 'final_etag'
+ UNION ALL SELECT 'file_id' UNION ALL SELECT 'expires_at' UNION ALL SELECT 'lease_token' UNION ALL SELECT 'lease_until'
+ UNION ALL SELECT 'available_at' UNION ALL SELECT 'attempts' UNION ALL SELECT 'created_at' UNION ALL SELECT 'updated_at'
+) required LEFT JOIN information_schema.columns actual ON actual.table_schema=DATABASE()
+ AND actual.table_name='cloud_multipart_uploads' AND actual.column_name=required.name
+WHERE actual.column_name IS NULL OR (actual.column_name='file_size' AND actual.data_type<>'bigint');
+SELECT 'cloud_multipart_index' AS check_name, expected.name AS detail
+FROM (SELECT 'PRIMARY' AS name UNION ALL SELECT 'uk_cloud_multipart_request'
+ UNION ALL SELECT 'idx_cloud_multipart_expiry' UNION ALL SELECT 'idx_cloud_multipart_cleanup') expected
+LEFT JOIN information_schema.statistics actual ON actual.table_schema=DATABASE()
+ AND actual.table_name='cloud_multipart_uploads' AND actual.index_name=expected.name
+WHERE actual.index_name IS NULL;

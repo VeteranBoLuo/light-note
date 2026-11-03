@@ -12,13 +12,13 @@ if (!OBS_AK || !OBS_SK || !OBS_ENDPOINT || !OBS_BUCKET_NAME) {
   console.warn('[OBS] Missing OBS env config, signed URL generation will fail until configured.');
 }
 
-const obsClient = new ObsClient({
+export const obsClient = new ObsClient({
   access_key_id: OBS_AK,
   secret_access_key: OBS_SK,
   server: OBS_ENDPOINT,
 });
 
-const bucketName = OBS_BUCKET_NAME;
+export const bucketName = OBS_BUCKET_NAME;
 const normalizeBaseUrl = () => {
   const endpointHost = (OBS_ENDPOINT || '').replace(/^https?:\/\//, '').replace(/\/$/, '');
   return `https://${bucketName}.${endpointHost}`;

@@ -27,6 +27,7 @@
     "noImplicitAny": false,
     "skipLibCheck": true,
     "paths": {
+      "@lightnote/shared/cloud-upload": ["../../packages/shared/cloudUpload.d.ts"],
       "@": ["src"],
       "@/*": ["src/*"],
       "@lightnote/shared/note-templates": ["../../packages/shared/noteTemplates.d.ts"],

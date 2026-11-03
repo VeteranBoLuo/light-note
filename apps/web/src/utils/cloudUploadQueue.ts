@@ -2,6 +2,8 @@ import axios from 'axios';
 import { apiBasePost } from '@/http/request';
 import { withForegroundActivity } from '@/http/requestActivity';
 import type { CloudUploadResult } from '@/api/cloudFileUploadApi';
+import { cloudUploadMode } from '@lightnote/shared/cloud-upload';
+import { createCloudMultipartUpload, createCloudPutLimiter } from './cloudMultipartUpload';
 
 export const CLOUD_UPLOAD_CONCURRENCY = 3;
 export const CLOUD_UPLOAD_BATCH_SIZE = 20;
@@ -9,7 +11,8 @@ export const CLOUD_UPLOAD_MOBILE_SELECTION_LIMIT = 100;
 const AUTO_RETRIES = 2;
 const PREVIEW_SIZE = 8;
 
-export type CloudUploadStatus = 'queued' | 'preparing' | 'uploading' | 'confirming' | 'retrying' | 'success' | 'error';
+export type CloudUploadStatus =
+  'queued' | 'preparing' | 'uploading' | 'merging' | 'confirming' | 'retrying' | 'success' | 'error';
 type UploadInfo = {
   filename: string;
   objectKey: string;
@@ -17,6 +20,7 @@ type UploadInfo = {
   fileType: string;
   headers?: object;
   expiresAt: number;
+  multipartSessionId?: string;
 };
 type Task = {
   id: number;
@@ -29,6 +33,7 @@ type Task = {
   progress: number;
   info?: UploadInfo;
   uploaded?: boolean;
+  multipart?: ReturnType<typeof createCloudMultipartUpload>;
   result?: CloudUploadResult;
 };
 export type CloudUploadSnapshot = {
@@ -48,6 +53,7 @@ function failure(response: any, fallback: string) {
     status: ['visitor', 'preview'].includes(response?.status) ? 401 : Number(response?.status),
     retryAfter: Number(response?.data?.retryAfter || 0),
     shortfallMB: Number(response?.data?.shortfallMB || 0),
+    code: response?.data?.errorCode,
   });
 }
 function statusOf(error: any) {
@@ -107,6 +113,7 @@ export function createCloudUploadQueue(
   let startedAt = 0;
   let transferred = 0;
   let roundTasks: Task[] | undefined;
+  const putSlot = createCloudPutLimiter(CLOUD_UPLOAD_CONCURRENCY);
 
   function snapshot(): CloudUploadSnapshot {
     let success = 0,
@@ -190,7 +197,8 @@ export function createCloudUploadQueue(
     });
     notify();
   }
-  async function prepare(group: Task[]) {
+  async function prepare(input: Task[]) {
+    const group = input.filter((task) => cloudUploadMode(task.size) === 'direct');
     if (!group.length) return;
     const response = await attempt(
       group,
@@ -225,6 +233,47 @@ export function createCloudUploadQueue(
     notify();
   }
   async function upload(task: Task) {
+    if (cloudUploadMode(task.size) === 'invalid') {
+      markError([task], new Error('UPLOAD_SIZE_INVALID'));
+      return;
+    }
+    if (cloudUploadMode(task.size) === 'multipart') {
+      task.multipart ||= createCloudMultipartUpload(task.file!, task.folderId, putSlot);
+      let lastLoaded = 0;
+      try {
+        const state = await withForegroundActivity(() =>
+          task.multipart!.run(
+            controller!.signal,
+            (loaded) => {
+              if (disposed || controller?.signal.aborted) return;
+              transferred += Math.max(0, loaded - lastLoaded);
+              lastLoaded = loaded;
+              task.progress = Math.min(99, (loaded / Math.max(1, task.size)) * 100);
+              notify();
+            },
+            (phase) => {
+              task.status = phase;
+              notify();
+            },
+          ),
+        );
+        assertActive();
+        task.info = {
+          filename: state.filename,
+          objectKey: state.objectKey,
+          fileType: state.fileType,
+          multipartSessionId: state.sessionId,
+          uploadUrl: '',
+          expiresAt: Infinity,
+        };
+        task.uploaded = true;
+        task.progress = 99;
+        task.status = 'confirming';
+      } catch (error) {
+        markError([task], error);
+      }
+      return;
+    }
     try {
       await attempt(
         [task],
@@ -237,21 +286,23 @@ export function createCloudUploadQueue(
           let lastLoaded = 0;
           try {
             await withForegroundActivity(() =>
-              axios.put(task.info!.uploadUrl, task.file!, {
-                headers: {
-                  ...task.info!.headers,
-                  'Content-Type': task.info!.fileType || task.type || 'application/octet-stream',
-                },
-                signal: controller!.signal,
-                timeout: 10 * 60_000,
-                onUploadProgress: (event) => {
-                  if (disposed || controller?.signal.aborted) return;
-                  transferred += Math.max(0, event.loaded - lastLoaded);
-                  lastLoaded = event.loaded;
-                  task.progress = Math.min(99, (event.loaded / Math.max(1, event.total || task.size)) * 100);
-                  progressChanged();
-                },
-              }),
+              putSlot(controller!.signal, () =>
+                axios.put(task.info!.uploadUrl, task.file!, {
+                  headers: {
+                    ...task.info!.headers,
+                    'Content-Type': task.info!.fileType || task.type || 'application/octet-stream',
+                  },
+                  signal: controller!.signal,
+                  timeout: 10 * 60_000,
+                  onUploadProgress: (event) => {
+                    if (disposed || controller?.signal.aborted) return;
+                    transferred += Math.max(0, event.loaded - lastLoaded);
+                    lastLoaded = event.loaded;
+                    task.progress = Math.min(99, (event.loaded / Math.max(1, event.total || task.size)) * 100);
+                    progressChanged();
+                  },
+                }),
+              ),
             );
           } catch (error) {
             // OBS 403 通常表示签名到期；重新签名不会影响已确认或待确认的文件。
@@ -286,6 +337,7 @@ export function createCloudUploadQueue(
                 fileType: task.info!.fileType || task.type,
                 fileSize: task.size,
                 objectKey: task.info!.objectKey,
+                ...(task.info!.multipartSessionId ? { multipartSessionId: task.info!.multipartSessionId } : {}),
               })),
               folderId: group[0].folderId,
             },
@@ -305,13 +357,27 @@ export function createCloudUploadQueue(
           task.progress = 100;
           // 已成功项释放 File 与签名，重试始终跳过。
           task.info = undefined;
+          task.multipart?.release();
+          task.multipart = undefined;
           task.file = undefined;
         } else task.status = 'error';
       });
       notify();
     } catch (error) {
+      const sessionExpired = [
+        'MULTIPART_SESSION_EXPIRED',
+        'MULTIPART_SESSION_INACTIVE',
+        'MULTIPART_SESSION_NOT_FOUND',
+      ].includes((error as any)?.code);
+      if (sessionExpired && group.length === 1)
+        group.forEach((task) => {
+          if (task.multipart) {
+            task.uploaded = false;
+            task.info = undefined;
+          }
+        });
       // 单个无效对象不能拖累同批的其余文件；未知/暂时错误仍保留原键，留待安全重放。
-      if (!controller?.signal.aborted && [400, 409].includes(statusOf(error)) && group.length > 1) {
+      if (!controller?.signal.aborted && ([400, 409].includes(statusOf(error)) || sessionExpired) && group.length > 1) {
         for (const task of group) {
           if (blocked) break;
           await confirm([task]);
@@ -332,6 +398,11 @@ export function createCloudUploadQueue(
     roundTasks = remaining;
     remaining.forEach((task) => {
       task.status = 'queued';
+      if (task.multipart?.wasCancelled()) {
+        task.uploaded = false;
+        task.info = undefined;
+        task.progress = 0;
+      }
     });
     notify(true);
     try {
@@ -343,7 +414,8 @@ export function createCloudUploadQueue(
           end < remaining.length &&
           end - offset < CLOUD_UPLOAD_BATCH_SIZE &&
           remaining[end].folderId === remaining[offset].folderId
-        ) end++;
+        )
+          end++;
         const group = remaining.slice(offset, end);
         offset = end;
         // 先恢复上轮已传完但确认失败的对象，不能再次 PUT 或申请新对象键。
@@ -405,11 +477,17 @@ export function createCloudUploadQueue(
     reservedFileNames: () =>
       tasks.filter((task) => task.status !== 'success').map((task) => task.name.normalize('NFC').trim()),
     snapshot,
-    cancel: () => controller?.abort(),
+    cancel: () => {
+      controller?.abort();
+      tasks.forEach((task) => {
+        if (task.status !== 'success') void task.multipart?.cancel();
+      });
+    },
     dispose: () => {
       disposed = true;
       controller?.abort();
       if (progressTimer) clearTimeout(progressTimer);
+      tasks.forEach((task) => task.multipart?.dispose());
     },
     results: () => tasks.flatMap((task) => (task.result ? [{ ...task.result, taskId: task.id }] : [])),
     shortfallMB: () => shortfallMB,

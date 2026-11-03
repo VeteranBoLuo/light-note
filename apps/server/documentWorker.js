@@ -1,6 +1,7 @@
 import { runSingleExtractionJob, cleanupExtractionMaterials } from './util/extraction/worker.js';
 import { withWorkerDiagnostics, withWorkerStage } from './util/workerDiagnostics.js';
 import { cleanupLegacyCloudObject } from './util/services/cloudLegacyObjectLifecycle.js';
+import { cloudMultipartUploads } from './util/services/cloudMultipartUploadService.js';
 import { cleanupRenameStage } from './util/services/cloudFileRenameStaging.js';
 import {
   runOrganizeInspection,
@@ -152,6 +153,7 @@ async function run() {
       rotatingQueue([
         ['rename.cleanup', () => cleanupRenameStage()],
         ['legacy.cleanup', () => cleanupLegacyCloudObject()],
+        ['multipart.cleanup', () => cloudMultipartUploads.cleanup()],
       ]),
     ),
   );

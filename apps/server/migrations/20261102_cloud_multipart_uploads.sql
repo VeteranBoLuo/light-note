@@ -1,0 +1,27 @@
+-- Explicit additive migration. No file backfill or changes to legacy PUT uploads.
+CREATE TABLE IF NOT EXISTS cloud_multipart_uploads (
+  id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  request_id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  user_id VARCHAR(255) NOT NULL,
+  object_key VARCHAR(500) NOT NULL,
+  upload_id VARCHAR(256) DEFAULT NULL,
+  file_name VARCHAR(255) NOT NULL,
+  file_type VARCHAR(255) NOT NULL,
+  file_size BIGINT UNSIGNED NOT NULL,
+  folder_id BIGINT DEFAULT NULL,
+  state ENUM('creating','uploading','completing','ready','confirmed','aborting','aborted') NOT NULL,
+  cancel_requested TINYINT UNSIGNED NOT NULL DEFAULT 0,
+  final_etag VARCHAR(255) DEFAULT NULL,
+  file_id BIGINT DEFAULT NULL,
+  expires_at DATETIME DEFAULT NULL,
+  lease_token CHAR(36) CHARACTER SET ascii COLLATE ascii_bin DEFAULT NULL,
+  lease_until DATETIME DEFAULT NULL,
+  available_at DATETIME DEFAULT NULL,
+  attempts INT UNSIGNED NOT NULL DEFAULT 0,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_cloud_multipart_request (user_id, request_id),
+  KEY idx_cloud_multipart_expiry (expires_at, id),
+  KEY idx_cloud_multipart_cleanup (available_at, id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

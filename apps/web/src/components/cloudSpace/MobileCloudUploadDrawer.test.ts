@@ -3,20 +3,10 @@ import { createApp, h, nextTick, ref } from 'vue';
 import { createI18n } from 'vue-i18n';
 import zhCN from '@/i18n/locales/zh-CN';
 
-const selectedFile = new File(['content'], 'source.md', { type: 'text/markdown' });
-
 vi.mock('@/components/base/BasicComponents/BDrawer.vue', () => ({
   default: {
     props: ['open'],
     template: '<section v-if="open"><slot /></section>',
-  },
-}));
-vi.mock('@/components/base/BasicComponents/BUpload.vue', () => ({
-  default: {
-    emits: ['change'],
-    setup(_: unknown, { emit, slots }: any) {
-      return () => h('div', { class: 'upload-stub', onClick: () => emit('change', [selectedFile]) }, slots.default?.());
-    },
   },
 }));
 vi.mock('@/components/base/BasicComponents/BButton.vue', () => ({
@@ -44,16 +34,46 @@ afterEach(() => {
 });
 
 describe('移动端正式文件上传抽屉', () => {
+  it('上一批正在检查时不打开选择器，检查结束后再按当前目标请求选择', async () => {
+    const host = document.createElement('div');
+    document.body.append(host);
+    const checking = ref(true);
+    const choose = vi.fn();
+    const close = vi.fn();
+    const app = createApp({
+      render: () =>
+        h(MobileCloudUploadDrawer, {
+          open: true,
+          checking: checking.value,
+          onChoose: choose,
+          'onUpdate:open': close,
+        }),
+    });
+    app.use(createI18n({ legacy: false, locale: 'zh-CN', messages: { 'zh-CN': zhCN } }));
+    app.mount(host);
+    cleanup = () => {
+      app.unmount();
+      host.remove();
+    };
+    host.querySelector<HTMLElement>('.mobile-cloud-upload__button')!.click();
+    expect(choose).not.toHaveBeenCalled();
+    expect(close).not.toHaveBeenCalled();
+    checking.value = false;
+    await nextTick();
+    host.querySelector<HTMLElement>('.mobile-cloud-upload__button')!.click();
+    expect(choose).toHaveBeenCalledWith(null);
+    expect(close).toHaveBeenCalledWith(false);
+  });
   it('其他页面默认回传根目录并关闭抽屉', () => {
     const host = document.createElement('div');
     document.body.append(host);
-    const received: Array<{ files: File[]; folderId: string | null }> = [];
+    const received: Array<string | null> = [];
     const openStates: boolean[] = [];
     const app = createApp({
       render: () =>
         h(MobileCloudUploadDrawer, {
           open: true,
-          onFiles: (files: File[], folderId: string | null) => received.push({ files, folderId }),
+          onChoose: (folderId: string | null) => received.push(folderId),
           'onUpdate:open': (open: boolean) => openStates.push(open),
         }),
     });
@@ -64,16 +84,16 @@ describe('移动端正式文件上传抽屉', () => {
       host.remove();
     };
 
-    host.querySelector<HTMLElement>('.upload-stub')?.click();
+    host.querySelector<HTMLElement>('.mobile-cloud-upload__button')?.click();
 
-    expect(received).toEqual([{ files: [selectedFile], folderId: null }]);
+    expect(received).toEqual([null]);
     expect(openStates).toEqual([false]);
   });
 
   it('支持把文件夹默认值改成用户选择的目标', () => {
     const host = document.createElement('div');
     document.body.append(host);
-    const received: Array<{ files: File[]; folderId: string | null }> = [];
+    const received: Array<string | null> = [];
     const folder = {
       id: 'folder-1',
       name: '项目资料',
@@ -91,7 +111,7 @@ describe('移动端正式文件上传抽屉', () => {
         h(MobileCloudUploadDrawer, {
           open: true,
           folders: [folder],
-          onFiles: (files: File[], folderId: string | null) => received.push({ files, folderId }),
+          onChoose: (folderId: string | null) => received.push(folderId),
         }),
     });
     app.use(createI18n({ legacy: false, locale: 'zh-CN', messages: { 'zh-CN': zhCN } }));
@@ -102,15 +122,15 @@ describe('移动端正式文件上传抽屉', () => {
     };
 
     host.querySelector<HTMLElement>('.folder-select-stub')?.click();
-    host.querySelector<HTMLElement>('.upload-stub')?.click();
+    host.querySelector<HTMLElement>('.mobile-cloud-upload__button')?.click();
 
-    expect(received).toEqual([{ files: [selectedFile], folderId: 'folder-1' }]);
+    expect(received).toEqual(['folder-1']);
   });
 
   it('在云空间传入有效默认文件夹时直接选中该目录', () => {
     const host = document.createElement('div');
     document.body.append(host);
-    const received: Array<{ files: File[]; folderId: string | null }> = [];
+    const received: Array<string | null> = [];
     const folder = {
       id: 'folder-current',
       name: '当前目录',
@@ -129,7 +149,7 @@ describe('移动端正式文件上传抽屉', () => {
           open: true,
           folders: [folder],
           defaultFolderId: folder.id,
-          onFiles: (files: File[], folderId: string | null) => received.push({ files, folderId }),
+          onChoose: (folderId: string | null) => received.push(folderId),
         }),
     });
     app.use(createI18n({ legacy: false, locale: 'zh-CN', messages: { 'zh-CN': zhCN } }));
@@ -139,9 +159,9 @@ describe('移动端正式文件上传抽屉', () => {
       host.remove();
     };
 
-    host.querySelector<HTMLElement>('.upload-stub')?.click();
+    host.querySelector<HTMLElement>('.mobile-cloud-upload__button')?.click();
 
-    expect(received).toEqual([{ files: [selectedFile], folderId: 'folder-current' }]);
+    expect(received).toEqual(['folder-current']);
   });
 
   it('异步刷新为同数量的新目录时仍会校准默认目标', async () => {

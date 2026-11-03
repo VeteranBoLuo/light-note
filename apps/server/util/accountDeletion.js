@@ -863,6 +863,10 @@ export async function purgeOwnedResources(connection, tables, userId) {
   await deleteIfPresent(connection, tables, 'note_tags', 'DELETE FROM note_tags WHERE user_id = ?', [userId]);
   await deleteIfPresent(connection, tables, 'bookmark', 'DELETE FROM bookmark WHERE user_id = ?', [userId]);
   await deleteIfPresent(connection, tables, 'files', 'DELETE FROM files WHERE create_by = ?', [userId]);
+  if (tables.has('cloud_multipart_uploads')) {
+    // Keep cleanup credentials until AbortMultipartUpload has finished.
+    await connection.query("UPDATE cloud_multipart_uploads SET state='aborting',cancel_requested=1,available_at=NOW(),expires_at=NULL WHERE user_id=?", [userId]);
+  }
   await deleteIfPresent(
     connection, tables, 'cloud_legacy_object_lifecycle',
     'DELETE FROM cloud_legacy_object_lifecycle WHERE user_id = ?', [userId],

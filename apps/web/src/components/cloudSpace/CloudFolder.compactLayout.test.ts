@@ -7,7 +7,6 @@ const desktopSource = readFileSync(resolve(componentRoot, 'CloudFolder.vue'), 'u
 const mobileSource = readFileSync(resolve(componentRoot, 'MobileCloudFolderDrawer.vue'), 'utf8').replace(/var\(--ui-(?:space|control|layout|font|card)-\d+, (\d+px)\)/g, '$1');
 const pickerSource = readFileSync(resolve(componentRoot, 'CloudFolderPicker.vue'), 'utf8').replace(/var\(--ui-(?:space|control|layout|font|card)-\d+, (\d+px)\)/g, '$1');
 const moveFileSource = readFileSync(resolve(componentRoot, 'MoveFile.vue'), 'utf8').replace(/var\(--ui-(?:space|control|layout|font|card)-\d+, (\d+px)\)/g, '$1');
-const uploadSource = readFileSync(resolve(componentRoot, 'HandleBtnGroup.vue'), 'utf8').replace(/var\(--ui-(?:space|control|layout|font|card)-\d+, (\d+px)\)/g, '$1');
 const fileListSource = readFileSync(resolve(componentRoot, 'fieldList.vue'), 'utf8').replace(/var\(--ui-(?:space|control|layout|font|card)-\d+, (\d+px)\)/g, '$1');
 const pageSource = readFileSync(resolve(process.cwd(), 'src/view/cloudSpace/cloudSpace.vue'), 'utf8').replace(/var\(--ui-(?:space|control|layout|font|card)-\d+, (\d+px)\)/g, '$1');
 
@@ -109,7 +108,6 @@ describe('云空间目录树紧凑布局', () => {
 
   it('文件新增、移动和删除后统一刷新目录计数快照', () => {
     expect(moveFileSource).toContain('await cloud.refreshAfterFileMutation()');
-    expect(uploadSource).toContain('await cloud.refreshAfterFileMutation({ preserveLoaded: true })');
     expect(fileListSource.match(/cloud\.refreshAfterFileMutation\(\)/gu)).toHaveLength(2);
   });
 

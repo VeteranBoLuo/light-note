@@ -12,19 +12,20 @@ const browser = await chromium.launch({
 });
 const results = [];
 const settle = (page) => page.waitForTimeout(200);
-const snapshot = (page) => page.locator('[data-mobile-resource-scroll]').evaluate((scroller) => {
-  const viewport = scroller.getBoundingClientRect();
-  const rows = [...scroller.querySelectorAll('.file-card,.field-item')]
-    .filter((element) => {
-      const rect = element.getBoundingClientRect();
-      return rect.bottom > viewport.top + 1 && rect.top < viewport.bottom;
-    })
-    .map((element) => ({
-      name: element.querySelector('.file-card-name,.file-name')?.textContent?.trim(),
-      top: element.getBoundingClientRect().top - viewport.top,
-    }));
-  return { top: scroller.scrollTop, rows };
-});
+const snapshot = (page) =>
+  page.locator('[data-mobile-resource-scroll]').evaluate((scroller) => {
+    const viewport = scroller.getBoundingClientRect();
+    const rows = [...scroller.querySelectorAll('.file-card,.field-item')]
+      .filter((element) => {
+        const rect = element.getBoundingClientRect();
+        return rect.bottom > viewport.top + 1 && rect.top < viewport.bottom;
+      })
+      .map((element) => ({
+        name: element.querySelector('.file-card-name,.file-name')?.textContent?.trim(),
+        top: element.getBoundingClientRect().top - viewport.top,
+      }));
+    return { top: scroller.scrollTop, rows };
+  });
 async function scroll(page, top) {
   await page.locator('[data-mobile-resource-scroll]').evaluate((element, value) => {
     element.scrollTop = value === 'end' ? element.scrollHeight : value;
@@ -33,11 +34,29 @@ async function scroll(page, top) {
 }
 async function upload(page, name, count = 1) {
   const total = await page.evaluate(() => window.cloudFixtureStore.fileTotal);
-  // 使用真实 BUpload 的文件选择入口以及 HandleBtnGroup 的上传/确认流程。
-  await page.locator('input[type=file]').first().setInputFiles(Array.from({ length: count }, (_, index) => ({
-    name: count === 1 ? name : `${index}-${name}`, mimeType: 'application/zip', buffer: Buffer.from('cloud scroll fixture'),
-  })));
+  // 模拟用户从全局入口打开选择器；每次打开绑定当前身份和会话。
+  const choosing = page.waitForEvent('filechooser');
+  await page.evaluate(async () => {
+    (await import('/src/store/cloudUpload.ts')).default().openPicker(null);
+  });
+  await (
+    await choosing
+  ).setFiles(
+    Array.from({ length: count }, (_, index) => ({
+      name: count === 1 ? name : `${index}-${name}`,
+      mimeType: 'application/zip',
+      buffer: Buffer.from('cloud scroll fixture'),
+    })),
+  );
   await page.waitForFunction((expected) => window.cloudFixtureStore.fileTotal === expected, total + count);
+  await page
+    .locator('.upload-progress')
+    .getByText(/^(上传完成|Upload complete)$/)
+    .waitFor();
+  await page
+    .locator('.upload-progress')
+    .getByRole('button', { name: /^(关闭|Close)$/ })
+    .click();
   await page.locator('.upload-progress').waitFor({ state: 'hidden' });
   await settle(page);
 }
@@ -59,7 +78,9 @@ try {
           }
           return route.continue();
         });
-        await page.goto(`${origin}/e2e/cloud-scroll.html?view=${view}&theme=${theme}&count=240&paged&renderProfile=${width < 768 ? 'mobile' : 'desktop'}`);
+        await page.goto(
+          `${origin}/e2e/cloud-scroll.html?view=${view}&theme=${theme}&count=240&paged&renderProfile=${width < 768 ? 'mobile' : 'desktop'}`,
+        );
         await page.locator('.file-card,.field-item').first().waitFor();
         await page.evaluate(async () => {
           window.cloudFixtureStore = (await import('/src/store/cloudSpace.ts')).default();
@@ -78,13 +99,16 @@ try {
           await page.screenshot({ path: `${output}/${view}-${width}-${theme}-${density}-top.png` });
 
           // 加载多页后选取第二页的阅读锚点，避免只验首屏。
-          if (await page.evaluate(() => window.cloudFixtureStore.filePage) < 3) {
+          if ((await page.evaluate(() => window.cloudFixtureStore.filePage)) < 3) {
             await scroll(page, 'end');
             await page.waitForFunction(() => window.cloudFixtureStore.filePage >= 2);
             await scroll(page, 'end');
             await page.waitForFunction(() => window.cloudFixtureStore.filePage >= 3);
           }
-          await scroll(page, await page.locator('[data-mobile-resource-scroll]').evaluate((element) => element.scrollHeight * 0.6));
+          await scroll(
+            page,
+            await page.locator('[data-mobile-resource-scroll]').evaluate((element) => element.scrollHeight * 0.6),
+          );
           const before = await snapshot(page);
           const pagesBefore = await page.evaluate(() => window.cloudFixtureStore.filePage);
           assert(before.top > 0);
@@ -92,14 +116,27 @@ try {
           const after = await snapshot(page);
           const same = after.rows.find((row) => row.name === before.rows[0].name);
           assert(same, `${view}/${width}/${density}: reading file remains visible`);
-          assert(Math.abs(same.top - before.rows[0].top) <= 2, `${view}/${width}/${density}: reading offset ${before.rows[0].top} -> ${same.top}`);
+          assert(
+            Math.abs(same.top - before.rows[0].top) <= 2,
+            `${view}/${width}/${density}: reading offset ${before.rows[0].top} -> ${same.top}`,
+          );
           assert(await page.evaluate((pages) => window.cloudFixtureStore.filePage >= pages, pagesBefore));
           await page.screenshot({ path: `${output}/${view}-${width}-${theme}-${density}-reading.png` });
           await upload(page, `批量上传-${density}.zip`, 4);
           const afterBatch = await snapshot(page);
           const batchAnchor = afterBatch.rows.find((row) => row.name === after.rows[0].name);
-          assert(batchAnchor && Math.abs(batchAnchor.top - after.rows[0].top) <= 2, `${view}/${width}/${density}: batch upload preserves reading position`);
-          results.push({ view, width, theme, density, atTop: atTop.top, readingOffsetDelta: same.top - before.rows[0].top });
+          assert(
+            batchAnchor && Math.abs(batchAnchor.top - after.rows[0].top) <= 2,
+            `${view}/${width}/${density}: batch upload preserves reading position`,
+          );
+          results.push({
+            view,
+            width,
+            theme,
+            density,
+            atTop: atTop.top,
+            readingOffsetDelta: same.top - before.rows[0].top,
+          });
           console.log('PASS upload scroll', view, width, theme, density);
         }
         assert.equal(puts, width < 768 ? 6 : 18);
