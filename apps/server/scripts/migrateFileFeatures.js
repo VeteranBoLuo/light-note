@@ -3,6 +3,7 @@ import fs from 'node:fs/promises';
 import pool from '../db/index.js';
 
 const files = [
+  '20261102_cloud_multipart_uploads.sql',
   '20260909_image_preview_metadata.sql',
   '20260909_organize_file_evidence.sql',
   '20260909_note_import_tasks.sql',

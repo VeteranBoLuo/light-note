@@ -1,5 +1,6 @@
 <template>
   <div class="app-root" :class="{ 'has-mobile-bottom-nav': mobileBottomNavActive }">
+    <GlobalCloudUploadQueue />
     <div v-if="!isOnline" class="app-offline-banner" role="status" aria-live="polite">
       <span class="app-offline-banner__dot" aria-hidden="true"></span>
       {{ t('http.offline') }}
@@ -56,6 +57,7 @@
   </div>
 </template>
 <script setup lang="ts">
+  import GlobalCloudUploadQueue from '@/components/cloudSpace/GlobalCloudUploadQueue.vue';
   import { syncBrowserPushOwner } from '@/composables/useBrowserPush';
   import { useNativeNotificationSync } from '@/composables/useNativeNotificationSync';
   import { useAndroidIncomingShare } from '@/composables/useAndroidIncomingShare';

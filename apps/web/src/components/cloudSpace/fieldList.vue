@@ -212,26 +212,32 @@
         </BActionMenu>
       </template>
     </CloudVirtualGrid>
-    <div v-if="downloadProgress.visible" class="download-progress-floating">
-      <div class="download-progress-header">
-        <div class="download-progress-title">{{ downloadProgress.phaseText }}</div>
-        <div class="download-progress-ops">
-          <span>{{ downloadProgress.current }}/{{ downloadProgress.total }}</span>
-          <BButton size="small" class="download-cancel-btn" @click="cancelBatchDownload">
-            {{ $t('common.cancel') }}
-          </BButton>
+    <Teleport to="#cloud-transfer-downloads" :disabled="!transferDockAvailable">
+      <div
+        v-if="downloadProgress.visible"
+        class="download-progress-floating"
+        :class="{ 'download-progress-floating--docked': transferDockAvailable }"
+      >
+        <div class="download-progress-header">
+          <div class="download-progress-title">{{ downloadProgress.phaseText }}</div>
+          <div class="download-progress-ops">
+            <span>{{ downloadProgress.current }}/{{ downloadProgress.total }}</span>
+            <BButton size="small" class="download-cancel-btn" @click="cancelBatchDownload">
+              {{ $t('common.cancel') }}
+            </BButton>
+          </div>
+        </div>
+        <div
+          class="download-progress-track"
+          role="progressbar"
+          aria-valuemin="0"
+          aria-valuemax="100"
+          :aria-valuenow="downloadProgress.percent"
+        >
+          <span :style="{ width: `${downloadProgress.percent}%` }"></span>
         </div>
       </div>
-      <div
-        class="download-progress-track"
-        role="progressbar"
-        aria-valuemin="0"
-        aria-valuemax="100"
-        :aria-valuenow="downloadProgress.percent"
-      >
-        <span :style="{ width: `${downloadProgress.percent}%` }"></span>
-      </div>
-    </div>
+    </Teleport>
     <div v-if="viewMode === 'table' && !bookmark.isMobile" class="field-header">
       <div class="flex-align-center-gap" :style="{ width: fieldNameWidth }">
         <BTooltip :title="fileSortLabel('fileName')">
@@ -896,7 +902,7 @@
   const { canJoinProject, joinProject } = useProjectResourceAction();
   import { useResourceSelection } from '@/composables/useResourceSelection';
   import type { SelectionOperation } from '@/store/resourceSelection';
-  import { computed, defineAsyncComponent, nextTick, ref, watch } from 'vue';
+  import { computed, defineAsyncComponent, nextTick, onMounted, ref, watch } from 'vue';
   import { blockGuestWrite } from '@/composables/useGuestGuard';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import BDropdown from '@/components/base/BasicComponents/BDropdown.vue';
@@ -983,6 +989,10 @@
   }
   const cloud = cloudSpaceStore();
   const bookmark = bookmarkStore();
+  const transferDockAvailable = ref(false);
+  onMounted(() => {
+    transferDockAvailable.value = Boolean(document.getElementById('cloud-transfer-downloads'));
+  });
   const user = useUserStore();
   const router = useRouter();
 
@@ -2670,6 +2680,14 @@
         color: var(--text-color);
       }
     }
+  }
+  .download-progress-floating--docked {
+    position: relative;
+    top: auto;
+    right: auto;
+    width: 100%;
+    z-index: auto;
+    box-sizing: border-box;
   }
   .batch-download-choice {
     display: grid;

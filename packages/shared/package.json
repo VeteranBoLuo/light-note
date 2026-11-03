@@ -9,6 +9,10 @@
     "test": "vitest run"
   },
   "exports": {
+    "./cloud-upload": {
+      "types": "./cloudUpload.d.ts",
+      "default": "./cloudUpload.js"
+    },
     ".": {
       "types": "./index.d.ts",
       "default": "./index.js"

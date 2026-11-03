@@ -383,6 +383,17 @@ describe('账号注销后台清理', () => {
     );
   });
 
+  it('注销时先保留分片回收凭据并标记取消，避免只删对象遗留未合并分片', async () => {
+    const connection = { query: vi.fn().mockResolvedValue([[]]) };
+    await purgeOwnedResources(connection, new Set(['cloud_multipart_uploads']), 'user-1');
+    expect(connection.query).toHaveBeenCalledWith(expect.stringContaining("SET state='aborting',cancel_requested=1"), [
+      'user-1',
+    ]);
+    expect(connection.query.mock.calls.some(([sql]) => sql.includes('DELETE FROM cloud_multipart_uploads'))).toBe(
+      false,
+    );
+  });
+
   it('注销时删除本账号公开表单以触发回答级联清理', async () => {
     const connection = createConnection(async () => [{ affectedRows: 1 }]);
     await purgeOwnedResources(connection, new Set(['collection_forms']), 'user-1');

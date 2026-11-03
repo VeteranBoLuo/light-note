@@ -298,6 +298,11 @@ declare(ADMIN_POLICIES.READ, 'file', [
 ]);
 
 declare(ADMIN_POLICIES.CONTENT_WRITE, 'file', [
+  ['POST', '/file/initMultipartUpload'],
+  ['POST', '/file/signMultipartParts'],
+  ['POST', '/file/multipartUploadStatus'],
+  ['POST', '/file/completeMultipartUpload'],
+  ['POST', '/file/abortMultipartUpload'],
   ['POST', '/file/uploadFiles'],
   ['POST', '/file/confirmUpload'],
   ['POST', '/file/prepareManagedUpload'],

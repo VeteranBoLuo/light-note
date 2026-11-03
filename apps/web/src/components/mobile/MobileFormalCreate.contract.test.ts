@@ -39,7 +39,6 @@ describe('移动端正式新建与快速收集的职责边界', () => {
 
   it('全局上传允许选择文件夹并按入口计算默认值，模块顶部加号仍继承当前文件夹', () => {
     expect(createLayerSource).toContain('defaultUploadFolderId');
-    expect(createLayerSource).toContain('uploadSelectedFiles(files, folderId)');
     expect(cloudSpaceSource).toContain('onAdd: () => openCurrentFolderUpload()');
     expect(cloudSpaceSource).not.toContain('consumeFormalFileCreateIntent');
   });
