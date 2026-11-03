@@ -105,6 +105,14 @@
           >
         </li>
       </ul>
+    </template>
+    <AdminManorSummaryCard
+      v-if="showManorSummary"
+      ref="manorSummaryCard"
+      :hide-internal="hideInternal"
+      :mobile="bookmark.isMobile"
+    />
+    <template v-if="data">
       <div v-if="pendingTotal > 0" class="ov-attention">
         <SvgIcon :src="icon.settings.notification" size="18" /><strong>{{ t('adminWorkspace.pending') }}</strong>
         <BButton v-if="data.pending.opinion > 0" type="text" size="small" @click="go('userOpinion')">{{
@@ -243,7 +251,8 @@
   import { getAdminOverviewSnapshot } from '@/api/adminOverview.ts';
   import { useAdminCursorList } from '@/composables/useAdminCursorList.ts';
   import router from '@/router';
-  import { bookmarkStore } from '@/store';
+  import { bookmarkStore, useUserStore } from '@/store';
+  import AdminManorSummaryCard from './AdminManorSummaryCard.vue';
   import AdminGrowthTrendCard from './AdminGrowthTrendCard.vue';
   import AdminActiveUsersDrawer from './AdminActiveUsersDrawer.vue';
   import type { ActiveUsersPage } from '@/api/userActivity';
@@ -276,6 +285,9 @@
   import { findVerticalScrollContainer, scrollIntoContainer } from '@/utils/scrolling';
 
   const bookmark = bookmarkStore();
+  const user = useUserStore();
+  const showManorSummary = computed(() => user.role === 'root' && !user.adminContext);
+  const manorSummaryCard = ref<InstanceType<typeof AdminManorSummaryCard> | null>(null);
   const { t } = useI18n({ messages: adminWorkspaceMessages, missingWarn: false, fallbackWarn: false });
   const data = ref<any>(null);
   const hideInternal = ref(true);
@@ -574,6 +586,7 @@
   }
 
   function refreshOverview() {
+    void manorSummaryCard.value?.refresh();
     void load({ force: true });
   }
 

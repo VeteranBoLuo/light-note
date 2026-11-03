@@ -27,6 +27,7 @@ async function respond(req, res, fn) {
 }
 export const getManorAdminStatus = (req, res) => respond(req, res, () => manorAdminService.status());
 export const getManorAdminOverview = (req, res) => respond(req, res, () => manorAdminService.overview(req.query));
+export const getManorAdminSummary = (req, res) => respond(req, res, () => manorAdminService.summary(req.query));
 export const getManorAdminPlayers = (req, res) => respond(req, res, () => manorAdminService.players(req.query));
 export const getManorAdminPlayer = (req, res) => respond(req, res, () => manorAdminService.player(req.params.userId));
 export const getManorAdminOperations = (req, res) => respond(req, res, () => manorAdminService.operations(req.query));
