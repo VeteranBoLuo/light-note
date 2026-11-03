@@ -9,6 +9,8 @@ import UserMg from '@/view/admin/components/userMg/UserMg.vue';
 import UserMgMobile from '@/view/admin/components/userMg/UserMgMobile.vue';
 import OperationLog from '@/view/admin/components/operationLog/OperationLog.vue';
 import ConversionFunnel from '@/view/admin/components/conversion/ConversionFunnel.vue';
+import ManorManagement from '@/view/admin/components/manorManagement/ManorManagement.vue';
+import { createManorAdminFixture } from './manorAdminFixture';
 import { bookmarkStore, useUserStore } from '@/store';
 import { isMobileViewport, usesMobileDeviceLayout } from '@/config/responsive';
 import { applyUiDensity } from '@/composables/useUiDensity';
@@ -26,7 +28,7 @@ const mobile = isMobileViewport(innerWidth);
 const pinia = createPinia();
 useUserStore(pinia).setUserInfo({
   id: 'admin-layout-fixture',
-  role: 'root',
+  role: params.get('role') === 'admin' ? 'admin' : 'root',
   alias: 'Fixture',
   preferences: { theme, lang: locale, noteViewMode: 'card' },
 });
@@ -150,9 +152,58 @@ const response = (config: any, data: unknown, status = 200) => ({
   headers: {},
   config,
 });
+let manorSummaryReads = 0;
 request.defaults.adapter = async (config) => {
   const body = typeof config.data === 'string' ? JSON.parse(config.data || '{}') : config.data || {};
   const url = config.url || '';
+  if (url.includes('/growth/admin/manor/')) {
+    const fixture = createManorAdminFixture();
+    const scenario = params.get('manor') || '';
+    const hideInternal = config.params?.hideInternal !== false && config.params?.hideInternal !== 'false';
+    if (scenario === 'slow') await new Promise((resolve) => setTimeout(resolve, 1800));
+    if (scenario === 'error') return response(config, null, 503);
+    if (scenario === 'maintenance') fixture.runtime.mode = 'maintenance';
+    if (scenario === 'closed') fixture.runtime.deploymentEnabled = false;
+    if (url.endsWith('/status')) return response(config, fixture.runtime);
+    if (url.endsWith('/overview')) {
+      const overview = fixture.overview();
+      overview.range.hideInternal = hideInternal;
+      return response(config, overview);
+    }
+    if (url.endsWith('/summary')) {
+      manorSummaryReads++;
+      if (scenario === 'refresh-error' && manorSummaryReads > 1) return response(config, null, 503);
+      const daily = fixture.overview().finances!.trend.map((row) => ({ ...row, net: row.issued - row.spent }));
+      if (scenario === 'empty')
+        daily.forEach((row) => {
+          row.issued = 0;
+          row.spent = 0;
+          row.net = 0;
+        });
+      if (!hideInternal && scenario !== 'empty') {
+        daily[6].spent += 40;
+        daily[6].net -= 40;
+      }
+      const report = {
+        day: daily[6].day,
+        hideInternal,
+        runtime: fixture.runtime,
+        daily: scenario === 'finances-error' ? null : daily,
+        activeToday:
+          scenario === 'unknown'
+            ? null
+            : scenario === 'empty'
+              ? 0
+              : (hideInternal ? 8 : 10) + (scenario === 'refresh-update' ? manorSummaryReads - 1 : 0),
+        activityPartialToday: scenario === 'partial',
+        failures: scenario === 'finances-error' ? ['finances'] : [],
+      };
+      if (scenario === 'unknown') report.runtime.coverageStartedAt = null;
+      if (scenario === 'partial') report.runtime.coverageStartedAt = `${report.day}T08:00:00+08:00`;
+      return response(config, report);
+    }
+    throw new Error(`UNEXPECTED_MANOR_FIXTURE_REQUEST: ${url}`);
+  }
   if (state === 'loading') await new Promise((resolve) => setTimeout(resolve, 60000));
   else await new Promise((resolve) => setTimeout(resolve, state === 'slow' ? 1000 : 30));
   if (state === 'error' && !url.includes('community')) return response(config, null, 503);
@@ -278,12 +329,14 @@ const router = createRouter({
         { path: 'userMg', component: UserMg },
         { path: 'operationLog', component: OperationLog },
         { path: 'conversion', component: ConversionFunnel },
+        { path: 'manorManagement', component: ManorManagement },
       ],
     },
     { path: '/overview', component: AdminOverview },
     { path: '/userMg', component: UserMgMobile },
     { path: '/operationLog', component: OperationLog },
     { path: '/conversion', component: ConversionFunnel },
+    { path: '/manorManagement', component: ManorManagement },
   ],
 });
 // Navigation in the production shell imports its router directly. Keep those
