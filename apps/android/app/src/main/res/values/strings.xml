@@ -55,4 +55,23 @@
     <string name="share_receiving">正在接收分享…</string>
     <string name="share_receiving_files">已处理 %1$d / %2$d 个文件</string>
     <string name="share_receiving_content">正在准备分享内容</string>
+    <string name="notification_diagnostic_title">通知连接诊断</string>
+    <string name="notification_diagnostic_message">本次通知连接检查未完成。\n\n失败环节：%1$s\n错误码：%2$s\n\n请复制错误码或截图反馈。错误码不包含账号或推送标识。同一错误不连续提示，退到桌面再返回 App 可再次查看。站内通知仍可使用。</string>
+    <string name="notification_diagnostic_copy">复制错误码</string>
+    <string name="notification_diagnostic_dismiss">知道了</string>
+    <string name="notification_diagnostic_copy_failed">复制失败，请截图记录错误码</string>
+    <string name="notification_diagnostic_privacy">读取隐私授权</string>
+    <string name="notification_diagnostic_installation_read">读取本地安装状态</string>
+    <string name="notification_diagnostic_revision">核对连接标识版本</string>
+    <string name="notification_diagnostic_identity">生成设备连接标识</string>
+    <string name="notification_diagnostic_installation_write">保存本地安装状态</string>
+    <string name="notification_diagnostic_description">生成设备连接信息</string>
+    <string name="notification_diagnostic_receipt_read">读取本地连接回执</string>
+    <string name="notification_diagnostic_receipt_save">保存本地连接回执</string>
+    <string name="notification_diagnostic_receipt_remove">清理本地连接回执</string>
+    <string name="notification_diagnostic_bind">检查手机通知状态</string>
+    <string name="notification_diagnostic_delivery">同步手机通知</string>
+    <string name="notification_diagnostic_clear">清理账号通知连接</string>
+    <string name="notification_diagnostic_settings">打开手机通知设置</string>
+    <string name="notification_diagnostic_bridge">处理通知检查请求</string>
 </resources>

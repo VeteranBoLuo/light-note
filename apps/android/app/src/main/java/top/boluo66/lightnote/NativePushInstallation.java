@@ -19,33 +19,46 @@ final class NativePushInstallation {
     }
     private String accountKey(String owner) { return NativePushIdentity.digest(owner); }
     synchronized JSONObject describe(String owner, String token, String appId) throws Exception {
-        if (!PrivacyConsentStore.isAccepted(context)) throw new IOException("PUSH_CONSENT_REQUIRED");
-        String id = prefs.getString("installation_id", "");
-        if (id.isEmpty()) id = UUID.randomUUID().toString();
-        String account = accountKey(owner);
-        String tokenHash = NativePushIdentity.digest(token);
-        long revision = prefs.getLong("revision:" + account, 0);
-        if (!tokenHash.equals(prefs.getString("token_hash:" + account, ""))) revision++;
-        if (revision < 1 || revision >= 9007199254740991L) throw new IOException("PUSH_REVISION_INVALID");
-        String identityScope = account + ":" + NativePushIdentity.digest(appId);
-        String key = prefs.getString("device_key:" + identityScope, "");
-        String kind = prefs.getString("identity_kind:" + identityScope, "installation");
-        if (key.isEmpty()) {
-            String platformId;
-            try { platformId = Settings.Secure.getString(context.getContentResolver(), Settings.Secure.ANDROID_ID); }
-            catch (RuntimeException ignored) { platformId = null; }
-            key = NativePushIdentity.key(platformId, id, owner, context.getPackageName(), appId);
-            kind = NativePushIdentity.usablePlatformId(platformId) ? "scoped" : "installation";
+        NativePushDiagnostics.Stage stage = NativePushDiagnostics.Stage.PRIVACY;
+        try {
+            if (!PrivacyConsentStore.isAccepted(context)) throw new IOException("PUSH_CONSENT_REQUIRED");
+            stage = NativePushDiagnostics.Stage.IDENTITY;
+            if (appId == null || appId.isEmpty()) throw new IOException("PUSH_APP_ID_UNAVAILABLE");
+            String account = accountKey(owner);
+            String tokenHash = NativePushIdentity.digest(token);
+            String identityScope = account + ":" + NativePushIdentity.digest(appId);
+            stage = NativePushDiagnostics.Stage.INSTALLATION_READ;
+            String id = prefs.getString("installation_id", "");
+            if (id.isEmpty()) id = UUID.randomUUID().toString();
+            long revision = prefs.getLong("revision:" + account, 0);
+            if (!tokenHash.equals(prefs.getString("token_hash:" + account, ""))) revision++;
+            stage = NativePushDiagnostics.Stage.REVISION;
+            if (revision < 1 || revision >= 9007199254740991L) throw new IOException("PUSH_REVISION_INVALID");
+            stage = NativePushDiagnostics.Stage.INSTALLATION_READ;
+            String key = prefs.getString("device_key:" + identityScope, "");
+            String kind = prefs.getString("identity_kind:" + identityScope, "installation");
+            stage = NativePushDiagnostics.Stage.IDENTITY;
+            if (key.isEmpty()) {
+                String platformId;
+                try { platformId = Settings.Secure.getString(context.getContentResolver(), Settings.Secure.ANDROID_ID); }
+                catch (RuntimeException ignored) { platformId = null; }
+                key = NativePushIdentity.key(platformId, id, owner, context.getPackageName(), appId);
+                kind = NativePushIdentity.usablePlatformId(platformId) ? "scoped" : "installation";
+            }
+            // Keep the first identity for this installation even if a compatibility layer
+            // temporarily stops exposing its scoped ID on a later foreground check.
+            stage = NativePushDiagnostics.Stage.INSTALLATION_WRITE;
+            if (!prefs.edit().putString("installation_id", id).putLong("revision:" + account, revision)
+                .putString("token_hash:" + account, tokenHash).putString("device_key:" + identityScope, key)
+                .putString("identity_kind:" + identityScope, kind).commit()) throw new IOException("PUSH_STORAGE_FAILED");
+            stage = NativePushDiagnostics.Stage.DESCRIPTION;
+            return new JSONObject().put("id", id).put("revision", revision)
+                .put("key", key).put("identityKind", kind)
+                .put("packageName", context.getPackageName()).put("pushAppId", appId)
+                .put("deviceLabel", Build.MODEL == null ? "Android" : Build.MODEL.substring(0, Math.min(96, Build.MODEL.length())).replaceAll("[\\p{Cntrl}]", " "));
+        } catch (Exception error) {
+            throw NativePushDiagnostics.failure(stage, error);
         }
-        // Keep the first identity for this installation even if a compatibility layer
-        // temporarily stops exposing its scoped ID on a later foreground check.
-        if (!prefs.edit().putString("installation_id", id).putLong("revision:" + account, revision)
-            .putString("token_hash:" + account, tokenHash).putString("device_key:" + identityScope, key)
-            .putString("identity_kind:" + identityScope, kind).commit()) throw new IOException("PUSH_STORAGE_FAILED");
-        return new JSONObject().put("id", id).put("revision", revision)
-            .put("key", key).put("identityKind", kind)
-            .put("packageName", context.getPackageName()).put("pushAppId", appId)
-            .put("deviceLabel", Build.MODEL == null ? "Android" : Build.MODEL.substring(0, Math.min(96, Build.MODEL.length())).replaceAll("[\\p{Cntrl}]", " "));
     }
     synchronized JSONObject read(String owner) throws Exception {
         String raw = prefs.getString("binding:" + accountKey(owner), "");

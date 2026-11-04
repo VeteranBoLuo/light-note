@@ -28,17 +28,21 @@ public final class HuaweiPushProbe {
     static synchronized void initialize(Context context) throws Exception {
         if (initialized) return;
         try (InputStream input = context.getAssets().open("agconnect-services.json")) {
-            AGConnectServicesConfig.fromContext(context).overlayWith(input);
+            AGConnectServicesConfig config = AGConnectServicesConfig.fromContext(context);
+            config.overlayWith(input);
             // overlayWith stores a lazy stream. Force config parsing before closing the asset.
-            String configuredAppId = appId(context);
+            String configuredAppId = config.getString("client/app_id");
             if (configuredAppId == null || configuredAppId.isEmpty()) throw new IllegalStateException("Missing app ID");
+            if (!configuredAppId.equals(BuildConfig.HUAWEI_PUSH_APP_ID)) throw new IllegalStateException("App ID mismatch");
             AGConnectInstance.initialize(context);
         }
         HmsMessaging.getInstance(context).setAutoInitEnabled(false);
         initialized = true;
     }
     static String appId(Context context) {
-        return AGConnectServicesConfig.fromContext(context).getString("client/app_id");
+        // A cached token can be reused before SDK initialization after a process restart.
+        // The build validates this public ID from the same config used by the manifest and assets.
+        return BuildConfig.HUAWEI_PUSH_APP_ID;
     }
     static void register(Context context) {
         final Context app = context.getApplicationContext();
