@@ -495,13 +495,16 @@
   }
 
   .profile-background-surface.is-decorated > .chat-profile-content__identity {
+    // 名片沿用资料页的整体高度，内边距计入下限；大头像框与长文字仍可自然撑开。
+    box-sizing: border-box;
     background: transparent;
     border: 0;
-    min-height: var(--ui-layout-200, 200px);
-    padding: var(--ui-space-24, 24px);
+    min-height: var(--ui-layout-160, 160px);
+    padding: var(--ui-space-16, 16px);
   }
 
   .chat-profile-content__hero.profile-background-surface.is-decorated > .chat-profile-content__identity {
+    min-height: var(--ui-layout-200, 200px);
     padding: 0;
   }
 
