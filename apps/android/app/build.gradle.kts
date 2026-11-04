@@ -12,6 +12,8 @@ val debugHomeUrl = providers.gradleProperty("lightNoteHomeUrl")
 
 val notificationSmokeEnabled = providers.gradleProperty("lightNoteNotificationSmoke")
     .map(String::toBoolean).getOrElse(false)
+val notificationDiagnosticsEnabled = providers.gradleProperty("lightNoteNotificationDiagnostics")
+    .map(String::toBoolean).getOrElse(false)
 
 val huaweiPushEnabled = providers.gradleProperty("lightNoteHuaweiPush")
     .map(String::toBoolean).getOrElse(false)
@@ -125,9 +127,11 @@ android {
         versionCode = releaseVersionCode
         versionName = releaseVersionName
         buildConfigField("boolean", "NOTIFICATION_SMOKE", "false")
+        buildConfigField("boolean", "NOTIFICATION_DIAGNOSTICS", notificationDiagnosticsEnabled.toString())
         buildConfigField("boolean", "NOTIFICATION_SYNC", "false")
         buildConfigField("boolean", "HUAWEI_PUSH_PROBE", "false")
         buildConfigField("boolean", "HUAWEI_PUSH", "false")
+        buildConfigField("String", "HUAWEI_PUSH_APP_ID", "\"\"")
         buildConfigField("String", "HOME_URL", "\"https://boluo66.top/app\"")
     }
 
@@ -147,6 +151,7 @@ android {
             applicationIdSuffix = ".preview"
             buildConfigField("boolean", "HUAWEI_PUSH_PROBE", huaweiPushProbeEnabled.toString())
             buildConfigField("boolean", "HUAWEI_PUSH", huaweiPushEnabled.toString())
+            buildConfigField("String", "HUAWEI_PUSH_APP_ID", "\"$huaweiDebugAppId\"")
             manifestPlaceholders["huaweiAppId"] = huaweiDebugAppId
             buildConfigField("boolean", "NOTIFICATION_SMOKE", notificationSmokeEnabled.toString())
             buildConfigField("boolean", "NOTIFICATION_SYNC", notificationSyncEnabled.toString())
@@ -155,6 +160,7 @@ android {
         release {
             isMinifyEnabled = false
             buildConfigField("boolean", "HUAWEI_PUSH", huaweiPushReleaseEnabled.toString())
+            buildConfigField("String", "HUAWEI_PUSH_APP_ID", "\"$huaweiReleaseAppId\"")
             buildConfigField("boolean", "NOTIFICATION_SYNC", huaweiPushReleaseEnabled.toString())
             manifestPlaceholders["huaweiAppId"] = huaweiReleaseAppId
             signingConfig = signingConfigs.findByName("release")
@@ -180,6 +186,7 @@ android {
             getByName("debug").manifest.srcFile("src/huaweiPush/AndroidManifest.xml")
             getByName("debug").java.srcDir("src/huaweiPush/java")
             getByName("debug").assets.srcDir(layout.buildDirectory.dir("generated/huawei-debug-assets"))
+            getByName("androidTest").java.srcDir("src/huaweiPushAndroidTest/java")
         }
         if (huaweiPushProbeEnabled) {
             getByName("debug").manifest.srcFile(layout.buildDirectory.file("generated/huawei-probe/AndroidManifest.xml"))

@@ -301,6 +301,7 @@ public final class MainActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        if (nativeNotificationSync != null) nativeNotificationSync.resume();
         pushSystemThemeToWeb(WindowInsetsSupport.isSystemNightMode());
         refreshNativeNotificationStatus();
         // 只在前台登记：退到后台还弹对话框是打扰，那时也不该由我们发起 startActivity
@@ -1605,6 +1606,7 @@ public final class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        if (nativeNotificationSync != null) nativeNotificationSync.close();
         if (prewarmNetworkSupport != null) prewarmNetworkSupport.close();
         IncomingShareStore.removeProgressListener(shareProgressListener);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && backInvokedCallback != null) {

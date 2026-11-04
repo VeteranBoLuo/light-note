@@ -27,6 +27,7 @@ final class NativeNotificationSync {
     private final SharedPreferences prefs;
     private final NotificationManager manager;
     private final NativePushInstallation pushInstallation;
+    private final NativePushDiagnostics diagnostics;
     private String owner = "";
     private String epoch = "";
     private String openOwner = "";
@@ -36,13 +37,17 @@ final class NativeNotificationSync {
         prefs = activity.getSharedPreferences("native_notification_sync", Activity.MODE_PRIVATE);
         manager = activity.getSystemService(NotificationManager.class);
         pushInstallation = new NativePushInstallation(activity);
+        diagnostics = new NativePushDiagnostics(activity);
     }
+    void resume() { diagnostics.reset(); }
+    void close() { diagnostics.reset(); }
     void pageChanged() { epoch = ""; }
     void open(Intent intent) {
         openOwner = intent == null ? "" : intent.getStringExtra("native_notification_owner");
         if (openOwner == null) openOwner = "";
     }
     void clear() {
+        diagnostics.reset();
         pushInstallation.advance(prefs.getString("owner", owner));
         owner = ""; epoch = ""; openOwner = "";
         remote("clear");
@@ -142,6 +147,15 @@ final class NativeNotificationSync {
         } catch (ReflectiveOperationException ignored) { return ""; }
     }
     JSONObject handle(JSONObject request) throws Exception {
+        try {
+            return handleRequest(request);
+        } catch (Exception error) {
+            String code = diagnostics.report(NativePushDiagnostics.stageForAction(request.optString("action")), error);
+            return new JSONObject().put("token", request.optString("token")).put("ok", false)
+                .put("diagnosticCode", code);
+        }
+    }
+    private JSONObject handleRequest(JSONObject request) throws Exception {
         JSONObject reply = new JSONObject().put("token", request.optString("token")).put("ok", false);
         if (!BuildConfig.NOTIFICATION_SYNC || !PrivacyConsentStore.isAccepted(activity)) return reply;
         String action = request.optString("action");
@@ -251,7 +265,10 @@ final class NativeNotificationSync {
             reply.put("pushProtocolVersion", 2);
             if (!remoteToken.isEmpty()) {
                 try { reply.put("installation", pushInstallation.describe(owner, remoteToken, remote("appId"))); }
-                catch (Exception ignored) { return reply.put("storageUnavailable", true); }
+                catch (Exception error) {
+                    String code = diagnostics.report(NativePushDiagnostics.Stage.BIND, error);
+                    return reply.put("storageUnavailable", true).put("diagnosticCode", code);
+                }
             }
         }
         // Keep the registration attempt above: a working compatibility token overrides HMS diagnostics.
