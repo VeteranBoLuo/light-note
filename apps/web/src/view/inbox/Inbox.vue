@@ -171,6 +171,14 @@
           </BButton>
         </aside>
 
+        <section v-if="isTodoFocused && todo.filters.scope === 'attention'" class="todo-attention-context">
+          <div>
+            <strong>{{ t('todoWorkspace.attention') }}</strong>
+            <span>{{ t('todoWorkspace.attentionHint') }}</span>
+          </div>
+          <BButton type="text" @click="resetTodoView">{{ t('todoWorkspace.viewAll') }}</BButton>
+        </section>
+
         <div class="todo-controls-row" :class="{ 'is-desktop': isTodoFocused && !bookmark.isMobile && !embedded }">
           <!-- 移动端先选择视图，再选择该视图的完成状态。 -->
           <section v-if="isTodoFocused && bookmark.isMobile" class="todo-workspace-toolbar">
@@ -585,7 +593,7 @@
                     <div v-if="bookmark.isDesktop" class="todo-group__columns" aria-hidden="true"
                       ><span>{{ t('todoWorkspace.organization') }}</span
                       ><span class="todo-group__centered-column">{{ t('todoWorkspace.priority') }}</span
-                      ><span class="todo-group__centered-column">{{ t('todoWorkspace.deadline') }}</span
+                      ><span class="todo-group__centered-column">{{ t('todoWorkspace.time') }}</span
                       ><span class="todo-group__centered-column">{{ t('todoWorkspace.nextReminder') }}</span></div
                     >
                   </header>
@@ -1238,7 +1246,12 @@
   const normalizeTodoView = (value: unknown): TodoView =>
     value === 'agenda' || value === 'calendar' || value === 'matrix' ? value : 'list';
   const todoViewUsesStatusFilter = (view: TodoView) => view === 'list' || view === 'matrix';
-  const todoView = ref<TodoView>(normalizeTodoView(user.preferences.todoView));
+  const todoView = ref<TodoView>(
+    route.query.attention === '1' && !route.query.todoId && !props.embedded
+      ? 'list'
+      : normalizeTodoView(user.preferences.todoView),
+  );
+  let attentionViewChange = false;
   const viewportHeight = ref(window.innerHeight);
   const overviewOverride = ref<boolean | null>(null);
   const updateViewportHeight = () => {
@@ -1296,7 +1309,7 @@
       ...group,
       label:
         group.key === 'all'
-          ? t('todoWorkspace.all')
+          ? t(todo.filters.scope === 'attention' ? 'todoWorkspace.attention' : 'todoWorkspace.all')
           : group.key === 'focus'
             ? t('todoWorkspace.focus')
             : group.key === 'completed'
@@ -1576,6 +1589,7 @@
   );
   const emptyStateTitle = computed(() => {
     if (inbox.filterType === 'todo') {
+      if (todo.filters.scope === 'attention') return t('todoWorkspace.attentionEmptyTitle');
       return todo.status === 'completed' ? t('inbox.todoCompletedEmptyTitle') : t('inbox.todoEmptyTitle');
     }
     if (isInboxGloballyEmpty.value) return t('inbox.emptyTitle');
@@ -1584,6 +1598,7 @@
   });
   const emptyStateDesc = computed(() => {
     if (inbox.filterType === 'todo') {
+      if (todo.filters.scope === 'attention') return t('todoWorkspace.attentionEmptyHint');
       return isMobileTodoPrimary.value ? t('inbox.todoPrimaryEmptyDesc') : t('inbox.todoEmptyDesc');
     }
     if (isInboxGloballyEmpty.value) return t('inbox.emptyDesc');
@@ -1598,6 +1613,7 @@
     });
   });
   const emptyStateAction = computed(() => {
+    if (inbox.filterType === 'todo' && todo.filters.scope === 'attention') return t('todoWorkspace.viewAll');
     if (inbox.filterType === 'all') return t('inbox.collectFirst');
     if (inbox.filterType === 'todo') return t('inbox.createTodo');
     return t('inbox.collectType', { type: currentTypeLabel.value });
@@ -1740,6 +1756,11 @@
     if (isTodoFocused.value) applyDefaultTodoSort();
     const requestedTodoId = String(route.query.todoId || '');
     if (isTodoFocused.value) todo.status = requestedTodoId ? 'all' : 'pending';
+    const requestedAttention = route.query.attention === '1' && !requestedTodoId && !embedded.value;
+    if (requestedAttention) {
+      applyTodoAttentionEntry();
+      await consumeTodoAttentionEntry();
+    }
     await refreshList();
     await openRequestedTodo(requestedTodoId, { listReady: true });
     if (scrollContainer.value) {
@@ -1786,6 +1807,8 @@
     },
   );
   watch(todoView, (view, previous) => {
+    const temporaryAttentionView = attentionViewChange;
+    attentionViewChange = false;
     scopeDrawerOpen.value = false;
     const unscoped = view === 'calendar' || view === 'matrix';
     const wasUnscoped = previous === 'calendar' || previous === 'matrix';
@@ -1819,11 +1842,45 @@
       selectedTodoIds.value = [];
       todoBatchActionsOpen.value = false;
     }
-    if (user.preferences.todoView === view) return;
+    if (temporaryAttentionView || user.preferences.todoView === view) return;
     updatePreference({ todoView: view }).catch(() => {
       message.warning(t('settings.saveFailed'));
     });
   });
+
+  function applyTodoAttentionEntry() {
+    inbox.filterType = 'todo';
+    inbox.keyword = '';
+    todo.focusAttention();
+    savedTodoRange = null;
+    collapsedGroups.value = {};
+    selectedTodoIds.value = [];
+    todoSelectionMode.value = false;
+    seriesDrawerOpen.value = false;
+    scopeDrawerOpen.value = false;
+    const viewChanged = todoView.value !== 'list';
+    attentionViewChange = viewChanged;
+    todoView.value = 'list';
+    return viewChanged;
+  }
+
+  async function consumeTodoAttentionEntry() {
+    if (route.query.attention !== '1') return;
+    const query = { ...route.query };
+    delete query.attention;
+    await router.replace({ query });
+  }
+
+  watch(
+    () => route.query.attention,
+    async (value) => {
+      if (value !== '1' || embedded.value || route.query.todoId) return;
+      const viewChanged = applyTodoAttentionEntry();
+      await consumeTodoAttentionEntry();
+      // A view switch already owns its refresh; same-view navigation needs an explicit refresh.
+      if (!viewChanged) await refreshList(true, true);
+    },
+  );
 
   /**
    * 定位并打开指定待办。
@@ -1857,6 +1914,7 @@
     () => (embedded.value ? route.query.resourceType : route.query.tab),
     async (requestedFilter, previousFilter) => {
       if (requestedFilter === previousFilter) return;
+      if (!embedded.value && route.query.attention === '1' && !route.query.todoId) return;
       const nextFilter = embedded.value
         ? resolveResourceFilter(requestedFilter)
         : resolveRequestedFilter(requestedFilter);
@@ -2017,6 +2075,10 @@
   }
 
   function handleEmptyStateAction() {
+    if (inbox.filterType === 'todo' && todo.filters.scope === 'attention') {
+      void resetTodoView();
+      return;
+    }
     if (isMobileTodoPrimary.value || inbox.filterType === 'todo') openTodoEditor();
     else openCapture();
   }
@@ -2769,6 +2831,28 @@
 </script>
 
 <style scoped lang="less">
+  .todo-attention-context {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--ui-space-12, 12px);
+    padding: var(--ui-space-8, 8px) 0;
+    color: var(--desc-color);
+    font-size: var(--ui-font-12, 12px);
+  }
+  .todo-attention-context > div {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--ui-space-4, 4px) var(--ui-space-10, 10px);
+    min-width: 0;
+  }
+  .todo-attention-context strong {
+    color: var(--text-color);
+  }
+  .todo-attention-context > .b_btn {
+    flex-shrink: 0;
+    font-size: var(--ui-font-12, 12px);
+  }
   .workspace-title-reset.b_btn {
     height: auto;
     padding: 0;
@@ -4205,12 +4289,7 @@
       font-size: var(--ui-font-12, 12px);
       flex-direction: column;
       align-items: center;
-    }
-    .inbox-page.todo-desktop-columns :deep(.is-workspace .todo-item__due-labeled:not(.overdue)) {
-      display: none;
-    }
-    .inbox-page.todo-desktop-columns :deep(.is-workspace .todo-item__due-compact) {
-      display: inline;
+      text-align: center;
     }
     .inbox-page.todo-desktop-columns :deep(.is-workspace .todo-subitems) {
       grid-column: 1 / -1;

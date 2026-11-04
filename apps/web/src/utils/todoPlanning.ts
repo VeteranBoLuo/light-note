@@ -8,6 +8,7 @@ export type TodoDateFormatOptions = {
   relative?: boolean;
   includeYear?: boolean;
   includeTime?: boolean;
+  includeWeekday?: boolean;
   now?: Date;
   relativeLabels?: {
     today: string;
@@ -132,6 +133,7 @@ function absoluteTodoDateLabel(
   includeYear: boolean,
   includeTime: boolean,
   now: Date,
+  includeWeekday: boolean,
 ) {
   const clock = clockLabel(date, locale);
   const sameYear = date.getFullYear() === now.getFullYear();
@@ -143,11 +145,13 @@ function absoluteTodoDateLabel(
       month: 'short',
       day: 'numeric',
     }).format(date);
-    return includeTime ? `${weekday}, ${datePart}, ${clock}` : `${weekday}, ${datePart}`;
+    const label = includeWeekday ? `${weekday}, ${datePart}` : datePart;
+    return includeTime ? `${label}, ${clock}` : label;
   }
   const weekday = new Intl.DateTimeFormat(locale, { weekday: 'short' }).format(date);
   const datePart = `${withYear ? `${date.getFullYear()}年` : ''}${date.getMonth() + 1}月${date.getDate()}日`;
-  return includeTime ? `${datePart}（${weekday}）${clock}` : `${datePart}（${weekday}）`;
+  const label = includeWeekday ? `${datePart}（${weekday}）` : datePart;
+  return includeTime ? `${label}${includeWeekday ? '' : ' '}${clock}` : label;
 }
 
 export function formatTodoDateTime(
@@ -174,7 +178,9 @@ export function formatTodoDateTime(
         : options.relativeLabels.tomorrow;
     }
   }
-  return absoluteTodoDateLabel(date, normalizedLocale, options.includeYear !== false, includeTime, now);
+  return absoluteTodoDateLabel(
+    date, normalizedLocale, options.includeYear !== false, includeTime, now, options.includeWeekday !== false,
+  );
 }
 
 export function localTodoDateTime(date: Date) {
@@ -305,6 +311,15 @@ export function isTodoOverdue(item: Pick<TodoItem, 'status' | 'dueAt' | 'occurre
   }
   const occurrenceDate = normalizeTodoDateOnly(item.occurrenceDate);
   return Boolean(occurrenceDate && occurrenceDate < normalizeTodoDateOnly(now));
+}
+
+/** Same deadline/occurrence precedence as the navigation attention count. Reminders do not count. */
+export function todoAttentionState(item: Pick<TodoItem, 'status' | 'dueAt' | 'occurrenceDate'>, now = new Date()) {
+  if (item.status !== 'pending') return null;
+  if (isTodoOverdue(item, now)) return 'overdue';
+  const date = item.dueAt ? normalizeTodoDateOnly(item.dueAt) : normalizeTodoDateOnly(item.occurrenceDate);
+  if (!date || date !== normalizeTodoDateOnly(now)) return null;
+  return item.dueAt ? 'dueToday' : 'scheduledToday';
 }
 
 export function dueForTodoGroup(key: TodoGroupKey, now = new Date()) {

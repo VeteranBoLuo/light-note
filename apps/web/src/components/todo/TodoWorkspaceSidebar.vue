@@ -177,19 +177,22 @@
     return countForStatus(store.navigationCounts.pending?.[key], store.navigationCounts.completed?.[key]);
   }
   const scopes = computed(() =>
-    ['all', 'today', 'week', 'important'].map((key) => ({
+    ['all', 'attention', 'today', 'week', 'important'].map((key) => ({
       key,
       label: t(`todoWorkspace.${key}`),
       count: scopeCount(key === 'all' ? 'allTotal' : key),
       icon:
         key === 'all'
           ? icon.todoWorkspace.checkSquare
-          : key === 'important'
-            ? icon.todoWorkspace.star
-            : icon.todoWorkspace.calendar,
+          : key === 'attention'
+            ? icon.todoWorkspace.focus
+            : key === 'important'
+              ? icon.todoWorkspace.star
+              : icon.todoWorkspace.calendar,
     })),
   );
   function select(key: string) {
+    if (key === 'attention') store.status = 'pending';
     store.filters = { ...store.filters, scope: scopes.value.some((scope) => scope.key === key) ? key : 'all' };
     delete store.filters.listId;
     if (key === 'unassigned') store.filters.listId = null;

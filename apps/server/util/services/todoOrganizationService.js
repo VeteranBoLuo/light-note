@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { todoDueSql } from './todoAttentionSql.js';
 import { invalidatePersonalKnowledgeCache } from '../personalKnowledgeSearch.js';
 
 const own = (value, key) => Object.prototype.hasOwnProperty.call(value || {}, key);
@@ -205,6 +206,7 @@ export function todoOrganizationFilters(input = {}, alias = 'todo_items') {
     } else where.push(`${alias}.list_id IS NULL`);
   }
   const scopes = {
+    attention: todoDueSql(alias).attention,
     today: `${alias}.due_at >= CURDATE() AND ${alias}.due_at < DATE_ADD(CURDATE(), INTERVAL 1 DAY)`,
     week: `${alias}.due_at >= DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY) AND ${alias}.due_at < DATE_ADD(CURDATE(), INTERVAL (7 - WEEKDAY(CURDATE())) DAY)`,
     important: `${alias}.priority = 2`,
@@ -261,7 +263,7 @@ export async function todoWorkspaceCounts(db, userId, input = {}) {
   const base = `user_id = ? AND del_flag = 0 AND COALESCE(instance_state, 'normal') = 'normal'`;
   const [[global], [status]] = await Promise.all([
     db.query(
-      `SELECT status, COUNT(*) AS allTotal, SUM(list_id IS NULL) AS unassigned, SUM(priority = 2) AS important, SUM(due_at < NOW()) AS overdue, SUM(due_at >= CURDATE() AND due_at < DATE_ADD(CURDATE(), INTERVAL 1 DAY)) AS today, SUM(due_at >= DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY) AND due_at < DATE_ADD(CURDATE(), INTERVAL (7 - WEEKDAY(CURDATE())) DAY)) AS week, SUM(start_at IS NOT NULL OR due_at IS NOT NULL OR occurrence_date IS NOT NULL) AS scheduled FROM todo_items WHERE ${base} AND status IN ('pending', 'completed') GROUP BY status`,
+      `SELECT status, COUNT(*) AS allTotal, SUM(list_id IS NULL) AS unassigned, SUM(priority = 2) AS important, SUM(${todoDueSql().attention}) AS attention, SUM(due_at < NOW()) AS overdue, SUM(due_at >= CURDATE() AND due_at < DATE_ADD(CURDATE(), INTERVAL 1 DAY)) AS today, SUM(due_at >= DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY) AND due_at < DATE_ADD(CURDATE(), INTERVAL (7 - WEEKDAY(CURDATE())) DAY)) AS week, SUM(start_at IS NOT NULL OR due_at IS NOT NULL OR occurrence_date IS NOT NULL) AS scheduled FROM todo_items WHERE ${base} AND status IN ('pending', 'completed') GROUP BY status`,
       [userId],
     ),
     db.query(
@@ -278,7 +280,7 @@ export async function todoWorkspaceCounts(db, userId, input = {}) {
   }
   totals.all = totals.pending + totals.completed;
   const numericCounts = (row = {}) => Object.fromEntries(Object.entries(row).filter(([key]) => key !== 'status').map(([key, value]) => [key, Number(value || 0)]));
-  const emptyCounts = { allTotal: 0, unassigned: 0, important: 0, overdue: 0, today: 0, week: 0, scheduled: 0 };
+  const emptyCounts = { allTotal: 0, unassigned: 0, important: 0, attention: 0, overdue: 0, today: 0, week: 0, scheduled: 0 };
   const pending = numericCounts(global.find(row => !row.status || row.status === 'pending') || emptyCounts);
   const completed = numericCounts(global.find(row => row.status === 'completed') || emptyCounts);
   return {

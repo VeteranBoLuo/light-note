@@ -177,6 +177,7 @@ it.each([
     const todoSelectionMode = {}, selectedTodoIds = {}, todoBatchActionsOpen = {};
     const user = { preferences: { todoView: '${view}' } };
     let savedTodoRange = null;
+    let attentionViewChange = false;
     const updateScrollFade = () => {};
     ${ts.transpile(viewNode.getText(ast), { target: ts.ScriptTarget.ES2022 })}
     ${watcherCode}

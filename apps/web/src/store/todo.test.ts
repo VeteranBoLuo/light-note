@@ -45,6 +45,51 @@ describe('todo store', () => {
     setActivePinia(createPinia());
   });
 
+  it('角标入口清除旧范围、关键词、优先级及选择，只请求需关注的未完成任务', async () => {
+    const store = useTodoStore();
+    store.workspaceEnabled = true;
+    store.filters = { scope: 'week', listId: 'hidden-list', tagIds: ['tag'], priority: 2, rangeStart: '2026-01-01' };
+    store.status = 'completed';
+    store.sort = 'newest';
+    store.keyword = '旧搜索';
+    store.selectedSeriesItems = { old: { id: 'old' } as any };
+    store.items = [{ id: 'hidden-future-task' } as any];
+    const generation = store.requestId;
+    getTodoWorkspace.mockResolvedValueOnce({ status: 200, data: { items: [] } });
+    store.focusAttention();
+    expect(store.items).toEqual([]);
+    expect(store.requestId).toBeGreaterThan(generation);
+    await store.refreshList();
+    expect(getTodoWorkspace).toHaveBeenCalledWith({ scope: 'attention', tagIds: [], status: 'pending', sort: 'smart', keyword: '' });
+    expect(store.selectedSeriesItems).toEqual({});
+  });
+
+  it('重复进入相同需关注范围时保留已加载内容，刷新失败仍可重试', async () => {
+    const store = useTodoStore();
+    store.workspaceEnabled = true;
+    store.seriesPresentation = true;
+    const item = { id: 'today', status: 'pending' } as any;
+    getTodoWorkspace.mockResolvedValueOnce({ status: 200, data: {
+      groups: [{ key: 'all', nodeCount: 1, instanceCount: 1 }],
+    } });
+    getTodoWorkspaceGroup.mockResolvedValueOnce({ status: 200, data: {
+      nodes: [{ kind: 'item', key: 'todo:today', item }], total: 1, nextCursor: null,
+    } });
+    store.focusAttention();
+    await store.refreshList();
+    await store.loadGroup('all');
+    store.focusAttention();
+    expect(store.items).toEqual([item]);
+    getTodoWorkspace.mockResolvedValueOnce({ status: 500 });
+    expect(await store.refreshList()).toBe(false);
+    expect(store.items).toEqual([item]);
+    expect(store.loadFailed).toBe(true);
+    store.seriesPresentation = false;
+    store.items = [{ id: 'calendar-future' } as any];
+    store.focusAttention();
+    expect(store.items).toEqual([]);
+  });
+
   it('账号切换时清空待办数据和筛选条件', () => {
     const store = useTodoStore();
     store.ownerId = 'user-a';

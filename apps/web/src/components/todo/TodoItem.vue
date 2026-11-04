@@ -17,6 +17,7 @@
         'is-overdue': overdue,
         'is-completed': item.status === 'completed',
         'is-workspace': workspace,
+        'is-series-detail': seriesDetail,
         'is-selectable': selectable && !writeDisabled,
       }"
     >
@@ -70,12 +71,26 @@
           </div>
         </div>
         <div class="todo-item__timing" :class="{ 'is-empty': !hasSchedule && reminderState.kind === 'none' }">
-          <div v-if="workspace || hasSchedule" class="todo-item__meta" :class="{ 'is-empty': !hasSchedule }">
-            <TodoTimeText v-if="!workspace && startLabel" class="todo-start-label" :text="startLabel" />
-            <TodoTimeText v-if="item.dueAt" class="todo-item__due-labeled" :class="{ overdue }" :text="dueLabel" />
-            <TodoTimeText v-if="workspace && dueTime && !overdue" class="todo-item__due-compact" :text="dueTime" />
-            <TodoTimeText v-if="!workspace && occurrenceLabel" class="todo-start-label" :text="occurrenceLabel" />
-            <span v-if="workspace && !dueTime" class="todo-item__no-deadline">—</span>
+          <div
+            v-if="workspace || hasSchedule"
+            class="todo-item__meta"
+            :class="{
+              'is-empty': !hasSchedule,
+              'is-today': workspace && (attentionState === 'dueToday' || attentionState === 'scheduledToday'),
+            }"
+          >
+            <template v-if="workspace">
+              <template v-if="workspaceTime">
+                <TodoTimeText class="todo-item__time-value" :class="{ overdue }" :text="workspaceTime" />
+                <span class="todo-item__time-kind" :class="{ overdue }">{{ workspaceTimeKind }}</span>
+              </template>
+              <span v-else class="todo-item__no-deadline">—</span>
+            </template>
+            <template v-else>
+              <TodoTimeText v-if="startLabel" class="todo-start-label" :text="startLabel" />
+              <TodoTimeText v-if="item.dueAt" class="todo-item__due-labeled" :class="{ overdue }" :text="dueLabel" />
+              <TodoTimeText v-if="occurrenceLabel" class="todo-start-label" :text="occurrenceLabel" />
+            </template>
           </div>
           <div
             v-if="workspace"
@@ -339,6 +354,7 @@
   import {
     formatTodoDateTime,
     isTodoOverdue,
+    todoAttentionState,
     isTodoSingleReminder,
     normalizeTodoDateOnly,
     todoPastReminderAt,
@@ -394,6 +410,7 @@
 
   const { now, today } = useTodoClock();
   const overdue = computed(() => isTodoOverdue(props.item, new Date(now.value)));
+  const attentionState = computed(() => todoAttentionState(props.item, new Date(now.value)));
   const priorityLabel = computed(() => t(`inbox.todoPriority${props.item.priority}`));
   const completedChecklistCount = computed(() => props.item.checklist.filter((check) => check.done).length);
   const dueTime = computed(() => {
@@ -401,6 +418,7 @@
     const value = formatTodoDateTime(props.item.dueAt, locale.value, {
       relative: true,
       includeYear: false,
+      includeWeekday: !props.workspace,
       now: today.value,
       relativeLabels: {
         today: t('inbox.todoToday'),
@@ -422,18 +440,28 @@
     });
     return value ? t('inbox.todoStarts', { time: value }) : '';
   });
-  const occurrenceLabel = computed(() => {
-    if (props.item.startAt || props.item.dueAt || !props.item.occurrenceDate) return '';
+  const occurrenceTime = computed(() => {
     const date = normalizeTodoDateOnly(props.item.occurrenceDate);
     if (!date) return '';
-    const value = formatTodoDateTime(`${date} 00:00:00`, locale.value, {
+    return formatTodoDateTime(`${date} 00:00:00`, locale.value, {
       relative: true,
       includeYear: false,
       includeTime: false,
+      includeWeekday: !props.workspace,
       now: today.value,
       relativeLabels: { today: t('inbox.todoToday'), tomorrow: t('inbox.todoTomorrow') },
     });
-    return value ? t('inbox.todoScheduledDate', { time: value }) : '';
+  });
+  const occurrenceLabel = computed(() => {
+    if (props.item.startAt || props.item.dueAt || !occurrenceTime.value) return '';
+    return t('inbox.todoScheduledDate', { time: occurrenceTime.value });
+  });
+  const workspaceTime = computed(() => props.item.dueAt ? dueTime.value : occurrenceTime.value);
+  const workspaceTimeKind = computed(() => {
+    const kind = props.item.dueAt
+      ? overdue.value ? 'overdue' : 'due'
+      : overdue.value ? 'scheduledOverdue' : 'scheduled';
+    return t(`todoWorkspace.timeKind.${kind}`);
   });
   const reminderLabel = computed(() => {
     const reminder = props.item.reminder;
@@ -507,7 +535,9 @@
     });
   });
   const hasSchedule = computed(() =>
-    props.workspace ? Boolean(dueTime.value) : Boolean(startLabel.value || dueLabel.value || occurrenceLabel.value),
+    props.workspace
+      ? Boolean(workspaceTime.value)
+      : Boolean(startLabel.value || dueLabel.value || occurrenceLabel.value),
   );
   const visibleTags = computed(() => (props.workspace ? props.item.tags?.slice(0, 1) : props.item.tags) || []);
   const hiddenTags = computed(() => (props.workspace ? props.item.tags?.slice(1) : []) || []);
@@ -817,6 +847,18 @@
     margin: 0;
     flex-direction: column;
     align-items: flex-start;
+    gap: var(--ui-space-2, 2px);
+  }
+  .todo-item__time-value {
+    font-size: var(--ui-font-13, 13px);
+  }
+  .todo-item__time-kind {
+    color: var(--desc-color);
+    font-size: var(--ui-font-11, 11px);
+    line-height: 1.4;
+  }
+  .todo-item__meta .todo-item__time-kind.overdue {
+    font-weight: 500;
   }
   .todo-item__next-reminder {
     display: block;
@@ -824,9 +866,6 @@
   }
   .todo-item__reminder-time {
     max-width: 100%;
-  }
-  .todo-item__due-compact {
-    display: none;
   }
   .todo-item__next-reminder.is-past .todo-item__reminder-state {
     color: var(--chip-pending-fg);
@@ -924,6 +963,9 @@
   .todo-item__meta .overdue {
     color: var(--danger-color, #e5484d);
     font-weight: 650;
+  }
+  .todo-item__meta.is-today {
+    color: var(--warning-color);
   }
   .todo-item__chips {
     display: flex;
@@ -1035,6 +1077,15 @@
     text-align: left;
     white-space: normal;
     transition: color 0.2s;
+  }
+  .todo-item:not(.is-series-detail) .todo-item__title,
+  .todo-item:not(.is-series-detail) .todo-item__selection-title {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   .todo-item__title.b_btn:focus-visible {
     color: var(--primary-color);

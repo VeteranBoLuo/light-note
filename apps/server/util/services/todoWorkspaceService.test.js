@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
 import { Temporal } from '@js-temporal/polyfill';
 import { snoozeV2Todo } from './todoSeriesService.js';
+import { todoWorkspaceCounts } from './todoOrganizationService.js';
 vi.mock('./todoService.js', () => ({
   listTodoPage: vi.fn(async (db, userId, { ids }) => {
     const [items] = await db.query(
@@ -113,6 +114,49 @@ describe.skipIf(!socket)('workspace SQL against isolated MySQL', () => {
     });
   }
   const nodeId = (node) => (node.kind === 'series' ? node.representative.id : node.item.id);
+
+  it('角标与需关注范围完全对应，包含无截止实例、系列与分页，完成后同时归零', async () => {
+    const { queryTodoAttentionCounts } = await vi.importActual('./todoService.js');
+    const today = await date(0), yesterday = await date(-1), tomorrow = await date(1);
+    await add('overdue', { due_at: `${yesterday} 23:59:59` });
+    await add('today-deadline', { due_at: `${today} 23:59:59` });
+    await add('series-old', { series_id: 'series-a', occurrence_date: yesterday });
+    await add('series-today', { series_id: 'series-a', occurrence_date: today });
+    await add('series-future', { series_id: 'series-a', occurrence_date: tomorrow });
+    await add('deadline-wins', { occurrence_date: yesterday, due_at: `${tomorrow} 00:00:00` });
+    await add('starts-today', { start_at: `${today} 00:00:00` });
+    await add('reminder-only');
+    await remind('reminder-only', `${today} 12:00:00`);
+    await add('undated');
+    await add('completed', { status: 'completed', due_at: `${today} 12:00:00` });
+    await add('deleted', { del_flag: 1, due_at: `${yesterday} 12:00:00` });
+    await add('skipped', { instance_state: 'skipped', occurrence_date: today });
+    await add('foreign', { user_id: 'other', due_at: `${yesterday} 12:00:00` });
+
+    const counts = await queryTodoAttentionCounts(db, 'owner');
+    expect(counts.todoAttentionTotal).toBe(4);
+    const input = { scope: 'attention', status: 'pending', groupKey: 'all', limit: 1 };
+    const overview = await todoWorkspaceCounts(db, 'owner', input);
+    expect(overview.overview.attention).toBe(counts.todoAttentionTotal);
+    expect(overview.statusTotals).toEqual({ pending: 4, completed: 0, all: 4 });
+    expect((await todoWorkspaceGroups(db, 'owner', input)).groups).toEqual([
+      { key: 'all', nodeCount: 3, instanceCount: 4 },
+    ]);
+    const nodes = [];
+    let cursor = null;
+    do {
+      const page = await todoWorkspaceGroupPage(db, 'owner', { ...input, cursor });
+      nodes.push(...page.nodes);
+      cursor = page.nextCursor;
+    } while (cursor);
+    expect(nodes.map(nodeId).sort()).toEqual(['overdue', 'series-today', 'today-deadline']);
+    expect(nodes.reduce((count, node) => count + (node.kind === 'series' ? node.instanceCount : 1), 0)).toBe(counts.todoAttentionTotal);
+    const series = await todoWorkspaceSeriesPage(db, 'owner', { ...input, seriesId: 'series-a', limit: 10 });
+    expect(series.items.map((item) => item.id).sort()).toEqual(['series-old', 'series-today']);
+    await db.query("UPDATE todo_items SET status = 'completed' WHERE id IN (?)", [['overdue', 'today-deadline', 'series-old', 'series-today']]);
+    expect((await queryTodoAttentionCounts(db, 'owner')).todoAttentionTotal).toBe(0);
+    expect((await todoWorkspaceGroups(db, 'owner', input)).groups).toEqual([]);
+  });
 
   it('月历范围按截止日期筛选，覆盖跨月、全天与首尾边界，排除区间相交但截止在月外的任务', async () => {
     await add('cross-month', { start_at: '2026-10-17 19:10:00', due_at: '2026-11-04 13:10:00' });

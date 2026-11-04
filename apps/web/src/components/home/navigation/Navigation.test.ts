@@ -245,6 +245,18 @@ describe('Navigation', () => {
    * 颜色分档必须由 overdue 是否为 0 决定：有历史逾期才是危险色。
    */
   describe('待办注意力角标', () => {
+    it.each([0, 1])('角标为 %s 时进入对应待办范围', async (count) => {
+      inbox.todoAttentionTotal = count;
+      inbox.todoDueTodayTotal = count;
+      const host = await mountNavigation();
+      const entry = host.querySelector<HTMLButtonElement>('#nav-todo-entry');
+      entry?.click();
+      expect(mocks.routerPush).toHaveBeenCalledWith({
+        path: '/inbox',
+        query: { tab: 'todo', ...(count ? { attention: '1' } : {}) },
+      });
+      if (count) expect(entry?.title).toContain('今天到期或安排 1 项');
+    });
     it('没有需要关注的待办时不渲染角标', async () => {
       const host = await mountNavigation();
       expect(host.querySelector('.navigation-attention-badge')).toBeNull();
@@ -261,7 +273,7 @@ describe('Navigation', () => {
       expect(badge?.textContent?.trim()).toBe('3');
       // 默认档位即危险色，不额外挂 is-due-today
       expect(badge?.classList.contains('is-due-today')).toBe(false);
-      expect(badge?.getAttribute('aria-label')).toBe('3 项待办需要关注：逾期 1 项，今天到期 2 项');
+      expect(badge?.getAttribute('aria-label')).toBe('3 项待办需要关注：逾期 1 项，今天到期或安排 2 项');
     });
 
     it('只有今天到期、没有历史逾期时降一档为警示色', async () => {

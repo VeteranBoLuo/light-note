@@ -25,6 +25,7 @@ import {
 import { recordTodoCompletion, recordTodoCreation } from '../growthActivityHistory.js';
 import { resolveTodoConfiguredReminderAt, resolveTodoNextReminderAt } from '@lightnote/shared/todo-reminder';
 import { nextTodoReminderAtSql } from './todoReminderSql.js';
+import { todoDueSql } from './todoAttentionSql.js';
 
 const STATUS = new Set(['pending', 'completed']);
 const FILTER_STATUS = new Set(['all', ...STATUS]);
@@ -38,16 +39,7 @@ const TODO_STATUS_TARGET_FIELDS = `id, title, description, checklist, priority, 
 // 工作台今日行动流的时间窗筛选：有截止时间按当前时刻，无截止的固定日程按实例日；
 // today 与 overdue 保持互斥，未来预生成实例不会提前计入今日摘要。
 const DUE_FILTERS = new Set(['overdue', 'today']);
-const DUE_SQL = Object.freeze({
-  overdue: `((due_at IS NOT NULL AND due_at < NOW())
-    OR (due_at IS NULL AND occurrence_date IS NOT NULL AND occurrence_date < CURDATE()))`,
-  today: `((due_at IS NOT NULL AND due_at >= NOW() AND due_at < DATE_ADD(CURDATE(), INTERVAL 1 DAY))
-    OR (due_at IS NULL AND occurrence_date = CURDATE()))`,
-  week: `((due_at IS NOT NULL AND due_at >= NOW()
-    AND due_at < DATE_ADD(CURDATE(), INTERVAL (7 - WEEKDAY(CURDATE())) DAY))
-    OR (due_at IS NULL AND occurrence_date >= CURDATE()
-    AND occurrence_date < DATE_ADD(CURDATE(), INTERVAL (7 - WEEKDAY(CURDATE())) DAY)))`,
-});
+const DUE_SQL = Object.freeze(todoDueSql());
 const NEXT_REMINDER_AT_SQL = nextTodoReminderAtSql('todo_items');
 const ACTION_AT_SQL = `NULLIF(LEAST(
   COALESCE(${NEXT_REMINDER_AT_SQL}, '9999-12-31 23:59:59'),
