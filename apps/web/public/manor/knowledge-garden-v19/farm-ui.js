@@ -501,13 +501,32 @@ const FarmUI = (() => {
   // 肥料共用麻布袋，标签区分档位；弹框、工具指针与动作使用同一素材。
   const fertIcon = (k) => `<span class="fert-icon fert-${k}" aria-hidden="true">${FarmArt.fertilizer(k)}</span>`;
 
+  // 缺水时按今天的任务给出下一步：先领已完成的水，再去轻笺做没完成的任务；都做完了就告诉用户明天再来。
+  // 数字不变，只把「没水」变成回到轻笺做任务的入口。
+  function waterSupply() {
+    const pending = M.pendingDailyWater(state).reduce((n, r) => n + r.water, 0);
+    const todo = (GardenLive.quests || []).map((q, i) => ({ name: esc(q.label || q.key), i })).filter(({ i }) => !state.dailyDone[i]);
+    return { pending, todo, bonus: Math.max(0, R.dailyWaterBonus - (state.dailyWaterBonusClaimed || 0)) };
+  }
+  function waterShortLink() {
+    const { pending, todo } = waterSupply();
+    const text = pending > 0 ? `有 ${pending} 滴水待领 · 去领取` : todo.length ? `还差 ${todo.length} 项任务 · 去补水` : "今天的水滴已领完";
+    return pending > 0 || todo.length ? `<button class="text-button seed-water-link" data-action="water-short">${text}</button>` : `<small>${text}，种子会留在地里等你</small>`;
+  }
   function waterShortDialog() {
-    showDialog(
-      "水滴不够了",
-      `每日任务每项可领取 ${R.dailyWater} 滴水，全部完成再领 ${R.dailyWaterBonus} 滴。`,
-      `<div class="care-preview">${toolSprite("water")}<div><strong>${state.water} <small>/ ${R.waterCap} 滴</small></strong><p>播种后浇一次水，每块地 ${R.plantWater} 滴</p></div></div><div class="info-box">没浇水的种子会一直留在地里等你，不会损失。</div>`,
-      `<button class="button primary" data-action="daily">每日任务</button>`
-    );
+    const { pending, todo, bonus } = waterSupply();
+    const care = `<div class="care-preview">${toolSprite("water")}<div><strong>${state.water} <small>/ ${R.waterCap} 滴</small></strong><p>播种后浇一次水，每块地 ${R.plantWater} 滴</p></div></div>`;
+    const keep = '<div class="info-box">没浇水的种子会一直留在地里等你，不会损失。</div>';
+    if (pending > 0) return showDialog(`有 ${pending} 滴水还没领`, "完成每日任务换来的水还在任务里，领取后自动浇灌待浇水的地。", care + keep,
+    `<button class="button" data-action="daily">每日任务</button><button class="button primary" data-action="claim-water-pour">领取 ${pending} 滴</button>`);
+    if (todo.length) {
+      const rows = todo.map(({ name, i }) => `<article class="manor-quest todo"><div class="quest-art">${toolSprite("daily")}</div><div><h3>${name}</h3><small>在轻笺完成</small></div><span class="quest-water">${toolSprite("water")}<b>+${R.dailyWater}</b><small>滴</small></span><button class="tile-btn quest-go" data-action="complete-daily" data-index="${i}">去完成</button></article>`).join("");
+      return showDialog(`还差 ${todo.length} 项每日任务`, `完成可得 ${todo.length * R.dailyWater} 滴${bonus ? `，全部完成再 +${bonus} 滴` : ""}。`, `<div class="manor-quests">${rows}</div>${keep}`,
+      `<button class="button" data-action="close">稍后</button><button class="button primary" data-action="complete-daily" data-index="${todo[0].i}">去完成：${todo[0].name}</button>`);
+    }
+    const purifier = !state.purifier && M.level(state) >= R.purifierLevels[0].gardenLevel ? `<div class="info-box">在商店建造海水过滤器，每天还能多收 ${R.purifierWater} 滴水。</div>` : "";
+    showDialog("今天的水滴都领过了", `明天完成每日任务还能再领 ${R.dailyWater * 3 + R.dailyWaterBonus} 滴。`, care + keep + purifier,
+    '<button class="button primary" data-action="close">知道了</button>');
   }
   // 生长中 / 盛开的地：看剩余时间、施肥、铲除
   function plotCard(i) {
@@ -734,7 +753,7 @@ const FarmUI = (() => {
       body += keys.length ?
       `<div class="market-grid seed-market-grid">${keys.map((k) => seedTile(k, target)).join("")}</div>` :
       `<section class="inventory-empty"><div class="empty-art">${FarmArt.giftPack()}</div><h3>给这片土地挑一颗种子吧</h3><p>背包暂时空了。去商店挑选，或从成长奖励和庄园成就获取种子。</p><div><button class="tile-btn primary" data-action="shop-tab" data-tab="seeds">去商店</button><button class="tile-btn" data-action="daily">查看每日任务</button></div></section>`;
-      if (target !== null) body += `<div class="seed-care-strip"><span>${toolSprite("water")}<span>每块地 <b>${R.plantWater}</b> 滴 · 现有 <b>${state.water}</b> 滴</span></span><small>${state.water < R.plantWater ? "完成每日任务补水后再浇灌" : "成熟后随时收获，不会枯萎"}</small></div>`;
+      if (target !== null) body += `<div class="seed-care-strip"><span>${toolSprite("water")}<span>每块地 <b>${R.plantWater}</b> 滴 · 现有 <b>${state.water}</b> 滴</span></span>${state.water < R.plantWater ? waterShortLink() : "<small>成熟后随时收获，不会枯萎</small>"}</div>`;
     } else if (tab === "crops") {
       const keys = Object.keys(M.CROPS).filter((k) => state.crops[k] > 0);
       body += keys.length ?
@@ -1016,6 +1035,22 @@ const FarmUI = (() => {
         return true;
       case "bag-tab":
         bagDialog(b.dataset.tab, bagTarget);
+        return true;
+      case "water-short":
+        waterShortDialog();
+        return true;
+      case "claim-water-pour": {
+        const reward = await M.claimAllDailyWater(state);
+        if (!reward) {waterShortDialog();return true;}
+        closeDialog(false);
+        update();
+        toast(`水滴 +${reward.water} · 已装入水桶`, { topCenter: true });
+        const dry = plotsIn("dry");
+        if (dry.length && state.water >= R.plantWater) await waterPlots(dry);
+        return true;
+      }
+      case "pour-dry":
+        await waterPlots(plotsIn("dry"));
         return true;
       case "seed-select":
         selectSeed(b.dataset.seed);

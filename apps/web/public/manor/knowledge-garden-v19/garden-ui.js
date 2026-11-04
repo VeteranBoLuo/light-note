@@ -706,6 +706,11 @@ function refreshSynchronizedView() {
 
 const wait = (ms) => new Promise((r) => setTimeout(r, matchMedia("(prefers-reduced-motion: reduce)").matches ? Math.min(ms, 60) : ms));
 
+// 领完水后，地里还有待浇水的作物时，把领取按钮换成一键浇灌，从任务回来到作物长起来只差这一下。
+function pourButton(pending) {
+  const dry = FarmUI.plotsIn("dry").length;
+  return !pending && dry && state.water >= R.plantWater ? `<button class="tile-btn primary quest-claim-all" data-action="pour-dry">${toolSprite("water")}浇灌 ${dry} 块待浇水的地</button>` : "";
+}
 function dailyDialog() {
   const done = state.dailyDone.filter(Boolean).length;
   const claimed = (state.dailyWaterClaims || []).reduce((n, v) => n + v, 0) + (state.dailyWaterBonusClaimed || 0);
@@ -721,7 +726,7 @@ function dailyDialog() {
   const bonusRemaining=R.dailyWaterBonus-(state.dailyWaterBonusClaimed || 0),bonusReady=done===3&&bonusRemaining>0;
   const bonusHint=done<3 ? `再完成 ${3-done} 项解锁` : !bonusRemaining ? "✓ 今日奖励已领取" : state.dailyWaterBonusClaimed ? `余下 ${bonusRemaining} 滴可续领` : "额外奖励已解锁";
   const bonus=`<div class="quest-completion"><div><strong>全完成奖励</strong><small>${bonusHint}</small></div><span class="quest-water">${toolSprite("water")}<b>+${bonusRemaining || R.dailyWaterBonus}</b><small>滴</small></span><button class="tile-btn ${bonusReady&&state.water<R.waterCap ? "primary" : ""}" data-action="claim-daily-water-bonus" ${!bonusReady||state.water>=R.waterCap ? "disabled" : ""}>${done<3 ? "未解锁" : !bonusRemaining ? "已领取" : state.water>=R.waterCap ? "水桶已满" : "领取奖励"}</button></div>`;
-  showDialog("每日任务", "每天积累一点知识，为庄园添水。", `<div class="quest-summary"><div class="quest-summary-head"><div><strong>今日已完成 ${done} / 3 项</strong><span class="quest-progress"><i style="width:${done / 3 * 100}%"></i></span></div><span><b>每天可得 ${R.dailyWater * 3 + R.dailyWaterBonus} 滴</b><small>今日已领 ${claimed} 滴</small></span></div>${bonus}</div><div class="manor-quests">${tasks}</div><div class="quest-bucket">${toolSprite("water")}<span>储水桶现有 <b>${state.water} 滴</b><small>储水容量 ${R.waterCap} 滴 · 装不下的水滴可在今日稍后领取</small></span><button class="tile-btn primary quest-claim-all" data-action="claim-all-daily-water" ${!pending || state.water >= R.waterCap ? "disabled" : ""}>${!pending ? "暂无可领取" : state.water >= R.waterCap ? "水桶已满" : `一键领取 · ${Math.min(pending, R.waterCap - state.water)} 滴`}</button></div>`,
+  showDialog("每日任务", "每天积累一点知识，为庄园添水。", `<div class="quest-summary"><div class="quest-summary-head"><div><strong>今日已完成 ${done} / 3 项</strong><span class="quest-progress"><i style="width:${done / 3 * 100}%"></i></span></div><span><b>每天可得 ${R.dailyWater * 3 + R.dailyWaterBonus} 滴</b><small>今日已领 ${claimed} 滴</small></span></div>${bonus}</div><div class="manor-quests">${tasks}</div><div class="quest-bucket">${toolSprite("water")}<span>储水桶现有 <b>${state.water} 滴</b><small>储水容量 ${R.waterCap} 滴 · 装不下的水滴可在今日稍后领取</small></span>${pourButton(pending) || `<button class="tile-btn primary quest-claim-all" data-action="claim-all-daily-water" ${!pending || state.water >= R.waterCap ? "disabled" : ""}>${!pending ? "暂无可领取" : state.water >= R.waterCap ? "水桶已满" : `一键领取 · ${Math.min(pending, R.waterCap - state.water)} 滴`}</button>`}</div>`,
   '<button class="button" data-action="collections">庄园成就</button><button class="button primary" data-action="close">回到庄园</button>', false, "daily-dialog");
   $("#dialog").dataset.syncView='daily';
 }
