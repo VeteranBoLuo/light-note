@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import {
-  convertMarkup,
   convertTable,
   detectTableFormat,
   parseDelimitedTable,
@@ -72,17 +71,6 @@ describe('工具箱文本与表格本地内核', () => {
     expect(() => convertTable('a,b', 'csv', 'csv')).toThrowError(
       expect.objectContaining<ToolboxTextError>({ code: 'SAME_FORMAT' }),
     );
-  });
-
-  it('Markdown 转 HTML 复用统一清洗管线，HTML 也可转回 Markdown', async () => {
-    const html = await convertMarkup('# 标题\n\n<script>alert(1)</script>\n\n- 条目', 'markdown_to_html');
-    expect(html).toContain('<h1');
-    expect(html).toContain('条目');
-    expect(html).not.toContain('<script');
-
-    const markdown = await convertMarkup('<h2>结论</h2><p><strong>保留</strong>结构</p>', 'html_to_markdown');
-    expect(markdown).toContain('## 结论');
-    expect(markdown).toContain('**保留**');
   });
 });
 

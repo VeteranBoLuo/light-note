@@ -54,12 +54,6 @@ const AI_TOOL_STRATEGIES = Object.freeze({
     defaultTitle: '概念图谱',
     draftState: 'editable',
   }),
-  action_plan: Object.freeze({
-    skillId: 'toolbox.action_plan',
-    artifactType: 'action_plan',
-    defaultTitle: '行动项清单',
-    draftState: 'needs_verification',
-  }),
   source_comparison: Object.freeze({
     skillId: 'toolbox.source_comparison',
     artifactType: 'comparison',
@@ -101,11 +95,6 @@ const AI_TOOL_INTENT_INSTRUCTIONS = Object.freeze({
     overview: '生成结构总览图，优先呈现核心概念的层级、组成和依赖关系。',
     causal: '优先提炼材料中有明确依据的因果、条件和影响链路，不补造关系。',
     compare: '围绕对比对象组织图谱，突出共同点、差异、适用边界和关联。',
-  }),
-  action_plan: Object.freeze({
-    meeting: '按会议落地场景提取已确认决定、行动项、负责人、期限和待澄清事项。',
-    project: '按项目推进场景组织阶段、行动、依赖、风险和下一次检查点。',
-    decision: '围绕已做或待做决策整理后续行动、验证条件、负责人和复盘时间。',
   }),
   source_comparison: Object.freeze({
     claims: '按关键说法逐项对齐资料，区分一致、差异、冲突和证据缺口。',

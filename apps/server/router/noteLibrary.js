@@ -127,11 +127,8 @@ router.post('/share/resolve', noteShareAccessLimiter, noteShareHandle.resolveNot
 router.post('/share/page', noteShareReadLimiter, noteShareHandle.getNoteSharePage);
 router.post('/share/tree', noteShareReadLimiter, noteShareHandle.getNoteShareTree);
 
-router.post('/addNoteTag', noteLibraryHandle.addNoteTag);
-router.post('/editNoteTag', noteLibraryHandle.editNoteTag);
 router.post('/queryNoteTagList', noteLibraryHandle.queryNoteTagList);
 router.post('/getNoteTags', noteLibraryHandle.getNoteTags);
-router.post('/delNoteTag', noteLibraryHandle.delNoteTag);
 router.post('/updateNoteTags', noteLibraryHandle.updateNoteTags);
 
 router.post('/getNoteVersions', noteLibraryHandle.getNoteVersions);

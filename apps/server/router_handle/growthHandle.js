@@ -36,7 +36,6 @@ import { getEconomyRuntime } from '../util/pointsEconomyCatalog.js';
 import { PointsEconomyError } from '../util/pointsEconomyOperations.js';
 import { getInventory, useItem } from '../util/items.js';
 import { getWeeklyChallenges } from '../util/weeklyChallenge.js';
-import { getRecap, updateRecapState } from '../util/recap.js';
 import { getGrowthTasks } from '../util/growthTaskService.js';
 import { claimGrowthRewards, getGrowthClaimableSnapshot } from '../util/growthClaimService.js';
 import { stableAgentErrorCode } from '../util/agent/logSafety.js';
@@ -546,27 +545,6 @@ export const doClaimAll = async (req, res) => {
   } catch (error) {
     console.error('一键领取失败 code=%s', stableAgentErrorCode(error));
     res.send(resultData(null, 500, '领取失败'));
-  }
-};
-
-// GET /growth/recap —— 那年今日 + 尘封回顾(旧内容重新推到面前)
-export const getRecapHandle = async (req, res) => {
-  try {
-    const userId = req.user?.id || 'visitor';
-    res.send(resultData(await getRecap(userId)));
-  } catch (error) {
-    console.error('获取回顾失败 code=%s', stableAgentErrorCode(error));
-    res.send(resultData(null, 500, L(req, '获取回顾失败', 'Failed to load recap')));
-  }
-};
-
-export const setRecapState = async (req, res) => {
-  if (!ensureNotVisitor(req, res)) return;
-  try {
-    res.send(resultData(await updateRecapState(req.user.id, req.body || {})));
-  } catch (error) {
-    console.error('更新回顾偏好失败 code=%s', stableAgentErrorCode(error));
-    res.send(resultData(null, 500, L(req, '更新回顾偏好失败', 'Failed to update recap preference')));
   }
 };
 

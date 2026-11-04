@@ -20,7 +20,6 @@ const PAID_PRICE_RANGES = Object.freeze({
   research_brief: Object.freeze({ min: 20, max: 60 }),
   study_kit: Object.freeze({ min: 18, max: 50 }),
   concept_map: Object.freeze({ min: 15, max: 45 }),
-  action_plan: Object.freeze({ min: 10, max: 35 }),
   source_comparison: Object.freeze({ min: 15, max: 50 }),
   knowledge_audit: Object.freeze({ min: 20, max: 60 }),
   ocr_to_text: Object.freeze({ min: 5, max: 30 }),
@@ -220,7 +219,6 @@ export function quoteToolboxPoints(toolId, { itemCount, totalBytes = 0, snapshot
   else if (toolId === 'research_brief') points = 20 + Math.max(0, count - 4) * 5;
   else if (toolId === 'study_kit') points = 18 + Math.max(0, count - 2) * 4;
   else if (toolId === 'concept_map') points = 15 + Math.max(0, count - 1) * 3;
-  else if (toolId === 'action_plan') points = 10 + Math.max(0, count - 1) * 3;
   else if (toolId === 'source_comparison') points = 15 + Math.max(0, count - 2) * 5;
   else if (toolId === 'knowledge_audit') points = 20 + Math.max(0, count - 2) * 4;
   else if (toolId === 'ocr_to_text') points = 5 + Math.max(0, count - 1) * 2 + Math.ceil(sizeMiB / 2) * 2;

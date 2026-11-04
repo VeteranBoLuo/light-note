@@ -21,7 +21,7 @@
 | 模型访问                    | `apps/server/util/agent/aiGateway.js`                           |
 | 动作与计费目录              | `apps/server/util/aiBillingCatalog.js`                          |
 | 额度错误协议                | `packages/shared/aiQuotaProtocol.js`                            |
-| 前端执行与展示              | `AiSkillPanel.vue`、`AiSkillResultContent.vue`、`useAiSkill.ts` |
+| 前端执行与展示              | `AiSkillPanel.vue`、`AiSkillResultContent.vue`、`api/aiSkillApi.ts` |
 
 新增或修改能力时更新这些事实源和契约测试，不在页面、Prompt、帮助文案或本文复制第二份 Skill 清单。
 

@@ -11,7 +11,6 @@ import { communityChatWorkspaceActive } from '@/composables/useCommunityChatActi
 import zh from '@/i18n/locales/zh-CN';
 import en from '@/i18n/locales/en-US';
 import chatRoute, { communityRoutes } from '@/router/modules/communityChat';
-import Preferences from '@/components/community/CommunityPreferencesPanel.vue';
 import Settings from '@/view/settings/Settings.vue';
 import BButton from '@/components/base/BasicComponents/BButton.vue';
 import Navigation from '@/components/home/navigation/Navigation.vue';
@@ -57,14 +56,7 @@ function withDemoImages(post: any) {
   return { ...post, images: demoPostImages.get(post.publicId) || post.images || [] };
 }
 const calls: { url: string; method: string; data: unknown; params: unknown }[] = [];
-const control = { failPreferences: params.has('error'), failProfileSave: false };
-const preferences = {
-  defaultView: 'chat',
-  revision: 0,
-  protocolVersion: 1,
-  availableViews: ['chat'],
-  feedEnabled: false,
-};
+const control = { failProfileSave: false };
 const author = {
   name: '薄荷',
   communityId: 'LN-MINT',
@@ -259,13 +251,6 @@ request.defaults.adapter = async (config) => {
       { id: account + '-bookmark', type: 'bookmark', title: 'MDN 网页开发文档', description: '本地隔离样例' },
     ].filter((item) => !body?.keyword || item.title.includes(body.keyword));
     data = { items, total: items.length, hasMore: false, typeTotals: { note: 2, bookmark: 1 } };
-  } else if (url.includes('/community/preferences/me')) {
-    if (control.failPreferences) throw new Error('Fixture unavailable');
-    if (method === 'put') {
-      preferences.revision++;
-      preferences.defaultView = body.defaultView;
-    }
-    data = { ...preferences };
   } else if (url.endsWith('/community-chat/rooms')) data = { access, messagingEnabled: true, items: rooms };
   else if (url.endsWith('/messages'))
     data = {
@@ -320,7 +305,6 @@ const router = createRouter({
     chatRoute,
     ...communityRoutes,
     { path: '/myInfo', component: () => import('@/components/personCenter/myInfo/MyInfoMobile.vue') },
-    { path: '/preferences', component: Preferences },
     { path: '/settings', name: 'settings', component: Settings },
   ],
 });
@@ -375,7 +359,7 @@ const app = createApp({
         h(
           'main',
           {
-            style: `flex:1;min-height:0;overflow:auto;${router.currentRoute.value.path === '/preferences' ? 'padding:24px' : ''}`,
+            style: `flex:1;min-height:0;overflow:auto`,
           },
           h(RouterView),
         ),

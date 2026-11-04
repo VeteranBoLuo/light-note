@@ -47,22 +47,15 @@ describe('知识工具箱前端边界', () => {
       'src/view/toolbox/components/ImageOptimizer.vue',
       'src/view/toolbox/components/ImageToPdf.vue',
       'src/view/toolbox/components/PdfToImages.vue',
-      'src/view/toolbox/components/MarkdownConverter.vue',
       'src/view/toolbox/components/TableConverter.vue',
-      'src/view/toolbox/components/MermaidEditor.vue',
-      'src/view/toolbox/components/BrowserSqlWorkbench.vue',
-      'src/view/toolbox/components/CodeSnapshotWorkbench.vue',
       'src/view/toolbox/components/DatasetWorkbench.vue',
       'src/view/toolbox/components/DocumentTextWorkbench.vue',
-      'src/view/toolbox/components/KnowledgeTextWorkbench.vue',
       'src/utils/pdfOrganizer.ts',
       'src/utils/imageOptimizer.ts',
       'src/utils/imageToPdf.ts',
       'src/utils/pdfToImages.ts',
-      'src/utils/toolboxBrowserSql.ts',
       'src/utils/toolboxDataset.ts',
       'src/utils/toolboxDocumentText.ts',
-      'src/utils/toolboxKnowledgeText.ts',
       'src/utils/toolboxLocal.ts',
       'src/utils/toolboxTextTools.ts',
     ]) {
@@ -84,22 +77,6 @@ describe('知识工具箱前端边界', () => {
     expect(converter).toContain('downloadToolboxBlob(new Blob([output.value]');
   });
 
-  it('Markdown 文件工具只保留真实文件入口，空态操作保持同组展示', () => {
-    const workbench = source('src/view/toolbox/components/KnowledgeTextWorkbench.vue');
-    const emptyStart = workbench.indexOf('<section v-if="sourceFiles.length === 0"');
-    const emptyEnd = workbench.indexOf('</section>', emptyStart);
-    const emptyState = workbench.slice(emptyStart, emptyEnd);
-
-    expect(emptyStart).toBeGreaterThan(-1);
-    expect(emptyEnd).toBeGreaterThan(emptyStart);
-    expect(emptyState).toContain('class="knowledge-file-empty__actions"');
-    expect(emptyState).toContain('directory');
-    expect(emptyState).toContain("t('toolbox.knowledgeText.chooseMarkdownFolder')");
-    expect(emptyState).toContain("t('toolbox.knowledgeText.chooseMarkdownFiles')");
-    expect(emptyState).not.toContain('@click="loadSample"');
-    expect(workbench).toContain('grid-template-columns: repeat(2, minmax(0, 1fr))');
-  });
-
   it('本地与知识库免费工作台统一通过注册表扩展，全部免费工具均已接入', () => {
     const registry = source('src/view/toolbox/localToolRegistry.ts');
     for (const toolId of [
@@ -107,9 +84,7 @@ describe('知识工具箱前端边界', () => {
       'image_optimizer',
       'image_to_pdf',
       'pdf_to_images',
-      'markdown_converter',
       'table_converter',
-      'mermaid_editor',
       'data_workbench',
       'data_quality_report',
       'data_cleaner',
@@ -119,16 +94,13 @@ describe('知识工具箱前端边界', () => {
       'table_merge_split',
       'data_anonymizer',
       'data_chart',
-      'regex_extractor',
       'pdf_text_extractor',
-      'frontmatter_batch',
-      'citation_converter',
-      'browser_sql',
-      'structured_data_lab',
       'docx_to_markdown',
-      'code_snapshot',
     ]) {
       expect(registry).toContain(`${toolId}:`);
+    }
+    for (const retiredId of ['markdown_converter', 'mermaid_editor', 'browser_sql', 'code_snapshot', 'regex_extractor']) {
+      expect(registry).not.toContain(`${retiredId}:`);
     }
     const serviceRegistry = source('src/view/toolbox/serviceToolRegistry.ts');
     expect(serviceRegistry).toContain('research_workspace:');
@@ -143,6 +115,8 @@ describe('知识工具箱前端边界', () => {
     expect(workbench).toContain('getToolboxServiceComponent');
     expect(workbench).toContain('recordToolboxRecentUse');
     expect(workbench).not.toContain("toolId === 'pdf_organizer'");
+    expect(workbench).toContain("isToolboxRetiredToolId(routeToolId) ? 'toolbox.retired' : 'toolbox.unavailable'");
+    expect(source('src/config/toolbox.ts')).toContain('export const TOOLBOX_RETIRED_TOOL_IDS');
   });
 
   it('所有工具箱页面复用同一滚动基线，图片压缩明确呈现前后双预览', () => {
@@ -560,9 +534,8 @@ describe('知识工具箱前端边界', () => {
     expect(workspace).toContain('grid-template-rows: minmax(0, 1fr)');
   });
 
-  it('材料弹窗、文本清理选项与 PDF 编排保持可发现、无断行且有明确拖拽反馈', () => {
+  it('材料弹窗与 PDF 编排保持可发现，并有明确拖拽反馈', () => {
     const workspace = source('src/view/toolbox/components/KnowledgeWorkspace.vue');
-    const textWorkbench = source('src/view/toolbox/components/KnowledgeTextWorkbench.vue');
     const pdfOrganizer = source('src/view/toolbox/components/PdfOrganizer.vue');
 
     expect(workspace).toContain(':show-footer="true"');
@@ -571,7 +544,6 @@ describe('知识工具箱前端边界', () => {
     expect(workspace).toMatch(/<BDateTimePicker\b[^>]*v-model:value="createForm.targetDate"/su);
     expect(source('src/view/toolbox/components/WorkspaceItemEditor.vue')).toContain('v-model:value="form.dueOn"');
     expect(workspace).not.toMatch(/<BInput[^>]+type="date"/su);
-    expect(textWorkbench).toContain('white-space: nowrap');
     expect(pdfOrganizer).toContain("import { VueDraggable } from 'vue-draggable-plus'");
     expect(pdfOrganizer).toContain('handle=".pdf-page-card__drag"');
     expect(pdfOrganizer).toContain('ghost-class="pdf-page-card--ghost"');
@@ -595,7 +567,6 @@ describe('知识工具箱前端边界', () => {
       'research_brief',
       'study_kit',
       'concept_map',
-      'action_plan',
       'source_comparison',
       'knowledge_audit',
     ]) {

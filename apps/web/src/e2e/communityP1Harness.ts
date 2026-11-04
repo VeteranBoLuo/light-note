@@ -10,7 +10,6 @@ import { communityChatWorkspaceActive } from '@/composables/useCommunityChatActi
 import zh from '@/i18n/locales/zh-CN';
 import en from '@/i18n/locales/en-US';
 import chatRoute, { communityRoutes } from '@/router/modules/communityChat';
-import Preferences from '@/components/community/CommunityPreferencesPanel.vue';
 import Settings from '@/view/settings/Settings.vue';
 import Navigation from '@/components/home/navigation/Navigation.vue';
 import MobileBottomNav from '@/components/mobile/MobileBottomNav.vue';
@@ -19,14 +18,7 @@ import '@/assets/css/index.less';
 // Isolated browser fixture: every request is served by this adapter, with no backend connection.
 const params = new URLSearchParams(location.search);
 const calls: { url: string; method: string; data: unknown; params: unknown }[] = [];
-const control = { failPreferences: params.has('error'), failProfileSave: false };
-const preferences = {
-  defaultView: 'chat',
-  revision: 0,
-  protocolVersion: 1,
-  availableViews: ['chat'],
-  feedEnabled: false,
-};
+const control = { failProfileSave: false };
 const author = {
   name: '薄荷',
   communityId: 'LN-MINT',
@@ -110,14 +102,7 @@ request.defaults.adapter = async (config) => {
   const body = typeof config.data === 'string' ? JSON.parse(config.data) : config.data;
   calls.push({ url, method, data: body, params: config.params });
   let data: unknown = {};
-  if (url.includes('/community/preferences/me')) {
-    if (control.failPreferences) throw new Error('Fixture unavailable');
-    if (method === 'put') {
-      preferences.revision++;
-      preferences.defaultView = body.defaultView;
-    }
-    data = { ...preferences };
-  } else if (url.endsWith('/community-chat/rooms')) data = { access, messagingEnabled: true, items: rooms };
+  if (url.endsWith('/community-chat/rooms')) data = { access, messagingEnabled: true, items: rooms };
   else if (url.endsWith('/messages'))
     data = {
       items: messages,
@@ -165,7 +150,7 @@ document.body.style.display = 'block';
 document.getElementById('app')!.style.width = '100%';
 const router = createRouter({
   history: createMemoryHistory(),
-  routes: [chatRoute, ...communityRoutes, { path: '/preferences', component: Preferences }, { path: '/settings', name: 'settings', component: Settings }],
+  routes: [chatRoute, ...communityRoutes, { path: '/settings', name: 'settings', component: Settings }],
 });
 const app = createApp({
   setup() {
@@ -189,7 +174,7 @@ const app = createApp({
         h(
           'main',
           {
-            style: `flex:1;min-height:0;overflow:auto;${bookmark.isMobile ? '' : 'margin-top:60px'};${router.currentRoute.value.path === '/preferences' ? 'padding:24px' : ''}`,
+            style: `flex:1;min-height:0;overflow:auto;${bookmark.isMobile ? '' : 'margin-top:60px'}`,
           },
           h(RouterView),
         ),

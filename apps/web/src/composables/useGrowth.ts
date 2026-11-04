@@ -281,22 +281,6 @@ export interface WeeklyData {
   policyVersion?: string;
 }
 
-export interface RecapItem {
-  type: 'bookmark' | 'note';
-  id: string;
-  title: string;
-  url: string | null;
-  time: string;
-}
-
-export interface RecapData {
-  weekly?: RecapItem[];
-  onThisDay: RecapItem[];
-  buried: RecapItem[];
-  stableDate?: string;
-  timezone?: string;
-}
-
 export interface GrowthPreferences {
   weeklyActiveTarget: 0 | 3 | 5 | 7;
   streakReminderEnabled: boolean;
@@ -404,7 +388,6 @@ const inventory = ref<Inventory | null>(null);
 const lottery = ref<LotteryStatus | null>(null);
 const weekly = ref<WeeklyData | null>(null);
 let weeklyRequest: { generation: number; promise: Promise<WeeklyData | null> } | null = null;
-const recap = ref<RecapData | null>(null);
 const growthTasks = ref<GrowthTasksData | null>(null);
 const claimable = ref<GrowthClaimable | null>(null);
 const preferences = ref<GrowthPreferences | null>(null);
@@ -416,8 +399,6 @@ const claimableLoading = ref(false);
 const claimableError = ref(false);
 const preferencesLoading = ref(false);
 const preferencesError = ref(false);
-const recapLoading = ref(false);
-const recapError = ref(false);
 const claimingRewards = ref(false);
 const shopLoading = ref(false);
 const shopError = ref(false);
@@ -435,11 +416,8 @@ let growthRequest: Promise<Growth | null> | null = null;
 let growthRequestOwnerId: string | null = null;
 let growthTasksRequest: Promise<GrowthTasksData | null> | null = null;
 let growthTasksRequestOwnerId: string | null = null;
-let recapRequest: Promise<RecapData | null> | null = null;
-let recapRequestOwnerId: string | null = null;
 let growthRequestVersion = 0;
 let dashboardRequestVersion = 0;
-let recapRequestVersion = 0;
 let ownerGeneration = 0;
 let claimRequestVersion = 0;
 
@@ -457,7 +435,6 @@ export function resetGrowth() {
   inventory.value = null;
   lottery.value = null;
   weekly.value = null;
-  recap.value = null;
   growthTasks.value = null;
   claimable.value = null;
   preferences.value = null;
@@ -468,11 +445,8 @@ export function resetGrowth() {
   growthRequestOwnerId = null;
   growthTasksRequest = null;
   growthTasksRequestOwnerId = null;
-  recapRequest = null;
-  recapRequestOwnerId = null;
   growthRequestVersion += 1;
   dashboardRequestVersion += 1;
-  recapRequestVersion += 1;
   loading.value = false;
   growthError.value = false;
   growthTasksLoading.value = false;
@@ -483,8 +457,6 @@ export function resetGrowth() {
   claimableError.value = false;
   preferencesLoading.value = false;
   preferencesError.value = false;
-  recapLoading.value = false;
-  recapError.value = false;
   shopLoading.value = false;
   shopError.value = false;
   inventoryLoading.value = false;
@@ -529,7 +501,6 @@ function ensureGrowthOwner(uid: string) {
   inventory.value = null;
   lottery.value = null;
   weekly.value = null;
-  recap.value = null;
   growthTasks.value = null;
   claimable.value = null;
   preferences.value = null;
@@ -544,9 +515,6 @@ function ensureGrowthOwner(uid: string) {
   growthTasksOwnerId = null;
   growthTasksRequest = null;
   growthTasksRequestOwnerId = null;
-  recapRequest = null;
-  recapRequestOwnerId = null;
-  recapRequestVersion += 1;
   loading.value = false;
   growthError.value = false;
   dashboardLoading.value = false;
@@ -557,8 +525,6 @@ function ensureGrowthOwner(uid: string) {
   claimableError.value = false;
   preferencesLoading.value = false;
   preferencesError.value = false;
-  recapLoading.value = false;
-  recapError.value = false;
   shopLoading.value = false;
   shopError.value = false;
   inventoryLoading.value = false;
@@ -1061,68 +1027,6 @@ export function useGrowth() {
     }
   }
 
-  // 那年今日 · 智能回顾
-  function removeRecapItem(item: RecapItem) {
-    if (!recap.value) return;
-    const keep = (candidate: RecapItem) => candidate.type !== item.type || candidate.id !== item.id;
-    recap.value = {
-      ...recap.value,
-      weekly: recap.value.weekly?.filter(keep),
-      onThisDay: recap.value.onThisDay.filter(keep),
-      buried: recap.value.buried.filter(keep),
-    };
-  }
-
-  async function loadRecap(force = false) {
-    const uid = useUserStore().id || 'visitor';
-    ensureGrowthOwner(uid);
-    // 工作台、移动「今日」与成长页可能同时挂载。普通读取合并同账号的在途请求；
-    // 写操作后的 force 刷新必须另起一代，避免复用写入前已经发出的旧快照。
-    if (!force && recapRequest && recapRequestOwnerId === uid) return recapRequest;
-    const generation = ownerGeneration;
-    const requestVersion = ++recapRequestVersion;
-    recapLoading.value = true;
-    recapError.value = false;
-    let request!: Promise<RecapData | null>;
-    // 与成长快照请求相同，延后一轮微任务，保证同步抛错也能在 finally 中清掉当前 request。
-    request = Promise.resolve().then(async () => {
-      try {
-        const res = await growthApi.getRecap();
-        if (!isCurrentGrowthOwner(uid, generation) || requestVersion !== recapRequestVersion) return null;
-        if (res?.status === 200 && res.data) recap.value = res.data as RecapData;
-        else recapError.value = true;
-      } catch (err) {
-        console.warn('加载回顾失败:', err);
-        if (isCurrentGrowthOwner(uid, generation) && requestVersion === recapRequestVersion) recapError.value = true;
-      } finally {
-        if (isCurrentGrowthOwner(uid, generation) && requestVersion === recapRequestVersion) {
-          recapLoading.value = false;
-        }
-        if (recapRequest === request) {
-          recapRequest = null;
-          recapRequestOwnerId = null;
-        }
-      }
-      return isCurrentGrowthOwner(uid, generation) && requestVersion === recapRequestVersion ? recap.value : null;
-    });
-    recapRequest = request;
-    recapRequestOwnerId = uid;
-    return request;
-  }
-
-  async function setRecapState(item: RecapItem, action: 'snooze_7d' | 'dismiss') {
-    const uid = useUserStore().id || 'visitor';
-    ensureGrowthOwner(uid);
-    const generation = ownerGeneration;
-    const res = await growthApi.updateRecapState({ type: item.type, id: item.id, action });
-    if (isCurrentGrowthOwner(uid, generation) && res?.status === 200 && res.data?.ok) {
-      // 写入已成功时先从共享读模型移除，后续回读失败也不会把用户刚隐藏的条目留在界面上。
-      removeRecapItem(item);
-      await loadRecap(true);
-    }
-    return res;
-  }
-
   async function loadClaimable() {
     ensureGrowthOwner(useUserStore().id || 'visitor');
     const generation = ownerGeneration;
@@ -1212,7 +1116,6 @@ export function useGrowth() {
     inventory,
     lottery,
     weekly,
-    recap,
     growthTasks,
     claimable,
     preferences,
@@ -1224,8 +1127,6 @@ export function useGrowth() {
     claimableError,
     preferencesLoading,
     preferencesError,
-    recapLoading,
-    recapError,
     claimingRewards,
     shopLoading,
     shopError,
@@ -1256,8 +1157,6 @@ export function useGrowth() {
     claimAchievement,
     loadWeekly,
     claimWeekly,
-    loadRecap,
-    setRecapState,
     loadClaimable,
     claimAllRewards,
     loadPreferences,

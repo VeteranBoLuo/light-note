@@ -36,7 +36,6 @@ const EXPECTED_INTERNAL_SKILLS = Object.freeze([
   ['toolbox.research_brief', 'toolbox', 'read'],
   ['toolbox.study_kit', 'toolbox', 'read'],
   ['toolbox.concept_map', 'toolbox', 'read'],
-  ['toolbox.action_plan', 'toolbox', 'read'],
   ['toolbox.source_comparison', 'toolbox', 'read'],
   ['toolbox.knowledge_audit', 'toolbox', 'read'],
   ['toolbox.translation', 'toolbox', 'read'],

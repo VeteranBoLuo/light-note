@@ -31,15 +31,6 @@ import {
   ORGANIZE_SUPPRESSION_TYPES,
   upsertOrganizeSuppression,
 } from '../util/services/organizeSuppressionService.js';
-import {
-  acceptOrganizeAiSuggestion,
-  createOrganizeAiSuggestionBatch,
-  editOrganizeAiSuggestion,
-  estimateOrganizeAiSuggestions,
-  getOrganizeAiSuggestionBatch,
-  ignoreOrganizeAiSuggestion,
-  listOrganizeAiSuggestionBatches,
-} from '../util/services/organizeAiSuggestionService.js';
 
 function subject(req) {
   return req.resourceUser || req.user || null;
@@ -318,115 +309,6 @@ export async function unmarkHealthNormal(req, res) {
   if (!current) return;
   try {
     return res.send(resultData(await unmarkLinkNormal(current.id, req.params.bookmarkId)));
-  } catch (error) {
-    return sendError(res, error);
-  }
-}
-
-export async function estimateAiSuggestions(req, res) {
-  const current = requirePrivateSubject(req, res);
-  if (!current) return;
-  try {
-    return res.send(resultData(await estimateOrganizeAiSuggestions(pool, { userId: current.id, input: req.body })));
-  } catch (error) {
-    return sendError(res, error);
-  }
-}
-
-export async function createAiSuggestionBatch(req, res) {
-  const current = requireWrite(req, res);
-  if (!current) return;
-  try {
-    return res.send(resultData(await createOrganizeAiSuggestionBatch(pool, { userId: current.id, input: req.body })));
-  } catch (error) {
-    return sendError(res, error);
-  }
-}
-
-export async function listAiSuggestionBatches(req, res) {
-  const current = requirePrivateSubject(req, res);
-  if (!current) return;
-  try {
-    return res.send(
-      resultData(
-        await listOrganizeAiSuggestionBatches(pool, {
-          userId: current.id,
-          cursor: req.query?.cursor,
-          limit: req.query?.limit,
-          status: req.query?.status,
-          groupId: req.query?.groupId,
-        }),
-      ),
-    );
-  } catch (error) {
-    return sendError(res, error);
-  }
-}
-
-export async function getAiSuggestionBatch(req, res) {
-  const current = requirePrivateSubject(req, res);
-  if (!current) return;
-  try {
-    return res.send(
-      resultData(await getOrganizeAiSuggestionBatch(pool, { userId: current.id, batchId: req.params.batchId })),
-    );
-  } catch (error) {
-    return sendError(res, error);
-  }
-}
-
-export async function editAiSuggestion(req, res) {
-  const current = requireWrite(req, res);
-  if (!current) return;
-  try {
-    return res.send(
-      resultData(
-        await editOrganizeAiSuggestion(pool, {
-          userId: current.id,
-          batchId: req.params.batchId,
-          suggestionId: req.params.suggestionId,
-          tagNames: req.body?.tagNames,
-        }),
-      ),
-    );
-  } catch (error) {
-    return sendError(res, error);
-  }
-}
-
-export async function acceptAiSuggestion(req, res) {
-  const current = requireWrite(req, res);
-  if (!current) return;
-  try {
-    return res.send(
-      resultData(
-        await acceptOrganizeAiSuggestion(pool, {
-          userId: current.id,
-          batchId: req.params.batchId,
-          suggestionId: req.params.suggestionId,
-          ...(Object.prototype.hasOwnProperty.call(req.body || {}, 'tagNames') ? { tagNames: req.body.tagNames } : {}),
-          ...(Object.prototype.hasOwnProperty.call(req.body || {}, 'tags') ? { tags: req.body.tags } : {}),
-        }),
-      ),
-    );
-  } catch (error) {
-    return sendError(res, error);
-  }
-}
-
-export async function ignoreAiSuggestion(req, res) {
-  const current = requireWrite(req, res);
-  if (!current) return;
-  try {
-    return res.send(
-      resultData(
-        await ignoreOrganizeAiSuggestion(pool, {
-          userId: current.id,
-          batchId: req.params.batchId,
-          suggestionId: req.params.suggestionId,
-        }),
-      ),
-    );
   } catch (error) {
     return sendError(res, error);
   }

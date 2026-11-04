@@ -73,7 +73,6 @@ vi.mock('@/components/base/BasicComponents/BInput.vue', () => ({
   },
 }));
 vi.mock('@/components/base/BasicComponents/BSelect.vue', () => ({ default: { template: '<div />' } }));
-vi.mock('./CommunityMentionPicker.vue', () => ({ default: { template: '<div />' } }));
 vi.mock('./CommunityPostBody.vue', () => ({ default: { template: '<div />' } }));
 vi.mock('./CommunityMarkdown.vue', () => ({ default: { template: '<div />' } }));
 const flush = async () => {

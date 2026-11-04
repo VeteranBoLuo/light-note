@@ -22,30 +22,9 @@ router.post('/duplicate-bookmarks/:groupKey/ignore', organizeHandle.ignoreDuplic
 router.delete('/duplicate-bookmarks/:groupKey/ignore', organizeHandle.unignoreDuplicate);
 router.get('/bookmark-health', organizeHandle.bookmarkHealth);
 router.post('/bookmark-health/scan', organizeHandle.startHealthScan);
-// 兼容已经打开的旧前端；语义已升级为创建或复用一次全量后台任务。
-router.post('/bookmark-health/check-batch', organizeHandle.startHealthScan);
 router.post('/bookmark-health/:bookmarkId/recheck', organizeHandle.recheckHealth);
 router.post('/bookmark-health/:bookmarkId/mark-normal', organizeHandle.markHealthNormal);
 router.delete('/bookmark-health/:bookmarkId/mark-normal', organizeHandle.unmarkHealthNormal);
-router.post('/ai-suggestions/estimate', localProcessingRateLimiter, organizeHandle.estimateAiSuggestions);
-router.post('/ai-suggestions/batches', localProcessingRateLimiter, organizeHandle.createAiSuggestionBatch);
-router.get('/ai-suggestions/batches', organizeHandle.listAiSuggestionBatches);
-router.get('/ai-suggestions/batches/:batchId', organizeHandle.getAiSuggestionBatch);
-router.put(
-  '/ai-suggestions/batches/:batchId/suggestions/:suggestionId',
-  localProcessingRateLimiter,
-  organizeHandle.editAiSuggestion,
-);
-router.post(
-  '/ai-suggestions/batches/:batchId/suggestions/:suggestionId/accept',
-  localProcessingRateLimiter,
-  organizeHandle.acceptAiSuggestion,
-);
-router.post(
-  '/ai-suggestions/batches/:batchId/suggestions/:suggestionId/ignore',
-  localProcessingRateLimiter,
-  organizeHandle.ignoreAiSuggestion,
-);
 
 router.post('/suggestions/previews', localProcessingRateLimiter, suggestions.preview);
 router.get('/suggestions/runs', suggestions.list);

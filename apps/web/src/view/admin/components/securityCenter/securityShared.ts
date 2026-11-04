@@ -1,4 +1,4 @@
-import type { InjectionKey, Ref } from 'vue';
+import type { InjectionKey } from 'vue';
 
 // Tab config
 export const securityTabs = [
@@ -64,13 +64,6 @@ export function severityColor(severity: string) {
   return { low: 'blue', medium: 'orange', high: 'volcano', critical: 'red' }[severity] || 'default';
 }
 
-export function scoreColor(score: number) {
-  if (score >= 80) return 'var(--security-critical)';
-  if (score >= 50) return 'var(--security-high)';
-  if (score >= 20) return 'var(--security-medium)';
-  return 'var(--security-low)';
-}
-
 export function statusText(status: string) {
   return (
     {
@@ -114,15 +107,6 @@ export function normalizeAccount(account: any) {
 
 // Injection keys
 export const OPEN_EVENT_DETAIL: InjectionKey<(eventId: string) => void> = Symbol('openEventDetail');
-export const OPEN_IP_ACCOUNTS: InjectionKey<(ip: string) => void> = Symbol('openIpAccounts');
-export const NAVIGATE_TO_USER_EVENTS: InjectionKey<(userId: string, userLabel: string) => void> =
-  Symbol('navigateToUserEvents');
-export const REFRESH_TRIGGER: InjectionKey<Ref<number>> = Symbol('refreshTrigger');
-export const BAN_IP: InjectionKey<(ip: string) => void> = Symbol('banIp');
-export const UNBAN_IP: InjectionKey<(ip: string) => void> = Symbol('unbanIp');
-export const BAN_ACCOUNT: InjectionKey<(account: any) => void> = Symbol('banAccount');
-export const UNBAN_ACCOUNT: InjectionKey<(account: any) => void> = Symbol('unbanAccount');
-
 // Table columns
 export const eventColumns = [
   { title: '时间', key: 'createdAt', sortable: true },
@@ -167,36 +151,12 @@ export const recentColumns = [
   { title: '动作', key: 'actionTaken' },
 ];
 
-export const ipColumns = [
-  { title: 'IP', key: 'ip' },
-  { title: '来源地', key: 'city' },
-  { title: '风险分', key: 'riskScore' },
-  { title: '攻击次数', key: 'totalAttacks' },
-  { title: '高危', key: 'highRiskCount' },
-  { title: '严重', key: 'criticalCount' },
-  { title: '状态', key: 'isBanned' },
-  { title: '最近攻击', key: 'lastAttackTime', sortable: true },
-  { title: '操作', key: 'action' },
-];
-
 export const accountColumns = [
   { title: '账号', key: 'account' },
   { title: '角色', key: 'role' },
   { title: '风险分', key: 'riskScore' },
   { title: '封禁原因', key: 'banReason' },
   { title: '封禁时间', key: 'bannedAt' },
-  { title: '操作', key: 'action' },
-];
-
-export const accountRepColumns = [
-  { title: '账号', key: 'account' },
-  { title: '角色', key: 'role' },
-  { title: '风险分', key: 'riskScore' },
-  { title: '事件次数', key: 'totalEvents' },
-  { title: '高危', key: 'highRiskCount' },
-  { title: '严重', key: 'criticalCount' },
-  { title: '状态', key: 'delFlag' },
-  { title: '最近事件', key: 'lastEventAt', sortable: true },
   { title: '操作', key: 'action' },
 ];
 
@@ -210,29 +170,9 @@ export const ruleColumns = [
   { title: '状态', key: 'enabled' },
 ];
 
-export const whitelistColumns = [
-  { title: '类型', key: 'targetType', width: 'var(--ui-layout-80, 80px)' },
-  { title: '白名单对象', key: 'targetLabel' },
-  { title: '备注', key: 'reason' },
-  { title: '状态', key: 'enabled', width: 'var(--ui-layout-80, 80px)' },
-  { title: '创建人', key: 'createdByLabel', width: 'var(--ui-layout-120, 120px)' },
-  { title: '更新时间', key: 'updatedAt', width: 'var(--ui-layout-180, 180px)', sortable: true },
-  { title: '操作', key: 'action', width: 'var(--ui-layout-100, 100px)' },
-];
-
 export const ipRecentColumns = [
   { title: '时间', key: 'createdAt' },
   { title: '规则', key: 'matchedRule', width: '160px' },
   { title: '等级', key: 'severity', width: '80px' },
   { title: '分数', key: 'threatScore', width: '80px' },
-];
-
-export const ipAccountColumns = [
-  { title: '账号', key: 'account' },
-  { title: '状态', key: 'delFlag', width: '60px' },
-  { title: '安全事件', key: 'securityEvents', width: '80px' },
-  { title: '访问次数', key: 'apiRequests', width: '80px' },
-  { title: '最近出现', key: 'lastSeenAt', width: '200px' },
-  { title: '来源', key: 'sources', width: '150px' },
-  { title: '操作', key: 'action' },
 ];

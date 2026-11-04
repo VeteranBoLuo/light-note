@@ -53,7 +53,6 @@ const {
   clearLogsByIp,
   getIpLogStats,
   getDeepSeekBalance,
-  getAgentLogsSummary,
   getNoticeSummary,
   clearImages,
   getHelpConfig,
@@ -62,7 +61,6 @@ const {
   getAdminOverviewSnapshot,
   getAdminOverviewRecent,
   getAdminOverviewTrend,
-  getAgentLogs,
   getApiLogDetail,
   getApiLogs,
   getOperationLogs,
@@ -1069,74 +1067,6 @@ describe('getAdminOverviewRecent 最近新增', () => {
   });
 });
 
-describe('getAgentLogs 请求摘要', () => {
-  beforeEach(() => query.mockReset());
-
-  it('保留短提问、识别旧隐私占位符，并截断过长文本', async () => {
-    query.mockImplementation(async (sql) => {
-      const activity = mockActivityStatement(sql);
-      if (activity) return activity;
-      const statement = String(sql);
-      if (statement.includes('SELECT a.*')) {
-        return [
-          [
-            {
-              id: '3',
-              task_type: 'agent',
-              question: '帮我总结这篇笔记',
-              turn_contract_trace: JSON.stringify({
-                version: '2.0-shadow',
-                requestedScopeMode: 'explicit',
-                allowedSourceCount: 3,
-              }),
-              created_at: '2026-08-06 12:03:00',
-            },
-            {
-              id: '2',
-              task_type: 'note_assist',
-              question: '[笔记助手请求，正文不写入日志]',
-              created_at: '2026-08-06 12:02:00',
-            },
-            { id: '1', task_type: 'agent', question: 'a'.repeat(620), created_at: '2026-08-06 12:01:00' },
-            {
-              id: '0',
-              task_type: 'agent_confirmation',
-              question: '[Agent 请求，用户未提交问题]',
-              created_at: '2026-08-06 12:00:00',
-            },
-          ],
-        ];
-      }
-      if (statement.includes('COUNT(*) as total')) return [[{ total: 4 }]];
-      return [[]];
-    });
-    const res = mockRes();
-
-    await getAgentLogs({ user: { role: 'root' }, body: { hideInternal: false, currentPage: 1, pageSize: 20 } }, res);
-
-    const items = res.send.mock.calls[0][0].data.items;
-    expect(items[0]).toMatchObject({
-      requestPreview: '帮我总结这篇笔记',
-      requestKind: 'user_question',
-      requestLabel: '提问',
-      turnContractTrace: {
-        version: '2.0-shadow',
-        requestedScopeMode: 'explicit',
-        allowedSourceCount: 3,
-      },
-    });
-    expect(items[0]).not.toHaveProperty('turn_contract_trace');
-    expect(items[1]).toMatchObject({ requestPreview: '笔记助手（请求正文未记录）', requestKind: 'redacted' });
-    expect(items[2].requestTruncated).toBe(true);
-    expect(items[2].requestPreview).toHaveLength(501);
-    expect(items[2].question).toBe(items[2].requestPreview);
-    expect(items[3]).toMatchObject({
-      taskTypeLabel: '操作确认',
-      requestPreview: '操作确认（用户未提交问题）',
-    });
-  });
-});
-
 describe('recordOperationLogs 管理员预览审计', () => {
   beforeEach(() => query.mockReset());
 
@@ -1694,84 +1624,6 @@ describe('getIpLogStats 统计', () => {
     const res = mockRes();
     await getIpLogStats({ user: { id: 'r', role: 'root' }, body: {} }, res);
     expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ status: 400 }));
-  });
-});
-
-describe('getAgentLogsSummary AI 质量指标', () => {
-  beforeEach(() => query.mockReset());
-
-  it('计算错误率、延迟分位、工具质量和确认比例', async () => {
-    query.mockImplementation((sql) => {
-      if (/SELECT COUNT\(\*\).*created_at >=/.test(sql)) {
-        return Promise.resolve([[{ count: 3, tokens: 120, cost: 0.02 }]]);
-      }
-      if (/SELECT COUNT\(\*\).*WHERE 1=1/.test(sql)) {
-        return Promise.resolve([[{ count: 10, tokens: 500, cost: 0.1 }]]);
-      }
-      if (/SELECT a\.status, a\.duration_ms/.test(sql)) {
-        return Promise.resolve([
-          [
-            {
-              status: 'success',
-              duration_ms: 100,
-              first_token_ms: 30,
-              planner_ms: 20,
-              tool_ms: 10,
-              final_ms: 70,
-              task_type: 'agent',
-              tools_used: '[{"name":"query_notes","status":"success"}]',
-            },
-            {
-              status: 'error',
-              duration_ms: 900,
-              first_token_ms: null,
-              planner_ms: 100,
-              tool_ms: 50,
-              final_ms: null,
-              task_type: 'agent',
-              tools_used: '[{"name":"query_notes","status":"error"}]',
-            },
-            {
-              status: 'success',
-              duration_ms: 300,
-              first_token_ms: 80,
-              planner_ms: null,
-              tool_ms: null,
-              final_ms: 300,
-              task_type: 'agent_confirmation',
-              tools_used: null,
-            },
-            {
-              status: 'confirmation_rejected',
-              duration_ms: 200,
-              first_token_ms: null,
-              planner_ms: null,
-              tool_ms: null,
-              final_ms: null,
-              task_type: 'agent_confirmation',
-              tools_used: null,
-            },
-          ],
-        ]);
-      }
-      return Promise.resolve([[]]);
-    });
-    const res = mockRes();
-    await getAgentLogsSummary({ user: { role: 'root' }, body: { hideInternal: false } }, res);
-    const payload = res.send.mock.calls[0][0];
-    expect(payload.status).toBe(200);
-    expect(payload.data.today).toEqual({ count: 3, tokens: 120 });
-    expect(payload.data.total).toEqual({ count: 10, tokens: 500 });
-    expect(payload.data.quality).toMatchObject({
-      sampleCount: 4,
-      errorRate: 25,
-      durationP50: 200,
-      durationP95: 900,
-      firstTokenP50: 30,
-      toolHitRate: 50,
-      toolErrorRate: 50,
-      confirmationRate: 50,
-    });
   });
 });
 

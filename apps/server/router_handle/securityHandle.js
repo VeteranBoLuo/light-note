@@ -1,7 +1,6 @@
 import pool from '../db/index.js';
 import { resultData } from '../util/common.js';
 import { validateQueryParams } from '../util/request.js';
-import { setIpBan } from '../util/security/services/ipReputation.js';
 import {
   disableSecurityWhitelist,
   isSecurityWhitelisted,
@@ -479,44 +478,6 @@ export const getIpReputationList = async (req, res) => {
     res.send(resultData({ items: rows, total: totalRows[0].total }));
   } catch (e) {
     res.send(resultData(null, 500, '获取IP画像失败：' + e.message));
-  }
-};
-
-export const banIp = async (req, res) => {
-  let connection;
-  try {
-    if (!(await ensureRootRole(req, res))) return;
-    const { ip, minutes = 60, reason = '管理员手动封禁', force = false } = req.body || {};
-    if (!ip) return res.send(resultData(null, 400, 'IP不能为空'));
-    if (!force) {
-      const conflict = await whitelistConflict('ip', ip);
-      if (conflict) return res.send(conflict);
-    }
-    connection = await pool.getConnection();
-    await connection.beginTransaction();
-    if (force) {
-      await disableSecurityWhitelist('ip', ip, connection);
-    }
-    await setIpBan(ip, true, minutes, reason, connection);
-    await connection.commit();
-    res.send(resultData(null, 200, 'IP已封禁'));
-  } catch (e) {
-    if (connection) await connection.rollback().catch(() => {});
-    res.send(resultData(null, 500, '封禁IP失败：' + e.message));
-  } finally {
-    if (connection) connection.release();
-  }
-};
-
-export const unbanIp = async (req, res) => {
-  try {
-    if (!(await ensureRootRole(req, res))) return;
-    const { ip } = req.body || {};
-    if (!ip) return res.send(resultData(null, 400, 'IP不能为空'));
-    await setIpBan(ip, false, 0, '');
-    res.send(resultData(null, 200, 'IP已解封'));
-  } catch (e) {
-    res.send(resultData(null, 500, '解封IP失败：' + e.message));
   }
 };
 

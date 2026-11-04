@@ -10,7 +10,6 @@ const mocks = vi.hoisted(() => ({
   release: vi.fn(),
   insertData: vi.fn(),
   insertResourceTagRelations: vi.fn(),
-  archiveAndSummarizeBookmark: vi.fn(),
   summarizeBookmark: vi.fn(),
   suggestTagsFromText: vi.fn(),
   suggestBookmarkMeta: vi.fn(),
@@ -42,13 +41,11 @@ vi.mock('../util/auth.js', () => ({
 }));
 vi.mock('../util/growth.js', () => ({ grantExp: vi.fn() }));
 vi.mock('../util/snapshot.js', () => ({
-  archiveAndSummarizeBookmark: mocks.archiveAndSummarizeBookmark,
   archiveBookmark: vi.fn(),
   getBookmarkSnapshot: vi.fn(),
   summarizeBookmark: mocks.summarizeBookmark,
 }));
 vi.mock('../util/linkHealth.js', () => ({
-  checkBookmarkHealth: vi.fn(),
   getHealthSummary: vi.fn(),
   markLinkNormal: vi.fn(),
   startFullCheck: vi.fn(),
@@ -75,7 +72,7 @@ vi.mock('../util/bookmarkUrl.js', () => ({
 vi.mock('../util/personalKnowledgeSearch.js', () => ({ invalidatePersonalKnowledgeCache: vi.fn() }));
 vi.mock('../util/aiExecution/service.js', () => ({ runAiExecution: mocks.runAiExecution }));
 
-const { doArchiveAndSummarizeBookmark, doOrganizeApply, doOrganizeQuote, doOrganizeRun, doSummarizeBookmark } =
+const { doOrganizeApply, doOrganizeQuote, doOrganizeRun, doSummarizeBookmark } =
   await import('./bookmarkHandle.js');
 
 function response() {
@@ -219,53 +216,6 @@ describe('bookmark AI entry governance', () => {
       }),
     );
     expect(res.payload).toMatchObject({ status: 200, data: { summary: '只读摘要' } });
-  });
-
-  it('网页存档合并动作通过单一根执行，并在只读上下文禁止归档与缓存', async () => {
-    mocks.archiveAndSummarizeBookmark.mockResolvedValue({ ok: true, summary: '临时摘要', archiveOk: false });
-    const req = {
-      body: { id: 'bookmark-1' },
-      user: { id: 'subject-1', role: 'user' },
-      billingUser: { id: 'root-1', role: 'root' },
-      adminContext: { id: 'ctx-1', mode: 'readonly' },
-      adminCapability: { policy: 'ai_use', resourceType: 'bookmark' },
-    };
-    const res = response();
-
-    await doArchiveAndSummarizeBookmark(req, res);
-
-    expect(mocks.archiveAndSummarizeBookmark).toHaveBeenCalledWith(
-      'subject-1',
-      'bookmark-1',
-      expect.objectContaining({
-        persist: false,
-        signal: expect.any(AbortSignal),
-        trace: expect.objectContaining({ taskType: 'bookmark_archive_summary' }),
-      }),
-    );
-    expect(mocks.runAiExecution).toHaveBeenCalledWith(
-      expect.objectContaining({ taskType: 'bookmark_archive_summary', skillId: 'bookmark.summarize_page' }),
-      expect.any(Function),
-    );
-    expect(res.payload).toMatchObject({ status: 200, data: { summary: '临时摘要' } });
-  });
-
-  it.each([
-    ['AI_QUOTA_EXCEEDED', 429],
-    ['AI_ACCESS_RESTRICTED', 403],
-  ])('书签摘要统一映射根执行错误 %s', async (code, status) => {
-    mocks.runAiExecution.mockRejectedValueOnce(Object.assign(new Error('internal'), { code }));
-    const req = {
-      body: { id: 'bookmark-1' },
-      user: { id: 'user-1', role: 'user' },
-      billingUser: { id: 'user-1', role: 'user' },
-    };
-    const res = response();
-
-    await doSummarizeBookmark(req, res);
-
-    expect(res.statusCode).toBe(status);
-    expect(res.payload).toMatchObject({ status, data: { code } });
   });
 
   it('批量整理只建立一个根执行，额度不足时以 429 保留已经完成的建议', async () => {

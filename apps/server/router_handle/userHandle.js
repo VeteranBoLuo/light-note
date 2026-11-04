@@ -102,7 +102,6 @@ import {
   preserveFeatureAnnouncementReads,
 } from '../util/services/featureAnnouncementService.js';
 import { preserveToolboxPinnedTools } from '../util/services/toolboxPinnedToolsService.js';
-import { preserveCommunityPreference } from '../util/communityPreferences.js';
 import { preserveCloudSpacePreference } from '../util/cloudSpacePreferences.js';
 import { preserveDataBackupPreference } from '../util/dataExport/preferences.js';
 import { preserveDailyBriefPreference } from '../util/dailyBriefFeature.js';
@@ -1276,7 +1275,6 @@ export const saveUserInfo = async (req, res) => {
         finalBody.preferences = preserveFeatureAnnouncementReads(finalBody.preferences, persistedUser.preferences);
         finalBody.preferences = preserveWorkshopPreference(finalBody.preferences, persistedUser.preferences);
         finalBody.preferences = preserveDailyBriefPreference(finalBody.preferences, persistedUser.preferences);
-        finalBody.preferences = preserveCommunityPreference(finalBody.preferences, persistedUser.preferences);
         finalBody.preferences = preserveToolboxPinnedTools(finalBody.preferences, persistedUser.preferences);
         finalBody.preferences = preserveCloudSpacePreference(finalBody.preferences, persistedUser.preferences);
         finalBody.preferences = preserveDataBackupPreference(finalBody.preferences, persistedUser.preferences);

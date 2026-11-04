@@ -34,7 +34,6 @@ router.post('/admin/campaigns/:campaignId/visibility', adminActionLimiter, handl
 router.get('/catalog', readLimiter, handle.catalog);
 router.get('/leaderboard', readLimiter, handle.leaderboard);
 router.get('/leaderboard/avatar/:publicId', readLimiter, handle.publicAvatar);
-router.get('/orders', readLimiter, handle.orders);
 router.post('/public-preference', preferenceLimiter, handle.publicPreference);
 router.get('/donation/checkout', checkoutLimiter, handle.donationCheckout);
 router.get('/checkout', checkoutLimiter, handle.checkout);

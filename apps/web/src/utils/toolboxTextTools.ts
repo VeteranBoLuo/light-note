@@ -1,22 +1,12 @@
-import { noteContentToHtml } from '@/utils/common';
-import { noteHtmlToMarkdown } from '@/utils/noteHtmlToMarkdown';
-
-export type MarkupDirection = 'markdown_to_html' | 'html_to_markdown';
 export type TableFormat = 'csv' | 'tsv' | 'json' | 'markdown';
 
 export class ToolboxTextError extends Error {
   constructor(
-    public readonly code: 'INPUT_TOO_LARGE' | 'DIFF_TOO_COMPLEX' | 'INVALID_TABLE' | 'INVALID_JSON' | 'SAME_FORMAT',
+    public readonly code: 'INPUT_TOO_LARGE' | 'INVALID_TABLE' | 'INVALID_JSON' | 'SAME_FORMAT',
   ) {
     super(code);
     this.name = 'ToolboxTextError';
   }
-}
-
-export async function convertMarkup(source: string, direction: MarkupDirection) {
-  const value = String(source || '');
-  if (value.length > 500_000) throw new ToolboxTextError('INPUT_TOO_LARGE');
-  return direction === 'markdown_to_html' ? noteContentToHtml(value, 'markdown') : noteHtmlToMarkdown(value);
 }
 
 export interface TableLimits {

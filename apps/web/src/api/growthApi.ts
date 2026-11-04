@@ -96,11 +96,6 @@ export const drawLottery = (payload: {
 // 领取成就奖励
 export const claimAchievement = (key: string) => apiBasePost('/api/growth/achievement/claim', { key });
 
-// 那年今日 · 智能回顾
-export const getRecap = () => apiBaseGet('/api/growth/recap');
-export const updateRecapState = (payload: { type: 'bookmark' | 'note'; id: string; action: 'snooze_7d' | 'dismiss' }) =>
-  apiBasePost('/api/growth/recap/state', payload);
-
 export const getClaimable = () => apiBaseGet('/api/growth/claimable');
 
 // 庄园入口提醒：只读计数，不加载庄园规则模型，顶栏引用也不会把庄园打进主包。
@@ -344,8 +339,6 @@ export default {
   getLotteryHistory,
   drawLottery,
   claimAchievement,
-  getRecap,
-  updateRecapState,
   getClaimable,
   claimAll,
   getGrowthPreferences,

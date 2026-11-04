@@ -41,7 +41,6 @@ import {
   getAfdianAdminOverview,
   getAfdianLeaderboard,
   getAfdianPublicAvatar,
-  getAfdianUserOrders,
   queryAfdianAdminOrders,
   queryAfdianAdminSupporters,
   setAfdianAdminIdentityHidden,
@@ -254,21 +253,6 @@ export async function leaderboard(req, res) {
   try {
     const userId = req.adminContext ? '' : req.user?.isAuthenticated && req.user?.role !== 'visitor' ? req.user.id : '';
     return res.send(resultData(await getAfdianLeaderboard({ userId })));
-  } catch (error) {
-    return sendError(req, res, error);
-  }
-}
-
-export async function orders(req, res) {
-  if (!ensurePrivateSupportAccess(req, res)) return;
-  try {
-    const data = await getAfdianUserOrders({
-      userId: req.user.id,
-      page: req.query.page,
-      pageSize: req.query.pageSize,
-      scope: req.query.scope,
-    });
-    return res.send(resultData(data));
   } catch (error) {
     return sendError(req, res, error);
   }

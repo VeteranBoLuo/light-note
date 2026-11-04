@@ -57,7 +57,6 @@ const suites = {
   'util/services/cloudFileRestore.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
   'util/dataExport/service.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
   'util/communityFeed/feed.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
-  'util/services/communityPreferenceService.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
   'util/services/toolboxPinnedToolsService.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
   'util/services/resourceReuseService.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
   'router_handle/noteLibraryHandle.persistence.mysql.test.js': 'P01_TEST_MYSQL_SOCKET',

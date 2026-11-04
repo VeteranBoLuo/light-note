@@ -20,8 +20,6 @@ const PROFILE_CONTRACTS = Object.freeze({
     '交付学习套件，必须分别提供“## 学习目标”“## 知识框架与核心概念”“## 易混淆点”“## 记忆卡片”“## 自测题”“## 参考答案”“## 薄弱点复习建议”七个非空章节。“记忆卡片”和“自测题”章节各用两列 Markdown 表格（问题 | 答案），每行对应一张卡片或一道题，禁止单元格换行。',
   concept_map:
     '交付概念图谱。正文首个非空内容必须是且只能是一个 Mermaid flowchart TD 代码块；随后分别提供“## 关系说明”“## 关键证据”“## 冲突与未连接概念”“## 阅读路径”四个非空章节。',
-  action_plan:
-    '交付行动项清单，必须分别提供“## 已确认决策”“## 行动项”“## 依赖与风险”“## 待澄清问题”“## 下一次检查建议”五个非空章节，其中“行动项”章节必须包含 Markdown 表格；材料未明确的负责人、期限或优先级写“未明确”。',
   source_comparison:
     '交付多资料对比，先提供统一维度的 Markdown 对比矩阵，再分别提供“## 共同点、差异与冲突”“## 互补信息”“## 覆盖限制”“## 下一步建议”四个非空章节。',
   knowledge_audit:
@@ -76,13 +74,6 @@ const PROFILE_REQUIREMENTS = Object.freeze({
     section('证据', '依据', 'evidence'),
     section('冲突', '未连接', '孤立', 'conflict', 'unconnected'),
     section('阅读路径', 'reading path'),
-  ]),
-  action_plan: Object.freeze([
-    section('决策', 'decision'),
-    Object.freeze({ ...section('行动项', '任务', 'action item'), requiresTable: true }),
-    section('依赖', '风险', 'risk'),
-    section('待澄清', '未明确', 'open question'),
-    section('检查', '复盘', 'check', 'review'),
   ]),
   source_comparison: Object.freeze([
     MARKDOWN_TABLE,
@@ -188,7 +179,6 @@ function matchSectionRequirements(headings, requirements, requirementIndex = 0, 
     .map((heading, index) => ({ heading, index }))
     .filter(({ heading }) => {
       if (!heading.body || !titleMatches(heading.title, requirement.labels)) return false;
-      if (requirement.requiresTable && !hasMarkdownTable(heading.body)) return false;
       const assignedShareGroup = assignments.get(heading.index);
       return !assignedShareGroup || (requirement.shareGroup && assignedShareGroup === requirement.shareGroup);
     });
@@ -363,14 +353,6 @@ export const toolboxSkills = Object.freeze([
     taskLabel: '提炼本轮材料中的概念与关系并生成概念图谱',
     systemRole: '你是轻笺知识工具箱的概念图谱 Skill。',
     modelPolicy: { temperature: 0.15, maxTokens: 4_800 },
-  }),
-  createToolboxSkill({
-    profileId: 'action_plan',
-    minResources: 1,
-    maxResources: 10,
-    taskLabel: '从本轮材料提取决策、行动项与风险',
-    systemRole: '你是轻笺知识工具箱的行动项清单 Skill。',
-    modelPolicy: { temperature: 0.15, maxTokens: 4_500 },
   }),
   withComparisonTableMode(createToolboxSkill({
     profileId: 'source_comparison',

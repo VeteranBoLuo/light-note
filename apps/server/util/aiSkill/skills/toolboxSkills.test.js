@@ -59,19 +59,6 @@ flowchart TD
 暂无。
 ## 阅读路径
 路径。`,
-  action_plan: `# 行动项清单
-## 已确认决策
-决策。
-## 行动项
-| 任务 | 负责人 |
-| --- | --- |
-| 执行 | 未明确 |
-## 依赖与风险
-风险。
-## 待澄清问题
-未明确。
-## 下一次检查建议
-下周复盘。`,
   source_comparison: `# 多资料对比
 | 维度 | 资料 A | 资料 B |
 | --- | --- | --- |
@@ -101,7 +88,7 @@ flowchart TD
 
 describe('toolbox AI Skill profiles', () => {
   it('one high-value artifact maps to one internal Skill and reuses the shared tool protocol limits', () => {
-    expect(toolboxSkills).toHaveLength(8);
+    expect(toolboxSkills).toHaveLength(7);
     for (const skill of toolboxSkills) {
       const profileId = skill.id.replace('toolbox.', '');
       const definition = getToolboxTool(profileId);
@@ -129,7 +116,7 @@ describe('toolbox AI Skill profiles', () => {
 
   it.each(Object.keys(VALID_RESULTS))('%s rejects keyword stuffing without semantic sections', (profileId) => {
     const mermaid = profileId === 'concept_map' ? '```mermaid\nflowchart TD\nA --> B\n```\n' : '';
-    const table = ['action_plan', 'source_comparison'].includes(profileId)
+    const table = profileId === 'source_comparison'
       ? '\n| 项目 | 内容 |\n| --- | --- |\n| 示例 | 示例 |'
       : '';
     const keywordStuffing = `${mermaid}# 普通结果\n结论摘要、来源证据、观点冲突、覆盖限制、未知待核验、下一步建议、学习目标、知识框架、核心概念、易混淆点、记忆卡片、自测题、参考答案、薄弱点复习建议、关系说明、未连接概念、阅读路径、决策、行动项、依赖风险、待澄清、检查复盘、共同点、差异、互补、重复合并、过时日期、知识缺口、权威保留、清理行动。${table}`;

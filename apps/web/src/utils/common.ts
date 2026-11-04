@@ -1,6 +1,5 @@
 // noinspection JSUnusedGlobalSymbols
 
-import { Ref } from 'vue';
 import { PWA_LAUNCH_QUERY_KEY, PWA_LAUNCH_QUERY_VALUE, PWA_RUNTIME_SESSION_KEY } from '@/config/appEntryBootstrap.ts';
 import { renderNoteMathHtml, serializeNoteMath } from '@/utils/noteMath';
 import { configureNoteMarkdownRenderer } from '@/utils/markdownRenderer.ts';
@@ -268,30 +267,6 @@ export function customTimer(ms) {
   return new Promise((resolve) => {
     setTimeout(resolve, ms);
   });
-}
-
-export function closeOpenWindow(className: string, flag: Ref<boolean>, remove?: boolean) {
-  if (remove) {
-    document.removeEventListener(
-      'click',
-      (e: any) => {
-        if (!e.target.matches(`.${className} *`)) {
-          flag.value = false;
-        }
-      },
-      true,
-    );
-  } else {
-    document.addEventListener(
-      'click',
-      (e: any) => {
-        if (!e.target.matches(`.${className} *`)) {
-          flag.value = false;
-        }
-      },
-      true,
-    );
-  }
 }
 
 export function openPage(url, newPage: boolean = true) {

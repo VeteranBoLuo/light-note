@@ -31,11 +31,7 @@
       /></div>
       <div v-else-if="!tool" class="toolbox-workbench__state is-error" role="alert">
         <span>{{
-          t(
-            ['text_batch', 'text_diff', 'markdown_checker'].includes(routeToolId)
-              ? 'toolbox.retired'
-              : 'toolbox.unavailable',
-          )
+          t(isToolboxRetiredToolId(routeToolId) ? 'toolbox.retired' : 'toolbox.unavailable')
         }}</span>
         <BButton size="small" @click="returnToToolboxParent">{{ t('toolbox.back') }}</BButton>
       </div>
@@ -50,11 +46,7 @@
         </section>
         <section v-else-if="tool.executionMode === 'browser'" class="toolbox-workbench__state is-error" role="alert">
           <span>{{
-            t(
-              ['text_batch', 'text_diff', 'markdown_checker'].includes(routeToolId)
-                ? 'toolbox.retired'
-                : 'toolbox.unavailable',
-            )
+            t(isToolboxRetiredToolId(routeToolId) ? 'toolbox.retired' : 'toolbox.unavailable')
           }}</span>
           <BButton size="small" @click="returnToToolboxParent">{{ t('toolbox.back') }}</BButton>
         </section>
@@ -68,11 +60,7 @@
         </section>
         <section v-else-if="tool.executionMode === 'service'" class="toolbox-workbench__state is-error" role="alert">
           <span>{{
-            t(
-              ['text_batch', 'text_diff', 'markdown_checker'].includes(routeToolId)
-                ? 'toolbox.retired'
-                : 'toolbox.unavailable',
-            )
+            t(isToolboxRetiredToolId(routeToolId) ? 'toolbox.retired' : 'toolbox.unavailable')
           }}</span>
           <BButton size="small" @click="returnToToolboxParent">{{ t('toolbox.back') }}</BButton>
         </section>
@@ -572,7 +560,12 @@
   import { useGrowth } from '@/composables/useGrowth';
   import { useMobileTopBar } from '@/composables/useMobileTopBar';
   import icon from '@/config/icon';
-  import { canonicalToolboxToolId, isToolboxWorkflowTool, TOOLBOX_WORKFLOW_PRESENTATION } from '@/config/toolbox';
+  import {
+    canonicalToolboxToolId,
+    isToolboxRetiredToolId,
+    isToolboxWorkflowTool,
+    TOOLBOX_WORKFLOW_PRESENTATION,
+  } from '@/config/toolbox';
   import { useUserStore } from '@/store';
   import { createLocalId, formatToolboxBytes, TOOLBOX_LOCAL_DELIVERY_EVENT } from '@/utils/toolboxLocal';
   import {

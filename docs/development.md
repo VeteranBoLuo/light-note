@@ -137,7 +137,7 @@ try {
 ### 组件与图标
 
 - 有 B 组件必须使用 B 组件：`BButton`、`BInput`、`BSelect`、`BTable`、`BModal`、`Alert.alert()`、`BPopover`、`BTooltip`、`BMessage`、`BLoading` 等。
-- 不新增 Ant Design Vue `a-*`；存量按改动范围迁移。确无 B 组件时才能使用原生控件，并在自检中说明。
+- Ant Design Vue 已从依赖中移除，不得重新引入 `a-*` 组件。确无 B 组件时才能使用原生控件，并在自检中说明。
 - 修改图标前实际打开 `apps/web/src/config/icon.ts`，确认完整属性路径存在。静态 UI 图标统一在该文件定义，由 `SvgIcon` 使用。
 - 禁止在业务模板新增静态 `<svg>/<path>`，也不创建只包装静态 SVG 的组件。共享单色图标优先使用 `currentColor`。
 - 数据可视化、复杂插画、favicon、用户上传和服务端动态图标不属于静态 UI 图标。

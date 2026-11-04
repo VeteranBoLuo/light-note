@@ -28,7 +28,6 @@ router.post('/getRelatedTag', bookmarkHandle.getRelatedTag);
 
 router.post('/getTagGraph', tagGraphHandle.getTagGraph);
 
-router.post('/getGlobalGraph', tagGraphHandle.getGlobalGraph);
 
 router.post('/getBookmarkList', bookmarkHandle.getBookmarkList);
 
@@ -48,7 +47,6 @@ router.post('/delBookmark', bookmarkHandle.delBookmark);
 
 router.post('/updateBookmark', bookmarkHandle.updateBookmark);
 
-router.post('/getCommonBookmarks', bookmarkHandle.getCommonBookmarks);
 
 router.post('/updateBookmarkSort', bookmarkHandle.updateBookmarkSort);
 
@@ -60,15 +58,12 @@ router.post('/importBookmarksExcel', bookmarkHandle.importBookmarksExcel);
 
 router.post('/archive', expensiveFreeActionRateLimiter, bookmarkHandle.doArchiveBookmark);
 
-router.post('/archive/retry-failed', expensiveFreeActionRateLimiter, bookmarkHandle.retryFailedArchives);
 
 router.post('/snapshot', bookmarkHandle.getSnapshot);
 
 router.post('/summarize', aiActionRateLimiter, bookmarkHandle.doSummarizeBookmark);
 
-router.post('/archive-summary', aiActionRateLimiter, bookmarkHandle.doArchiveAndSummarizeBookmark);
 
-router.post('/health/check', bookmarkHandle.doCheckHealth);
 
 router.post('/health/checkAll', bookmarkHandle.doCheckAllHealth);
 

@@ -26,7 +26,6 @@ describe('toolbox catalog', () => {
     expect(quoteToolboxPoints('research_brief', { itemCount: 4 })).toBe(20);
     expect(quoteToolboxPoints('study_kit', { itemCount: 4 })).toBe(26);
     expect(quoteToolboxPoints('concept_map', { itemCount: 3 })).toBe(21);
-    expect(quoteToolboxPoints('action_plan', { itemCount: 3 })).toBe(16);
     expect(quoteToolboxPoints('source_comparison', { itemCount: 4 })).toBe(25);
     expect(quoteToolboxPoints('knowledge_audit', { itemCount: 5 })).toBe(32);
     expect(quoteToolboxPoints('ocr_to_text', { itemCount: 1, totalBytes: 4 * 1024 * 1024 })).toBe(9);
@@ -97,13 +96,12 @@ describe('toolbox catalog', () => {
       'points',
       'free',
     ]);
-    expect(catalog.tools).toHaveLength(44);
+    expect(catalog.tools).toHaveLength(31);
     expect(getPublicToolboxCatalog().tools.filter((item) => item.availability.enabled)).toHaveLength(19);
     expect(catalog.tools.filter((item) => item.availability.enabled)).toHaveLength(18);
-    expect(catalog.tools.find((item) => item.id === 'action_plan')?.availability.enabled).toBe(false);
-    expect(catalog.tools.find((item) => item.id === 'browser_sql')?.availability.enabled).toBe(false);
-    expect(catalog.tools.filter((item) => item.executionMode === 'browser')).toHaveLength(27);
-    expect(catalog.tools.filter((item) => item.executionMode === 'service')).toHaveLength(7);
+    expect(catalog.tools.some((item) => ['action_plan', 'browser_sql', 'directory_index'].includes(item.id))).toBe(false);
+    expect(catalog.tools.filter((item) => item.executionMode === 'browser')).toHaveLength(16);
+    expect(catalog.tools.filter((item) => item.executionMode === 'service')).toHaveLength(6);
     expect(
       catalog.tools
         .filter((item) => item.executionMode === 'browser')

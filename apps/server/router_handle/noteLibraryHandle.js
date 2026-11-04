@@ -13,7 +13,7 @@ import {
   DrawingSceneValidationError,
   serializeDrawingScene,
 } from '@lightnote/shared/drawing-note';
-import { snakeCaseKeys, resultData, mergeExistingProperties, insertData, L } from '../util/common.js';
+import { snakeCaseKeys, resultData, insertData, L } from '../util/common.js';
 import { RESOURCE_TYPE, replaceResourceTagRelations, validateUserTags } from '../util/resourceTags.js';
 import { ensureNotVisitor } from '../util/auth.js';
 import { attachPendingStatus } from '../util/resourceInbox.js';
@@ -29,7 +29,6 @@ import {
   resolveOwnedResourceRefSummaries,
   syncNoteResourceRefs,
 } from '../util/services/noteReferenceService.js';
-import { createTag } from '../util/services/tagService.js';
 import { cleanupOrphanNoteImages, extractNoteImageUrls, filterOwnedImageUrls } from '../util/noteImages.js';
 import { buildNoteCardPreview } from '../util/noteCardPreview.js';
 import { buildDrawingScenePreview } from '../util/drawingPreview.js';
@@ -1774,72 +1773,6 @@ export const toggleNoteTop = async (req, res) => {
   }
 };
 
-export const addNoteTag = async (req, res) => {
-  if (!ensureNotVisitor(req, res)) return;
-  try {
-    const userId = req.user.id;
-    const name = String(req.body.name || '').trim();
-    if (!name) {
-      return res.send(resultData(null, 400, '标签名称不能为空'));
-    }
-    try {
-      const createdTag = await createTag({ userId, name });
-      res.send(resultData({ id: createdTag.id, name: createdTag.name }));
-    } catch (err) {
-      if (String(err?.message || '').startsWith('TAG_DUPLICATE:')) {
-        return res.send(resultData(null, 409, '标签已存在'));
-      }
-      return sendNoteServerError(res, 'add-note-tag', err);
-    }
-  } catch (e) {
-    console.warn('[note-library] add tag rejected code=%s', stableAgentErrorCode(e));
-    return res.send(resultData(null, 400, '客户端请求参数无效'));
-  }
-};
-
-export const editNoteTag = async (req, res) => {
-  if (!ensureNotVisitor(req, res)) return;
-  try {
-    const userId = req.user.id;
-    const name = String(req.body.name || '').trim();
-    if (!name) {
-      return res.send(resultData(null, 400, '标签名称不能为空'));
-    }
-    const params = {
-      name,
-    };
-    const connection = await pool.getConnection();
-    try {
-      await connection.beginTransaction();
-      const [checkRes] = await connection.query('SELECT id FROM tag WHERE user_id = ? AND name = ? AND del_flag = 0', [
-        userId,
-        name,
-      ]);
-      if (checkRes.length > 0 && checkRes[0].id !== req.body.id) {
-        throw new Error('标签已存在');
-      }
-      const [result] = await connection.query('update tag set ? where id=? and user_id=?', [
-        snakeCaseKeys(mergeExistingProperties(params, [], ['id'])),
-        req.body.id,
-        userId,
-      ]);
-      await connection.commit();
-      res.send(resultData(result));
-    } catch (err) {
-      await connection.rollback();
-      if (String(err?.message || '') === '标签已存在') {
-        return res.send(resultData(null, 409, '标签已存在'));
-      }
-      return sendNoteServerError(res, 'edit-note-tag', err);
-    } finally {
-      connection.release();
-    }
-  } catch (e) {
-    console.warn('[note-library] edit tag rejected code=%s', stableAgentErrorCode(e));
-    return res.send(resultData(null, 400, '客户端请求参数无效'));
-  }
-};
-
 export const queryNoteTagList = async (req, res) => {
   try {
     const userId = req.user.id;
@@ -1915,25 +1848,6 @@ export const getNoteTags = async (req, res) => {
     res.send(resultData(result));
   } catch (e) {
     return sendNoteServerError(res, 'query-note-tags', e);
-  }
-};
-
-export const delNoteTag = (req, res) => {
-  if (!ensureNotVisitor(req, res)) return;
-  try {
-    const userId = req.user.id;
-    const tagId = req.body.id;
-    pool
-      .query('DELETE FROM tag WHERE id = ? AND user_id = ?', [tagId, userId])
-      .then(() => {
-        res.send(resultData('删除标签成功'));
-      })
-      .catch((err) => {
-        return sendNoteServerError(res, 'delete-note-tag', err);
-      });
-  } catch (e) {
-    console.warn('[note-library] delete tag rejected code=%s', stableAgentErrorCode(e));
-    return res.send(resultData(null, 400, '客户端请求参数无效'));
   }
 };
 

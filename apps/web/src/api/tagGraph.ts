@@ -68,29 +68,3 @@ export function fetchTagGraph(params: TagGraphRequest) {
     msg: string;
   }>;
 }
-
-export interface GlobalGraphResponse {
-  nodes: TagGraphNode[];
-  edges: TagGraphEdge[];
-  stats: {
-    tagCount: number;
-    shownTagCount: number;
-    resourceCount: number;
-    totalResourceCount: number;
-    taggedResourceCount: number;
-    untaggedResourceCount: number;
-    emptyTagCount: number;
-    isolatedTagCount: number;
-    edgeCount: number;
-    truncated: boolean;
-  };
-}
-
-// 全局知识地图:全部标签 + 标签共现边;资源在聚焦标签后通过 fetchTagGraph 按需加载。
-export function fetchGlobalGraph(params?: { minCoOccurrence?: number }) {
-  return apiBasePost('/api/bookmark/getGlobalGraph', params || {}) as Promise<{
-    status: number;
-    data: GlobalGraphResponse;
-    msg: string;
-  }>;
-}

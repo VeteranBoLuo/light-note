@@ -108,16 +108,6 @@ describe('adminRoutePolicyMiddleware', () => {
     }
   });
 
-  it.each(['readonly', 'maintain'])('社区本人偏好拒绝 %s 代管，能力元数据允许读取', (mode) => {
-    for (const method of ['GET', 'PUT']) {
-      const next = vi.fn();
-      adminRoutePolicyMiddleware(createReq('/community/preferences/me', method, mode), createRes(), next);
-      expect(next).not.toHaveBeenCalled();
-    }
-    const next = vi.fn();
-    adminRoutePolicyMiddleware(createReq('/community/capabilities', 'GET', mode), createRes(), next);
-    expect(next).toHaveBeenCalledOnce();
-  });
   it.each(['readonly', 'maintain'])('项目删除拒绝 %s 代管上下文', (mode) => {
     const next = vi.fn();
     const res = createRes();
@@ -303,25 +293,9 @@ describe('adminRoutePolicyMiddleware', () => {
     }
   });
 
-  it('整理 AI 的动态批次详情可代管只读，创建与复审动作在两种代管模式都失败关闭', () => {
+  it('整理建议的批量应用在两种代管模式都失败关闭', () => {
     for (const mode of ['readonly', 'maintain']) {
-      const detailNext = vi.fn();
-      const detailRes = createRes();
-      adminRoutePolicyMiddleware(
-        createReq('/organize/ai-suggestions/batches/batch-1', 'GET', mode),
-        detailRes,
-        detailNext,
-      );
-      expect(detailNext).toHaveBeenCalledTimes(1);
-      expect(detailRes.json).not.toHaveBeenCalled();
-
-      for (const [method, path] of [
-        ['POST', '/organize/suggestions/runs/run-1/apply-batch'],
-        ['POST', '/organize/ai-suggestions/batches'],
-        ['PUT', '/organize/ai-suggestions/batches/batch-1/suggestions/suggestion-1'],
-        ['POST', '/organize/ai-suggestions/batches/batch-1/suggestions/suggestion-1/accept'],
-        ['POST', '/organize/ai-suggestions/batches/batch-1/suggestions/suggestion-1/ignore'],
-      ]) {
+      for (const [method, path] of [['POST', '/organize/suggestions/runs/run-1/apply-batch']]) {
         const next = vi.fn();
         const res = createRes();
         adminRoutePolicyMiddleware(createReq(path, method, mode), res, next);
@@ -342,7 +316,6 @@ describe('adminRoutePolicyMiddleware', () => {
       ['POST', '/organize/duplicate-bookmarks/group-1/ignore'],
       ['DELETE', '/organize/duplicate-bookmarks/group-1/ignore'],
       ['POST', '/organize/bookmark-health/scan'],
-      ['POST', '/organize/bookmark-health/check-batch'],
       ['POST', '/organize/bookmark-health/bookmark-1/recheck'],
       ['POST', '/organize/bookmark-health/bookmark-1/mark-normal'],
       ['DELETE', '/organize/bookmark-health/bookmark-1/mark-normal'],
@@ -527,7 +500,6 @@ describe('adminRoutePolicyMiddleware', () => {
       '/growth/inventory/acquisitions',
       '/growth/lottery',
       '/growth/lottery/history',
-      '/growth/recap',
       '/growth/claimable',
       '/growth/preferences',
       '/growth/weekly',
@@ -547,7 +519,6 @@ describe('adminRoutePolicyMiddleware', () => {
         '/growth/achievement/claim',
         '/growth/claimAll',
         '/growth/weekly/claim',
-        '/growth/recap/state',
       ]) {
         const next = vi.fn();
         const res = createRes();

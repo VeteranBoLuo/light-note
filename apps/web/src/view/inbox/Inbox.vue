@@ -3077,7 +3077,7 @@
     margin: 0 0 var(--ui-space-8, 8px);
     flex-shrink: 0;
   }
-  /* 待整理与全部资源 / 知识地图是资源中心的同级视图。
+  /* 待整理与全部资源是资源中心的同级视图。
      桌面资源态沿用 ResourcePageShell 的标题基线与正文间距，避免路由切换时整页上移。 */
   .inbox-page--resource-workspace > .inbox-hero {
     min-height: var(--ui-layout-54, 54px);

@@ -28,7 +28,6 @@ import { inspectLocalOcrRuntime } from './util/aiDocument/localOcr.js';
 import { stableAgentErrorCode } from './util/agent/logSafety.js';
 import { ensureToolboxSchema } from './util/toolboxSchema.js';
 import { cleanupExpiredToolboxData, runSingleToolboxJob } from './util/toolbox/worker.js';
-import { runSingleOrganizeAiSuggestionBatch } from './util/services/organizeAiSuggestionService.js';
 import { ensureOrganizeSchema } from './util/organizeSchema.js';
 import { createWorkerResourceGate } from './util/workerResourceGate.js';
 
@@ -140,7 +139,6 @@ async function run() {
       rotatingQueue([
         ['extraction', (worker) => runSingleExtractionJob(worker, pool, { phase: 'ai' })],
         ['toolbox', (worker) => runSingleToolboxJob(worker, pool, { runLocalProcessing: runMedia })],
-        ['organize.ai.batch', runSingleOrganizeAiSuggestionBatch],
         [
           'organize.ai.legacy',
           (worker) => runSingleSuggestionItem(worker, pool, { skipRules: true, pipeline: 'legacy' }),

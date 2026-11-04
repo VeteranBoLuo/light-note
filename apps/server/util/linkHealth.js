@@ -151,13 +151,6 @@ export async function isChecking(userId) {
 }
 
 /**
- * 兼容旧入口：用户动作始终创建或复用一次全量持久任务，不在 HTTP 请求内等待外链检测。
- */
-export async function checkBookmarkHealth(userId) {
-  return startFullCheck(userId);
-}
-
-/**
  * 为账号创建当前一次全量检测快照。每个账号只有一个任务行，pending/running 时重复请求直接复用。
  * 旧观测和用户“标记正常”都不会在启动时被清空；Worker 会用本轮结果逐项刷新观测。
  */

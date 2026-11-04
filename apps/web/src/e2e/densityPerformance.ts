@@ -11,7 +11,7 @@ import { applyUiDensity } from '@/composables/useUiDensity';
 import { resolveViewportDeviceType } from '@/config/responsive';
 import BCard from '@/components/base/BasicComponents/BCard.vue';
 import BSelect from '@/components/base/BasicComponents/BSelect.vue';
-import CommonDataTable from '@/components/workbenches/CommonDataTable.vue';
+import BTable from '@/components/base/BasicComponents/BTable/BTable.vue';
 const params = new URLSearchParams(location.search);
 const mobile = resolveViewportDeviceType(innerWidth) !== 'desktop';
 document.documentElement.dataset.theme = params.get('theme') === 'night' ? 'night' : 'day';
@@ -34,7 +34,7 @@ const columns=[{key:'name',title:'名称'},{key:'count',title:'数量'},{key:'de
 const app=createApp({render:()=>h('main',[
  h(BSelect,{style:'width:240px;margin-bottom:16px',value:selected.value,'onUpdate:value':(v:string)=>selected.value=v,options:rows.map(r=>({value:String(r.id),label:r.name}))}),
  h('section',{key:generation.value,class:'bench-grid',style:'display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px'},
- view.value==='tables'?Array.from({length:4},(_,i)=>h('div',{style:'height:660px'},[h(CommonDataTable,{title:`工作台列表 ${i+1}`,tableData:rows,columns})])):
+ view.value==='tables'?Array.from({length:4},(_,i)=>h('div',{style:'height:660px'},[h(BCard,{title:`工作台列表 ${i+1}`,padding:'16px',style:'height:100%'},()=>h(BTable,{data:rows,columns,style:'height:100%'}))])):
  Array.from({length:160},(_,i)=>h(BCard,{title:`卡片 ${i+1}`,padding:'16px'},()=>h('p','相同的固定内容，用于对照重复挂载卡片的成本。'))))
 ])}),pinia=createPinia();
 app.use(pinia);

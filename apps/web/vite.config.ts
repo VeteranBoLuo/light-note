@@ -3,7 +3,6 @@ import vue from '@vitejs/plugin-vue';
 import vueJsx from '@vitejs/plugin-vue-jsx';
 import Components from 'unplugin-vue-components/vite';
 import AutoImport from 'unplugin-auto-import/vite';
-import { ElementPlusResolver, AntDesignVueResolver } from 'unplugin-vue-components/resolvers';
 import androidColorMixFallback from './src/vite/androidColorMixFallback';
 import androidFontWeightFallback from './src/vite/androidFontWeightFallback';
 import dynamicViewportFallback from './src/vite/dynamicViewportFallback';
@@ -41,7 +40,6 @@ export default defineConfig(({ command, mode }) => {
         dirs: ['src/components/base/*'],
         directoryAsNamespace: true,
         deep: true,
-        resolvers: [ElementPlusResolver(), AntDesignVueResolver({ importStyle: 'less' })],
       }),
       AutoImport({
         imports: [

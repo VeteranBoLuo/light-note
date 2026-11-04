@@ -8,10 +8,6 @@ import icon from '@/config/icon';
 
 const source = readFileSync(resolve(process.cwd(), 'src/view/noteLibrary/NoteLibrary.vue'), 'utf8');
 const detailSource = readFileSync(resolve(process.cwd(), 'src/view/noteLibrary/NoteDetail.vue'), 'utf8');
-const subpageSource = readFileSync(
-  resolve(process.cwd(), 'src/components/noteLibrary/detail/NoteSubpageSection.vue'),
-  'utf8',
-);
 const cardSource = readFileSync(resolve(process.cwd(), 'src/components/noteLibrary/library/NoteCard.vue'), 'utf8');
 const listItemSource = readFileSync(
   resolve(process.cwd(), 'src/components/noteLibrary/library/NoteListItem.vue'),
@@ -497,8 +493,6 @@ describe('笔记库页面树交互接线', () => {
     expect(detailSource).toContain('@move-page="openMoveSelf"');
     expect(detailSource).toContain('<NoteMoveModal');
     expect(detailSource).toContain(':note="moveTargetNote"');
-    expect(subpageSource).toContain("t('note.moveExistingUnderThisPage')");
-    expect(subpageSource).toContain("t('note.moveThisPageUnderAnother')");
   });
 
   it('详情页父级面包屑直接打开父正文，根节点才返回笔记库列表', () => {

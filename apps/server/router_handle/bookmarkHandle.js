@@ -1,8 +1,4 @@
-import {
-  enqueueBookmarkArchive,
-  getBookmarkArchiveStatus,
-  retryFailedBookmarkArchives,
-} from '../util/bookmarkArchiveJobs.js';
+import { enqueueBookmarkArchive, getBookmarkArchiveStatus } from '../util/bookmarkArchiveJobs.js';
 import pool from '../db/index.js';
 import { resultData, snakeCaseKeys, mergeExistingProperties, insertData } from '../util/common.js';
 import { getDerivedRelatedTags } from '../util/services/tagRelationService.js';
@@ -20,9 +16,8 @@ import {
 import { promises as fs } from 'fs';
 import { ensureNotVisitor, ensureUserOrAdminPolicy } from '../util/auth.js';
 import { grantExp } from '../util/growth.js';
-import { archiveAndSummarizeBookmark, getBookmarkSnapshot, summarizeBookmark } from '../util/snapshot.js';
+import { getBookmarkSnapshot, summarizeBookmark } from '../util/snapshot.js';
 import {
-  checkBookmarkHealth,
   getHealthSummary,
   markLinkNormal,
   startFullCheck,
@@ -31,7 +26,6 @@ import {
 import { suggestBookmarkMeta, suggestTagsFromText, ORGANIZE_MAX_BATCH } from '../util/aiOrganize.js';
 import { attachPendingStatus } from '../util/resourceInbox.js';
 import { createBookmark, normalizeBookmarkUrl, shouldResetBookmarkIcon } from '../util/services/bookmarkService.js';
-import { queryFrequentBookmarks } from '../util/services/frequentBookmarkService.js';
 import { runBookmarkImportTransaction } from '../util/services/bookmarkImportService.js';
 import { createIconBatch } from '../util/bookmarkIconBatchService.js';
 import { getIconBatchStatus, retryIconBatchFailures } from '../util/bookmarkIconBatchService.js';
@@ -705,67 +699,6 @@ export const doSummarizeBookmark = async (req, res) => {
   }
 };
 
-// POST /bookmark/archive-summary —— 显式生成同一版本的网页正文存档与 AI 摘要
-export const doArchiveAndSummarizeBookmark = async (req, res) => {
-  if (!ensureUserOrAdminPolicy(req, res, ['ai_use'])) return;
-  const abortContext = createRequestAbortContext(req, res);
-  try {
-    const { id } = req.body || {};
-    if (!id) return res.send(resultData(null, 400, '缺少书签 id'));
-    const persist = req.adminContext?.mode !== 'readonly';
-    const requestId = crypto.randomUUID();
-    const result = await runAiExecution(
-      createUserAiExecutionConfig('bookmark.summarize_page', {
-        requestId,
-        request: req,
-        identity: req.billingUser || req.user,
-        subjectIdentity: req.resourceUser || req.user,
-        taskType: 'bookmark_archive_summary',
-        skillVersion: 1,
-        surface: 'bookmark_detail',
-        resolveResultOutcome: resolveBookmarkAiResultOutcome,
-      }),
-      () =>
-        archiveAndSummarizeBookmark(req.user.id, id, {
-          persist,
-          signal: abortContext.signal,
-          trace: {
-            traceId: requestId,
-            taskType: 'bookmark_archive_summary',
-            stage: 'bookmark_archive_summary',
-          },
-        }),
-    );
-    if (
-      isAiQuotaErrorCode(result?.code) ||
-      ['quota_exceeded', 'quota_insufficient_for_request'].includes(result?.reason)
-    ) {
-      return res.status(429).send(resultData(result, 429, result.msg));
-    }
-    return res.send(resultData(result));
-  } catch (error) {
-    const failure = resolvePublicAiExecutionError(error, '网页存档暂时无法生成，请稍后重试');
-    if (failure.status >= 500) console.error('[bookmark] archive summary failed code=%s', failure.code);
-    return res
-      .status(failure.status)
-      .send(resultData(publicAiExecutionErrorData(failure), failure.status, failure.message));
-  } finally {
-    abortContext.complete();
-  }
-};
-
-// POST /bookmark/health/check —— 兼容旧入口：创建或复用一次持久化全量检测任务
-export const doCheckHealth = async (req, res) => {
-  if (!ensureNotVisitor(req, res)) return;
-  try {
-    const result = await checkBookmarkHealth((req.resourceUser || req.user).id);
-    res.send(resultData(result));
-  } catch (error) {
-    console.error('[bookmark-health] scan start failed code=%s', stableAgentErrorCode(error));
-    res.send(resultData(null, 500, '检测失败，请稍后重试'));
-  }
-};
-
 // POST /bookmark/health/reset —— 清空体检记录,从头重新检测
 export const doResetHealth = async (req, res) => {
   if (!ensureNotVisitor(req, res)) return;
@@ -1027,22 +960,6 @@ export const delBookmark = async (req, res) => {
     res.send(resultData(null, 500, '删除书签失败，请稍后重试'));
   } finally {
     connection.release();
-  }
-};
-
-export const getCommonBookmarks = async (req, res) => {
-  try {
-    const result = await queryFrequentBookmarks(req.user.id);
-    res.send(
-      resultData({
-        items: result,
-        total: 10,
-      }),
-    );
-  } catch (e) {
-    // 此前把错误文本当 200 业务数据返回:前端会把 SQL 错误串当书签列表渲染
-    console.error('[bookmark] 获取常用书签失败 code=%s', stableAgentErrorCode(e));
-    res.send(resultData(null, 500, '获取常用书签失败'));
   }
 };
 
@@ -1743,15 +1660,5 @@ export const retryIconBatchFailuresHandler = async (req, res) => {
   } catch (err) {
     console.error('[icon-batch] 重试失败 code=%s', stableAgentErrorCode(err));
     res.send(resultData(null, 500, '重试失败'));
-  }
-};
-
-export const retryFailedArchives = async (req, res) => {
-  if (!ensureNotVisitor(req, res)) return;
-  try {
-    res.send(resultData(await retryFailedBookmarkArchives((req.resourceUser || req.user).id)));
-  } catch (error) {
-    console.error('[bookmark-archive] retry failed code=%s', stableAgentErrorCode(error));
-    res.send(resultData(null, 500, '重试任务提交失败，请稍后重试'));
   }
 };

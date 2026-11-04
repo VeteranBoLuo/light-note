@@ -108,13 +108,6 @@ declare(ADMIN_POLICIES.READ, 'community', [
   ['GET', '/community/relations'],
 ]);
 
-// Public capability metadata is read-only; personal navigation is never editable in impersonation.
-declare(ADMIN_POLICIES.READ, 'community', [['GET', '/community/capabilities']]);
-declare(ADMIN_POLICIES.ACCOUNT_WRITE, 'community', [
-  ['GET', '/community/preferences/me'],
-  ['PUT', '/community/preferences/me'],
-]);
-
 declare(ADMIN_POLICIES.ACCOUNT_WRITE, 'file', [
   ['GET', '/file/image/:id'],
   ['GET', '/file/preferences'],
@@ -160,10 +153,8 @@ declare(ADMIN_POLICIES.READ, 'bookmark', [
   ['POST', '/bookmark/getTagEditorData'],
   ['POST', '/bookmark/getRelatedTag'],
   ['POST', '/bookmark/getTagGraph'],
-  ['POST', '/bookmark/getGlobalGraph'],
   ['POST', '/bookmark/getBookmarkList'],
   ['POST', '/bookmark/getBookmarkDetail'],
-  ['POST', '/bookmark/getCommonBookmarks'],
   ['POST', '/bookmark/resolveUrl'],
   ['POST', '/bookmark/snapshot'],
   ['GET', '/bookmark/health'],
@@ -183,7 +174,6 @@ declare(ADMIN_POLICIES.CONTENT_WRITE, 'bookmark', [
   ['POST', '/bookmark/importBookmarksHtml'],
   ['POST', '/bookmark/importBookmarksExcel'],
   ['POST', '/bookmark/archive'],
-  ['POST', '/bookmark/archive/retry-failed'],
   ['POST', '/bookmark/health/ignore'],
   // AI 整理"应用"是对 subject 的真实内容写(建标签/加关系/补书签名称),必须 maintain-only、readonly 阻断,
   // 不能归 AI_USE(否则只读预览代管也能落库,违反"readonly 阻断写")。
@@ -193,13 +183,11 @@ declare(ADMIN_POLICIES.CONTENT_WRITE, 'bookmark', [
 
 declare(ADMIN_POLICIES.AI_USE, 'bookmark', [
   ['POST', '/bookmark/summarize'],
-  ['POST', '/bookmark/archive-summary'],
   ['POST', '/bookmark/ai/organize/quote'],
   ['POST', '/bookmark/ai/organize/run'],
 ]);
 
 declare(ADMIN_POLICIES.CONTENT_DESTRUCTIVE, 'bookmark', [
-  ['POST', '/bookmark/health/check'],
   ['POST', '/bookmark/health/checkAll'],
   ['POST', '/bookmark/health/reset'],
 ]);
@@ -257,9 +245,6 @@ declare(ADMIN_POLICIES.CONTENT_WRITE, 'note', [
   ['POST', '/note/deleteNoteSubtree'],
   ['POST', '/note/updateNoteSort'],
   ['POST', '/note/toggleNoteTop'],
-  ['POST', '/note/addNoteTag'],
-  ['POST', '/note/editNoteTag'],
-  ['POST', '/note/delNoteTag'],
   ['POST', '/note/updateNoteTags'],
   ['POST', '/note/createNoteVersion'],
   ['POST', '/note/restoreNoteVersion'],
@@ -285,7 +270,6 @@ declare(ADMIN_POLICIES.READ, 'file', [
   ['POST', '/file/queryTotalFileSize'],
   ['POST', '/file/getFileInfo'],
   ['POST', '/file/preview/resolve'],
-  ['POST', '/file/image-previews/resolve'],
   ['POST', '/file/image-previews/prepare'],
   ['POST', '/file/preview/archive'],
   ['POST', '/file/queryFolder'],
@@ -364,9 +348,6 @@ declare(ADMIN_POLICIES.READ, 'organize', [
   ['GET', '/organize/issues/:issueType'],
   ['GET', '/organize/duplicate-bookmarks/:groupKey/preview'],
   ['GET', '/organize/bookmark-health'],
-  ['POST', '/organize/ai-suggestions/estimate'],
-  ['GET', '/organize/ai-suggestions/batches'],
-  ['GET', '/organize/ai-suggestions/batches/:batchId'],
 ]);
 declare(ADMIN_POLICIES.CONTENT_WRITE, 'organize', [
   ['POST', '/organize/untagged/ignore'],
@@ -375,7 +356,6 @@ declare(ADMIN_POLICIES.CONTENT_WRITE, 'organize', [
   ['POST', '/organize/duplicate-bookmarks/:groupKey/ignore'],
   ['DELETE', '/organize/duplicate-bookmarks/:groupKey/ignore'],
   ['POST', '/organize/bookmark-health/scan'],
-  ['POST', '/organize/bookmark-health/check-batch'],
   ['POST', '/organize/bookmark-health/:bookmarkId/recheck'],
   ['POST', '/organize/bookmark-health/:bookmarkId/mark-normal'],
   ['DELETE', '/organize/bookmark-health/:bookmarkId/mark-normal'],
@@ -389,12 +369,6 @@ declare(ADMIN_POLICIES.CONTENT_WRITE, 'visitor_organize_suggestions', [
   ['POST', '/organize/suggestions/runs/:id/pause'],
   ['POST', '/organize/suggestions/runs/:id/resume'],
   ['POST', '/organize/suggestions/runs/:id/items/:suggestionId/actions'],
-]);
-declare(ADMIN_POLICIES.ACCOUNT_WRITE, 'organize_ai_suggestions', [
-  ['POST', '/organize/ai-suggestions/batches'],
-  ['PUT', '/organize/ai-suggestions/batches/:batchId/suggestions/:suggestionId'],
-  ['POST', '/organize/ai-suggestions/batches/:batchId/suggestions/:suggestionId/accept'],
-  ['POST', '/organize/ai-suggestions/batches/:batchId/suggestions/:suggestionId/ignore'],
 ]);
 declare(ADMIN_POLICIES.READ, 'todo', [
   ['POST', '/todo/list'],
@@ -584,7 +558,6 @@ declare(ADMIN_POLICIES.ACCOUNT_WRITE, 'user', [
 declare(ADMIN_POLICIES.ACCOUNT_WRITE, 'support', [
   ['GET', '/support/state'],
   ['GET', '/support/store/state'],
-  ['GET', '/support/orders'],
   ['POST', '/support/public-preference'],
   ['GET', '/support/donation/checkout'],
   ['GET', '/support/checkout'],
@@ -676,7 +649,6 @@ declare(ADMIN_POLICIES.READ, 'growth', [
   ['GET', '/growth/inventory/acquisitions'],
   ['GET', '/growth/lottery'],
   ['GET', '/growth/lottery/history'],
-  ['GET', '/growth/recap'],
   ['GET', '/growth/claimable'],
   ['GET', '/growth/preferences'],
   ['GET', '/growth/weekly'],
@@ -694,7 +666,6 @@ declare(ADMIN_POLICIES.ACCOUNT_WRITE, 'annual_report', [
 declare(ADMIN_POLICIES.ACCOUNT_WRITE, 'growth_preferences', [
   ['PUT', '/growth/preferences'],
   ['PUT', '/growth/preferences/points-goal'],
-  ['POST', '/growth/recap/state'],
 ]);
 declare(ADMIN_POLICIES.ACCOUNT_WRITE, 'daily_review', [
   ['POST', '/daily-review/today/ensure'],
@@ -764,9 +735,7 @@ declare(ADMIN_POLICIES.ADMIN_ONLY, 'admin', [
   ['POST', '/resource-governance/jobs/:id/retry'],
   ['POST', '/resource-governance/jobs/:id/cancel'],
   ['POST', '/resource-governance/audits/query'],
-  ['POST', '/common/getAgentLogs'],
   ['POST', '/common/getAgentLogChain'],
-  ['POST', '/common/getAgentLogsSummary'],
   ['POST', '/common/getDeepSeekBalance'],
   ['POST', '/common/getAdminOverviewSnapshot'],
   ['POST', '/common/getAdminOverviewActiveUsers'],
@@ -802,8 +771,6 @@ declare(ADMIN_POLICIES.ADMIN_ONLY, 'admin', [
   ['POST', '/security/events/batchHandle'],
   ['POST', '/security/ipReputation'],
   ['POST', '/security/ipAccounts'],
-  ['POST', '/security/ipBan'],
-  ['POST', '/security/ipUnban'],
   ['POST', '/security/accountBans'],
   ['POST', '/security/accountReputation'],
   ['POST', '/security/accountBan'],
@@ -995,16 +962,6 @@ function resolvePolicy(method, path) {
   if (/^\/organize\/bookmark-health\/[^/]+\/(?:recheck|mark-normal)$/.test(path)) {
     const action = path.split('/').pop();
     return routePolicies.get(`${method} /organize/bookmark-health/:bookmarkId/${action}`);
-  }
-  if (/^\/organize\/ai-suggestions\/batches\/[^/]+$/.test(path)) {
-    return routePolicies.get(`${method} /organize/ai-suggestions/batches/:batchId`);
-  }
-  if (/^\/organize\/ai-suggestions\/batches\/[^/]+\/suggestions\/[^/]+$/.test(path)) {
-    return routePolicies.get(`${method} /organize/ai-suggestions/batches/:batchId/suggestions/:suggestionId`);
-  }
-  if (/^\/organize\/ai-suggestions\/batches\/[^/]+\/suggestions\/[^/]+\/(?:accept|ignore)$/.test(path)) {
-    const action = path.split('/').pop();
-    return routePolicies.get(`${method} /organize/ai-suggestions/batches/:batchId/suggestions/:suggestionId/${action}`);
   }
   if (/^\/infra\/logs\/[^/]+$/.test(path)) {
     return routePolicies.get(`${method} /infra/logs/:serviceId`);

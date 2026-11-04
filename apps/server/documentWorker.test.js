@@ -45,9 +45,6 @@ vi.mock('./util/extraction/worker.js', () => ({
   cleanupExtractionMaterials: async () => {},
   runSingleExtractionJob: mocks.extraction,
 }));
-vi.mock('./util/services/organizeAiSuggestionService.js', () => ({
-  runSingleOrganizeAiSuggestionBatch: async () => false,
-}));
 vi.mock('./util/services/organizeSuggestionService.js', () => ({ runSingleSuggestionItem: mocks.item }));
 vi.mock('./util/services/organizeCompletionNotification.js', () => ({
   runOrganizeCompletionNotifications: async () => false,

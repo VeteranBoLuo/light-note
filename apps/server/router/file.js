@@ -923,7 +923,6 @@ router.post('/queryTotalFileSize', async (req, res) => {
 router.post('/updateFile', fileHandle.updateFile);
 router.post('/getFileInfo', fileHandle.getFileInfo);
 // 已打开的旧客户端收到关闭信号后回到原图链路，不再准备派生任务。
-router.post('/image-previews/resolve', (_req, res) => res.send({ status: 200, data: { enabled: false, items: [] } }));
 router.post('/image-previews/prepare', (_req, res) => res.send({ status: 200, data: { enabled: false, items: [] } }));
 router.post('/preview/resolve', filePreviewHandle.resolveOwnedFilePreview);
 router.post('/preview/prepare', localProcessingRateLimiter, (req, res) => {

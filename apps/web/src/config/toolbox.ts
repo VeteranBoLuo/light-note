@@ -23,7 +23,6 @@ export type ToolboxWorkflowToolId =
   | 'research_brief'
   | 'study_kit'
   | 'concept_map'
-  | 'action_plan'
   | 'source_comparison'
   | 'knowledge_audit';
 
@@ -50,6 +49,27 @@ export const TOOLBOX_DEFAULT_QUICK_TOOL_IDS: ToolboxToolId[] = [
   'ocr_to_text',
 ];
 
+/** 已从协议删除的工具；旧链接与旧置顶据此显示“已下架”而不是普通不可用。 */
+export const TOOLBOX_RETIRED_TOOL_IDS: readonly string[] = Object.freeze([
+  'action_plan',
+  'browser_sql',
+  'citation_converter',
+  'code_snapshot',
+  'directory_index',
+  'frontmatter_batch',
+  'markdown_checker',
+  'markdown_converter',
+  'mermaid_editor',
+  'regex_extractor',
+  'structured_data_lab',
+  'text_batch',
+  'text_diff',
+]);
+
+export function isToolboxRetiredToolId(toolId: string) {
+  return TOOLBOX_RETIRED_TOOL_IDS.includes(toolId);
+}
+
 /** User pins take priority; removed tools never return through older preferences. */
 export function resolveToolboxQuickToolIds(pinnedToolIds: readonly string[]): string[] {
   return [
@@ -58,7 +78,7 @@ export function resolveToolboxQuickToolIds(pinnedToolIds: readonly string[]): st
         ['learning_workspace', 'writing_workspace'].includes(id) ? 'research_workspace' : id,
       ),
     ),
-  ].filter((id) => !['text_batch', 'text_diff', 'markdown_checker'].includes(id));
+  ].filter((id) => !isToolboxRetiredToolId(id));
 }
 
 export const TOOLBOX_STARTER_TOOL_IDS = [
@@ -94,16 +114,12 @@ export const TOOLBOX_PRESENTATION: Record<
   research_brief: { icon: icon.toolbox.research, category: 'knowledge', accent: 'blue' },
   study_kit: { icon: icon.toolbox.study, category: 'knowledge', accent: 'teal' },
   concept_map: { icon: icon.toolbox.conceptMap, category: 'knowledge', accent: 'violet' },
-  action_plan: { icon: icon.toolbox.actionPlan, category: 'knowledge', accent: 'blue' },
   knowledge_audit: { icon: icon.toolbox.audit, category: 'knowledge', accent: 'rose' },
   pdf_organizer: { icon: icon.toolbox.pdf, category: 'document', accent: 'rose' },
   image_optimizer: { icon: icon.toolbox.image, category: 'image', accent: 'teal' },
   image_to_pdf: { icon: icon.toolbox.imageToPdf, category: 'document', accent: 'amber' },
   pdf_to_images: { icon: icon.toolbox.pdfToImages, category: 'document', accent: 'blue' },
-  markdown_converter: { icon: icon.toolbox.markdown, category: 'text', accent: 'violet' },
-  text_diff: { icon: icon.toolbox.textDiff, category: 'text', accent: 'rose' },
   table_converter: { icon: icon.toolbox.table, category: 'text', accent: 'teal' },
-  mermaid_editor: { icon: icon.toolbox.mermaid, category: 'knowledge', accent: 'violet' },
   data_workbench: { icon: icon.toolbox.table, category: 'data', accent: 'violet' },
   data_quality_report: { icon: icon.toolbox.audit, category: 'data', accent: 'blue' },
   data_cleaner: { icon: icon.toolbox.table, category: 'data', accent: 'teal' },
@@ -113,18 +129,9 @@ export const TOOLBOX_PRESENTATION: Record<
   table_merge_split: { icon: icon.toolbox.swap, category: 'data', accent: 'blue' },
   data_anonymizer: { icon: icon.toolbox.local, category: 'data', accent: 'teal' },
   data_chart: { icon: icon.toolbox.mermaid, category: 'data', accent: 'rose' },
-  text_batch: { icon: icon.toolbox.markdown, category: 'text', accent: 'blue' },
-  regex_extractor: { icon: icon.toolbox.textDiff, category: 'text', accent: 'amber' },
   pdf_text_extractor: { icon: icon.toolbox.ocr, category: 'document', accent: 'blue' },
-  markdown_checker: { icon: icon.toolbox.audit, category: 'text', accent: 'teal' },
-  frontmatter_batch: { icon: icon.toolbox.markdown, category: 'text', accent: 'violet' },
-  citation_converter: { icon: icon.toolbox.research, category: 'text', accent: 'amber' },
-  browser_sql: { icon: icon.toolbox.table, category: 'data', accent: 'violet' },
-  structured_data_lab: { icon: icon.toolbox.table, category: 'data', accent: 'blue' },
   docx_to_markdown: { icon: icon.toolbox.markdown, category: 'document', accent: 'teal' },
-  code_snapshot: { icon: icon.toolbox.image, category: 'text', accent: 'rose' },
   knowledge_structure_audit: { icon: icon.toolbox.audit, category: 'knowledge', accent: 'teal' },
-  directory_index: { icon: icon.toolbox.markdown, category: 'knowledge', accent: 'blue' },
   source_comparison: { icon: icon.toolbox.comparison, category: 'knowledge', accent: 'amber' },
   ocr_to_text: { icon: icon.toolbox.ocr, category: 'document', accent: 'blue' },
 };
@@ -243,11 +250,6 @@ export const TOOLBOX_WORKFLOW_PRESENTATION: Record<ToolboxWorkflowToolId, Toolbo
     defaultIntent: 'overview',
     intents: TOOLBOX_TOOL_INTENTS.concept_map,
     outcomes: ['diagram', 'relations', 'readingPath'],
-  },
-  action_plan: {
-    defaultIntent: 'meeting',
-    intents: TOOLBOX_TOOL_INTENTS.action_plan,
-    outcomes: ['decisions', 'actions', 'risks'],
   },
   source_comparison: {
     defaultIntent: 'claims',

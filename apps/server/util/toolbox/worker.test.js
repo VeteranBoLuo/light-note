@@ -37,7 +37,6 @@ describe('toolbox worker contracts', () => {
       research_brief: 'toolbox.research_brief',
       study_kit: 'toolbox.study_kit',
       concept_map: 'toolbox.concept_map',
-      action_plan: 'toolbox.action_plan',
       source_comparison: 'toolbox.source_comparison',
       knowledge_audit: 'toolbox.knowledge_audit',
     });

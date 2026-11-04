@@ -45,7 +45,7 @@ describe("toolbox protocol", () => {
   });
 
   it("keeps every tool id unique and every execution contract explicit", () => {
-    expect(TOOLBOX_TOOL_CATALOG).toHaveLength(44);
+    expect(TOOLBOX_TOOL_CATALOG).toHaveLength(31);
     expect(new Set(TOOLBOX_TOOL_CATALOG.map((item) => item.id)).size).toBe(
       TOOLBOX_TOOL_CATALOG.length,
     );
@@ -72,15 +72,15 @@ describe("toolbox protocol", () => {
     }
   });
 
-  it("exposes only the focused knowledge workflows while retaining disabled ids for compatibility", () => {
+  it("exposes only the focused knowledge workflows and drops retired standalone tools", () => {
     expect(
       TOOLBOX_TOOL_CATALOG.filter((item) => item.availability.enabled).map(
         (item) => item.id,
       ),
     ).toEqual(ACTIVE_TOOL_IDS);
-    expect(getToolboxTool("directory_index")?.availability.enabled).toBe(false);
-    expect(getToolboxTool("browser_sql")?.availability.enabled).toBe(false);
-    expect(getToolboxTool("action_plan")?.availability.enabled).toBe(false);
+    for (const retiredId of ["directory_index", "browser_sql", "action_plan", "mermaid_editor", "text_diff"]) {
+      expect(getToolboxTool(retiredId)).toBeNull();
+    }
     expect(getToolboxTool("image_to_pdf")?.availability.enabled).toBe(false);
     expect(getToolboxTool("pdf_to_images")?.availability.enabled).toBe(false);
     expect(getToolboxTool("pdf_text_extractor")?.availability.enabled).toBe(
@@ -110,17 +110,15 @@ describe("toolbox protocol", () => {
     const localTools = TOOLBOX_TOOL_CATALOG.filter(
       (item) => item.executionMode === "browser",
     );
-    expect(localTools).toHaveLength(27);
+    expect(localTools).toHaveLength(16);
     expect(localTools.every((item) => item.billingMedium === "free")).toBe(
       true,
     );
     expect(isToolboxPaidTool("pdf_organizer")).toBe(false);
-    expect(isToolboxPaidTool("mermaid_editor")).toBe(false);
     expect(isToolboxPaidTool("data_workbench")).toBe(false);
-    expect(isToolboxPaidTool("browser_sql")).toBe(false);
     expect(
       TOOLBOX_TOOL_CATALOG.filter((item) => item.executionMode === "service"),
-    ).toHaveLength(7);
+    ).toHaveLength(6);
     expect(isToolboxPaidTool("research_workspace")).toBe(false);
     expect(isToolboxPaidTool("knowledge_structure_audit")).toBe(false);
     expect(isToolboxPaidTool("research_brief")).toBe(true);

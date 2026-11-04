@@ -11,8 +11,6 @@ router.get('/events/:eventId', securityHandle.getSecurityEventDetail);
 router.post('/events/:eventId/handle', securityHandle.handleSecurityEvent);
 router.post('/ipReputation', securityHandle.getIpReputationList);
 router.post('/ipAccounts', securityHandle.getIpAccounts);
-router.post('/ipBan', securityHandle.banIp);
-router.post('/ipUnban', securityHandle.unbanIp);
 router.post('/accountBans', securityHandle.getAccountBanList);
 router.post('/accountReputation', securityHandle.getAccountReputationList);
 router.post('/accountBan', securityHandle.banAccount);
