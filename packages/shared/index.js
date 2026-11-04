@@ -892,12 +892,12 @@ export const ANDROID_RELEASE = Object.freeze({
   versionName: '1.0.4',
   versionCode: 10004,
   packageName: 'top.boluo66.lightnote',
-  releaseDate: '2026-11-02',
-  fileSizeBytes: 2319142,
-  sha256: 'd40ea29a514b624a2803693815ab72bf05d09979cb040420ddc9b9982381d606',
+  releaseDate: '2026-11-04',
+  fileSizeBytes: 2330666,
+  sha256: '6556d68980f911a7f66a2e49e9592b173cbcf87a11781aa79503058f9c83d45b',
   certificateSha256:
     '23:D3:65:AA:C9:33:A3:8D:71:07:0E:0C:2B:DD:C0:CD:B7:E1:7B:41:67:7F:FC:5E:45:2C:96:D8:9A:1C:77:B4',
-  downloadPath: '/downloads/android/light-note-1.0.4-d40ea29a514b.apk',
+  downloadPath: '/downloads/android/light-note-1.0.4-6556d68980f9.apk',
   minAndroidVersion: '8.0',
   permissions: Object.freeze([
     'android.permission.POST_NOTIFICATIONS',
