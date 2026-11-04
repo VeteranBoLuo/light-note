@@ -1,268 +1,134 @@
 <template>
-  <CommonContainer v-if="bookmark.isMobile" :title="t('personCenter.feedback')" @backClick="goBack">
-    <OpinionPanel page-mode :initial-tab="initialTab" @replyViewed="handleReplyViewed" @submitted="handleSubmitted" />
-  </CommonContainer>
-
-  <div v-else class="opinion-page">
-    <div class="opinion-page__bg" />
-    <section class="opinion-page__container">
-      <header class="opinion-page__hero">
-        <BButton class="opinion-page__back" @click="goBack">
-          <svg-icon :src="icon.arrow_left" size="18" />
+  <main ref="pageRef" v-auto-scrollbar class="opinion-page" :class="{ 'opinion-page--mobile': bookmark.isMobile }">
+    <CommonContainer v-if="bookmark.isMobile" embedded-mobile :title="t('personCenter.feedback')" @backClick="goBack">
+      <OpinionPanel :initial-tab="initialTab" @replyViewed="handleReplyViewed" @submitted="handleSubmitted" />
+    </CommonContainer>
+    <div v-else class="opinion-page__container">
+      <header class="opinion-page__header">
+        <BButton type="text" class="opinion-page__back" @click="goBack">
+          <SvgIcon :src="icon.arrow_left" size="18" />
           <span>{{ t('common.back') }}</span>
         </BButton>
-        <div class="opinion-page__hero-main">
-          <h1 class="opinion-page__title">{{ t('personCenter.feedback') }}</h1>
-          <p class="opinion-page__desc">{{ t('personCenter.opinions.pageDesc') }}</p>
+        <div class="opinion-page__heading">
+          <h1>{{ t('personCenter.feedback') }}</h1>
+          <p>{{ t('personCenter.opinions.pageIntro') }}</p>
         </div>
       </header>
-
-      <div class="opinion-page__body">
-        <main class="opinion-page__main">
-          <OpinionPanel
-            page-mode
-            :initial-tab="initialTab"
-            @replyViewed="handleReplyViewed"
-            @submitted="handleSubmitted"
-          />
-        </main>
+      <div class="opinion-page__surface">
+        <OpinionPanel :initial-tab="initialTab" @replyViewed="handleReplyViewed" @submitted="handleSubmitted" />
       </div>
-    </section>
-  </div>
+    </div>
+  </main>
 </template>
 
 <script setup lang="ts">
-  import BButton from '@/components/base/BasicComponents/BButton.vue';
-  import CommonContainer from '@/components/base/BasicComponents/CommonContainer.vue';
-  import OpinionPanel from '@/components/personCenter/opinions/OpinionPanel.vue';
-  import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
-  import icon from '@/config/icon.ts';
-  import { bookmarkStore, useUserStore } from '@/store';
-  import { computed } from 'vue';
+  import { computed, ref } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useRoute, useRouter } from 'vue-router';
+  import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import CommonContainer from '@/components/base/BasicComponents/CommonContainer.vue';
+  import OpinionPanel from './OpinionPanel.vue';
+  import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
+  import icon from '@/config/icon';
+  import { bookmarkStore } from '@/store';
+  import { useDensityScrollAnchor } from '@/composables/useDensityScrollAnchor';
 
   const { t } = useI18n();
   const route = useRoute();
   const router = useRouter();
-  const user = useUserStore();
   const bookmark = bookmarkStore();
-
+  const pageRef = ref<HTMLElement | null>(null);
+  useDensityScrollAnchor(pageRef);
   const initialTab = computed(() => (route.query.tab === 'history' ? 'history' : 'form'));
 
   function goBack() {
-    if (window.history.length > 1) {
-      router.back();
-      return;
-    }
-    router.push(bookmark.isMobile ? '/personCenter' : '/home');
+    if (window.history.length > 1) router.back();
+    else router.push(bookmark.isMobile ? '/personCenter' : '/home');
   }
-
   function handleReplyViewed() {
-    user.unreadOpinionReplyTotal = 0;
-    if (route.query.markViewed) {
-      const nextQuery = { ...route.query };
-      delete nextQuery.markViewed;
-      router.replace({
-        path: route.path,
-        query: nextQuery,
-      });
-    }
+    if (!route.query.markViewed) return;
+    const nextQuery = { ...route.query };
+    delete nextQuery.markViewed;
+    router.replace({ path: route.path, query: nextQuery });
   }
-
   function handleSubmitted() {
-    router.replace({
-      path: route.path,
-      query: {
-        ...route.query,
-        tab: 'history',
-      },
-    });
+    router.replace({ path: route.path, query: { ...route.query, tab: 'history' } });
   }
 </script>
 
 <style scoped lang="less">
   .opinion-page {
     height: 100vh;
-    position: relative;
-    padding: var(--ui-space-20, 20px) var(--ui-space-24, 24px) var(--ui-space-20, 20px);
-    box-sizing: border-box;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-    background:
-      radial-gradient(
-        circle at top left,
-        color-mix(in srgb, var(--resource-bookmark-color) 14%, transparent),
-        transparent 28%
-      ),
-      radial-gradient(
-        circle at top right,
-        color-mix(in srgb, var(--resource-note-color) 12%, transparent),
-        transparent 24%
-      ),
-      var(--page-background, var(--background-color));
-  }
-
-  .opinion-page__bg {
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-    background-image:
-      linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
-    background-size: 24px 24px;
-    opacity: 0.5;
-  }
-
-  .opinion-page__container {
-    position: relative;
-    max-width: var(--ui-layout-1180, 1180px);
+    height: 100dvh;
     width: 100%;
+    box-sizing: border-box;
+    overflow: auto;
+    padding: var(--ui-space-40, 40px) var(--ui-space-24, 24px);
+    color: var(--text-color);
+    background: var(--surface-panel-bg);
+  }
+  .opinion-page__container {
+    width: 100%;
+    max-width: var(--ui-layout-1050, 1050px);
     margin: 0 auto;
-    flex: 1;
-    min-height: 0;
-    display: flex;
-    flex-direction: column;
-    gap: var(--ui-space-16, 16px);
   }
-
-  .opinion-page__hero {
-    border: 1px solid color-mix(in srgb, var(--border-color) 92%, transparent);
-    border-radius: 18px;
-    padding: var(--ui-space-16, 16px) var(--ui-space-22, 22px);
-    background:
-      linear-gradient(
-        135deg,
-        color-mix(in srgb, var(--resource-bookmark-color) 8%, var(--background-color)),
-        transparent 60%
-      ),
-      var(--background-color);
-    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.05);
+  .opinion-page__header {
     display: flex;
-    flex-direction: column;
-    gap: var(--ui-space-10, 10px);
+    align-items: flex-start;
+    gap: var(--ui-space-20, 20px);
+    margin-bottom: var(--ui-space-28, 28px);
+  }
+  .opinion-page__back.b_btn {
+    height: var(--ui-control-32, 32px);
     flex: none;
-  }
-
-  .opinion-page__back.b_btn.default_btn {
-    height: auto;
-    line-height: normal;
-    white-space: normal;
-    // Preserve the native button's 13⅓px standard font while following interface density.
-    font-size: calc(var(--ui-font-20, 20px) * 2 / 3);
-    width: fit-content;
-    display: inline-flex;
-    align-items: center;
     gap: var(--ui-space-8, 8px);
-    padding: var(--ui-space-8, 8px) var(--ui-space-14, 14px);
-    border-radius: 999px;
-    border: 1px solid var(--border-color);
-    background: var(--background-color);
-    color: var(--text-color);
-    cursor: pointer;
+    margin-top: var(--ui-space-2, 2px);
+    padding: 0;
+    color: var(--desc-color);
   }
-
-  .opinion-page__eyebrow {
-    font-size: var(--ui-font-12, 12px);
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--sub-text-color);
-  }
-
-  .opinion-page__title {
-    margin: 0 0 var(--ui-space-6, 6px);
-    font-size: var(--ui-font-20, 20px);
-    font-weight: 600;
-    line-height: 1.3;
-    color: var(--text-color);
-  }
-
-  .opinion-page__desc {
-    margin: 0;
-    max-width: var(--ui-layout-700, 700px);
-    font-size: var(--ui-font-13, 13px);
-    line-height: 1.6;
-    color: var(--sub-text-color);
-  }
-
-  .opinion-page__body {
-    flex: 1;
-    min-height: 0;
-    display: flex;
-    flex-direction: column;
-  }
-
-  .opinion-page__side {
-    display: flex;
-    flex-direction: column;
-    gap: var(--ui-space-16, 16px);
-    position: sticky;
-    top: var(--ui-layout-20, 20px);
-  }
-
-  .opinion-page__side-card,
-  .opinion-page__main {
-    border: 1px solid color-mix(in srgb, var(--border-color) 92%, transparent);
-    border-radius: 22px;
-    background: color-mix(in srgb, var(--background-color) 96%, transparent);
-    box-shadow: 0 12px 36px rgba(0, 0, 0, 0.06);
-  }
-
-  .opinion-page__side-card {
-    padding: var(--ui-space-18, 18px);
-    color: var(--sub-text-color);
-    line-height: 1.7;
-  }
-
-  .opinion-page__side-title {
-    font-size: var(--ui-font-15, 15px);
-    font-weight: 700;
-    color: var(--text-color);
-    margin-bottom: var(--ui-space-8, 8px);
-  }
-
-  .opinion-page__side-card p {
-    margin: 0;
-  }
-
-  .opinion-page__main {
-    padding: var(--ui-space-20, 20px);
+  .opinion-page__heading {
     min-width: 0;
-    flex: 1;
-    min-height: 0;
-    overflow: hidden;
+    padding-left: var(--ui-space-20, 20px);
+    border-left: 1px solid var(--surface-border-color);
   }
-
-  @media (max-width: 960px) {
-    .opinion-page {
-      height: auto;
-      min-height: 100vh;
-      overflow: visible;
-      padding: var(--ui-space-18, 18px) var(--ui-space-14, 14px) var(--ui-space-24, 24px);
-    }
-
-    .opinion-page__hero {
-      padding: var(--ui-space-14, 14px) var(--ui-space-16, 16px);
-      border-radius: 16px;
-    }
-
-    .opinion-page__title {
-      font-size: var(--ui-font-20, 20px);
-    }
-
-    .opinion-page__body {
-      flex: none;
-      min-height: auto;
-    }
-
-    .opinion-page__side {
-      position: static;
-    }
-
-    .opinion-page__main {
-      height: auto;
-      overflow: visible;
-    }
+  .opinion-page__heading h1 {
+    margin: 0;
+    font-size: var(--ui-font-24, 24px);
+    line-height: 1.4;
+    font-weight: 600;
+  }
+  .opinion-page__heading p {
+    margin: var(--ui-space-6, 6px) 0 0;
+    color: var(--desc-color);
+    font-size: var(--ui-font-14, 14px);
+    line-height: 1.6;
+  }
+  .opinion-page__surface {
+    padding: var(--ui-space-28, 28px) var(--ui-space-32, 32px);
+    border: 1px solid var(--surface-border-color);
+    border-radius: 16px;
+    background: var(--surface-card-bg);
+    box-shadow: var(--surface-card-shadow);
+  }
+  .opinion-page--mobile {
+    padding: 0;
+    overflow: hidden;
+    background: var(--background-color);
+  }
+  .opinion-page--mobile > :deep(.common-container--embedded-mobile) {
+    height: 100%;
+  }
+  .opinion-page--mobile :deep(.phone-container--embedded) {
+    padding: 0 var(--ui-space-20, 20px);
+  }
+  .opinion-page--mobile :deep(.phone-container--embedded .phone-navigation) {
+    height: var(--ui-layout-56, 56px);
+    flex-basis: var(--ui-layout-56, 56px);
+    font-size: var(--ui-font-18, 18px);
+    font-weight: 600;
+  }
+  .opinion-page--mobile :deep(.phone-container--embedded .phone-body) {
+    padding-top: 0;
+    padding-bottom: var(--ui-space-20, 20px);
   }
 </style>
