@@ -9,6 +9,7 @@
     "dev": "vite",
     "build": "pnpm run check:drawing-thumbnail-renderer && pnpm run check:landing-assets && pnpm run typecheck && rimraf dist && vite build && pnpm run check:pdf-worker-artifact && node scripts/ensure-spa-route-fallbacks.mjs && node scripts/prerender.mjs && node scripts/verify-seo-artifacts.mjs && pnpm run write:release-asset-manifest",
     "generate:extension-icons": "node scripts/generate-extension-icons.mjs",
+    "generate:macos-pwa-icons": "node scripts/generate-macos-pwa-icons.mjs",
     "generate:extension-store-assets": "node scripts/generate-extension-store-assets.mjs",
     "build:extension": "pnpm run generate:extension-icons && vite build --config vite.extension.config.ts",
     "package:extension": "pnpm run build:extension && node scripts/package-extension.mjs",

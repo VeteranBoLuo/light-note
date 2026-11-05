@@ -8,6 +8,7 @@ import androidColorMixFallback from './src/vite/androidColorMixFallback';
 import androidFontWeightFallback from './src/vite/androidFontWeightFallback';
 import dynamicViewportFallback from './src/vite/dynamicViewportFallback';
 import earlyAppEntryBootstrap from './src/vite/earlyAppEntryBootstrap';
+import macosPwaManifest from './src/vite/macosPwaManifest';
 import { assertLocalViteBackend, createLocalBackendProxy } from './src/vite/localBackendProxy';
 import seoPreviewRoutes from './src/vite/seoPreviewRoutes';
 import manorRuntime from './src/vite/manorRuntime';
@@ -34,6 +35,7 @@ export default defineConfig(({ command, mode }) => {
       publicArtworkPlugin(),
       staticPrewarmManifestPlugin(),
       earlyAppEntryBootstrap(),
+      macosPwaManifest(),
       seoPreviewRoutes(),
       vue(),
       vueJsx(),
