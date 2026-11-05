@@ -6195,7 +6195,13 @@ export default {
     uploadQueueExpand: 'Expand upload queue',
     uploadQueueCollapseLabel: 'Collapse',
     uploadQueueExpandLabel: 'Expand',
-    uploadQueueSaved: '{success} / {total} files saved',
+    uploadQueueUploaded: '{success} / {total} files uploaded',
+    uploadQueueCompleted: '{count} file uploaded | {count} files uploaded',
+    uploadQueueOverallProgress: 'Overall upload progress',
+    uploadQueueFileProgress: 'Upload progress for {name}',
+    uploadQueueHelp: 'Upload details',
+    uploadQueueWaitingRetry: 'Waiting to retry',
+    uploadQueueSessionHint: 'Select unfinished files again after closing or refreshing this page.',
     uploadQueueFailedCount: '{count} failed',
     uploadQueueChecking: 'Checking files',
     uploadQueueChecked: '{checked} / {total} files checked',
@@ -6209,8 +6215,8 @@ export default {
     uploadQueueQuota: 'Cloud Space is full. Further uploads have stopped. Free up space or expand storage, then retry.',
     uploadQueueAuth: 'Your login or permissions changed. Check your account before retrying.',
     uploadQueueRetryHint:
-      'Saved files will not be uploaded again. Remaining files stay in this session; closing or refreshing requires selecting them again.',
-    uploadQueueRetry: 'Retry {count} remaining files',
+      'Uploaded files will not be uploaded again. Select unfinished files again after closing or refreshing this page.',
+    uploadQueueRetry: 'Retry {count} file | Retry {count} files',
     uploadQueueAppend: 'Add more files',
     uploadQueueAppendHint: 'Add more files to this queue. They will use the previous batch’s folder.',
     uploadQueueAppendMobileHint:
@@ -6219,9 +6225,9 @@ export default {
       'Select up to {count} files at a time. Nothing was added. Select fewer files and add them in batches.',
     uploadMobileSelectionHint: 'Up to {count} files at a time. Add more batches while uploading.',
     uploadQueueDiscard:
-      'Some files are unfinished. Closing this queue clears unfinished items. Saved files will remain. Continue?',
+      'Some files are unfinished. Closing this queue clears unfinished items. Uploaded files will remain. Continue?',
     uploadQueueCancelConfirm:
-      'Stop further uploads? Saved files will remain. Files being saved will be checked first; you can retry the others in this session.',
+      'Stop further uploads? Uploaded files will remain. Files being saved will be checked first; you can retry the others in this session.',
     uploadQueueCheckFailed: 'Could not check file names. Upload has not started. Please retry.',
     uploadQueueDuplicateTitle: 'Duplicate file names',
     uploadQueueLocalDuplicates:
@@ -6236,7 +6242,7 @@ export default {
       uploading: 'Uploading',
       confirming: 'Saving',
       retrying: 'Waiting to retry',
-      success: 'Saved',
+      success: 'Uploaded',
       error: 'Failed, retry available',
     },
     batchPreview: 'Preview',

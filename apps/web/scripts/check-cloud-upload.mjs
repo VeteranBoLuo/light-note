@@ -42,10 +42,55 @@ async function settled(page, expected) {
     (n) => window.__cloudUploadFixture.controls.confirmed.size === n && !window.__cloudUploadFixture.controls.active,
     expected,
   );
-  await page.getByRole('button', { name: /重试剩余|Retry .* remaining/ }).waitFor();
+  await page.getByRole('button', { name: /^(重试 |Retry )/ }).waitFor();
+}
+async function checkSingleFile(profile) {
+  const single = await open(profile);
+  await single.evaluate(() => {
+    window.__cloudUploadFixture.controls.putDelay = 1200;
+    void window.__cloudUploadFixture.start(1, ['photo-3.jpg']);
+  });
+  await single.waitForFunction(() => window.__cloudUploadFixture.controls.active === 1);
+  assert.equal(await single.getByRole('progressbar').count(), 1, 'One file has one progress bar');
+  const help = single.getByRole('button', { name: /^(上传说明|Upload details)$/ });
+  await help.click();
+  assert.equal(await help.getAttribute('aria-expanded'), 'true');
+  assert.equal(await single.locator('#cloud-upload-help').isVisible(), true);
+  await help.press('Enter');
+  assert.equal(await help.getAttribute('aria-expanded'), 'false');
+  assert.equal(await single.locator('#cloud-upload-help').count(), 0);
+  await settled(single, 0);
+  assert.equal(await single.getByRole('progressbar').count(), 1, 'Failed single file still has one progress bar');
+  const buttons = await single.locator('.upload-actions').getByRole('button').all();
+  const first = await buttons[0].boundingBox();
+  const second = await buttons[1].boundingBox();
+  assert(first.x + first.width < second.x || first.y + first.height < second.y, 'Actions are separated');
+  const name = `${profile.width}-${profile.theme}-${profile.density || 'mobile'}-${profile.lang || 'zh'}-${profile.renderProfile || 'auto'}`;
+  await single.screenshot({ path: join(output, `${name}-single-failed.png`) });
+  await single.evaluate(() => {
+    Object.assign(window.__cloudUploadFixture.controls, { fail: false, putDelay: 10 });
+  });
+  await single.getByRole('button', { name: /^(重试 |Retry )/ }).click();
+  await single.getByText(/^(上传完成|Upload complete)$/).waitFor();
+  await single
+    .getByRole('status')
+    .filter({ hasText: /^(已上传 1 个文件|1 file uploaded)$/ })
+    .waitFor();
+  assert.equal(await single.getByRole('progressbar').count(), 0, 'Completion shows a result instead of progress');
+  await single.getByRole('button', { name: /^(收起上传队列|Collapse upload queue)$/ }).click();
+  assert.equal(await single.locator('.upload-progress--collapsed .progress-track').count(), 0);
+  await single.getByRole('button', { name: /^(展开上传队列|Expand upload queue)$/ }).click();
+  assert.equal(await single.getByRole('progressbar').count(), 0);
+  await single
+    .locator('.upload-progress')
+    .getByRole('button', { name: /^(关闭|Close)$/ })
+    .click();
+  await single.locator('.upload-progress').waitFor({ state: 'hidden' });
+  await single.close();
 }
 try {
   for (const profile of profiles) {
+    await checkSingleFile(profile);
     const page = await open(profile);
     await page.evaluate(() => {
       void window.__cloudUploadFixture.start(60);
@@ -66,7 +111,7 @@ try {
     await page.evaluate(() => {
       window.__cloudUploadFixture.controls.fail = false;
     });
-    await page.getByRole('button', { name: /重试剩余|Retry .* remaining/ }).click();
+    await page.getByRole('button', { name: /^(重试 |Retry )/ }).click();
     await page.waitForFunction(() => window.__cloudUploadFixture.controls.confirmed.size === 60);
     await page.getByText(/^(上传完成|Upload complete)$/).waitFor();
     assert.equal(await page.evaluate(() => window.__cloudUploadFixture.controls.puts.length), 61);
@@ -165,7 +210,7 @@ try {
   await quota.evaluate(() => {
     Object.assign(window.__cloudUploadFixture.controls, { quota: false, fail: false });
   });
-  await quota.getByRole('button', { name: /重试剩余/ }).click();
+  await quota.getByRole('button', { name: /^重试 / }).click();
   await quota.getByText('上传完成', { exact: true }).waitFor();
   await quota.close();
 
@@ -177,12 +222,12 @@ try {
   await cancel.waitForFunction(() => window.__cloudUploadFixture.controls.active === 3);
   await cancel.getByRole('button', { name: '取消上传', exact: true }).click();
   await cancel.getByRole('button', { name: '确定', exact: true }).click();
-  await cancel.getByRole('button', { name: /重试剩余/ }).waitFor();
+  await cancel.getByRole('button', { name: /^重试 / }).waitFor();
   assert(await cancel.evaluate(() => window.__cloudUploadFixture.controls.puts.length <= 3));
   await cancel.evaluate(() => {
     Object.assign(window.__cloudUploadFixture.controls, { fail: false, putDelay: 5 });
   });
-  await cancel.getByRole('button', { name: /重试剩余/ }).click();
+  await cancel.getByRole('button', { name: /^重试 / }).click();
   await cancel.getByText('上传完成', { exact: true }).waitFor();
   await cancel.close();
   const duplicates = await open();
@@ -234,7 +279,7 @@ try {
     await stale.waitForFunction(() => window.__cloudUploadFixture.controls.active === 3);
     if (action === 'close') {
       await stale.evaluate(() => window.__cloudUploadFixture.upload.cancel());
-      await stale.getByRole('button', { name: /重试剩余/ }).waitFor();
+      await stale.getByRole('button', { name: /^重试 / }).waitFor();
       await stale.locator('.upload-progress').getByRole('button', { name: '关闭', exact: true }).click();
     } else await stale.getByRole('button', { name: '取消上传', exact: true }).click();
     await stale.evaluate(() => {
@@ -414,7 +459,7 @@ try {
   await settled(mobile, 204);
   assert.equal(await mobile.evaluate(() => window.__cloudUploadFixture.controls.puts.length), 205);
   await mobile.screenshot({ path: join(output, 'mobile-append-failed.png') });
-  await mobile.getByRole('button', { name: /重试剩余 1 个文件/ }).click();
+  await mobile.getByRole('button', { name: '重试 1 个文件', exact: true }).click();
   await mobile.getByText('上传完成', { exact: true }).waitFor();
   assert.equal(await mobile.evaluate(() => window.__cloudUploadFixture.controls.puts.length), 206);
   assert.equal(await mobile.evaluate(() => window.__cloudUploadFixture.controls.targets.at(-1)), 'album-a');
