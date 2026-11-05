@@ -108,7 +108,7 @@ describe('data backup panel', () => {
       'files',
     ]);
   });
-  it('customizes content from the existing dialog, including extraction-only exports', async () => {
+  it('customizes content from the existing dialog, including single-type exports', async () => {
     routes(null);
     const { host, click } = mount();
     await flush();
@@ -119,7 +119,7 @@ describe('data backup panel', () => {
       )!;
     expect(checkbox('笔记').getAttribute('aria-checked')).toBe('true');
     expect(checkbox('文件').getAttribute('aria-checked')).toBe('true');
-    expect(checkbox('资料提取表').getAttribute('aria-checked')).toBe('false');
+    expect(checkbox('资料提取表')).toBeUndefined();
     const select = host.querySelector('select')!;
     select.value = 'markdown';
     select.dispatchEvent(new Event('change', { bubbles: true }));
@@ -128,10 +128,10 @@ describe('data backup panel', () => {
       await flush();
     }
     expect([...host.querySelectorAll('button')].find((b) => b.textContent?.includes('开始备份'))?.disabled).toBe(true);
-    checkbox('资料提取表').click();
+    checkbox('书签').click();
     await flush();
     await click('开始备份');
-    expect(calls('create')[0][1]).toMatchObject({ types: ['extractions'] });
+    expect(calls('create')[0][1]).toMatchObject({ types: ['bookmarks'] });
   });
   it('opens the options with an empty result instead of a download', async () => {
     routes(null, { create: { empty: true } });

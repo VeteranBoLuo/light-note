@@ -180,7 +180,6 @@
     notes: 'noteHint',
     bookmarks: 'bookmarkHint',
     files: 'fileHint',
-    extractions: 'extractionHint',
   };
   // 超过 1GB 的文件原件打包和下载都更慢，提前说明，不拦截。
   const LARGE_FILE_BYTES = 1024 * 1024 * 1024;

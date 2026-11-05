@@ -162,8 +162,11 @@ describe('知识工具箱前端边界', () => {
 
     expect(groupedToolIds).toEqual(activeToolIds);
     expect(new Set(groupedToolIds).size).toBe(groupedToolIds.length);
-    expect(activeToolIds).toContain('extraction');
-    expect(TOOLBOX_HOME_GROUPS.find((group) => group.id === 'create')?.toolIds).toContain('extraction');
+    expect(TOOLBOX_HOME_GROUPS.find((group) => group.id === 'create')?.toolIds).toEqual([
+      'translation',
+      'material_to_note',
+      'study_kit',
+    ]);
     expect(TOOLBOX_HOME_GROUPS.find((group) => group.id === 'prepare')?.toolIds).toEqual(['pdf_organizer', 'ocr_to_text']);
     expect(TOOLBOX_HOME_GROUPS.map((group) => group.id)).toEqual(['workspace', 'create', 'prepare']);
     expect(home).toContain('class="toolbox-overview"');
@@ -242,8 +245,14 @@ describe('知识工具箱前端边界', () => {
         accept: ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'],
       },
     });
-    // 已删除的数据工作台及其模式别名只作为下架深链展示提示，不再跳转到合并入口。
-    for (const retiredId of ['data_workbench', 'data_quality_report', 'data_chart', 'table_converter'] as const) {
+    // 已删除的工具（含数据工作台的模式别名）只作为下架深链展示提示，不再跳转到合并入口。
+    for (const retiredId of [
+      'data_workbench',
+      'data_quality_report',
+      'data_chart',
+      'table_converter',
+      'extraction',
+    ] as const) {
       expect(canonicalToolboxToolId(retiredId)).toBe(retiredId);
       expect(TOOLBOX_RETIRED_TOOL_IDS).toContain(retiredId);
       expect(TOOLBOX_TOOL_CATALOG.find((tool) => tool.id === retiredId)).toBeUndefined();

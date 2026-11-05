@@ -1560,13 +1560,3 @@ it('rejects a table changed between loading and claiming the save lease without 
   expect(connection.query.mock.calls[0][1]).toEqual(['table-1', 'owner']);
   expect(connection.rollback).toHaveBeenCalledOnce();
 });
-
-describe('提取任务首页投影',()=>{
-  it('本人活动表展示真实进度，暂停不能走旧任务取消或保存',async()=>{
-    const database={query:vi.fn(async (sql) => sql.includes('SELECT e.id') ? [[{id:'e',title:'产品',status:'paused',processed:2,total:5,created_at:new Date(),updated_at:new Date()}]] : [[]])};
-    const result=await listToolboxHomeTasks({userId:'user-1',database});
-    expect(result.active[0]).toMatchObject({id:'e',toolId:'extraction',canCancel:false,extraction:{title:'产品',status:'paused',processed:2,total:5}});
-    expect(database.query.mock.calls.find(([sql])=>sql.includes('SELECT e.id'))[1]).toEqual(['user-1']);
-    expect(result.ready).toEqual([]);
-  });
-});

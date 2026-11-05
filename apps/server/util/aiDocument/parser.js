@@ -550,7 +550,7 @@ export async function parseDocumentBuffer(buffer, descriptor, options = {}) {
     return {
       text,
       chunks: finalized.chunks,
-      // Extraction needs non-overlapping source positions, not retrieval chunks.
+      // Full-range consumers such as OCR need non-overlapping source positions, not retrieval chunks.
       // Opt-in only: the ordinary attachment response never carries this snapshot.
       ...(options.includeSegments ? { segments: segments.map((segment, index) => ({
         id: `s${index + 1}`, text: segment.content,

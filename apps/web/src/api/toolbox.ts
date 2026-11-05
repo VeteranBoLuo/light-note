@@ -171,14 +171,13 @@ export type ToolboxJobInput = {
   }[];
   options: NonNullable<ToolboxInput['options']>;
 };
-export type ToolboxTaskFilter = 'all' | 'failed' | 'active' | 'paused' | 'ready' | 'finished';
+export type ToolboxTaskFilter = 'all' | 'failed' | 'active' | 'ready' | 'finished';
 export type ToolboxJob = {
   title?: string;
   materialCount?: number;
   materialTitles?: string[];
   dismissed?: boolean;
   input?: ToolboxJobInput;
-  extraction?: { title: string; status: string; processed: number; total: number };
   sourceWorkspaceId?: string | null;
   id: string;
   toolId: string;

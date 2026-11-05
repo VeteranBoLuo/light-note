@@ -9,7 +9,6 @@ import { listInboxResources } from '../resourceInbox.js';
 import { summarizeUntaggedResources } from './resourceInventoryService.js';
 import { summarizePendingOrganizeReview } from './organizeReviewSummary.js';
 import { adviceContext } from './dailyBriefAdvice.js';
-import { EXTRACTION_SCHEMA } from '../extraction/schema.js';
 
 const socketPath = process.env.LIGHTNOTE_TEST_MYSQL_SOCKET;
 describe.skipIf(!socketPath)('简报工坊待处理状态 SQL（隔离 MySQL）', () => {
@@ -79,7 +78,6 @@ describe.skipIf(!socketPath)('简报工坊待处理状态 SQL（隔离 MySQL）'
       'CREATE TABLE organize_suggestions(id VARCHAR(64),user_id VARCHAR(64),run_id VARCHAR(64),item_id VARCHAR(64),status VARCHAR(32),kind VARCHAR(32),payload_json JSON)',
     );
     await db.query('CREATE TABLE toolbox_workspaces(id VARCHAR(64),user_id VARCHAR(64))');
-    for (const sql of EXTRACTION_SCHEMA) await db.query(sql);
   });
   beforeEach(async () => {
     await db.query('DELETE FROM toolbox_artifacts');
@@ -90,7 +88,6 @@ describe.skipIf(!socketPath)('简报工坊待处理状态 SQL（隔离 MySQL）'
       'files',
       'todo_items',
       'toolbox_workspaces',
-      'toolbox_extractions',
       'onboarding_seed_resources',
       'resource_inbox',
       'organize_suggestion_runs',
@@ -225,19 +222,9 @@ describe.skipIf(!socketPath)('简报工坊待处理状态 SQL（隔离 MySQL）'
       await compileBriefOnboardingFact(db, 'owner', await compileBriefActivityFacts(db, 'owner', calendar)),
     ).toMatchObject({ count: 1 });
   });
-  it('未进入今日重点的待办和暂停提取表也属于已有数据', async () => {
+  it('未进入今日重点的待办也属于已有数据', async () => {
     const activity = await compileBriefActivityFacts(db, 'owner', calendar);
     await db.query("INSERT INTO todo_items SET id='future',user_id='owner'");
-    expect(await compileBriefOnboardingFact(db, 'owner', activity)).toMatchObject({ count: 0 });
-    await db.query('DELETE FROM todo_items');
-    await db.query('INSERT INTO toolbox_extractions SET id=?,user_id=?,request_id=?,input_digest=?,title=?,status=?', [
-      randomUUID(),
-      'owner',
-      randomUUID(),
-      '0'.repeat(64),
-      '提取表',
-      'paused',
-    ]);
     expect(await compileBriefOnboardingFact(db, 'owner', activity)).toMatchObject({ count: 0 });
   });
   it('较早生成但仍有效未保存的成果保留；排除已保存、已过期及其他账号', async () => {

@@ -6,7 +6,6 @@ import { annualReportEn } from './annualReport';
 import { MAKEUP_WINDOW_DAYS } from '@lightnote/shared';
 import { noteMathEn } from './noteMath';
 import { featureShortcutEn } from './featureShortcut';
-import { extractionEn } from './extraction';
 import { comparisonTableEn } from './comparisonTable';
 import { translationEn } from './translation';
 import { saveAsNoteEn } from './saveAsNote';
@@ -125,7 +124,6 @@ export default {
   },
 
   translation: translationEn,
-  extraction: extractionEn,
   saveAsNote: saveAsNoteEn,
   comparisonTable: comparisonTableEn,
   collectionForms: collectionFormsEn,
@@ -1384,7 +1382,6 @@ export default {
         all: 'All',
         failed: 'Failed',
         active: 'In progress',
-        paused: 'Paused',
         ready: 'To save',
         finished: 'Finished',
       },
@@ -1891,11 +1888,6 @@ export default {
       text: 'Text & data',
     },
     tool: {
-      extraction: {
-        name: 'Extract to table',
-        description: 'AI field suggestions and extraction with source evidence',
-        output: 'Reviewable structured table',
-      },
       translation: {
         name: 'Translation',
         description: 'Translate complete materials and save as a note',

@@ -11,7 +11,6 @@ import {
 } from "./toolboxProtocol.js";
 
 const ACTIVE_TOOL_IDS = [
-  "extraction",
   "translation",
   "forms",
   "research_workspace",
@@ -44,7 +43,7 @@ describe("toolbox protocol", () => {
   });
 
   it("keeps every tool id unique and every execution contract explicit", () => {
-    expect(TOOLBOX_TOOL_CATALOG).toHaveLength(18);
+    expect(TOOLBOX_TOOL_CATALOG).toHaveLength(17);
     expect(new Set(TOOLBOX_TOOL_CATALOG.map((item) => item.id)).size).toBe(
       TOOLBOX_TOOL_CATALOG.length,
     );
@@ -100,7 +99,7 @@ describe("toolbox protocol", () => {
     expect(getToolboxTool("pdf_text_extractor")?.availability.enabled).toBe(
       false,
     );
-    expect(ACTIVE_TOOL_IDS).toHaveLength(10);
+    expect(ACTIVE_TOOL_IDS).toHaveLength(9);
   });
 
   it("does not treat browser-local utilities as paid jobs", () => {
@@ -115,7 +114,7 @@ describe("toolbox protocol", () => {
     expect(isToolboxPaidTool("pdf_organizer")).toBe(false);
     expect(
       TOOLBOX_TOOL_CATALOG.filter((item) => item.executionMode === "service"),
-    ).toHaveLength(5);
+    ).toHaveLength(4);
     expect(isToolboxPaidTool("research_workspace")).toBe(false);
     expect(isToolboxPaidTool("translation")).toBe(true);
     expect(isToolboxPaidTool("material_to_note")).toBe(true);

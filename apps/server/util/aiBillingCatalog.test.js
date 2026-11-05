@@ -134,7 +134,8 @@ describe('aiBillingCatalog', () => {
     ]);
     expect(toolboxActions.map((action) => action.id)).toEqual(expect.arrayContaining(retiredActionIds));
     const publicIds = listPublicAiBillingCatalog().tokenActions.map((action) => action.id);
-    for (const actionId of retiredActionIds) expect(publicIds).not.toContain(actionId);
+    for (const actionId of [...retiredActionIds, 'toolbox.extraction_suggest', 'toolbox.extraction_extract'])
+      expect(publicIds).not.toContain(actionId);
     expect(toolboxActions.every((action) => action.allowedBillingPolicies.join(',') === 'user,system')).toBe(true);
 
     const skill = resolveAiSkill('toolbox.study_kit', 1);

@@ -572,6 +572,7 @@ export async function purgeToolboxWorkspace(connection, tables, userId) {
   await deleteIfPresent(connection, tables, 'toolbox_ocr_usage', 'DELETE FROM toolbox_ocr_usage WHERE user_id = ?', [
     userId,
   ]);
+  // 资料转表格已下架但表仍保留，注销时继续清理历史数据。
   for (const table of ['toolbox_extraction_records', 'toolbox_extraction_sources', 'toolbox_extraction_receipts', 'toolbox_extractions']) {
     await deleteIfPresent(connection, tables, table, `DELETE FROM ${table} WHERE user_id = ?`, [userId]);
   }

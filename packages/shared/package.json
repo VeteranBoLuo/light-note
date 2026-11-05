@@ -109,10 +109,6 @@
       "types": "./collectionForms.d.ts",
       "default": "./collectionForms.js"
     },
-    "./extraction": {
-      "types": "./extraction.d.ts",
-      "default": "./extraction.js"
-    },
     "./note-math": {
       "types": "./noteMath.d.ts",
       "default": "./noteMath.js"

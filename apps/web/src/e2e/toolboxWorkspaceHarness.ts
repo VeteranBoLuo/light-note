@@ -361,7 +361,7 @@ const homeTaskFixtures = (['processing', 'succeeded', 'failed'] as const).map((s
 const taskFlowJobs: ToolboxJob[] = [
   { ...homeTaskFixtures[2], id: 'old-failure', toolId: 'material_to_note', title: '阅读摘记 · 资料转笔记', error: { code: 'AI_SKILL_OUTPUT_PROFILE_INVALID', message: 'Fixture' }, billing: { medium: 'ai_quota', status: 'released', quotedPoints: 0, actualPoints: 0, refundedPoints: 0 }, input: { question: '整理阅读材料中的主张与证据，保留具体的应用建议。', options: { detailLevel: 'balanced' }, materials: [{ type: 'note', id: 'visual-note', title: '阅读摘记', available: true }] } },
   { ...homeTaskFixtures[2], id: 'legacy-failure', toolId: 'material_to_note', input: { question: '', materials: [], options: {} } },
-  { ...homeTaskFixtures[0], id: 'paused-extraction', toolId: 'extraction', title: '阅读资料提取表', extraction: { title: '阅读资料提取表', status: 'paused', processed: 0, total: 1 } },
+  { ...homeTaskFixtures[0], id: 'processing-task', toolId: 'material_to_note', title: '阅读资料整理' },
   ...Array.from({ length: 24 }, (_, index) => ({ ...homeTaskFixtures[1], id: `ready-${index}`, title: `阅读方法研究简报 ${index+1}` })),
 ];
 function response(config: any, data: unknown, status = 200) {
@@ -419,11 +419,11 @@ request.defaults.adapter = async (config) => {
   if (params.get('taskFlow') === '1') ((window as any).taskFlowRequests ||= []).push({ url, method: config.method });
   if (params.get('taskFlow') === '1') {
     const visible = taskFlowJobs.filter(job => !sessionStorage.getItem(`toolbox-dismissed-${job.id}`));
-    if (url === '/api/toolbox/home') return response(config, { schemaVersion: 2, workspaces: { continue: homeWorkspaceFixtures, recent: homeWorkspaceFixtures }, tasks: { active: visible.filter(job => job.extraction), ready: visible.filter(job => job.status==='succeeded').slice(0,4), recent: [], attention: visible.filter(job => job.status==='failed') } });
+    if (url === '/api/toolbox/home') return response(config, { schemaVersion: 2, workspaces: { continue: homeWorkspaceFixtures, recent: homeWorkspaceFixtures }, tasks: { active: visible.filter(job => job.status==='processing'), ready: visible.filter(job => job.status==='succeeded').slice(0,4), recent: [], attention: visible.filter(job => job.status==='failed') } });
     if (url === '/api/toolbox/tasks') {
       if (state === 'error') return response(config, {}, 500);
       const filter = config.params?.filter || 'all';
-      const filtered = state === 'empty' ? [] : visible.filter(job => filter==='all' || (filter==='failed' && job.status==='failed') || (filter==='paused' && job.extraction) || (filter==='ready' && job.status==='succeeded'));
+      const filtered = state === 'empty' ? [] : visible.filter(job => filter==='all' || (filter==='failed' && job.status==='failed') || (filter==='ready' && job.status==='succeeded'));
       const offset = Number(config.params?.cursor || 0);
       return response(config, { items: filtered.slice(offset,offset+20), nextCursor: filtered.length>offset+20 ? String(offset+20) : null });
     }

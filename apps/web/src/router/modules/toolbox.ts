@@ -15,12 +15,6 @@ const homeMeta = {
 
 const toolboxRouter: RouteRecordRaw[] = [
   {
-    path: '/toolbox/extraction',
-    name: 'toolboxExtraction',
-    meta: { ...commonMeta, title: '资料转表格' },
-    component: () => import('@/view/toolbox/extraction/ExtractionWorkbench.vue'),
-  },
-  {
     path: '/toolbox/translation',
     name: 'toolboxTranslation',
     meta: { ...commonMeta, title: '翻译' },

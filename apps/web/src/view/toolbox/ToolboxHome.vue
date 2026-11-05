@@ -168,11 +168,7 @@
           )
         }}</div>
         <div class="toolbox-task-list">
-          <div
-            v-for="job in continueJobs"
-            :key="`task-${job.extraction ? 'extraction' : 'job'}:${job.id}`"
-            class="toolbox-task-row"
-          >
+          <div v-for="job in continueJobs" :key="`task-${job.id}`" class="toolbox-task-row">
             <BButton
               class="toolbox-activity-card is-task"
               :class="`is-${presentation(job.toolId).accent}`"
@@ -636,9 +632,8 @@
     return candidates
       .filter((job): job is ToolboxJob => {
         if (!job) return false;
-        const key = `${job.extraction ? 'extraction' : 'job'}:${job.id}`;
-        if (seen.has(key)) return false;
-        seen.add(key);
+        if (seen.has(job.id)) return false;
+        seen.add(job.id);
         return true;
       })
       .slice(0, 3);
@@ -882,8 +877,6 @@
     return tool.price.kind === 'free' ? 'success' : 'pin';
   }
   function billingLabel(tool: ToolboxCatalogItem) {
-    if (import.meta.env.DEV && tool.id === 'extraction' && !tool.availability.enabled)
-      return t('extraction.localPreview');
     if (tool.billingMedia.length === 1 && tool.billingMedium === 'ai_quota') return t('translation.quota');
     if (tool.id === 'ocr_to_text') return t('toolbox.ocrBillingLabel');
     if (tool.price.kind !== 'free') {
@@ -898,8 +891,6 @@
     return toolboxTaskStateLabel(job, t);
   }
   function taskContinueDescription(job: ToolboxJob) {
-    if (job.extraction)
-      return t('extraction.progress', { done: job.extraction.processed, total: job.extraction.total });
     if (job.save.status === 'save_failed') return t('toolbox.task.saveFailed');
     if (isReadyTask(job)) return t('toolbox.home.resultReadyDescription');
     if (job.status === 'failed') return t('toolbox.task.processingFailed');
@@ -965,9 +956,7 @@
   function openTask(job: ToolboxJob) {
     recordToolboxRecentUse(user, job.toolId);
     rememberHomeScroll();
-    void router.push(
-      job.extraction ? { path: '/toolbox/extraction', query: { id: job.id } } : `/toolbox/task/${job.id}`,
-    );
+    void router.push(`/toolbox/task/${job.id}`);
   }
   function openRecentEntry(entry: RecentEntry) {
     recordToolboxRecentUse(user, entry.toolId);
@@ -995,9 +984,7 @@
     catalogFailed.value = false;
     catalogDegraded.value = false;
     try {
-      tools.value = (await fetchToolboxCatalog()).tools.filter(
-        (tool) => tool.availability.enabled || (import.meta.env.DEV && tool.id === 'extraction'),
-      );
+      tools.value = (await fetchToolboxCatalog()).tools.filter((tool) => tool.availability.enabled);
       refreshLocalRecentUses();
       void refreshPinnedTools();
     } catch {

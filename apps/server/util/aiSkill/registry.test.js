@@ -34,8 +34,6 @@ const EXPECTED_INTERNAL_SKILLS = Object.freeze([
   ['toolbox.material_to_note', 'toolbox', 'read'],
   ['toolbox.study_kit', 'toolbox', 'read'],
   ['toolbox.translation', 'toolbox', 'read'],
-  ['toolbox.extraction_suggest', 'toolbox', 'read'],
-  ['toolbox.extraction_extract', 'toolbox', 'read'],
   ['community.review_screen', 'community', 'read'],
   ['public_resource.review_screen', 'public_resource', 'read'],
 ]);

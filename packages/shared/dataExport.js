@@ -1,6 +1,6 @@
-export const DATA_EXPORT_TYPES = Object.freeze(["notes", "bookmarks", "files", "extractions"]);
+export const DATA_EXPORT_TYPES = Object.freeze(["notes", "bookmarks", "files"]);
 export const DATA_EXPORT_ACTIVE = Object.freeze(["queued", "running"]);
-/** 「备份全部资料」一键预设：笔记保留原始格式并下载图片，加书签与文件原件；资料提取表只在自定义里选。 */
+/** 「备份全部资料」一键预设：笔记保留原始格式并下载图片，加书签与文件原件。 */
 export const DATA_EXPORT_FULL_BACKUP = Object.freeze({
   types: Object.freeze(["notes", "bookmarks", "files"]),
   noteFormat: "original",

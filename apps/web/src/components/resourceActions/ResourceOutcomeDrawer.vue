@@ -394,7 +394,6 @@
   } from '@/config/toolbox';
   import { useUserStore } from '@/store';
   import { persistAiMarkdownResultAsNote, persistAiNotePreview } from '@/utils/aiNoteDraft';
-  import { stageExtraction } from '@/utils/extractionHandoff';
   import { closeCurrentMobileOverlayThen } from '@/utils/mobileOverlayHistory';
   import { toolboxErrorMessageKey } from '@/utils/toolboxErrorPresentation';
 
@@ -402,7 +401,7 @@
   type DetailLevel = 'concise' | 'balanced' | 'detailed';
   type ToolOption = { tool: ToolboxCatalogItem; eligible: boolean; reason: string };
 
-  const OUTCOME_TOOL_ORDER: readonly ToolboxToolId[] = ['extraction', 'material_to_note', 'study_kit'];
+  const OUTCOME_TOOL_ORDER: readonly ToolboxToolId[] = ['material_to_note', 'study_kit'];
 
   const props = withDefaults(
     defineProps<{
@@ -486,7 +485,8 @@
         (tool) =>
           tool.availability.enabled &&
           tool.input.kind === 'resources' &&
-          (tool.id === 'extraction' || (tool.executionMode === 'ai_skill' && isToolboxWorkflowTool(tool.id))),
+          tool.executionMode === 'ai_skill' &&
+          isToolboxWorkflowTool(tool.id),
       )
       .map((tool) => {
         const reason = toolEligibilityReason(tool);
@@ -591,7 +591,6 @@
   }
 
   function toolPriceLabel(tool: ToolboxCatalogItem) {
-    if (tool.id === 'extraction') return t('toolbox.workbench.aiQuotaBilling');
     if (tool.price.kind === 'free') return t('toolbox.free');
     if (tool.billingMedia.includes('ai_quota')) {
       return t('toolbox.billingChoiceRange', { min: tool.price.min, max: tool.price.max });
@@ -642,11 +641,6 @@
 
   function selectTool(tool: ToolboxCatalogItem) {
     if (toolEligibilityReason(tool)) return;
-    if (tool.id === 'extraction') {
-      stageExtraction(props.resources);
-      void closeCurrentMobileOverlayThen(closeDrawer, () => router.push('/toolbox/extraction'));
-      return;
-    }
     selectedQuickActionId.value = '';
     selectedToolId.value = tool.id;
     selectedIntent.value = isToolboxWorkflowTool(tool.id) ? TOOLBOX_WORKFLOW_PRESENTATION[tool.id].defaultIntent : '';

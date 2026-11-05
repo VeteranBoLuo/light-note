@@ -3,7 +3,6 @@ import { compileWorkshopBriefFacts } from './dailyBriefWorkshop.js';
 import { compileBriefTodoFacts } from './dailyBriefTodoFacts.js';
 import { listInboxResources } from '../resourceInbox.js';
 import { summarizeUntaggedResources } from './resourceInventoryService.js';
-import { extractionSchemaReady } from '../extraction/schema.js';
 import { taskVisibleSql } from '../toolbox/taskIdentity.js';
 
 export const DAILY_BRIEF_FACT_DEFINITIONS = Object.freeze([
@@ -53,20 +52,18 @@ export async function compileBriefOnboardingFact(database, userId, activity, kno
     knownWork.some((fact) => fact.count > 0)
   )
     return empty;
-  const extractionReady = await extractionSchemaReady(database);
   const [[presence]] = await database.query(
     `SELECT
       EXISTS(SELECT 1 FROM todo_items i WHERE i.user_id=? AND i.del_flag=0
         AND NOT EXISTS(SELECT 1 FROM onboarding_seed_resources seed
           WHERE seed.user_id=i.user_id AND seed.resource_type='todo' AND seed.resource_id=i.id) LIMIT 1) AS hasTodos,
       EXISTS(SELECT 1 FROM toolbox_workspaces WHERE user_id=? LIMIT 1) AS hasWorkspaces,
-      EXISTS(SELECT 1 FROM toolbox_jobs job WHERE user_id=? AND ${taskVisibleSql()} LIMIT 1) AS hasJobs,
-      ${extractionReady ? 'EXISTS(SELECT 1 FROM toolbox_extractions WHERE user_id=? LIMIT 1)' : '0'} AS hasExtractions`,
-    [userId, userId, userId, ...(extractionReady ? [userId] : [])],
+      EXISTS(SELECT 1 FROM toolbox_jobs job WHERE user_id=? AND ${taskVisibleSql()} LIMIT 1) AS hasJobs`,
+    [userId, userId, userId],
   );
   return {
     ...empty,
-    count: ['hasTodos', 'hasWorkspaces', 'hasJobs', 'hasExtractions'].every((key) =>
+    count: ['hasTodos', 'hasWorkspaces', 'hasJobs'].every((key) =>
       [0, '0', false].includes(presence?.[key]),
     )
       ? 1

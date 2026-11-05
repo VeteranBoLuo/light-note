@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import {
   getPublicToolboxCatalog,
   normalizeToolboxBillingMedium,
@@ -8,15 +8,6 @@ import {
 } from './catalog.js';
 
 describe('toolbox catalog', () => {
-  it('提取工具默认关闭，显式开关只开放独立工作台，不进入旧报价任务',()=>{
-    try {
-      vi.stubEnv('TOOLBOX_EXTRACTION_ENABLED','false');
-      expect(getPublicToolboxCatalog().tools.find(t=>t.id==='extraction').availability.enabled).toBe(false);
-      vi.stubEnv('TOOLBOX_EXTRACTION_ENABLED','true');
-      expect(getPublicToolboxCatalog().tools.find(t=>t.id==='extraction')).toMatchObject({availability:{enabled:true},billingMedia:['ai_quota'],executionMode:'service'});
-      expect(()=>normalizeToolboxInput('extraction',{})).toThrow();
-    } finally {vi.unstubAllEnvs();}
-  });
   it('quotes the documented bounded price ranges', () => {
     expect(quoteToolboxPoints('material_to_note', { itemCount: 2 })).toBe(8);
     expect(quoteToolboxPoints('material_to_note', { itemCount: 20 })).toBe(30);
@@ -86,14 +77,14 @@ describe('toolbox catalog', () => {
       'points',
       'free',
     ]);
-    expect(catalog.tools).toHaveLength(18);
+    expect(catalog.tools).toHaveLength(17);
     expect(getPublicToolboxCatalog().tools.filter((item) => item.availability.enabled)).toHaveLength(9);
     expect(catalog.tools.filter((item) => item.availability.enabled)).toHaveLength(8);
     expect(
-      catalog.tools.some((item) => ['action_plan', 'data_workbench', 'image_optimizer', 'knowledge_structure_audit'].includes(item.id)),
+      catalog.tools.some((item) => ['action_plan', 'data_workbench', 'image_optimizer', 'knowledge_structure_audit', 'extraction'].includes(item.id)),
     ).toBe(false);
     expect(catalog.tools.filter((item) => item.executionMode === 'browser')).toHaveLength(4);
-    expect(catalog.tools.filter((item) => item.executionMode === 'service')).toHaveLength(5);
+    expect(catalog.tools.filter((item) => item.executionMode === 'service')).toHaveLength(4);
     // 已下架的 AI 工具只保留历史名称，不再可报价。
     expect(
       catalog.tools

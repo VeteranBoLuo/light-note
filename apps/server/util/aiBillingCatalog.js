@@ -54,7 +54,8 @@ function tokenAction({
 export const AI_BILLING_ACTIONS = Object.freeze([
   tokenAction({ id: 'public_resource.review_screen', module: 'general', labelKey: 'publicResourceReviewScreen', taskTypes: ['skill_public_resource_review_screen'], allowedBillingPolicies: ['system'], publicCatalog: false }),
   tokenAction({ id: 'community.review_screen', module: 'general', labelKey: 'communityReviewScreen', taskTypes: ['skill_community_review_screen'], allowedBillingPolicies: ['system'], publicCatalog: false }),
-  ...['suggest', 'extract'].map(mode => tokenAction({ id: `toolbox.extraction_${mode}`, module: 'toolbox', labelKey: 'toolboxExtraction', taskTypes: [`skill_toolbox_extraction_${mode}`], allowedBillingPolicies: ['user'] })),
+  // 资料转表格已下架，只保留计费动作用于历史用量展示。
+  ...['suggest', 'extract'].map(mode => tokenAction({ id: `toolbox.extraction_${mode}`, module: 'toolbox', labelKey: 'toolboxExtraction', taskTypes: [`skill_toolbox_extraction_${mode}`], allowedBillingPolicies: ['user'], publicCatalog: false })),
   tokenAction({ id: 'toolbox.translation', module: 'toolbox', labelKey: 'toolboxTranslation', taskTypes: ['skill_toolbox_translation'], allowedBillingPolicies: ['user'] }),
   tokenAction({ id: 'toolbox.summarize_text', module: 'toolbox', labelKey: 'toolboxSummarizeText', taskTypes: ['skill_toolbox_summarize_text'], allowedBillingPolicies: ['user'] }),
   tokenAction({ id: 'organize.metadata', module: 'organize', labelKey: 'organizeMetadata', taskTypes: ['organize_resource_metadata'], unit: 'item', maxUserProviderCalls: 1, maxPlatformProviderCalls: 1 }),

@@ -22,29 +22,21 @@
       </div>
       <div v-else-if="!items.length" class="task-list-state">{{ t('toolbox.taskList.empty') }}</div>
       <div v-else class="task-records">
-        <article v-for="job in items" :key="`${job.extraction ? 'extraction' : 'job'}:${job.id}`" class="task-record">
+        <article v-for="job in items" :key="job.id" class="task-record">
           <span class="task-record__icon"><SvgIcon :src="presentation(job).icon" size="22" /></span>
           <div class="task-record__copy">
             <div class="task-record__title">
               <BButton type="text" class="task-name" @click="open(job)">{{ title(job) }}</BButton>
-              <BChip
-                :tone="
-                  job.extraction?.status === 'paused'
-                    ? 'pending'
-                    : toolboxJobStatusTone(job.save.status === 'save_failed' ? 'failed' : job.status)
-                "
-                >{{ toolboxTaskStateLabel(job, t) }}</BChip
-              >
+              <BChip :tone="toolboxJobStatusTone(job.save.status === 'save_failed' ? 'failed' : job.status)">{{
+                toolboxTaskStateLabel(job, t)
+              }}</BChip>
             </div>
             <div class="task-record__meta">{{ t(`toolbox.tool.${job.toolId}.name`) }} · {{ date(job.updatedAt) }}</div>
-            <p v-if="job.extraction">{{
-              t('extraction.progress', { done: job.extraction.processed, total: job.extraction.total })
-            }}</p>
-            <p v-else-if="job.save.status === 'save_failed'">{{ t('toolbox.taskList.saveFailed') }}</p>
+            <p v-if="job.save.status === 'save_failed'">{{ t('toolbox.taskList.saveFailed') }}</p>
             <p v-else-if="job.status === 'failed'">{{
               t(toolboxErrorMessageKey(job.error, 'toolbox.task.processingFailed'))
             }}</p>
-            <small v-if="!job.title && !job.artifact && !job.extraction">{{ t('toolbox.taskList.legacy') }}</small>
+            <small v-if="!job.title && !job.artifact">{{ t('toolbox.taskList.legacy') }}</small>
           </div>
           <div class="task-record__actions">
             <BButton type="text" @click="open(job)"
@@ -93,7 +85,7 @@
   const route = useRoute(),
     router = useRouter(),
     user = useUserStore();
-  const keys: ToolboxTaskFilter[] = ['all', 'failed', 'active', 'paused', 'ready', 'finished'];
+  const keys: ToolboxTaskFilter[] = ['all', 'failed', 'active', 'ready', 'finished'];
   const filter = computed<ToolboxTaskFilter>(() =>
     keys.includes(route.query.filter as ToolboxTaskFilter) ? (route.query.filter as ToolboxTaskFilter) : 'all',
   );
@@ -140,11 +132,7 @@
   }
   function open(job: ToolboxJob) {
     remember();
-    void router.push(
-      job.extraction
-        ? { path: '/toolbox/extraction', query: { id: job.id } }
-        : `/toolbox/task/${encodeURIComponent(job.id)}`,
-    );
+    void router.push(`/toolbox/task/${encodeURIComponent(job.id)}`);
   }
   async function read(sequence: number, append: boolean) {
     if (disposed || sequence !== generation) return;
@@ -156,10 +144,8 @@
         ...(append && nextCursor.value ? { cursor: nextCursor.value } : {}),
       });
       if (sequence !== generation || disposed) return;
-      const known = new Set(
-        (append ? items.value : []).map((job) => `${job.extraction ? 'extraction' : 'job'}:${job.id}`),
-      );
-      const fresh = result.items.filter((job) => !known.has(`${job.extraction ? 'extraction' : 'job'}:${job.id}`));
+      const known = new Set((append ? items.value : []).map((job) => job.id));
+      const fresh = result.items.filter((job) => !known.has(job.id));
       items.value = append ? [...items.value, ...fresh] : fresh;
       nextCursor.value = result.nextCursor;
       pages = append ? pages + 1 : 1;

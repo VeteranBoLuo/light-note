@@ -1,11 +1,10 @@
 import mysql from 'mysql2/promise';
 import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { EXTRACTION_SCHEMA } from '../extraction/schema.js';
 import { listToolboxTaskPage } from './taskList.js';
 import { dismissToolboxJob, getToolboxJob, listToolboxHomeTasks } from './service.js';
 const socketPath = process.env.LIGHTNOTE_TEST_MYSQL_SOCKET;
-describe.skipIf(!socketPath)('task list across domains (isolated MySQL)', () => {
+describe.skipIf(!socketPath)('task list (isolated MySQL)', () => {
   const schema = `task_list_${randomUUID().replaceAll('-', '')}`;
   let admin, database;
   beforeAll(async () => {
@@ -13,7 +12,7 @@ describe.skipIf(!socketPath)('task list across domains (isolated MySQL)', () => 
     admin = await mysql.createConnection({ socketPath, user: 'root' });
     const [[state]] = await admin.query('SELECT @@global.skip_networking AS isolated');
     if (Number(state.isolated) !== 1) throw new Error('Disposable MySQL required');
-    // Production's legacy toolbox tables use general_ci; extraction installs unicode_ci explicitly.
+    // Production's legacy toolbox tables use general_ci.
     await admin.query(`CREATE DATABASE ${schema} CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci`);
     database = mysql.createPool({ socketPath, user: 'root', database: schema, dateStrings: true });
     await database.query(
@@ -28,17 +27,9 @@ describe.skipIf(!socketPath)('task list across domains (isolated MySQL)', () => 
     await database.query(
       `CREATE TABLE note(id VARCHAR(64),create_by VARCHAR(64),title VARCHAR(255),update_time DATETIME,del_flag INT)`,
     );
-    for (const sql of EXTRACTION_SCHEMA) await database.query(sql);
   });
   beforeEach(async () => {
-    for (const table of [
-      'toolbox_jobs',
-      'toolbox_artifacts',
-      'toolbox_job_inputs',
-      'note',
-      'toolbox_extractions',
-      'toolbox_extraction_sources',
-    ])
+    for (const table of ['toolbox_jobs', 'toolbox_artifacts', 'toolbox_job_inputs', 'note'])
       await database.query(`DELETE FROM ${table}`);
   });
   afterAll(async () => {
@@ -60,24 +51,13 @@ describe.skipIf(!socketPath)('task list across domains (isolated MySQL)', () => 
       create_time: '2026-08-29 10:42:00',
       ...values,
     });
-  const extraction = (id, values = {}) =>
-    database.query('INSERT INTO toolbox_extractions SET ?', {
-      id,
-      user_id: 'owner',
-      request_id: randomUUID(),
-      input_digest: '0'.repeat(64),
-      title: '提取表',
-      status: 'paused',
-      updated_at: '2026-10-14 10:00:00',
-      ...values,
-    });
-  it('includes an old failed task after recent paused extraction tasks, with stable global paging and owner isolation', async () => {
+  it('includes an old failed task after recent tasks, with stable paging and owner isolation', async () => {
     await job('old-failure');
     await job('foreign', { user_id: 'other', updated_at: '2026-10-26' });
     await job('hidden', { options_json: '{"homeDismissed":true}', updated_at: '2026-10-26' });
     await job('translation', { tool_id: 'translation', updated_at: '2026-10-26' });
-    await extraction('new-b');
-    await extraction('new-a');
+    await job('new-b', { status: 'succeeded', updated_at: '2026-10-14 10:00:00' });
+    await job('new-a', { status: 'succeeded', updated_at: '2026-10-14 10:00:00' });
     const first = await listToolboxTaskPage({ userId: 'owner', limit: 1, database });
     expect(first.items.map((item) => item.id)).toEqual(['new-b']);
     const second = await listToolboxTaskPage({ userId: 'owner', limit: 1, cursor: first.nextCursor, database });
@@ -88,25 +68,14 @@ describe.skipIf(!socketPath)('task list across domains (isolated MySQL)', () => 
     expect(
       (await listToolboxTaskPage({ userId: 'owner', filter: 'failed', database })).items.map((item) => item.id),
     ).toEqual(['old-failure']);
-    expect((await listToolboxTaskPage({ userId: 'owner', filter: 'paused', database })).items).toHaveLength(2);
   });
   it('keeps old failures in the home attention queue even beyond the recent scan window', async () => {
     await job('old');
     for (let index = 0; index < 53; index++)
       await job(`new-${index}`, { status: 'succeeded', updated_at: '2026-10-26' });
-    await extraction('paused');
     const home = await listToolboxHomeTasks({ userId: 'owner', database });
     expect(home.recent.some((item) => item.id === 'old')).toBe(false);
     expect(home.attention).toMatchObject([{ id: 'old', title: '阅读摘记' }]);
-  });
-  it('pages tied identities across legacy general and extraction unicode collations', async () => {
-    await job('same-id', { updated_at: '2026-10-14 10:00:00' });
-    await extraction('same-id');
-    const first = await listToolboxTaskPage({ userId: 'owner', limit: 1, database });
-    expect(first.items[0]).toMatchObject({ id: 'same-id', toolId: 'material_to_note' });
-    const second = await listToolboxTaskPage({ userId: 'owner', limit: 1, cursor: first.nextCursor, database });
-    expect(second.items[0]).toMatchObject({ id: 'same-id', toolId: 'extraction' });
-    expect(second.nextCursor).toBeNull();
   });
   it('dismisses from visible lists without changing billing or deleting the retained task', async () => {
     await job('failed', { billing_status: 'released' });

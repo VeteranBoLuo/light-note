@@ -58,6 +58,7 @@ export const TOOLBOX_RETIRED_TOOL_IDS: readonly string[] = Object.freeze([
   'data_workbench',
   'directory_index',
   'docx_to_markdown',
+  'extraction',
   'frontmatter_batch',
   'idea_to_draft',
   'image_optimizer',
@@ -97,7 +98,6 @@ export const TOOLBOX_PRESENTATION: Record<
   ToolboxToolId,
   { icon: string; category: ToolboxCategory; accent: 'violet' | 'blue' | 'amber' | 'teal' | 'rose' }
 > = {
-  extraction: { icon: icon.toolbox.table, category: 'knowledge', accent: 'violet' },
   translation: { icon: icon.language, category: 'knowledge', accent: 'violet' },
   forms: { icon: icon.toolbox.table, category: 'workspace', accent: 'teal' },
   research_workspace: { icon: icon.toolbox.research, category: 'workspace', accent: 'blue' },
@@ -162,7 +162,7 @@ export const TOOLBOX_HOME_GROUPS = [
     id: 'create',
     icon: icon.toolbox.materialNote,
     accent: 'violet',
-    toolIds: ['extraction', 'translation', 'material_to_note', 'study_kit'],
+    toolIds: ['translation', 'material_to_note', 'study_kit'],
   },
   {
     id: 'prepare',

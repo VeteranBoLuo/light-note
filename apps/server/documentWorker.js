@@ -1,4 +1,3 @@
-import { runSingleExtractionJob, cleanupExtractionMaterials } from './util/extraction/worker.js';
 import { withWorkerDiagnostics, withWorkerStage } from './util/workerDiagnostics.js';
 import { cleanupLegacyCloudObject } from './util/services/cloudLegacyObjectLifecycle.js';
 import { cloudMultipartUploads } from './util/services/cloudMultipartUploadService.js';
@@ -137,7 +136,6 @@ async function run() {
     pipelineLoop(
       'ai',
       rotatingQueue([
-        ['extraction', (worker) => runSingleExtractionJob(worker, pool, { phase: 'ai' })],
         ['toolbox', (worker) => runSingleToolboxJob(worker, pool, { runLocalProcessing: runMedia })],
         [
           'organize.ai.legacy',
@@ -171,7 +169,6 @@ async function run() {
         await withWorkerDiagnostics('periodic-cleanup', () =>
           withWorkerStage('toolbox.expire', () => cleanupExpiredToolboxData()),
         );
-        await withWorkerDiagnostics('periodic-cleanup', () => withWorkerStage('extraction.expire', () => cleanupExtractionMaterials()));
         lastCleanupAt = now;
       }
       if (!stopping) await wait(60 * 60 * 1000);
@@ -184,7 +181,6 @@ async function run() {
 }
 
 const rotatingDocumentQueue = rotatingQueue([
-  ['extraction.prepare', worker => runSingleExtractionJob(worker, pool, { phase: 'prepare' })],
   ['document', runSingleDocumentJob],
   ['file-preview', runSingleFilePreviewJob],
 ]);

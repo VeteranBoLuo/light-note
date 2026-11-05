@@ -6,7 +6,6 @@ import { annualReportZh } from './annualReport';
 import { MAKEUP_WINDOW_DAYS } from '@lightnote/shared';
 import { noteMathZh } from './noteMath';
 import { featureShortcutZh } from './featureShortcut';
-import { extractionZh } from './extraction';
 import { comparisonTableZh } from './comparisonTable';
 import { translationZh } from './translation';
 import { saveAsNoteZh } from './saveAsNote';
@@ -123,7 +122,6 @@ export default {
   },
 
   translation: translationZh,
-  extraction: extractionZh,
   saveAsNote: saveAsNoteZh,
   comparisonTable: comparisonTableZh,
   collectionForms: collectionFormsZh,
@@ -1329,7 +1327,7 @@ export default {
       legacy: '历史记录 · 未保留材料名称',
       appendFailed: '后续任务加载失败，已加载内容仍保留',
       end: '已显示此筛选下的全部任务',
-      filters: { all: '全部', failed: '失败', active: '进行中', paused: '已暂停', ready: '待保存', finished: '已结束' },
+      filters: { all: '全部', failed: '失败', active: '进行中', ready: '待保存', finished: '已结束' },
     },
     taskContext: {
       restartDismissFailed: '新任务已创建，但旧提醒移除失败，可稍后手动移除。',
@@ -1808,11 +1806,6 @@ export default {
       text: '文本与数据',
     },
     tool: {
-      extraction: {
-        name: '资料转表格',
-        description: 'AI 建议字段，提取条目并核对原文依据',
-        output: '可核对的结构化表格',
-      },
       translation: { name: '翻译', description: '完整翻译资料，保留结构并保存为笔记', output: '译文或双语对照笔记' },
       forms: {
         name: '公开收集',
