@@ -649,7 +649,8 @@
     claimAchievement,
     useProtectCard,
   } = useGrowth();
-  const growthV2Enabled = computed(() => growth.value?.features?.growthCenterV2 ?? import.meta.env.DEV);
+  // 成长中心 V2 已全量开放：只有服务端明确下发 false（应急回退）才显示旧版，加载期间不先闪旧版。
+  const growthV2Enabled = computed(() => growth.value?.features?.growthCenterV2 !== false);
   const pointsCenterEnabled = computed(() => growth.value?.features?.pointsCenter ?? import.meta.env.DEV);
   const claimableCount = computed(() => Number(claimable.value?.count || 0));
   const { achievementClaimableCount, claimAllTooltip, snapshotClaimableBreakdown, claimSuccessMessage } =

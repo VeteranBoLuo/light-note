@@ -1,5 +1,3 @@
-import crypto from 'node:crypto';
-
 export const NOTE_TREE_FEATURE = Object.freeze({
   READ: 'note_tree_read',
   WRITE: 'note_tree_write',
@@ -31,53 +29,18 @@ function explicitBoolean(value) {
   return null;
 }
 
-function defaultRolloutPercent(env = process.env) {
-  return normalizedText(env.NODE_ENV).toLowerCase() === 'production' ? 0 : 100;
-}
-
-function rolloutPercent(value, fallback = 100) {
-  if (value === undefined || value === null || normalizedText(value) === '') return fallback;
-  const number = Number(value);
-  if (!Number.isFinite(number)) return 0;
-  return Math.max(0, Math.min(100, Math.floor(number)));
-}
-
-function stableBucket(feature, subjectId) {
-  const digest = crypto.createHash('sha256').update(`${feature}:${subjectId}`).digest();
-  return digest.readUInt32BE(0) % 100;
-}
-
-function configuredTestUsers(env) {
-  return new Set(
-    normalizedText(env.NOTE_TREE_TEST_USER_IDS)
-      .split(',')
-      .map((item) => item.trim())
-      .filter(Boolean),
-  );
-}
-
+// 页面树已全量开放，不随 NODE_ENV 变化；显式 false 是事故急停，Root 也不能绕过。
 function rawFeatureEnabled(feature, identity = {}, env = process.env) {
   if (!FEATURE_SET.has(feature)) return false;
-  const prefix = ENV_PREFIX[feature];
-  const master = explicitBoolean(env[`${prefix}_ENABLED`]);
-  // 显式 false 是事故急停，Root/测试账号也不能绕过。
-  if (master === false) return false;
-
+  if (explicitBoolean(env[`${ENV_PREFIX[feature]}_ENABLED`]) === false) return false;
   const actor = identity.actor || {};
   const subject = identity.subject || actor;
-  const actorId = normalizedText(actor.id);
-  const subjectId = normalizedText(subject.id);
-  if (actor.role === 'root' || configuredTestUsers(env).has(actorId) || configuredTestUsers(env).has(subjectId)) {
-    return true;
-  }
-  if (!subjectId) return false;
-  const fallbackPercent = master === true ? 100 : defaultRolloutPercent(env);
-  return stableBucket(feature, subjectId) < rolloutPercent(env[`${prefix}_ROLLOUT_PERCENT`], fallbackPercent);
+  return actor.role === 'root' || Boolean(normalizedText(subject.id));
 }
 
 /**
  * 返回当前 actor/subject 的页面树能力快照。下游能力依赖上游能力：例如分析开关打开，
- * 但目录范围本身关闭时，分析仍必须失败关闭，不能形成绕过读取灰度的侧门。
+ * 但目录范围本身关闭时，分析仍必须失败关闭，不能形成绕过读取开关的侧门。
  */
 export function resolveNoteTreeFeatures(identity = {}, env = process.env) {
   const read = rawFeatureEnabled(NOTE_TREE_FEATURE.READ, identity, env);
@@ -110,7 +73,7 @@ export class NoteTreeFeatureError extends Error {
     this.name = 'NoteTreeFeatureError';
     this.code = 'NOTE_TREE_FEATURE_DISABLED';
     this.feature = feature;
-    // 灰度未命中不暴露功能存在性；客户端通过能力快照控制 UI。
+    // 关闭时不暴露功能存在性；客户端通过能力快照控制 UI。
     this.status = 404;
   }
 }
@@ -120,11 +83,3 @@ export function assertNoteTreeFeature(req, feature, env = process.env) {
   if (!features[feature]) throw new NoteTreeFeatureError(feature);
   return features;
 }
-
-export const __testing = Object.freeze({
-  FEATURE_NAMES,
-  defaultRolloutPercent,
-  explicitBoolean,
-  rolloutPercent,
-  stableBucket,
-});

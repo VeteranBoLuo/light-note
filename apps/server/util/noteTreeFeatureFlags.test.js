@@ -5,7 +5,6 @@ import {
   NoteTreeFeatureError,
   noteTreeFeatureIdentity,
   resolveNoteTreeFeatures,
-  __testing,
 } from './noteTreeFeatureFlags.js';
 
 const userIdentity = (id = 'user-1') => ({
@@ -13,17 +12,35 @@ const userIdentity = (id = 'user-1') => ({
   subject: { id, role: 'user' },
 });
 
-describe('noteTreeFeatureFlags', () => {
-  it('本地与测试默认完整开启，且下游开关依赖读取/写入能力', () => {
-    expect(resolveNoteTreeFeatures(userIdentity(), {})).toEqual({
-      note_tree_read: true,
-      note_tree_write: true,
-      note_tree_mobile: true,
-      note_tree_subtree_trash: true,
-      ai_note_branch_scope: true,
-      ai_note_branch_analysis: true,
-    });
+const ALL_ENABLED = Object.freeze({
+  note_tree_read: true,
+  note_tree_write: true,
+  note_tree_mobile: true,
+  note_tree_subtree_trash: true,
+  ai_note_branch_scope: true,
+  ai_note_branch_analysis: true,
+});
 
+describe('noteTreeFeatureFlags', () => {
+  it('未配置时在任何运行环境都完整开启，不依赖 NODE_ENV', () => {
+    for (const env of [{}, { NODE_ENV: 'production' }, { NODE_ENV: 'test' }]) {
+      expect(resolveNoteTreeFeatures(userIdentity(), env)).toEqual(ALL_ENABLED);
+    }
+    expect(resolveNoteTreeFeatures(userIdentity(), { NODE_ENV: 'production', NOTE_TREE_READ_ENABLED: 'true' })).toEqual(
+      ALL_ENABLED,
+    );
+    // 旧的百分比灰度变量已移除，残留配置不能让普通用户静默失去页面树。
+    expect(
+      resolveNoteTreeFeatures(userIdentity(), { NODE_ENV: 'production', NOTE_TREE_READ_ROLLOUT_PERCENT: '0' })
+        .note_tree_read,
+    ).toBe(true);
+  });
+
+  it('只有显式关闭才急停，Root 也不能绕过，下游能力随上游一起关闭', () => {
+    const root = { actor: { id: 'root-1', role: 'root' }, subject: { id: 'subject-1', role: 'user' } };
+    for (const value of ['false', '0', 'off', 'no']) {
+      expect(resolveNoteTreeFeatures(root, { NOTE_TREE_READ_ENABLED: value }).note_tree_read).toBe(false);
+    }
     expect(
       resolveNoteTreeFeatures(userIdentity(), {
         NOTE_TREE_READ_ENABLED: 'false',
@@ -38,80 +55,29 @@ describe('noteTreeFeatureFlags', () => {
       ai_note_branch_scope: false,
       ai_note_branch_analysis: false,
     });
-  });
-
-  it('生产环境默认关闭，Root/测试账号仍可先行验收', () => {
-    expect(resolveNoteTreeFeatures(userIdentity(), { NODE_ENV: 'production' })).toEqual({
-      note_tree_read: false,
+    expect(resolveNoteTreeFeatures(userIdentity(), { NOTE_TREE_WRITE_ENABLED: 'false' })).toEqual({
+      ...ALL_ENABLED,
       note_tree_write: false,
-      note_tree_mobile: false,
       note_tree_subtree_trash: false,
+    });
+    expect(resolveNoteTreeFeatures(userIdentity(), { AI_NOTE_BRANCH_SCOPE_ENABLED: 'false' })).toEqual({
+      ...ALL_ENABLED,
       ai_note_branch_scope: false,
       ai_note_branch_analysis: false,
     });
-    expect(
-      resolveNoteTreeFeatures(
-        { actor: { id: 'root-1', role: 'root' }, subject: { id: 'subject-1', role: 'user' } },
-        { NODE_ENV: 'production' },
-      ).note_tree_read,
-    ).toBe(true);
-    expect(
-      resolveNoteTreeFeatures(userIdentity('tester-1'), {
-        NODE_ENV: 'production',
-        NOTE_TREE_TEST_USER_IDS: 'tester-1',
-      }).note_tree_read,
-    ).toBe(true);
   });
 
-  it('显式开启可全量放行，也可与百分比灰度组合', () => {
-    expect(
-      resolveNoteTreeFeatures(userIdentity('enabled-user'), {
-        NODE_ENV: 'production',
-        NOTE_TREE_READ_ENABLED: 'true',
-      }).note_tree_read,
-    ).toBe(true);
-
-    const subjectId = 'rollout-user';
-    const bucket = __testing.stableBucket(NOTE_TREE_FEATURE.READ, subjectId);
-    expect(
-      resolveNoteTreeFeatures(userIdentity(subjectId), {
-        NODE_ENV: 'production',
-        NOTE_TREE_READ_ENABLED: 'true',
-        NOTE_TREE_READ_ROLLOUT_PERCENT: String(bucket),
-      }).note_tree_read,
-    ).toBe(false);
-    expect(
-      resolveNoteTreeFeatures(userIdentity(subjectId), {
-        NODE_ENV: 'production',
-        NOTE_TREE_READ_ENABLED: 'true',
-        NOTE_TREE_READ_ROLLOUT_PERCENT: String(bucket + 1),
-      }).note_tree_read,
-    ).toBe(true);
+  it('缺少资源身份时保持关闭，Root 不受影响', () => {
+    expect(resolveNoteTreeFeatures({}, {}).note_tree_read).toBe(false);
+    expect(resolveNoteTreeFeatures({ actor: { role: 'user' }, subject: { role: 'user' } }, {}).note_tree_read).toBe(
+      false,
+    );
+    expect(resolveNoteTreeFeatures({ actor: { role: 'root' }, subject: { role: 'visitor' } }, {}).note_tree_read).toBe(
+      true,
+    );
   });
 
-  it('按 subject ID 确定性分桶，同一用户结果稳定', () => {
-    const env = { NOTE_TREE_READ_ROLLOUT_PERCENT: '20' };
-    const first = resolveNoteTreeFeatures(userIdentity('stable-user'), env).note_tree_read;
-    for (let index = 0; index < 20; index += 1) {
-      expect(resolveNoteTreeFeatures(userIdentity('stable-user'), env).note_tree_read).toBe(first);
-    }
-    expect(__testing.stableBucket(NOTE_TREE_FEATURE.READ, 'stable-user')).toBeGreaterThanOrEqual(0);
-    expect(__testing.stableBucket(NOTE_TREE_FEATURE.READ, 'stable-user')).toBeLessThan(100);
-  });
-
-  it('Root 和测试账号跳过百分比分桶，但不能绕过显式急停', () => {
-    const root = { actor: { id: 'root-1', role: 'root' }, subject: { id: 'subject-1', role: 'user' } };
-    expect(resolveNoteTreeFeatures(root, { NOTE_TREE_READ_ROLLOUT_PERCENT: '0' }).note_tree_read).toBe(true);
-    expect(
-      resolveNoteTreeFeatures(userIdentity('tester-1'), {
-        NOTE_TREE_TEST_USER_IDS: 'tester-1,tester-2',
-        NOTE_TREE_READ_ROLLOUT_PERCENT: '0',
-      }).note_tree_read,
-    ).toBe(true);
-    expect(resolveNoteTreeFeatures(root, { NOTE_TREE_READ_ENABLED: 'false' }).note_tree_read).toBe(false);
-  });
-
-  it('管理员代管按 actor Root 放行、按 subject 形成资源身份', () => {
+  it('管理员代管按 actor 识别 Root、按 subject 形成资源身份', () => {
     const req = {
       user: { id: 'subject-1', role: 'user' },
       resourceUser: { id: 'subject-1', role: 'user' },
@@ -121,16 +87,14 @@ describe('noteTreeFeatureFlags', () => {
       actor: { id: 'root-1', role: 'root' },
       subject: { id: 'subject-1', role: 'user' },
     });
-    expect(assertNoteTreeFeature(req, NOTE_TREE_FEATURE.READ, { NOTE_TREE_READ_ROLLOUT_PERCENT: '0' })).toBeTruthy();
+    expect(assertNoteTreeFeature(req, NOTE_TREE_FEATURE.READ, { NODE_ENV: 'production' })).toBeTruthy();
   });
 
-  it('未命中灰度时返回不暴露功能存在性的稳定错误', () => {
+  it('关闭时返回不暴露功能存在性的稳定错误', () => {
     expect(() =>
-      assertNoteTreeFeature(
-        { user: { id: 'user-1', role: 'user' } },
-        NOTE_TREE_FEATURE.WRITE,
-        { NOTE_TREE_WRITE_ENABLED: 'false' },
-      ),
+      assertNoteTreeFeature({ user: { id: 'user-1', role: 'user' } }, NOTE_TREE_FEATURE.WRITE, {
+        NOTE_TREE_WRITE_ENABLED: 'false',
+      }),
     ).toThrowError(expect.objectContaining({ code: 'NOTE_TREE_FEATURE_DISABLED', status: 404 }));
     expect(new NoteTreeFeatureError(NOTE_TREE_FEATURE.READ).feature).toBe(NOTE_TREE_FEATURE.READ);
   });

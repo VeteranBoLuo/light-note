@@ -79,7 +79,7 @@ export const getMyGrowth = async (req, res) => {
     const userRole = req.user?.role || 'visitor';
     const growth = await getGrowth(userId, { userRole });
     growth.features = {
-      growthCenterV2: isGrowthCenterV2Enabled({ userId, userRole }),
+      growthCenterV2: isGrowthCenterV2Enabled(),
       pointsCenter: getPointsEarningRuntime().pointsCenterEnabled,
       manor: knowledgeManorEnabled() && canEnterManor(userRole) && !req.adminContext,
     };
