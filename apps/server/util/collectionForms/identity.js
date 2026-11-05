@@ -33,7 +33,8 @@ export function renewIdentity(res, identity) {
   const value = `${id}.${Date.now() + TTL}`;
   res.cookie(COOKIE, `${value}.${signature(value)}`, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
+    // 与登录 Cookie 同一规则：线上没设 NODE_ENV，按它判断会漏掉 Secure。
+    secure: process.env.SECURE_COOKIE != null ? process.env.SECURE_COOKIE === '1' : process.platform === 'linux',
     sameSite: 'lax',
     path: '/api/public/forms',
     maxAge: TTL,

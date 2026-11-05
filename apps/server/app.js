@@ -52,6 +52,7 @@ import { getUploadStaticDirectories } from './util/bookmarkIconStorage.js';
 import { startAccountDeletionCleanupScheduler } from './util/accountDeletion.js';
 import { startOperationalLogRetentionScheduler } from './util/operationalLogRetention.js';
 import { requestTraceMiddleware } from './util/requestTrace.js';
+import { httpErrorHandler } from './util/httpErrorHandler.js';
 import { ensureResourceGovernanceSchema } from './util/resourceGovernanceSchema.js';
 import { ensureCommunityChatSchema } from './util/communityChatSchema.js';
 import { registerCommunityChatRealtimeHub } from './util/communityChat/realtimeHub.js';
@@ -123,6 +124,8 @@ allRouter.forEach((item) => {
 for (const directory of getUploadStaticDirectories(process.env)) {
   app.use('/uploads', express.static(directory));
 }
+// 必须挂在全部路由之后：兜住未捕获异常，避免默认错误页向客户端回显堆栈。
+app.use(httpErrorHandler);
 
 startSessionMaintenance();
 // 安全策略与复核接口依赖新增列和策略表，启动监听前先完成幂等迁移，避免首批请求撞上半初始化 Schema。
