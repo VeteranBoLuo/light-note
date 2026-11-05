@@ -1,4 +1,4 @@
-import { apiBaseDelete, apiBaseGet, apiBasePost, type ApiResponse } from '@/http/request';
+import { apiBaseGet, apiBasePost, type ApiResponse } from '@/http/request';
 
 export type OrganizeIssueType = 'untagged' | 'duplicate_bookmark' | 'bookmark_health';
 export type OrganizeResourceType = 'bookmark' | 'note' | 'file';
@@ -180,12 +180,6 @@ export interface BookmarkHealthSummary {
   suspect: BookmarkHealthItem[];
 }
 
-export interface OrganizeIssueListResponse<T> {
-  items: T[];
-  nextCursor: string | null;
-  hasMore: boolean;
-}
-
 export interface OrganizeAiSuggestionTag {
   evidence?: string;
   evidenceRef?: string;
@@ -208,9 +202,6 @@ export const getOrganizeIssueList = (
 export const ignoreUntaggedResources = (items: Array<{ resourceType: OrganizeResourceType; resourceId: string }>) =>
   apiBasePost('/api/organize/untagged/ignore', { items }, { silent: true });
 
-export const unignoreUntaggedResources = (items: Array<{ resourceType: OrganizeResourceType; resourceId: string }>) =>
-  apiBaseDelete('/api/organize/untagged/ignore', { items }, { silent: true });
-
 export const getDuplicateBookmarkPreview = (groupKey: string) =>
   apiBaseGet(`/api/organize/duplicate-bookmarks/${groupKey}/preview`, undefined, { silent: true });
 
@@ -228,9 +219,6 @@ export const resolveDuplicateBookmarks = (
 export const ignoreDuplicateBookmarks = (groupKey: string) =>
   apiBasePost(`/api/organize/duplicate-bookmarks/${groupKey}/ignore`, {}, { silent: true });
 
-export const unignoreDuplicateBookmarks = (groupKey: string) =>
-  apiBaseDelete(`/api/organize/duplicate-bookmarks/${groupKey}/ignore`, undefined, { silent: true });
-
 export const getBookmarkHealth = ({ includeSuspect = true }: { includeSuspect?: boolean } = {}) =>
   apiBaseGet('/api/organize/bookmark-health', { includeSuspect: includeSuspect ? 1 : 0 }, { silent: true });
 export const startBookmarkHealthScan = () => apiBasePost('/api/organize/bookmark-health/scan', {}, { silent: true });
@@ -238,5 +226,3 @@ export const recheckBookmarkHealth = (bookmarkId: string) =>
   apiBasePost(`/api/organize/bookmark-health/${bookmarkId}/recheck`, {}, { silent: true });
 export const markBookmarkHealthNormal = (bookmarkId: string) =>
   apiBasePost(`/api/organize/bookmark-health/${bookmarkId}/mark-normal`, {}, { silent: true });
-export const unmarkBookmarkHealthNormal = (bookmarkId: string) =>
-  apiBaseDelete(`/api/organize/bookmark-health/${bookmarkId}/mark-normal`, undefined, { silent: true });

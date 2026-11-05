@@ -203,4 +203,3 @@ export function usePublicationSubmission(onComplete: (rows: PublicBatchRow[]) =>
     reset,
   };
 }
-export type PublicationSubmission = ReturnType<typeof usePublicationSubmission>;

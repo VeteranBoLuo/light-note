@@ -24,35 +24,6 @@ export { OFFICIAL_HOST } from '@lightnote/shared';
  */
 export { ANDROID_RELEASE, ANDROID_LATEST_APK_PATH } from '@lightnote/shared';
 
-export interface AndroidReleaseInfo {
-  /** 用户可见版本号 */
-  versionName: string;
-  /** 内部版本号,每次发布必须递增 */
-  versionCode: number;
-  /** 正式包名,首次发布后不可更换 */
-  packageName: string;
-  /** 发布日期(本地时区,YYYY-MM-DD) */
-  releaseDate: string;
-  /** APK 字节数,用于展示文件大小 */
-  fileSizeBytes: number;
-  /** 线上 APK 的 SHA-256,必须取自最终上线文件 */
-  sha256: string;
-  /** 正式签名证书 SHA-256 指纹 */
-  certificateSha256: string;
-  /** 下载路径(带版本号的不可变地址,不用会被覆盖的匿名文件名) */
-  downloadPath: string;
-  /** 最低系统版本 */
-  minAndroidVersion: string;
-  /** 原生权限清单 */
-  permissions: readonly string[];
-  /**
-   * APK 是否已经真的躺在线上可下载路径里。
-   * false 时下载按钮显示「准备中」且不可点,用于「已备案未发布」这一过渡状态,
-   * 避免按钮指向一个还没上传或只上传了一半的文件。
-   */
-  released: boolean;
-}
-
 /** 把字节数格式化成 MB,下载页展示文件大小用。 */
 export function formatFileSize(bytes: number): string {
   return `${(bytes / 1024 / 1024).toFixed(2)} MB`;

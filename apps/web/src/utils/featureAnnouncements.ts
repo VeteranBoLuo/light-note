@@ -83,15 +83,3 @@ export function shouldShowFeatureAnnouncement(options: {
   }
   return featureAnnouncementSeenVersion(options.preferences, announcement.id) !== announcement.version;
 }
-
-export function millisecondsUntilFeatureAnnouncementBoundary(announcementId: string, now: number | Date = Date.now()) {
-  const announcement = getFeatureAnnouncement(announcementId);
-  if (!announcement) return 0;
-  const timestamp = now instanceof Date ? now.getTime() : Number(now);
-  const publishedAt = Date.parse(announcement.publishedAt);
-  const expiresAt = Date.parse(announcement.expiresAt);
-  if (!Number.isFinite(timestamp) || !Number.isFinite(publishedAt) || !Number.isFinite(expiresAt)) return 0;
-  if (timestamp < publishedAt) return publishedAt - timestamp;
-  if (timestamp < expiresAt) return expiresAt - timestamp;
-  return 0;
-}

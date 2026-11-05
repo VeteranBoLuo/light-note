@@ -257,10 +257,8 @@ describe('笔记库页面树交互接线', () => {
 
   it('笔记根节点在中英文界面统一命名为“笔记库”', () => {
     expect(zhLocaleSource).toContain("knowledgeRoot: '笔记库'");
-    expect(zhLocaleSource).toContain("useRoot: '改存到笔记库'");
     expect(zhLocaleSource).not.toContain("knowledgeRoot: '我的知识库'");
     expect(enLocaleSource).toContain("knowledgeRoot: 'Note Library'");
-    expect(enLocaleSource).toContain("useRoot: 'Move to Note Library'");
   });
 
   it('宽屏 AI 侧栏以稳定零宽轨道平滑收展，不再用 display none 瞬切', () => {

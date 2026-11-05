@@ -61,15 +61,6 @@ export function isEmpty(val: unknown): boolean {
 }
 
 /**
- * 判断元素是否为当前聚焦元素
- * @param element DOM 元素
- * @returns 是否聚焦
- */
-export function isFocused(element: Element): boolean {
-  return document.activeElement === element;
-}
-
-/**
  * 基础邮箱格式校验。用于不依赖第三方表单组件的轻量表单场景。
  */
 export function isValidEmail(value: string): boolean {

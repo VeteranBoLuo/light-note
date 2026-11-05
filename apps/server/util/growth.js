@@ -29,7 +29,6 @@ import {
   applyAchievementEarningPolicy,
   achievementPolicyVersionForRuntime,
   checkinPointsForStreak,
-  dailyClaimRef,
   dailyClaimRefCandidates,
   earningWritesEnabled,
   earningPolicyVersionForDay,
@@ -177,10 +176,6 @@ function dateFromDayKey(key) {
 // 补签候选:今天之前的补签窗口，按由近到远排序。补签只补签到记录，不补经验/积分/里程碑。
 export function getMakeupCandidateDays(now = new Date()) {
   return Array.from({ length: MAKEUP_WINDOW_DAYS }, (_, index) => dayKey(addCalendarDays(now, -(index + 1))));
-}
-
-export function isMakeupCandidateDay(key, now = new Date()) {
-  return !!dateFromDayKey(key) && getMakeupCandidateDays(now).includes(key);
 }
 
 function countStreakEndingAt(daySet, endDay) {
@@ -1359,59 +1354,6 @@ export async function getGrowthDashboard(userId, { userRole = null, db = pool, c
     timeline,
     streakMilestones,
     currentStreak: curStreak,
-  };
-}
-
-/**
- * 领取今日任务的所有可领阶段奖励；每阶段独立幂等。
- * 后端二次核算任务完成状态,防前端伪造;游客不发。
- * 满级仍照常发放经验与积分，等级由 levelForExp() 钳制。
- */
-export async function claimDailyQuestBonus(userId, { userRole = null, calendar = null } = {}) {
-  if (isVisitorGrowthActor(userId, userRole)) return { ok: false, reason: 'visitor' };
-  const accountCalendar = calendar || (await getGrowthCalendarContext(userId));
-  const g = await getGrowth(userId, { userRole, calendar: accountCalendar });
-  const today = accountCalendar.dayKey;
-  const policyVersion = await resolveDailyEarningPolicyVersion(today, { lock: true });
-  if (!earningWritesEnabled(policyVersion)) return { ok: false, reason: 'earning_paused' };
-  const dailyStages = resolveDailyQuestStages(policyVersion);
-  const { completedCount } = await getDailyQuestState(userId, g, { calendar: accountCalendar, policyVersion });
-  if (completedCount < dailyStages[0].required) return { ok: false, reason: 'incomplete' };
-
-  let expGained = 0;
-  let pointsEarned = 0;
-  let eligibleCount = 0;
-  let duplicateCount = 0;
-  let leveledUp = false;
-  for (const stage of dailyStages.filter((item) => completedCount >= item.required)) {
-    eligibleCount++;
-    const ref = dailyClaimRef(today, stage.required, policyVersion);
-    const grant = await grantExp(userId, stage.source, {
-      day: today,
-      amount: stage.exp,
-      userRole,
-      calendar: accountCalendar,
-    });
-    const gotPoints = await earnPoints(userId, stage.points, 'quest', ref, pool, {
-      policyVersion,
-      meta: { stage: stage.key, required: stage.required },
-    });
-    if (!gotPoints && grant.duplicated) duplicateCount++;
-    expGained += Number(grant.granted || 0);
-    if (gotPoints) pointsEarned += stage.points;
-    leveledUp ||= Boolean(grant.leveledUp);
-  }
-  if (eligibleCount > 0 && duplicateCount === eligibleCount) {
-    return { ok: true, already: true, growth: await getGrowth(userId, { userRole, calendar: accountCalendar }) };
-  }
-  return {
-    ok: true,
-    expGained,
-    pointsEarned,
-    // capped 专指「今日经验已达上限被截断」。
-    capped: expGained === 0,
-    leveledUp,
-    growth: await getGrowth(userId, { userRole, calendar: accountCalendar }),
   };
 }
 

@@ -68,5 +68,3 @@ export function saveNoteDraft(draft: NoteDraft): Promise<void> {
 export function clearNoteDraft(): Promise<void> {
   return chrome.storage.local.remove(STORAGE_KEYS.noteDraft);
 }
-
-export const extensionStorageKeys = STORAGE_KEYS;

@@ -242,24 +242,6 @@ export interface LotteryStatus {
   };
 }
 
-export interface LotteryDrawResult {
-  ok: boolean;
-  reason?: string;
-  msg?: string;
-  cost?: number;
-  free?: boolean;
-  points?: number;
-  results?: LotteryPrize[];
-  pityTriggered?: boolean;
-  pityHitIndexes?: number[]; // 本批次内命中保底的序号，从 1 开始
-  pityProgressBefore?: number;
-  pityProgressAfter?: number;
-  nextPityIn?: number;
-  economyVersion?: string;
-  mode?: 'free' | 'paid';
-  idempotent?: boolean;
-}
-
 export interface WeeklyChallenge {
   key: string;
   metric: string;

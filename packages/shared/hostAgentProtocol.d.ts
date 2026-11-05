@@ -36,8 +36,6 @@ export declare const HOST_AGENT_ACTIONS: {
   readonly NGINX_RELOAD: "nginx.reload";
   readonly SERVICE_RESTART: "service.restart";
 };
-export declare const HOST_AGENT_SERVICE_STATES: readonly HostAgentServiceState[];
-export declare const HOST_AGENT_JOB_STATES: readonly HostAgentJobState[];
 
 export declare class HostAgentProtocolError extends Error {
   code: string;

@@ -138,12 +138,3 @@ export function hasLoggedInBefore(): boolean {
     return false;
   }
 }
-
-/** 清除「曾登录」标记（如登录页的「退出并清除登录记忆」入口）。 */
-export function clearLoggedIn(): void {
-  try {
-    localStorage.removeItem(LOGGED_IN_KEY);
-  } catch {
-    // 静默忽略
-  }
-}

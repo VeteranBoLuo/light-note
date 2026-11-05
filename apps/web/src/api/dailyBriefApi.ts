@@ -80,12 +80,6 @@ export interface DailyBriefState {
   pauseReason?: 'manual' | 'quota' | 'budget' | null;
 }
 
-export interface DailyBriefPreference {
-  featureEnabled: boolean;
-  enabled: boolean;
-  autoUpdate?: boolean;
-}
-
 export const getDailyBrief = (options: { check?: boolean } = {}) =>
   apiBaseGet('/api/workbench/daily-brief', options.check ? { check: '1' } : undefined, { silent: true });
 

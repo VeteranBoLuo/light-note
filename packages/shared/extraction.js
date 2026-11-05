@@ -9,20 +9,11 @@ export const EXTRACTION_LIMITS = Object.freeze({
   windows: 250,
   cellCharacters: 1000,
 });
-export const EXTRACTION_FIELD_TYPES = Object.freeze(["text", "number", "date"]);
 export const EXTRACTION_ACTIVE_STATUSES = Object.freeze([
   "preparing",
   "queued",
   "analyzing",
   "processing",
-]);
-export const EXTRACTION_CELL_STATUSES = Object.freeze([
-  "found",
-  "missing",
-  "unavailable",
-  "conflict",
-  "format_error",
-  "evidence_incomplete",
 ]);
 export function extractionCurrentValue(cell, review) {
   return review?.overridden === true ? review.value : cell.originalValue;

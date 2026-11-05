@@ -51,14 +51,6 @@ const ALLOWED_TAGS = [
   'td',
 ];
 
-function safeAnchorPart(value: string) {
-  return String(value || '')
-    .trim()
-    .replace(/[^a-zA-Z0-9_-]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 64);
-}
-
 const CJK_URL_SENTENCE_BOUNDARY = /[，。；：！？、）】》」』”’]/u;
 
 function canonicalHttpUrl(value: string) {
@@ -129,12 +121,6 @@ export function repairAiBareUrlBoundaries(html: string): string {
     anchor.after(document.createTextNode(trailingText));
   }
   return root.innerHTML;
-}
-
-export function getAiEvidenceAnchorId(citationKey: string, scope = ''): string {
-  const safeScope = safeAnchorPart(scope);
-  const safeKey = safeAnchorPart(citationKey);
-  return `ai-evidence-${safeScope ? `${safeScope}-` : ''}${safeKey || 'unknown'}`;
 }
 
 /**

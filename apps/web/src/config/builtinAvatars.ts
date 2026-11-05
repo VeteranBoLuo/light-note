@@ -246,8 +246,6 @@ export const BUILTIN_AVATARS: readonly BuiltinAvatar[] = [
   },
 ] as const;
 
-export const BUILTIN_AVATAR_SPRITE_URL = avatarSpriteUrl;
-
 export function builtinAvatarPreviewStyle(avatar: BuiltinAvatar) {
   const sprite = AVATAR_SPRITES[avatar.sprite];
   return {

@@ -117,16 +117,6 @@ function calcScore(item: SearchResultItem, keyword: string): number {
   return 0;
 }
 
-// 顶栏下拉用:后端按 sort/时间返回,精确匹配可能排不进前几条。
-// 复用结果页同一套 calcScore 按匹配度重排(分数相同保持后端原顺序,稳定)。
-export function rankByRelevance(items: SearchResultItem[], keyword: string): SearchResultItem[] {
-  if (!keyword.trim()) return items;
-  return items
-    .map((item, index) => ({ item, index, score: calcScore(item, keyword) }))
-    .sort((a, b) => b.score - a.score || a.index - b.index)
-    .map((entry) => entry.item);
-}
-
 export function mapDisplayItems(items: SearchResultItem[], keyword: string): DisplaySearchItem[] {
   return items.map((item, index) => {
     const rawTime = item.origin === 'public' ? item.publicResource?.publishedAt || '' : getRawTime(item.raw);
@@ -146,42 +136,6 @@ export function mapDisplayItems(items: SearchResultItem[], keyword: string): Dis
       fileMeta: extractFileMeta(item.raw),
       searchScore: calcScore(item, keyword),
     };
-  });
-}
-
-export function filterByDate(item: DisplaySearchItem, range: ResourceDate): boolean {
-  if (range === 'all') return true;
-  if (!item.updatedAtMs) return false;
-  return Date.now() - item.updatedAtMs <= DATE_RANGE_MS[range];
-}
-
-export function filterByTags(item: DisplaySearchItem, selectedTags: string[]): boolean {
-  if (!selectedTags.length) return true;
-  if (!item.tagNames.length) return false;
-  return selectedTags.some((tag) => item.tagNames.includes(tag));
-}
-
-export function filterByUntagged(item: DisplaySearchItem, untagged: boolean): boolean {
-  if (!untagged) return true;
-  if (item.type === 'tag') return false;
-  return item.tagNames.length === 0;
-}
-
-export function sortDisplayItems(items: DisplaySearchItem[], sort: ResourceSort): DisplaySearchItem[] {
-  if (sort === 'relevance') {
-    return [...items].sort((a, b) => {
-      if (a.searchScore !== b.searchScore) return b.searchScore - a.searchScore;
-      return a.originalIndex - b.originalIndex;
-    });
-  }
-  if (sort === 'name') {
-    return [...items].sort((a, b) => a.title.localeCompare(b.title, 'zh-Hans-CN', { sensitivity: 'base' }));
-  }
-  return [...items].sort((a, b) => {
-    if (!a.updatedAtMs && !b.updatedAtMs) return 0;
-    if (!a.updatedAtMs) return 1;
-    if (!b.updatedAtMs) return -1;
-    return b.updatedAtMs - a.updatedAtMs;
   });
 }
 

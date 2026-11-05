@@ -128,5 +128,4 @@ export const PUBLIC_RESOURCE_LIMITS: Readonly<{
   workspace: number;
 }>;
 export const PUBLIC_RESOURCE_KINDS: readonly PublicResourceKind[];
-export const PUBLIC_RESOURCE_STATUSES: readonly PublicResourceStatus[];
 export const PUBLIC_RESOURCE_REVIEW_CATEGORIES: readonly string[];

@@ -11,14 +11,6 @@ export const PUBLIC_RESOURCE_LIMITS = Object.freeze({
   workspace: 1000,
 });
 export const PUBLIC_RESOURCE_KINDS = Object.freeze(["bookmark", "note"]);
-export const PUBLIC_RESOURCE_STATUSES = Object.freeze([
-  "ai_checking",
-  "pending_review",
-  "published",
-  "rejected",
-  "withdrawn",
-  "removed",
-]);
 export const PUBLIC_RESOURCE_REVIEW_CATEGORIES = Object.freeze([
   "ads",
   "spam",

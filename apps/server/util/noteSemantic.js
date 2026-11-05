@@ -437,7 +437,3 @@ export function noteQuestionNeedsImageOcr(question, document) {
     (Number(document.checklist?.total || 0) === 0 && text.length < 80)
   );
 }
-
-export function noteQuestionNeedsTaskDetails(question) {
-  return TASK_INTENT_PATTERN.test(String(question || ''));
-}

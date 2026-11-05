@@ -23,8 +23,6 @@ export interface AnnualReportDefinition {
 
 export declare const ANNUAL_REPORT_CHAPTERS: readonly AnnualReportChapter[];
 export declare const ANNUAL_REPORT_LIGHT_CHAPTERS: readonly AnnualReportChapter[];
-export declare const ANNUAL_REPORT_RECORD_TYPES: readonly AnnualReportRecordType[];
-export declare const ANNUAL_REPORT_TITLE_MODIFIERS: readonly AnnualReportTitleModifier[];
 export declare const ANNUAL_REPORTS: Readonly<Record<number, AnnualReportDefinition>>;
 export declare function getAnnualReportDefinition(year: unknown): AnnualReportDefinition | null;
 export declare function isAnnualReportOpen(

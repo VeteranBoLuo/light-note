@@ -576,7 +576,3 @@ export async function parseDocumentBuffer(buffer, descriptor, options = {}) {
     throw error;
   }
 }
-
-export function getSupportedDocumentAccept() {
-  return AI_DOCUMENT_SUPPORTED_EXTENSIONS.join(',');
-}

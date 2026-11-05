@@ -630,22 +630,6 @@ export async function createToolboxJob({ userId, quoteId, clientRequestId, sourc
   }
 }
 
-export async function listToolboxJobs({ userId, limit = 20, database = pool }) {
-  const take = Math.max(1, Math.min(50, Math.floor(Number(limit) || 20)));
-  const [rows] = await database.query(
-    `SELECT job.*, artifact.artifact_type, artifact.title AS artifact_title,
-            artifact.content_type AS artifact_content_type, artifact.artifact_version,
-            artifact.status AS artifact_status, artifact.expires_at AS artifact_expires_at
-       FROM toolbox_jobs job
-       LEFT JOIN toolbox_artifacts artifact ON artifact.id = job.artifact_id
-      WHERE job.user_id = ? AND job.tool_id <> 'translation' AND ${taskVisibleSql()}
-      ORDER BY job.create_time DESC, job.id DESC
-      LIMIT ?`,
-    [userId, take],
-  );
-  return (await hydrateTaskIdentities(database, userId, rows)).map((row) => formatJob(row));
-}
-
 // Translation history is independent of the workshop overview and paginated before formatting.
 // Soft deletion affects translation history only; billing and note receipts remain authoritative.
 export async function deleteTranslationHistory({ userId, jobIds, all = false, database = pool }) {

@@ -10,7 +10,6 @@ const sources = vi.hoisted(() => ({
   inbox: vi.fn(),
   untagged: vi.fn(),
   workshop: vi.fn(),
-  materials: vi.fn(),
   extractionReady: vi.fn(),
 }));
 vi.mock('./dailyBriefTodoFacts.js', () => ({ compileBriefTodoFacts: sources.todos }));
@@ -18,7 +17,6 @@ vi.mock('./organizeReviewSummary.js', () => ({ summarizePendingOrganizeReview: s
 vi.mock('../resourceInbox.js', () => ({ listInboxResources: sources.inbox }));
 vi.mock('./resourceInventoryService.js', () => ({ summarizeUntaggedResources: sources.untagged }));
 vi.mock('./dailyBriefWorkshop.js', () => ({ compileWorkshopBriefFacts: sources.workshop }));
-vi.mock('../aiSkill/resourceEvidence.js', () => ({ loadPreparedResourceExcerpts: sources.materials }));
 vi.mock('../extraction/schema.js', async (importOriginal) => ({
   ...(await importOriginal()),
   extractionSchemaReady: sources.extractionReady,
@@ -50,7 +48,6 @@ beforeEach(() => {
   });
   sources.untagged.mockResolvedValue({ total: 510, revision: 'untagged-revision' });
   sources.workshop.mockResolvedValue([]);
-  sources.materials.mockResolvedValue([]);
   sources.extractionReady.mockResolvedValue(false);
 });
 
@@ -109,9 +106,7 @@ it('所有待处理来源为空时保持安静，查询失败不能伪装成没�
 });
 
 it('行动建议编译不读取资料正文，详情读取器不可用也不影响工作台事实', async () => {
-  sources.materials.mockRejectedValue(new Error('must not read content'));
   const facts = await compileDailyBriefFacts(database(), 'owner', calendar);
-  expect(sources.materials).not.toHaveBeenCalled();
   expect(facts.some((fact) => fact.id === 'organize_pending' && fact.count === 4)).toBe(true);
   expect(JSON.stringify(facts)).not.toContain('不应被扩写');
 });

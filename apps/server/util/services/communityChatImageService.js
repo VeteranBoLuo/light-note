@@ -2,7 +2,6 @@ import { createHash, randomUUID } from 'node:crypto';
 import fs from 'node:fs/promises';
 import {
   COMMUNITY_CHAT_ATTACHMENT_PENDING_HOURS,
-  COMMUNITY_CHAT_ATTACHMENT_RETENTION_DAYS,
 } from '@lightnote/shared/community-chat-attachments';
 import { validateCommunityChatGif } from '../communityChatGif.js';
 import { safeImageSize } from '../safeImageSize.js';
@@ -25,7 +24,6 @@ import {
 import { assertCommunityChatPostingAllowed } from './communityChatModerationService.js';
 
 export const COMMUNITY_CHAT_IMAGE_PENDING_HOURS = COMMUNITY_CHAT_ATTACHMENT_PENDING_HOURS;
-export const COMMUNITY_CHAT_IMAGE_RETENTION_DAYS = COMMUNITY_CHAT_ATTACHMENT_RETENTION_DAYS;
 
 export { COMMUNITY_CHAT_IMAGE_MAX_BYTES, COMMUNITY_CHAT_IMAGE_MAX_COUNT, COMMUNITY_CHAT_IMAGE_MAX_PENDING_PER_USER };
 

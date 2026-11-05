@@ -438,15 +438,6 @@ export const logoutCurrentSession = async (req, res) => {
   clearAuthCookie(res);
 };
 
-export const requireRole = (...roles) => {
-  return (req, res, next) => {
-    if (!req.user?.id || !roles.includes(req.user.role)) {
-      return res.send(resultData(null, 403, '没有操作权限'));
-    }
-    return next();
-  };
-};
-
 // 游客只读预览守卫：游客（或无身份）执行写操作时，返回 status 'preview' 触发前端注册软引导。
 // 注意：必须用 'preview'，不能用 401/403/'visitor'——前端 request.ts 把这些当作会话过期/硬错误，
 // 只有 'preview' 才会派发 light-note:preview-blocked 弹注册引导。

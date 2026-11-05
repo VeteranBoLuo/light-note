@@ -452,12 +452,6 @@ export function getAchievementFrameByKey(key) {
   return FRAME_CATALOG.find((item) => item.acquisition === 'achievement' && item.achievementKey === key) || null;
 }
 
-// ============================================================================
-export async function getPoints(userId) {
-  const [rows] = await pool.query('SELECT points FROM user_growth WHERE user_id = ? LIMIT 1', [userId]);
-  return Number(rows[0]?.points || 0);
-}
-
 // 赚取积分。ref 非空时按 (user_id, reason, ref) 幂等(签到/任务按天只发一次)。
 // 需在调用方已确保 user_growth 行存在;可传入事务连接 conn。
 export async function earnPoints(
@@ -547,11 +541,6 @@ export async function earnStorage(userId, mb, reason, ref = null, conn = pool) {
   ]);
   await conn.query('UPDATE user_growth SET storage_bonus_mb = storage_bonus_mb + ? WHERE user_id = ?', [mb, userId]);
   return true;
-}
-
-export async function getStorageBonus(userId) {
-  const [rows] = await pool.query('SELECT storage_bonus_mb FROM user_growth WHERE user_id = ? LIMIT 1', [userId]);
-  return Number(rows[0]?.storage_bonus_mb || 0);
 }
 
 // ============================================================================
@@ -1204,11 +1193,6 @@ export async function getClaimedLimitedShopItemIds(userId, conn = pool) {
   return [...new Set(rows.map((row) => row.itemId || row.item_id).filter(Boolean))];
 }
 
-export async function getEquippedTitle(userId) {
-  const [rows] = await pool.query('SELECT equipped_title FROM user_growth WHERE user_id = ? LIMIT 1', [userId]);
-  return rows[0]?.equipped_title || null;
-}
-
 // 购买:事务内校验余额/真实等级/上限/是否已拥有 → 扣分 → 生效 → 记流水
 export async function buyItem(
   userId,
@@ -1483,11 +1467,6 @@ export async function equipFrame(userId, frameId, { userRole = null } = {}) {
   if (!owned.length) return { ok: false, reason: 'not_owned', msg: '未拥有该装扮' };
   await pool.query('UPDATE user_growth SET equipped_frame = ? WHERE user_id = ?', [frameId, userId]);
   return { ok: true, equipped: frameId };
-}
-
-export async function getEquippedFrame(userId) {
-  const [rows] = await pool.query('SELECT equipped_frame FROM user_growth WHERE user_id = ? LIMIT 1', [userId]);
-  return rows[0]?.equipped_frame || null;
 }
 
 export async function equipBackground(userId, backgroundId) {

@@ -62,7 +62,6 @@ vi.mock('../util/toolbox/service.js', () => ({
   getToolboxCatalog: vi.fn(),
   getToolboxJob: vi.fn(),
   listToolboxHomeTasks: mocks.listToolboxHomeTasks,
-  listToolboxJobs: vi.fn(),
   prepareToolboxUpload: vi.fn(),
   saveToolboxArtifactToNote: mocks.saveToolboxArtifactToNote,
 }));

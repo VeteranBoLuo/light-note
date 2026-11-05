@@ -26,8 +26,6 @@ import {
   buildObjectKey,
   buildObjectUrl,
   createDownloadSignedUrl,
-  deleteObjectFromObs,
-  getObjectMetadataFromObs,
 } from '../util/obsClient.js';
 import {
   FILE_CATEGORY_ORDER,

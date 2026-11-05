@@ -63,12 +63,6 @@ export const COMMUNITY_CHAT_OFFICIAL_STICKERS = Object.freeze(
   ),
 );
 
-export const COMMUNITY_CHAT_OFFICIAL_STICKER_PACK = Object.freeze({
-  id: PAPER_SPIRIT_PACK_ID,
-  version: 3,
-  stickers: COMMUNITY_CHAT_OFFICIAL_STICKERS,
-});
-
 const officialStickerByKey = new Map(
   [
     ...legacyPaperSpiritStickers,

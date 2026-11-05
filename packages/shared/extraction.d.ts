@@ -82,9 +82,7 @@ export const EXTRACTION_LIMITS: Readonly<{
   windows: number;
   cellCharacters: number;
 }>;
-export const EXTRACTION_FIELD_TYPES: readonly ExtractionFieldType[];
 export const EXTRACTION_ACTIVE_STATUSES: readonly string[];
-export const EXTRACTION_CELL_STATUSES: readonly ExtractionCell["status"][];
 export function extractionCurrentValue(
   cell: ExtractionCell,
   review?: ExtractionReview,

@@ -256,46 +256,6 @@ export function parseTimeRange(
   return null;
 }
 
-function shortDateTime(value, { withTime = false } = {}) {
-  const text = String(value || '');
-  return withTime ? text.slice(0, 16) : text.slice(0, 10);
-}
-
-/** 展示 Binder 已解析完成的用户本地范围，不重新计算。 */
-export function describeResolvedTimeRange(expr, range, locale = 'zh-CN') {
-  const startValue = range?.localStart || range?.start;
-  const endValue = range?.localEnd || range?.end;
-  if (!startValue || !endValue) return '';
-  const expression = String(expr || '').trim();
-  const english = String(locale || '')
-    .toLowerCase()
-    .startsWith('en');
-  const startDate = shortDateTime(startValue);
-  const endDate = shortDateTime(endValue);
-  const endTime = String(endValue).slice(11, 16);
-  const zone = range?.timeZone ? ` · ${range.timeZone}` : '';
-
-  if (expression === '今天' || expression === '今日') {
-    return english ? `today (${startDate}, through ${endTime}${zone})` : `今天（${startDate}，截至 ${endTime}${zone}）`;
-  }
-  if (expression === '昨天' || expression === '昨日') {
-    return english ? `yesterday (${startDate}${zone})` : `昨天（${startDate}${zone}）`;
-  }
-  if (/^(?:最近|近)\s*24\s*个?\s*小时$/u.test(expression)) {
-    const start = shortDateTime(startValue, { withTime: true });
-    const end = shortDateTime(endValue, { withTime: true });
-    return english ? `the last 24 hours (${start} to ${end}${zone})` : `最近24小时（${start} 至 ${end}${zone}）`;
-  }
-  if (startDate === endDate) {
-    return english
-      ? `${expression || 'the requested range'} (${startDate}${zone})`
-      : `${expression || '所选范围'}（${startDate}${zone}）`;
-  }
-  return english
-    ? `${expression || 'the requested range'} (${startDate} to ${endDate}${zone})`
-    : `${expression || '所选范围'}（${startDate} 至 ${endDate}${zone}）`;
-}
-
 const ALL_TIME_EXPRESSIONS = new Set([
   '全部',
   '所有',
@@ -324,18 +284,6 @@ export function isAllTimeExpression(value) {
   );
 }
 
-/** 解析必须给出合法口径的时间范围；不认识的表达式不能静默退化为全量。 */
-export function parseRequiredTimeRange(
-  value,
-  { label = '时间', allowAll = false, now, timeZone, storageTimeZone } = {},
-) {
-  const expression = String(value || '').trim();
-  if (allowAll && isAllTimeExpression(expression)) return null;
-  const time = parseTimeRange(expression, { now, timeZone, storageTimeZone });
-  if (!time) throw new Error(`${label}范围无法识别`);
-  return time;
-}
-
 const BOUND_AGENT_TIME_RANGES = Symbol('boundAgentTimeRanges');
 
 function temporalContextOptions(context = {}) {
@@ -352,47 +300,6 @@ function temporalRangeError(label) {
   error.code = 'TOOL_TIME_RANGE_INVALID';
   error.status = 400;
   return error;
-}
-
-/**
- * 在 Tool Policy 通过公开 schema 校验后，给参数对象绑定只在服务端可见的权威范围。
- * V3 可直接传入 Binder 的 resolvedTemporalRanges；legacy 则在这里用同一个请求级
- * temporalContext 解析一次。Symbol 不会进入确认令牌、日志或模型上下文。
- */
-export function bindAgentTemporalRanges({ tool, args, context = {} } = {}) {
-  if (!args || typeof args !== 'object' || Array.isArray(args)) return args;
-  const slots = Array.isArray(tool?.temporalSlots) ? tool.temporalSlots : [];
-  if (!slots.length) return args;
-  const authoritative = context.resolvedTemporalRanges || {};
-  const bound = {};
-  for (const slot of slots) {
-    const name = String(slot?.name || '').trim();
-    if (!name) continue;
-    if (Object.hasOwn(authoritative, name)) {
-      const record = authoritative[name];
-      bound[name] = Object.freeze({
-        expression: String(record?.expression ?? args[name] ?? '').trim(),
-        range: record?.range ?? record?.resolved ?? null,
-        source: 'binder',
-      });
-      continue;
-    }
-    const expression = String(args[name] || '').trim();
-    if (!expression) continue;
-    if (slot.allowAll === true && isAllTimeExpression(expression)) {
-      bound[name] = Object.freeze({ expression, range: null, source: 'tool_policy' });
-      continue;
-    }
-    const range = parseTimeRange(expression, temporalContextOptions(context));
-    if (!range) throw temporalRangeError(slot.label || name);
-    bound[name] = Object.freeze({ expression, range, source: 'tool_policy' });
-  }
-  Object.defineProperty(args, BOUND_AGENT_TIME_RANGES, {
-    value: Object.freeze(bound),
-    configurable: true,
-    enumerable: false,
-  });
-  return args;
 }
 
 /**
@@ -420,17 +327,4 @@ export function resolveAgentTimeRange(
   if (!range && required) throw temporalRangeError(label);
   if (!range && expression) throw temporalRangeError(label);
   return range;
-}
-
-/** 返回可进入结果契约的时间口径副本，不泄露 Symbol 或内部上下文。 */
-export function projectAgentTemporalRanges(args) {
-  const bound = args?.[BOUND_AGENT_TIME_RANGES] || {};
-  return Object.freeze(
-    Object.fromEntries(
-      Object.entries(bound).map(([name, record]) => [
-        name,
-        Object.freeze({ expression: record.expression, range: record.range, source: record.source }),
-      ]),
-    ),
-  );
 }

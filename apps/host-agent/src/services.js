@@ -178,17 +178,6 @@ async function readPrivilegedCapabilities(
   }
 }
 
-export async function canExecuteNginxReload(
-  config,
-  helperRequester = requestPrivilegedHelper,
-) {
-  const capabilities = await readPrivilegedCapabilities(
-    config,
-    helperRequester,
-  );
-  return capabilities?.nginxReload === true;
-}
-
 async function readPm2Items(config, runner, helperRequester) {
   if (config.pm2AccessMode === "disabled") {
     throw Object.assign(new Error("PM2 access is disabled"), {

@@ -12,7 +12,6 @@ export const COMMUNITY_FEED_LIMITS: Readonly<{
   maxPageSize: number;
 }>;
 export const COMMUNITY_POST_KINDS: readonly ["share", "question", "thought"];
-export const COMMUNITY_PROFILE_CONSENT_VERSION: number;
 export function communityTextLength(value: unknown): number;
 export interface CommunityPostInput {
   contentVersion?: 2;

@@ -1,7 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import pool from '../db/index.js';
 import { checkUrlLiveness } from './fetchWebMeta.js';
-import { ensureOrganizeSchema } from './organizeSchema.js';
 import { createBookmarkExactUrlHash } from './services/bookmarkExactUrlService.js';
 
 const BATCH = 25;
@@ -9,10 +8,6 @@ const CONCURRENCY = 4;
 const MAX_ATTEMPTS = 3;
 const SCAN_LEASE_MINUTES = 5;
 const ACTIVE_SCAN_STATUSES = new Set(['pending', 'running']);
-
-export async function ensureBookmarkHealthTable() {
-  await ensureOrganizeSchema();
-}
 
 async function runPool(items, worker) {
   let index = 0;

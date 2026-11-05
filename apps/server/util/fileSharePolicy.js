@@ -1,8 +1,5 @@
 import {
-  SHARE_ALLOWED_DAYS,
-  SHARE_DEFAULT_DAYS,
   SHARE_EVENT_RETENTION_DAYS,
-  SHARE_MAX_LIMIT,
   createShareToken,
   hashShareAccessCode,
   hashShareToken,
@@ -12,9 +9,6 @@ import {
   verifyShareAccessCode,
 } from './sharePolicy.js';
 
-export const FILE_SHARE_DEFAULT_DAYS = SHARE_DEFAULT_DAYS;
-export const FILE_SHARE_ALLOWED_DAYS = SHARE_ALLOWED_DAYS;
-export const FILE_SHARE_MAX_LIMIT = SHARE_MAX_LIMIT;
 export const FILE_SHARE_EVENT_RETENTION_DAYS = SHARE_EVENT_RETENTION_DAYS;
 
 export {

@@ -6,12 +6,9 @@ import { readItemDetails, hydrateItemDetails, boardTodoJoin, boardOpenSql, board
 
 export const TOOLBOX_WORKSPACE_KINDS = Object.freeze(['research', 'learning', 'writing']);
 export const TOOLBOX_WORKSPACE_STATUSES = Object.freeze(['active', 'paused', 'completed', 'archived']);
-export const TOOLBOX_WORKSPACE_LANES = Object.freeze(['inbox', 'knowledge', 'action']);
-export const TOOLBOX_WORKSPACE_ITEM_STATUSES = Object.freeze(['open', 'in_progress', 'done', 'archived']);
 
 const MAX_WORKSPACES = 50;
 const MAX_RESOURCES = 100;
-const MAX_ITEMS = 500;
 const HOME_CONTINUE_WORKSPACE_LIMIT = 6;
 const HOME_RECENT_WORKSPACE_LIMIT = 6;
 const HOME_WORKSPACE_SCAN_LIMIT = 50;

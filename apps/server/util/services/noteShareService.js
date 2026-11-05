@@ -116,17 +116,3 @@ export async function listActiveInheritedNoteShares({ db, userId, parentId }) {
   if (!ancestorIds.length) return [];
   return queryActiveInheritedNoteShares(db, { userId, ancestorIds });
 }
-
-export async function assertNoteShareExposureAcknowledged({ db, userId, parentId, acknowledged = false }) {
-  const shares = await listActiveInheritedNoteShares({ db, userId, parentId });
-  if (!shares.length || acknowledged === true) return shares;
-  throw new NoteTreeError(
-    'NOTE_SHARE_EXPOSURE_CONFIRMATION_REQUIRED',
-    '目标目录正在公开分享，需要确认后继续',
-    409,
-    {
-      shareCount: shares.length,
-      roots: shares.slice(0, 5).map((share) => ({ id: share.rootNoteId, title: share.rootTitle })),
-    },
-  );
-}

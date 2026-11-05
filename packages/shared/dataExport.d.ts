@@ -35,7 +35,6 @@ export interface DataExportFailure {
 }
 export const DATA_EXPORT_TYPES: readonly DataExportType[];
 export const DATA_EXPORT_ACTIVE: readonly string[];
-export const DATA_EXPORT_DEFAULTS: DataExportOptions;
 export const DATA_EXPORT_FULL_BACKUP: Readonly<DataExportOptions>;
 export function isFullDataBackup(types: unknown): boolean;
 /** 资料清单与上次成功备份，供「数据与备份」页使用。 */

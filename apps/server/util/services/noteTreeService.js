@@ -689,11 +689,6 @@ export async function resolveOwnedNoteCreateTarget({ userId, parentId = null, db
   };
 }
 
-export async function resolveOwnedNoteDescendantIds({ userId, rootNoteId, includeRoot = false, db = pool } = {}) {
-  const snapshot = await loadOwnedNoteTree(userId, { db });
-  return resolveNoteDescendantIdsFromSnapshot(snapshot, rootNoteId, { includeRoot });
-}
-
 function noteShareExposureDetails(shares) {
   return {
     shareCount: shares.length,
@@ -1380,20 +1375,6 @@ function resolveRestoreReparentIds({ rows, activeSnapshot }) {
     }
   }
   return reparentIds;
-}
-
-export async function previewOwnedNoteTrashRestore({
-  userId,
-  ids = [],
-  time = null,
-  restoreAll = false,
-  db = pool,
-} = {}) {
-  const rows = await collectOwnedDeletedNoteBatchRows(queryDb(db), { userId, ids, time, restoreAll });
-  return {
-    count: rows.length,
-    batchCount: new Set(rows.map((row) => row.treeDeleteBatchId).filter(Boolean)).size,
-  };
 }
 
 /**

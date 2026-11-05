@@ -478,12 +478,6 @@ export async function createToolboxJob(input: {
   return response.data as ToolboxJob;
 }
 
-export async function fetchToolboxJobs(limit = 20): Promise<ToolboxJob[]> {
-  const response = await apiBaseGet('/api/toolbox/tasks', { limit }, { silent: true });
-  if (response.status !== 200) throw apiFailure(response, 'TOOLBOX_TASKS_FAILED');
-  return Array.isArray(response.data?.items) ? response.data.items : [];
-}
-
 export async function fetchToolboxTaskPage(
   params: { filter?: ToolboxTaskFilter; cursor?: string; limit?: number } = {},
 ): Promise<{ items: ToolboxJob[]; nextCursor: string | null }> {

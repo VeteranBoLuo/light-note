@@ -15,12 +15,6 @@ export const GRAPH_NODE_LABEL_KEY: Record<GraphNodeType, string> = {
   file: 'tagGraph.nodeType.file',
 };
 
-export const GRAPH_RESOURCE_TYPE_OPTIONS: Array<{ value: Exclude<GraphNodeType, 'tag'>; labelKey: string }> = [
-  { value: 'bookmark', labelKey: 'tagGraph.nodeType.bookmark' },
-  { value: 'note', labelKey: 'tagGraph.nodeType.note' },
-  { value: 'file', labelKey: 'tagGraph.nodeType.file' },
-];
-
 export function resolveGraphViewportSize(measuredWidth: number, measuredHeight: number, compact = false) {
   const width = Number.isFinite(measuredWidth) && measuredWidth > 0 ? measuredWidth : 900;
   const height = Number.isFinite(measuredHeight) && measuredHeight > 0 ? measuredHeight : compact ? 320 : 420;

@@ -54,7 +54,6 @@ const {
   getIpLogStats,
   getDeepSeekBalance,
   getNoticeSummary,
-  clearImages,
   getHelpConfig,
   resolveHelpSources,
   getAdminOverview,
@@ -1808,82 +1807,6 @@ describe('后台日志组合筛选', () => {
     expect(String(sql)).toContain('o.create_by = ?');
     expect(String(sql)).not.toContain('user-1');
     expect(params).toEqual(expect.arrayContaining(['笔记库', 'user-1', '2026-08-09 23:59:59']));
-  });
-});
-
-describe('clearImages 服务端校验与失败上报', () => {
-  const rootReq = (images) => ({ user: { id: 'root-1', role: 'root' }, body: { images } });
-  beforeEach(() => {
-    query.mockReset();
-    unlinkSpy.mockReset();
-    collectUsedSpy.mockReset();
-    deleteThumbnailSpy.mockReset();
-    // ensureRootRole 的复核查询
-    query.mockResolvedValue([[{ role: 'root', del_flag: 0 }]]);
-    collectUsedSpy.mockResolvedValue(new Set());
-    deleteThumbnailSpy.mockResolvedValue(false);
-    unlinkSpy.mockResolvedValue();
-  });
-
-  it('仍被引用的图片被跳过,不执行删除', async () => {
-    collectUsedSpy.mockResolvedValue(new Set(['note-1-used']));
-    const res = mockRes();
-    await clearImages(rootReq([{ fullFileName: 'note-1-used.png' }]), res);
-    expect(unlinkSpy).not.toHaveBeenCalled();
-    const sent = res.send.mock.calls.at(-1)[0];
-    expect(sent.status).toBe(200);
-    expect(sent.data.skipped).toEqual(['note-1-used.png']);
-    expect(sent.msg).toContain('仍被引用');
-  });
-
-  it('全部删除失败时返回 500,不谎报成功', async () => {
-    unlinkSpy.mockRejectedValue(Object.assign(new Error('EACCES'), { code: 'EACCES' }));
-    const res = mockRes();
-    await clearImages(rootReq([{ fullFileName: 'a.png' }, { fullFileName: 'b.png' }]), res);
-    expect(res.status).toHaveBeenCalledWith(500);
-    const sent = res.send.mock.calls.at(-1)[0];
-    expect(sent.data.failed).toEqual(['a.png', 'b.png']);
-  });
-
-  it('派生缩略图清理失败时仍继续删除原图', async () => {
-    deleteThumbnailSpy.mockRejectedValueOnce(Object.assign(new Error('cache readonly'), { code: 'EACCES' }));
-    const res = mockRes();
-    await clearImages(rootReq([{ fullFileName: 'a.png' }]), res);
-    expect(unlinkSpy).toHaveBeenCalledWith('/www/wwwroot/images/a.png');
-    expect(res.send.mock.calls.at(-1)[0].data.deleted).toEqual(['a.png']);
-  });
-
-  it('部分失败时 200 但消息如实报告,ENOENT 视为幂等成功', async () => {
-    unlinkSpy
-      .mockResolvedValueOnce()
-      .mockRejectedValueOnce(Object.assign(new Error('missing'), { code: 'ENOENT' }))
-      .mockRejectedValueOnce(Object.assign(new Error('EACCES'), { code: 'EACCES' }));
-    const res = mockRes();
-    await clearImages(
-      rootReq([{ fullFileName: 'a.png' }, { fullFileName: 'gone.png' }, { fullFileName: 'c.png' }]),
-      res,
-    );
-    const sent = res.send.mock.calls.at(-1)[0];
-    expect(sent.status).toBe(200);
-    expect(sent.data.deleted).toEqual(['a.png', 'gone.png']);
-    expect(sent.data.failed).toEqual(['c.png']);
-    expect(sent.msg).toContain('删除失败');
-  });
-
-  it('路径穿越被 basename 归一,只删图片目录内文件', async () => {
-    const res = mockRes();
-    await clearImages(rootReq([{ fullFileName: '../../etc/passwd' }]), res);
-    expect(unlinkSpy).toHaveBeenCalledTimes(1);
-    const target = unlinkSpy.mock.calls[0][0];
-    expect(target).toBe('/www/wwwroot/images/passwd');
-  });
-
-  it('非 root 直接拒绝', async () => {
-    const res = mockRes();
-    await clearImages({ user: { id: 'u1', role: 'user' }, body: { images: [{ fullFileName: 'a.png' }] } }, res);
-    expect(unlinkSpy).not.toHaveBeenCalled();
-    const sent = res.send.mock.calls.at(-1)[0];
-    expect(sent.status).toBe(403);
   });
 });
 

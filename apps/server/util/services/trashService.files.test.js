@@ -2,7 +2,7 @@ import { beforeEach, expect, it, vi } from 'vitest';
 const state = vi.hoisted(() => ({ files: [], connection: null }));
 vi.mock('../../db/index.js', () => ({ default: { getConnection: async () => state.connection } }));
 vi.mock('../personalKnowledgeSearch.js', () => ({ invalidatePersonalKnowledgeCache: vi.fn() }));
-vi.mock('./noteTreeService.js', () => ({ previewOwnedNoteTrashRestore: vi.fn(), restoreOwnedNoteTrash: vi.fn() }));
+vi.mock('./noteTreeService.js', () => ({ restoreOwnedNoteTrash: vi.fn() }));
 vi.mock('../obsClient.js', () => ({ buildObjectKey: (user, name) => `files/${user}/${name}` }));
 import { restoreTrashResources } from './trashService.js';
 

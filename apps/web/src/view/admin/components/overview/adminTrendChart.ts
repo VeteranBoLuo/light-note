@@ -16,13 +16,6 @@ export interface AdminTrendDay {
   content?: number;
 }
 
-export interface TrendSeries {
-  key: string;
-  label: string;
-  colorVar: string;
-  values: number[];
-}
-
 export interface TrendSummary {
   sum: number;
   dailyAverage: number;

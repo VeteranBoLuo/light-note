@@ -5,7 +5,7 @@ import { upsertKnowledgeBase, updateKnowledgeBaseById } from '../util/services/k
 import { invalidateKnowledgeCache } from '../util/knowledgeService.js';
 import { stableAgentErrorCode } from '../util/agent/logSafety.js';
 import { adminActionErrorResponse, beginAdminAction, finishAdminAction } from '../util/adminActionExecution.js';
-import { DEFAULT_HELP_SECTION, HELP_KNOWLEDGE_CATEGORY, toPublicHelpArticle } from '../util/helpKnowledge.js';
+import { DEFAULT_HELP_SECTION, HELP_KNOWLEDGE_CATEGORY } from '../util/helpKnowledge.js';
 
 const KNOWLEDGE_CLIENT_ERRORS = new Set([
   'CONTENT_TOO_LONG',
@@ -443,19 +443,5 @@ export const getKnowledgeCategories = async (req, res) => {
     res.send(resultData(categories));
   } catch (e) {
     res.send(resultData(null, 500, '服务器内部错误: ' + e.message));
-  }
-};
-
-/** 获取帮助中心文章（供 Help.vue 使用） */
-export const getHelpCenterArticles = async (req, res) => {
-  try {
-    const [result] = await pool.query(
-      "SELECT id, title, content, type, sort, help_section FROM knowledge_base WHERE category = '帮助中心' AND status = 'public' AND COALESCE(admin_archived, 0) = 0 ORDER BY sort ASC, created_at ASC",
-    );
-    res.send(resultData(result.map(toPublicHelpArticle), 200));
-  } catch (e) {
-    // 公开接口:不把 SQL 错误细节返给游客,降级空数组 + 500
-    console.error('[knowledge] 获取帮助中心文章失败 code=%s', stableAgentErrorCode(e));
-    res.send(resultData([], 500, '获取帮助中心内容失败'));
   }
 };

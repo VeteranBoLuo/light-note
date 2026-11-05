@@ -32,8 +32,6 @@ export const SENSITIVE_KEYS = [
   /credential/i,
 ];
 
-export const SAFE_PREFIXES = ['/security'];
-
 export const SENSITIVE_PATHS = [
   { pattern: /^\/?\.env/i, score: 55, name: '探测 .env 配置文件' },
   { pattern: /^\/?\.git(?:\/|$)/i, score: 55, name: '探测 Git 目录' },

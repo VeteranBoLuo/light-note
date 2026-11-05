@@ -28,7 +28,3 @@ export function usesMobileDeviceLayout(width: number, coarsePointer = false): bo
 export function isMobileViewport(width: number): boolean {
   return width < VIEWPORT_BREAKPOINTS.mobile;
 }
-
-export function isCompactViewport(width: number): boolean {
-  return width < VIEWPORT_BREAKPOINTS.compact;
-}

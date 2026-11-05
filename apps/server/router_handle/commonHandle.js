@@ -18,7 +18,6 @@ import { buildOperationLogSystem } from '../util/apiLogSystem.js';
 import { getDeepSeekBalance as queryDeepSeekBalance } from '../util/agent/providerBalance.js';
 import { getDeepSeekDailyBalanceChange } from '../util/agent/providerBalanceSnapshot.js';
 import { collectUsedImageNames } from '../util/noteImages.js';
-import { deleteNoteImageThumbnail } from '../util/noteImageThumbnail.js';
 import { resolveKnowledgeSourceTarget } from '../util/agent/sourceUtils.js';
 import { stableAgentErrorCode } from '../util/agent/logSafety.js';
 import { toPublicHelpArticle } from '../util/helpKnowledge.js';
@@ -394,29 +393,6 @@ export const getNoticeSummary = async (req, res) => {
   } catch (e) {
     res.send(resultData(null, 500, '获取提醒汇总失败：' + e.message));
   }
-};
-
-const ensureSortColumn = async (connection, tableName) => {
-  const [columnRows] = await connection.query(`SHOW COLUMNS FROM \`${tableName}\` LIKE 'sort'`);
-  if (columnRows.length > 0) {
-    return false;
-  }
-  try {
-    await connection.query(`ALTER TABLE \`${tableName}\` ADD COLUMN sort INT NOT NULL DEFAULT 0`);
-  } catch (e) {
-    if (e?.code === 'ER_DUP_FIELDNAME') return false;
-    throw e;
-  }
-  return true;
-};
-
-const reseedSortById = async (connection, tableName) => {
-  await connection.query('SET @help_sort_seed := -1');
-  await connection.query(
-    `UPDATE \`${tableName}\`
-     SET sort = (@help_sort_seed := @help_sort_seed + 1)
-     ORDER BY id ASC`,
-  );
 };
 
 // sort 列管理已移除（knowledge_base 自带 sort 列）
@@ -1178,61 +1154,6 @@ export const getImages = async (req, res) => {
   } catch (error) {
     console.error('读取目录时出错：', error);
     res.send(resultData(null, 500, '读取图片目录失败'));
-  }
-};
-
-export const clearImages = async (req, res) => {
-  const userId = await ensureRootRole(req, res);
-  if (!userId) return;
-  const directoryPath = '/www/wwwroot/images';
-  const images = Array.isArray(req.body.images) ? req.body.images : [];
-  if (!images.length) {
-    return res.send(resultData(null, 400, '未指定要删除的图片'));
-  }
-
-  try {
-    // 删除前服务端重建引用集合再次校验(不信任前端的"已失效"标记):
-    // 图库列表与实际清理之间存在时间差,期间图片可能已被笔记/模板重新引用
-    const usedNames = await collectUsedImageNames();
-    const deleted = [];
-    const skipped = [];
-    const failed = [];
-    for (const data of images) {
-      // basename 防路径穿越,只允许删除图片目录内的文件
-      const fullFileName = path.basename(String(data?.fullFileName || ''));
-      if (!fullFileName) continue;
-      const baseName = fullFileName.replace(/\.[^.]+$/, '');
-      if (usedNames.has(baseName)) {
-        skipped.push(fullFileName);
-        continue;
-      }
-      try {
-        await deleteNoteImageThumbnail(`https://boluo66.top/uploads/${fullFileName}`).catch((error) => {
-          console.warn('[image-cleanup] thumbnail delete failed code=%s', stableAgentErrorCode(error));
-        });
-        await fsP.unlink(path.join(directoryPath, fullFileName));
-        deleted.push(fullFileName);
-      } catch (error) {
-        // 文件已不存在视为删除达成(幂等),其余失败如实上报,不谎报成功
-        if (error?.code === 'ENOENT') {
-          deleted.push(fullFileName);
-        } else {
-          console.error(`删除文件失败: ${fullFileName}`, error);
-          failed.push(fullFileName);
-        }
-      }
-    }
-    if (failed.length && !deleted.length && !skipped.length) {
-      return res.status(500).send(resultData({ deleted, skipped, failed }, 500, '删除失败'));
-    }
-    const msgParts = [];
-    if (deleted.length) msgParts.push(`已删除 ${deleted.length} 张`);
-    if (skipped.length) msgParts.push(`${skipped.length} 张仍被引用已跳过`);
-    if (failed.length) msgParts.push(`${failed.length} 张删除失败`);
-    res.send(resultData({ deleted, skipped, failed }, 200, msgParts.join('；') || '删除成功'));
-  } catch (error) {
-    console.error('删除过程中出现错误:', error);
-    res.status(500).send(resultData(null, 500, '删除失败'));
   }
 };
 
