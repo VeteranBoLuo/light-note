@@ -958,7 +958,6 @@ router.post('/updateFolder', fileHandle.updateFolder);
 router.post('/moveFolder', fileHandle.moveFolder);
 router.post('/deleteFolder', fileHandle.deleteFolder);
 router.post('/clearFolderFiles', fileHandle.clearFolderFiles);
-router.post('/updateFolderSort', fileHandle.updateFolderSort);
 router.post('/getFileTags', fileHandle.getFileTags);
 router.post('/updateFileTags', fileHandle.updateFileTags);
 

@@ -18,8 +18,6 @@ const mocks = vi.hoisted(() => ({
   updateToolboxWorkspace: vi.fn(),
   addToolboxWorkspaceResources: vi.fn(),
   removeToolboxWorkspaceResource: vi.fn(),
-  createToolboxWorkspaceItem: vi.fn(),
-  updateToolboxWorkspaceItem: vi.fn(),
   createToolboxWorkspaceSession: vi.fn(),
   getToolboxWorkspace: vi.fn(),
   listToolboxWorkspaces: vi.fn(),
@@ -68,7 +66,6 @@ vi.mock('../util/toolbox/service.js', () => ({
 vi.mock('../util/toolbox/workspace.js', () => ({
   addToolboxWorkspaceResources: mocks.addToolboxWorkspaceResources,
   createToolboxWorkspace: mocks.createToolboxWorkspace,
-  createToolboxWorkspaceItem: mocks.createToolboxWorkspaceItem,
   createToolboxWorkspaceSession: mocks.createToolboxWorkspaceSession,
   getToolboxWorkspace: mocks.getToolboxWorkspace,
   listToolboxHomeWorkspaces: mocks.listToolboxHomeWorkspaces,
@@ -77,7 +74,6 @@ vi.mock('../util/toolbox/workspace.js', () => ({
   removeToolboxWorkspaceResource: mocks.removeToolboxWorkspaceResource,
   deleteToolboxWorkspace: mocks.deleteToolboxWorkspace,
   updateToolboxWorkspace: mocks.updateToolboxWorkspace,
-  updateToolboxWorkspaceItem: mocks.updateToolboxWorkspaceItem,
 }));
 const {
   addWorkspaceResources,
@@ -87,7 +83,6 @@ const {
   createJob,
   createQuote,
   createWorkspace,
-  createWorkspaceItem,
   createWorkspaceSession,
   getHome,
   getProjectEntry,
@@ -100,7 +95,6 @@ const {
   saveArtifact,
   deleteWorkspace,
   updateWorkspace,
-  updateWorkspaceItem,
 } = await import('./toolboxHandle.js');
 
 function createResponse() {
@@ -297,16 +291,12 @@ describe('toolbox home handlers', () => {
     mocks.updateToolboxWorkspace.mockResolvedValue(workspace);
     mocks.addToolboxWorkspaceResources.mockResolvedValue(workspace);
     mocks.removeToolboxWorkspaceResource.mockResolvedValue(workspace);
-    mocks.createToolboxWorkspaceItem.mockResolvedValue(workspace);
-    mocks.updateToolboxWorkspaceItem.mockResolvedValue(workspace);
     mocks.createToolboxWorkspaceSession.mockResolvedValue(workspace);
 
     await createWorkspace(request, response);
     await updateWorkspace(request, response);
     await addWorkspaceResources(request, response);
     await removeWorkspaceResource(request, response);
-    await createWorkspaceItem(request, response);
-    await updateWorkspaceItem(request, response);
     await createWorkspaceSession(request, response);
 
     expect(mocks.recordServerOperation.mock.calls.map(([, payload]) => payload)).toEqual([
@@ -314,8 +304,6 @@ describe('toolbox home handlers', () => {
       { module: '知识工坊', operation: '更新持续工作区' },
       { module: '知识工坊', operation: '添加工作区资料' },
       { module: '知识工坊', operation: '移除工作区资料' },
-      { module: '知识工坊', operation: '新建工作区事项' },
-      { module: '知识工坊', operation: '更新工作区事项' },
       { module: '知识工坊', operation: '记录工作区推进' },
     ]);
     const loggedPayloads = mocks.recordServerOperation.mock.calls.map(([, payload]) => payload);

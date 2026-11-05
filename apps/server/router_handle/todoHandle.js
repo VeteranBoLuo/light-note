@@ -299,10 +299,6 @@ export async function resumeTodoSeriesV2(req, res) {
   return seriesActionTodoV2(req, res, 'resume');
 }
 
-export async function stopTodoSeriesV2(req, res) {
-  return seriesActionTodoV2(req, res, 'stop');
-}
-
 export async function skipTodoInstanceV2(req, res) {
   if (!ensureNotVisitor(req, res)) return;
   const todoId = String(req.body?.todoId || '').trim();

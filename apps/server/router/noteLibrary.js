@@ -104,7 +104,6 @@ router.post('/resolveResourceRefs', noteLibraryHandle.resolveResourceRefs);
 router.post('/resourceBacklinks', noteLibraryHandle.resourceBacklinks);
 router.post('/delNote', noteLibraryHandle.delNote);
 router.post('/deleteNoteSubtree', noteLibraryHandle.deleteNoteSubtree);
-router.post('/updateNoteSort', noteLibraryHandle.updateNoteSort);
 router.post('/toggleNoteTop', noteLibraryHandle.toggleNoteTop);
 
 router.post('/share/create', (req, res) => {

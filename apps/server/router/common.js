@@ -44,7 +44,6 @@ router.post('/clearLogsByIp', commonHandle.clearLogsByIp);
 
 router.post('/analyzeImgUrl', commonHandle.analyzeImgUrl);
 
-router.post('/getImages', commonHandle.getImages);
 
 router.post('/getHelpConfig', commonHandle.getHelpConfig);
 
@@ -52,10 +51,8 @@ router.post('/resolveHelpSources', commonHandle.resolveHelpSources);
 
 router.get('/noticeSummary', commonHandle.getNoticeSummary);
 
-router.post('/getAgentLogChain', commonHandle.getAgentLogChain);
 router.post('/getDeepSeekBalance', commonHandle.getDeepSeekBalance);
 router.post('/getAdminOverviewSnapshot', commonHandle.getAdminOverviewSnapshot);
-router.post('/getAdminOverview', commonHandle.getAdminOverview);
 router.post('/getAdminOverviewTrend', commonHandle.getAdminOverviewTrend);
 router.post('/getAdminOverviewRecent', commonHandle.getAdminOverviewRecent);
 router.post('/getAdminActionCenter', getAdminActionCenter);

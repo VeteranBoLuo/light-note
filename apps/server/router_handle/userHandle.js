@@ -1335,16 +1335,6 @@ export const markFeatureAnnouncementSeen = async (req, res) => {
   }
 };
 
-export const deleteUserById = (req, res) => {
-  return res.send(
-    resultData(
-      null,
-      req.user?.role === 'root' ? 410 : 403,
-      L(req, '该旧接口已停用，请使用后台用户管理', 'This legacy endpoint is disabled'),
-    ),
-  );
-};
-
 export const startGithubOAuth = async (req, res) => {
   const requestId = crypto.randomUUID();
   try {

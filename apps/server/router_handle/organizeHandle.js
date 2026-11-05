@@ -17,10 +17,7 @@ import {
   unignoreDuplicateBookmarkGroup,
 } from '../util/services/bookmarkDuplicateService.js';
 import { getOrganizeSummary } from '../util/services/organizeSummaryService.js';
-import {
-  getOrganizeKnowledgeStructureSummary,
-  listOrganizeKnowledgeStructureIssues,
-} from '../util/services/knowledgeStructureOrganizeService.js';
+import { listOrganizeKnowledgeStructureIssues } from '../util/services/knowledgeStructureOrganizeService.js';
 import {
   isOwnedUntaggedResource,
   listUntaggedResources,
@@ -69,16 +66,6 @@ export async function summary(req, res) {
   if (!current) return;
   try {
     return res.send(resultData(await getOrganizeSummary(current.id)));
-  } catch (error) {
-    return sendError(res, error);
-  }
-}
-
-export async function knowledgeStructureSummary(req, res) {
-  const current = requirePrivateSubject(req, res);
-  if (!current) return;
-  try {
-    return res.send(resultData(await getOrganizeKnowledgeStructureSummary({ userId: current.id })));
   } catch (error) {
     return sendError(res, error);
   }

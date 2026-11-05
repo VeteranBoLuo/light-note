@@ -52,34 +52,6 @@ export async function filterOwnedImageUrls({ urls, userId, connection = null }) 
 }
 
 /**
- * 汇总全站"仍被引用"的图片文件名(不含扩展名)集合——供后台图库判定失效与清理校验。
- * 引用来源:书签图标、笔记图片登记(note_images)、模板正文。
- * 模板正文在内存提取(当前模板量小:每人≤20;规模增长后应改引用表)。
- */
-export async function collectUsedImageNames() {
-  const [bookmarkRows] = await pool.query('SELECT icon_url FROM bookmark');
-  const [noteRows] = await pool.query('SELECT url FROM note_images');
-  const [templateRows] = await pool.query('SELECT content FROM note_template');
-  const [versionRows] = await pool.query('SELECT content FROM note_versions');
-  const [assetRows] = await pool.query("SELECT source_locator FROM image_assets WHERE storage_kind='local'");
-  const urls = [
-    ...bookmarkRows.map((r) => r.icon_url),
-    ...noteRows.map((r) => r.url),
-    ...templateRows.flatMap((r) => extractNoteImageUrls(r.content)),
-    ...versionRows.flatMap((r) => extractNoteImageUrls(r.content)),
-    ...assetRows.map(r=>`https://boluo66.top/uploads/${r.source_locator}`),
-  ];
-  const usedNames = new Set();
-  for (const url of urls) {
-    if (typeof url !== 'string' || !url) continue;
-    const seg = url.split('?')[0].split('/').pop() || '';
-    const base = seg.replace(/\.[^.]+$/, '');
-    if (base) usedNames.add(base);
-  }
-  return usedNames;
-}
-
-/**
  * 清理"可能成为孤儿"的图片物理文件——仅当既没有任何笔记引用(note_images 已无该 URL 行)、
  * 也没有任何模板正文仍包含该文件时才删磁盘文件。
  * 必须在删除事务提交之后调用(此时残留的 note_images 行即"其他笔记仍在引用")。

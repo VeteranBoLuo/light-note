@@ -12,7 +12,6 @@ const {
   deleteOwnedCloudFolderTree,
   listOwnedCloudFolders,
   moveOwnedCloudFolder,
-  reorderOwnedCloudFolders,
   renameOwnedCloudFolder,
 } = await import('./cloudFolderTreeService.js');
 
@@ -258,31 +257,6 @@ describe('cloudFolderTreeService', () => {
       [null, 1, 1, 'user-1'],
       [null, 2, 2, 'user-1'],
     ]);
-  });
-
-  it('只接受同一层级的完整排序', async () => {
-    const rows = [
-      { id: 1, name: 'A', parent_id: null, sort: 0 },
-      { id: 2, name: 'B', parent_id: null, sort: 1 },
-      { id: 3, name: 'C', parent_id: 1, sort: 0 },
-    ];
-    const db = mutationDatabase(rows);
-    await expect(
-      reorderOwnedCloudFolders({ userId: 'user-1', parentId: null, items: [{ id: 2 }, { id: 1 }], database: db }),
-    ).resolves.toEqual({ parentId: null, items: ['2', '1'] });
-    expect(db.connection.query.mock.calls.slice(2).map((call) => call[1])).toEqual([
-      ['2', 0, '1', 1, '2', '1', 'user-1', null],
-    ]);
-
-    const invalidDb = mutationDatabase(rows);
-    await expect(
-      reorderOwnedCloudFolders({
-        userId: 'user-1',
-        parentId: null,
-        items: [{ id: 1 }, { id: 3 }],
-        database: invalidDb,
-      }),
-    ).rejects.toThrow(/FOLDER_SORT_INVALID/);
   });
 
   it('仅删除没有子文件夹和文件的空目录', async () => {

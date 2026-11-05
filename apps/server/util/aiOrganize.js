@@ -1,10 +1,8 @@
 import { classifyWebPageSnapshot, EXPLICIT_WEB_READ_MAX_BYTES, fetchWebMeta } from './fetchWebMeta.js';
 import { estimateAiProviderTokens, requestAi } from './agent/aiGateway.js';
 
-// AI 自动整理:批量给书签生成名称/描述 + 从「已有标签」匹配 + 建议新标签。
-// 单次条数上限只控制响应时长；真实模型调用统一进入 AI Execution，按 Provider 用量结算。
-
-export const ORGANIZE_MAX_BATCH = 20; // 单次最多处理条数(控制单次时长;整完可继续下一批)
+// 书签智能补全：生成名称/描述 + 从「已有标签」匹配 + 建议新标签。
+// 真实模型调用统一进入 AI Execution，按 Provider 用量结算。
 export const AI_TAG_SUGGESTION_CAP = 3;
 export const AI_TAG_STRONG_CONFIDENCE_MIN = 0.86;
 

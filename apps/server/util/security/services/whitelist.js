@@ -20,16 +20,3 @@ export const isSecurityWhitelisted = async (targetType, targetValue, executor = 
   );
   return Boolean(rows[0]);
 };
-
-export const disableSecurityWhitelist = async (targetType, targetValue, executor = pool) => {
-  const type = normalizeWhitelistType(targetType);
-  const value = String(targetValue || '').trim();
-  if (!type || !value) return false;
-  await executor.query(
-    `UPDATE security_whitelist
-     SET enabled = 0, updated_at = NOW()
-     WHERE target_type = ? AND target_value = ? AND enabled = 1`,
-    [type, value],
-  );
-  return true;
-};

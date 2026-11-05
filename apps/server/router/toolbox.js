@@ -26,13 +26,10 @@ router.post(
 );
 router.post('/workspaces/:workspaceId/board', localProcessingRateLimiter, toolboxHandle.operateWorkspaceBoard);
 router.get('/workspaces/:workspaceId/items/:itemId', localProcessingRateLimiter, toolboxHandle.getWorkspaceBoardItem);
-router.post('/workspaces/:workspaceId/items', localProcessingRateLimiter, toolboxHandle.createWorkspaceItem);
-router.patch('/workspaces/:workspaceId/items/:itemId', localProcessingRateLimiter, toolboxHandle.updateWorkspaceItem);
 router.post('/workspaces/:workspaceId/sessions', localProcessingRateLimiter, toolboxHandle.createWorkspaceSession);
 router.post('/quotes', aiActionRateLimiter, toolboxHandle.createQuote);
 router.post('/uploads', localProcessingRateLimiter, toolboxHandle.prepareUpload);
 router.get('/tasks', toolboxHandle.listJobs);
-router.get('/jobs', toolboxHandle.listJobs);
 router.post('/translation/history/delete', localProcessingRateLimiter, toolboxHandle.removeTranslationHistory);
 router.get('/translation/history', toolboxHandle.translationHistory);
 router.get('/translation/history/:jobId', toolboxHandle.translationRecord);

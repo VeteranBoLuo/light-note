@@ -7,7 +7,6 @@ const mocks = vi.hoisted(() => ({
   listUntaggedResources: vi.fn(),
   listDuplicateBookmarkGroups: vi.fn(),
   listBookmarkHealthIssues: vi.fn(),
-  getOrganizeKnowledgeStructureSummary: vi.fn(),
   listOrganizeKnowledgeStructureIssues: vi.fn(),
   startFullCheck: vi.fn(),
 }));
@@ -21,7 +20,6 @@ vi.mock('../util/common.js', () => ({
 vi.mock('../util/auth.js', () => ({ ensureNotVisitor: mocks.ensureNotVisitor }));
 vi.mock('../util/services/organizeSummaryService.js', () => ({ getOrganizeSummary: mocks.getOrganizeSummary }));
 vi.mock('../util/services/knowledgeStructureOrganizeService.js', () => ({
-  getOrganizeKnowledgeStructureSummary: mocks.getOrganizeKnowledgeStructureSummary,
   listOrganizeKnowledgeStructureIssues: mocks.listOrganizeKnowledgeStructureIssues,
 }));
 vi.mock('../util/services/resourceInventoryService.js', () => ({
@@ -50,7 +48,7 @@ vi.mock('../util/services/organizeSuppressionService.js', () => ({
   upsertOrganizeSuppression: vi.fn(),
 }));
 
-const { ignoreUntagged, knowledgeStructureSummary, listIssues, startHealthScan, summary } =
+const { ignoreUntagged, listIssues, startHealthScan, summary } =
   await import('./organizeHandle.js');
 
 function mockRes() {
@@ -64,12 +62,11 @@ describe('organizeHandle', () => {
     vi.clearAllMocks();
     mocks.ensureNotVisitor.mockReturnValue(true);
     mocks.getOrganizeSummary.mockResolvedValue({ totals: { findingTotal: 0 } });
-    mocks.getOrganizeKnowledgeStructureSummary.mockResolvedValue({ healthScore: 100, affectedNoteCount: 0 });
     mocks.listOrganizeKnowledgeStructureIssues.mockResolvedValue({ items: [], hasMore: false, nextCursor: null });
     mocks.listUntaggedResources.mockResolvedValue({ items: [], hasMore: false, nextCursor: null });
   });
 
-  it('知识结构摘要与列表沿用当前资源主体并保持独立读取', async () => {
+  it('知识结构问题列表沿用当前资源主体', async () => {
     const req = {
       user: { id: 'root-1', role: 'root' },
       resourceUser: { id: 'target-1', role: 'user' },
@@ -78,10 +75,8 @@ describe('organizeHandle', () => {
     };
     const res = mockRes();
 
-    await knowledgeStructureSummary(req, res);
     await listIssues(req, res);
 
-    expect(mocks.getOrganizeKnowledgeStructureSummary).toHaveBeenCalledWith({ userId: 'target-1' });
     expect(mocks.listOrganizeKnowledgeStructureIssues).toHaveBeenCalledWith(
       expect.objectContaining({ userId: 'target-1', kind: 'empty', limit: '20' }),
     );

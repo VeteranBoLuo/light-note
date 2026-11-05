@@ -1,24 +1,7 @@
 import express from 'express';
-import * as securityHandle from '../router_handle/securityHandle.js';
 import * as securityV2Handle from '../router_handle/securityV2Handle.js';
 
 const router = express.Router();
-
-router.post('/overview', securityHandle.getSecurityOverview);
-router.post('/events', securityHandle.getSecurityEvents);
-router.post('/events/batchHandle', securityHandle.batchHandleSecurityEvents);
-router.get('/events/:eventId', securityHandle.getSecurityEventDetail);
-router.post('/events/:eventId/handle', securityHandle.handleSecurityEvent);
-router.post('/ipReputation', securityHandle.getIpReputationList);
-router.post('/ipAccounts', securityHandle.getIpAccounts);
-router.post('/accountBans', securityHandle.getAccountBanList);
-router.post('/accountReputation', securityHandle.getAccountReputationList);
-router.post('/accountBan', securityHandle.banAccount);
-router.post('/accountUnban', securityHandle.unbanAccount);
-router.post('/rules', securityHandle.getSecurityRules);
-router.post('/whitelist', securityHandle.getSecurityWhitelist);
-router.post('/whitelist/save', securityHandle.saveSecurityWhitelist);
-router.post('/whitelist/remove', securityHandle.removeSecurityWhitelist);
 
 router.post('/v2/overview', securityV2Handle.getSecurityOverviewV2);
 router.post('/v2/review/clusters', securityV2Handle.getSecurityReviewClusters);

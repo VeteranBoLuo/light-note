@@ -133,7 +133,6 @@ declare(ADMIN_POLICIES.READ, 'bookmark', [
   ['POST', '/bookmark/queryTagSpaces'],
   ['POST', '/bookmark/getTagSpace'],
   ['POST', '/bookmark/queryTagSpaceResources'],
-  ['POST', '/bookmark/getTagDetail'],
   ['POST', '/bookmark/getTagEditorData'],
   ['POST', '/bookmark/getRelatedTag'],
   ['POST', '/bookmark/getTagGraph'],
@@ -159,16 +158,11 @@ declare(ADMIN_POLICIES.CONTENT_WRITE, 'bookmark', [
   ['POST', '/bookmark/importBookmarksExcel'],
   ['POST', '/bookmark/archive'],
   ['POST', '/bookmark/health/ignore'],
-  // AI 整理"应用"是对 subject 的真实内容写(建标签/加关系/补书签名称),必须 maintain-only、readonly 阻断,
-  // 不能归 AI_USE(否则只读预览代管也能落库,违反"readonly 阻断写")。
-  ['POST', '/bookmark/ai/organize/apply'],
   ['POST', '/bookmark/retryIconBatchFailures'],
 ]);
 
 declare(ADMIN_POLICIES.AI_USE, 'bookmark', [
   ['POST', '/bookmark/summarize'],
-  ['POST', '/bookmark/ai/organize/quote'],
-  ['POST', '/bookmark/ai/organize/run'],
 ]);
 
 declare(ADMIN_POLICIES.CONTENT_DESTRUCTIVE, 'bookmark', [
@@ -227,7 +221,6 @@ declare(ADMIN_POLICIES.CONTENT_WRITE, 'note', [
   ['POST', '/note/moveNoteNodes'],
   ['POST', '/note/delNote'],
   ['POST', '/note/deleteNoteSubtree'],
-  ['POST', '/note/updateNoteSort'],
   ['POST', '/note/toggleNoteTop'],
   ['POST', '/note/updateNoteTags'],
   ['POST', '/note/createNoteVersion'],
@@ -289,7 +282,6 @@ declare(ADMIN_POLICIES.CONTENT_WRITE, 'file', [
   ['POST', '/file/moveFolder'],
   ['POST', '/file/deleteFolder'],
   ['POST', '/file/clearFolderFiles'],
-  ['POST', '/file/updateFolderSort'],
   ['POST', '/file/updateFileTags'],
   ['POST', '/file/share/create'],
   ['POST', '/file/share/revoke'],
@@ -328,7 +320,6 @@ declare(ADMIN_POLICIES.READ, 'organize', [
   ['GET', '/organize/suggestions/runs/:id'],
   ['GET', '/organize/suggestions/runs/:id/items/:suggestionId/archive-preview'],
   ['GET', '/organize/summary'],
-  ['GET', '/organize/knowledge-structure/summary'],
   ['GET', '/organize/issues/:issueType'],
   ['GET', '/organize/duplicate-bookmarks/:groupKey/preview'],
   ['GET', '/organize/bookmark-health'],
@@ -390,7 +381,6 @@ declare(ADMIN_POLICIES.ACCOUNT_WRITE, 'todo', [
   ['POST', '/todo/v2/convert'],
   ['POST', '/todo/v2/series/pause'],
   ['POST', '/todo/v2/series/resume'],
-  ['POST', '/todo/v2/series/stop'],
   ['POST', '/todo/v2/instance/skip'],
   // 翻月补齐会持久化生成固定日程实例，不是只读查询；代管上下文必须继续失败关闭。
   ['POST', '/todo/v2/calendar-range'],
@@ -416,7 +406,6 @@ declare(ADMIN_POLICIES.CONTENT_DESTRUCTIVE, 'trash', [
 ]);
 
 declare(ADMIN_POLICIES.READ, 'common', [
-  ['POST', '/common/getImages'],
   ['POST', '/common/getHelpConfig'],
   ['POST', '/common/resolveHelpSources'],
   ['GET', '/common/noticeSummary'],
@@ -441,7 +430,6 @@ declare(ADMIN_POLICIES.READ, 'toolbox', [
   ['GET', '/toolbox/tasks'],
   ['GET', '/toolbox/translation/history'],
   ['GET', '/toolbox/translation/history/:jobId'],
-  ['GET', '/toolbox/jobs'],
   ['GET', '/toolbox/jobs/:jobId'],
   ['GET', '/toolbox/artifacts/:artifactId'],
   ['GET', '/toolbox/artifacts/:artifactId/study'],
@@ -460,9 +448,7 @@ declare(ADMIN_POLICIES.ACCOUNT_WRITE, 'toolbox', [
   ['POST', '/toolbox/workspaces/:workspaceId/open'],
   ['POST', '/toolbox/workspaces/:workspaceId/resources'],
   ['POST', '/toolbox/workspaces/:workspaceId/resources/remove'],
-  ['POST', '/toolbox/workspaces/:workspaceId/items'],
   ['POST', '/toolbox/workspaces/:workspaceId/board'],
-  ['PATCH', '/toolbox/workspaces/:workspaceId/items/:itemId'],
   ['POST', '/toolbox/workspaces/:workspaceId/sessions'],
   ['POST', '/toolbox/uploads'],
   ['POST', '/toolbox/jobs'],
@@ -512,7 +498,6 @@ declare(ADMIN_POLICIES.ACCOUNT_WRITE, 'user', [
   ['POST', '/user/extension/exchange'],
   ['POST', '/user/saveUserInfo'],
   ['POST', '/user/feature-announcements/seen'],
-  ['GET', '/user/deleteUserById'],
   ['POST', '/user/logout'],
   ['POST', '/user/configPassword'],
   ['GET', '/user/email-change/status'],
@@ -715,11 +700,9 @@ declare(ADMIN_POLICIES.ADMIN_ONLY, 'admin', [
   ['POST', '/resource-governance/jobs/:id/retry'],
   ['POST', '/resource-governance/jobs/:id/cancel'],
   ['POST', '/resource-governance/audits/query'],
-  ['POST', '/common/getAgentLogChain'],
   ['POST', '/common/getDeepSeekBalance'],
   ['POST', '/common/getAdminOverviewSnapshot'],
   ['POST', '/common/getAdminOverviewActiveUsers'],
-  ['POST', '/common/getAdminOverview'],
   ['POST', '/common/getAdminOverviewRecent'],
   ['POST', '/todo/v2/admin/diagnostics'],
   ['POST', '/common/getAdminOverviewTrend'],
@@ -744,21 +727,6 @@ declare(ADMIN_POLICIES.ADMIN_ONLY, 'admin', [
   ['POST', '/opinion/getOpinionList'],
   ['POST', '/opinion/replyOpinion'],
   ['POST', '/opinion/delOpinion'],
-  ['POST', '/security/overview'],
-  ['POST', '/security/events'],
-  ['GET', '/security/events/:eventId'],
-  ['POST', '/security/events/:eventId/handle'],
-  ['POST', '/security/events/batchHandle'],
-  ['POST', '/security/ipReputation'],
-  ['POST', '/security/ipAccounts'],
-  ['POST', '/security/accountBans'],
-  ['POST', '/security/accountReputation'],
-  ['POST', '/security/accountBan'],
-  ['POST', '/security/accountUnban'],
-  ['POST', '/security/rules'],
-  ['POST', '/security/whitelist'],
-  ['POST', '/security/whitelist/save'],
-  ['POST', '/security/whitelist/remove'],
   ['POST', '/security/v2/overview'],
   ['POST', '/security/v2/review/clusters'],
   ['POST', '/security/v2/review/batch-disposition'],
@@ -798,8 +766,6 @@ declare(ADMIN_POLICIES.ADMIN_ONLY, 'admin', [
   ['POST', '/growth/admin/campaigns/execute'],
   ['POST', '/growth/admin/campaigns/detail'],
   ['POST', '/growth/admin/campaigns/delete'],
-  ['POST', '/json/deleteConfigById'],
-  ['POST', '/json/updateConfig'],
   ['POST', '/knowledgeBase/list'],
   ['POST', '/knowledgeBase/get'],
   ['POST', '/knowledgeBase/search'],
@@ -960,9 +926,6 @@ function resolvePolicy(method, path) {
   }
   if (/^\/toolbox\/workspaces\/[^/]+\/board$/.test(path)) {
     return routePolicies.get(`${method} /toolbox/workspaces/:workspaceId/board`);
-  }
-  if (/^\/toolbox\/workspaces\/[^/]+\/items$/.test(path)) {
-    return routePolicies.get(`${method} /toolbox/workspaces/:workspaceId/items`);
   }
   if (/^\/toolbox\/workspaces\/[^/]+\/items\/[^/]+$/.test(path)) {
     return routePolicies.get(`${method} /toolbox/workspaces/:workspaceId/items/:itemId`);

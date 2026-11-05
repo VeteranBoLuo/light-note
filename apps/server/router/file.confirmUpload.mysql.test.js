@@ -72,7 +72,6 @@ vi.mock('../router_handle/fileHandle.js', () => ({
   moveFolder: vi.fn(),
   deleteFolder: vi.fn(),
   clearFolderFiles: vi.fn(),
-  updateFolderSort: vi.fn(),
   getFileTags: vi.fn(),
   updateFileTags: vi.fn(),
 }));

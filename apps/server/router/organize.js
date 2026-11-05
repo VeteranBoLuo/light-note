@@ -7,7 +7,6 @@ import * as suggestions from '../router_handle/organizeSuggestionHandle.js';
 const router = express.Router();
 
 router.get('/summary', organizeHandle.summary);
-router.get('/knowledge-structure/summary', localProcessingRateLimiter, organizeHandle.knowledgeStructureSummary);
 router.get(
   '/issues/:issueType',
   (req, res, next) =>

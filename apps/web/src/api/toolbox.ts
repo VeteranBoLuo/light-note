@@ -407,33 +407,6 @@ export async function removeToolboxWorkspaceResource(
   return response.data as ToolboxWorkspace;
 }
 
-export async function createToolboxWorkspaceItem(
-  workspaceId: string,
-  input: { lane: ToolboxWorkspaceLane; title: string; content?: string; dueOn?: string | null },
-): Promise<ToolboxWorkspace> {
-  const response = await apiBasePost(`/api/toolbox/workspaces/${encodeURIComponent(workspaceId)}/items`, input, {
-    silent: true,
-  });
-  if (![200, 201].includes(Number(response.status))) throw apiFailure(response, 'TOOLBOX_WORKSPACE_ITEM_CREATE_FAILED');
-  invalidateToolboxProjects();
-  return response.data as ToolboxWorkspace;
-}
-
-export async function updateToolboxWorkspaceItem(
-  workspaceId: string,
-  itemId: string,
-  input: Partial<Pick<ToolboxWorkspaceItem, 'title' | 'content' | 'lane' | 'status' | 'position' | 'dueOn'>>,
-): Promise<ToolboxWorkspace> {
-  const response = await apiBasePatch(
-    `/api/toolbox/workspaces/${encodeURIComponent(workspaceId)}/items/${encodeURIComponent(itemId)}`,
-    input,
-    { silent: true },
-  );
-  if (response.status !== 200) throw apiFailure(response, 'TOOLBOX_WORKSPACE_ITEM_UPDATE_FAILED');
-  invalidateToolboxProjects();
-  return response.data as ToolboxWorkspace;
-}
-
 export async function createToolboxWorkspaceSession(
   workspaceId: string,
   input: { summary?: string; nextStep?: string; durationMinutes?: number },

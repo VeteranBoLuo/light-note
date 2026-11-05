@@ -547,31 +547,6 @@ export async function removeToolboxWorkspaceResource({ userId, workspaceId, reso
   return getToolboxWorkspace({ userId: ownerId, workspaceId, database });
 }
 
-export async function createToolboxWorkspaceItem({ userId, workspaceId, input = {}, database = pool } = {}) {
-  const { operateBoard } = await import('./board.js');
-  return (
-    await operateBoard({
-      userId,
-      workspaceId,
-      database,
-      legacy: true,
-      input: { requestId: crypto.randomUUID(), command: { ...input, type: 'create' } },
-    })
-  ).workspace;
-}
-export async function updateToolboxWorkspaceItem({ userId, workspaceId, itemId, input = {}, database = pool } = {}) {
-  const { operateBoard } = await import('./board.js');
-  return (
-    await operateBoard({
-      userId,
-      workspaceId,
-      database,
-      legacy: true,
-      input: { requestId: crypto.randomUUID(), command: { ...input, itemId, type: 'edit' } },
-    })
-  ).workspace;
-}
-
 export async function createToolboxWorkspaceSession({ userId, workspaceId, input = {}, database = pool } = {}) {
   const ownerId = requiredUserId(userId);
   await requireWorkspace(database, ownerId, workspaceId);

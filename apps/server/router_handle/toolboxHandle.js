@@ -32,7 +32,6 @@ import {
 import {
   addToolboxWorkspaceResources,
   createToolboxWorkspace,
-  createToolboxWorkspaceItem,
   createToolboxWorkspaceSession,
   getToolboxWorkspace,
   listToolboxHomeWorkspaces,
@@ -41,7 +40,6 @@ import {
   removeToolboxWorkspaceResource,
   updateToolboxWorkspace,
   deleteToolboxWorkspace,
-  updateToolboxWorkspaceItem,
 } from '../util/toolbox/workspace.js';
 
 function sendError(res, error) {
@@ -203,37 +201,6 @@ export async function removeWorkspaceResource(req, res) {
       resource: req.body?.resource,
     });
     await recordToolboxOperation(req, '移除工作区资料');
-    return res.send(resultData(workspace));
-  } catch (error) {
-    return sendError(res, error);
-  }
-}
-
-export async function createWorkspaceItem(req, res) {
-  if (!requireWrite(req, res)) return;
-  try {
-    const workspace = await createToolboxWorkspaceItem({
-      userId: req.user.id,
-      workspaceId: req.params.workspaceId,
-      input: req.body,
-    });
-    await recordToolboxOperation(req, '新建工作区事项');
-    return res.status(201).send(resultData(workspace));
-  } catch (error) {
-    return sendError(res, error);
-  }
-}
-
-export async function updateWorkspaceItem(req, res) {
-  if (!requireWrite(req, res)) return;
-  try {
-    const workspace = await updateToolboxWorkspaceItem({
-      userId: req.user.id,
-      workspaceId: req.params.workspaceId,
-      itemId: req.params.itemId,
-      input: req.body,
-    });
-    await recordToolboxOperation(req, '更新工作区事项');
     return res.send(resultData(workspace));
   } catch (error) {
     return sendError(res, error);

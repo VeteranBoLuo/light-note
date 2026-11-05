@@ -24,7 +24,6 @@ router.post('/v2/update-preview', todoHandle.updatePreviewTodoV2);
 router.post('/v2/update', todoHandle.updateTodoV2);
 router.post('/v2/series/pause', todoHandle.pauseTodoSeriesV2);
 router.post('/v2/series/resume', todoHandle.resumeTodoSeriesV2);
-router.post('/v2/series/stop', todoHandle.stopTodoSeriesV2);
 router.post('/v2/instance/skip', todoHandle.skipTodoInstanceV2);
 router.post('/v2/delete', todoHandle.deleteTodoV2);
 router.post('/v2/admin/diagnostics', todoHandle.todoPlanDiagnosticsV2);

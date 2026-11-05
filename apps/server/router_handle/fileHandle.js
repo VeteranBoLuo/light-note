@@ -22,7 +22,6 @@ import {
   listOwnedCloudFolders,
   moveOwnedCloudFolder,
   renameOwnedCloudFolder,
-  reorderOwnedCloudFolders,
 } from '../util/services/cloudFolderTreeService.js';
 
 function sendFolderServiceError(req, res, error, fallback) {
@@ -258,26 +257,6 @@ export const moveFolder = async (req, res) => {
       res,
       e,
       L(req, '文件夹移动暂时失败，请稍后重试', 'The folder could not be moved. Try again later.'),
-    );
-  }
-};
-
-export const updateFolderSort = async (req, res) => {
-  if (!ensureNotVisitor(req, res)) return;
-  try {
-    const items = Array.isArray(req.body?.folders) ? req.body.folders : req.body?.tags;
-    const result = await reorderOwnedCloudFolders({
-      userId: req.user.id,
-      parentId: req.body?.parentId,
-      items,
-    });
-    return res.send(resultData(result, 200, L(req, '排序成功', 'Folder order updated')));
-  } catch (e) {
-    return sendFolderServiceError(
-      req,
-      res,
-      e,
-      L(req, '文件夹排序暂时失败，请稍后重试', 'The folder order could not be updated. Try again later.'),
     );
   }
 };

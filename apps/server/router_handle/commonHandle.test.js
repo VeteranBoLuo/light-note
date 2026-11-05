@@ -6,9 +6,8 @@ const getConnection = vi.fn();
 vi.mock('../db/index.js', () => ({ default: { query, getConnection } }));
 
 // clearImages 用:文件删除与引用集合均可控
-const { unlinkSpy, collectUsedSpy, deleteThumbnailSpy } = vi.hoisted(() => ({
+const { unlinkSpy, deleteThumbnailSpy } = vi.hoisted(() => ({
   unlinkSpy: vi.fn(),
-  collectUsedSpy: vi.fn(),
   deleteThumbnailSpy: vi.fn(),
 }));
 vi.mock('fs/promises', () => ({
@@ -16,7 +15,6 @@ vi.mock('fs/promises', () => ({
     unlink: unlinkSpy,
   },
 }));
-vi.mock('../util/noteImages.js', () => ({ collectUsedImageNames: collectUsedSpy }));
 vi.mock('../util/noteImageThumbnail.js', () => ({ deleteNoteImageThumbnail: deleteThumbnailSpy }));
 const { mockProcessBookmarkIcons, mockIsBookmarkIconCheckRecent } = vi.hoisted(() => ({
   mockProcessBookmarkIcons: vi.fn().mockResolvedValue([]),
@@ -56,7 +54,6 @@ const {
   getNoticeSummary,
   getHelpConfig,
   resolveHelpSources,
-  getAdminOverview,
   getAdminOverviewSnapshot,
   getAdminOverviewRecent,
   getAdminOverviewTrend,
@@ -590,48 +587,6 @@ describe('getAdminOverviewTrend 历史分析', () => {
     await getAdminOverviewTrend({ user: { role: 'root' }, body: { days: 365 } }, res);
     expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ status: 400 }));
     expect(query).not.toHaveBeenCalled();
-  });
-});
-
-describe('getAdminOverview 兼容接口', () => {
-  beforeEach(() => query.mockReset());
-
-  it('并发组合快照与 7 日历史，并保留旧趋势字段', async () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date('2026-08-24T12:00:00+08:00'));
-    try {
-      query.mockImplementation(async (sql) => {
-        const snapshotResult = mockAdminOverviewSnapshotStatement(sql);
-        if (snapshotResult) return snapshotResult;
-        const activity = mockActivityStatement(sql);
-        if (activity) return activity;
-        const statement = String(sql);
-        if (statement.includes('same_time_baseline')) return [[]];
-        if (statement.includes('admin_overview_trend')) {
-          return [[{ d: '2026-08-24', kind: 'note', c: 3 }]];
-        }
-        if (statement.includes('AS activeUsers')) return [[{ activeUsers: 5 }]];
-        return [[]];
-      });
-      const res = mockRes();
-
-      await getAdminOverview({ user: { role: 'root' }, body: { hideInternal: true } }, res);
-
-      expect(query).toHaveBeenCalledTimes(15);
-      const payload = res.send.mock.calls[0][0];
-      expect(payload.status).toBe(200);
-      expect(payload.data.trend.at(-1)).toMatchObject({
-        label: '08-24',
-        d: '08-24',
-        notes: 3,
-        contentTotal: 3,
-        content: 3,
-      });
-      expect(payload.data.trendPeriod).toEqual({ days: 7, granularity: 'day' });
-      expect(payload.data).toHaveProperty('todayBaseline');
-    } finally {
-      vi.useRealTimers();
-    }
   });
 });
 

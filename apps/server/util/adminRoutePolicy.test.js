@@ -187,7 +187,6 @@ describe('adminRoutePolicyMiddleware', () => {
       '/toolbox/quotes',
       '/toolbox/workspaces',
       '/toolbox/workspaces/workspace-1/resources',
-      '/toolbox/workspaces/workspace-1/items',
       '/toolbox/workspaces/workspace-1/sessions',
       '/toolbox/workspaces/workspace-1/open',
       '/toolbox/jobs',
@@ -462,28 +461,6 @@ describe('adminRoutePolicyMiddleware', () => {
       expect(next).not.toHaveBeenCalled();
       expect(res.status).toHaveBeenCalledWith(403);
       expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ data: { code: 'ADMIN_MAINTENANCE_FORBIDDEN' } }));
-    }
-  });
-
-  it('AI 整理"应用"是内容写:readonly 阻断、maintain 放行;只读的 quote/run 仍放行', () => {
-    // apply = 真实写(建标签/关系/补名称),必须 maintain-only
-    const denyNext = vi.fn();
-    const denyRes = createRes();
-    adminRoutePolicyMiddleware(createReq('/bookmark/ai/organize/apply', 'POST', 'readonly'), denyRes, denyNext);
-    expect(denyNext).not.toHaveBeenCalled();
-    expect(denyRes.json).toHaveBeenCalledWith(expect.objectContaining({ data: { code: 'ADMIN_PREVIEW_READONLY' } }));
-
-    const allowNext = vi.fn();
-    const allowReq = createReq('/bookmark/ai/organize/apply', 'POST', 'maintain');
-    adminRoutePolicyMiddleware(allowReq, createRes(), allowNext);
-    expect(allowNext).toHaveBeenCalledTimes(1);
-    expect(allowReq.suppressUserRewards).toBe(true);
-
-    // quote/run 只产建议、不落库,仍属 AI_USE,readonly 可用
-    for (const path of ['/bookmark/ai/organize/quote', '/bookmark/ai/organize/run']) {
-      const next = vi.fn();
-      adminRoutePolicyMiddleware(createReq(path, 'POST', 'readonly'), createRes(), next);
-      expect(next).toHaveBeenCalledTimes(1);
     }
   });
 

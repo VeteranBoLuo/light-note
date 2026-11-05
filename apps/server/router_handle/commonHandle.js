@@ -4,7 +4,6 @@ import { queryActivitySummary, queryActivityBaseline, activityFailure } from '..
 import { resultData, snakeCaseKeys, insertData, generateUUID, INTERNAL_ROLES } from '../util/common.js';
 import { isLocalIp } from '../util/ipFilter.js';
 import { isSelfTraffic } from '../util/logExclude.js';
-import fsP from 'fs/promises';
 import path from 'path';
 import pool from '../db/index.js';
 import { validateQueryParams } from '../util/request.js';
@@ -17,7 +16,6 @@ import {
 import { buildOperationLogSystem } from '../util/apiLogSystem.js';
 import { getDeepSeekBalance as queryDeepSeekBalance } from '../util/agent/providerBalance.js';
 import { getDeepSeekDailyBalanceChange } from '../util/agent/providerBalanceSnapshot.js';
-import { collectUsedImageNames } from '../util/noteImages.js';
 import { resolveKnowledgeSourceTarget } from '../util/agent/sourceUtils.js';
 import { stableAgentErrorCode } from '../util/agent/logSafety.js';
 import { toPublicHelpArticle } from '../util/helpKnowledge.js';
@@ -1102,61 +1100,6 @@ export const analyzeImgUrl = async (req, res) => {
   res.send(resultData(allResults.filter(Boolean), 200, '图标检查完成'));
 };
 
-export const getImages = async (req, res) => {
-  // 后台图库(列全站书签图标 + 笔记图片 + 笔记模板图片 + 服务器图片目录)——仅 root 可查
-  if (req.user?.role !== 'root') return res.send(resultData(null, 403, '没有操作权限'));
-  // 指定要读取的目录路径
-  const directoryPath = '/www/wwwroot/images';
-
-  try {
-    // 读取目录中的所有文件和子目录。
-    // 用异步版：readdirSync 会阻塞事件循环，图片目录条目多时一次后台图库加载
-    // 会把整个单进程服务卡住(所有并发请求一起等)，而这里本来就在 async 上下文里。
-    let files = [];
-    try {
-      files = await fsP.readdir(directoryPath);
-    } catch (e) {
-      if (e.code === 'ENOENT') {
-        files = [];
-      } else {
-        throw e;
-      }
-    }
-
-    // 过滤并处理文件名和后缀
-    let fileList = files.map((file) => {
-      const ext = path.extname(file); // 获取文件后缀
-      const fileName = path.basename(file, ext); // 获取文件名（不带后缀）
-      return {
-        name: fileName,
-        extension: ext.split('.')[1],
-        fullFileName: file, // 如果需要完整的文件名（包括后缀）
-      };
-    });
-
-    // 引用集合统一由 util/noteImages.js 汇总(书签图标 + note_images + 模板正文),
-    // 精确按「文件名(不含扩展)」比对,避免子串误判(如 bookmark-5 命中 bookmark-50);
-    // 「仅被模板引用」的图片必须算已使用,否则 Root 清理会导致模板裂图
-    const usedNames = await collectUsedImageNames();
-
-    if (req.body.name) {
-      fileList = fileList.filter((file) => file.name.includes(req.body.name));
-    }
-    res.send(
-      resultData({
-        items: {
-          usedImages: fileList.filter((file) => usedNames.has(file.name)),
-          unUsedImages: fileList.filter((file) => !usedNames.has(file.name)),
-        },
-        total: fileList.length,
-      }),
-    );
-  } catch (error) {
-    console.error('读取目录时出错：', error);
-    res.send(resultData(null, 500, '读取图片目录失败'));
-  }
-};
-
 export const getHelpConfig = async (req, res) => {
   try {
     const [result] = await pool.query(
@@ -2018,72 +1961,5 @@ export const getAdminOverviewRecent = async (req, res) => {
     const status = error?.code === 'ADMIN_LIST_CURSOR_INVALID' ? 400 : 500;
     console.error('[AdminOverviewRecent] 查询失败 code=%s', stableAgentErrorCode(error));
     return res.send(resultData(null, status, status === 400 ? '查询游标无效' : '获取最近新增数据失败'));
-  }
-};
-
-// POST /common/getAdminOverview —— 兼容旧客户端的完整总览（核心快照 + 7 日历史分析）
-export const getAdminOverview = async (req, res) => {
-  if (req.user?.role !== 'root') return res.send(resultData(null, 403, '仅管理员可查看'));
-  try {
-    const hideInternal = req.body?.hideInternal !== false;
-    const now = new Date();
-    const [snapshot, history] = await Promise.all([
-      queryAdminOverviewSnapshot({ hideInternal, now }),
-      queryAdminOverviewTrend({ days: 7, hideInternal, now }),
-    ]);
-    // 旧接口保留 d/content 字段一个兼容周期；新总览页面使用快照与趋势接口，不再等待完整响应。
-    const trend = history.trend.map((row) => ({
-      ...row,
-      d: row.label,
-      content: row.contentTotal,
-    }));
-    return res.send(
-      resultData({
-        ...snapshot,
-        trend,
-        trendPeriod: { days: history.days, granularity: history.granularity },
-        todayBaseline: history.todayBaseline,
-      }),
-    );
-  } catch (error) {
-    console.error('[AdminOverview] 查询失败 code=%s', stableAgentErrorCode(error));
-    return res.send(resultData(null, 500, '获取后台总览失败'));
-  }
-};
-
-/**
- * 一条动作链路上的全部调用（root 专属）。
- *
- * 发卡、用户确认或驳回是彼此独立的请求，各有自己的 request_id；correlation_id 把它们绑在一起，
- * 后台才能回答「确认卡发出去了吗、用户点了没有、最后成功了吗」。链路记录条数天然很小(通常 2~4 条)，
- * 因此不做分页，只做固定上限保护。
- */
-export const getAgentLogChain = async (req, res) => {
-  try {
-    if (req.user?.role !== 'root') return res.send(resultData(null, 403, '仅管理员可查看'));
-
-    const correlationId = String(req.body?.correlationId || '').trim();
-    if (!correlationId || correlationId.length > 64 || !/^[A-Za-z0-9][A-Za-z0-9._:-]*$/.test(correlationId)) {
-      return res.send(resultData(null, 400, '链路标识无效'));
-    }
-
-    const [rows] = await pool.query(
-      `SELECT id, request_id, correlation_id, confirmation_id, task_type, status, outcome_kind, tools_used,
-              answer_chars, answer_digest, delivered, error_msg, duration_ms, total_tokens, created_at
-         FROM agent_logs
-        WHERE correlation_id = ?
-        ORDER BY created_at ASC, id ASC
-        LIMIT 20`,
-      [correlationId],
-    );
-
-    return res.send(resultData({ items: rows, correlationId }));
-  } catch (e) {
-    // 老库还没跑迁移时按「无链路」返回，后台详情仍能展示其余信息，不整页报错。
-    if (e?.code === 'ER_BAD_FIELD_ERROR') {
-      return res.send(resultData({ items: [], correlationId: String(req.body?.correlationId || '') }));
-    }
-    console.error('[admin-list] AI 调用链路查询失败 code=%s', stableAgentErrorCode(e));
-    return res.send(resultData(null, 500, '查询失败'));
   }
 };

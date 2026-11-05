@@ -1,7 +1,6 @@
 import pool from '../../db/index.js';
 import { getToolboxKnowledgeOverview, ORGANIZE_KNOWLEDGE_ISSUE_KINDS } from '../toolbox/knowledgeStructure.js';
 
-const PREVIEW_LIMIT = 3;
 const DEFAULT_PAGE_LIMIT = 20;
 const MAX_PAGE_LIMIT = 50;
 const ORGANIZE_KNOWLEDGE_ISSUE_KIND_SET = new Set(ORGANIZE_KNOWLEDGE_ISSUE_KINDS);
@@ -41,13 +40,6 @@ function normalizeIssueKind(value) {
   });
 }
 
-function organizeIssueCounts(issueCounts = {}) {
-  return ORGANIZE_KNOWLEDGE_ISSUE_KINDS.map((kind) => ({
-    kind,
-    count: Math.max(0, Number(issueCounts[kind] || 0)),
-  }));
-}
-
 function organizeHealthScore(totalNotes, issueCounts = {}) {
   const total = Math.max(0, Number(totalNotes || 0));
   if (!total) return 100;
@@ -59,35 +51,6 @@ function organizeHealthScore(totalNotes, issueCounts = {}) {
     ratio('untitled') * 10 +
     ratio('deep') * 8;
   return Math.max(0, Math.min(100, Math.round(100 - penalty)));
-}
-
-export async function getOrganizeKnowledgeStructureSummary({ userId, db = pool } = {}) {
-  const overview = await getToolboxKnowledgeOverview({
-    userId,
-    db,
-    analysisOptions: {
-      issueKinds: ORGANIZE_KNOWLEDGE_ISSUE_KINDS,
-      issueLimit: PREVIEW_LIMIT,
-      includeNodes: false,
-    },
-  });
-  return {
-    scannedAt: overview.scannedAt,
-    healthScore: organizeHealthScore(overview.summary.total, overview.issueCounts),
-    totalNotes: overview.summary.total,
-    rootNotes: overview.summary.roots,
-    maxDepth: overview.summary.maxDepth,
-    findingCount: overview.selectedIssueTotal,
-    affectedNoteCount: overview.selectedAffectedNoteCount,
-    priorityIssueCount: overview.selectedSeverityCounts.high,
-    issueCounts: organizeIssueCounts(overview.issueCounts),
-    preview: {
-      state: 'ready',
-      items: overview.issues,
-      hasMore: overview.selectedIssueTotal > overview.issues.length,
-      errorCode: null,
-    },
-  };
 }
 
 export async function listOrganizeKnowledgeStructureIssues({ userId, cursor, limit, kind, db = pool } = {}) {
