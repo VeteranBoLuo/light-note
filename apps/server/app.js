@@ -133,8 +133,8 @@ try {
   process.exit(1);
 }
 ensureNotificationTable().catch((err) => console.error('通知表初始化失败 code=%s', stableAgentErrorCode(err)));
-// 白名单缓存必须在开始接请求前加载完:否则重启后的空窗期(异步加载未完成)会漏过滤、记下本该跳过的自己人日志(如部署后立刻用白名单设备操作)
-await initLogExclude().catch((err) => console.error('日志白名单初始化失败 code=%s', stableAgentErrorCode(err)));
+// 内部设备缓存必须在开始接请求前加载完:否则重启后的空窗期(异步加载未完成)会漏过滤、记下本该跳过的自己人日志(如部署后立刻在内部设备上以游客身份操作)
+await initLogExclude().catch((err) => console.error('内部设备过滤初始化失败 code=%s', stableAgentErrorCode(err)));
 // 成长中心读取接口必须保持纯只读，因此相关 Schema 在监听 HTTP 前完成，而不是在 GET 内兜底建表。
 try {
   await ensurePointsSchema();

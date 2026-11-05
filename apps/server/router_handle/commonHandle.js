@@ -3,7 +3,7 @@ import { buildApproximateFunnelQuery, buildEntrySourceQuery } from '../util/serv
 import { queryActivitySummary, queryActivityBaseline, activityFailure } from '../util/services/userActivityService.js';
 import { resultData, snakeCaseKeys, insertData, generateUUID, INTERNAL_ROLES } from '../util/common.js';
 import { isLocalIp } from '../util/ipFilter.js';
-import { isSelfTraffic, listLogExclude, addLogExclude, removeLogExclude } from '../util/logExclude.js';
+import { isSelfTraffic } from '../util/logExclude.js';
 import fsP from 'fs/promises';
 import path from 'path';
 import pool from '../db/index.js';
@@ -760,8 +760,8 @@ export const recordOperationLogs = (req, res) => {
     if (!userId || !moduleName || !operationName) {
       return res.send(resultData(null, 400, '操作日志参数不完整'));
     }
-    // 本地/回环请求(本地调试)不记操作日志
-    // 游客内容维护属于管理员审计，即使是自己人设备也必须记录。
+    // 本地/回环请求(本地调试)与内部设备上的非内部账号流量不记操作日志
+    // 游客内容维护属于管理员审计，即使在内部设备上也必须记录。
     if (!req.isVisitorWorkspace && isSelfTraffic(req)) return res.send(resultData(null));
     const log = {
       module: req.isVisitorWorkspace ? `游客内容维护/${moduleName}` : moduleName,
@@ -790,48 +790,6 @@ export const recordOperationLogs = (req, res) => {
       });
   } catch (e) {
     res.send(resultData(null, 400, '客户端请求异常：' + e.message));
-  }
-};
-
-// —— 日志白名单(自己人设备免记录 api/操作/转化):仅 root 可管理 ——
-export const getLogExclude = async (req, res) => {
-  if (req.user?.role !== 'root') return res.send(resultData(null, 403, '没有操作权限'));
-  try {
-    res.send(resultData(await listLogExclude()));
-  } catch (e) {
-    res.send(resultData(null, 500, '服务器内部错误: ' + e.message));
-  }
-};
-
-export const addLogExcludeFp = async (req, res) => {
-  if (req.user?.role !== 'root') return res.send(resultData(null, 403, '没有操作权限'));
-  try {
-    const fingerprint = String(req.body?.fingerprint || '')
-      .trim()
-      .slice(0, 128);
-    const deviceId = String(req.body?.deviceId || req.headers?.['x-log-device-id'] || '')
-      .trim()
-      .slice(0, 128);
-    const note = String(req.body?.note || '')
-      .trim()
-      .slice(0, 255);
-    if (!fingerprint) return res.send(resultData(null, 400, '缺少指纹'));
-    await addLogExclude(fingerprint, deviceId, note);
-    res.send(resultData(null));
-  } catch (e) {
-    res.send(resultData(null, 500, '服务器内部错误: ' + e.message));
-  }
-};
-
-export const removeLogExcludeFp = async (req, res) => {
-  if (req.user?.role !== 'root') return res.send(resultData(null, 403, '没有操作权限'));
-  try {
-    const fingerprint = String(req.body?.fingerprint || '').trim();
-    if (!fingerprint) return res.send(resultData(null, 400, '缺少指纹'));
-    await removeLogExclude(fingerprint);
-    res.send(resultData(null));
-  } catch (e) {
-    res.send(resultData(null, 500, '服务器内部错误: ' + e.message));
   }
 };
 

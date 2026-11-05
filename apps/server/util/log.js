@@ -1,6 +1,6 @@
 import pool from '../db/index.js';
 import { resultData, formatDateTime, insertData } from './common.js';
-import { isSelfTraffic } from './logExclude.js';
+import { isSelfTraffic, rememberInternalDevice } from './logExclude.js';
 import { shouldSkipApiLog, summarizeApiLogPayload } from './logPolicy.js';
 import { redactSensitiveText, stableAgentErrorCode } from './agent/logSafety.js';
 import { buildApiLogSystem } from './apiLogSystem.js';
@@ -106,6 +106,8 @@ export function sanitizeLogUrl(value) {
 export async function logFunction(req, res, next) {
   try {
     const requestStartedAt = Date.now();
+    // 全局中间件对每个请求都执行：root/test 登录态在这里把当前设备登记为内部设备，后续同设备游客流量才能被排除。
+    rememberInternalDevice(req);
     // 管理员上下文由 admin_context_audit 统一记录 actor/subject/policy，避免混入普通用户 API 日志。
     if (req.adminContext) {
       next();
@@ -126,7 +128,7 @@ export async function logFunction(req, res, next) {
       next();
       return;
     }
-    // 本地/回环 IP,或「自己人」设备(指纹白名单)——不记 API 日志
+    // 本地/回环 IP,或内部设备上的非内部账号流量——不记 API 日志
     if (!isVisitorWorkspaceWrite && isSelfTraffic(req)) {
       next();
       return;

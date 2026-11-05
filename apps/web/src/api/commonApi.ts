@@ -245,9 +245,3 @@ export function refreshBookmarkIconAfterSave(
   bookmarkIconAfterSaveRequests.set(requestKey, request);
   return request;
 }
-
-// 日志白名单(自己人设备免记录 api/操作/转化):仅 root 可用
-export const getLogExclude = () => apiBasePost('/api/common/getLogExclude', {});
-export const addLogExclude = (fingerprint: string, deviceId?: string, note?: string) =>
-  apiBasePost('/api/common/addLogExclude', { fingerprint, deviceId, note });
-export const removeLogExclude = (fingerprint: string) => apiBasePost('/api/common/removeLogExclude', { fingerprint });

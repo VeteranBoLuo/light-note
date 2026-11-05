@@ -28,7 +28,6 @@ const MOBILE_ROUTES = new Set([
   '/conversion',
   '/supportManagement',
   '/logCleanup',
-  '/logExclude',
   '/securityCenterMobile',
   '/notificationCenter',
   '/adminGovernance',
@@ -86,7 +85,6 @@ describe('后台导航菜单', () => {
         'adminAudit',
         'apiLog',
         'logCleanup',
-        'logExclude',
         'resourceGovernance',
         'adminGovernance',
       ]),
@@ -96,8 +94,8 @@ describe('后台导航菜单', () => {
       expect.arrayContaining(['knowledgeBase', 'notificationCenter', 'securityCenter', 'serverManagement']),
     );
     expect(ids).toContain('manorManagement');
-    expect(ids).toHaveLength(22);
-    expect(new Set(ids).size).toBe(22);
+    expect(ids).toHaveLength(21);
+    expect(new Set(ids).size).toBe(21);
     expect(ids.at(-1)).toBe('serverManagement');
   });
 
@@ -205,7 +203,7 @@ describe('后台导航菜单', () => {
 describe('resolveActiveNavId', () => {
   it('后台子路由取末段', () => {
     expect(resolveActiveNavId('/admin/userMg')).toBe('userMg');
-    expect(resolveActiveNavId('/admin/logExclude')).toBe('logExclude');
+    expect(resolveActiveNavId('/admin/logCleanup')).toBe('logCleanup');
   });
 
   it('/admin 本身高亮总览（重定向完成前不该没有高亮）', () => {
@@ -240,6 +238,14 @@ describe('resolveActiveNavId', () => {
     ]) {
       expect(ids.has(resolveActiveNavId(path))).toBe(true);
     }
+  });
+
+  it('日志白名单入口已移除，旧地址在两端都转到 API 日志', () => {
+    const ids = allItems(nav()).map((item) => item.id);
+    expect(ids).not.toContain('logExclude');
+    const desktopShell = adminRouter.find((route) => route.path === '/admin');
+    expect(desktopShell?.children?.find((route) => route.path === 'logExclude')?.redirect).toBe('/admin/apiLog');
+    expect(adminRouter.find((route) => route.path === 'logExclude')?.redirect).toBe('/apiLog');
   });
 
   it('独立任务系列诊断保留深链路由，但不再伪装成所有待办的常驻模块', () => {

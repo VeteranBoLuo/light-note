@@ -56,9 +56,6 @@ vi.mock('../util/growthTaskCompletion.js', () => ({ completeGrowthTask }));
 vi.mock('../util/services/communityChatIdentityService.js', () => ({ ensureCommunityChatIdentity }));
 vi.mock('../util/logExclude.js', () => ({
   isSelfTraffic: vi.fn(() => true),
-  listLogExclude: vi.fn(),
-  addLogExclude: vi.fn(),
-  removeLogExclude: vi.fn(),
 }));
 vi.mock('../util/extensionAuth.js', () => ({
   createExtensionAuthorizationCode,

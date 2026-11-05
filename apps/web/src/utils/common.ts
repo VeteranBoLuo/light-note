@@ -243,7 +243,7 @@ export function getLogFingerprint() {
 
 const LOG_DEVICE_ID_KEY = 'ln_log_device_id';
 
-// 浏览器本地稳定设备标识：用于日志白名单和登录设备列表归并；不参与登录、权限或设备信任判断。
+// 浏览器本地稳定设备标识：用于内部设备日志过滤和登录设备列表归并；不参与登录、权限或设备信任判断。
 export function getLogDeviceId() {
   try {
     const stored = localStorage.getItem(LOG_DEVICE_ID_KEY);

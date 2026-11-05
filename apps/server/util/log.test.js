@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const query = vi.fn();
+const logExclude = vi.hoisted(() => ({ isSelfTraffic: vi.fn(() => false), rememberInternalDevice: vi.fn() }));
 
 vi.mock('../db/index.js', () => ({ default: { query } }));
 vi.mock('./common.js', () => ({
@@ -8,7 +9,7 @@ vi.mock('./common.js', () => ({
   formatDateTime: () => '',
   insertData: (value) => value,
 }));
-vi.mock('./logExclude.js', () => ({ isSelfTraffic: () => false }));
+vi.mock('./logExclude.js', () => logExclude);
 vi.mock('./logPolicy.js', async (importOriginal) => ({
   ...(await importOriginal()),
   shouldSkipApiLog: () => false,
@@ -189,5 +190,85 @@ describe('API 日志脱敏', () => {
     expect(stored.bytes).toBeGreaterThan(64 * 1024);
     expect(stored.preview).toHaveLength(4096);
     expect(stored.preview.startsWith('{"items":[')).toBe(true);
+  });
+});
+
+describe('API 日志的内部设备过滤', () => {
+  const mockRes = () => ({ statusCode: 200, on: vi.fn(), send: vi.fn() });
+
+  beforeEach(() => {
+    query.mockReset();
+    query.mockResolvedValue([{}, []]);
+    logExclude.isSelfTraffic.mockReset().mockReturnValue(false);
+    logExclude.rememberInternalDevice.mockReset();
+  });
+
+  it('每个请求都先交给内部设备登记，管理员上下文请求也不例外', async () => {
+    const req = {
+      adminContext: { id: 'ctx-1' },
+      user: { id: 'target-1', role: 'user' },
+      originalUrl: '/api/note/getNoteList',
+      method: 'POST',
+      headers: {},
+    };
+    const res = mockRes();
+    const next = vi.fn();
+
+    await logFunction(req, res, next);
+
+    expect(logExclude.rememberInternalDevice).toHaveBeenCalledWith(req);
+    expect(next).toHaveBeenCalledOnce();
+    expect(res.on).not.toHaveBeenCalled();
+  });
+
+  it('自有流量直接放行，不登记 finish 回调也不写库', async () => {
+    logExclude.isSelfTraffic.mockReturnValue(true);
+    const req = {
+      user: { id: 'visitor-1', role: 'visitor', isAuthenticated: false },
+      originalUrl: '/api/bookmark/getBookmarkList',
+      method: 'POST',
+      body: {},
+      headers: { 'x-log-device-id': '7f0c2a4e-5b1d-4c2e-9a3f-1d2e3f4a5b6c' },
+      ip: '203.0.113.8',
+    };
+    const res = mockRes();
+    const next = vi.fn();
+
+    await logFunction(req, res, next);
+
+    expect(logExclude.isSelfTraffic).toHaveBeenCalledWith(req);
+    expect(next).toHaveBeenCalledOnce();
+    expect(res.on).not.toHaveBeenCalled();
+    expect(query).not.toHaveBeenCalled();
+  });
+
+  it('内部账号登录态不算自有流量时照常写入 API 日志', async () => {
+    let finish = () => {};
+    const res = {
+      statusCode: 200,
+      on: vi.fn((event, callback) => {
+        if (event === 'finish') finish = callback;
+      }),
+      send: vi.fn(),
+    };
+
+    await logFunction(
+      {
+        user: { id: 'root-1', role: 'root', isAuthenticated: true },
+        originalUrl: '/api/bookmark/getBookmarkList',
+        method: 'POST',
+        body: {},
+        headers: { 'x-log-device-id': '7f0c2a4e-5b1d-4c2e-9a3f-1d2e3f4a5b6c' },
+        ip: '203.0.113.8',
+        route: {},
+      },
+      res,
+      vi.fn(),
+    );
+    await finish();
+    await Promise.resolve();
+
+    expect(query).toHaveBeenCalledOnce();
+    expect(query.mock.calls[0][1][0].userId).toBe('root-1');
   });
 });

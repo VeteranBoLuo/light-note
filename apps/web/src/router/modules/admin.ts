@@ -136,8 +136,9 @@ const adminRouter: RouteRecordRaw[] = [
         component: () => import('@/view/admin/components/logCleanup/LogCleanup.vue'),
       },
       {
+        // 日志白名单已改为内部账号登录时自动标记设备，旧地址转到 API 日志。
         path: 'logExclude',
-        component: () => import('@/view/admin/components/logExclude/LogExclude.vue'),
+        redirect: '/admin/apiLog',
       },
       {
         path: 'pointsOps',
@@ -246,7 +247,7 @@ const adminRouter: RouteRecordRaw[] = [
   {
     path: 'logExclude',
     meta: MOBILE_ADMIN_META,
-    component: () => import('@/view/admin/components/logExclude/LogExclude.vue'),
+    redirect: '/apiLog',
   },
   {
     path: 'adminGovernance',

@@ -508,7 +508,7 @@ export const registerUser = async (req, res) => {
     );
 
     // 记录日志（非关键，失败不影响注册）。注册路由手动写 api_logs，
-    // 不经过全局请求日志中间件，因此必须在这里单独应用自有流量白名单。
+    // 不经过全局请求日志中间件，因此必须在这里单独排除本地与内部设备流量。
     if (!isSelfTraffic(req)) {
       try {
         const system = JSON.stringify(
