@@ -1,7 +1,12 @@
 <template>
   <div
     class="chat-profile-content"
-    :class="{ 'chat-profile-content--identity-only': identityOnly, 'chat-profile-content--stable': stableLayout }"
+    :class="{
+      'chat-profile-content--identity-only': identityOnly,
+      'chat-profile-content--stable': stableLayout,
+      'chat-profile-content--card': cardLayout,
+      'chat-profile-content--mobile': cardLayout && isMobileLayout,
+    }"
   >
     <div v-if="loading" class="chat-profile-content__state">
       <BLoading inline loading :title="t('communityChat.profile.loading')" />
@@ -34,8 +39,38 @@
           <slot name="identityActions" />
         </ProfileBackgroundSurface>
         <template v-if="!identityOnly">
+          <div
+            v-if="cardLayout && (isOwn || (communityActions && profile.userPublicId) || (authenticated && chatActions))"
+            class="chat-profile-content__toolbar"
+          >
+            <BButton v-if="isOwn" type="text" class="chat-profile-content__edit" @click="beginEdit">
+              <SvgIcon :src="icon.communityChat.profileEdit" size="16" aria-hidden="true" />
+              {{ t('community.feed.editProfile') }}
+            </BButton>
+            <CommunityProfileActions
+              v-if="communityActions && profile.userPublicId"
+              :user-public-id="profile.userPublicId"
+              :prepared-profile="actionsProfile"
+              card-layout
+              @navigate="emit('navigate', $event)"
+            />
+            <BActionMenu
+              v-if="authenticated && chatActions && !isOwn"
+              :items="memberActions"
+              :aria-label="t('communityChat.profile.moreActions')"
+              :z-index="800"
+              placement="bottom-right"
+              class="chat-profile-content__more"
+              @select="selectMemberAction"
+            >
+              <BButton type="text" :aria-label="t('communityChat.profile.moreActions')">
+                <SvgIcon :src="icon.common.more" size="16" aria-hidden="true" />
+                {{ t('common.more') }}
+              </BButton>
+            </BActionMenu>
+          </div>
           <CommunityProfileActions
-            v-if="communityActions && profile.userPublicId"
+            v-else-if="!cardLayout && communityActions && profile.userPublicId"
             :user-public-id="profile.userPublicId"
             :prepared-profile="actionsProfile"
             @navigate="emit('navigate', $event)"
@@ -53,9 +88,11 @@
               </span>
             </div>
             <p :class="{ 'is-empty': !profile.bio }">
-              {{ profile.bio || t('communityChat.profile.bioEmpty') }}
+              {{
+                profile.bio || t(cardLayout ? 'communityChat.profile.bioEmptyShort' : 'communityChat.profile.bioEmpty')
+              }}
             </p>
-            <p v-if="profile.communityTenureLabel" class="chat-profile-content__tenure">
+            <p v-if="!cardLayout && profile.communityTenureLabel" class="chat-profile-content__tenure">
               <SvgIcon :src="icon.growth.tenure" size="15" aria-hidden="true" />
               <span>{{ profile.communityTenureLabel }}</span>
             </p>
@@ -67,14 +104,26 @@
                 <SvgIcon :src="icon.userCenter.growth" size="17" aria-hidden="true" />
                 <strong>{{ t('communityChat.profile.featuredAchievements') }}</strong>
               </span>
-              <small>{{ t('communityChat.profile.achievementCount', { count: profile.achievementCount }) }}</small>
+              <BButton
+                v-if="cardLayout && hasMoreAchievements && !compact"
+                type="text"
+                class="chat-profile-content__all-link"
+                :aria-label="t('communityChat.profile.viewAllAchievements', { count: profile.achievementCount })"
+                @click="openAllAchievements"
+              >
+                {{ t('communityChat.profile.allAchievementsLink', { count: profile.achievementCount }) }}
+                <SvgIcon :src="icon.arrow_right" size="14" aria-hidden="true" />
+              </BButton>
+              <small v-else>{{
+                t('communityChat.profile.achievementCount', { count: profile.achievementCount })
+              }}</small>
               <slot name="achievementActions" />
             </div>
 
             <AchievementGrid :achievements="featuredAchievements" />
 
             <BButton
-              v-if="hasMoreAchievements && !compact"
+              v-if="!cardLayout && hasMoreAchievements && !compact"
               type="text"
               class="chat-profile-content__view-all"
               @click="openAllAchievements"
@@ -84,7 +133,7 @@
             </BButton>
           </section>
 
-          <div v-if="isOwn" class="chat-profile-content__actions chat-profile-content__actions--own">
+          <div v-if="!cardLayout && isOwn" class="chat-profile-content__actions chat-profile-content__actions--own">
             <BButton type="primary" @click="beginEdit">
               <SvgIcon :src="icon.communityChat.profileEdit" size="16" aria-hidden="true" />
               {{ t('community.feed.editProfile') }}
@@ -92,7 +141,7 @@
           </div>
 
           <div
-            v-else-if="authenticated && chatActions"
+            v-else-if="!cardLayout && authenticated && chatActions && !isOwn"
             class="chat-profile-content__actions chat-profile-content__actions--moderation"
             :class="{ 'is-single': profile.role === 'official' }"
           >
@@ -106,12 +155,31 @@
             </BButton>
           </div>
 
-          <div v-else-if="!authenticated && chatActions" class="chat-profile-content__visitor-action">
+          <div v-else-if="!authenticated && chatActions && !isOwn" class="chat-profile-content__visitor-action">
             <span>{{ t('communityChat.profile.visitorHint') }}</span>
             <BButton type="primary" @click="emit('login')">{{ t('communityChat.guestLoginAction') }}</BButton>
           </div>
 
-          <p v-if="!compact" class="chat-profile-content__privacy">
+          <div v-if="cardLayout && !compact" class="chat-profile-content__privacy-disclosure">
+            <div class="chat-profile-content__privacy-summary">
+              <span>
+                <SvgIcon :src="icon.growth.lock" size="13" aria-hidden="true" />
+                {{ t('communityChat.profile.privacySummary') }}
+              </span>
+              <BButton type="text" :aria-expanded="privacyExpanded" @click="privacyExpanded = !privacyExpanded">
+                {{ t(privacyExpanded ? 'communityChat.profile.hidePrivacy' : 'communityChat.profile.showPrivacy') }}
+                <SvgIcon
+                  :src="icon.arrow_right"
+                  size="13"
+                  class="chat-profile-content__privacy-chevron"
+                  :class="{ 'is-expanded': privacyExpanded }"
+                  aria-hidden="true"
+                />
+              </BButton>
+            </div>
+            <p v-if="privacyExpanded" class="chat-profile-content__privacy">{{ t('communityChat.profile.privacy') }}</p>
+          </div>
+          <p v-else-if="!compact" class="chat-profile-content__privacy">
             <SvgIcon :src="icon.growth.lock" size="14" aria-hidden="true" />
             <span>{{ t('communityChat.profile.privacy') }}</span>
           </p>
@@ -176,6 +244,8 @@
     CommunityChatPublicAchievement,
   } from '@/api/communityChatApi';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import BActionMenu from '@/components/base/BasicComponents/BActionMenu.vue';
+  import type { BActionMenuItem } from '@/components/base/BasicComponents/actionMenu';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
@@ -186,6 +256,7 @@
   import icon from '@/config/icon';
   import { frameVariant } from '@/config/growthFrames';
   import { useUiDensity } from '@/composables/useUiDensity';
+  import { useMobileLayout } from '@/composables/useMobileLayout';
   import { avatarFrameStableSlot } from '@/config/avatarFrameArtwork';
   import type {
     CommunityChatProfileUpdateInput,
@@ -198,6 +269,8 @@
     defineProps<{
       identityOnly?: boolean;
       compact?: boolean;
+      /** 仅弹窗名片使用紧凑布局；公开主页与装扮预览沿用各自的结构。 */
+      cardLayout?: boolean;
       /** 装扮预览：头像槽按最大头像框预留、默认与插画背景共用同一盒模型，切换时名片内容不位移。 */
       stableLayout?: boolean;
       communityActions?: boolean;
@@ -220,6 +293,7 @@
     {
       identityOnly: false,
       compact: false,
+      cardLayout: false,
       stableLayout: false,
       communityActions: true,
       chatActions: true,
@@ -251,7 +325,19 @@
     viewChange: [view: ProfileView];
   }>();
   const { t, te } = useI18n();
+  const isMobileLayout = useMobileLayout();
   const view = ref<ProfileView>('summary');
+  const privacyExpanded = ref(false);
+  const memberActions = computed<BActionMenuItem[]>(() => [
+    ...(props.profile?.role === 'official'
+      ? []
+      : [{ key: 'block', label: t('communityChat.blocks.action'), icon: icon.navigation.permissions }]),
+    { key: 'report', label: t('communityChat.report.title'), icon: icon.message.warning, danger: true },
+  ]);
+  function selectMemberAction(key: string) {
+    if (key === 'block') emit('block');
+    else if (key === 'report') emit('report');
+  }
   const detailAchievement = ref<CommunityChatPublicAchievement | null>(null);
   const detailVisible = ref(false);
   const featuredAchievements = computed(() => (props.profile?.achievements || []).slice(0, 3));
@@ -294,7 +380,9 @@
       return () => {
         const profile = identityProps.profile;
         const validFrameId = profile.frameId && frameVariant(profile.frameId) ? profile.frameId : null;
-        const avatarSize = props.stableLayout ? dimension(props.compact ? 52 : 68, 'layout') : props.compact ? 52 : 68;
+        const baseAvatarSize = props.compact || (props.cardLayout && isMobileLayout.value) ? 52 : 68;
+        const avatarSize =
+          props.stableLayout || props.cardLayout ? dimension(baseAvatarSize, 'layout') : baseAvatarSize;
         const avatar = validFrameId
           ? h(AvatarFramePreview, {
               frameId: validFrameId,
@@ -346,6 +434,12 @@
               : null,
             h('span', { class: 'chat-profile-content__identity-tags' }, tags),
             profile.title ? h('small', profile.title) : null,
+            props.cardLayout && profile.communityTenureLabel
+              ? h('small', { class: 'chat-profile-content__tenure' }, [
+                  h(SvgIcon, { src: icon.growth.tenure, size: 14, 'aria-hidden': 'true' }),
+                  h('span', profile.communityTenureLabel),
+                ])
+              : null,
             slots.default?.(),
           ]),
         ]);
@@ -375,7 +469,11 @@
           {
             class: [
               'chat-profile-content__achievement-list',
-              { 'chat-profile-content__achievement-list--expanded': gridProps.expanded },
+              {
+                'chat-profile-content__achievement-list--expanded': gridProps.expanded,
+                'chat-profile-content__achievement-list--three':
+                  props.cardLayout && !gridProps.expanded && gridProps.achievements.length === 3,
+              },
             ],
           },
           gridProps.achievements.map((achievement) =>
@@ -400,7 +498,7 @@
                 h(AchievementEmblem, {
                   achievementKey: achievement.key,
                   group: achievement.group,
-                  size: props.compact ? 38 : 30,
+                  size: props.cardLayout ? dimension(32, 'layout') : props.compact ? 38 : 30,
                 }),
                 h('span', [
                   h('strong', achievementName(achievement.key)),
@@ -427,6 +525,7 @@
     () => props.sessionKey,
     () => {
       view.value = 'summary';
+      privacyExpanded.value = false;
     },
   );
 </script>
@@ -598,12 +697,12 @@
     font-size: var(--ui-font-11, 11px);
   }
 
-  .chat-profile-content__community-id {
+  .chat-profile-content__identity-copy > .chat-profile-content__community-id {
     width: fit-content;
     padding: var(--ui-space-2, 2px) var(--ui-space-7, 7px);
     border: 1px solid var(--surface-border-color);
     border-radius: 999px;
-    color: var(--primary-color) !important;
+    color: var(--primary-color);
     background: var(--card-background);
     font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
     letter-spacing: 0.02em;
@@ -669,11 +768,11 @@
     color: var(--desc-color);
   }
 
-  .chat-profile-content__tenure {
+  .chat-profile-content .chat-profile-content__tenure {
     display: flex;
     align-items: center;
     gap: var(--ui-space-6, 6px);
-    color: var(--desc-color) !important;
+    color: var(--desc-color);
   }
 
   .chat-profile-content__section-heading,
@@ -926,6 +1025,237 @@
     background: var(--workspace-panel-bg-color);
     font-size: var(--ui-font-10, 10px);
     font-weight: 700;
+  }
+
+  .chat-profile-content--card {
+    min-height: 0;
+    gap: var(--ui-space-20, 20px);
+
+    .chat-profile-content__identity {
+      padding: var(--ui-space-16, 16px);
+      gap: var(--ui-space-16, 16px);
+    }
+
+    .profile-background-surface.is-decorated > .chat-profile-content__identity {
+      min-height: var(--ui-layout-160, 160px);
+    }
+
+    .chat-profile-content__avatar {
+      width: var(--ui-layout-76, 76px);
+      height: var(--ui-layout-76, 76px);
+      flex: 0 0 var(--ui-layout-76, 76px);
+    }
+
+    .chat-profile-content__avatar.is-framed {
+      width: auto;
+      height: auto;
+      min-height: 0;
+      flex: 0 0 auto;
+    }
+
+    .chat-profile-content__identity-copy {
+      flex: 1;
+      grid-template-columns: minmax(0, 1fr);
+      gap: var(--ui-space-6, 6px);
+    }
+
+    .chat-profile-content__identity-copy > strong {
+      font-size: var(--ui-font-20, 20px);
+    }
+
+    .chat-profile-content__identity-copy > small {
+      font-size: var(--ui-font-12, 12px);
+    }
+
+    .chat-profile-content__identity-copy > .chat-profile-content__community-id {
+      max-width: 100%;
+      padding: 0;
+      border: 0;
+      border-radius: 0;
+      color: var(--desc-color);
+      background: transparent;
+      overflow-wrap: anywhere;
+    }
+
+    .chat-profile-content__identity-tags {
+      min-width: 0;
+      align-items: flex-start;
+    }
+
+    .chat-profile-content__identity-tags > * {
+      max-width: 100%;
+      white-space: nowrap;
+    }
+
+    .chat-profile-content__level.growth-level-chip,
+    .chat-profile-content__role,
+    .chat-profile-content__rarity {
+      font-size: var(--ui-font-11, 11px);
+    }
+
+    .chat-profile-content__rarity {
+      color: var(--warning-color);
+      border-color: currentColor;
+    }
+
+    .profile-background-surface.is-decorated .chat-profile-content__rarity {
+      color: var(--text-color);
+      border-color: var(--desc-color);
+    }
+
+    .profile-background-surface.is-decorated .chat-profile-content__tenure {
+      color: var(--text-color);
+    }
+
+    .chat-profile-content__tenure {
+      align-items: flex-start;
+      line-height: 1.5;
+    }
+
+    .chat-profile-content__tenure .svg-icon {
+      flex-shrink: 0;
+      margin-top: var(--ui-space-2, 2px);
+    }
+
+    .chat-profile-content__tenure > span {
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
+
+    .chat-profile-content__bio > p {
+      font-size: var(--ui-font-13, 13px);
+    }
+
+    .chat-profile-content__section-heading {
+      flex-wrap: wrap;
+      gap: var(--ui-space-6, 6px) var(--ui-space-12, 12px);
+    }
+
+    .chat-profile-content__section-heading strong {
+      font-size: var(--ui-font-14, 14px);
+    }
+
+    .chat-profile-content__all-link {
+      min-height: var(--ui-control-32, 32px);
+      padding: 0;
+      gap: var(--ui-space-4, 4px);
+      font-size: var(--ui-font-12, 12px);
+    }
+
+    .chat-profile-content__achievement-list--three {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .chat-profile-content__achievement {
+      min-height: var(--ui-layout-64, 64px);
+      padding: var(--ui-space-10, 10px) var(--ui-space-8, 8px);
+    }
+
+    .chat-profile-content__achievement strong {
+      font-size: var(--ui-font-12, 12px);
+    }
+
+    .chat-profile-content__achievement small {
+      font-size: var(--ui-font-11, 11px);
+    }
+  }
+
+  .chat-profile-content__toolbar {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--ui-space-8, 8px);
+  }
+
+  .chat-profile-content__toolbar > .chat-profile-content__edit.b_btn {
+    padding: 0;
+    gap: var(--ui-space-5, 5px);
+    font-size: var(--ui-font-13, 13px);
+  }
+
+  .chat-profile-content__more {
+    margin-left: auto;
+  }
+
+  .chat-profile-content__more .b_btn {
+    padding: 0;
+    gap: var(--ui-space-4, 4px);
+    color: var(--desc-color);
+  }
+
+  .chat-profile-content__privacy-disclosure {
+    min-width: 0;
+    padding-top: var(--ui-space-12, 12px);
+    border-top: 1px solid var(--surface-border-color);
+    display: grid;
+    gap: var(--ui-space-4, 4px);
+  }
+
+  .chat-profile-content__privacy-summary,
+  .chat-profile-content__privacy-summary > span {
+    display: flex;
+    align-items: center;
+    gap: var(--ui-space-6, 6px);
+  }
+
+  .chat-profile-content__privacy-summary {
+    justify-content: space-between;
+    flex-wrap: wrap;
+    color: var(--desc-color);
+    font-size: var(--ui-font-11, 11px);
+  }
+
+  .chat-profile-content__privacy-summary .b_btn {
+    padding: 0;
+    gap: var(--ui-space-4, 4px);
+    color: var(--desc-color);
+    font-size: var(--ui-font-11, 11px);
+  }
+
+  .chat-profile-content__privacy-chevron {
+    transform: rotate(90deg);
+  }
+
+  .chat-profile-content__privacy-chevron.is-expanded {
+    transform: rotate(-90deg);
+  }
+
+  .chat-profile-content--card.chat-profile-content--mobile {
+    gap: var(--ui-space-16, 16px);
+
+    .chat-profile-content__identity {
+      padding: var(--ui-space-12, 12px);
+      gap: var(--ui-space-12, 12px);
+    }
+
+    .profile-background-surface.is-decorated > .chat-profile-content__identity {
+      min-height: 0;
+    }
+
+    .chat-profile-content__avatar {
+      width: var(--ui-layout-60, 60px);
+      height: var(--ui-layout-60, 60px);
+      flex-basis: var(--ui-layout-60, 60px);
+    }
+
+    .chat-profile-content__avatar.is-framed {
+      width: auto;
+      height: auto;
+      flex-basis: auto;
+    }
+
+    .chat-profile-content__identity-copy > strong {
+      font-size: var(--ui-font-18, 18px);
+    }
+
+    .chat-profile-content__achievement-list {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .chat-profile-content__achievement {
+      min-height: var(--ui-layout-54, 54px);
+    }
   }
 
   @media (max-width: 520px) {
