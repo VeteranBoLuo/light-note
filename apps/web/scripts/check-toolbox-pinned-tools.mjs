@@ -22,7 +22,7 @@ try {
   ]) {
     const context = await browser.newContext({ viewport: { width, height: 1000 }, reducedMotion: 'reduce' });
     await context.addInitScript(() =>
-      localStorage.setItem('lightnote.toolbox.pinned-tools.v1:visual-user:user', JSON.stringify(['image_optimizer'])),
+      localStorage.setItem('lightnote.toolbox.pinned-tools.v1:visual-user:user', JSON.stringify(['pdf_organizer'])),
     );
     const page = await context.newPage();
     page.on('pageerror', (error) => errors.push(error.message));
