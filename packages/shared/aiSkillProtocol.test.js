@@ -5,6 +5,7 @@ import {
   AiSkillProtocolError,
   validateAiSkillRequest,
   validateAiSkillResponse,
+  hasUsableBookmarkFields,
 } from "./aiSkillProtocol.js";
 
 const requestFixture = () => ({
@@ -23,6 +24,59 @@ const requestFixture = () => ({
 });
 
 describe("aiSkillProtocol", () => {
+  it.each([
+    {},
+    {
+      url: "https://example.com/",
+      name: "",
+      description: "",
+      matchedTagIds: [],
+      newTags: [],
+    },
+    { name: "  ", description: "\n", matchedTagIds: [""], newTags: [" "] },
+    { name: {}, description: [], newTags: [{}] },
+  ])("书签成功响应拒绝没有可用字段的结果：%j", (fields) => {
+    expect(hasUsableBookmarkFields(fields)).toBe(false);
+    expect(() =>
+      validateAiSkillResponse({
+        protocolVersion: 1,
+        requestId: requestFixture().requestId,
+        skillId: "bookmark.parse_url",
+        skillVersion: 1,
+        status: "preview_ready",
+        result: { kind: "field_suggestions", fields },
+        sources: [],
+        coverage: null,
+        availableActions: [],
+        receipt: null,
+        error: null,
+      }),
+    ).toThrowError(expect.objectContaining({ code: "AI_SKILL_OUTPUT_EMPTY" }));
+  });
+
+  it.each([
+    { name: "网页名称" },
+    { description: "网页说明" },
+    { matchedTagIds: ["tag-1"] },
+    { newTags: ["主题"] },
+  ])("仍允许部分可用的书签字段：%j", (fields) => {
+    expect(hasUsableBookmarkFields(fields)).toBe(true);
+    expect(
+      validateAiSkillResponse({
+        protocolVersion: 1,
+        requestId: requestFixture().requestId,
+        skillId: "bookmark.parse_url",
+        skillVersion: 1,
+        status: "preview_ready",
+        result: { kind: "field_suggestions", fields },
+        sources: [],
+        coverage: null,
+        availableActions: [],
+        receipt: null,
+        error: null,
+      }).status,
+    ).toBe("preview_ready");
+  });
   it("前后端共用范围问答资源上限", () => {
     expect(AI_SCOPED_CONVERSATION_MAX_RESOURCES).toBe(50);
   });

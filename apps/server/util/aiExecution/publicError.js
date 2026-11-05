@@ -47,6 +47,13 @@ const PUBLIC_AI_EXECUTION_ERRORS = Object.freeze({
     status: 502,
     message: '简报建议包含当前状态无法支持的数字、日期或时间',
   },
+  BOOKMARK_PAGE_NOT_FOUND: { status: 422, message: '该页面不存在或内容已被删除，请检查书签网址' },
+  BOOKMARK_PAGE_DNS_FAILED: { status: 503, message: '暂时无法解析网站地址，请检查网址或稍后重试' },
+  BOOKMARK_PAGE_TLS_FAILED: { status: 422, message: '网站证书验证失败，请检查原网站或手动填写书签信息' },
+  BOOKMARK_PAGE_TLS_HANDSHAKE_FAILED: {
+    status: 503,
+    message: '与网站建立安全连接失败，请稍后重试或手动填写书签信息',
+  },
   BOOKMARK_PAGE_AUTH_REQUIRED: {
     status: 422,
     message: '该网页需要登录后才能查看，轻笺不会使用你的站点账号或 Cookie，请手动填写书签信息',

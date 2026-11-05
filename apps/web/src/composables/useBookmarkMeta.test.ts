@@ -23,7 +23,8 @@ vi.mock('@/components/base/BasicComponents/BMessage/BMessage', () => ({
     info: (...args: any[]) => messageInfo(...args),
   },
 }));
-vi.mock('@/api/commonApi', () => ({ recordOperation: vi.fn() }));
+const recordOperation = vi.fn();
+vi.mock('@/api/commonApi', () => ({ recordOperation }));
 const alertAlert = vi.fn();
 vi.mock('@/components/base/BasicComponents/BModal/Alert', () => ({
   default: { alert: (...a: any[]) => alertAlert(...a), destroy: vi.fn() },
@@ -89,6 +90,7 @@ describe('useBookmarkMeta.generateBookmarkMeta', () => {
     messageWarning.mockReset();
     messageError.mockReset();
     messageInfo.mockReset();
+    recordOperation.mockReset();
   });
 
   it('回填 name/description,只勾选候选内存在的推荐标签(白名单过滤)', async () => {
@@ -274,9 +276,30 @@ describe('useBookmarkMeta.generateBookmarkMeta', () => {
     await t.generateBookmarkMeta();
     expect(t.bookmarkData.value.relatedTags).toEqual(['manual', 'old-ai']);
 
-    mockSkillSuccess({ name: '', description: '', matchedTagIds: [], newTags: [] });
+    mockSkillSuccess({ name: '本轮有效名称', description: '本轮有效说明', matchedTagIds: [], newTags: [] });
     await t.generateBookmarkMeta();
     expect(t.bookmarkData.value.relatedTags).toEqual(['manual']);
+  });
+
+  it.each([
+    {},
+    { name: '', description: '', matchedTagIds: [], newTags: [] },
+    { name: ' ', description: '\n', matchedTagIds: [''], newTags: [' '] },
+  ])('空结果保留已有输入和标签，不记录成功或采纳：%j', async (fields) => {
+    const state = setup([{ label: '手动标签', value: 'manual' }]);
+    state.bookmarkData.value.name = '手写名称';
+    state.bookmarkData.value.description = '手写说明';
+    state.bookmarkData.value.relatedTags = ['manual'];
+    mockSkillSuccess(fields);
+    await state.generateBookmarkMeta();
+    expect(state.recognitionFailure.value).not.toBeNull();
+    expect(state.bookmarkData.value).toMatchObject({
+      name: '手写名称',
+      description: '手写说明',
+      relatedTags: ['manual'],
+    });
+    expect(messageSuccess).not.toHaveBeenCalled();
+    expect(recordOperation).not.toHaveBeenCalled();
   });
 
   it('url 为空时不发请求', async () => {

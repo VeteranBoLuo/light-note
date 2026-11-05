@@ -9554,6 +9554,8 @@ export default {
       TIMEOUT: 'Reading the page timed out. Retry later or open the original page.',
       DNS_FAILED: 'The website address could not be resolved. Please retry later.',
       TLS_FAILED: 'The website certificate could not be verified. Please check the original website.',
+      TLS_HANDSHAKE_FAILED:
+        'A secure connection to the website could not be established. Retry later or open the original page.',
       RATE_LIMITED: 'This website is limiting requests. Please retry later.',
       CONTENT_TOO_LARGE: 'The page exceeds the content reading limit. Open it directly or save a specific article URL.',
       NOT_HTML: 'This link is a file or image, so page text cannot be extracted. Open the original link.',

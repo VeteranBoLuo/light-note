@@ -68,6 +68,7 @@ export declare class AiSkillProtocolError extends Error {
 export declare function validateAiSkillRequest(
   input: unknown,
 ): Readonly<AiSkillRequest>;
+export declare function hasUsableBookmarkFields(value: unknown): boolean;
 export declare function validateAiSkillResponse(
   input: unknown,
 ): Readonly<AiSkillResponse>;

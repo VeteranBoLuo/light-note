@@ -198,7 +198,12 @@ export async function suggestResourceMetadata(snapshot, kinds, tags, prepared, b
   }
   if (snapshot.type === 'file') return suggestFileMetadata(snapshot, kinds, tags, beforeCall);
   if (snapshot.type === 'bookmark') {
-    const result = await suggestPreparedBookmarkMeta(prepared, { userTags: tags, includeSuggestionDetails: true });
+    const result = await suggestPreparedBookmarkMeta(prepared, {
+      userTags: tags,
+      includeSuggestionDetails: true,
+      allowEmptyResult: true,
+      beforeRequest: beforeCall,
+    });
     if (!result) throw suggestionError('AI_SKILL_STRUCTURED_OUTPUT_INVALID', '生成结果格式无效', 502);
     const name = normalizeName(result.name);
     const description = String(result.description || '').trim();

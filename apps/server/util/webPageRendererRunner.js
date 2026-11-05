@@ -1,6 +1,8 @@
 import { chromium } from 'playwright-core';
 import { startSafeWebProxy } from './safeWebProxy.js';
 import { lookupPublicAddresses, validatePublicWebUrl } from './webUrlSafety.js';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const MAX_INPUT_BYTES = 16 * 1024;
 let currentStage = 'startup';
@@ -32,25 +34,41 @@ function browserUserAgent(version, profile = 'desktop') {
   return `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${normalized} Safari/537.36`;
 }
 
-async function waitForRenderedDom(page, timeout) {
-  const deadline = Date.now() + Math.min(5_000, Math.max(1_000, Math.trunc(timeout / 3)));
+async function waitForRenderedDom(page, deadline, pendingRequests = () => 0) {
   let previous = '';
   let stableCount = 0;
   while (Date.now() < deadline) {
-    await page.waitForTimeout(400);
+    await page.waitForTimeout(Math.min(400, Math.max(1, deadline - Date.now())));
     try {
       const signature = await page.evaluate(() =>
         JSON.stringify({
           href: location.href,
           title: document.title,
-          textLength: document.body?.innerText?.length || 0,
-          loading: /(?:加载中|正在加载|\bloading\b)/iu.test(document.body?.innerText || ''),
+          text: String(document.body?.innerText || '')
+            .trim()
+            .slice(0, 2_000),
+          description:
+            document
+              .querySelector(
+                'meta[name="description" i],meta[property="og:description" i],meta[name="twitter:description" i]',
+              )
+              ?.getAttribute('content') || '',
+          shareTitle:
+            document
+              .querySelector('meta[property="og:title" i],meta[name="twitter:title" i]')
+              ?.getAttribute('content') || '',
           elements: document.body?.childElementCount || 0,
         }),
       );
       stableCount = signature === previous ? stableCount + 1 : 0;
       previous = signature;
-      if (stableCount >= 2 && !JSON.parse(signature).loading) break;
+      const snapshot = JSON.parse(signature);
+      const hasMaterial =
+        snapshot.text.length >= 40 ||
+        snapshot.shareTitle.trim().length >= 3 ||
+        (snapshot.title.trim().length >= 3 && snapshot.description.trim().length >= 8);
+      const loading = snapshot.text.length < 800 && /(?:加载中|正在加载|\bloading\b)/iu.test(snapshot.text);
+      if (stableCount >= 2 && hasMaterial && !loading && pendingRequests() === 0) break;
     } catch {
       // 页面可能正在由挑战脚本 reload；下一轮继续观察新文档。
       stableCount = 0;
@@ -191,6 +209,7 @@ async function run(config) {
     return { ok: false, reason: 'RENDERER_INSECURE_IDENTITY' };
   }
   const target = validatePublicWebUrl(config.url, { allowedPorts: [80, 443], defaultPortsOnly: true });
+  const deadline = Date.now() + config.timeout;
   currentStage = 'proxy_start';
   const proxy = await startSafeWebProxy({ maxRequests: config.maxRequests });
   let browser;
@@ -231,6 +250,18 @@ async function run(config) {
       viewport: config.profile === 'mobile' ? { width: 412, height: 915 } : { width: 1280, height: 800 },
     });
     const page = await context.newPage();
+    const pendingRequests = new Set();
+    let mainResponse = null;
+    page.on('response', (response) => {
+      if (response.request().isNavigationRequest() && response.frame() === page.mainFrame()) mainResponse = response;
+    });
+    page.on('request', (request) => {
+      if (['document', 'script', 'stylesheet', 'xhr', 'fetch'].includes(request.resourceType()))
+        pendingRequests.add(request);
+    });
+    const finishRequest = (request) => pendingRequests.delete(request);
+    page.on('requestfinished', finishRequest);
+    page.on('requestfailed', finishRequest);
     page.on('popup', (popup) => void popup.close().catch(() => {}));
     let routedRequests = 0;
     const blockedMethods = {};
@@ -271,17 +302,21 @@ async function run(config) {
       }
     });
     currentStage = 'navigate';
-    const response = await page.goto(target.href, { waitUntil: 'domcontentloaded', timeout: config.timeout });
+    const response = await page.goto(target.href, {
+      waitUntil: 'domcontentloaded',
+      timeout: Math.max(1, deadline - Date.now()),
+    });
     currentStage = 'settle';
-    await waitForRenderedDom(page, config.timeout);
+    await waitForRenderedDom(page, deadline, () => pendingRequests.size);
     currentStage = 'response_inspect';
-    const headers = (await response?.allHeaders().catch(() => ({}))) || {};
+    const finalResponse = mainResponse || response;
+    const headers = (await finalResponse?.allHeaders().catch(() => ({}))) || {};
     const contentType = String(headers['content-type'] || '');
     if (contentType && !/text\/html|application\/xhtml|text\/plain|application\/xml/iu.test(contentType)) {
       return { ok: false, reason: 'NOT_HTML' };
     }
     currentStage = 'snapshot';
-    const snapshot = await captureSnapshot(page, config.bodyLimit, response?.status() || 0, contentType);
+    const snapshot = await captureSnapshot(page, config.bodyLimit, finalResponse?.status() || 0, contentType);
     snapshot.signals.blockedMethods = blockedMethods;
     if (config.diagnostics) snapshot.signals.networkFailures = diagnosticFailures;
     return snapshot;
@@ -291,18 +326,23 @@ async function run(config) {
   }
 }
 
-let result;
-try {
-  currentStage = 'input';
-  const config = await readInput();
-  result = await run(config);
-} catch (error) {
-  result = { ok: false, reason: stableReason(error), stage: currentStage };
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  let result;
+  try {
+    currentStage = 'input';
+    const config = await readInput();
+    result = await run(config);
+  } catch (error) {
+    result = { ok: false, reason: stableReason(error), stage: currentStage };
+  }
+  // Runner 是一次性隔离进程，先完成清理与结果写入，再主动退出。
+  await new Promise((resolve) => process.stdout.write(JSON.stringify(result), resolve));
+  process.exit(0);
 }
-// Runner 是一次性隔离进程。Linux 上 Chromium/Playwright 关闭后可能仍短暂保留底层
-// 活动句柄；若只设置 exitCode，父进程会一直等到渲染硬超时并把成功误报为超时。
-// 先等待协议结果完整写入 stdout，再显式结束已经完成清理的 Runner。
-await new Promise((resolve) => process.stdout.write(JSON.stringify(result), resolve));
-process.exit(0);
 
-export const webPageRendererRunnerInternals = Object.freeze({ browserUserAgent, stableReason });
+export const webPageRendererRunnerInternals = Object.freeze({
+  browserUserAgent,
+  stableReason,
+  waitForRenderedDom,
+  run,
+});

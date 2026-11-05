@@ -18,6 +18,7 @@ const messages = {
   TIMEOUT: '读取网页超时，可稍后重试',
   DNS_FAILED: '暂时无法解析网站地址，可稍后重试',
   TLS_FAILED: '网站证书验证失败，请检查原网站',
+  TLS_HANDSHAKE_FAILED: '与网站建立安全连接失败，可稍后手动重试',
   RATE_LIMITED: '网站限制了请求频率，请稍后重试',
   CONTENT_TOO_LARGE: '网页超过安全读取大小限制，建议保存具体文章页面',
   NOT_HTML: '该链接是文件或图片，不能作为网页正文存档',
