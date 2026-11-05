@@ -104,18 +104,17 @@ function tankStyle() {
   return `--tank-k:${k};--tank-aspect:${aspect.toFixed(4)}`;
 }
 const tankHash = () => activeFishIds().join("-") + "|" + tankShape(M.tankSize(state, FISH)).aspect.toFixed(3);
-function toast(text, { topCenter = false, duration } = {}) {
+function toast(text, { duration } = {}) {
   clearTimeout(toastTimer);
   $("#toast").textContent = text;
   $("#toast").hidden = false;
-  $("#toast").dataset.topCenter = String(topCenter);
   positionFeedback();
   toastTimer = setTimeout(() => $("#toast").hidden = true, duration || (text.length > 28 ? 3400 : 2200));
 }
 function confirmManorExit() {
   if (Date.now() > exitArmedUntil) {
     exitArmedUntil = Date.now() + 3000;
-    toast("再次返回退出庄园", { topCenter: true, duration: 3000 });
+    toast("再次返回退出庄园", { duration: 3000 });
     return false;
   }
   exitArmedUntil = 0;
@@ -124,28 +123,17 @@ function confirmManorExit() {
 function requestManorExit(button) {
   if (!confirmManorExit()) return;
   if (button) button.disabled = true;
-  toast("正在返回轻笺…", { topCenter: true });
-  GardenLive.exit().catch(() => { if (button?.isConnected) button.disabled = false; toast("暂时未能返回，请再试一次", { topCenter: true }); });
+  toast("正在返回轻笺…");
+  GardenLive.exit().catch(() => { if (button?.isConnected) button.disabled = false; toast("暂时未能返回，请再试一次"); });
 }
 function positionFeedback() {
   const hud = $("#gameHud"),garden = $(".garden-scene"),mode = $("#farmToolMode");
   const top = Math.max(12, (hud?.getBoundingClientRect().bottom || $(".prototype-lab")?.getBoundingClientRect().bottom || 0) + 8);
   if (mode && garden) mode.style.top = `${top - garden.getBoundingClientRect().top}px`;
-  const dialog = !$("#modal").hidden && $("#dialog");
-  const feedback = $("#toast"),mobile = document.documentElement.classList.contains("light-note-mobile-rendering");
+  // 所有提示统一放在 HUD 下方居中，不随弹框或场景换位；工具模式条出现时排在它下面
+  const feedback = $("#toast");
   const density = typeof getComputedStyle === "function" ? parseFloat(getComputedStyle(feedback).getPropertyValue("--d")) || 1 : 1;
-  const skyTop = garden ? garden.getBoundingClientRect().top + 16 * density : top;
-  if (feedback.dataset.topCenter === "true") {
-    feedback.style.top = `${Math.max(12, (hud?.getBoundingClientRect().bottom || 0) + 8 * density)}px`;
-    feedback.style.left = "50%";
-    feedback.style.maxWidth = "";
-    return;
-  }
-  feedback.style.top = `${dialog ? Math.max(dialog.getBoundingClientRect().top + 80, dialog.getBoundingClientRect().bottom - 120) : mobile ? top + (mode && !mode.hidden ? mode.getBoundingClientRect().height + 6 : 0) : skyTop}px`;
-  const left = $('.hud-identity')?.getBoundingClientRect().right,right = $('.hud-right')?.getBoundingClientRect().left;
-  const gap = !mobile && !dialog && left && right ? right - left - 24 * density : 0;
-  feedback.style.maxWidth = gap > 140 * density ? `${Math.min(440 * density, gap)}px` : "";
-  feedback.style.left = gap > 140 * density ? `${(left + right) / 2}px` : "";
+  feedback.style.top = `${top + (mode && !mode.hidden ? mode.getBoundingClientRect().height + 6 * density : 0)}px`;
 }
 function announce(text) {
   $("#announce").textContent = text;
@@ -687,7 +675,7 @@ function refreshSynchronizedView() {
   if($("#modal").hidden)return;
   const dialog=$("#dialog"),family=dialog.dataset.family;
   const top=dialog.querySelector('.dialog-body')?.scrollTop||0;
-  const changed=()=>toast(GardenLive.snapshot?.copy?.panelUpdated||'庄园数据已更新，请重新打开操作面板',{topCenter:true});
+  const changed=()=>toast(GardenLive.snapshot?.copy?.panelUpdated||'庄园数据已更新，请重新打开操作面板');
   if(family==='inventory-dialog')FarmUI.refreshInventory();
   else if(family==='farm-shop-dialog')FarmUI.shopDialog();
   else if(dialog.dataset.syncView==='daily')dailyDialog();
@@ -1327,7 +1315,7 @@ function init() {
       catch { b.disabled = false; toast("暂时无法重置，请稍后重试"); }
       return;
     }
-    if (fishingBusy() && a !== "close" && a !== "cast" && !castFreeAction(a, b)) {toast("等这一竿收完再操作", { topCenter: true });return;}
+    if (fishingBusy() && a !== "close" && a !== "cast" && !castFreeAction(a, b)) {toast("等这一竿收完再操作");return;}
     if (!["plot", "fert-select", "fert-cancel", "tool-select", "tools-toggle", "tool-cancel"].includes(a)) FarmUI.cancelTool();
     // 引导期间只响应引导里的操作和第 1 块地
     if (state.guide && !["guide-adopt", "plot", "close"].includes(a) && !(state.guide === "plant" && a === "plant-seed")) return;
@@ -1415,12 +1403,12 @@ function init() {
       case "claim-daily-water":
       case "claim-daily-water-bonus":{
           const from = b.getBoundingClientRect(),reward = a === "claim-daily-water-bonus" ? await M.claimDailyWaterBonus(state) : await M.claimDailyWater(state, +b.dataset.index);
-          if (reward) {update();dailyDialog();GardenFX.flyTo(from, $("#waterCount"), toolSprite("water"), { size: 36 });toast(`水滴 +${reward.water} · 已装入水桶`, {topCenter:true});}
+          if (reward) {update();dailyDialog();GardenFX.flyTo(from, $("#waterCount"), toolSprite("water"), { size: 36 });toast(`水滴 +${reward.water} · 已装入水桶`);}
           break;
         }
       case "claim-all-daily-water":{
           const from = b.getBoundingClientRect(),reward = await M.claimAllDailyWater(state);
-          if (reward) {update();dailyDialog();GardenFX.flyTo(from, $("#waterCount"), toolSprite("water"), { size: 36 });toast(`水滴 +${reward.water}${reward.pending ? ` · 余下 ${reward.pending} 滴今日可继续领取` : " · 已装入水桶"}`, {topCenter:true});}
+          if (reward) {update();dailyDialog();GardenFX.flyTo(from, $("#waterCount"), toolSprite("water"), { size: 36 });toast(`水滴 +${reward.water}${reward.pending ? ` · 余下 ${reward.pending} 滴今日可继续领取` : " · 已装入水桶"}`);}
           break;
         }
       case "bait":

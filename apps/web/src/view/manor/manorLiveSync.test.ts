@@ -130,7 +130,7 @@ it('冲突响应携带最新资产时立即同步，不重复发送旧操作或�
   expect(s.update).toHaveBeenCalledOnce();expect(s.inventory).toHaveBeenCalledOnce();
   const event=new Event('unhandledrejection',{cancelable:true});Object.assign(event,{reason:error});s.win.dispatchEvent(event);await flush();
   expect(event.defaultPrevented).toBe(true);
-  expect(s.toast).toHaveBeenCalledWith('已同步最新状态',{topCenter:true});
+  expect(s.toast).toHaveBeenCalledWith('已同步最新状态');
   expect(s.calls('command')).toHaveLength(1);expect(s.calls('get')).toHaveLength(1);
 });
 
@@ -169,5 +169,5 @@ it('另一端钓鱼中点击资产操作先同步，不静默卡住或提交新�
   expect(click).not.toHaveBeenCalled();expect(s.calls('command')).toHaveLength(0);
   expect(s.calls('get')).toHaveLength(2);
   const next=s.snapshot(2);next.state.casting=false;await s.reply('get',next);
-  expect(s.state.casting).toBe(false);expect(s.toast).toHaveBeenCalledWith(expect.any(String),{topCenter:true});
+  expect(s.state.casting).toBe(false);expect(s.toast).toHaveBeenCalledWith(expect.any(String));
 });

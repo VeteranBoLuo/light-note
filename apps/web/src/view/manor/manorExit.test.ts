@@ -12,7 +12,7 @@ it('浏览器与游戏内返回共用三秒确认窗口；超时重新提示，�
     Date: { now: () => now }, toast, GardenLive: { exit },
   });
   expect(gate.confirmManorExit()).toBe(false);
-  expect(toast).toHaveBeenLastCalledWith('再次返回退出庄园', { topCenter: true, duration: 3000 });
+  expect(toast).toHaveBeenLastCalledWith('再次返回退出庄园', { duration: 3000 });
   now += 1000;
   const button = { disabled: false, isConnected: true };
   gate.requestManorExit(button);

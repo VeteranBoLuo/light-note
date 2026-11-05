@@ -1044,7 +1044,7 @@ const FarmUI = (() => {
         if (!reward) {waterShortDialog();return true;}
         closeDialog(false);
         update();
-        toast(`水滴 +${reward.water} · 已装入水桶`, { topCenter: true });
+        toast(`水滴 +${reward.water} · 已装入水桶`);
         const dry = plotsIn("dry");
         if (dry.length && state.water >= R.plantWater) await waterPlots(dry);
         return true;
