@@ -11,16 +11,16 @@ describe('featureAnnouncementService', () => {
 
     const result = await markFeatureAnnouncementSeen({
       userId: 'user-1',
-      announcementId: 'knowledge-workshop',
-      version: 'knowledge-workshop-v1',
-      now: new Date('2026-09-01T00:00:00.000Z'),
+      announcementId: 'annual-report-2026',
+      version: 'annual-report-2026-v1',
+      now: new Date('2026-12-20T00:00:00.000Z'),
       db,
     });
 
-    expect(result).toMatchObject({ active: true, persisted: true, version: 'knowledge-workshop-v1' });
+    expect(result).toMatchObject({ active: true, persisted: true, version: 'annual-report-2026-v1' });
     expect(db.query).toHaveBeenCalledWith(expect.stringContaining('JSON_SET'), [
-      '$.featureAnnouncements."knowledge-workshop"',
-      'knowledge-workshop-v1',
+      '$.featureAnnouncements."annual-report-2026"',
+      'annual-report-2026-v1',
       'user-1',
     ]);
   });
@@ -30,9 +30,9 @@ describe('featureAnnouncementService', () => {
 
     const result = await markFeatureAnnouncementSeen({
       userId: 'user-1',
-      announcementId: 'knowledge-workshop',
-      version: 'knowledge-workshop-v1',
-      now: new Date('2026-09-14T16:00:00.000Z'),
+      announcementId: 'annual-report-2026',
+      version: 'annual-report-2026-v1',
+      now: new Date('2027-01-31T16:00:00.000Z'),
       db,
     });
 
@@ -49,7 +49,7 @@ describe('featureAnnouncementService', () => {
     await expect(
       markFeatureAnnouncementSeen({
         userId: 'user-1',
-        announcementId: 'knowledge-workshop',
+        announcementId: 'annual-report-2026',
         version: 'old-version',
         db,
       }),

@@ -23,14 +23,14 @@ describe('SITE_COMPLIANCE', () => {
 });
 
 describe('FEATURE_ANNOUNCEMENTS', () => {
-  it('用绝对发布时间和失效时间限制知识工坊上新提示', () => {
-    const announcement = getFeatureAnnouncement(FEATURE_ANNOUNCEMENTS.KNOWLEDGE_WORKSHOP.id);
+  it('用绝对发布时间和失效时间限制上新提示', () => {
+    const announcement = getFeatureAnnouncement(FEATURE_ANNOUNCEMENTS.ANNUAL_REPORT_2026.id);
 
-    expect(announcement).toBe(FEATURE_ANNOUNCEMENTS.KNOWLEDGE_WORKSHOP);
-    expect(isFeatureAnnouncementActive(announcement, new Date('2026-08-30T15:59:59.999Z'))).toBe(false);
-    expect(isFeatureAnnouncementActive(announcement, new Date('2026-08-30T16:00:00.000Z'))).toBe(true);
-    expect(isFeatureAnnouncementActive(announcement, new Date('2026-09-14T15:59:59.999Z'))).toBe(true);
-    expect(isFeatureAnnouncementActive(announcement, new Date('2026-09-14T16:00:00.000Z'))).toBe(false);
+    expect(announcement).toBe(FEATURE_ANNOUNCEMENTS.ANNUAL_REPORT_2026);
+    expect(isFeatureAnnouncementActive(announcement, new Date('2026-12-14T15:59:59.999Z'))).toBe(false);
+    expect(isFeatureAnnouncementActive(announcement, new Date('2026-12-14T16:00:00.000Z'))).toBe(true);
+    expect(isFeatureAnnouncementActive(announcement, new Date('2027-01-31T15:59:59.999Z'))).toBe(true);
+    expect(isFeatureAnnouncementActive(announcement, new Date('2027-01-31T16:00:00.000Z'))).toBe(false);
   });
 });
 

@@ -1,9 +1,6 @@
-import { FEATURE_ANNOUNCEMENTS, getFeatureAnnouncement, isFeatureAnnouncementActive } from '@lightnote/shared';
+import { getFeatureAnnouncement, isFeatureAnnouncementActive } from '@lightnote/shared';
 
 const FEATURE_ANNOUNCEMENT_STORAGE_PREFIX = 'light-note:feature-announcement';
-
-export const KNOWLEDGE_WORKSHOP_ANNOUNCEMENT = FEATURE_ANNOUNCEMENTS.KNOWLEDGE_WORKSHOP;
-export const KNOWLEDGE_WORKSHOP_ANNOUNCEMENT_ID = KNOWLEDGE_WORKSHOP_ANNOUNCEMENT.id;
 
 type AnnouncementPreferences = {
   featureAnnouncements?: Record<string, string>;

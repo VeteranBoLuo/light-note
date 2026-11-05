@@ -5062,7 +5062,6 @@ export default {
       aiSuggestions: 'AI Suggestions',
     },
     aiSuggestions: {
-      analyzing: 'Analyzing; suggestions will update automatically',
 
       tagLoadFailed: 'Unable to load tags. Please retry.',
       tagPickerHint: 'Choose up to 3 tags. Add tags from the dropdown footer, then save to apply them.',
@@ -6274,7 +6273,6 @@ export default {
     chooseFiles: 'Choose files',
     uploadDestination: 'Save to folder',
     uploadDestinationHint: 'Optional. Files stay in All Files when no folder is selected.',
-    uploadError: 'Upload failed: {message}',
     fileName: 'File Name',
     mobileActionsTitle: 'Cloud Space Actions',
     newFolder: 'New Folder',
@@ -9208,8 +9206,6 @@ export default {
     noContext: 'No resources found',
     searching: 'Searching…',
     uploadImage: 'Upload image',
-    removeAttachment: 'Remove',
-    retryAttachment: 'Retry',
     materialLimit: 'This AI task can use up to {count} materials. The first {count} selected items will be used.',
     citationAriaLabel: 'Citation {key}',
     maximize: 'Maximize',

@@ -4851,7 +4851,6 @@ export default {
       aiSuggestions: 'AI 整理建议',
     },
     aiSuggestions: {
-      analyzing: '正在分析，建议生成后会自动更新',
 
       tagLoadFailed: '标签加载失败，请重试。',
       tagPickerHint: '最多选择 3 个标签。可在下拉框底部新增标签，保存后应用到资料。',
@@ -6026,7 +6025,6 @@ export default {
     chooseFiles: '选择文件',
     uploadDestination: '保存到文件夹',
     uploadDestinationHint: '可选；不选择文件夹时，文件会保存在“全部文件”中。',
-    uploadError: '上传失败：{message}',
     fileName: '文件名',
     mobileActionsTitle: '云空间操作',
     newFolder: '新建文件夹',
@@ -8852,8 +8850,6 @@ export default {
     noContext: '没有找到可添加的资源',
     searching: '正在搜索…',
     uploadImage: '上传图片',
-    removeAttachment: '移除',
-    retryAttachment: '重试',
     materialLimit: '本次 AI 处理最多使用 {count} 项材料，已采用当前选择的前 {count} 项。',
     citationAriaLabel: '引用 {key}',
     maximize: '最大化',
