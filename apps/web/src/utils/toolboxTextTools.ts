@@ -2,7 +2,7 @@ export type TableFormat = 'csv' | 'tsv' | 'json' | 'markdown';
 
 export class ToolboxTextError extends Error {
   constructor(
-    public readonly code: 'INPUT_TOO_LARGE' | 'INVALID_TABLE' | 'INVALID_JSON' | 'SAME_FORMAT',
+    public readonly code: 'INPUT_TOO_LARGE' | 'INVALID_TABLE',
   ) {
     super(code);
     this.name = 'ToolboxTextError';
@@ -57,110 +57,6 @@ export function parseDelimitedTable(source: string, delimiter: ',' | '\t', limit
   return normalizeTable(rows, limits);
 }
 
-function splitMarkdownRow(line: string) {
-  const trimmed = line.trim().replace(/^\|/u, '').replace(/\|$/u, '');
-  const cells: string[] = [];
-  let cell = '';
-  let escaped = false;
-  for (const character of trimmed) {
-    if (escaped) {
-      cell += character;
-      escaped = false;
-    } else if (character === '\\') escaped = true;
-    else if (character === '|') {
-      cells.push(cell.trim());
-      cell = '';
-    } else cell += character;
-  }
-  if (escaped) cell += '\\';
-  cells.push(cell.trim());
-  return cells;
-}
-
-function parseMarkdownTable(source: string, limits: TableLimits) {
-  const lines = String(source || '')
-    .replace(/\r\n?/gu, '\n')
-    .split('\n')
-    .filter((line) => line.trim());
-  if (lines.length < 2) throw new ToolboxTextError('INVALID_TABLE');
-  if (lines.length - 1 > (limits.maxRows ?? 5000)) throw new ToolboxTextError('INPUT_TOO_LARGE');
-  const rows = lines.map(splitMarkdownRow);
-  const separator = rows[1];
-  if (!separator?.length || !separator.every((cell) => /^:?-{3,}:?$/u.test(cell.trim()))) {
-    throw new ToolboxTextError('INVALID_TABLE');
-  }
-  rows.splice(1, 1);
-  return normalizeTable(rows, limits);
-}
-
-function parseJsonTable(source: string, limits: TableLimits) {
-  let value: unknown;
-  try {
-    value = JSON.parse(source);
-  } catch {
-    throw new ToolboxTextError('INVALID_JSON');
-  }
-  if (!Array.isArray(value) || !value.length) throw new ToolboxTextError('INVALID_JSON');
-  if (value.length + 1 > (limits.maxRows ?? 5000)) throw new ToolboxTextError('INPUT_TOO_LARGE');
-  if (value.every((entry) => Array.isArray(entry))) {
-    const arrays = value as unknown[][];
-    const columns = Math.max(...arrays.map((entry) => entry.length));
-    if (!columns || columns > 200) throw new ToolboxTextError('INVALID_TABLE');
-    return normalizeTable([Array.from({ length: columns }, (_, index) => `column_${index + 1}`), ...arrays], limits);
-  }
-  if (!value.every((entry) => entry && typeof entry === 'object' && !Array.isArray(entry))) {
-    throw new ToolboxTextError('INVALID_JSON');
-  }
-  const records = value as Record<string, unknown>[];
-  const headers = [...new Set(records.flatMap((record) => Object.keys(record)))];
-  if (!headers.length || headers.length > 200) throw new ToolboxTextError('INVALID_TABLE');
-  return normalizeTable(
-    [
-      headers,
-      ...records.map((record) =>
-        headers.map((header) => {
-          const cell = record[header];
-          return cell != null && typeof cell === 'object' ? JSON.stringify(cell) : String(cell ?? '');
-        }),
-      ),
-    ],
-    limits,
-  );
-}
-
-export function parseTable(source: string, format: TableFormat, limits: TableLimits = {}) {
-  if (String(source || '').length > (limits.maxCharacters ?? 1_000_000)) throw new ToolboxTextError('INPUT_TOO_LARGE');
-  if (format === 'csv') return parseDelimitedTable(source, ',', limits);
-  if (format === 'tsv') return parseDelimitedTable(source, '\t', limits);
-  if (format === 'json') return parseJsonTable(source, limits);
-  return parseMarkdownTable(source, limits);
-}
-
-/** Guess only the container/delimiter; parsing still validates the complete input. */
-export function detectTableFormat(source: string): TableFormat {
-  const sample = source
-    .replace(/^\uFEFF/u, '')
-    .trimStart()
-    .slice(0, 8192);
-  if (sample.startsWith('[') || sample.startsWith('{')) return 'json';
-  const lines = sample.split(/\r?\n/u).filter((line) => line.trim());
-  if (lines[1] && splitMarkdownRow(lines[1]).every((cell) => /^:?-{3,}:?$/u.test(cell.trim()))) return 'markdown';
-  let quoted = false,
-    tabs = 0,
-    commas = 0;
-  for (let index = 0; index < sample.length; index++) {
-    const character = sample[index];
-    if (character === '"') {
-      if (quoted && sample[index + 1] === '"') index++;
-      else quoted = !quoted;
-    } else if (!quoted) {
-      if (character === '\t') tabs++;
-      if (character === ',') commas++;
-    }
-  }
-  return tabs > commas ? 'tsv' : 'csv';
-}
-
 function escapeDelimitedCell(value: string, delimiter: string) {
   return /["\r\n]/u.test(value) || value.includes(delimiter) ? `"${value.replace(/"/gu, '""')}"` : value;
 }
@@ -206,22 +102,4 @@ export function serializeTable(table: string[][], format: TableFormat, limits: T
   if (format === 'tsv') return serializeDelimited(normalized, '\t');
   if (format === 'json') return serializeJson(normalized);
   return serializeMarkdown(normalized);
-}
-
-export function convertTable(
-  source: string,
-  inputFormat: TableFormat,
-  outputFormat: TableFormat,
-  firstRowHeader = true,
-) {
-  if (inputFormat === outputFormat) throw new ToolboxTextError('SAME_FORMAT');
-  const table = parseTable(source.replace(/^\uFEFF/, ''), inputFormat);
-  if (!firstRowHeader && (inputFormat === 'csv' || inputFormat === 'tsv'))
-    table.unshift(table[0]!.map((_cell, index) => `column_${index + 1}`));
-  return {
-    table,
-    output: serializeTable(table, outputFormat),
-    rows: Math.max(0, table.length - 1),
-    columns: table[0]?.length || 0,
-  };
 }

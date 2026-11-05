@@ -17,35 +17,34 @@ const ACTIVE_TOOL_IDS = [
   "research_workspace",
   "learning_workspace",
   "writing_workspace",
-  "idea_to_draft",
   "material_to_note",
-  "research_brief",
   "study_kit",
+  "pdf_organizer",
+  "ocr_to_text",
+];
+// 已下架但有历史成果的 AI 工具：保留协议身份与名称，只用于展示历史任务。
+const RETIRED_AI_TOOL_IDS = [
+  "idea_to_draft",
+  "research_brief",
   "concept_map",
   "source_comparison",
   "knowledge_audit",
-  "pdf_organizer",
-  "image_optimizer",
-  "table_converter",
-  "data_workbench",
-  "docx_to_markdown",
-  "knowledge_structure_audit",
-  "ocr_to_text",
 ];
 
 describe("toolbox protocol", () => {
   it("keeps the toolbox processing requirement boundary in the shared protocol", () => {
     expect(TOOLBOX_PROCESSING_REQUIREMENT_MAX_CHARS).toBe(1000);
-    expect(TOOLBOX_TOOL_INTENTS.research_brief).toEqual([
-      "decision",
-      "landscape",
-      "verify",
+    expect(Object.keys(TOOLBOX_TOOL_INTENTS)).toEqual(["material_to_note", "study_kit"]);
+    expect(TOOLBOX_TOOL_INTENTS.study_kit).toEqual([
+      "understand",
+      "memorize",
+      "practice",
     ]);
-    expect(Object.isFrozen(TOOLBOX_TOOL_INTENTS.research_brief)).toBe(true);
+    expect(Object.isFrozen(TOOLBOX_TOOL_INTENTS.study_kit)).toBe(true);
   });
 
   it("keeps every tool id unique and every execution contract explicit", () => {
-    expect(TOOLBOX_TOOL_CATALOG).toHaveLength(31);
+    expect(TOOLBOX_TOOL_CATALOG).toHaveLength(18);
     expect(new Set(TOOLBOX_TOOL_CATALOG.map((item) => item.id)).size).toBe(
       TOOLBOX_TOOL_CATALOG.length,
     );
@@ -78,31 +77,30 @@ describe("toolbox protocol", () => {
         (item) => item.id,
       ),
     ).toEqual(ACTIVE_TOOL_IDS);
-    for (const retiredId of ["directory_index", "browser_sql", "action_plan", "mermaid_editor", "text_diff"]) {
+    for (const retiredId of [
+      "directory_index",
+      "browser_sql",
+      "action_plan",
+      "mermaid_editor",
+      "text_diff",
+      "data_workbench",
+      "data_chart",
+      "table_converter",
+      "image_optimizer",
+      "docx_to_markdown",
+      "knowledge_structure_audit",
+    ]) {
       expect(getToolboxTool(retiredId)).toBeNull();
+    }
+    for (const retiredId of RETIRED_AI_TOOL_IDS) {
+      expect(getToolboxTool(retiredId)?.availability.enabled).toBe(false);
     }
     expect(getToolboxTool("image_to_pdf")?.availability.enabled).toBe(false);
     expect(getToolboxTool("pdf_to_images")?.availability.enabled).toBe(false);
     expect(getToolboxTool("pdf_text_extractor")?.availability.enabled).toBe(
       false,
     );
-    for (const legacyId of [
-      "data_quality_report",
-      "data_cleaner",
-      "data_validator",
-      "pivot_analysis",
-      "table_diff",
-      "table_merge_split",
-      "data_anonymizer",
-      "data_chart",
-    ]) {
-      expect(getToolboxTool(legacyId)?.availability.enabled).toBe(false);
-    }
-    expect(getToolboxTool("data_workbench")).toMatchObject({
-      availability: { enabled: true },
-      input: { minItems: 1, maxItems: 2, maxBytes: 30 * 1024 * 1024 },
-    });
-    expect(ACTIVE_TOOL_IDS).toHaveLength(20);
+    expect(ACTIVE_TOOL_IDS).toHaveLength(10);
   });
 
   it("does not treat browser-local utilities as paid jobs", () => {
@@ -110,31 +108,24 @@ describe("toolbox protocol", () => {
     const localTools = TOOLBOX_TOOL_CATALOG.filter(
       (item) => item.executionMode === "browser",
     );
-    expect(localTools).toHaveLength(16);
+    expect(localTools).toHaveLength(4);
     expect(localTools.every((item) => item.billingMedium === "free")).toBe(
       true,
     );
     expect(isToolboxPaidTool("pdf_organizer")).toBe(false);
-    expect(isToolboxPaidTool("data_workbench")).toBe(false);
     expect(
       TOOLBOX_TOOL_CATALOG.filter((item) => item.executionMode === "service"),
-    ).toHaveLength(6);
+    ).toHaveLength(5);
     expect(isToolboxPaidTool("research_workspace")).toBe(false);
-    expect(isToolboxPaidTool("knowledge_structure_audit")).toBe(false);
-    expect(isToolboxPaidTool("research_brief")).toBe(true);
     expect(isToolboxPaidTool("translation")).toBe(true);
-    expect(isToolboxPaidTool("idea_to_draft")).toBe(true);
-    expect(getToolboxTool("idea_to_draft")?.billingMedia).toEqual([
+    expect(isToolboxPaidTool("material_to_note")).toBe(true);
+    expect(isToolboxPaidTool("study_kit")).toBe(true);
+    expect(getToolboxTool("study_kit")?.billingMedia).toEqual([
       "points",
       "ai_quota",
     ]);
     expect(getToolboxTool("ocr_to_text")?.billingMedia).toEqual(["ai_quota", "points", "free"]);
-    expect(getToolboxTool("idea_to_draft")?.input).toMatchObject({
-      kind: "prompt",
-      minItems: 0,
-      maxItems: 0,
-    });
-    expect(isToolboxPaidTool("study_kit")).toBe(true);
+    // 历史概念图谱成果仍可保存为笔记，依赖协议中保留的成果定义。
     expect(getToolboxTool("concept_map")?.output.canSaveToNote).toBe(true);
   });
 

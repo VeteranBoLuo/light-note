@@ -24,23 +24,11 @@ const TOOLBOX_LEASE_HEARTBEAT_MS = 60_000;
 const TOOLBOX_LEASE_FAILURE_GRACE_MS = 8 * 60_000;
 const MATERIAL_TO_NOTE_MAX_TOKENS = Object.freeze({ concise: 2_600, balanced: 4_200, detailed: 6_000 });
 const AI_TOOL_STRATEGIES = Object.freeze({
-  idea_to_draft: Object.freeze({
-    skillId: 'toolbox.idea_to_draft',
-    artifactType: 'note_draft',
-    defaultTitle: '灵感初稿',
-    draftState: 'editable',
-  }),
   material_to_note: Object.freeze({
     skillId: 'toolbox.material_to_note',
     artifactType: 'note_draft',
     defaultTitle: '资料整理笔记',
     draftState: 'editable',
-  }),
-  research_brief: Object.freeze({
-    skillId: 'toolbox.research_brief',
-    artifactType: 'research_brief',
-    defaultTitle: '研究速读包',
-    draftState: 'needs_verification',
   }),
   study_kit: Object.freeze({
     skillId: 'toolbox.study_kit',
@@ -48,63 +36,20 @@ const AI_TOOL_STRATEGIES = Object.freeze({
     defaultTitle: '学习套件',
     draftState: 'editable',
   }),
-  concept_map: Object.freeze({
-    skillId: 'toolbox.concept_map',
-    artifactType: 'concept_map',
-    defaultTitle: '概念图谱',
-    draftState: 'editable',
-  }),
-  source_comparison: Object.freeze({
-    skillId: 'toolbox.source_comparison',
-    artifactType: 'comparison',
-    defaultTitle: '多资料对比',
-    draftState: 'editable',
-  }),
-  knowledge_audit: Object.freeze({
-    skillId: 'toolbox.knowledge_audit',
-    artifactType: 'knowledge_audit',
-    defaultTitle: '所选资料内容检查报告',
-    draftState: 'needs_verification',
-  }),
 });
 const TOOL_SKILLS = Object.freeze(
   Object.fromEntries(Object.entries(AI_TOOL_STRATEGIES).map(([toolId, strategy]) => [toolId, strategy.skillId])),
 );
 const AI_TOOL_INTENT_INSTRUCTIONS = Object.freeze({
-  idea_to_draft: Object.freeze({
-    article: '按可直接阅读的文章组织内容，重视开头、段落节奏、观点展开和收束。',
-    proposal: '按可继续完善的方案初稿组织内容，明确目标、对象、思路、执行步骤与待确认项。',
-    script: '按口播或视频脚本组织内容，提供自然开场、信息推进、转场和结尾行动建议。',
-  }),
   material_to_note: Object.freeze({
     synthesize: '按主题综合整理材料，合并重复信息，同时保留来源依据、分歧和未知项。',
     outline: '优先建立层级清晰的笔记大纲，再把材料内容归入合适章节。',
     merge: '合并多份相近材料，删除重复表述，并明确标出互相冲突或版本不同的内容。',
   }),
-  research_brief: Object.freeze({
-    decision: '围绕待决策问题组织结论，明确支持依据、反例、限制和仍需核验的信息。',
-    landscape: '先给出主题全貌，再梳理主要观点、参与方、分支和材料覆盖边界。',
-    verify: '重点核验材料中的关键说法，区分一致证据、冲突证据和无法确认的部分。',
-  }),
   study_kit: Object.freeze({
     understand: '以建立理解为主，先给知识框架，再解释核心概念、关系和易混淆点。',
     memorize: '以记忆巩固为主，提炼关键定义、区别、条件和高质量问答卡片。',
     practice: '以自测为主，生成由浅入深的理解题和应用题，并将答案与解析独立放置。',
-  }),
-  concept_map: Object.freeze({
-    overview: '生成结构总览图，优先呈现核心概念的层级、组成和依赖关系。',
-    causal: '优先提炼材料中有明确依据的因果、条件和影响链路，不补造关系。',
-    compare: '围绕对比对象组织图谱，突出共同点、差异、适用边界和关联。',
-  }),
-  source_comparison: Object.freeze({
-    claims: '按关键说法逐项对齐资料，区分一致、差异、冲突和证据缺口。',
-    viewpoints: '按观点与立场比较资料，明确各自主张、依据、前提和覆盖边界。',
-    options: '按统一决策维度比较候选方案，保留优劣、适用条件和无法判断项。',
-  }),
-  knowledge_audit: Object.freeze({
-    cleanup: '优先识别重复、可合并和低价值内容，并给出保留依据与清理顺序。',
-    freshness: '优先检查日期、版本、时效性和相互冲突的陈述，标出需要复核的内容。',
-    gaps: '优先发现证据薄弱、覆盖不足和关键知识缺口，并给出补齐建议。',
   }),
 });
 const NON_RETRYABLE_CODES = new Set([
@@ -492,7 +437,6 @@ async function executeAiTool(job, inputs, identity) {
       threadId: null,
       input: {
         title,
-        ...(job.tool_id === 'source_comparison' && options.resultMode === 'table' ? { resultMode: 'table', columns: options.columns } : {}),
         question: String(options.question || '').trim(),
         instruction: toolboxIntentInstruction(job.tool_id, options.intent),
         detailLevel: options.detailLevel || 'balanced',
@@ -521,13 +465,7 @@ async function executeAiTool(job, inputs, identity) {
   );
   const content = artifactContent(response);
   if (!content || response?.receipt?.modelCalled === false) {
-    throw toolboxError(
-      'TOOLBOX_NO_READABLE_CONTENT',
-      job.tool_id === 'idea_to_draft'
-        ? '本次没有生成可用初稿，未保留本次计费'
-        : '所选材料没有足够的可读内容，未保留本次计费',
-      400,
-    );
+    throw toolboxError('TOOLBOX_NO_READABLE_CONTENT', '所选材料没有足够的可读内容，未保留本次计费', 400);
   }
   const partial = coverageIsPartial(response.coverage);
   return {
@@ -538,7 +476,6 @@ async function executeAiTool(job, inputs, identity) {
     sources: Array.isArray(response.sources) ? response.sources : [],
     coverage: response.coverage || { complete: false, warnings: ['coverage_missing'] },
     meta: {
-      ...(response.result?.comparisonTable ? { comparisonTable: response.result.comparisonTable } : {}),
       ...(job.tool_id === 'study_kit' ? { study: extractStudyCards(content) } : {}),
       draftState: strategy.draftState,
       sourceCount: Array.isArray(response.sources) ? response.sources.length : 0,
@@ -778,8 +715,7 @@ export async function runClaimedToolboxJob(job, database = pool, { onProgress, s
         });
         if (job.tool_id === 'ocr_to_text' && job.billing_medium === 'free')
           return runLocalProcessing(() => executeFreeOcr(job, database));
-        const promptOnly = job.tool_id === 'idea_to_draft';
-        await updateToolboxJobStage(job, leaseOwner, promptOnly ? 'preparing_prompt' : 'reading_sources', 28, database);
+        await updateToolboxJobStage(job, leaseOwner, 'reading_sources', 28, database);
         if (job.tool_id === 'ocr_to_text' && safeJson(job.options_json, {})?.recognitionMode === 'ai') {
           return executeAiOcr(job, inputs, identity, database, {
             requestId: toolboxAttemptRequestId(job),
@@ -790,7 +726,7 @@ export async function runClaimedToolboxJob(job, database = pool, { onProgress, s
         if (job.tool_id === 'ocr_to_text' || inputs.resourceRefs.some((item) => item.type === 'file')) {
           documentState = await ensureDocumentInputsReady(job, inputs, database);
         }
-        await updateToolboxJobStage(job, leaseOwner, promptOnly ? 'prompt_ready' : 'sources_ready', 42, database);
+        await updateToolboxJobStage(job, leaseOwner, 'sources_ready', 42, database);
         await markExternalCostCommitted(
           job,
           leaseOwner,

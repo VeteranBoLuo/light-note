@@ -19,7 +19,7 @@
         </div>
         <div class="document-text-sourcebar__actions">
           <BUpload raw-file multiple :accept="accept" :max-total-size="null" @change="loadFiles">
-            <BButton><SvgIcon :src="icon.toolbox.upload" size="14" />{{ t('toolbox.dataset.replace') }}</BButton>
+            <BButton><SvgIcon :src="icon.toolbox.upload" size="14" />{{ t('toolbox.documentText.replace') }}</BButton>
           </BUpload>
           <BButton @click="clearAll">{{ t('common.clear') }}</BButton>
         </div>
@@ -43,9 +43,8 @@
               ><strong :title="file.name">{{ file.name }}</strong
               ><small>{{ formatToolboxBytes(file.size) }}</small></span
             >
-            <BChip v-if="resultFor(index)" tone="success">{{ t('toolbox.documentText.ready') }}</BChip>
+            <BChip v-if="pdfResults[index]" tone="success">{{ t('toolbox.documentText.ready') }}</BChip>
             <BChip v-else-if="running && progress.currentFile === index" tone="pending">{{ progressLabel }}</BChip>
-            <BChip v-else-if="fileErrors[index]" tone="danger">{{ t('toolbox.documentText.failed') }}</BChip>
           </BButton>
         </aside>
         <section class="document-text-main">
@@ -57,20 +56,11 @@
               ></div
             >
           </header>
-          <BTabs
-            v-if="!isPdf && activeResult"
-            v-model:active-tab="outputView"
-            :options="[
-              { key: 'preview', label: t('toolbox.documentText.preview') },
-              { key: 'raw', label: 'Markdown' },
-            ]"
-            :aria-label="t('toolbox.local.resultView')"
-          />
           <DocumentSummary
-            v-if="isPdf && activeResult && files[activeFile]"
+            v-if="activeResult && files[activeFile]"
             :file="files[activeFile]!"
             :text="activeOutput"
-            :has-text="Boolean((activeResult as PdfTextFileResult).pages.some((page) => page.text.trim()))"
+            :has-text="Boolean(activeResult.pages.some((page) => page.text.trim()))"
             :warning="activeWarning"
           />
           <div v-if="running" class="document-text-progress" role="status">
@@ -79,48 +69,31 @@
               ><strong>{{ progressPercent }}%</strong></div
             ><BProgress :percent="progressPercent" />
           </div>
-          <p v-if="!isPdf && failedCount" class="document-text-batch" role="status">{{
-            t('toolbox.documentText.batchResult', { success: successfulDocxResults.length, failed: failedCount })
-          }}</p>
-          <div v-if="activeError" class="document-text-error" role="alert"
-            ><SvgIcon :src="icon.message.error" size="18" /><span>{{ activeError }}</span></div
+          <div v-if="error" class="document-text-error" role="alert"
+            ><SvgIcon :src="icon.message.error" size="18" /><span>{{ error }}</span></div
           >
           <template v-if="activeResult">
             <div v-if="activeWarning" class="document-text-warning"
               ><SvgIcon :src="icon.message.info" size="17" /><span>{{ activeWarning }}</span></div
             >
-            <div v-if="!isPdf && outputView === 'preview'" class="document-text-preview">
-              <CommunityMarkdown :body="activeTextOnly" />
-              <div v-if="imagePreviews.length" class="document-text-images"
-                ><figure v-for="image in imagePreviews" :key="image.path"
-                  ><img :src="image.url" :alt="image.path" loading="lazy" /><figcaption>{{
-                    image.path
-                  }}</figcaption></figure
-                ></div
-              >
-            </div>
-            <BInput v-else v-model:value="activeOutput" type="textarea" :rows="dimension(22, 'layout')" readonly />
+            <BInput :value="activeOutput" type="textarea" :rows="dimension(22, 'layout')" readonly />
           </template>
-          <div v-else-if="!activeError && !running" class="document-text-placeholder">
+          <div v-else-if="!error && !running" class="document-text-placeholder">
             <SvgIcon :src="toolIcon" size="32" /><strong>{{ t('toolbox.documentText.waitingTitle') }}</strong
             ><p>{{ waitingDescription }}</p>
           </div>
-          <div v-if="!hasResults || failedCount || running" class="document-text-runbar">
+          <div v-if="!hasResults || running" class="document-text-runbar">
             <span>{{ t('toolbox.documentText.localHint') }}</span>
             <BButton :type="hasResults ? undefined : 'primary'" :disabled="running" :loading="running" @click="run">{{
-              running
-                ? t('toolbox.documentText.processing')
-                : failedCount
-                  ? t('toolbox.documentText.retryFailed')
-                  : runLabel
+              running ? t('toolbox.documentText.processing') : runLabel
             }}</BButton>
           </div>
           <div v-if="hasResults" class="document-text-main__actions">
-            <BButton :disabled="!activeTextOnly.trim()" @click="copyActive"
+            <BButton :disabled="!activeOutput.trim()" @click="copyActive"
               ><SvgIcon :src="icon.toolbox.copy" size="15" />{{ t('toolbox.local.copyResult') }}</BButton
             >
-            <BButton :disabled="!activeTextOnly.trim()" @click="saveAsNote">{{ t('toolbox.task.saveToNote') }}</BButton>
-            <BButton :disabled="!activeTextOnly.trim()" @click="translateOutput">{{ t('translation.title') }}</BButton>
+            <BButton :disabled="!activeOutput.trim()" @click="saveAsNote">{{ t('toolbox.task.saveToNote') }}</BButton>
+            <BButton :disabled="!activeOutput.trim()" @click="translateOutput">{{ t('translation.title') }}</BButton>
             <BButton type="primary" :disabled="running" @click="downloadResults"
               ><SvgIcon :src="icon.toolbox.download" size="15" />{{ downloadLabel }}</BButton
             >
@@ -140,8 +113,6 @@
   import { useI18n } from 'vue-i18n';
   import type { ToolboxToolId } from '@lightnote/shared/toolbox-protocol';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
-  import BTabs from '@/components/base/BasicComponents/BTabs.vue';
-  import CommunityMarkdown from '@/components/community/CommunityMarkdown.vue';
   import BChip from '@/components/base/BasicComponents/BChip.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import BProgress from '@/components/base/BasicComponents/BProgress.vue';
@@ -152,12 +123,7 @@
   import { useUiDensity } from '@/composables/useUiDensity';
   import { TOOLBOX_PRESENTATION } from '@/config/toolbox';
   import { copyTextToClipboard } from '@/utils/clipboard';
-  import {
-    convertDocxToMarkdown,
-    extractPdfText,
-    type DocxMarkdownResult,
-    type PdfTextFileResult,
-  } from '@/utils/toolboxDocumentText';
+  import { extractPdfText, type PdfTextFileResult } from '@/utils/toolboxDocumentText';
   import {
     downloadToolboxBlob,
     formatToolboxBytes,
@@ -165,16 +131,13 @@
     safeDownloadBaseName,
   } from '@/utils/toolboxLocal';
 
-  type DocumentTextToolId = Extract<ToolboxToolId, 'pdf_text_extractor' | 'docx_to_markdown'>;
-  const props = defineProps<{ toolId: DocumentTextToolId }>();
+  const props = defineProps<{ toolId: Extract<ToolboxToolId, 'pdf_text_extractor'> }>();
   import { usePdfSession } from './pdfSession';
   const publishPdf = usePdfSession(
     async () => files.value,
     (incoming) => {
-      if (isPdf.value) {
-        clearAll();
-        loadFiles(incoming);
-      }
+      clearAll();
+      loadFiles(incoming);
     },
   );
   const { t } = useI18n();
@@ -182,39 +145,31 @@
   const router = useRouter();
   const saveDraftKeys = new WeakMap<File, { content: string; key: string }>();
   function translateOutput() {
-    if (!activeTextOnly.value.trim()) return;
-    stageTranslation(activeTextOnly.value, activeFileName.value.replace(/\.[^.]+$/, ''));
+    if (!activeOutput.value.trim()) return;
+    stageTranslation(activeOutput.value, activeFileName.value.replace(/\.[^.]+$/, ''));
     void router.push('/toolbox/translation');
   }
   async function saveAsNote() {
     const file = files.value[activeFile.value];
-    if (!file || !activeTextOnly.value.trim()) return;
-    if (saveDraftKeys.get(file)?.content !== activeTextOnly.value)
-      saveDraftKeys.set(file, { content: activeTextOnly.value, key: crypto.randomUUID() });
+    if (!file || !activeOutput.value.trim()) return;
+    if (saveDraftKeys.get(file)?.content !== activeOutput.value)
+      saveDraftKeys.set(file, { content: activeOutput.value, key: crypto.randomUUID() });
     const draft = {
       title: activeFileName.value.replace(/\.[^.]+$/, ''),
-      content: activeTextOnly.value,
+      content: activeOutput.value,
       type: 'markdown' as const,
     };
     const key = `document-text:${saveDraftKeys.get(file)?.key}`;
     const result = await openSaveAsNote({
       sourceKey: key,
       ...draft,
-      isCurrent: () => files.value[activeFile.value] === file && activeTextOnly.value === draft.content,
+      isCurrent: () => files.value[activeFile.value] === file && activeOutput.value === draft.content,
       save: (options) => createNoteFromContent(draft, key, options),
     });
     if (result?.openAfterSave) await router.push(`/noteLibrary/${encodeURIComponent(result.noteId)}`);
   }
-  const outputView = ref('preview');
   const files = ref<File[]>([]);
   const pdfResults = ref<PdfTextFileResult[]>([]);
-  const docxResults = ref<Array<DocxMarkdownResult | null>>([]);
-  const fileErrors = ref<string[]>([]);
-  const failedCount = computed(() => fileErrors.value.filter(Boolean).length);
-  const successfulDocxResults = computed(() =>
-    docxResults.value.filter((result): result is DocxMarkdownResult => result !== null),
-  );
-  const activeError = computed(() => error.value || fileErrors.value[activeFile.value] || '');
   let runVersion = 0;
   const activeFile = ref(0);
   const loading = ref(false);
@@ -222,38 +177,19 @@
   const error = ref('');
   const progress = reactive({ completed: 0, total: 0, currentFile: 0 });
 
-  const isPdf = computed(() => props.toolId === 'pdf_text_extractor');
   const toolName = computed(() => t(`toolbox.tool.${props.toolId}.name`));
   const toolIcon = computed(() => TOOLBOX_PRESENTATION[props.toolId].icon);
   const emptyTitle = computed(() => t(`toolbox.documentText.emptyTitle.${props.toolId}`));
   const chooseLabel = computed(() => t(`toolbox.documentText.choose.${props.toolId}`));
   const runLabel = computed(() => t(`toolbox.documentText.run.${props.toolId}`));
-  const accept = computed(() =>
-    isPdf.value
-      ? '.pdf,application/pdf'
-      : '.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  );
-  const maxFiles = computed(() => (isPdf.value ? 4 : 5));
-  const maxBytes = computed(() => (isPdf.value ? 80 : 50) * 1024 * 1024);
-  const limitHint = computed(() =>
-    t('toolbox.documentText.limitHint', {
-      type: isPdf.value ? 'PDF' : 'DOCX',
-      count: maxFiles.value,
-      size: isPdf.value ? 80 : 50,
-    }),
-  );
+  const accept = '.pdf,application/pdf';
+  const maxFiles = 4;
+  const maxBytes = 80 * 1024 * 1024;
+  const limitHint = computed(() => t('toolbox.documentText.limitHint', { type: 'PDF', count: maxFiles, size: 80 }));
   const totalBytes = computed(() => files.value.reduce((sum, file) => sum + file.size, 0));
-  const hasResults = computed(() => (isPdf.value ? pdfResults.value.length : successfulDocxResults.value.length) > 0);
-  const activeResult = computed(
-    () => (isPdf.value ? pdfResults.value[activeFile.value] : docxResults.value[activeFile.value]) || null,
-  );
-  const activeOutput = computed({
-    get: () =>
-      isPdf.value
-        ? (activeResult.value as PdfTextFileResult | null)?.text || ''
-        : (activeResult.value as DocxMarkdownResult | null)?.markdown || '',
-    set: () => undefined,
-  });
+  const hasResults = computed(() => pdfResults.value.length > 0);
+  const activeResult = computed(() => pdfResults.value[activeFile.value] || null);
+  const activeOutput = computed(() => activeResult.value?.text || '');
   const activeFileName = computed(() => files.value[activeFile.value]?.name || toolName.value);
   const waitingDescription = computed(() => t(`toolbox.documentText.waitingDescription.${props.toolId}`));
   const progressPercent = computed(() =>
@@ -262,77 +198,30 @@
   const progressLabel = computed(() =>
     t('toolbox.documentText.progress', { current: progress.completed, total: progress.total || files.value.length }),
   );
-  const imagePreviews = ref<Array<{ path: string; url: string }>>([]);
-  const activeTextOnly = computed(() =>
-    activeOutput.value.replace(/!\[Image\]\(assets\/image-\d+\.(?:png|jpg|webp)\)/g, ''),
-  );
-  function releaseImagePreviews() {
-    imagePreviews.value.forEach((image) => URL.revokeObjectURL(image.url));
-    imagePreviews.value = [];
-  }
-  watch(activeResult, (result) => {
-    releaseImagePreviews();
-    if (!isPdf.value && result)
-      imagePreviews.value = ((result as DocxMarkdownResult).images || []).map((image) => ({
-        path: image.path,
-        url: URL.createObjectURL(new Blob([image.bytes as BlobPart], { type: image.mimeType })),
-      }));
-  });
-  onBeforeUnmount(releaseImagePreviews);
   const downloadLabel = computed(() =>
-    (isPdf.value ? pdfResults.value.length : successfulDocxResults.value.length) > 1 ||
-    successfulDocxResults.value.some((result) => result.images?.length)
-      ? t('toolbox.documentText.downloadZip')
-      : t('toolbox.local.downloadResult'),
+    pdfResults.value.length > 1 ? t('toolbox.documentText.downloadZip') : t('toolbox.local.downloadResult'),
   );
   const activeStats = computed(() => {
-    if (!activeResult.value) return [];
-    if (isPdf.value) {
-      const result = activeResult.value as PdfTextFileResult;
-      const characters = result.pages.reduce((sum, page) => sum + page.characters, 0);
-      const empty = result.pages.filter((page) => !page.text).length;
-      return [
-        { label: t('toolbox.documentText.pages'), value: result.pages.length },
-        { label: t('toolbox.documentText.characters'), value: characters.toLocaleString() },
-        { label: t('toolbox.documentText.emptyPages'), value: empty },
-      ];
-    }
-    const stats = (activeResult.value as DocxMarkdownResult).stats;
+    const result = activeResult.value;
+    if (!result) return [];
+    const characters = result.pages.reduce((sum, page) => sum + page.characters, 0);
+    const empty = result.pages.filter((page) => !page.text).length;
     return [
-      { label: t('toolbox.documentText.paragraphs'), value: stats.paragraphs },
-      { label: t('toolbox.documentText.headings'), value: stats.headings },
-      { label: t('toolbox.documentText.tables'), value: stats.tables },
-      { label: t('toolbox.documentText.links'), value: stats.links },
+      { label: t('toolbox.documentText.pages'), value: result.pages.length },
+      { label: t('toolbox.documentText.characters'), value: characters.toLocaleString() },
+      { label: t('toolbox.documentText.emptyPages'), value: empty },
     ];
   });
   const activeWarning = computed(() => {
-    if (!activeResult.value) return '';
-    if (isPdf.value) {
-      const empty = (activeResult.value as PdfTextFileResult).pages.filter((page) => !page.text).length;
-      return empty ? t('toolbox.documentText.pdfScanWarning', { count: empty }) : '';
-    }
-    const images = (activeResult.value as DocxMarkdownResult).stats.images;
-    const result = activeResult.value as DocxMarkdownResult;
-    return images
-      ? t(result.skippedImages ? 'toolbox.documentText.docxImages' : 'toolbox.documentText.docxImagesReady', {
-          count: result.images?.length || 0,
-          skipped: result.skippedImages || 0,
-        })
-      : '';
+    const empty = activeResult.value?.pages.filter((page) => !page.text).length || 0;
+    return empty ? t('toolbox.documentText.pdfScanWarning', { count: empty }) : '';
   });
-
-  function resultFor(index: number) {
-    return isPdf.value ? pdfResults.value[index] : docxResults.value[index];
-  }
 
   function resetResults() {
     runVersion++;
     running.value = false;
     pdfResults.value = [];
-    docxResults.value = [];
-    fileErrors.value = [];
     error.value = '';
-    outputView.value = 'preview';
     progress.completed = 0;
     progress.total = 0;
     progress.currentFile = 0;
@@ -340,20 +229,17 @@
 
   function loadFiles(value: File[]) {
     const selected = value || [];
-    if (selected.length > maxFiles.value)
-      return message.warning(t('toolbox.documentText.tooMany', { count: maxFiles.value }));
+    if (selected.length > maxFiles) return message.warning(t('toolbox.documentText.tooMany', { count: maxFiles }));
     if (!selected.length) return;
-    const correct = selected.every((file) =>
-      isPdf.value
-        ? file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')
-        : file.name.toLowerCase().endsWith('.docx'),
+    const correct = selected.every(
+      (file) => file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf'),
     );
     if (!correct) return message.warning(t('toolbox.documentText.invalidType'));
-    if (selected.reduce((sum, file) => sum + file.size, 0) > maxBytes.value) {
+    if (selected.reduce((sum, file) => sum + file.size, 0) > maxBytes) {
       return message.warning(t('toolbox.documentText.tooLarge'));
     }
     files.value = selected;
-    if (isPdf.value) publishPdf();
+    publishPdf();
     activeFile.value = 0;
     resetResults();
   }
@@ -367,40 +253,19 @@
   async function run() {
     if (!files.value.length || running.value) return;
     const snapshot = [...files.value];
-    const retryIndexes = fileErrors.value.flatMap((value, index) => (value ? [index] : []));
-    if (!retryIndexes.length) resetResults();
+    resetResults();
     const version = ++runVersion;
     running.value = true;
     progress.completed = 0;
     error.value = '';
     try {
-      if (isPdf.value) {
-        progress.total = snapshot.length;
-        const results = await extractPdfText(snapshot, (completed, total) => {
-          if (version !== runVersion) return;
-          progress.completed = completed;
-          progress.total = total;
-        });
-        if (version === runVersion) pdfResults.value = results;
-      } else {
-        const indexes = retryIndexes.length ? retryIndexes : snapshot.map((_file, index) => index);
-        if (!retryIndexes.length) docxResults.value = snapshot.map(() => null);
-        progress.total = indexes.length;
-        for (const index of indexes) {
-          if (version !== runVersion) return;
-          progress.currentFile = index;
-          fileErrors.value[index] = '';
-          try {
-            const result = await convertDocxToMarkdown(snapshot[index]!);
-            if (version !== runVersion) return;
-            docxResults.value[index] = result;
-          } catch (cause) {
-            if (version !== runVersion) return;
-            fileErrors.value[index] = documentError(cause);
-          }
-          progress.completed++;
-        }
-      }
+      progress.total = snapshot.length;
+      const results = await extractPdfText(snapshot, (completed, total) => {
+        if (version !== runVersion) return;
+        progress.completed = completed;
+        progress.total = total;
+      });
+      if (version === runVersion) pdfResults.value = results;
     } catch (cause) {
       if (version === runVersion) error.value = documentError(cause);
     } finally {
@@ -411,40 +276,29 @@
   function documentError(cause: unknown) {
     const code = cause instanceof Error ? cause.message : '';
     return t(
-      `toolbox.documentText.error.${['TOO_MANY_PAGES', 'TOO_LARGE', 'INVALID_DOCX'].includes(code) ? code : 'generic'}`,
+      `toolbox.documentText.error.${['TOO_MANY_PAGES', 'TOO_LARGE'].includes(code) ? code : 'generic'}`,
     );
   }
 
   async function copyActive() {
-    const copied = await copyTextToClipboard(activeTextOnly.value);
+    const copied = await copyTextToClipboard(activeOutput.value);
     message[copied ? 'success' : 'error'](t(copied ? 'toolbox.local.copySuccess' : 'toolbox.local.copyFailed'));
   }
 
   async function downloadResults() {
-    const results: Array<{ name: string; content: string; images?: DocxMarkdownResult['images'] }> = isPdf.value
-      ? pdfResults.value.map((result) => ({ name: `${safeDownloadBaseName(result.name)}.txt`, content: result.text }))
-      : successfulDocxResults.value.map((result) => ({
-          name: `${safeDownloadBaseName(result.name)}.md`,
-          content: result.markdown,
-          images: result.images,
-        }));
+    const results = pdfResults.value.map((result) => ({
+      name: `${safeDownloadBaseName(result.name)}.txt`,
+      content: result.text,
+    }));
     if (!results.length) return;
-    if (results.length === 1 && !results[0]!.images?.length) {
+    if (results.length === 1) {
       downloadToolboxBlob(new Blob([results[0]!.content], { type: 'text/plain;charset=utf-8' }), results[0]!.name);
       return;
     }
     const JSZip = (await import('jszip')).default;
     const zip = new JSZip();
     const usedNames = new Set<string>();
-    for (const result of results) {
-      const name = reserveToolboxFileName(result.name, usedNames);
-      if (result.images?.length) {
-        const directory = name.replace(/\.md$/, '');
-        // Reserve the root name too so identically named documents never share an image folder.
-        zip.file(name, result.content.replace(/\]\(assets\//g, `](${directory}/assets/`));
-        for (const image of result.images) zip.file(`${directory}/${image.path}`, image.bytes);
-      } else zip.file(name, result.content);
-    }
+    for (const result of results) zip.file(reserveToolboxFileName(result.name, usedNames), result.content);
     downloadToolboxBlob(await zip.generateAsync({ type: 'blob' }), `lightnote-${props.toolId}.zip`);
   }
 
@@ -464,24 +318,6 @@
     gap: var(--ui-space-6, 6px);
   }
 
-  .document-text-images {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(var(--ui-layout-120, 120px), 1fr));
-    gap: var(--ui-space-12, 12px);
-  }
-  .document-text-images figure {
-    margin: 0;
-  }
-  .document-text-images img {
-    display: block;
-    max-width: 100%;
-    max-height: var(--ui-layout-240, 240px);
-    object-fit: contain;
-  }
-  .document-text-images figcaption {
-    color: var(--desc-color);
-    font-size: var(--ui-font-11, 11px);
-  }
 
   @import (reference) '@/assets/css/workspace-surfaces.less';
   .document-text-workbench {
@@ -617,19 +453,6 @@
     align-items: center;
     justify-content: flex-end;
   }
-  .document-text-preview {
-    min-height: var(--ui-layout-360, 360px);
-    padding: var(--ui-space-20, 20px);
-    border: 1px solid var(--workspace-divider);
-    border-radius: 8px;
-    overflow-wrap: anywhere;
-    min-width: 0;
-  }
-  .document-text-preview :deep(table) {
-    display: block;
-    overflow-x: auto;
-    max-width: 100%;
-  }
   .document-text-main :deep(textarea) {
     min-height: var(--ui-layout-360, 360px);
     font-family: ui-monospace, monospace;
@@ -654,8 +477,7 @@
     font-size: var(--ui-font-12, 12px);
   }
   .document-text-error,
-  .document-text-warning,
-  .document-text-batch {
+  .document-text-warning {
     display: flex;
     gap: var(--ui-space-8, 8px);
     margin: 0;
@@ -666,8 +488,7 @@
     font-size: var(--ui-font-13, 13px);
     line-height: 1.6;
   }
-  .document-text-warning,
-  .document-text-batch {
+  .document-text-warning {
     color: var(--chip-pending-fg);
     border-color: var(--chip-pending-border);
     background: var(--chip-pending-bg);
@@ -738,10 +559,6 @@
       white-space: normal;
       overflow-wrap: anywhere;
       line-height: 1.5;
-    }
-    .document-text-preview {
-      padding: var(--ui-space-12, 12px);
-      min-height: var(--ui-layout-260, 260px);
     }
     .document-text-main__title h2 {
       font-size: var(--ui-font-18, 18px);

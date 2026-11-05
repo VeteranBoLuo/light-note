@@ -750,7 +750,6 @@
     const ids = new Set([
       ...quickTools.value.slice(4).map((tool) => tool.id),
       'forms',
-      'image_optimizer',
       'ocr_to_text',
     ]);
     return tools.value.filter(

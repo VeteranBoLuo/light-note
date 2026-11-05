@@ -327,7 +327,7 @@ describe('toolbox service boundaries', () => {
     };
     const request = {
       userId: 'user-1',
-      toolId: 'research_brief',
+      toolId: 'study_kit',
       rawInput: { resourceRefs: [{ type: 'note', id: 'note-1' }] },
       billingMedium: 'points',
       clientRequestId: 'quote-request-1234',
@@ -336,9 +336,9 @@ describe('toolbox service boundaries', () => {
 
     const quote = await createToolboxQuote(request);
     expect(quote).toMatchObject({
-      toolId: 'research_brief',
+      toolId: 'study_kit',
       billingMedium: 'points',
-      quotedPoints: 20,
+      quotedPoints: 18,
       status: 'active',
     });
     const inserted = database.query.mock.calls[1][1];
@@ -359,7 +359,7 @@ describe('toolbox service boundaries', () => {
             billing_medium: inserted[5],
             input_digest: inserted[6],
             input_snapshot_json: inserted[7],
-            quoted_points: 20,
+            quoted_points: 18,
             status: 'active',
             expires_at: quote.expiresAt,
           },
@@ -368,53 +368,6 @@ describe('toolbox service boundaries', () => {
     };
     await expect(createToolboxQuote({ ...request, database: replayDatabase })).resolves.toMatchObject({ id: quote.id });
     expect(replayDatabase.query).toHaveBeenCalledOnce();
-  });
-
-  it('quotes a prompt-only draft without requiring knowledge resources', async () => {
-    mocks.resolvePersonalKnowledgeResourceVersions.mockResolvedValue([]);
-    const database = {
-      query: vi
-        .fn()
-        .mockResolvedValueOnce([[]])
-        .mockResolvedValueOnce([{ affectedRows: 1 }]),
-    };
-
-    const quote = await createToolboxQuote({
-      userId: 'user-1',
-      toolId: 'idea_to_draft',
-      rawInput: {
-        options: {
-          question: '写一篇解释个人知识库长期价值的文章，面向刚入职的产品经理',
-          intent: 'article',
-          detailLevel: 'detailed',
-        },
-      },
-      billingMedium: 'points',
-      clientRequestId: 'prompt-quote-1234',
-      database,
-    });
-
-    expect(quote).toMatchObject({
-      toolId: 'idea_to_draft',
-      billingMedium: 'points',
-      quotedPoints: 28,
-      status: 'active',
-      inputSummary: { itemCount: 0, resourceCount: 0, uploadCount: 0 },
-    });
-    expect(mocks.resolvePersonalKnowledgeResourceVersions).toHaveBeenCalledWith(
-      expect.objectContaining({ userId: 'user-1', resourceRefs: [] }),
-    );
-    const inserted = database.query.mock.calls[1][1];
-    expect(JSON.parse(inserted[7])).toEqual({
-      resourceRefs: [],
-      sourceIds: [],
-      options: {
-        question: '写一篇解释个人知识库长期价值的文章，面向刚入职的产品经理',
-        intent: 'article',
-        detailLevel: 'detailed',
-        taskMaterials: [],
-      },
-    });
   });
 
   it('quotes an AI skill with user AI quota without reserving points', async () => {
@@ -429,7 +382,7 @@ describe('toolbox service boundaries', () => {
 
     const quote = await createToolboxQuote({
       userId: 'user-1',
-      toolId: 'research_brief',
+      toolId: 'study_kit',
       rawInput: { resourceRefs: [{ type: 'note', id: 'note-1' }] },
       billingMedium: 'ai_quota',
       clientRequestId: 'quota-quote-1234',
@@ -451,10 +404,10 @@ describe('toolbox service boundaries', () => {
           {
             id: 'quote-existing',
             request_id: 'medium-quote-1234',
-            tool_id: 'research_brief',
+            tool_id: 'study_kit',
             pricing_version: 'toolbox-billing-v2',
             billing_medium: 'points',
-            input_digest: toolboxInputDigest({ toolId: 'research_brief', input: snapshot }),
+            input_digest: toolboxInputDigest({ toolId: 'study_kit', input: snapshot }),
             input_snapshot_json: JSON.stringify(snapshot),
             quoted_points: 20,
             status: 'active',
@@ -467,7 +420,7 @@ describe('toolbox service boundaries', () => {
     await expect(
       createToolboxQuote({
         userId: 'user-1',
-        toolId: 'research_brief',
+        toolId: 'study_kit',
         rawInput: { resourceRefs: [{ type: 'note', id: 'note-1' }] },
         billingMedium: 'ai_quota',
         clientRequestId: 'medium-quote-1234',
@@ -485,10 +438,10 @@ describe('toolbox service boundaries', () => {
     const quote = {
       id: 'quote-1',
       user_id: 'user-1',
-      tool_id: 'research_brief',
+      tool_id: 'study_kit',
       pricing_version: 'toolbox-billing-v2',
       billing_medium: 'points',
-      input_digest: toolboxInputDigest({ toolId: 'research_brief', input: snapshot }),
+      input_digest: toolboxInputDigest({ toolId: 'study_kit', input: snapshot }),
       input_snapshot_json: JSON.stringify(snapshot),
       quoted_points: 20,
       status: 'active',
@@ -522,7 +475,7 @@ describe('toolbox service boundaries', () => {
         database,
       }),
     ).resolves.toMatchObject({
-      toolId: 'research_brief',
+      toolId: 'study_kit',
       status: 'queued',
       artifactState: 'none',
       billing: { status: 'reserved', quotedPoints: 20 },
@@ -544,10 +497,10 @@ describe('toolbox service boundaries', () => {
     const quote = {
       id: 'quote-quota-1',
       user_id: 'user-1',
-      tool_id: 'research_brief',
+      tool_id: 'study_kit',
       pricing_version: 'toolbox-billing-v2',
       billing_medium: 'ai_quota',
-      input_digest: toolboxInputDigest({ toolId: 'research_brief', input: snapshot }),
+      input_digest: toolboxInputDigest({ toolId: 'study_kit', input: snapshot }),
       input_snapshot_json: JSON.stringify(snapshot),
       quoted_points: 0,
       status: 'active',
@@ -1448,9 +1401,9 @@ describe('source project transaction boundary', () => {
     const quote = {
       id: 'q',
       pricing_version: 'toolbox-billing-v2',
-      tool_id: 'research_brief',
+      tool_id: 'study_kit',
       billing_medium: 'ai_quota',
-      input_digest: toolboxInputDigest({ toolId: 'research_brief', input: snapshot }),
+      input_digest: toolboxInputDigest({ toolId: 'study_kit', input: snapshot }),
       input_snapshot_json: JSON.stringify(snapshot),
       status: 'active',
       expires_at: new Date(Date.now() + 60_000),

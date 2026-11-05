@@ -451,7 +451,6 @@ declare(ADMIN_POLICIES.READ, 'toolbox', [
   ['GET', '/toolbox/pinned-tools'],
   ['GET', '/toolbox/home'],
   ['GET', '/toolbox/project-entry'],
-  ['GET', '/toolbox/knowledge-overview'],
   ['GET', '/toolbox/workspaces'],
   ['GET', '/toolbox/workspaces/:workspaceId'],
   ['GET', '/toolbox/workspaces/:workspaceId/items/:itemId'],

@@ -35,32 +35,14 @@ export type ToolboxToolId =
   | "concept_map"
   | "knowledge_audit"
   | "pdf_organizer"
-  | "image_optimizer"
   | "image_to_pdf"
   | "pdf_to_images"
-  | "table_converter"
-  | "data_workbench"
-  | "data_quality_report"
-  | "data_cleaner"
-  | "data_validator"
-  | "pivot_analysis"
-  | "table_diff"
-  | "table_merge_split"
-  | "data_anonymizer"
-  | "data_chart"
   | "pdf_text_extractor"
-  | "docx_to_markdown"
-  | "knowledge_structure_audit"
   | "source_comparison"
   | "ocr_to_text";
 export type ToolboxAiToolId =
-  | "idea_to_draft"
   | "material_to_note"
-  | "research_brief"
-  | "study_kit"
-  | "concept_map"
-  | "source_comparison"
-  | "knowledge_audit";
+  | "study_kit";
 
 export interface ToolboxToolDefinition {
   id: ToolboxToolId;
@@ -104,21 +86,8 @@ export interface ToolboxToolDefinition {
 export const TOOLBOX_PROTOCOL_VERSION: 1;
 export const TOOLBOX_PRICING_VERSION: "toolbox-billing-v2";
 export const TOOLBOX_PROCESSING_REQUIREMENT_MAX_CHARS: 1000;
-export const TOOLBOX_EXECUTION_MODES: readonly ToolboxExecutionMode[];
 export const TOOLBOX_BILLING_MEDIA: readonly ToolboxBillingMedium[];
 export const TOOLBOX_JOB_STATUSES: readonly ToolboxJobStatus[];
-export const TOOLBOX_BILLING_STATUSES: readonly ToolboxBillingStatus[];
-export const TOOLBOX_SAVE_STATUSES: readonly ToolboxSaveStatus[];
-export const TOOLBOX_ARTIFACT_TYPES: readonly (
-  | "translation"
-  | "note_draft"
-  | "research_brief"
-  | "study_kit"
-  | "concept_map"
-  | "knowledge_audit"
-  | "comparison"
-  | "ocr_text"
-)[];
 export const TOOLBOX_RESOURCE_TYPES: readonly ToolboxResourceType[];
 export const TOOLBOX_TOOL_INTENTS: Readonly<
   Record<ToolboxAiToolId, readonly string[]>

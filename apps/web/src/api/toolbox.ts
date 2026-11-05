@@ -1,5 +1,4 @@
 import { withForegroundActivity } from '@/http/requestActivity';
-import type { ComparisonColumn } from '@lightnote/shared/comparison-table';
 import { invalidateToolboxProjects } from '@/utils/toolboxProjectState';
 import { recordAiProductEvent, type AiProductEventDimensions } from '@/api/aiTelemetry';
 import type { ToolboxToolDefinition } from '@lightnote/shared/toolbox-protocol';
@@ -21,8 +20,6 @@ export type ToolboxInput = {
     intent?: string;
     detailLevel?: 'concise' | 'balanced' | 'detailed';
     targetLength?: number;
-    resultMode?: 'report' | 'table';
-    columns?: ComparisonColumn[];
   };
 };
 
@@ -146,41 +143,6 @@ export type ToolboxHomeWorkspaceSummary = Pick<
   | 'lastOpenedAt'
   | 'updatedAt'
 >;
-
-export type ToolboxKnowledgeIssue = {
-  kind: string;
-  severity: 'high' | 'medium' | 'low';
-  noteId: string;
-  title: string;
-  path: string;
-  reason: string;
-};
-
-export type ToolboxKnowledgeOverview = {
-  scannedAt: string;
-  snapshotVersion?: string;
-  policy: { staleAfterDays: number; deepNoteDepth: number };
-  summary: {
-    total: number;
-    roots: number;
-    maxDepth: number;
-    tagged: number;
-    linked: number;
-    empty: number;
-    stale: number;
-    invalidParents: number;
-    duplicateGroups: number;
-    duplicateNotes: number;
-    healthScore: number;
-  };
-  issueCounts: Record<string, number>;
-  issues: ToolboxKnowledgeIssue[];
-  issueTotal: number;
-  selectedIssueTotal?: number;
-  selectedSeverityCounts?: { high: number; medium: number; low: number };
-  scopeOptions?: Array<{ id: string; path: string }>;
-  recommendations: Array<{ code: string; count: number; priority: 'high' | 'medium' | 'low' }>;
-};
 
 export type ToolboxQuote = {
   id: string;
@@ -324,19 +286,6 @@ export async function fetchToolboxHome(): Promise<ToolboxHomeOverview> {
   const response = await apiBaseGet('/api/toolbox/home', undefined, { silent: true });
   if (response.status !== 200) throw apiFailure(response, 'TOOLBOX_HOME_FAILED');
   return parseToolboxHomeOverview(response.data);
-}
-
-export async function fetchToolboxKnowledgeOverview(params?: {
-  snapshot?: string;
-  rootId?: string;
-  issueKind?: string;
-  includeOptional?: boolean;
-  offset?: number;
-  limit?: number;
-}): Promise<ToolboxKnowledgeOverview> {
-  const response = await apiBaseGet('/api/toolbox/knowledge-overview', params, { silent: true });
-  if (response.status !== 200) throw apiFailure(response, 'TOOLBOX_KNOWLEDGE_OVERVIEW_FAILED');
-  return response.data as ToolboxKnowledgeOverview;
 }
 
 export type ProjectEntrySource = NonNullable<AiProductEventDimensions['entrySource']>;

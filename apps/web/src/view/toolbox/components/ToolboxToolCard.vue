@@ -52,11 +52,7 @@
   );
   const previews = {
     material_to_note: 'note',
-    research_brief: 'report',
-    source_comparison: 'matrix',
     study_kit: 'flashcards',
-    concept_map: 'map',
-    idea_to_draft: 'draft',
     pdf_organizer: 'pages',
   } as const;
   const preview = computed(() => previews[props.toolId as keyof typeof previews]);

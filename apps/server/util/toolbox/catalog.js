@@ -1,4 +1,3 @@
-import { normalizeComparisonColumns } from '@lightnote/shared/comparison-table';
 import { createHash } from 'node:crypto';
 import {
   TOOLBOX_TRANSLATION_MAX_CHARS, TOOLBOX_TRANSLATION_LANGUAGES,
@@ -15,13 +14,8 @@ export const TOOLBOX_QUOTE_TTL_MS = 10 * 60_000;
 const SAFE_ID_PATTERN = /^[A-Za-z0-9._:@/-]{1,128}$/u;
 const SAFE_REQUEST_ID_PATTERN = /^[A-Za-z0-9:_-]{12,64}$/u;
 const PAID_PRICE_RANGES = Object.freeze({
-  idea_to_draft: Object.freeze({ min: 12, max: 28 }),
   material_to_note: Object.freeze({ min: 8, max: 30 }),
-  research_brief: Object.freeze({ min: 20, max: 60 }),
   study_kit: Object.freeze({ min: 18, max: 50 }),
-  concept_map: Object.freeze({ min: 15, max: 45 }),
-  source_comparison: Object.freeze({ min: 15, max: 50 }),
-  knowledge_audit: Object.freeze({ min: 20, max: 60 }),
   ocr_to_text: Object.freeze({ min: 5, max: 30 }),
 });
 
@@ -114,7 +108,6 @@ function normalizeOptions(toolId, value) {
     'intent',
     'detailLevel',
     'targetLength',
-    ...(toolId === 'source_comparison' ? ['resultMode', 'columns'] : []),
     ...(toolId === 'translation' ? ['sourceLanguage', 'targetLanguage', 'acceptPartial'] : []),
     ...(toolId === 'ocr_to_text' ? ['recognitionMode'] : []),
   ]);
@@ -123,15 +116,6 @@ function normalizeOptions(toolId, value) {
     throw toolboxError('TOOLBOX_OPTIONS_UNKNOWN_FIELD', `工具选项包含未知字段：${unknown.join(', ')}`);
   if (value.recognitionMode != null && !['ai', 'basic'].includes(value.recognitionMode))
     throw toolboxError('TOOLBOX_OPTIONS_INVALID', '不支持该识别方式');
-  let comparison = {};
-  if (toolId === 'source_comparison') {
-    if (value.resultMode != null && !['report', 'table'].includes(value.resultMode)) throw toolboxError('TOOLBOX_OPTIONS_INVALID', '不支持该对比形式');
-    if (value.resultMode === 'table') {
-      try { comparison = { resultMode: 'table', columns: normalizeComparisonColumns(value.columns) }; }
-      catch { throw toolboxError('TOOLBOX_OPTIONS_INVALID', '请填写 1～12 个不重复的列标题，每个最多 40 字'); }
-      if (!String(value.question || '').trim()) throw toolboxError('TOOLBOX_OPTIONS_INVALID', '请填写比较重点');
-    } else if (value.columns != null) throw toolboxError('TOOLBOX_OPTIONS_INVALID', '文字报告不接受表格列设置');
-  }
   const title = String(value.title || '').trim();
   const question = String(value.question || '').trim();
   const intent = String(value.intent || '').trim();
@@ -158,7 +142,6 @@ function normalizeOptions(toolId, value) {
     throw toolboxError('TOOLBOX_TRANSLATION_LANGUAGE_INVALID', '请选择有效的翻译语言');
   return Object.freeze({
     ...(toolId === 'translation' ? { sourceLanguage: value.sourceLanguage || 'auto', targetLanguage: value.targetLanguage, acceptPartial: value.acceptPartial === true } : {}),
-    ...comparison,
     ...(value.recognitionMode ? { recognitionMode: value.recognitionMode } : {}),
     ...(title ? { title } : {}),
     ...(question ? { question } : {}),
@@ -183,9 +166,6 @@ export function normalizeToolboxInput(toolId, rawInput) {
   const resourceRefs = normalizeResourceRefs(input.resourceRefs);
   const sourceIds = normalizeSourceIds(input.sourceIds);
   const options = normalizeOptions(toolId, input.options);
-  if (definition.input.kind === 'prompt' && !options.question) {
-    throw toolboxError('TOOLBOX_QUESTION_REQUIRED', '请输入要展开的主题、想法或目标');
-  }
   if (definition.input.kind === 'resources' && sourceIds.length) {
     throw toolboxError('TOOLBOX_INPUT_TYPE_INVALID', '该工具当前只支持轻笺内的资料');
   }
@@ -208,19 +188,12 @@ export function normalizeToolboxInput(toolId, rawInput) {
   return Object.freeze({ resourceRefs: Object.freeze(resourceRefs), sourceIds: Object.freeze(sourceIds), options, ...(toolId === 'translation' && input.text ? { text: input.text } : {}) });
 }
 
-export function quoteToolboxPoints(toolId, { itemCount, totalBytes = 0, snapshot = null, options = null } = {}) {
+export function quoteToolboxPoints(toolId, { itemCount, totalBytes = 0 } = {}) {
   const count = Math.max(0, Math.floor(Number(itemCount) || 0));
   const sizeMiB = Math.max(0, Number(totalBytes) || 0) / (1024 * 1024);
-  const quoteOptions = snapshot?.options || options || {};
   let points;
-  if (toolId === 'idea_to_draft') {
-    points = quoteOptions.detailLevel === 'concise' ? 12 : quoteOptions.detailLevel === 'detailed' ? 28 : 18;
-  } else if (toolId === 'material_to_note') points = 8 + Math.max(0, count - 2) * 3;
-  else if (toolId === 'research_brief') points = 20 + Math.max(0, count - 4) * 5;
+  if (toolId === 'material_to_note') points = 8 + Math.max(0, count - 2) * 3;
   else if (toolId === 'study_kit') points = 18 + Math.max(0, count - 2) * 4;
-  else if (toolId === 'concept_map') points = 15 + Math.max(0, count - 1) * 3;
-  else if (toolId === 'source_comparison') points = 15 + Math.max(0, count - 2) * 5;
-  else if (toolId === 'knowledge_audit') points = 20 + Math.max(0, count - 2) * 4;
   else if (toolId === 'ocr_to_text') points = 5 + Math.max(0, count - 1) * 2 + Math.ceil(sizeMiB / 2) * 2;
   else throw toolboxError('TOOLBOX_QUOTE_NOT_REQUIRED', '该工具无需服务端报价');
   const range = PAID_PRICE_RANGES[toolId];
@@ -239,7 +212,7 @@ export function getPublicToolboxCatalog({ disabledToolIds = [] } = {}) {
       ...(definition.billingMedium === 'ai_quota'
         ? { price: { kind: 'quota', currency: 'ai_quota', min: 0, max: 0 } }
         : definition.billingMedium === 'points'
-        ? { price: { kind: 'quote', currency: 'points', ...PAID_PRICE_RANGES[definition.id] } }
+        ? { price: { kind: 'quote', currency: 'points', ...(PAID_PRICE_RANGES[definition.id] || { min: 0, max: 0 }) } }
         : { price: { kind: 'free', currency: null, min: 0, max: 0 } }),
     })),
   };

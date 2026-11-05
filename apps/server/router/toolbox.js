@@ -14,7 +14,6 @@ router.get('/catalog', toolboxHandle.getCatalog);
 router.get('/project-entry', toolboxHandle.getProjectEntry);
 router.post('/project-entry/dismiss', localProcessingRateLimiter, toolboxHandle.dismissProjectEntry);
 router.get('/home', localProcessingRateLimiter, toolboxHandle.getHome);
-router.get('/knowledge-overview', localProcessingRateLimiter, toolboxHandle.getKnowledgeOverview);
 router.get('/workspaces', localProcessingRateLimiter, toolboxHandle.listWorkspaces);
 router.post('/workspaces', localProcessingRateLimiter, toolboxHandle.createWorkspace);
 router.get('/workspaces/:workspaceId', localProcessingRateLimiter, toolboxHandle.getWorkspace);

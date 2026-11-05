@@ -5,7 +5,6 @@ import {
   IMAGE_OPTIMIZER_MAX_OUTPUT_PIXELS,
   ImageOptimizerError,
   optimizeImage,
-  releaseOptimizedImages,
   validateImageFiles,
 } from './imageOptimizer';
 
@@ -75,8 +74,6 @@ describe('图片压缩器输入边界', () => {
     expect(close).toHaveBeenCalledOnce();
     expect(createObjectUrl).toHaveBeenCalledOnce();
 
-    releaseOptimizedImages([output]);
-    expect(revokeObjectUrl).toHaveBeenCalledWith('blob:optimized');
   });
 
   it('不设置尺寸限制时拒绝静默缩小超出安全像素的图片', async () => {

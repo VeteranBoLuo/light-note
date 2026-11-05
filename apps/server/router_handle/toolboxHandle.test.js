@@ -21,7 +21,6 @@ const mocks = vi.hoisted(() => ({
   createToolboxWorkspaceItem: vi.fn(),
   updateToolboxWorkspaceItem: vi.fn(),
   createToolboxWorkspaceSession: vi.fn(),
-  getToolboxKnowledgeOverview: vi.fn(),
   getToolboxWorkspace: vi.fn(),
   listToolboxWorkspaces: vi.fn(),
   readProjectEntry: vi.fn(),
@@ -52,9 +51,6 @@ vi.mock('../util/operationLog.js', () => ({
 }));
 vi.mock('../util/toolbox/errors.js', () => ({
   parseToolboxError: (error) => ({ status: 500, data: { code: error?.code || 'ERROR' }, message: 'failed' }),
-}));
-vi.mock('../util/toolbox/knowledgeStructure.js', () => ({
-  getToolboxKnowledgeOverview: mocks.getToolboxKnowledgeOverview,
 }));
 vi.mock('../util/toolbox/translationStream.js', () => ({ streamTranslation: mocks.streamTranslation }));
 vi.mock('../util/toolbox/service.js', () => ({
@@ -100,7 +96,6 @@ const {
   operateWorkspaceBoard,
   getWorkspace,
   listWorkspaces,
-  getKnowledgeOverview,
   openWorkspace,
   removeWorkspaceResource,
   saveArtifact,
@@ -167,20 +162,6 @@ describe('toolbox home handlers', () => {
     mocks.ensureNotVisitor.mockReturnValue(false);
     await deleteWorkspace(req, createResponse());
     expect(mocks.deleteToolboxWorkspace).not.toHaveBeenCalled();
-  });
-  it('知识库整理接口不再返回目录导出所需的完整节点树', async () => {
-    const overview = { summary: { total: 3 }, issues: [] };
-    mocks.getToolboxKnowledgeOverview.mockResolvedValueOnce(overview);
-    const response = createResponse();
-
-    await getKnowledgeOverview({ user: { id: 'user-1' } }, response);
-
-    expect(mocks.getToolboxKnowledgeOverview).toHaveBeenCalledWith({
-      userId: 'user-1',
-      analysisOptions: { includeNodes: false },
-      query: undefined,
-    });
-    expect(response.send).toHaveBeenCalledWith({ data: overview, status: 200, msg: 'success' });
   });
 
   it('首页只读取当前资源所有者，并返回固定版本的聚合读模型', async () => {
@@ -429,8 +410,6 @@ describe('visitor project previews', () => {
     });
     expect(mocks.getToolboxWorkspace).toHaveBeenCalledWith({ userId: 'visitor-owner', workspaceId: 'example' });
     expect(mocks.ensureUserOrAdminPolicy).not.toHaveBeenCalled();
-    await getKnowledgeOverview(req, res);
-    expect(mocks.getToolboxKnowledgeOverview).not.toHaveBeenCalled();
   });
   it('returns projects with an empty task collection and does not mark a project opened', async () => {
     const req = { user: { id: 'visitor-owner', role: 'visitor' }, params: { workspaceId: 'example' } };

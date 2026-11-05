@@ -10,7 +10,6 @@ import { resultData } from '../util/common.js';
 import { stableAgentErrorCode } from '../util/agent/logSafety.js';
 import { recordServerOperation } from '../util/operationLog.js';
 import { parseToolboxError } from '../util/toolbox/errors.js';
-import { getToolboxKnowledgeOverview } from '../util/toolbox/knowledgeStructure.js';
 import {
   cancelToolboxJob,
   dismissToolboxJob,
@@ -82,20 +81,6 @@ export async function getCatalog(req, res) {
     const catalog = getToolboxCatalog();
     if (req.user?.id && req.user.role !== 'visitor') catalog.ocrUsage = await getToolboxOcrUsage(readUserId(req));
     return res.send(resultData(catalog));
-  } catch (error) {
-    return sendError(res, error);
-  }
-}
-
-export async function getKnowledgeOverview(req, res) {
-  if (!requireRead(req, res)) return;
-  try {
-    const overview = await getToolboxKnowledgeOverview({
-      userId: readUserId(req),
-      analysisOptions: { includeNodes: false },
-      query: req.query,
-    });
-    return res.send(resultData(overview));
   } catch (error) {
     return sendError(res, error);
   }

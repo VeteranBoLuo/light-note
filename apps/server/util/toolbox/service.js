@@ -819,7 +819,7 @@ export async function getToolboxJob({ userId, jobId, database = pool }) {
   return { ...formatJob(enriched), input: {
     question: typeof options.question === 'string' ? options.question : '',
     materials,
-    options: Object.fromEntries(['intent','detailLevel','resultMode','columns','recognitionMode'].filter(key => options[key] !== undefined).map(key => [key, options[key]])),
+    options: Object.fromEntries(['intent','detailLevel','recognitionMode'].filter(key => options[key] !== undefined).map(key => [key, options[key]])),
   } };
 }
 

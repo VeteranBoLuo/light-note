@@ -498,34 +498,6 @@ request.defaults.adapter = async (config) => {
       })),
       generatedAt: now,
     });
-  if (url === '/api/toolbox/knowledge-overview')
-    return response(config, {
-      scannedAt: now,
-      policy: { staleAfterDays: 180, deepNoteDepth: 8 },
-      summary: {
-        total: 2,
-        roots: 2,
-        maxDepth: 1,
-        tagged: 1,
-        linked: 0,
-        empty: 1,
-        stale: 0,
-        invalidParents: 0,
-        duplicateGroups: 0,
-        duplicateNotes: 0,
-        healthScore: 60,
-      },
-      issueCounts: { empty: 1, untagged: 1 },
-      issueTotal: 2,
-      issues: [
-        { kind: 'empty', severity: 'high', noteId: 'empty-note', title: '待补充的笔记', path: '待补充的笔记' },
-        { kind: 'untagged', severity: 'low', noteId: 'untagged-note', title: '未分类笔记', path: '未分类笔记' },
-      ],
-      recommendations: [
-        { code: 'review_empty', count: 1, priority: 'high' },
-        { code: 'add_tags', count: 1, priority: 'low' },
-      ],
-    });
   if (url === '/api/toolbox/project-entry') {
     if (state === 'error') return response(config, {}, 500);
     return response(config, {

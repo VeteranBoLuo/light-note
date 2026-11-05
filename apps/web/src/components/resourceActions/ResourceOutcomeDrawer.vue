@@ -402,15 +402,7 @@
   type DetailLevel = 'concise' | 'balanced' | 'detailed';
   type ToolOption = { tool: ToolboxCatalogItem; eligible: boolean; reason: string };
 
-  const OUTCOME_TOOL_ORDER: readonly ToolboxToolId[] = [
-    'extraction',
-    'material_to_note',
-    'research_brief',
-    'source_comparison',
-    'study_kit',
-    'concept_map',
-    'knowledge_audit',
-  ];
+  const OUTCOME_TOOL_ORDER: readonly ToolboxToolId[] = ['extraction', 'material_to_note', 'study_kit'];
 
   const props = withDefaults(
     defineProps<{
