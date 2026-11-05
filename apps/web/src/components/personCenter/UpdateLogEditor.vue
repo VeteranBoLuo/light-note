@@ -22,6 +22,16 @@
         </label>
 
         <label class="editor-field">
+          <span>{{ t('changelog.fields.productVersion') }}</span>
+          <BInput
+            v-model:value="productVersion"
+            :maxlength="32"
+            :placeholder="t('changelog.placeholders.productVersion')"
+          />
+          <small>{{ t('changelog.productVersionHint') }}</small>
+        </label>
+
+        <label class="editor-field">
           <span>{{ t('changelog.fields.publishDate') }}</span>
           <BInput v-model:value="publishDate" type="date" />
         </label>
@@ -144,6 +154,7 @@
 </template>
 
 <script setup lang="ts">
+  import { normalizeProductVersion } from '@lightnote/shared';
   import { computed, nextTick, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
@@ -201,6 +212,7 @@
   const activeTab = ref('edit');
   const title = ref('');
   const publishDate = ref('');
+  const productVersion = ref('');
   const summary = ref('');
   const tagsText = ref('');
   const contentMarkdown = ref('');
@@ -250,6 +262,7 @@
     return JSON.stringify({
       title: title.value,
       publishDate: publishDate.value,
+      productVersion: productVersion.value,
       summary: summary.value,
       tagsText: tagsText.value,
       contentMarkdown: contentMarkdown.value,
@@ -262,6 +275,7 @@
   function applyItem(item: UpdateLogItem) {
     title.value = item.title || '';
     publishDate.value = item.publishDate || '';
+    productVersion.value = item.productVersion || '';
     summary.value = item.summary || '';
     tagsText.value = (item.tags || []).join('，');
     contentMarkdown.value =
@@ -448,12 +462,18 @@
 
   async function save() {
     if (saving.value || !logId.value) return;
+    const version = normalizeProductVersion(productVersion.value);
+    if (version === null) {
+      message.warning(t('changelog.invalidProductVersion'));
+      return;
+    }
     saving.value = true;
     try {
       const res = await saveUpdateLog({
         id: logId.value,
         title: title.value,
         publishDate: publishDate.value,
+        productVersion: version,
         summary: summary.value,
         highlights: updateLogMarkdownSummaryItems(contentMarkdown.value),
         tags: splitTags(tagsText.value),
@@ -557,8 +577,7 @@
 
   .editor-meta-grid {
     display: grid;
-    grid-template-columns:
-      minmax(0, 2fr) minmax(var(--ui-layout-170, 170px), 0.55fr) minmax(var(--ui-layout-170, 170px), 0.55fr);
+    grid-template-columns: minmax(0, 2fr) repeat(3, minmax(var(--ui-layout-140, 140px), 0.55fr));
     gap: var(--ui-space-10, 10px) var(--ui-space-12, 12px);
   }
 
@@ -573,7 +592,7 @@
   }
 
   .editor-field--summary {
-    grid-column: 1 / 3;
+    grid-column: 1 / 4;
   }
 
   .editor-field small {
@@ -635,13 +654,10 @@
     flex: 1;
   }
 
-  .markdown-input :deep(.input-container) {
-    height: 100%;
-  }
-
   .markdown-input :deep(.b-textarea) {
+    display: block;
     height: 100%;
-    min-height: 300px;
+    min-height: 0;
     resize: none;
     border: 0;
     border-radius: 0;
@@ -770,6 +786,7 @@
 
     .editor-footer {
       align-items: stretch;
+      flex-wrap: wrap;
     }
 
     .editor-footer-main {

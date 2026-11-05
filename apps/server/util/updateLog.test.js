@@ -5,6 +5,7 @@ import {
   normalizeFeaturedFeaturesInput,
   normalizeLegacyUpdateLogs,
   normalizeUpdateLogInput,
+  normalizeUpdateLogRecord,
   parseStoredFeaturedFeatures,
   updateLogImagePublicUrl,
   validateUpdateLogImage,
@@ -85,7 +86,17 @@ describe('featured features', () => {
 
   it.each([
     [{ items: 'x' }, 'INVALID_ITEMS'],
-    [{ items: [valid, { ...valid, featureId: 'manor' }, { ...valid, featureId: 'workshop' }, { ...valid, featureId: 'trash' }] }, 'TOO_MANY_ITEMS'],
+    [
+      {
+        items: [
+          valid,
+          { ...valid, featureId: 'manor' },
+          { ...valid, featureId: 'workshop' },
+          { ...valid, featureId: 'trash' },
+        ],
+      },
+      'TOO_MANY_ITEMS',
+    ],
     [{ items: [{ ...valid, featureId: 'Bad Id' }] }, 'INVALID_FEATURE_ID'],
     [{ items: [{ ...valid, description: '字'.repeat(31) }] }, 'DESCRIPTION_TOO_LONG'],
     [{ items: [{ ...valid, publishDate: '2026-02-30' }] }, 'INVALID_PUBLISH_DATE'],
@@ -111,8 +122,30 @@ describe('featured features', () => {
         { ...valid, featureId: 'trash' },
       ],
     });
-    expect(parseStoredFeaturedFeatures(stored).map((item) => item.featureId)).toEqual(['note-reference', 'manor', 'workshop']);
+    expect(parseStoredFeaturedFeatures(stored).map((item) => item.featureId)).toEqual([
+      'note-reference',
+      'manor',
+      'workshop',
+    ]);
     expect(parseStoredFeaturedFeatures('{bad json')).toEqual([]);
     expect(parseStoredFeaturedFeatures(null)).toEqual([]);
+  });
+});
+
+describe('更新日志产品版本', () => {
+  const input = { title: '版本更新', publishDate: '2026-10-30', status: 'draft' };
+  it('独立读取产品版本，旧记录继续保持未编号', () => {
+    expect(normalizeUpdateLogRecord({ title: '里程碑', product_version: '1.0.0' })).toMatchObject({
+      productVersion: '1.0.0',
+    });
+    expect(normalizeUpdateLogRecord({ title: '历史记录' })).toMatchObject({ productVersion: '' });
+  });
+  it('清洗版本，并区分显式留空与未传字段', () => {
+    expect(normalizeUpdateLogInput({ ...input, productVersion: ' 1.1.0 ' }).value.productVersion).toBe('1.1.0');
+    expect(normalizeUpdateLogInput({ ...input, productVersion: '' }).value).toHaveProperty('productVersion', '');
+    expect(normalizeUpdateLogInput(input).value).not.toHaveProperty('productVersion');
+  });
+  it.each(['v1.1.0', '1.1', '01.1.0', '1.1.0-rc.1', 110, {}])('拒绝无效产品版本：%j', (productVersion) => {
+    expect(normalizeUpdateLogInput({ ...input, productVersion })).toEqual({ error: 'INVALID_PRODUCT_VERSION' });
   });
 });

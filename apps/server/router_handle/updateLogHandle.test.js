@@ -255,7 +255,13 @@ describe('updateLogHandle', () => {
 
   it('公开读取「最近上线」时跳过坏条目', async () => {
     mocks.poolQuery.mockResolvedValueOnce([
-      [{ json_content: JSON.stringify({ items: [{ featureId: 'manor', publishDate: '2026-10-30' }, { featureId: 'x' }] }) }],
+      [
+        {
+          json_content: JSON.stringify({
+            items: [{ featureId: 'manor', publishDate: '2026-10-30' }, { featureId: 'x' }],
+          }),
+        },
+      ],
     ]);
     const res = mockRes();
     await featured({ headers: {} }, res);
@@ -284,5 +290,86 @@ describe('updateLogHandle', () => {
     expect(sql).toContain('ON DUPLICATE KEY UPDATE');
     expect(values).toEqual(['quick_search_featured', JSON.stringify(body)]);
     expect(ok.send.mock.calls[0][0]).toMatchObject({ status: 200, data: body });
+  });
+});
+
+describe('更新日志产品版本保存', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.ensureNotVisitor.mockReturnValue(true);
+    mocks.getConnection.mockResolvedValue(connection);
+    mocks.poolQuery.mockReset();
+    connection.query.mockReset();
+  });
+  it.each([
+    [{ productVersion: ' 1.1.0 ' }, '1.1.0'],
+    [{ productVersion: '' }, null],
+    [{}, '1.0.0'],
+  ])('保存、清除与旧客户端兼容：%j', async (version, storedVersion) => {
+    tableExists();
+    connection.query
+      .mockResolvedValueOnce([[{ id: 'log-1', image_keys: '[]' }]])
+      .mockResolvedValueOnce([{ affectedRows: 1 }]);
+    mocks.poolQuery.mockResolvedValueOnce([
+      [
+        {
+          id: 'log-1',
+          title: '里程碑',
+          publish_date: '2026-10-30',
+          product_version: storedVersion,
+          status: 'published',
+        },
+      ],
+    ]);
+    const res = mockRes();
+    await save(
+      {
+        headers: {},
+        user: { id: 'root-1', role: 'root' },
+        body: {
+          id: 'log-1',
+          title: '里程碑',
+          publishDate: '2026-10-30',
+          highlights: ['更新内容'],
+          status: 'published',
+          ...version,
+        },
+      },
+      res,
+    );
+    const [sql, params] = connection.query.mock.calls[1];
+    if ('productVersion' in version) {
+      expect(sql).toContain('product_version = ?');
+      expect(params[2]).toBe(storedVersion);
+    } else expect(sql).not.toContain('product_version');
+    expect(connection.commit).toHaveBeenCalledOnce();
+    expect(res.send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: 200,
+        data: { item: expect.objectContaining({ productVersion: storedVersion || '' }) },
+      }),
+    );
+  });
+  it('版本无效时不进入数据库或事务', async () => {
+    const res = mockRes();
+    await save(
+      {
+        headers: {},
+        user: { id: 'root-1', role: 'root' },
+        body: {
+          id: 'log-1',
+          title: '里程碑',
+          publishDate: '2026-10-30',
+          productVersion: '1.1',
+          status: 'draft',
+        },
+      },
+      res,
+    );
+    expect(res.send).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 400, data: { code: 'INVALID_PRODUCT_VERSION' } }),
+    );
+    expect(mocks.getConnection).not.toHaveBeenCalled();
+    expect(mocks.poolQuery).not.toHaveBeenCalled();
   });
 });

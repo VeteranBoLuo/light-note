@@ -4488,3 +4488,12 @@ FROM (SELECT 'PRIMARY' AS name UNION ALL SELECT 'uk_cloud_multipart_request'
 LEFT JOIN information_schema.statistics actual ON actual.table_schema=DATABASE()
  AND actual.table_name='cloud_multipart_uploads' AND actual.index_name=expected.name
 WHERE actual.index_name IS NULL;
+
+-- 更新日志表可选；已存在时必须具备产品版本列，避免部署后列表与编辑失败。
+SELECT '[update_logs] missing_product_version' AS check_name, 'update_logs.product_version' AS detail
+FROM information_schema.tables t
+WHERE t.table_schema = DATABASE() AND t.table_name = 'update_logs'
+  AND NOT EXISTS (
+    SELECT 1 FROM information_schema.columns c
+    WHERE c.table_schema = t.table_schema AND c.table_name = t.table_name AND c.column_name = 'product_version'
+  );

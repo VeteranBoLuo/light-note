@@ -282,3 +282,6 @@ export interface TodoListSummary {
 }
 export interface TodoTagSummary { id: string; name: string }
 export type TodoOrganizationScope = 'current' | 'future' | 'series';
+
+/** 可选的三段式产品版本；空值返回空串，格式无效返回 null。 */
+export declare function normalizeProductVersion(value: unknown): string | null;

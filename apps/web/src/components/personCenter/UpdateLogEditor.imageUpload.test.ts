@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   deleteLog: vi.fn(() => Promise.resolve({ status: 200 })),
   listLogs: vi.fn(),
   saveLog: vi.fn(),
+  alert: vi.fn(),
   uploadImage: vi.fn(),
   message: {
     success: vi.fn(),
@@ -31,7 +32,7 @@ vi.mock('@/api/updateLogApi', async (importOriginal) => {
 vi.mock('@/api/commonApi', () => ({ recordOperation: vi.fn() }));
 vi.mock('@/utils/common', () => ({ noteContentToHtml: vi.fn(() => Promise.resolve('')) }));
 vi.mock('@/components/base/BasicComponents/BMessage/BMessage', () => ({ default: mocks.message }));
-vi.mock('@/components/base/BasicComponents/BModal/Alert', () => ({ default: { alert: vi.fn() } }));
+vi.mock('@/components/base/BasicComponents/BModal/Alert', () => ({ default: { alert: mocks.alert } }));
 
 vi.mock('@/components/base/BasicComponents/BModal/BModal.vue', () => ({
   default: {
@@ -97,11 +98,12 @@ const { default: UpdateLogEditor } = await import('./UpdateLogEditor.vue');
 let app: ReturnType<typeof createApp> | undefined;
 let host: HTMLDivElement | undefined;
 
-function updateLogItem(contentMarkdown = '第一段\n\n第二段') {
+function updateLogItem(contentMarkdown = '第一段\n\n第二段', productVersion = '') {
   return {
     id: 'log-1',
     title: '版本更新',
     publishDate: '2026-08-21',
+    productVersion,
     summary: '',
     highlights: [],
     tags: [],
@@ -111,8 +113,8 @@ function updateLogItem(contentMarkdown = '第一段\n\n第二段') {
   };
 }
 
-async function mountEditor(contentMarkdown?: string) {
-  mocks.listLogs.mockResolvedValue({ status: 200, data: { items: [updateLogItem(contentMarkdown)] } });
+async function mountEditor(contentMarkdown?: string, productVersion = '') {
+  mocks.listLogs.mockResolvedValue({ status: 200, data: { items: [updateLogItem(contentMarkdown, productVersion)] } });
   host = document.createElement('div');
   document.body.append(host);
   app = createApp(UpdateLogEditor, { visible: true, logId: 'log-1' });
@@ -124,6 +126,10 @@ async function mountEditor(contentMarkdown?: string) {
         'zh-CN': {
           common: { loading: '加载中', delete: '删除', cancel: '取消', maxTotalSize: '总文件大小不能超过 {n}MB' },
           changelog: {
+            fields: { productVersion: '产品版本' },
+            placeholders: { productVersion: '例如：1.0.0' },
+            saveDraft: '保存草稿',
+            invalidProductVersion: '请输入三段式版本号',
             imageAlt: '更新日志图片',
             imageUploadSuccess: '图片已插入光标位置，可切换到预览查看',
             imageUploadFailed: '图片上传失败',
@@ -277,4 +283,49 @@ describe('UpdateLogEditor 图片插入', () => {
     expect(mocks.message.warning).toHaveBeenCalledWith('总文件大小不能超过 5MB');
     expect(mocks.uploadImage).not.toHaveBeenCalled();
   });
+});
+
+describe('UpdateLogEditor 产品版本', () => {
+  const versionInput = () =>
+    [...host!.querySelectorAll('label')]
+      .find((label) => label.textContent?.includes('产品版本'))!
+      .querySelector<HTMLInputElement>('input')!;
+  const saveButton = () =>
+    [...host!.querySelectorAll('button')].find((button) => button.textContent?.includes('保存草稿'))!;
+  it.each(['1.1.0', ''])('回显版本并支持保存或显式清空：%s', async (value) => {
+    await mountEditor(undefined, '1.0.0');
+    expect(versionInput().value).toBe('1.0.0');
+    versionInput().value = value;
+    versionInput().dispatchEvent(new Event('input', { bubbles: true }));
+    await nextTick();
+    mocks.saveLog.mockResolvedValueOnce({ status: 200, data: { item: updateLogItem(undefined, value) } });
+    saveButton().click();
+    await vi.waitFor(() =>
+      expect(mocks.saveLog).toHaveBeenCalledWith(expect.objectContaining({ productVersion: value, status: 'draft' })),
+    );
+  });
+  it('无效版本保留输入并提示，不发起保存', async () => {
+    await mountEditor();
+    versionInput().value = '1.1';
+    versionInput().dispatchEvent(new Event('input', { bubbles: true }));
+    await nextTick();
+    saveButton().click();
+    await vi.waitFor(() => expect(mocks.message.warning).toHaveBeenCalledWith('请输入三段式版本号'));
+    expect(mocks.saveLog).not.toHaveBeenCalled();
+    expect(versionInput().value).toBe('1.1');
+  });
+});
+
+it('只修改产品版本后取消也会提示未保存修改', async () => {
+  await mountEditor(undefined, '1.0.0');
+  const input = [...host!.querySelectorAll('label')]
+    .find((label) => label.textContent?.includes('产品版本'))!
+    .querySelector<HTMLInputElement>('input')!;
+  input.value = '1.0.1';
+  input.dispatchEvent(new Event('input', { bubbles: true }));
+  await nextTick();
+  [...host!.querySelectorAll('button')].find((button) => button.textContent?.includes('取消'))!.click();
+  await vi.waitFor(() => expect(mocks.alert).toHaveBeenCalledOnce());
+  expect(input.value).toBe('1.0.1');
+  expect(mocks.saveLog).not.toHaveBeenCalled();
 });

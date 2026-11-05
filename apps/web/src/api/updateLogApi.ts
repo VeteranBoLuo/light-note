@@ -7,6 +7,7 @@ export interface UpdateLogItem {
   id: string;
   title: string;
   publishDate: string;
+  productVersion?: string;
   summary: string;
   highlights: string[];
   tags: string[];
@@ -26,6 +27,7 @@ export interface UpdateLogPayload {
   id: string;
   title: string;
   publishDate: string;
+  productVersion?: string;
   summary: string;
   highlights: string[];
   tags: string[];
@@ -95,6 +97,7 @@ function normalizeLegacyUpdateLogs(rawContent: unknown): UpdateLogItem[] {
         id: `legacy-${index + 1}`,
         title,
         publishDate,
+        productVersion: '',
         summary: '',
         highlights,
         tags: [],
