@@ -911,6 +911,27 @@ describe('成长看板独立统计完成边界', () => {
     });
     expect(db.query.mock.calls.every(([sql]) => /^\s*SELECT/i.test(sql))).toBe(true);
   });
+  it('连签里程碑标出已发放档位，当前连签回落后仍不把已领档位当作下一个目标', async () => {
+    const db = setup();
+    const normal = db.query.getMockImplementation();
+    db.query.mockImplementation((sql, params) => {
+      if (sql.includes("reason = 'streak_milestone'")) return [[{ ref: '7' }, { ref: '30' }, { ref: 'legacy' }]];
+      if (sql.includes('SELECT exp, streak, last_checkin_date')) return [[{ exp: 900, streak: 3, points: 0 }]];
+      return normal(sql, params);
+    });
+    const result = await getGrowthDashboard('owner', { userRole: 'user', db, calendar: accountCalendar('20260911') });
+    expect(result.streakMilestones.map(({ days, reached, granted }) => [days, reached, granted])).toEqual([
+      [7, false, true],
+      [30, false, true],
+      [100, false, false],
+      [365, false, false],
+    ]);
+    const milestoneQuery = db.query.mock.calls.find(([sql]) => sql.includes("reason = 'streak_milestone'"));
+    expect(milestoneQuery?.[1]).toEqual(['owner']);
+
+    const guest = await getGrowthDashboard('visitor-shared-id', { userRole: 'visitor', db });
+    expect(guest.streakMilestones.every((milestone) => milestone.granted === false)).toBe(true);
+  });
   it('多个统计失败时返回原顺序首个错误，不继续读取时间线', async () => {
     const db = setup();
     const normal = db.query.getMockImplementation();

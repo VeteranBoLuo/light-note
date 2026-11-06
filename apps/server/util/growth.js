@@ -1124,6 +1124,8 @@ export async function getGrowthDashboard(userId, { userRole = null, db = pool, c
     checkinDays: [],
   };
   let timeline = [];
+  // 连签里程碑每个账号只发一次(points_log 按 ref=天数幂等)，展示「下一个可领的里程碑」须排除已发放的档位。
+  const grantedMilestoneDays = new Set();
 
   if (!isGuest) {
     // 资源计数 + 注册时间(合并成一条查询)。
@@ -1234,7 +1236,7 @@ export async function getGrowthDashboard(userId, { userRole = null, db = pool, c
 
     // 成长足迹:从真实活动派生(书签/笔记/文件 + 升级里程碑),合并按时间倒序取 15。
     // 不再只读 growth_events，兼容早期缺少经验账本的历史账号，避免足迹恒空。
-    const [[bmRows], [ntRows], [flRows], [msRows]] = await Promise.all([
+    const [[bmRows], [ntRows], [flRows], [msRows], [streakMilestoneRows]] = await Promise.all([
       db.query(
         `SELECT b.name, b.create_time FROM bookmark b
          WHERE b.user_id = ? AND b.del_flag = 0
@@ -1270,7 +1272,12 @@ export async function getGrowthDashboard(userId, { userRole = null, db = pool, c
         "SELECT meta, create_time FROM growth_events WHERE user_id = ? AND source = 'milestone' ORDER BY create_time DESC LIMIT 12",
         [userId],
       ),
+      db.query("SELECT ref FROM points_log WHERE user_id = ? AND reason = 'streak_milestone'", [userId]),
     ]);
+    for (const row of streakMilestoneRows || []) {
+      const days = Number(row?.ref);
+      if (Number.isInteger(days) && days > 0) grantedMilestoneDays.add(days);
+    }
     timeline = [
       ...bmRows.map((r) => ({ source: 'bookmark', name: r.name, meta: null, time: r.create_time })),
       ...ntRows.map((r) => ({ source: 'note', name: r.title, meta: null, time: r.create_time })),
@@ -1421,6 +1428,8 @@ export async function getGrowthDashboard(userId, { userRole = null, db = pool, c
     storageMb: m.storageMb || 0,
     cards: m.cards || 0,
     reached: curStreak >= m.days,
+    // 已发放过的档位不会再发；前端据此跳到下一个仍可获得的里程碑。
+    granted: grantedMilestoneDays.has(m.days),
   }));
 
   return {
