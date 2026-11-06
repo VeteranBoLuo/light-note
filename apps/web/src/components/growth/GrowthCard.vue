@@ -91,6 +91,7 @@
       </div>
       <div v-if="!g.isMax" class="gc-tonext">{{ t('growth.toNext', { n: g.expToNext.toLocaleString('en-US') }) }}</div>
 
+      <div v-if="permanentOnly && g.aiNextLevelGift && g.aiLevelGiftStatus !== 'ineligible'" class="gc-tonext">{{ t('aiQuotaOneTime.nextGift', { amount: g.aiNextLevelGift.tokens.toLocaleString() }) }}</div>
       <div class="gc-perks">
         <div class="gc-perk">
           <span class="gc-perk-label">{{ t('growth.space') }}</span>
@@ -100,8 +101,10 @@
           }}</span>
         </div>
         <div class="gc-perk">
-          <span class="gc-perk-label">{{ t('growth.aiQuota') }}</span>
+          <span class="gc-perk-label">{{ t(permanentOnly ? 'aiQuotaOneTime.levelGift' : 'growth.aiQuota') }}</span>
           <b class="gc-perk-val">{{ tokenLabel }}</b>
+          <span v-if="permanentOnly && g.aiLevelGift && g.aiLevelGiftStatus !== 'ineligible'" class="gc-perk-bonus">{{ t('aiQuotaOneTime.cumulative', { amount: g.aiLevelGift.cumulativeTokens.toLocaleString() }) }}</span>
+          <span v-if="permanentOnly && ['held','missing'].includes(g.aiLevelGiftStatus || '')" class="gc-perk-bonus" role="status">{{ t(g.aiLevelGiftStatus === 'held' ? 'aiQuotaOneTime.giftHeld' : 'aiQuotaOneTime.giftPending') }}</span>
         </div>
         <div class="gc-perk">
           <span class="gc-perk-label">{{ t('growth.trashRetain') }}</span>
@@ -173,7 +176,7 @@
     <RankLadder class="gc-ladder-modal" />
   </BModal>
 
-  <LevelUpOverlay v-if="lvUp" :level="lvUp.level" :name="lvUp.name" @close="lvUp = null" />
+  <LevelUpOverlay v-if="lvUp" :level="lvUp.level" :name="lvUp.name" :ai-gift-tokens="lvUp.aiGiftTokens" :gift-pending="lvUp.giftPending" @close="lvUp = null" />
 </template>
 
 <script setup lang="ts">
@@ -219,7 +222,7 @@
   } = useGrowth();
   const emit = defineEmits<{ (event: 'activity-changed'): void }>();
   const checking = ref(false);
-  const lvUp = ref<{ level: number; name: string } | null>(null); // 升级动画数据
+  const lvUp = ref<{ level: number; name: string; aiGiftTokens?: number; giftPending?: boolean } | null>(null); // 升级动画数据
   const earnPopoverOpen = ref(false);
   const rankVisible = ref(false);
 
@@ -257,7 +260,9 @@
           });
           if (res.data.leveledUp && res.data.growth) {
             if (preferences.value?.celebrationEnabled !== false) {
-              lvUp.value = { level: res.data.growth.level, name: res.data.growth.name };
+              lvUp.value = { level: res.data.growth.level, name: res.data.growth.name,
+                aiGiftTokens: res.data.growth.aiLevelGiftStatus === 'up_to_date' ? res.data.growth.aiLevelGift?.tokens : 0,
+                giftPending: ['held', 'missing'].includes(res.data.growth.aiLevelGiftStatus || '') };
             } else {
               message.success(t('growth.leveledUp', { lv: res.data.growth.level, name: res.data.growth.name }));
             }
@@ -298,7 +303,7 @@
     // 进成长页即视为查看升级通知:提示 + 标记已读(清红点)
     if (g.value?.hasUnreadLevelUp) {
       if (preferences.value?.celebrationEnabled !== false) {
-        lvUp.value = { level: g.value.level, name: g.value.name };
+        lvUp.value = { level: g.value.level, name: g.value.name, aiGiftTokens: g.value.aiLevelGiftStatus === 'up_to_date' ? g.value.aiLevelGift?.tokens : 0, giftPending: ['held', 'missing'].includes(g.value.aiLevelGiftStatus || '') };
       } else {
         message.info(t('growth.leveledUp', { lv: g.value.level, name: g.value.name }));
       }
@@ -318,7 +323,8 @@
   const fmtMb = (mb: number) => (mb >= 1024 ? `${+(mb / 1024).toFixed(1)} GB` : `${mb} MB`);
   const spaceLabel = computed(() => fmtMb(g.value?.spaceMb || 0));
   const bonusSpaceLabel = computed(() => fmtMb(g.value?.spaceBonusMb || 0)); // 已扩容部分,单独标注
-  const tokenLabel = computed(() => (g.value?.aiTokenDaily || 0).toLocaleString('en-US'));
+  const permanentOnly = computed(() => g.value?.billingMode === 'permanent_only');
+  const tokenLabel = computed(() => permanentOnly.value && g.value?.aiLevelGiftStatus === 'ineligible' ? t('aiQuotaOneTime.internalCredits') : (permanentOnly.value ? g.value?.aiLevelGift?.tokens || 0 : g.value?.aiTokenDaily || 0).toLocaleString('en-US'));
   const currentRankFreeDraws = computed(
     () => ranks.value.find((rank) => rank.level === (g.value?.level || 1))?.freeDraws || 0,
   );

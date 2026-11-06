@@ -169,6 +169,15 @@ describe('aiExecution', () => {
       model_generation: { billingScope: 'user', maxCalls: 2 },
       output_repair: { billingScope: 'platform', maxCalls: 2 },
     });
+    const reservationBudget = {
+      inputTokens: 2000,
+      evidenceTokens: 4000,
+      protocolTokens: 8000,
+      outputTokens: 6000,
+      visionTokens: 0,
+      totalTokens: 20000,
+      unclampedTokens: 20000,
+    };
 
     await runAiExecution(
       {
@@ -180,7 +189,11 @@ describe('aiExecution', () => {
         persistence,
       },
       async () => {
-        const execution = configureActiveAiExecution({ providerPlan: expandedPlan, reservationTokens: 20_000 });
+        const execution = configureActiveAiExecution({
+          providerPlan: expandedPlan,
+          reservationTokens: 20_000,
+          inputDiagnostics: { version: 1, reservationBudget },
+        });
         expect(execution).toMatchObject({
           maxUserProviderCalls: 2,
           maxPlatformProviderCalls: 2,
@@ -197,6 +210,10 @@ describe('aiExecution', () => {
 
     expect(client).toHaveBeenCalledTimes(2);
     expect(quota.reserve).toHaveBeenCalledWith(expect.any(Object), expect.objectContaining({ reserveTokens: 20_000 }));
+    expect(persistence.updateAiExecutionReservation.mock.calls[0][0].inputDiagnostics).toEqual({
+      version: 1,
+      reservationBudget,
+    });
   });
 
   it('最终没有可交付结果时记为失败、保留 Provider 用量，但退回用户额度', async () => {

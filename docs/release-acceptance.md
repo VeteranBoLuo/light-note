@@ -55,9 +55,11 @@ pnpm local:stop    # 停止应用和依赖，保留本地数据
 ```
 
 - 网页为 `http://localhost:15173`，邮件箱为 `http://localhost:18025`，API 仅监听 `127.0.0.1:19001`。MySQL、Redis、S3 分别使用回环端口 13306、16379、19002；不复用已有本机实例。
+- 多个工作树同时运行时，首次启动可显式设置 `LIGHTNOTE_LOCAL_PORT_OFFSET=1000 pnpm local:start`，整组端口统一偏移并持久保存；后续 start/stop/check 读取该配置，不复用或结束其他工作树的进程。Lima 虚拟机使用按工作树哈希隔离的短路径 `~/.codex/local-vms/`，避免 macOS Unix socket 长度限制。
 - 数据、日志、配置及 root/test/user/visitor 账号保存在 Git 忽略的 `.local-test/`；初始账号凭据只在 `.local-test/accounts.json` 查看，不写入文档、输出或提交。自行修改密码后以新密码为准，启动不重置密码；联通检查使用仍有效的已存测试凭据。停止服务不清空数据，重启不覆盖已有账号和资料。
 - 本机进程只读取 `.local-test/server.env`，不加载后端原 `.env`，也不继承终端中的服务凭据。数据库、Redis、存储、邮件及写入目录须通过隔离校验后才允许启动或消费本地提醒。
 - 首次建库优先读取本机 `.local-test/schema.sql` 的纯结构快照，不复制线上记录、账号、会话或队列；缺失时使用仓库结构基线并执行明确登记的本地迁移与现有 ensure。Schema 门禁失败即停止，不自动修改生产数据库。
+- 新增额度、赠礼、简报预算、C11 与风控默认配置仅在缺失时追加；保留已有值及凭据，默认仍为赠礼关闭、等级日额度、C11 关闭。AI 账本、控制与短期风控事实 Schema 同批登记到本地迁移，不在启动时发历史赠礼。
 - 前端随 Vite 热更新；后端和 Worker 代码变化后停止、重新启动本机环境。`local:start` 会执行已登记的未完成迁移及结构补齐；停止应用后也可运行 `pnpm local:migrate` 单独初始化/升级，再重新启动。迁移执行记录在本地库，不自动重放历史数据迁移。
 - 开发涉及数据库、依赖或配置时，交付要求统一遵守[本机测试环境同步维护](./development.md#本机测试环境同步维护)。
 - 邮件全部捕获在本机；真实 AI、第三方登录、支付、厂商推送与 Host Agent 运维需要各自的独立配置或对应运行平台，不属于本地模拟通过即已完成的真实服务验收。默认不配置真实服务凭据，支付和外部推送保持关闭。
@@ -110,6 +112,8 @@ pnpm local:stop    # 停止应用和依赖，保留本地数据
 调度随 API 启动，仅生产运行环境消费；缺结构或未显式启用时不扫描账号。验证覆盖存量账号排除、满 24 小时边界、同秒分页、邮箱／GitHub 共用口径、并发及失败回滚、重启／通知删除去重、历史奖励保留、超过旧名额继续奖励，以及浏览器／华为／原生同步通道排除。暂停自动邀请可设置 `SIGNUP_SOURCE_SURVEY_ENABLED=false`，保留已存边界、进度、答案和奖励。回滚到不识别不限名额契约的版本前须暂停原调查表单，不能将名额改回旧值或清理积分收据。
 
 ### 其他领域门禁
+
+一次性 AI 等级赠礼依赖 `20261106_ai_level_gifts.sql` 与 `20261106_ai_gift_risk_facts.sql` 的加法结构；先完成结构安装与 `check:schema`，再更新 API 和使用统一 Execution 的 Worker。结构安装不发赠礼、不清零余额；显式补发与关闭日额度仍按 [一次性等级赠礼与校准](./ai-skills.md#一次性等级赠礼与校准) 核对资格、逐档账本和差异，不能把进程启动视为补发完成。
 
 知识庄园开放前，显式运行 `pnpm --filter server migrate:knowledge-manor` 安装 `20261024_knowledge_manor.sql` 的存档与幂等操作表，不回填账号或调整资产。部署脚本仅在本轮已授权且显式设置 `LIGHTNOTE_APPLY_KNOWLEDGE_MANOR_MIGRATION=1` 时执行此迁移。`KNOWLEDGE_MANOR_ENABLED` 默认关闭，是部署总开关；开启后由 `KNOWLEDGE_MANOR_AUDIENCE` 决定开放范围，默认 `internal`（Root 与 test 账号），`all` 为全部登录账号，游客与管理员代管始终不开放；启动与 Schema 门禁均检查契约。公开开放分两段：先以 `internal` 部署 API 与 Web，用 test 账号在生产完成新手、种植、垂钓、出售与积分流水核对，确认普通账号仍不可见；再改为 `all` 并重启 API，用普通账号复核。开放获准上线时执行 `node scripts/seedKnowledgeManorKnowledge.js` 同步帮助与 AI 知识条目，随 API 重启刷新检索缓存。收回开放只需改回 `internal` 并重启，保留存档与积分。API 和 Web 必须携带同一庄园规则版本，发布前验证与主站积分并发、失败回滚、断网重试、钓鱼刷新恢复及账号隔离；MySQL 5.7 兼容门禁不能用本地 MySQL 8 的结果替代。回退先关闭开关，保留新增表、操作收据与已结算积分，不逆向回收用户资产。
 
@@ -334,6 +338,8 @@ Web 发布先把新产物完整解包到独立 staging 目录，通过基本产�
 ### 帮助知识维护
 
 用户功能变化需同步公开帮助，不能把更新日志当作操作教程。`node scripts/syncUserHelpKnowledge.mjs` 默认只读预览；`--prepare --state-dir=绝对私有目录` 保存待维护条目、原文及状态快照，取得对应内容写入授权后使用同一目录执行 `--apply`，再用 `--verify` 核对结果。目录限当前维护者访问，快照与回执不进入 Git 或公开静态目录。
+
+维护新 AI 额度策略时，可在旧业务模式下仅对预览／准备显式指定 `--target-billing-mode=permanent_only --target-economy-version=points-economy-c11 --target-gift-version=ai-level-gifts-v1 --target-guest-quota=0`，四项须齐全，不修改运行时开关。计划保存目标事实、原运行事实、文章快照及哈希；`--apply`／`--verify` 必须核对实际事实与目标一致，`--restore` 则核对原运行事实。模式、目录、赠送表或文章发生变化即停止，不能跳过 `KNOWLEDGE_PLAN_OUTDATED` 与文章冲突检查。
 
 维护脚本从现行等级、游客额度、补签窗口和商品目录生成权益说明，更新前复核规则与条目快照，逐条复用知识库写服务和管理员审计；已归档文章不自动恢复，既有文章保持 ID。冲突时停止，沿用同一计划重试已完成项不重复创建。`--restore` 只恢复仍与本次结果一致的条目，新增文章改为内部状态而不物理删除；之后有人修改的内容不能覆盖。历史内容 migration 不重跑，不把维护脚本挂到启动流程。
 

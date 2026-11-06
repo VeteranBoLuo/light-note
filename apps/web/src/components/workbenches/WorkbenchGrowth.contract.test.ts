@@ -44,7 +44,7 @@ describe('工作台成长卡交互契约', () => {
     expect(source).toContain('useAiQuotaStatus({ autoLoad: false })');
     expect(source).toContain('if (props.expanded) void loadAiQuota()');
     expect(source).toContain("t('growth.assetTodayRemaining')");
-    expect(source).toContain("t('growth.assetPermanentBalance')");
+    expect(source).toContain("'growth.assetPermanentBalance'");
     expect(source).toContain("t('growth.assetPointsLabel')");
     expect(source).toContain('formatAiQuotaTokens(dailyQuotaRemaining.value, locale.value)');
     expect(source).toContain('aiQuotaUnavailable.value || dailyQuotaRemaining.value === null');

@@ -170,7 +170,7 @@ const ensureSecurityV2Tables = async () => {
     CREATE TABLE IF NOT EXISTS security_account_restrictions (
       id BIGINT AUTO_INCREMENT PRIMARY KEY,
       user_id VARCHAR(64) NOT NULL,
-      restriction_type ENUM('login_lock','write_lock','upload_lock','ai_lock','full_lock') NOT NULL,
+      restriction_type ENUM('login_lock','write_lock','upload_lock','ai_lock','full_lock','gift_hold') NOT NULL,
       scope_json JSON NULL,
       status ENUM('active','revoked','expired') DEFAULT 'active',
       reason VARCHAR(500) NOT NULL,
@@ -184,6 +184,10 @@ const ensureSecurityV2Tables = async () => {
       INDEX idx_security_restriction_created (created_at)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
   `);
+  const restrictionType = await readColumnType('security_account_restrictions', 'restriction_type');
+  if (restrictionType && !restrictionType.includes("'gift_hold'")) {
+    await pool.query("ALTER TABLE security_account_restrictions MODIFY restriction_type ENUM('login_lock','write_lock','upload_lock','ai_lock','full_lock','gift_hold') NOT NULL");
+  }
   await pool.query(`
     CREATE TABLE IF NOT EXISTS security_rule_tuning_suggestions (
       id BIGINT AUTO_INCREMENT PRIMARY KEY,

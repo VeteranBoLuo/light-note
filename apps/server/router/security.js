@@ -15,6 +15,8 @@ router.post('/v2/rules/:ruleCode/replay', securityV2Handle.replaySecurityRule);
 router.post('/v2/exceptions/list', securityV2Handle.listSecurityExceptions);
 router.post('/v2/exceptions/save', securityV2Handle.saveSecurityException);
 router.post('/v2/exceptions/disable', securityV2Handle.disableSecurityException);
+router.post('/v2/ai-gifts/status', securityV2Handle.getAiGiftControls);
+router.post('/v2/ai-gifts/control', securityV2Handle.setAiGiftControls);
 router.post('/v2/restrictions/list', securityV2Handle.listSecurityRestrictions);
 router.post('/v2/restrictions/apply', securityV2Handle.applySecurityRestriction);
 router.post('/v2/restrictions/revoke', securityV2Handle.revokeSecurityRestriction);

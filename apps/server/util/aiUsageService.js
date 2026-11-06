@@ -1,6 +1,7 @@
 import { readGroupedUsage, mapGroupedUsage } from './aiUsageGroups.js';
 import { AI_USAGE_FILTER_MODULE_KEYS as AI_USAGE_MODULES } from '@lightnote/shared/ai-usage-modules';
 import pool from '../db/index.js';
+import { aiQuotaMode } from './aiQuotaPolicy.js';
 import { classifyAiProviderStage } from './aiExecution/providerPlan.js';
 import { AI_BILLING_ACTIONS, listPublicAiBillingCatalog, resolveAiBillingAction } from './aiBillingCatalog.js';
 
@@ -101,7 +102,8 @@ export const mapAiUsageProviderSpan = mapProviderSpan;
 function mapUsageItem(row) {
   const action = publicAction(row.skill_id, row.task_type);
   const providerTokens = safeNumber(row.provider_tokens);
-  const chargedTokens = safeNumber(row.charged_tokens);
+  const billingPolicy = row.billing_policy === 'system' ? 'system' : 'user';
+  const chargedTokens = billingPolicy === 'system' ? 0 : safeNumber(row.charged_tokens);
   return {
     id: String(row.id || ''),
     ...action,
@@ -110,6 +112,7 @@ function mapUsageItem(row) {
     modelCalled: row.model_called === true || Number(row.model_called) === 1,
     providerCallCount: safeNumber(row.provider_call_count),
     providerTokens,
+    billingPolicy,
     chargedTokens,
     platformCoveredTokens: Math.max(0, providerTokens - chargedTokens),
     usageComplete: row.usage_complete === true || Number(row.usage_complete) === 1,
@@ -196,17 +199,19 @@ function aggregateModules(rows, selectedModule) {
   );
 }
 
-function usageStoreError() {
-  const error = new Error('AI 用量明细暂不可用');
+function usageStoreError(cause) {
+  const error = new Error('AI 用量明细暂不可用', { cause });
   error.code = 'AI_USAGE_STORE_UNAVAILABLE';
   error.status = 503;
   return error;
 }
 
-/**
- * 只查询“谁实际支付额度”的 actor_user_id。管理员查看他人资料时，subject_user_id 可能
- * 是被代管用户，若按 subject 查询会把管理员触发的 AI 成本错误展示给对方。
- */
+// 个人付费记录按 actor 归属；仅本人平台简报按 subject 可见，不能泛化为所有系统或代管任务。
+const personalUsageVisibility = `((actor_user_id = ? AND billing_policy = 'user')
+  OR (actor_user_id = 'system:daily_brief' AND billing_policy = 'system'
+      AND skill_id = 'routine.daily_brief' AND subject_user_id = ?))`;
+const userChargeSql = "CASE WHEN billing_policy = 'user' THEN charged_tokens ELSE 0 END";
+
 export async function getUserAiUsage(userId, rawQuery = {}, database = pool) {
   const actorUserId = String(userId || '')
     .trim()
@@ -221,11 +226,11 @@ export async function getUserAiUsage(userId, rawQuery = {}, database = pool) {
   try {
     const offset = (query.page - 1) * query.pageSize;
     const moduleFilter = buildModuleFilter(query.module);
-    const where = `actor_user_id = ?
-      AND billing_policy = 'user'
+    const where = `${personalUsageVisibility}
       AND model_called = 1
       AND created_at >= DATE_SUB(CURRENT_TIMESTAMP, INTERVAL ? DAY)${moduleFilter.sql}${query.organizeRunId ? ' AND organize_run_id = ?' : ''}`;
     const whereParams = [
+      actorUserId,
       actorUserId,
       query.days,
       ...moduleFilter.params,
@@ -235,7 +240,7 @@ export async function getUserAiUsage(userId, rawQuery = {}, database = pool) {
       query.groupOrganize
         ? readGroupedUsage(database, where, whereParams, query.pageSize, offset)
         : database.query(
-            `SELECT id, skill_id, task_type, status, model_called, provider_call_count,
+            `SELECT id, skill_id, task_type, billing_policy, status, model_called, provider_call_count,
                 provider_tokens, charged_tokens, usage_complete, quota_settlement_status,
                 duration_ms, created_at
            FROM ai_executions
@@ -246,11 +251,11 @@ export async function getUserAiUsage(userId, rawQuery = {}, database = pool) {
           ),
       database.query(
         `SELECT COUNT(*) AS model_actions,
-                COALESCE(SUM(charged_tokens), 0) AS charged_tokens,
+                COALESCE(SUM(${userChargeSql}), 0) AS charged_tokens,
                 COALESCE(SUM(provider_tokens), 0) AS provider_tokens,
-                COALESCE(SUM(GREATEST(0, provider_tokens - charged_tokens)), 0) AS platform_covered_tokens,
-                COALESCE(SUM(CASE WHEN charged_tokens = 0 THEN 1 ELSE 0 END), 0) AS zero_charge_model_actions,
-                COALESCE(SUM(CASE WHEN DATE(created_at) = CURRENT_DATE THEN charged_tokens ELSE 0 END), 0)
+                COALESCE(SUM(GREATEST(0, provider_tokens - (${userChargeSql}))), 0) AS platform_covered_tokens,
+                COALESCE(SUM(CASE WHEN (${userChargeSql}) = 0 THEN 1 ELSE 0 END), 0) AS zero_charge_model_actions,
+                COALESCE(SUM(CASE WHEN DATE(created_at) = CURRENT_DATE THEN (${userChargeSql}) ELSE 0 END), 0)
                   AS today_charged_tokens
            FROM ai_executions
           WHERE ${where}`,
@@ -258,17 +263,17 @@ export async function getUserAiUsage(userId, rawQuery = {}, database = pool) {
       ),
       database.query(
         `SELECT DATE_FORMAT(created_at, '%Y-%m-%d') AS usage_date,
-                SUM(charged_tokens) AS charged_tokens,
+                SUM(${userChargeSql}) AS charged_tokens,
                 SUM(provider_tokens) AS provider_tokens,
                 COUNT(*) AS actions
            FROM ai_executions
           WHERE ${where}
-          GROUP BY DATE(created_at)
-          ORDER BY DATE(created_at) ASC`,
+          GROUP BY usage_date
+          ORDER BY usage_date ASC`,
         whereParams,
       ),
       database.query(
-        `SELECT skill_id, task_type, SUM(charged_tokens) AS charged_tokens,
+        `SELECT skill_id, task_type, SUM(${userChargeSql}) AS charged_tokens,
                 SUM(provider_tokens) AS provider_tokens, COUNT(*) AS actions
            FROM ai_executions
           WHERE ${where}
@@ -294,6 +299,7 @@ export async function getUserAiUsage(userId, rawQuery = {}, database = pool) {
 
     return {
       query,
+      billingMode: aiQuotaMode(),
       ...(query.groupOrganize ? { groupingAvailable: itemsResult.available } : {}),
       summary,
       daily: dailyRows.map((row) => ({
@@ -314,7 +320,7 @@ export async function getUserAiUsage(userId, rawQuery = {}, database = pool) {
     };
   } catch (error) {
     if (error?.code === 'AI_USAGE_AUTH_REQUIRED') throw error;
-    throw usageStoreError();
+    throw usageStoreError(error);
   }
 }
 
@@ -341,13 +347,13 @@ export async function getUserAiUsageDetail(userId, executionId, database = pool)
   }
   try {
     const [executionRows] = await database.query(
-      `SELECT id, skill_id, task_type, status, model_called, provider_call_count,
+      `SELECT id, skill_id, task_type, billing_policy, status, model_called, provider_call_count,
               provider_tokens, charged_tokens, usage_complete, quota_settlement_status,
               duration_ms, created_at
          FROM ai_executions
-        WHERE id = ? AND actor_user_id = ? AND billing_policy = 'user' AND model_called = 1
+        WHERE id = ? AND ${personalUsageVisibility} AND model_called = 1
         LIMIT 1`,
-      [normalizedExecutionId, actorUserId],
+      [normalizedExecutionId, actorUserId, actorUserId],
     );
     const executionRow = Array.isArray(executionRows) ? executionRows[0] : null;
     if (!executionRow) {
@@ -368,7 +374,7 @@ export async function getUserAiUsageDetail(userId, executionId, database = pool)
     );
     const rows = Array.isArray(spanRows) ? spanRows : [];
     const execution = mapUsageItem(executionRow);
-    const waiveUserCharge = execution.status === 'failed' && execution.chargedTokens === 0;
+    const waiveUserCharge = execution.billingPolicy === 'system' || (execution.status === 'failed' && execution.chargedTokens === 0);
     return {
       execution,
       // billing_scope 在内部账本表示调用发出时的预期归属；公开详情展示最终实际承担方。
@@ -376,7 +382,7 @@ export async function getUserAiUsageDetail(userId, executionId, database = pool)
     };
   } catch (error) {
     if (['AI_USAGE_EXECUTION_NOT_FOUND', 'AI_USAGE_AUTH_REQUIRED'].includes(error?.code)) throw error;
-    throw usageStoreError();
+    throw usageStoreError(error);
   }
 }
 

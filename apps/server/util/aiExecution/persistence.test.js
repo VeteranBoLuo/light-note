@@ -19,7 +19,15 @@ function execution(overrides = {}) {
 }
 
 function database() {
-  return { query: vi.fn().mockResolvedValue([{ affectedRows: 1 }]) };
+  const db = {
+    query: vi.fn().mockResolvedValue([{ affectedRows: 1 }]),
+    beginTransaction: vi.fn(),
+    commit: vi.fn(),
+    rollback: vi.fn().mockResolvedValue(),
+    release: vi.fn(),
+  };
+  db.getConnection = vi.fn(async () => db);
+  return db;
 }
 
 describe('aiExecution persistence', () => {
@@ -81,17 +89,18 @@ describe('aiExecution persistence', () => {
       }),
       db,
     );
-    expect(db.query.mock.calls[0][0]).toContain('billing_rule_version, validation_rule_version');
-    expect(db.query.mock.calls[0][0]).toContain('lease_expires_at');
-    expect(db.query.mock.calls[0][1]).toEqual(expect.arrayContaining([3, 2, leaseExpiresAt]));
+    const insert = db.query.mock.calls.find(([sql]) => sql.includes('INSERT INTO ai_executions'));
+    expect(insert[0]).toContain('billing_rule_version, validation_rule_version');
+    expect(insert[0]).toContain('lease_expires_at');
+    expect(insert[1]).toEqual(expect.arrayContaining([3, 2, leaseExpiresAt]));
 
     await renewAiExecutionLease(execution({ leaseExpiresAt }), db);
-    expect(db.query.mock.calls[1][0]).toContain("status = 'running'");
+    expect(db.query.mock.calls.at(-1)[0]).toContain("status = 'running'");
 
     await settleAiExecution(execution(), db);
-    expect(db.query.mock.calls[2][0]).toContain('lease_expires_at = NULL');
-    expect(db.query.mock.calls[2][0]).toContain('quota_reservation_key = COALESCE');
-    expect(db.query.mock.calls[2][1]).toContain('reservation-1');
+    expect(db.query.mock.calls.at(-1)[0]).toContain('lease_expires_at = NULL');
+    expect(db.query.mock.calls.at(-1)[0]).toContain('quota_reservation_key = COALESCE');
+    expect(db.query.mock.calls.at(-1)[1]).toContain('reservation-1');
   });
 
   it('Span 持久化调用顺序、计费归属和修复触发码，但不保存模型正文', async () => {

@@ -8,6 +8,7 @@ import {
   type PointsEconomyOperation,
 } from '@/utils/pointsEconomyRequest';
 
+export interface AiLevelGift { version: string; level: number; tokens: number; cumulativeTokens: number }
 export interface Growth {
   exp: number;
   level: number;
@@ -15,6 +16,10 @@ export interface Growth {
   spaceMb: number;
   spaceBonusMb?: number; // 其中积分兑换的永久扩容部分(MB)
   aiTokenDaily: number;
+  billingMode?: 'daily_and_permanent' | 'permanent_only';
+  aiLevelGift?: AiLevelGift;
+  aiNextLevelGift?: AiLevelGift | null;
+  aiLevelGiftStatus?: 'up_to_date' | 'missing' | 'held' | 'ineligible' | 'disabled';
   trashDays?: number;
   streak: number;
   protectCards?: number;
@@ -45,6 +50,8 @@ export interface Rank {
   cumExp: number;
   spaceMb: number;
   aiTokenDaily: number;
+  billingMode?: 'daily_and_permanent' | 'permanent_only';
+  aiLevelGift?: AiLevelGift;
   trashDays: number;
   freeDraws?: number; // 每日免费抽奖次数(随等级解锁)
 }
@@ -188,6 +195,7 @@ export interface InventoryItem {
 }
 
 export interface Inventory {
+  billingMode?: 'daily_and_permanent' | 'permanent_only';
   items: InventoryItem[];
   assets: { points: number; storageBonusMb: number; aiBonusTokens: number };
 }
@@ -392,6 +400,7 @@ const growthTasksLoading = ref(false);
 const growthTasksError = ref(false);
 let loadedOnce = false;
 let ranksLoaded = false;
+let ranksRequestVersion = 0;
 let ownerId: string | null = null; // 成长缓存归属的账号,切号即作废
 let growthTasksOwnerId: string | null = null; // 成长任务缓存单独归属，避免影响成长快照缓存
 let growthRequest: Promise<Growth | null> | null = null;
@@ -412,6 +421,9 @@ export function resetGrowth() {
   ownerGeneration += 1;
   claimRequestVersion += 1;
   growth.value = null;
+  ranks.value = [];
+  ranksLoaded = false;
+  ranksRequestVersion += 1;
   dashboard.value = null;
   shop.value = null;
   inventory.value = null;
@@ -478,6 +490,9 @@ function ensureGrowthOwner(uid: string) {
   if (ownerId === uid) return;
   // 任一成长入口都可能先发请求；不能依赖 /growth/me 恰好先执行来完成账号隔离。
   growth.value = null;
+  ranks.value = [];
+  ranksLoaded = false;
+  ranksRequestVersion += 1;
   dashboard.value = null;
   shop.value = null;
   inventory.value = null;
@@ -538,6 +553,10 @@ export function useGrowth() {
         if (growthRequestVersion === requestVersion && ownerId === uid && res?.status === 200 && res.data) {
           growth.value = res.data as Growth;
           loadedOnce = true;
+          if (ranksLoaded && ranks.value[0]?.billingMode !== growth.value.billingMode) {
+            ranksLoaded = false;
+            void loadRanks();
+          }
         } else if (growthRequestVersion === requestVersion && ownerId === uid) {
           growthError.value = true;
         }
@@ -660,10 +679,13 @@ export function useGrowth() {
 
   // 段位表:15 级只在首次拉取一次(内容基本不变)
   async function loadRanks() {
+    const uid = useUserStore().id || 'visitor';
+    ensureGrowthOwner(uid);
     if (ranksLoaded) return ranks.value;
+    const requestVersion = ++ranksRequestVersion;
     try {
       const res = await growthApi.getRanks();
-      if (res?.status === 200 && Array.isArray(res.data)) {
+      if (ownerId === uid && ranksRequestVersion === requestVersion && res?.status === 200 && Array.isArray(res.data)) {
         ranks.value = res.data as Rank[];
         ranksLoaded = true;
       }

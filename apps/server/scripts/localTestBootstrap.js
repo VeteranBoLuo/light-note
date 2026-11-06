@@ -9,6 +9,17 @@ import { localSqlStatements } from '../util/localSqlStatements.js';
 assertLocalTestEnvironment(process.env);
 const stateDir = process.env.LIGHTNOTE_LOCAL_TEST_DIR;
 const migrations = [
+  '20260708_growth.sql', '20260708_ai_token_usage.sql', '20260719_ai_quota_hardening.sql',
+  '20260823_ai_execution_ledger.sql', '20260824_ai_usage_actor_index.sql',
+  '20260825_ai_execution_rule_versions_and_lease.sql', '20260825_ai_provider_span_explainability.sql',
+  '20260923_ai_execution_input_diagnostics.sql',
+  '20261030_infra_alerts.sql', '20261030_infra_alert_silences.sql',
+  '20261106_ai_level_gifts.sql',
+  '20261106_ai_gift_risk_facts.sql',
+  '20260715_resource_inbox.sql', '20260831_organize_center_v2.sql',
+  '20260905_organize_suggestion_runs.sql', '20260905_organize_ai_group.sql',
+  '20260906_organize_usage_groups.sql', '20260906_organize_run_lifecycle.sql',
+  '20260911_organize_processing_jobs.sql',
   '20261102_cloud_multipart_uploads.sql',
   '20260909_image_preview_metadata.sql', '20260909_organize_file_evidence.sql',
   '20260909_note_import_tasks.sql', '20260909_note_import_progress.sql', '20260909_visitor_examples.sql',
@@ -19,7 +30,7 @@ const migrations = [
 ];
 const ensureModules = [
   ['security/index.js', 'ensureSecurityTables'], ['notification.js', 'ensureNotificationTable'],
-  ['points.js', 'ensurePointsSchema'], ['aiBonusWalletSchema.js', 'ensureAiBonusWalletSchema'],
+  ['points.js', 'ensurePointsSchema'], ['aiBonusWalletSchema.js', 'ensureAiBonusWalletSchema'], ['aiLevelGiftSchema.js', 'ensureAiLevelGiftSchema'],
   ['growthTaskSchema.js', 'ensureGrowthTaskSchema'], ['growthCenterSchema.js', 'ensureGrowthCenterSchema'],
   ['dailyReviewSchema.js', 'ensureDailyReviewSchema'], ['aiDocumentSchema.js', 'ensureAiDocumentSchema'],
   ['toolboxSchema.js', 'ensureToolboxSchema'], ['dailyBriefSchema.js', 'ensureDailyBriefSchema'],
@@ -51,13 +62,21 @@ try {
     await applySql(source);
     console.log('[local-bootstrap] installed empty schema; no production rows imported');
   }
+  await (await import('../util/aiDocumentSchema.js')).ensureAiDocumentSchema();
   await pool.query('CREATE TABLE IF NOT EXISTS local_test_migrations (name VARCHAR(191) NOT NULL PRIMARY KEY, applied_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4');
   for (const file of migrations) {
     const [applied] = await pool.query('SELECT name FROM local_test_migrations WHERE name=?', [file]);
     if (applied.length) continue;
     console.log('[local-bootstrap] applying %s', file);
+    if (file === '20260814_points_earning_c5.sql') await (await import('../util/growthCenterSchema.js')).ensureGrowthCenterSchema();
+    if (file === '20260905_organize_ai_group.sql') await (await import('../util/organizeSchema.js')).ensureOrganizeSchema();
     await applySql(await fs.readFile(new URL(`../migrations/${file}`, import.meta.url), 'utf8'));
     await pool.query('INSERT INTO local_test_migrations (name) VALUES (?)', [file]);
+    if (file === '20260708_growth.sql') {
+      await (await import('../util/points.js')).ensurePointsSchema();
+      const [[notice]] = await pool.query("SELECT column_name FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='user_growth' AND column_name='last_notified_level'");
+      if (!notice) await applySql(await fs.readFile(new URL('../migrations/20260708_growth_notice.sql', import.meta.url), 'utf8'));
+    }
   }
   for (const [file, name] of ensureModules) {
     const module = await import(`../util/${file}`);

@@ -110,6 +110,25 @@ describe('积分消费幂等收据', () => {
     expect(conn.query).toHaveBeenCalledTimes(2);
   });
 
+  it.each([
+    ['points-economy-c10', 'points-economy-c11', { kind: 'ai_pack', amount: 50_000 }],
+    ['points-economy-c11', 'points-economy-c10', { kind: 'points', amount: 3 }],
+  ])('%s 的成功收据在 %s 仍原样回放', async (version, active, prize) => {
+    const original = { ok: true, economyVersion: version, results: [prize] };
+    const payload = { mode: 'free', times: 1 };
+    const hash = operationHash({ operationType: 'lottery_free', economyVersion: version, expectedCost: 0, payload });
+    const conn = { query: vi.fn()
+      .mockResolvedValueOnce([[{ id: 12, operation_type: 'lottery_free', operation_hash: hash, status: 'succeeded', result_json: original }]])
+      .mockResolvedValueOnce([{ affectedRows: 1 }]) };
+    const result = await beginPointsEconomyOperation(conn, {
+      userId: 'u1', operationType: 'lottery_free', payload, clientRequestId: 'cross-version-free-receipt',
+      economyVersion: version, expectedCost: 0, actualCost: 0,
+      runtime: { economyVersion: active, requireWriteVersion: true },
+    });
+    expect(result.replay).toEqual({ ...original, idempotent: true });
+    expect(conn.query).toHaveBeenCalledTimes(2);
+  });
+
   it('缺少版本协议与预期价格时拒绝执行', async () => {
     const conn = { query: vi.fn() };
     await expect(

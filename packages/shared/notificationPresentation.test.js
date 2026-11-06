@@ -92,6 +92,10 @@ describe("shared notification presentation", () => {
       body: "",
     });
   });
+  it("shows credited gifts and distinguishes gifts still awaiting review", () => {
+    expect(notificationPresentation({ type: "level_up", meta: { level: 5, aiGiftTokens: 120000, aiGiftStatus: "granted" } }, "zh-CN").content).toBe("AI 赠礼 120,000 tokens 已到账");
+    expect(browserNotificationPresentation({ type: "level_up", meta: { level: 5, aiGiftTokens: 0, aiGiftStatus: "held" } }, "en-US").body).toBe("AI gift pending");
+  });
   it("preserves ordinary inbox titles and limits plaintext push previews", () => {
     expect(
       browserNotificationPresentation(

@@ -28,8 +28,8 @@
       >
         <div class="ai-quota-panel__head">
           <div>
-            <h2 id="ai-quota-panel-title">{{ t('settings.ai.quota') }}</h2>
-            <p>{{ t('settings.ai.quotaDescription') }}</p>
+            <h2 id="ai-quota-panel-title">{{ t(!aiQuotaStatus || permanentOnly ? 'personCenter.aiQuotaLabel' : 'settings.ai.quota') }}</h2>
+            <p>{{ t(!aiQuotaStatus ? 'settings.ai.pageDescription' : permanentOnly ? 'aiQuotaOneTime.description' : 'settings.ai.quotaDescription') }}</p>
           </div>
           <BButton
             v-if="aiQuotaUnavailable"
@@ -61,7 +61,7 @@
             />
             <small>{{ metric.hint }}</small>
             <BButton
-              v-if="metric.key === 'permanent'"
+              v-if="metric.key === 'permanent' || metric.key === 'balance'"
               class="ai-quota-metric__acquire"
               size="small"
               @click="acquireVisible = true"
@@ -71,7 +71,7 @@
           </BCard>
         </div>
 
-        <div v-if="pendingQuotaText" class="ai-quota-pending" role="status" aria-live="polite">
+        <div v-if="pendingQuotaText && !permanentOnly" class="ai-quota-pending" role="status" aria-live="polite">
           <span aria-hidden="true"></span>
           <p>{{ pendingQuotaText }}</p>
         </div>
@@ -139,10 +139,16 @@
     loading: aiQuotaLoading,
     unavailable: aiQuotaUnavailable,
     load: loadAiQuota,
+    permanentOnly,
   } = useAiQuotaStatus();
 
   const aiQuotaMetrics = computed(() => {
     const status = aiQuotaStatus.value;
+    if (permanentOnly.value && status && !aiQuotaUnavailable.value && Number.isFinite(status.bonusTokens)) return [
+      { key: 'balance', label: t('aiQuotaOneTime.balance'), value: formatAiQuotaTokens(status.bonusTokens, locale.value), hint: t('aiQuotaOneTime.balanceHint') },
+      { key: 'pending', label: t('aiQuotaOneTime.pending'), value: formatAiQuotaTokens(status.pendingReservedTokens || 0, locale.value), hint: t('aiQuotaOneTime.pendingHint') },
+      { key: 'available', label: t('aiQuotaOneTime.available'), value: formatAiQuotaTokens(status.availableRemaining ?? status.remaining, locale.value), hint: t('aiQuotaOneTime.availableHint') },
+    ];
     if (
       !status ||
       status.exempt ||

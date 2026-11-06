@@ -1,6 +1,21 @@
 // 管理员复现摘要。只显式投影结构化参数，不递归复制请求或模型上下文。
 const QUERY_KEYS = new Set(['id', 'v', 'p', 'page', 'aid', 'bvid']);
 const OPERATIONS = new Set(['polish', 'rewrite', 'summarize', 'expand', 'proofread', 'title', 'outline', 'translate']);
+const BUDGET_FIELDS = [
+  'inputTokens',
+  'evidenceTokens',
+  'visionTokens',
+  'outputTokens',
+  'protocolTokens',
+  'totalTokens',
+  'unclampedTokens',
+];
+
+function reservationBudgetSnapshot(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  if (!BUDGET_FIELDS.every((key) => Number.isSafeInteger(value[key]) && value[key] >= 0)) return null;
+  return Object.fromEntries(BUDGET_FIELDS.map((key) => [key, value[key]]));
+}
 
 export function diagnosticUrl(value) {
   if (typeof value !== 'string' || value.length > 2000) return null;
@@ -23,7 +38,7 @@ export function diagnosticUrl(value) {
   }
 }
 
-export function buildAiInputDiagnostics(request = {}) {
+export function buildAiInputDiagnostics(request = {}, { reservationBudget } = {}) {
   const input = request.input || {};
   const fields = {};
   if (request.skillId === 'bookmark.parse_url') {
@@ -40,6 +55,8 @@ export function buildAiInputDiagnostics(request = {}) {
       ...new Set(input.resourceTypes.filter((type) => ['note', 'bookmark', 'file', 'todo'].includes(type))),
     ];
   }
+  const budget = reservationBudgetSnapshot(reservationBudget);
+  if (budget) fields.reservationBudget = budget;
   return Object.keys(fields).length ? { version: 1, ...fields } : null;
 }
 
@@ -48,7 +65,10 @@ export function readAiInputDiagnostics(value, skillId) {
   try {
     const data = typeof value === 'string' ? JSON.parse(value) : value;
     if (!data || data.version !== 1) return null;
-    const result = buildAiInputDiagnostics({ skillId, input: { ...data, pageContext: data.pageContextProvided } });
+    const result = buildAiInputDiagnostics(
+      { skillId, input: { ...data, pageContext: data.pageContextProvided } },
+      { reservationBudget: data.reservationBudget },
+    );
     if (result?.url) result.urlRedacted = result.urlRedacted || data.urlRedacted === true;
     return result;
   } catch {

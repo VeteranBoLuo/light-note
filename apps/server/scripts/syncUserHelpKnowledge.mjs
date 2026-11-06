@@ -1,12 +1,14 @@
+import { parseHelpPolicyTarget, selectHelpPolicyFacts, assertHelpPolicyFacts } from '../util/helpQuotaPolicyFacts.js';
+import { aiQuotaMode, levelGiftsEnabled, platformDailyBriefEnabled } from '../util/aiQuotaPolicy.js';
 /** Explicit, reviewable product-knowledge maintenance; no startup hook or automatic publication. */
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import pool from '../db/index.js';
 import redis from '../util/redisClient.js';
-import { RANKS } from '../util/growth.js';
+import { AI_LEVEL_GIFT_VERSIONS, RANKS } from '../util/growth.js';
 import { getStatusForUser } from '../util/aiQuota.js';
-import { getActiveEconomyCatalog } from '../util/pointsEconomyCatalog.js';
+import { ECONOMY_CATALOGS, getActiveEconomyCatalog } from '../util/pointsEconomyCatalog.js';
 import { MAKEUP_WINDOW_DAYS } from '@lightnote/shared';
 import { buildHelpKnowledgeRefreshEntries } from '../util/helpKnowledgeRefreshContent.js';
 import {
@@ -25,11 +27,13 @@ const modes = args.filter((arg) => ['--prepare', '--apply', '--verify', '--resto
 if (
   modes.length > 1 ||
   args.some(
-    (arg) => !['--prepare', '--apply', '--verify', '--restore'].includes(arg) && !arg.startsWith('--state-dir='),
+    (arg) => !['--prepare', '--apply', '--verify', '--restore'].includes(arg) && !arg.startsWith('--state-dir=') && !['--target-billing-mode=', '--target-economy-version=', '--target-gift-version=', '--target-guest-quota='].some(prefix => arg.startsWith(prefix)),
   )
 )
   throw new Error('INVALID_ARGUMENTS');
 const mode = modes[0] || '--preview';
+const target = parseHelpPolicyTarget(args);
+if (target && !['--preview', '--prepare'].includes(mode)) throw new Error('HELP_TARGET_PREPARATION_ONLY');
 const directory = args.find((arg) => arg.startsWith('--state-dir='))?.slice('--state-dir='.length);
 if (mode !== '--preview' && !path.isAbsolute(directory || '')) throw new Error('PRIVATE_STATE_DIRECTORY_REQUIRED');
 
@@ -60,6 +64,9 @@ async function readFacts() {
     makeupWindowDays: MAKEUP_WINDOW_DAYS,
     galaxyFrame: frame && { cost: frame.cost, minLevel: frame.minLevel },
     economyVersion: catalog.version,
+    billingMode: aiQuotaMode(), levelGiftMode: levelGiftsEnabled() ? 'on' : 'off',
+    platformDailyBrief: platformDailyBriefEnabled(),
+    giftVersion: AI_LEVEL_GIFT_VERSIONS.at(-1).version, levelGifts: [...AI_LEVEL_GIFT_VERSIONS.at(-1).tokens],
   };
 }
 async function receipts() {
@@ -255,21 +262,24 @@ try {
   if (mode !== '--preview') await stateDirectory();
   if (['--apply', '--verify', '--restore'].includes(mode)) {
     const plan = await load('plan.json');
-    if (mode === '--verify') await verify(plan);
-    else if (mode === '--restore') await restore(plan);
+    if (mode === '--verify') { assertHelpPolicyFacts(plan, await readFacts()); await verify(plan); }
+    else if (mode === '--restore') { assertHelpPolicyFacts(plan, await readFacts(), { restore: true }); await restore(plan); }
     else {
       const facts = await readFacts();
+      assertHelpPolicyFacts(plan, facts);
       await apply(plan, buildHelpKnowledgeRefreshEntries(facts), facts);
     }
   } else {
-    const facts = await readFacts();
+    const previousFacts = await readFacts();
+    const facts = selectHelpPolicyFacts(previousFacts, target, { catalogs: ECONOMY_CATALOGS, schedules: AI_LEVEL_GIFT_VERSIONS });
     const plan = {
+      targetFacts: facts, previousFacts,
       ...buildKnowledgeMaintenancePlan(await readRows(), buildHelpKnowledgeRefreshEntries(facts)),
       factsHash: knowledgeMaintenanceHash(facts),
       preparedAt: new Date().toISOString(),
     };
     if (mode === '--prepare') await save('plan.json', plan, true);
-    console.log(JSON.stringify({ mode: mode.slice(2), ...summarizeKnowledgePlan(plan) }));
+    console.log(JSON.stringify({ mode: mode.slice(2), targetFacts: facts, ...summarizeKnowledgePlan(plan) }));
   }
 } catch (error) {
   const code = error.code || String(error.message || '').split(':')[0];

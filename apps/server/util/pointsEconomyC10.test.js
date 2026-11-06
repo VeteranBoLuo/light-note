@@ -4,14 +4,14 @@ import {
   freeDrawsFor,
   getEconomyCatalogSnapshot,
   getEconomyRuntime,
-  POINTS_ECONOMY_VERSION,
+  C10_POINTS_ECONOMY_VERSION,
 } from './pointsEconomyCatalog.js';
 
 describe('C10 免费惊喜预算与历史合同', () => {
   it('只更新免费奖池，保留 C9 商品、付费奖池和等级次数', () => {
     const previous = getEconomyCatalogSnapshot(C9_POINTS_ECONOMY_VERSION);
-    const current = getEconomyCatalogSnapshot();
-    expect(POINTS_ECONOMY_VERSION).toBe('points-economy-c10');
+    const current = getEconomyCatalogSnapshot(C10_POINTS_ECONOMY_VERSION);
+    expect(C10_POINTS_ECONOMY_VERSION).toBe('points-economy-c10');
     expect(current).toEqual({
       ...previous,
       version: 'points-economy-c10',
@@ -40,7 +40,7 @@ describe('C10 免费惊喜预算与历史合同', () => {
   });
 
   it('总权重 1000、AI 总概率 10%，每抽期望为 3.5 积分和 2600 tokens', () => {
-    const pool = getEconomyCatalogSnapshot().freePolicy.pool;
+    const pool = getEconomyCatalogSnapshot(C10_POINTS_ECONOMY_VERSION).freePolicy.pool;
     const total = pool.reduce((sum, prize) => sum + prize.weight, 0);
     expect(total).toBe(1000);
     expect(pool.filter((prize) => prize.kind === 'ai_pack').reduce((sum, prize) => sum + prize.weight, 0) / total).toBe(

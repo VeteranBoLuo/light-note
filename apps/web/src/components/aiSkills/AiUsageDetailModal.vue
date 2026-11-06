@@ -49,6 +49,7 @@
           <div>
             <span>{{ t('settings.ai.usage.detail.userCharged') }}</span>
             <strong>{{ formatNumber(detail.execution.chargedTokens) }}</strong>
+            <small v-if="detail.execution.billingPolicy === 'system'">{{ t('aiQuotaOneTime.platformPaid') }}</small>
             <small>tokens</small>
           </div>
           <div>
@@ -197,6 +198,7 @@
   import { copyTextToClipboard } from '@/utils/clipboard';
 
   interface UsageExecution {
+    billingPolicy?: string;
     id: string;
     module: string;
     labelKey: string;

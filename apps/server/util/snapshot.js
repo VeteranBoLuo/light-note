@@ -1,4 +1,5 @@
 import pool from '../db/index.js';
+import { aiQuotaMode } from './aiQuotaPolicy.js';
 import { archiveFailure } from './bookmarkArchivePolicy.js';
 import { EXPLICIT_WEB_READ_MAX_BYTES, fetchWebMeta } from './fetchWebMeta.js';
 import { requestAi } from './agent/aiGateway.js';
@@ -229,6 +230,7 @@ export async function summarizeBookmark(
       return {
         ok: false,
         code: String(e.code),
+        billingMode: aiQuotaMode(),
         reason: quotaErrorKind === 'exhausted' ? 'quota_exceeded' : 'quota_insufficient_for_request',
         ...(Number.isFinite(requiredTokens)
           ? {
@@ -238,7 +240,9 @@ export async function summarizeBookmark(
           : {}),
         msg:
           quotaErrorKind === 'exhausted'
-            ? '当前 AI 额度已用完，请等待每日额度重置或补充永久额度'
+            ? aiQuotaMode() === 'permanent_only'
+              ? '当前 AI 额度已用完，可通过升级、积分兑换或购买补充额度'
+              : '当前 AI 额度已用完，请等待每日额度重置或补充永久额度'
             : '当前仍有 AI 额度，但不足以生成本次摘要，请减少材料或补充额度',
       };
     }

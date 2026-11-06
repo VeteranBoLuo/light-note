@@ -33,12 +33,12 @@
       <article class="asset asset-ai">
         <span class="asset-icon"><SvgIcon :src="icon.growth.ai" :size="28" /></span>
         <div class="asset-body"
-          ><span>{{ t('growth.assetAiBalance') }}</span
+          ><span>{{ t(permanentOnly ? 'aiQuotaOneTime.aiBalance' : 'growth.assetAiBalance') }}</span
           ><strong :title="(inv?.assets.aiBonusTokens || 0).toLocaleString(locale) + ' tokens'"
             >{{ fmtTokens(inv?.assets.aiBonusTokens || 0) }} <small>tokens</small></strong
           ></div
         >
-        <p>{{ t('growth.assetAiHint') }}</p>
+        <p>{{ t(permanentOnly ? 'aiQuotaOneTime.retained' : 'growth.assetAiHint') }}</p>
         <footer>
           <BButton type="text" @click="router.push({ name: 'aiUsage' })">{{
             t(bookmark.isMobileDevice ? 'growth.inventoryDetailShort' : 'growth.assetDetails')
@@ -164,6 +164,7 @@
   const readOnly = computed(() => props.readOnly);
   const { inventory, inventoryError, growth, loadInventory, useItem } = useGrowth();
   const inv = inventory;
+  const permanentOnly = computed(() => inv.value?.billingMode === 'permanent_only' || growth.value?.billingMode === 'permanent_only');
   const bookmark = bookmarkStore();
   const records = ref<InstanceType<typeof LotteryRecords> | null>(null);
   const historyRevision = ref(0);
@@ -197,7 +198,7 @@
   }
   function itemDescription(item: InventoryItem) {
     return item.id === 'ai_pack'
-      ? t('growth.legacyAiPackDesc')
+      ? t(permanentOnly.value ? 'aiQuotaOneTime.legacyPackDescription' : 'growth.legacyAiPackDesc')
       : item.id === 'makeup_card'
         ? t('growth.inventoryMakeupHint', { n: MAKEUP_WINDOW_DAYS })
         : item.desc;

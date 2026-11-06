@@ -54,11 +54,11 @@ describe('AI 额度快捷展示契约', () => {
     expect(summarySource).toContain("t('personCenter.aiQuotaUnavailable')");
     expect(summarySource).toContain("'is-unavailable': unavailable");
     expect(summarySource).toContain(':aria-busy="loading"');
-    expect(summarySource).toContain("t('personCenter.aiQuotaBreakdown'");
+    expect(summarySource).toContain("'personCenter.aiQuotaBreakdown'");
     expect(summarySource).toContain('class="ai-quota-summary__primary-value"');
-    expect(summarySource).toContain("t('personCenter.aiQuotaTodayRemaining')");
+    expect(summarySource).toContain("'personCenter.aiQuotaTodayRemaining'");
     expect(summarySource).toContain('class="ai-quota-summary__secondary-value"');
-    expect(summarySource).toContain("t('personCenter.aiQuotaPermanentShort')");
+    expect(summarySource).toContain("'personCenter.aiQuotaPermanentShort'");
     expect(summarySource).not.toContain("layout !== 'tile'");
     expect(standardSummarySource).toContain('min-height: 68px');
     expect(summarySource).toContain('.ai-quota-summary.is-tile :deep(.b-progress__trail)');
@@ -67,11 +67,11 @@ describe('AI 额度快捷展示契约', () => {
     expect(summarySource).toContain('`打开页面【${entrySource}】`');
   });
 
-  it('AI 卡以今日剩余为主、永久额度为辅助，进度只读取今日额度比例', () => {
+  it('兼容旧模式今日剩余与余额，进度只用于日额度模式', () => {
     expect(summarySource).toContain('daily: formatAiQuotaTokens(status.value.dailyRemaining');
     expect(summarySource).toContain('permanent: formatAiQuotaTokens(status.value.bonusTokens');
     expect(summarySource).toContain(':percent="remainingPercent"');
-    expect(summarySource).toContain('v-if="!loginRequired && status && !status.exempt && !unavailable"');
+    expect(summarySource).toContain('v-if="!permanentOnly && !loginRequired && status && !status.exempt && !unavailable"');
     expect(standardSummarySource).toMatch(/\.ai-quota-summary__primary-value strong\s*\{[\s\S]*?font-size:\s*13px;/);
     expect(summarySource).toMatch(
       /\.ai-quota-summary__secondary-value strong\s*\{[\s\S]*?color:\s*var\(--desc-color\);/,

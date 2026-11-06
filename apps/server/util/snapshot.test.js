@@ -151,6 +151,7 @@ describe('summarizeBookmark AI Gateway', () => {
     await expect(summarizeBookmark('user-1', 'bookmark-1')).resolves.toEqual({
       ok: false,
       code: 'AI_QUOTA_EXCEEDED',
+      billingMode: 'daily_and_permanent',
       reason: 'quota_exceeded',
       msg: '当前 AI 额度已用完，请等待每日额度重置或补充永久额度',
     });
@@ -170,6 +171,7 @@ describe('summarizeBookmark AI Gateway', () => {
     await expect(summarizeBookmark('user-1', 'bookmark-1')).resolves.toEqual({
       ok: false,
       code: 'AI_QUOTA_INSUFFICIENT_FOR_REQUEST',
+      billingMode: 'daily_and_permanent',
       reason: 'quota_insufficient_for_request',
       requiredTokens: 12_345,
       availableTokens: 8_765,

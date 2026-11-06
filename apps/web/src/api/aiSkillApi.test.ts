@@ -65,7 +65,7 @@ describe('aiSkillApi', () => {
     apiBasePost.mockResolvedValue({
       status: 429,
       msg: '今日 AI 额度已用完',
-      data: { code: 'AI_QUOTA_EXCEEDED' },
+      data: { code: 'AI_QUOTA_EXCEEDED', billingMode: 'permanent_only' },
     });
 
     await expect(executeAiSkill(request)).rejects.toEqual(
@@ -74,6 +74,7 @@ describe('aiSkillApi', () => {
         code: 'AI_QUOTA_EXCEEDED',
         message: '今日 AI 额度已用完',
         status: 429,
+        billingMode: 'permanent_only',
       }),
     );
   });
@@ -185,5 +186,13 @@ describe('aiSkillApi', () => {
         responseType: 'stream',
       }),
     );
+  });
+  it('流式额度错误保留计费模式，永久模式不会被界面误解成等待日刷新', async () => {
+    const stream = new ReadableStream<Uint8Array>({ start(controller) {
+      controller.enqueue(new TextEncoder().encode('event: error\ndata: {"code":"AI_QUOTA_EXCEEDED","status":429,"message":"额度不足","billingMode":"permanent_only"}\n\n'));
+      controller.close();
+    } });
+    vi.mocked(httpRequest).mockResolvedValue({ data: stream } as any);
+    await expect(executeAiSkillStream(request)).rejects.toMatchObject({ code: 'AI_QUOTA_EXCEEDED', billingMode: 'permanent_only' });
   });
 });

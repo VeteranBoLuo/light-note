@@ -77,7 +77,7 @@ describe('整次整理用量汇总', () => {
     for (const [sql, args] of db.query.mock.calls) {
       expect(sql).toContain('actor_user_id = ?');
       expect(sql).toContain('organize_run_id = ?');
-      expect(args.slice(0, 3)).toEqual(['payer', 30, id]);
+      expect(args.slice(0, 4)).toEqual(['payer', 'payer', 30, id]);
     }
     expect(normalizeAiUsageQuery({ organizeRunId: id, groupOrganize: true }).groupOrganize).toBeUndefined();
     expect(() => normalizeAiUsageQuery({ organizeRunId: "' OR 1=1" })).toThrow();

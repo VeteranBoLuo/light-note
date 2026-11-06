@@ -24,6 +24,8 @@
             <div class="lvup-title">{{ t('growth.levelUpTitle') }}</div>
             <div class="lvup-name">{{ t('growth.ranks.' + level) }}</div>
             <div class="lvup-sub">{{ t('growth.levelUpSub', { lv: level }) }}</div>
+            <div v-if="aiGiftTokens && aiGiftTokens > 0" class="lvup-sub">{{ t('aiQuotaOneTime.giftReceived', { amount: aiGiftTokens.toLocaleString() }) }}</div>
+            <div v-else-if="giftPending" class="lvup-sub">{{ t('aiQuotaOneTime.giftPending') }}</div>
           </div>
 
           <div class="lvup-hint">{{ t('growth.levelUpDismiss') }}</div>
@@ -40,7 +42,7 @@
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon.ts';
 
-  const props = defineProps<{ level: number; name: string }>();
+  const props = defineProps<{ level: number; name: string; aiGiftTokens?: number; giftPending?: boolean }>();
   const emit = defineEmits<{ (e: 'close'): void }>();
   const { t } = useI18n();
 

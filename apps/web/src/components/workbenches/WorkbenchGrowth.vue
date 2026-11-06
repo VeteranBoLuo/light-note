@@ -121,7 +121,7 @@
         <div class="growth-asset growth-asset--daily">
           <span class="growth-asset__label">
             <span class="growth-asset__dot" aria-hidden="true"></span>
-            {{ t('growth.assetTodayRemaining') }}
+            {{ t(permanentOnly ? 'aiQuotaOneTime.balance' : 'growth.assetTodayRemaining') }}
           </span>
           <strong
             class="growth-asset__value"
@@ -147,7 +147,7 @@
         <div class="growth-asset growth-asset--permanent">
           <span class="growth-asset__label">
             <span class="growth-asset__dot" aria-hidden="true"></span>
-            {{ t('growth.assetPermanentBalance') }}
+            {{ t(permanentOnly ? 'aiQuotaOneTime.available' : 'growth.assetPermanentBalance') }}
           </span>
           <strong
             class="growth-asset__value"
@@ -300,10 +300,11 @@
     return Number.isFinite(amount) ? Math.max(0, amount) : null;
   }
 
+  const permanentOnly = computed(() => aiQuotaStatus.value?.billingMode === 'permanent_only');
   const quotaReading = computed(() => aiQuotaLoading.value || (!aiQuotaStatus.value && !aiQuotaUnavailable.value));
   const quotaExempt = computed(() => Boolean(aiQuotaStatus.value?.exempt));
   const dailyQuotaRemaining = computed(
-    () => finiteMetric(aiQuotaStatus.value?.dailyRemaining) ?? finiteMetric(aiQuotaStatus.value?.remaining),
+    () => permanentOnly.value ? finiteMetric(aiQuotaStatus.value?.bonusTokens) : finiteMetric(aiQuotaStatus.value?.dailyRemaining) ?? finiteMetric(aiQuotaStatus.value?.remaining),
   );
   const dailyQuotaTotal = computed(
     () => finiteMetric(aiQuotaStatus.value?.dailyQuota) ?? finiteMetric(aiQuotaStatus.value?.quota),
@@ -311,11 +312,12 @@
   const dailyQuotaUsed = computed(
     () => finiteMetric(aiQuotaStatus.value?.dailyUsed) ?? finiteMetric(aiQuotaStatus.value?.used),
   );
-  const permanentBalance = computed(() => finiteMetric(aiQuotaStatus.value?.bonusTokens));
+  const permanentBalance = computed(() => finiteMetric(permanentOnly.value ? aiQuotaStatus.value?.availableRemaining ?? aiQuotaStatus.value?.remaining : aiQuotaStatus.value?.bonusTokens));
   const reservedQuota = computed(() => finiteMetric(aiQuotaStatus.value?.pendingReservedTokens) || 0);
   const points = computed(() => finiteMetric(g.value?.points));
   const dailyQuotaMeterAvailable = computed(
     () =>
+      !permanentOnly.value &&
       !quotaReading.value &&
       !quotaExempt.value &&
       !aiQuotaUnavailable.value &&
@@ -333,6 +335,7 @@
     if (quotaReading.value) return t('growth.assetLoadingHint');
     if (quotaExempt.value) return t('growth.assetUnlimitedHint');
     if (aiQuotaUnavailable.value || dailyQuotaRemaining.value === null) return t('growth.assetUnavailableHint');
+    if (permanentOnly.value) return t('aiQuotaOneTime.retained');
     if (reservedQuota.value > 0) return t('growth.assetSettling');
     if (dailyQuotaUsed.value !== null) {
       return t('growth.assetDailyUsed', { n: formatAiQuotaTokens(dailyQuotaUsed.value, locale.value) });
@@ -352,7 +355,9 @@
     if (quotaReading.value) return t('growth.assetLoadingHint');
     if (quotaExempt.value) return t('growth.assetUnlimitedHint');
     if (aiQuotaUnavailable.value || permanentBalance.value === null) return t('growth.assetUnavailableHint');
-    return t('growth.assetPermanentHint');
+    return permanentOnly.value
+      ? t('aiQuotaOneTime.availableWithPending', { amount: formatAiQuotaTokens(reservedQuota.value, locale.value) })
+      : t('growth.assetPermanentHint');
   });
   const pointsDisplay = computed(() => {
     if (points.value === null) return t('growth.assetUnavailable');

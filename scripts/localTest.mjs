@@ -5,8 +5,10 @@ import { existsSync, openSync, closeSync, readFileSync, writeFileSync, mkdirSync
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import net from 'node:net';
+import os from 'node:os';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { stopManagedChild } from './localProcessLifecycle.mjs';
+import { localTestPorts } from '../apps/server/util/localTestPorts.js';
 import { assertLocalTestEnvironment } from '../apps/server/util/localTestEnvironment.js';
 
 const script = fileURLToPath(import.meta.url);
@@ -20,9 +22,14 @@ const requireServer = createRequire(path.join(serverDir, 'package.json'));
 const dotenv = requireServer('dotenv');
 const mysql = requireServer('mysql2/promise');
 const command = process.argv[2] || 'status';
-const ports = { mysql: 13306, redis: 16379, storage: 19002, favicon: 19003, mail: 18025, smtp: 11025, api: 19001, web: 15173 };
-const storagePorts = [19333, 29333, 19340, 29340, 18888, 28888, 29002];
-const containerName = `lightnote-local-mysql-${createHash('sha256').update(root).digest('hex').slice(0, 10)}`;
+const savedPortConfig = existsSync(envFile) ? dotenv.parse(readFileSync(envFile)) : {};
+if (process.env.LIGHTNOTE_LOCAL_PORT_OFFSET != null && savedPortConfig.LIGHTNOTE_LOCAL_PORT_OFFSET != null &&
+    process.env.LIGHTNOTE_LOCAL_PORT_OFFSET !== savedPortConfig.LIGHTNOTE_LOCAL_PORT_OFFSET) throw new Error('LOCAL_TEST_PORT_PROFILE_CONFLICT');
+const { offset: portOffset, storagePorts, ...ports } = localTestPorts({ ...savedPortConfig, ...process.env });
+const workspaceHash = createHash('sha256').update(root).digest('hex').slice(0, 10);
+const containerName = `lightnote-local-mysql-${workspaceHash}`;
+// macOS Unix socket 最多 104 字节，工作树路径不能作为 Lima 的 socket 前缀。
+const vmDir = path.join(os.homedir(), '.codex', 'local-vms', workspaceHash);
 const children = [];
 let stopping = false;
 let ownsLock = false;
@@ -72,22 +79,29 @@ async function waitPort(port, child, timeout = 60000) {
   }
   throw new Error(`等待端口 ${port} 超时。`);
 }
+function defaultFaviconEntry() {
+  const sibling = path.join(root, '../toolkit/favimg/src/index.js');
+  if (existsSync(sibling)) return sibling;
+  const commonDir = execFileSync('git', ['rev-parse', '--git-common-dir'], { cwd: root, encoding: 'utf8' }).trim();
+  return path.resolve(root, commonDir, '../../toolkit/favimg/src/index.js');
+}
 function prepareConfig() {
   mkdirSync(stateDir, { recursive: true, mode: 0o700 });
   chmodSync(stateDir, 0o700);
+  mkdirSync(vmDir, { recursive: true, mode: 0o700 });
   for (const dir of ['mysql57', 'redis', 'objects', 'uploads', 'thumbnails', 'drawing', 'files', 'exports', 'tmp', 'logs', 'colima', 'docker-config']) mkdirSync(path.join(stateDir, dir), { recursive: true, mode: 0o700 });
   if (!existsSync(envFile)) {
     const secret = () => randomBytes(32).toString('hex');
     const env = {
       NODE_ENV: 'development', LIGHTNOTE_RUNTIME_ENV: 'local', LIGHTNOTE_LOCAL_TEST: '1',
-      LIGHTNOTE_LOCAL_TEST_DIR: stateDir, DOTENV_CONFIG_PATH: envFile,
+      LIGHTNOTE_LOCAL_TEST_DIR: stateDir, LIGHTNOTE_LOCAL_PORT_OFFSET: String(portOffset), DOTENV_CONFIG_PATH: envFile,
       LIGHTNOTE_DATABASE_SCOPE: 'local', ALLOW_REMOTE_DATABASE_READS: 'false', ALLOW_REMOTE_DATABASE_WRITES: 'false',
-      DB_HOST: '127.0.0.1', DB_PORT: '13306', DB_NAME: 'lightnote_local', DB_USER: 'lightnote_local', DB_PASSWORD: secret(),
-      REDIS_URL: `redis://:${secret()}@127.0.0.1:16379`,
-      OBS_ENDPOINT: 'http://127.0.0.1:19002', OBS_BUCKET_NAME: 'lightnote-local', OBS_AK: secret().slice(0, 20), OBS_SK: secret(),
-      SMTP_HOST: '127.0.0.1', SMTP_PORT: '11025', SMTP_USER: 'noreply@lightnote.test', SMTP_PASS: '', SECURE_COOKIE: '0',
-      SITE_URL: 'http://localhost:15173', VITE_ENV: 'local',
-      FAVICON_API_BASE_URL: 'http://127.0.0.1:19003/', LIGHTNOTE_LOCAL_FAVICON_ENTRY: path.join(root, '../toolkit/favimg/src/index.js'),
+      DB_HOST: '127.0.0.1', DB_PORT: String(ports.mysql), DB_NAME: 'lightnote_local', DB_USER: 'lightnote_local', DB_PASSWORD: secret(),
+      REDIS_URL: `redis://:${secret()}@127.0.0.1:${ports.redis}`,
+      OBS_ENDPOINT: `http://127.0.0.1:${ports.storage}`, OBS_BUCKET_NAME: 'lightnote-local', OBS_AK: secret().slice(0, 20), OBS_SK: secret(),
+      SMTP_HOST: '127.0.0.1', SMTP_PORT: String(ports.smtp), SMTP_USER: 'noreply@lightnote.test', SMTP_PASS: '', SECURE_COOKIE: '0',
+      SITE_URL: `http://localhost:${ports.web}`, VITE_ENV: 'local',
+      FAVICON_API_BASE_URL: `http://127.0.0.1:${ports.favicon}/`, LIGHTNOTE_LOCAL_FAVICON_ENTRY: defaultFaviconEntry(),
       SESSION_SECRET: secret(), RESOURCE_GOVERNANCE_TOKEN_SECRET: secret(), COLLECTION_FORMS_IDENTITY_SECRET: secret(),
       LIGHT_NOTE_IMAGE_DIR: path.join(stateDir, 'uploads'), BOOKMARK_ICON_UPLOAD_DIR: path.join(stateDir, 'uploads'),
       NOTE_IMAGE_THUMBNAIL_DIR: path.join(stateDir, 'thumbnails'), DATA_EXPORT_STORAGE_DIR: path.join(stateDir, 'exports'),
@@ -107,7 +121,17 @@ function prepareConfig() {
     privateWrite(envFile, Object.entries(env).map(([key, value]) => `${key}=${JSON.stringify(value)}`).join('\n') + '\n');
     privateWrite(path.join(stateDir, 'mysql-admin.json'), JSON.stringify({ password: secret() }));
   }
-  const env = dotenv.parse(readFileSync(envFile));
+  let source = readFileSync(envFile, 'utf8');
+  const env = dotenv.parse(source);
+  const defaults = { LIGHTNOTE_LOCAL_PORT_OFFSET: String(portOffset), AI_LEVEL_GIFT_MODE: 'off', AI_DAILY_QUOTA_MODE: 'level',
+    AI_DAILY_BRIEF_PLATFORM_BILLING: 'off', AI_RESERVATION_CALIBRATION_MODE: 'legacy', AI_DAILY_BRIEF_DAILY_QUOTA: '66000', POINTS_ECONOMY_C11_ENABLED: 'false',
+    AI_GIFT_NETWORK_REGISTRATION_LIMIT: '3', AI_GIFT_GLOBAL_REGISTRATION_LIMIT: '20', AI_GIFT_NEW_ACCOUNT_TOKEN_LIMIT: '500000' };
+  for (const [key, value] of Object.entries(defaults)) {
+    if (env[key] !== undefined) continue;
+    source += `${source.endsWith('\n') ? '' : '\n'}${key}=${JSON.stringify(value)}\n`;
+    env[key] = value;
+  }
+  privateWrite(envFile, source);
   assertLocalTestEnvironment(env);
   return env;
 }
@@ -170,7 +194,7 @@ async function initializeDatabase(env) {
   let db;
   const until = Date.now() + 90000;
   while (Date.now() < until) {
-    try { db = await mysql.createConnection({ host: '127.0.0.1', port: 13306, user: 'root', password: adminConfig.password, connectTimeout: 2000 }); break; }
+    try { db = await mysql.createConnection({ host: '127.0.0.1', port: ports.mysql, user: 'root', password: adminConfig.password, connectTimeout: 2000 }); break; }
     catch { await sleep(500); }
   }
   if (!db) throw new Error('MySQL 5.7 未就绪；检查 .local-test/logs/mysql.log。');
@@ -185,7 +209,7 @@ async function initializeDatabase(env) {
 function dockerEnv() {
   const proxies = {};
   for (const name of ['HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY', 'NO_PROXY', 'http_proxy', 'https_proxy', 'all_proxy', 'no_proxy']) if (process.env[name]) proxies[name] = process.env[name];
-  return { ...childEnv({}), ...proxies, COLIMA_HOME: path.join(stateDir, 'colima'), DOCKER_CONFIG: path.join(stateDir, 'docker-config'), DOCKER_HOST: `unix://${stateDir}/colima/default/docker.sock` };
+  return { ...childEnv({}), ...proxies, COLIMA_HOME: vmDir, DOCKER_CONFIG: path.join(stateDir, 'docker-config'), DOCKER_HOST: `unix://${vmDir}/default/docker.sock` };
 }
 async function serve(migrateOnly = false) {
   const config = prepareConfig();
@@ -210,17 +234,17 @@ async function serve(migrateOnly = false) {
     if (!dockerReady) await oneShot('docker-vm', executable('colima'), ['start', '--cpu', '2', '--memory', '4', '--disk', '20', '--vm-type=vz', '--vz-rosetta', '--activate=false'], dockerEnv(), root);
     const admin = JSON.parse(readFileSync(path.join(stateDir, 'mysql-admin.json'), 'utf8'));
     privateWrite(path.join(stateDir, 'mysql-root-password'), admin.password);
-    const database = run('mysql', executable('docker'), ['run', '--rm', '--name', containerName, '--platform', 'linux/amd64', '--publish', '127.0.0.1:13306:3306', '--mount', `type=bind,source=${stateDir}/mysql57,target=/var/lib/mysql`, '--mount', `type=bind,source=${stateDir}/mysql-root-password,target=/run/secrets/mysql-root-password,readonly`, '--env', 'MYSQL_ROOT_PASSWORD_FILE=/run/secrets/mysql-root-password', '--env', 'MYSQL_ROOT_HOST=%', 'mysql:5.7.44', '--skip-log-bin', '--skip-name-resolve', '--character-set-server=utf8mb4', '--collation-server=utf8mb4_unicode_ci', '--default-time-zone=+08:00', '--innodb-buffer-pool-size=134217728', '--max-connections=120'], dockerEnv());
+    const database = run('mysql', executable('docker'), ['run', '--rm', '--name', containerName, '--platform', 'linux/amd64', '--publish', `127.0.0.1:${ports.mysql}:3306`, '--mount', `type=bind,source=${stateDir}/mysql57,target=/var/lib/mysql`, '--mount', `type=bind,source=${stateDir}/mysql-root-password,target=/run/secrets/mysql-root-password,readonly`, '--env', 'MYSQL_ROOT_PASSWORD_FILE=/run/secrets/mysql-root-password', '--env', 'MYSQL_ROOT_HOST=%', 'mysql:5.7.44', '--skip-log-bin', '--skip-name-resolve', '--character-set-server=utf8mb4', '--collation-server=utf8mb4_unicode_ci', '--default-time-zone=+08:00', '--innodb-buffer-pool-size=134217728', '--max-connections=120'], dockerEnv());
     await waitPort(ports.mysql, database);
     await initializeDatabase(config);
     const redisPassword = decodeURIComponent(new URL(config.REDIS_URL).password);
     const redisConfig = path.join(stateDir, 'redis.conf');
-    privateWrite(redisConfig, `bind 127.0.0.1\nport 16379\nprotected-mode yes\nrequirepass ${redisPassword}\ndir "${stateDir}/redis"\nsave 60 1\nappendonly no\n`);
+    privateWrite(redisConfig, `bind 127.0.0.1\nport ${ports.redis}\nprotected-mode yes\nrequirepass ${redisPassword}\ndir "${stateDir}/redis"\nsave 60 1\nappendonly no\n`);
     await waitPort(ports.redis, run('redis', executable('redis-server'), [redisConfig], env));
     privateWrite(path.join(stateDir, 's3.json'), JSON.stringify({ identities: [{ name: 'lightnote-local', credentials: [{ accessKey: config.OBS_AK, secretKey: config.OBS_SK }], actions: ['Admin', 'Read', 'Write', 'List', 'Tagging'] }] }));
-    const storage = run('storage', executable('weed'), ['mini', '-ip=127.0.0.1', '-ip.bind=127.0.0.1', `-dir=${stateDir}/objects`, '-s3.port=19002', `-s3.config=${stateDir}/s3.json`, '-bucket=lightnote-local', '-master.port=19333', '-master.port.grpc=29333', '-volume.port=19340', '-volume.port.grpc=29340', '-filer.port=18888', '-filer.port.grpc=28888', '-s3.port.grpc=29002', '-admin.ui=false', '-admin.port.legacy=0', '-s3.port.iceberg=0', '-s3.port.lance=0', '-webdav.port=0'], env);
+    const storage = run('storage', executable('weed'), ['mini', '-ip=127.0.0.1', '-ip.bind=127.0.0.1', `-dir=${stateDir}/objects`, `-s3.port=${ports.storage}`, `-s3.config=${stateDir}/s3.json`, '-bucket=lightnote-local', `-master.port=${storagePorts[0]}`, `-master.port.grpc=${storagePorts[1]}`, `-volume.port=${storagePorts[2]}`, `-volume.port.grpc=${storagePorts[3]}`, `-filer.port=${storagePorts[4]}`, `-filer.port.grpc=${storagePorts[5]}`, `-s3.port.grpc=${storagePorts[6]}`, '-admin.ui=false', '-admin.port.legacy=0', '-s3.port.iceberg=0', '-s3.port.lance=0', '-webdav.port=0'], env);
     await waitPort(ports.storage, storage);
-    await waitPort(ports.smtp, run('mail', executable('mailpit'), ['--listen', '127.0.0.1:18025', '--smtp', '127.0.0.1:11025', '--database', path.join(stateDir, 'mail.db'), '--disable-version-check', '--quiet'], env));
+    await waitPort(ports.smtp, run('mail', executable('mailpit'), ['--listen', `127.0.0.1:${ports.mail}`, '--smtp', `127.0.0.1:${ports.smtp}`, '--database', path.join(stateDir, 'mail.db'), '--disable-version-check', '--quiet'], env));
     await waitPort(ports.favicon, run('favicon', process.execPath, [path.join(serverDir, 'scripts/localTestFavicon.js')], env, { cwd: serverDir }));
     await oneShot('bootstrap', process.execPath, [path.join(serverDir, 'scripts/localTestBootstrap.js')], env);
     await oneShot('schema', process.execPath, [path.join(serverDir, 'scripts/checkSchemaAssertions.js')], env);
@@ -228,12 +252,12 @@ async function serve(migrateOnly = false) {
     const api = run('api', process.execPath, [path.join(serverDir, 'app.js')], env, { cwd: serverDir });
     await waitPort(ports.api, api);
     for (const name of ['document', 'bookmarkIcon', 'resourceGovernance', 'browserPush', 'noteImport', 'dataExport']) run(`${name}-worker`, process.execPath, [path.join(serverDir, `${name}Worker.js`)], env, { cwd: serverDir });
-    const web = run('web', executable('pnpm'), ['--filter', 'web', 'exec', 'vite', '--host', '127.0.0.1', '--port', '15173', '--strictPort'], env);
+    const web = run('web', executable('pnpm'), ['--filter', 'web', 'exec', 'vite', '--host', '127.0.0.1', '--port', String(ports.web), '--strictPort'], env);
     await waitPort(ports.web, web);
     await sleep(1500);
     if (stopping) return;
     saveState('ready');
-    console.log('本机测试环境已就绪：http://localhost:15173；邮件：http://localhost:18025。');
+    console.log(`本机测试环境已就绪：http://localhost:${ports.web}；邮件：http://localhost:${ports.mail}。`);
   } catch (error) { await shutdown(1, error.message); }
 }
 async function status() {
@@ -241,7 +265,7 @@ async function status() {
   const running = isManager(state);
   console.log(`本机测试环境：${running ? state.status : 'stopped'}${state?.detail ? `（${state.detail}）` : ''}`);
   for (const [name, port] of Object.entries(ports)) console.log(`${name.padEnd(8)} 127.0.0.1:${port} ${await canConnect(port) ? 'listening' : 'stopped'}`);
-  console.log('网页：http://localhost:15173\n邮件：http://localhost:18025\n账号：.local-test/accounts.json（仅本机）');
+  console.log(`网页：http://localhost:${ports.web}\n邮件：http://localhost:${ports.mail}\n账号：.local-test/accounts.json（仅本机）`);
 }
 async function main() {
   if (command === '_serve' || command === 'migrate') {

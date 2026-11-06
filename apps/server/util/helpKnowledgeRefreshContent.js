@@ -13,14 +13,15 @@ Markdown 中以受控 HTML 结构保存，预览会显示一图一文；在富�
 });
 
 /** Current product guides. Explicit maintenance only; never imported by application startup. */
-export function buildHelpKnowledgeRefreshEntries({ ranks, guestQuota, makeupWindowDays, galaxyFrame }) {
+export function buildHelpKnowledgeRefreshEntries({ ranks, guestQuota, makeupWindowDays, galaxyFrame, billingMode = 'daily_and_permanent', levelGifts = [], economyVersion = null, platformDailyBrief = false }) {
+  const permanentOnly = billingMode === 'permanent_only';
   if (
     !Array.isArray(ranks) ||
     ranks.length !== 15 ||
     !ranks.every(
       (rank, index) => rank.level === index + 1 && rank.aiTokenDaily > 0 && rank.spaceMb > 0 && rank.trashDays > 0,
     ) ||
-    !(guestQuota > 0) ||
+    (permanentOnly ? guestQuota !== 0 || levelGifts.length !== 15 || !levelGifts.every(value => Number.isSafeInteger(value) && value > 0) : !(guestQuota > 0)) ||
     !(makeupWindowDays > 0) ||
     !Number.isFinite(galaxyFrame?.cost) ||
     !Number.isFinite(galaxyFrame?.minLevel)
@@ -45,7 +46,10 @@ export function buildHelpKnowledgeRefreshEntries({ ranks, guestQuota, makeupWind
     guide(key, title, null, content, { category, ...options });
   const site = 'https://boluo66.top';
   const link = (label, path) => `[${label}](${site}${path})`;
-  const rankTable =
+  const giftTotal = levelGifts.reduce((sum, value) => sum + value, 0);
+  const rankTable = permanentOnly
+    ? '| 等级 | 本级赠礼 | 累计赠礼 | 基础云空间 | 回收站保留期 |\n|---|---:|---:|---:|---|\n' + ranks.map((r, index) => `| Lv.${r.level} | ${levelGifts[index] / 10000} 万 tokens | ${levelGifts.slice(0, index + 1).reduce((sum, value) => sum + value, 0) / 10000} 万 tokens | ${r.spaceMb / 1024} GB | ${r.trashDays >= 3650 ? '永久（按当前等级规则）' : r.trashDays + ' 天'} |`).join('\n')
+    :
     '| 等级 | 每日 AI 额度 | 基础云空间 | 回收站保留期 |\n|---|---:|---:|---|\n' +
     ranks
       .map(
@@ -53,7 +57,9 @@ export function buildHelpKnowledgeRefreshEntries({ ranks, guestQuota, makeupWind
           `| Lv.${r.level} | ${r.aiTokenDaily / 10000} 万 tokens | ${r.spaceMb / 1024} GB | ${r.trashDays >= 3650 ? '永久（按当前等级规则）' : r.trashDays + ' 天'} |`,
       )
       .join('\n');
-  const quota = `今日等级额度按账号每日周期重置并优先使用；永久 AI 余额不会每日清零，今日额度用完后自动接续。注册账号 Lv.1 每日 ${ranks[0].aiTokenDaily / 10000} 万、Lv.15 每日 ${ranks[14].aiTokenDaily / 10000} 万 tokens，中间等级平滑递增。游客可用的公开帮助等能力按设备每日 ${guestQuota / 10000} 万 tokens，并受共享网络限额保护。角色不会额外放大额度。`;
+  const quota = permanentOnly
+    ? `AI 额度不再按日、周或月刷新，已获得的额度永久保留。符合资格的普通用户注册领取 ${levelGifts[0] / 10000} 万 tokens，之后每升一级各领一次；Lv.1 至 Lv.15 累计 ${giftTotal / 10000} 万 tokens（含注册礼），跨级补齐、降级后再升级不重复领取。老用户保留原余额，额外补齐当前真实等级尚未领取的赠礼。赠送表按注册时适用的版本固定，安全受限或暂扣账号待复核后补齐；Root、test、游客和系统账号不自动领赠礼。游客使用模型需登录。积分兑换、购买和活动所得同样累积到余额。余额、处理中预留、当前可用分别展示；任务结束按实际用量结算，多余预留返还。`
+    : `今日等级额度按账号每日周期重置并优先使用；永久 AI 余额不会每日清零，今日额度用完后自动接续。注册账号 Lv.1 每日 ${ranks[0].aiTokenDaily / 10000} 万、Lv.15 每日 ${ranks[14].aiTokenDaily / 10000} 万 tokens，中间等级平滑递增。游客可用的公开帮助等能力按设备每日 ${guestQuota / 10000} 万 tokens，并受共享网络限额保护。角色不会额外放大额度。`;
   const storage = `等级基础云空间从 Lv.1 的 ${ranks[0].spaceMb / 1024} GB 增至 Lv.15 的 ${ranks[14].spaceMb / 1024} GB，永久扩容另行叠加；当前总容量、文件占用和回收站占用可在云空间容量详情核对。把文件移入回收站不会立即释放容量，实际清理后才释放。`;
   const mobile = `手机底部为「今日、资料、收集、待办、社区」。「资料」回到最近使用的书签、笔记或云空间；「收集」提供新建与上传入口，也能进入知识工坊；「社区」包含聊天室和广场。头像菜单提供个人资料、成长、设置、帮助与回收站，顶部搜索可以快速找资料。`;
 
@@ -232,17 +238,17 @@ Markdown 可用 \`$...$\` 写行内公式，单独一块用 \`$$...$$\`。例如
     'quota',
     'AI 额度、用量明细与加油包',
     'AI 与权益',
-    `# AI 额度与永久余额
+    `# ${permanentOnly ? 'AI 额度与余额' : 'AI 额度与永久余额'}
 ${quota}
 
 ${rankTable}
 
-## 永久余额与查看方式
+## ${permanentOnly ? '余额与查看方式' : '永久余额与查看方式'}
 积分兑换或符合条件的奖励、新购买的 AI 权益直接进入永久余额，不会仅在领取当天有效；旧背包中的 AI 包可按页面说明转入。已到账的历史余额保留，不因新规则收回。不要把经验、积分、永久 AI 余额和云空间混成同一种资产。
 
-在${link('AI 用量与计费规则', '/ai-usage')}查看今日额度、已用、永久余额及最近用量。模型调用按真实用量和成功交付规则结算，平台协议修复由平台承担；预占不是最终扣费。不同工具的停止、失败和保留规则以该入口说明为准，积分工具不会同时扣用户 AI 额度。
+在${link('AI 用量与计费规则', '/ai-usage')}查看${permanentOnly ? '余额、处理中预留、当前可用及最近用量' : '今日额度、已用、永久余额及最近用量'}。模型调用按真实用量和成功交付规则结算，平台协议修复由平台承担；预占不是最终扣费。不同工具的停止、失败和保留规则以该入口说明为准，积分工具不会同时扣用户 AI 额度。
 
-用量明细展示模块、状态、输入／输出 tokens 和承担方，不展示私有问题与正文。额度不足时等待每日周期重置，或按需使用已有永久余额；购买权益从${link('资源商店', '/store')}进入，纯支持页面不发放 AI 或空间。`,
+用量明细展示模块、状态、输入／输出 tokens 和承担方，不展示私有问题与正文。${permanentOnly ? '余额不足时，可通过升级、积分兑换或购买补充额度后继续使用；' : '额度不足时等待每日周期重置，或按需使用已有永久余额；'}购买权益从${link('资源商店', '/store')}进入，纯支持页面不发放 AI 或空间。`,
   );
 
   extra(
@@ -254,17 +260,17 @@ ${quota}
 
 笔记、书签、云文件、待办、整理、帮助问答和工坊中按 AI 额度结算的操作共用可解释的用量账本。免费本地工具、普通关键词搜索、确定性处理和未外发的缓存结果不扣模型额度。
 
-新获得的 AI 包直接进入永久余额，不是当日临时加额。当前余额与实际扣量请打开${link('AI 用量', '/ai-usage')}核对，帮助文章无法读取个人实时余额。`,
+新获得的 AI 包直接进入余额。${platformDailyBrief ? '自动或手动刷新的每日简报 AI 建议由平台承担，用户扣量为 0；平台预算用完时保留事实与上次建议，不改扣个人余额。' : ''}当前余额与实际扣量请打开${link('AI 用量', '/ai-usage')}核对，帮助文章无法读取个人实时余额。`,
   );
   extra(
     'quota-faq',
-    'AI 额度每天多少：每日等级额度与永久余额',
+    permanentOnly ? 'AI 额度怎么获得：注册和升级赠礼与余额' : 'AI 额度每天多少：每日等级额度与永久余额',
     'FAQ',
-    `# 每日 AI 额度
+    `# ${permanentOnly ? 'AI 额度与赠礼' : '每日 AI 额度'}
 ${quota}
 
-在${link('AI 用量', '/ai-usage')}查看个人当前额度、永久余额与最近消耗。永久 AI 余额不会每天清零；新包到账后自动使用，无需重复手动领取。`,
-    { matchTitles: ['AI额度每天多少：游客 3 万、注册用户 25 万到 200 万'] },
+在${link('AI 用量', '/ai-usage')}查看${permanentOnly ? '余额、处理中预留、当前可用与最近消耗' : '个人当前额度、永久余额与最近消耗'}。新包到账后自动使用，无需重复手动领取。`,
+    { matchTitles: ['AI额度每天多少：游客 3 万、注册用户 25 万到 200 万', 'AI 额度每天多少：每日等级额度与永久余额', 'AI 额度怎么获得：注册和升级赠礼与余额'] },
   );
 
   guide(
@@ -272,13 +278,13 @@ ${quota}
     '成长等级权益：云空间、AI额度、回收站和免费抽奖',
     'AI 与权益',
     `# 成长等级权益
-等级由累计经验决定，普通用户、test 和 Root 的个人权益都按真实等级计算。
+等级由累计经验决定，云空间等权益按真实等级计算。${permanentOnly ? 'AI 等级赠礼仅面向符合资格的普通用户，Root 与 test 通过有审计的管理入账补充额度。' : '普通用户、test 和 Root 的每日 AI 权益都按真实等级计算。'}
 
 ${rankTable}
 
 ${storage}
 
-免费「每日惊喜」次数按等级解锁：Lv.1～2 无，Lv.3～5 每日 1 次，Lv.6～9 每日 2 次，Lv.10 及以上每日 3 次，以当前页面为准。每日惊喜与付费积分抽奖分别管理，奖励不是保证收入。历史已到账资产继续保留。
+免费「每日惊喜」次数按等级解锁：Lv.1～2 无，Lv.3～5 每日 1 次，Lv.6～9 每日 2 次，Lv.10 及以上每日 3 次，以当前页面为准。每日惊喜与付费积分抽奖分别管理，奖励不是保证收入。历史已到账资产继续保留。${economyVersion === 'points-economy-c11' ? '免费每日惊喜只赠送积分，奖项为 2、3、5、20 积分，权重依次 200、600、180、20；不再直接赠送 AI 额度。切换或回退不恢复已使用次数，历史奖品收据保持原样。' : ''}
 
 当前权益可在${link('我的成长', '/growth')}、云空间容量详情和${link('AI 用量', '/ai-usage')}核对。`,
   );
@@ -771,9 +777,9 @@ ${link('工作台', '/workbenches')}集中查看今日简报、近期资料、�
     '游客模式有什么限制',
     'FAQ',
     `# 游客模式
-游客可浏览公开官网、帮助、社区和允许的示例，公开帮助问答在游客额度与安全限制内使用。游客没有正式账号的私人资料空间，不能据此长期创建或修改个人资料、管理表单、公开资源或参加个人成长。
+游客可浏览公开官网、帮助、社区和允许的示例。${permanentOnly ? '使用需要模型的帮助问答时请先登录。' : '公开帮助问答在游客额度与安全限制内使用。'}游客没有正式账号的私人资料空间，不能据此长期创建或修改个人资料、管理表单、公开资源或参加个人成长。
 
-需要保存书签、笔记、云文件、跨设备同步或分析个人资料时，请注册或登录。游客的本地偏好与设备有关，不会转换成另一个人的正式账号数据。游客公开 AI 能力当前按设备每日 ${guestQuota / 10000} 万 tokens，并受共享网络限额保护。`,
+需要保存书签、笔记、云文件、跨设备同步或分析个人资料时，请注册或登录。游客的本地偏好与设备有关，不会转换成另一个人的正式账号数据。${permanentOnly ? '游客没有模型试用额度，登录后使用；基础笔记等确定性功能不受影响。' : `游客公开 AI 能力当前按设备每日 ${guestQuota / 10000} 万 tokens，并受共享网络限额保护。`}`,
   );
   extra(
     'frame-price',

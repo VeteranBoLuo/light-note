@@ -4,6 +4,12 @@ import { extractAiQuotaError, getAiQuotaErrorPresentation } from './aiQuotaError
 const t = (key: string, params?: Record<string, unknown>) => `${key}:${JSON.stringify(params || {})}`;
 
 describe('AI quota error presentation', () => {
+  it('永久模式耗尽提示只提供补充方式，不承诺等待刷新', () => {
+    const value = getAiQuotaErrorPresentation({ code: 'AI_QUOTA_EXCEEDED', billingMode: 'permanent_only' });
+    expect(value.message).toContain('升级、积分兑换或购买');
+    expect(value.message).not.toContain('重置');
+    expect(value.message).not.toContain('等待');
+  });
   it('识别统一请求层压平后的额度耗尽错误', () => {
     expect(
       getAiQuotaErrorPresentation({ code: 'HTTP_429', data: { code: 'AI_QUOTA_EXCEEDED' } }, t),

@@ -1,14 +1,18 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   getConnection: vi.fn(),
+  query: vi.fn(),
+  getStatusForUser: vi.fn(),
   creditAiBonusTokens: vi.fn(),
 }));
 
-vi.mock('../db/index.js', () => ({ default: { getConnection: mocks.getConnection } }));
+vi.mock('../db/index.js', () => ({ default: { getConnection: mocks.getConnection, query: mocks.query } }));
 vi.mock('./aiBonusWallet.js', () => ({ creditAiBonusTokens: mocks.creditAiBonusTokens }));
+vi.mock('./aiQuota.js', () => ({ getStatusForUser: mocks.getStatusForUser }));
 
-import { useItem } from './items.js';
+import { useItem, getInventory } from './items.js';
+afterEach(() => vi.unstubAllEnvs());
 
 describe('历史 AI 加油包迁移', () => {
   beforeEach(() => {
@@ -50,5 +54,13 @@ describe('历史 AI 加油包迁移', () => {
     expect(connection.commit).toHaveBeenCalledOnce();
     expect(connection.rollback).not.toHaveBeenCalled();
     expect(connection.release).toHaveBeenCalledOnce();
+  });
+
+  it('新模式背包余额与统一额度快照一致，包含在途预留且不发放赠礼', async () => {
+    vi.stubEnv('AI_DAILY_QUOTA_MODE', 'off');
+    mocks.query.mockResolvedValueOnce([[]]).mockResolvedValueOnce([[{ ai_bonus_tokens: 790000 }]]);
+    mocks.getStatusForUser.mockResolvedValue({ bonusTokens: 810000, availableRemaining: 790000 });
+    expect(await getInventory('user-1')).toMatchObject({ billingMode: 'permanent_only', assets: { aiBonusTokens: 810000 } });
+    expect(mocks.creditAiBonusTokens).not.toHaveBeenCalled();
   });
 });

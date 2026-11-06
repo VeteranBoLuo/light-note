@@ -35,6 +35,12 @@ function withGroundedProtocol(messages) {
   return [{ role: 'system', content: GROUNDED_OUTPUT_PROTOCOL_INSTRUCTION }, ...normalized];
 }
 
+function assertCompleteProviderOutput(response) {
+  if (response?.finishReason === 'length') {
+    throw Object.assign(new Error('生成内容超过单次输出上限，请减少材料或缩小处理范围'), { code: 'AI_SKILL_OUTPUT_TOO_LONG', status: 502 });
+  }
+}
+
 function validateSkillResult(result, resultValidator) {
   return typeof resultValidator === 'function' ? resultValidator(result) : result;
 }
@@ -106,6 +112,7 @@ export async function callGroundedSkillModel({
   };
   let response = await requestAi(messages, requestOptions);
   try {
+    assertCompleteProviderOutput(response);
     return validateSkillResult(
       validateGroundedMarkdownOutput({
         content: response.content,
@@ -131,6 +138,7 @@ export async function callGroundedSkillModel({
         trace: { ...trace, stage: `${trace?.stage || 'skill_output'}_repair` },
       },
     );
+    assertCompleteProviderOutput(response);
     return validateSkillResult(
       validateGroundedMarkdownOutput({
         content: response.content,
@@ -184,6 +192,7 @@ export async function callGroundedSkillModelStream({
   };
   let response = await requestAiStream(messages, requestOptions);
   try {
+    assertCompleteProviderOutput(response);
     return validateSkillResult(
       validateGroundedMarkdownOutput({
         content: response.content,
@@ -210,6 +219,7 @@ export async function callGroundedSkillModelStream({
         trace: { ...trace, stage: `${trace?.stage || 'skill_output'}_repair` },
       },
     );
+    assertCompleteProviderOutput(response);
     return validateSkillResult(
       validateGroundedMarkdownOutput({
         content: response.content,

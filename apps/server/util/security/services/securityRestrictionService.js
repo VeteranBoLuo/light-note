@@ -2,7 +2,7 @@ import pool from '../../../db/index.js';
 
 const CACHE_TTL_MS = 15_000;
 const cache = new Map();
-export const SECURITY_RESTRICTION_TYPES = new Set(['login_lock', 'write_lock', 'upload_lock', 'ai_lock', 'full_lock']);
+export const SECURITY_RESTRICTION_TYPES = new Set(['login_lock', 'write_lock', 'upload_lock', 'ai_lock', 'full_lock', 'gift_hold']);
 
 export const clearSecurityRestrictionCache = (userId = '') => {
   if (userId) cache.delete(String(userId));

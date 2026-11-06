@@ -1,3 +1,4 @@
+import { localTestPorts } from '../util/localTestPorts.js';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
@@ -59,7 +60,7 @@ try {
   console.log('[local-check] multipart initiate/upload/list/complete verified');
   phase = 'mail';
   await sendTrackedEmail({ emailType: 'local_test', recipient: 'check@lightnote.test', subject: `本地环境检查 ${id}`, text: '这封邮件仅进入本机 Mailpit。' });
-  const inbox = await fetch('http://127.0.0.1:18025/api/v1/messages').then(r => r.json());
+  const inbox = await fetch(`http://127.0.0.1:${localTestPorts().mail}/api/v1/messages`).then(r => r.json());
   assert.ok(inbox.messages.some(message => message.Subject.includes(id)));
   console.log('[local-check] SMTP capture verified; no external mail sent');
   phase = 'login';
@@ -76,7 +77,7 @@ try {
     break;
   }
   assert.ok(account, 'LOCAL_TEST_SAVED_LOGIN_CREDENTIALS_UNAVAILABLE');
-  const login = await fetch('http://127.0.0.1:15173/api/user/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: account.email, password: account.password }) }).then(r => r.json());
+  const login = await fetch(`http://127.0.0.1:${localTestPorts().web}/api/user/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: account.email, password: account.password }) }).then(r => r.json());
   assert.equal(login.status, 200);
   assert.equal(login.data.role, account.role);
   assert.ok(login.data.sid);

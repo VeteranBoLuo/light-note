@@ -35,6 +35,26 @@ describe('useAiQuotaStatus', () => {
     mocks.user.adminContext = null;
   });
 
+  it('永久模式只暴露余额、在途和可用，不再提供每日展示字段', async () => {
+    mocks.apiBasePost.mockResolvedValue({ status: 200, data: { billingMode: 'permanent_only', used: 0, quota: 810000,
+      remaining: 810000, bonusTokens: 810000, pendingReservedTokens: 20000, availableRemaining: 790000,
+      dailyQuota: 0, dailyUsed: 0, dailyRemaining: 0 } });
+    const quota = useAiQuotaStatus({ autoLoad: false });
+    await quota.load();
+    expect(quota.permanentOnly.value).toBe(true);
+    expect(quota.status.value).toMatchObject({ bonusTokens: 810000, pendingReservedTokens: 20000, availableRemaining: 790000 });
+    expect(quota.status.value).not.toHaveProperty('dailyQuota');
+    expect(quota.status.value).not.toHaveProperty('dailyRemaining');
+    expect(quota.remainingPercent.value).toBe(0);
+  });
+
+  it('未知计费模式不能回退为承诺每日刷新的旧口径', async () => {
+    mocks.apiBasePost.mockResolvedValue({ status: 200, data: { billingMode: 'unknown', used: 0, quota: 10, remaining: 10 } });
+    const quota = useAiQuotaStatus({ autoLoad: false });
+    expect(await quota.load()).toBeNull();
+    expect(quota.unavailable.value).toBe(true);
+  });
+
   it('游客的可用额度为零且不请求额度接口，登录后重新读取真实余额', async () => {
     mocks.user.role = 'visitor';
     const quota = useAiQuotaStatus({ autoLoad: false });

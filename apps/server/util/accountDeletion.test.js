@@ -19,6 +19,8 @@ const deleteObjectFromObs = vi.fn();
 const cleanupOrphanNoteImages = vi.fn();
 const extractNoteImageUrls = vi.fn();
 const cleanupBookmarkIconFiles = vi.fn();
+const preserveAiGiftRiskOnDeletion = vi.fn();
+vi.mock('./aiLevelGiftRiskFacts.js', () => ({ preserveAiGiftRiskOnDeletion }));
 
 vi.mock('../db/index.js', () => ({ default: { query: poolQuery, getConnection } }));
 vi.mock('./redisClient.js', () => ({ default: redisClient }));
@@ -179,6 +181,11 @@ describe('账号注销提交', () => {
     expect(result.status).toBe('pending');
     expect(connection.beginTransaction).toHaveBeenCalledTimes(1);
     expect(connection.commit).toHaveBeenCalledTimes(1);
+    expect(preserveAiGiftRiskOnDeletion).toHaveBeenCalledWith(connection, expect.any(Set), 'user-1');
+    const anonymizeCall = connection.query.mock.calls.findIndex(([sql]) => sql.includes("role = 'deleted'"));
+    expect(preserveAiGiftRiskOnDeletion.mock.invocationCallOrder[0]).toBeLessThan(
+      connection.query.mock.invocationCallOrder[anonymizeCall],
+    );
     expect(connection.rollback).not.toHaveBeenCalled();
     expect(connection.release).toHaveBeenCalledTimes(1);
     expect(connection.query.mock.calls[1][0]).toContain('GET_LOCK');
@@ -212,13 +219,20 @@ describe('账号注销提交', () => {
 });
 
 describe('账号注销后台清理', () => {
-  it('清理本人提取表的结果、材料与回执，缺表兼容且不触及原文件', async()=>{
-    const connection=createConnection(async()=>[{affectedRows:1}]);
-    const names=['toolbox_extraction_records','toolbox_extraction_sources','toolbox_extraction_receipts','toolbox_extractions'];
-    await purgeToolboxWorkspace(connection,new Set(names),'owner');
+  it('清理本人提取表的结果、材料与回执，缺表兼容且不触及原文件', async () => {
+    const connection = createConnection(async () => [{ affectedRows: 1 }]);
+    const names = [
+      'toolbox_extraction_records',
+      'toolbox_extraction_sources',
+      'toolbox_extraction_receipts',
+      'toolbox_extractions',
+    ];
+    await purgeToolboxWorkspace(connection, new Set(names), 'owner');
     expect(connection.query.mock.calls).toHaveLength(4);
-    expect(connection.query.mock.calls.map(([sql])=>sql)).toEqual(names.map(name=>`DELETE FROM ${name} WHERE user_id = ?`));
-    expect(connection.query.mock.calls.every(([,values])=>values[0]==='owner')).toBe(true);
+    expect(connection.query.mock.calls.map(([sql]) => sql)).toEqual(
+      names.map((name) => `DELETE FROM ${name} WHERE user_id = ?`),
+    );
+    expect(connection.query.mock.calls.every(([, values]) => values[0] === 'owner')).toBe(true);
   });
   it('按引用顺序清理工具箱任务、产物与报价', async () => {
     const connection = createConnection(async () => [{ affectedRows: 1 }]);
@@ -418,8 +432,15 @@ describe('账号注销后台清理', () => {
   });
   it('注销填写者删除本人账号回答，不触及独立积分收据', async () => {
     const connection = createConnection(async () => [{ affectedRows: 1 }]);
-    await purgeOwnedResources(connection, new Set(['collection_submissions', 'points_grant_operations']), 'participant');
-    expect(connection.query).toHaveBeenCalledExactlyOnceWith('DELETE FROM collection_submissions WHERE respondent_user_id = ?', ['participant']);
+    await purgeOwnedResources(
+      connection,
+      new Set(['collection_submissions', 'points_grant_operations']),
+      'participant',
+    );
+    expect(connection.query).toHaveBeenCalledExactlyOnceWith(
+      'DELETE FROM collection_submissions WHERE respondent_user_id = ?',
+      ['participant'],
+    );
   });
 
   it('已完成的清理任务记录只保留 180 天并分批删除', async () => {

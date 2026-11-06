@@ -60,6 +60,7 @@ export interface DailyBrief {
 }
 
 export interface DailyBriefState {
+  adviceBillingPolicy?: 'user' | 'system';
   featureEnabled: boolean;
   enabled: boolean;
   date: string;

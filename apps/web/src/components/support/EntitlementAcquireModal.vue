@@ -8,10 +8,11 @@
   >
     <div class="entitlement-acquire">
       <p class="entitlement-acquire__intro">{{ t('support.acquire.description') }}</p>
-      <p v-if="asset === 'ai' && status" class="entitlement-acquire__intro"
+      <p v-if="asset === 'ai' && status && !permanentOnly" class="entitlement-acquire__intro"
         >{{ t('entitlementJourney.daily') }} {{ formatAiQuotaTokens(status.dailyRemaining) }} ·
         {{ t('entitlementJourney.permanent') }} {{ formatAiQuotaTokens(status.bonusTokens) }}</p
       >
+      <p v-if="asset === 'ai' && status && permanentOnly" class="entitlement-acquire__intro">{{ t('aiQuotaOneTime.balance') }} {{ formatAiQuotaTokens(status.bonusTokens) }} · {{ t('aiQuotaOneTime.available') }} {{ formatAiQuotaTokens(status.availableRemaining ?? status.remaining) }}</p>
       <div class="entitlement-acquire__options">
         <BButton class="entitlement-acquire__option" @click="goToPoints">
           <span class="entitlement-acquire__icon is-points" aria-hidden="true">
@@ -65,7 +66,7 @@
   const router = useRouter();
 
   const user = useUserStore();
-  const { status, load } = useAiQuotaStatus({ autoLoad: false });
+  const { status, load, permanentOnly } = useAiQuotaStatus({ autoLoad: false });
   watch(
     visible,
     (open) => {

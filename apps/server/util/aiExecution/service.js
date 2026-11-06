@@ -296,6 +296,9 @@ export function configureActiveAiExecution(config = {}, execution = getActiveAiE
   execution.maxUserProviderCalls = providerPlan.maxUserProviderCalls;
   execution.maxPlatformProviderCalls = providerPlan.maxPlatformProviderCalls;
   execution.reservationTokens = Math.max(1, Math.floor(Number(config.reservationTokens || 1)));
+  if (config.inputDiagnostics) {
+    execution.inputDiagnostics = readAiInputDiagnostics(config.inputDiagnostics, execution.skillId);
+  }
   return execution;
 }
 

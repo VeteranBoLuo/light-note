@@ -24,11 +24,11 @@
         <span>{{ t('personCenter.aiQuotaLabel') }}</span>
         <span v-if="quotaBreakdown" class="ai-quota-summary__values" aria-hidden="true">
           <span class="ai-quota-summary__primary-value">
-            <small>{{ t('personCenter.aiQuotaTodayRemaining') }}</small>
+            <small>{{ t(permanentOnly ? 'aiQuotaOneTime.balance' : 'personCenter.aiQuotaTodayRemaining') }}</small>
             <strong>{{ quotaBreakdown.daily }}</strong>
           </span>
           <span class="ai-quota-summary__secondary-value">
-            <small>{{ t('personCenter.aiQuotaPermanentShort') }}</small>
+            <small>{{ t(permanentOnly ? 'aiQuotaOneTime.available' : 'personCenter.aiQuotaPermanentShort') }}</small>
             <strong>{{ quotaBreakdown.permanent }}</strong>
           </span>
           <span v-if="pendingReservationText" class="ai-quota-summary__pending">
@@ -39,7 +39,7 @@
         <strong v-else class="ai-quota-summary__status">{{ statusText }}</strong>
       </span>
       <BProgress
-        v-if="!loginRequired && status && !status.exempt && !unavailable"
+        v-if="!permanentOnly && !loginRequired && status && !status.exempt && !unavailable"
         size="small"
         :percent="remainingPercent"
         :aria-label="accessibleLabel"
@@ -78,7 +78,7 @@
     'open-details': [];
   }>();
   const { t, locale } = useI18n();
-  const { status, loading, unavailable, loginRequired, remainingPercent, load } = useAiQuotaStatus({ autoLoad: false });
+  const { status, loading, unavailable, loginRequired, remainingPercent, permanentOnly, load } = useAiQuotaStatus({ autoLoad: false });
 
   watch(
     () => props.active,
@@ -90,6 +90,10 @@
 
   const quotaBreakdown = computed(() => {
     if (loginRequired.value || !status.value || status.value.exempt || unavailable.value) return null;
+    if (permanentOnly.value) return {
+      daily: formatAiQuotaTokens(status.value.bonusTokens, locale.value),
+      permanent: formatAiQuotaTokens(status.value.availableRemaining ?? status.value.remaining, locale.value),
+    };
     if (
       Number.isFinite(status.value.dailyRemaining) &&
       Number.isFinite(status.value.dailyQuota) &&
@@ -107,7 +111,7 @@
     if (loading.value && !status.value) return t('personCenter.aiQuotaLoading');
     if (unavailable.value || !status.value) return t('personCenter.aiQuotaUnavailable');
     if (status.value.exempt) return t('personCenter.aiQuotaUnlimited');
-    if (quotaBreakdown.value) return t('personCenter.aiQuotaBreakdown', quotaBreakdown.value);
+    if (quotaBreakdown.value) return t(permanentOnly.value ? 'aiQuotaOneTime.balanceBreakdown' : 'personCenter.aiQuotaBreakdown', quotaBreakdown.value);
     return t('personCenter.aiQuotaRemaining', {
       amount: formatAiQuotaTokens(status.value.remaining, locale.value),
     });

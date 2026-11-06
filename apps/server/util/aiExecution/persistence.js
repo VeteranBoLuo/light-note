@@ -11,34 +11,65 @@ function persistenceError(code) {
   return error;
 }
 
+async function inTransaction(database, operation) {
+  const connection = await database.getConnection();
+  try {
+    await connection.beginTransaction();
+    const result = await operation(connection);
+    await connection.commit();
+    return result;
+  } catch (error) {
+    await connection.rollback().catch(() => {});
+    throw error;
+  } finally {
+    connection.release();
+  }
+}
+
 export async function insertAiExecution(execution, database = pool) {
   const grouped = Boolean(execution.organizeRunId && execution.organizeItemId);
   try {
-    const [result] = await database.query(
-      `INSERT INTO ai_executions
+    const insert = async (connection) => {
+      // 和注销保持账号先于执行行的锁序，避免外发前记账与注销快照互相等待。
+      if (execution.billingPolicy === 'user')
+        await connection.query('SELECT id FROM user WHERE id=? LOCK IN SHARE MODE', [execution.actorUserId]);
+      const [result] = await connection.query(
+        `INSERT INTO ai_executions
         (id, request_id, actor_user_id, subject_user_id, billing_policy, surface, task_type,
          skill_id, skill_version, billing_rule_version, validation_rule_version, status,
          quota_reservation_key, lease_expires_at, input_diagnostics_json${grouped ? ', organize_run_id, organize_item_id' : ''})
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'running', ?, ?, ?${grouped ? ', ?, ?' : ''})`,
-      [
-        execution.id,
-        execution.requestId,
-        execution.actorUserId,
-        execution.subjectUserId,
-        execution.billingPolicy,
-        execution.surface,
-        execution.taskType,
-        execution.skillId,
-        execution.skillVersion,
-        execution.billingRuleVersion,
-        execution.validationRuleVersion,
-        execution.quotaHandle?.reservationKey || null,
-        execution.leaseExpiresAt,
-        execution.inputDiagnostics ? JSON.stringify(execution.inputDiagnostics) : null,
-        ...(grouped ? [execution.organizeRunId, execution.organizeItemId] : []),
-      ],
-    );
-    if (!affectedExactlyOne(result)) throw persistenceError('AI_EXECUTION_START_NOT_PERSISTED');
+        [
+          execution.id,
+          execution.requestId,
+          execution.actorUserId,
+          execution.subjectUserId,
+          execution.billingPolicy,
+          execution.surface,
+          execution.taskType,
+          execution.skillId,
+          execution.skillVersion,
+          execution.billingRuleVersion,
+          execution.validationRuleVersion,
+          execution.quotaHandle?.reservationKey || null,
+          execution.leaseExpiresAt,
+          execution.inputDiagnostics ? JSON.stringify(execution.inputDiagnostics) : null,
+          ...(grouped ? [execution.organizeRunId, execution.organizeItemId] : []),
+        ],
+      );
+      if (!affectedExactlyOne(result)) throw persistenceError('AI_EXECUTION_START_NOT_PERSISTED');
+      // 外发前固化新号成本归属；后续注销或清理账号不会丢失正在执行的实际用量。
+      if (execution.billingPolicy === 'user')
+        await connection.query(
+          `INSERT INTO ai_level_gift_risk_usage (execution_id,created_at)
+       SELECT e.id,e.created_at FROM ai_executions e JOIN user u
+         ON u.id=CONVERT(e.actor_user_id USING utf8) COLLATE utf8_general_ci
+       WHERE e.id=? AND u.role='user' AND u.create_time>=DATE_SUB(NOW(),INTERVAL 7 DAY)`,
+          [execution.id],
+        );
+    };
+    if (execution.billingPolicy === 'user') await inTransaction(database, insert);
+    else await insert(database);
   } catch (error) {
     if (error?.code === 'ER_DUP_ENTRY') throw persistenceError('AI_EXECUTION_REQUEST_DUPLICATED');
     if (error?.code?.startsWith?.('AI_EXECUTION_')) throw error;
@@ -80,44 +111,58 @@ export async function renewAiExecutionLease(execution, database = pool) {
 }
 
 export async function updateAiExecutionReservation(execution, database = pool) {
-  const [result] = await database.query('UPDATE ai_executions SET quota_reservation_key = ? WHERE id = ?', [
-    execution.quotaHandle?.reservationKey || null,
-    execution.id,
-  ]);
+  const [result] = await database.query(
+    'UPDATE ai_executions SET quota_reservation_key = ?, input_diagnostics_json = ? WHERE id = ?',
+    [
+      execution.quotaHandle?.reservationKey || null,
+      execution.inputDiagnostics ? JSON.stringify(execution.inputDiagnostics) : null,
+      execution.id,
+    ],
+  );
   if (!affectedExactlyOne(result)) throw persistenceError('AI_EXECUTION_RESERVATION_NOT_PERSISTED');
 }
 
 export async function insertAiProviderSpan(span, database = pool) {
-  const [result] = await database.query(
-    `INSERT INTO ai_provider_spans
+  const insert = async (connection) => {
+    const [result] = await connection.query(
+      `INSERT INTO ai_provider_spans
       (id, execution_id, trace_id, stage, task_type, kind, billing_scope, sequence_no,
        provider, model, status, trigger_code, usage_status, estimated_tokens,
        prompt_tokens, completion_tokens, total_tokens, estimated_cost, duration_ms, error_code)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [
-      span.id,
-      span.executionId,
-      span.traceId,
-      span.stage,
-      span.taskType,
-      span.kind,
-      span.billingScope,
-      span.sequenceNo,
-      span.provider,
-      span.model,
-      span.status,
-      span.triggerCode,
-      span.usageStatus,
-      span.estimatedTokens,
-      span.usage.promptTokens,
-      span.usage.completionTokens,
-      span.usage.totalTokens,
-      span.estimatedCost,
-      span.durationMs,
-      span.errorCode,
-    ],
-  );
-  if (!affectedExactlyOne(result)) throw persistenceError('AI_PROVIDER_SPAN_NOT_PERSISTED');
+      [
+        span.id,
+        span.executionId,
+        span.traceId,
+        span.stage,
+        span.taskType,
+        span.kind,
+        span.billingScope,
+        span.sequenceNo,
+        span.provider,
+        span.model,
+        span.status,
+        span.triggerCode,
+        span.usageStatus,
+        span.estimatedTokens,
+        span.usage.promptTokens,
+        span.usage.completionTokens,
+        span.usage.totalTokens,
+        span.estimatedCost,
+        span.durationMs,
+        span.errorCode,
+      ],
+    );
+    if (!affectedExactlyOne(result)) throw persistenceError('AI_PROVIDER_SPAN_NOT_PERSISTED');
+    if (span.usage.totalTokens > 0)
+      await connection.query(
+        'UPDATE ai_level_gift_risk_usage SET provider_tokens=provider_tokens+? WHERE execution_id=?',
+        [span.usage.totalTokens, span.executionId],
+      );
+  };
+  // Span 唯一键和计数同事务，重放不能重复累计；此处不再依赖仍然存在的账号行。
+  if (span.usage.totalTokens > 0) await inTransaction(database, insert);
+  else await insert(database);
 }
 
 export async function settleAiExecution(execution, database = pool) {
