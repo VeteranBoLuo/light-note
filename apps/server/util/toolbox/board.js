@@ -9,12 +9,12 @@ const iso = (x) => (x ? new Date(x).toISOString() : null);
 async function createLinkedTodo(connection, userId, item, now) {
   if (item.lane !== 'action' || item.todoId)
     throw toolboxError('BOARD_TODO_ALREADY_BOUND', '此行动已有待办或不是行动卡', 409);
-  const { createTodo } = await import('../services/todoService.js');
-  const result = await createTodo(connection, userId, {
+  const { createSingleTodoPlan } = await import('../services/todoSingleTaskService.js');
+  const result = await createSingleTodoPlan(connection, userId, {
     title: item.title.slice(0, 200),
     description: item.content,
     dueAt: item.dueOn ? `${item.dueOn} 23:59:59` : null,
-  });
+  }, { idempotencyKey: `toolbox-todo:${item.id}` });
   Object.assign(item, {
     todoId: result.id,
     details: { ...item.details, todoTitle: item.title.slice(0, 200) },

@@ -7,7 +7,8 @@ import { prepareOwnedNotePlacement, deleteOwnedNoteSubtrees } from './noteTreeSe
 import { applyOwnedNoteContentChange } from './noteService.js';
 import { sanitizePersistedNoteContent } from '../noteHtmlSanitizer.js';
 import { extractOwnedResourceRefs, validateOwnedResourceRefs } from './noteReferenceService.js';
-import { createTodo, updateTodo } from './todoService.js';
+import { updateTodo } from './todoService.js';
+import { createSingleTodoPlan, upgradePlainTodoPlan } from './todoSingleTaskService.js';
 import { saveTodoList, writeTodoOrganization } from './todoOrganizationService.js';
 import { createOwnedCloudFolder, deleteEmptyOwnedCloudFolder } from './cloudFolderTreeService.js';
 import { registerAsset, syncNoteImageReferences } from '../imagePreview/references.js';
@@ -32,6 +33,9 @@ export const SNAPSHOT_TABLES = Object.freeze({
   resource_tag_relations: ['user_id', ['tag_id', 'resource_type', 'resource_id']],
   resource_inbox: ['user_id', ['id']],
   todo_reminders: ['user_id', ['id']],
+  todo_reminder_rules: ['user_id', ['id']],
+  todo_reminder_jobs: ['user_id', ['id']],
+  todo_plan_requests: ['user_id', ['id']],
   todo_lists: ['user_id', ['id']],
   todo_items: ['user_id', ['id']],
   todo_tag_relations: ['user_id', ['target_type', 'target_id', 'tag_id']],
@@ -75,7 +79,10 @@ export function planVisitorV2(snapshot) {
     })),
     todos: definitions.todos.map((item) => {
       const old = unique(snapshot.tables.todo_items, item.title);
-      const safe = old && !old.series_id && old.status === 'pending' && Number(old.plan_version || 1) === 1;
+      const hasReminder = old && ['todo_reminders', 'todo_reminder_rules', 'todo_reminder_jobs']
+        .some(table => snapshot.tables[table].some(row => String(row.todo_id) === String(old.id)));
+      const safe = old && !old.series_id && !old.recurrence_rule && !hasReminder &&
+        old.status === 'pending' && [1, 2].includes(Number(old.plan_version || 1));
       return { ...item, id: safe ? old.id : null, retainedId: old && !safe ? String(old.id) : null };
     }),
   };
@@ -252,13 +259,13 @@ export async function applyVisitorV2(connection, { snapshot, images, now = new D
   const rolling = [];
   for (const item of plan.todos) {
     const old = snapshot.tables.todo_items.find((r) => String(r.id) === String(item.id));
-    if (old && (old.series_id || old.status !== 'pending' || Number(old.plan_version || 1) !== 1))
+    if (old && (old.series_id || old.status !== 'pending' || ![1, 2].includes(Number(old.plan_version || 1))))
       throw exampleError('VISITOR_TODO_REUSE_UNSAFE');
     const entry = {
       key: item.key,
       type: 'todo',
       id: item.id,
-      offsets: { due_at: item.offset, start_at: null, completed_at: item.status === 'completed' ? item.offset : null },
+      offsets: { due_at: item.offset, start_at: null, completed_at: item.status === 'completed' ? item.offset : null, occurrence_date: item.offset },
     };
     const values = rollingValues(entry, date);
     const resourceRefs = item.note ? [{ type: 'note', id: noteMap.get(item.note) }] : [];
@@ -279,13 +286,19 @@ export async function applyVisitorV2(connection, { snapshot, images, now = new D
           ]
         : [],
     };
-    if (item.id) await updateTodo(connection, owner, item.id, todo);
-    else
-      item.id = (await createTodo(connection, owner, todo, { invalidateSearch: false, suppressUserRewards: true })).id;
+    if (item.id) {
+      await updateTodo(connection, owner, item.id, todo);
+      if (Number(old.plan_version || 1) === 1 && !(await upgradePlainTodoPlan(connection, owner, item.id, { now })))
+        throw exampleError('VISITOR_TODO_REUSE_UNSAFE');
+    } else {
+      item.id = (await createSingleTodoPlan(connection, owner, todo, {
+        idempotencyKey: `visitor-example:${item.key}`, invalidateSearch: false, suppressUserRewards: true, now,
+      })).id;
+    }
     entry.id = String(item.id);
     // Demo status is installation data, not an actual completion/reward event.
     await connection.query('UPDATE todo_items SET ?,status=? WHERE id=? AND user_id=?', [
-      values,
+      { ...values, checklist: JSON.stringify(todo.checklist) },
       item.status,
       item.id,
       owner,

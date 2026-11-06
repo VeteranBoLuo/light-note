@@ -55,6 +55,7 @@ const suites = {
   'util/services/userIpLocationService.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
   'util/collectionForms/service.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
   'util/services/cloudFileRestore.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
+  'util/services/initialTodoPlanUpgrade.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
   'util/dataExport/service.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
   'util/communityFeed/feed.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
   'util/services/toolboxPinnedToolsService.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',

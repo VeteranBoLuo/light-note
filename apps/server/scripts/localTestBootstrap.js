@@ -87,6 +87,14 @@ try {
     await seedNewUserCloudFile({ userId: account.id, folderId: seed.folderId, siteUrl: process.env.SITE_URL });
     console.log('[local-bootstrap] seeded role=%s', account.role);
   }
+  const todoPlanUpgrade = '20261106_initial_todo_plans_v2';
+  const [todoPlanUpgradeApplied] = await pool.query('SELECT name FROM local_test_migrations WHERE name=?', [todoPlanUpgrade]);
+  if (!todoPlanUpgradeApplied.length) {
+    const { upgradeInitialTodoPlans } = await import('../util/services/initialTodoPlanUpgradeService.js');
+    const result = await upgradeInitialTodoPlans(pool, { apply: true });
+    await pool.query('INSERT INTO local_test_migrations (name) VALUES (?)', [todoPlanUpgrade]);
+    console.log('[local-bootstrap] todo sample upgrade %s', JSON.stringify(result));
+  }
   console.log('[local-bootstrap] ready; credentials remain in .local-test/accounts.json');
 } catch (error) {
   console.error('[local-bootstrap] failed code=%s', error?.code || 'BOOTSTRAP_FAILED');

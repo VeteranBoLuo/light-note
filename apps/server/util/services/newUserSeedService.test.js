@@ -234,6 +234,8 @@ describe('newUserSeedService', () => {
     expect(todoInserts.map(([, [row]]) => row.title)).toEqual(['收藏第一个网页', '写下第一篇笔记', '上传第一份文件']);
     expect(todoInserts.map(([, [row]]) => row.priority)).toEqual([1, 2, 1]);
     expect(todoInserts.every(([, [row]]) => row.status === 'pending' && row.due_at == null)).toBe(true);
+    expect(todoInserts.every(([, [row]]) => row.plan_version === 2 && row.series_id == null && row.instance_timezone === 'Asia/Shanghai')).toBe(true);
+    expect(connection.query.mock.calls.some(([sql]) => sql.startsWith('INSERT INTO todo_reminders'))).toBe(false);
     const listInserts = connection.query.mock.calls.filter(([sql]) => sql.startsWith('INSERT INTO todo_lists'));
     expect(listInserts).toHaveLength(1);
     const [listId, owner, listName] = listInserts[0][1];

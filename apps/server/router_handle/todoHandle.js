@@ -245,7 +245,8 @@ export async function convertLegacyTodoV2(req, res) {
 }
 
 export async function updatePreviewTodoV2(req, res) {
-  if (!ensureNotVisitor(req, res)) return;
+  // 只读本人任务并计算预览；游客浏览示例和管理员只读上下文不能误用写入拦截器。
+  // 实际保存仍由 updateTodoV2 独立校验写权限。
   const todoId = String(req.body?.todoId || '').trim();
   if (!todoId) return res.send(resultData(null, 400, '缺少待办 ID'));
   try {

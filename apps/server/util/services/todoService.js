@@ -376,6 +376,7 @@ async function syncReminder(connection, { todoId, userId, reminder }) {
   }
 }
 
+/** @deprecated 仅承接历史客户端的 v1 写入；内部新入口使用 createSingleTodoPlan 或 createTodoPlan。 */
 export async function createTodo(
   connection,
   userId,

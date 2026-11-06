@@ -12,6 +12,7 @@ import {
   deleteToolboxWorkspace,
 } from './workspace.js';
 import { compileWorkshopBriefFacts } from '../services/dailyBriefWorkshop.js';
+import { installTodoTestSchema } from '../../test-utils/todoSchema.js';
 
 const socketPath = process.env.LIGHTNOTE_TEST_MYSQL_SOCKET;
 describe.skipIf(!socketPath)('项目证据、结论与行动 · 真实 MySQL', () => {
@@ -36,8 +37,7 @@ describe.skipIf(!socketPath)('项目证据、结论与行动 · 真实 MySQL', (
     created = true;
     await admin.query(`USE ${schema}`);
     await admin.query('CREATE TABLE user (id VARCHAR(255) CHARACTER SET utf8 COLLATE utf8_general_ci PRIMARY KEY)');
-    await migration('20260715_todo_action_center.sql');
-    await admin.query('ALTER TABLE todo_items ADD occurrence_date DATE DEFAULT NULL');
+    await installTodoTestSchema(admin);
     await migration('20260829_toolbox_workspaces.sql');
     await migration('20260908_toolbox_board.sql');
     await migration('20261010_workspace_item_details.sql');
@@ -64,6 +64,11 @@ describe.skipIf(!socketPath)('项目证据、结论与行动 · 真实 MySQL', (
       'toolbox_workspace_sessions',
       'toolbox_workspaces',
       'todo_reminders',
+      'todo_plan_requests',
+      'todo_reminder_jobs',
+      'todo_reminder_rules',
+      'todo_resource_refs',
+      'todo_tag_relations',
       'todo_items',
       'note',
       'bookmark',
@@ -241,6 +246,8 @@ describe.skipIf(!socketPath)('项目证据、结论与行动 · 真实 MySQL', (
     const first = await run(command, 0, requestId);
     const todoId = first.workspace.items.find((item) => item.id === 'action').todoId;
     expect(todoId).toBeTruthy();
+    expect((await admin.query('SELECT plan_version,instance_timezone FROM todo_items WHERE id=?', [todoId]))[0][0])
+      .toMatchObject({ plan_version: 2, instance_timezone: 'Asia/Shanghai' });
     const replay = await run(command, 0, requestId);
     expect(replay.workspace.items.find((item) => item.id === 'action').todoId).toBe(todoId);
     expect((await admin.query('SELECT COUNT(*) AS n FROM todo_items'))[0][0].n).toBe(3);
