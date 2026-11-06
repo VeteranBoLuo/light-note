@@ -82,6 +82,21 @@ try {
     const module = await import(`../util/${file}`);
     await module[name]();
   }
+  // C8 积分获取要求先固化既有成就的奖励快照（线上在维护窗口显式执行）。本机缺标记时补做一次：
+  // 准备函数要求「C8 尚未配置」，因此在本进程内临时移除 C8 开关后执行，结束后恢复。
+  const { POINTS_EARNING_C8_SNAPSHOT_MARKER } = await import('../util/pointsEarningPolicy.js');
+  const c8Keys = ['POINTS_EARNING_C8_ENABLED', 'POINTS_EARNING_C8_EFFECTIVE_DAY', 'POINTS_EARNING_C8_EFFECTIVE_WEEK'];
+  const [c8Snapshot] = await pool.query('SELECT 1 FROM points_economy_migration_state WHERE migration_key=? LIMIT 1', [POINTS_EARNING_C8_SNAPSHOT_MARKER]);
+  if (!c8Snapshot.length && c8Keys.some(key => process.env[key])) {
+    const saved = Object.fromEntries(c8Keys.map(key => [key, process.env[key]]));
+    for (const key of c8Keys) delete process.env[key];
+    try {
+      const { preparePointsEarningC8 } = await import('../util/pointsEarningC8Preparation.js');
+      console.log('[local-bootstrap] points C8 snapshot %s', JSON.stringify(await preparePointsEarningC8({ apply: true })));
+    } finally {
+      for (const [key, value] of Object.entries(saved)) if (value !== undefined) process.env[key] = value;
+    }
+  }
   await (await import('../util/services/knowledgeManorSchema.js')).migrateKnowledgeManorSchema(pool);
   await (await import('../util/services/knowledgeManorAdminSchema.js')).migrateKnowledgeManorAdminSchema(pool);
   await (await import('../util/huaweiPushDeliverySchema.js')).ensureHuaweiPushDeliverySchema(pool);
