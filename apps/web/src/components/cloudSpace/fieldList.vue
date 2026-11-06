@@ -485,19 +485,12 @@
             </div>
             <div class="file-tags-cell">
               <span v-if="!item.tags?.length" class="file-tags-empty">-</span>
-              <div v-else class="file-tags-list">
-                <ResourceTagChip
-                  v-for="tag in item.tags"
-                  :data-range-select="batchMode ? '' : undefined"
-                  :key="tag.id"
-                  :tag="tag"
-                  size="medium"
-                  interactive
-                  max-width="var(--ui-layout-90, 90px)"
-                  @click.stop="onFileTagClick(item, tag.id, $event)"
-                  v-click-log="{ module: '云空间', operation: `点击文件关联标签【${tag.name}】` }"
-                />
-              </div>
+              <CloudFileTags
+                v-else
+                :tags="item.tags"
+                :batch-mode="batchMode"
+                @select="(tagId, event) => onFileTagClick(item, tagId, event)"
+              />
             </div>
             <div>{{
               item.fileSize >= 1024 * 1024
@@ -960,7 +953,7 @@
   import type { CloudFolderNode } from '@/types/cloudFolder';
   import { resolveFileAiSummaryPresentation } from '@/utils/fileAiSummary';
   import CloudTextCardPreview from '@/components/cloudSpace/CloudTextCardPreview.vue';
-  import ResourceTagChip from '@/components/tag/ResourceTagChip.vue';
+  import CloudFileTags from '@/components/cloudSpace/CloudFileTags.vue';
   import ResourceBatchActionsDrawer from '@/components/resourceActions/ResourceBatchActionsDrawer.vue';
   import MobilePageActionsDrawer, { type MobilePageActionItem } from '@/components/mobile/MobilePageActionsDrawer.vue';
   import ResourceBatchActionBar from '@/components/resourceActions/ResourceBatchActionBar.vue';
@@ -2864,7 +2857,7 @@
   .default-area {
     display: grid;
     grid-template-columns:
-      minmax(var(--ui-layout-86, 86px), 0.7fr) minmax(var(--ui-layout-130, 130px), 1.15fr) minmax(
+      minmax(var(--ui-layout-130, 130px), 1.15fr) minmax(var(--ui-layout-86, 86px), 0.7fr) minmax(
         var(--ui-layout-74, 74px),
         0.55fr
       )
@@ -3046,14 +3039,6 @@
   }
   .file-tags-cell {
     min-width: 0;
-  }
-
-  .file-tags-list {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--ui-space-6, 6px);
-    max-height: var(--ui-layout-40, 40px);
-    overflow: hidden;
   }
 
   .file-tags-empty {
