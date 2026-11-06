@@ -99,11 +99,7 @@ function normalizeInboxListOptions(input = {}) {
   const offset = paginated ? decodeOffsetCursor(input.cursor, INBOX_PAGE_CURSOR_SCOPE) : 0;
   const view = input.view === 'summary' ? 'summary' : 'full';
   const includeTotal = input.includeTotal !== false;
-  // 只取最近若干天收集的条目，供「今日待处理」这类只关心新收资料的读模型使用。
-  const collectedWithinDays = input.collectedWithinDays == null ? null : Number(input.collectedWithinDays);
-  const validWindow = Number.isInteger(collectedWithinDays) && collectedWithinDays > 0 && collectedWithinDays <= 365;
-  if (collectedWithinDays !== null && !validWindow) throw inboxListError();
-  return { type, sort, keyword, paginated, limit, offset, view, includeTotal, collectedWithinDays };
+  return { type, sort, keyword, paginated, limit, offset, view, includeTotal };
 }
 
 /**
@@ -123,17 +119,12 @@ export async function listInboxResources(db, { userId, ...input } = {}) {
     };
     return includeCounts ? { ...empty, pendingTotal: 0, typeTotals: { bookmark: 0, note: 0, file: 0 } } : empty;
   }
-  const { type, sort, keyword, paginated, limit, offset, view, includeTotal, collectedWithinDays } =
-    normalizeInboxListOptions(input);
+  const { type, sort, keyword, paginated, limit, offset, view, includeTotal } = normalizeInboxListOptions(input);
   const where = [`i.user_id = ?`, `i.status = 'pending'`];
   const params = [ownerId];
   if (input.excludeOnboardingSeeds === true) {
     where.push(`NOT EXISTS(SELECT 1 FROM onboarding_seed_resources seed
       WHERE seed.user_id=i.user_id AND seed.resource_type=i.resource_type AND seed.resource_id=i.resource_id)`);
-  }
-  if (collectedWithinDays) {
-    where.push('i.create_time >= DATE_SUB(NOW(), INTERVAL ? DAY)');
-    params.push(collectedWithinDays);
   }
   if (type !== 'all') {
     where.push('i.resource_type = ?');

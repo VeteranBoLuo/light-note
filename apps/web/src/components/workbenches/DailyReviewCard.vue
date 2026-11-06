@@ -458,8 +458,7 @@
   });
   const showCard = computed(() => {
     if (isVisitor.value || user.preferences?.dailyReviewEnabled === false) return false;
-    // 正常空清单在桌面与移动入口都不占位；刷新失败等需要反馈的状态仍照常显示。
-    if (!displayAll.value && isEmpty.value && !error.value && !actionError.value) return false;
+    if (inline.value && isEmpty.value && !error.value && !actionError.value) return false;
     if ((loading.value && !review.value) || (error.value && !review.value)) return true;
     const status = review.value?.session?.status;
     return status === 'active' || status === 'empty' || status === 'completed' || status === 'skipped';

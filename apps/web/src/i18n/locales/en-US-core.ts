@@ -4742,6 +4742,7 @@ export default {
       continueWorking: 'Continue Working',
       continueHint: 'Resume your recent and frequently used content',
       quickCreate: 'Quick Create',
+      quickCreateHint: 'Capture first, then organize everything in one place',
       popularTags: 'Popular Tags',
       popularTagsHint: 'Jump into topics with the most connected content',
       latestUpdate: 'Latest Update',
@@ -4780,7 +4781,7 @@ export default {
       // notifications appear as a tile below but are not counted as action items
       actionTotalUnit: 'todos / organizing items',
       todoPending: 'Unfinished Todos',
-      todoPendingTodayHint: 'All open · {count} today',
+      todoPendingHint: 'All todos that still need action',
       unreadNotification: 'Unread Notifications',
       unreadNotificationHint: 'Messages not viewed yet',
       inboxPending: 'Resource organization',
@@ -4806,7 +4807,7 @@ export default {
       inboxCompleted: 'Marked as organized',
       actionFailed: 'Action failed. Please try again later.',
       allDoneTitle: 'All caught up for today',
-      allDoneDesc: "Today's list is clear. Time to capture or create something new.",
+      allDoneDesc: 'Todos and inbox are clear. Time to capture or create something new.',
     },
     mobileToday: {
       greetingMorning: 'Good morning',
