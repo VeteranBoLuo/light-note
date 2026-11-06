@@ -78,6 +78,8 @@ function mountPromptPanel(overrides: Record<string, unknown> = {}) {
       locale: 'zh-CN',
       messages: {
         'zh-CN': {
+          personCenter: { aiQuotaLoginRequired: '登录后使用' },
+          aiQuotaOneTime: { loginRequired: '登录后即可使用 AI，并领取符合条件的注册赠礼。' },
           aiQuotaErrors: {
             exhaustedTitle: 'AI 额度已用完',
             exhaustedMessage: '额度已经用完',
@@ -132,6 +134,19 @@ beforeEach(() => {
 });
 
 describe('AiSkillPanel 自动执行预设动作', () => {
+  it('新模式游客没有试用额度时直接触发登录引导，不显示兑换和等待刷新', async () => {
+    executeAiSkill.mockRejectedValueOnce(Object.assign(new Error('quota'), { code: 'AI_QUOTA_EXCEEDED', billingMode: 'permanent_only' }));
+    const guided = vi.fn();
+    window.addEventListener('light-note:preview-blocked', guided);
+    try {
+      const host = mountPromptPanel({ actions: [{ id: 'run', label: '提问', input: {} }], autoRunActionId: 'run' });
+      await flushExecution();
+      expect(host.textContent).toContain('登录后即可使用 AI');
+      expect(host.textContent).not.toContain('等待');
+      expect(guided).toHaveBeenCalledOnce();
+    } finally { window.removeEventListener('light-note:preview-blocked', guided); }
+  });
+
   it('结果操作点击只记录点击，不能提前宣称保存或采用成功', async () => {
     const response = completedResponse('help.answer');
     response.availableActions = [{ id: 'save', label: '保存为笔记' }];

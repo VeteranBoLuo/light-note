@@ -1,3 +1,4 @@
+import { localTestPorts } from '../../../server/util/localTestPorts.js';
 import type { ClientRequest, IncomingMessage } from 'node:http';
 import type { ProxyOptions } from 'vite';
 
@@ -37,7 +38,7 @@ export function assertLocalViteBackend(viteEnv: unknown) {
 }
 
 export function createLocalBackendProxy({ isolated = process.env.LIGHTNOTE_LOCAL_TEST === '1' } = {}): Record<string, ProxyOptions> {
-  const backendTarget = isolated ? 'http://127.0.0.1:19001' : LOCAL_VITE_BACKEND_TARGET;
+  const backendTarget = isolated ? `http://127.0.0.1:${localTestPorts().api}` : LOCAL_VITE_BACKEND_TARGET;
   return {
     '^/api(?:/|$)': {
       target: backendTarget,

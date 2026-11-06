@@ -4,13 +4,13 @@ async function readGroups(database, where, params, pageSize, offset) {
   const [rows, count] = await Promise.all([
     database.query(
       `SELECT g.*, r.status AS run_status FROM (
-      SELECT MIN(id) AS id, organize_run_id, MIN(skill_id) AS skill_id, MIN(task_type) AS task_type,
+      SELECT MIN(id) AS id, organize_run_id, MIN(skill_id) AS skill_id, MIN(task_type) AS task_type, MIN(billing_policy) AS billing_policy,
         COUNT(*) AS execution_count, COUNT(DISTINCT organize_item_id) AS resource_count,
         CASE WHEN organize_run_id IS NULL THEN MAX(status) WHEN SUM(status='running')>0 THEN 'running'
           WHEN SUM(status<>'success')>0 THEN IF(SUM(status='success')>0,'partial','failed') ELSE 'success' END AS status,
         1 AS model_called, SUM(provider_call_count) AS provider_call_count,
-        SUM(provider_tokens) AS provider_tokens, SUM(charged_tokens) AS charged_tokens,
-        SUM(GREATEST(0,provider_tokens-charged_tokens)) AS platform_covered_tokens,
+        SUM(provider_tokens) AS provider_tokens, SUM(CASE WHEN billing_policy='user' THEN charged_tokens ELSE 0 END) AS charged_tokens,
+        SUM(GREATEST(0,provider_tokens-(CASE WHEN billing_policy='user' THEN charged_tokens ELSE 0 END))) AS platform_covered_tokens,
         MIN(usage_complete) AS usage_complete,
         IF(organize_run_id IS NULL,MAX(quota_settlement_status),IF(SUM(quota_settlement_status='deferred')>0,'deferred','reconciled')) AS quota_settlement_status,
         SUM(duration_ms) AS duration_ms, MAX(created_at) AS created_at
@@ -55,7 +55,7 @@ export async function readGroupedUsage(database, where, params, pageSize, offset
     if (!['ER_BAD_FIELD_ERROR', 'ER_NO_SUCH_TABLE'].includes(error.code)) throw error;
     const [rows, count] = await Promise.all([
       database.query(
-        `SELECT id, skill_id, task_type, status, model_called, provider_call_count,
+        `SELECT id, skill_id, task_type, billing_policy, status, model_called, provider_call_count,
         provider_tokens, charged_tokens, usage_complete, quota_settlement_status, duration_ms, created_at
         FROM ai_executions WHERE ${where} ORDER BY created_at DESC,id DESC LIMIT ? OFFSET ?`,
         [...params, pageSize, offset],

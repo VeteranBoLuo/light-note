@@ -2,6 +2,20 @@ import { describe, expect, it, vi } from 'vitest';
 import helpAnswer from './helpAnswer.js';
 
 describe('help.answer', () => {
+  it('无刷新模式使用419万赠礼和平台简报规则，剔除等待每日刷新的旧说明', async () => {
+    vi.stubEnv('AI_DAILY_QUOTA_MODE', 'off');
+    vi.stubEnv('AI_LEVEL_GIFT_MODE', 'on');
+    try {
+      const prepared = await helpAnswer.prepare({ input: { question: '15级的 AI 额度还每天刷新吗？' },
+        dependencies: { retrieveHelp: vi.fn().mockResolvedValue([{ id: 'old', title: '旧额度', content: '每日 AI 额度会刷新，用完等待每日重置。' }]) } });
+      expect(prepared.sources).toHaveLength(1);
+      expect(prepared.sources[0].excerpt).toContain('累计赠礼 419 万 tokens');
+      expect(prepared.sources[0].excerpt).toContain('Root、test、游客、系统账号不自动领赠礼');
+      expect(prepared.sources[0].excerpt).toContain('用户扣量为 0');
+      expect(JSON.stringify(prepared.messages)).not.toContain('等待每日重置');
+    } finally { vi.unstubAllEnvs(); }
+  });
+
   it('强制只检索公开帮助资料', async () => {
     const retrieveHelp = vi.fn().mockResolvedValue([{ id: 'h-1', title: '帮助', content: '公开说明' }]);
     const prepared = await helpAnswer.prepare({

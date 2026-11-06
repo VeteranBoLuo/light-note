@@ -77,7 +77,12 @@ describe('executeAiSkill', () => {
       url: 'https://example.com/watch?id=42',
       urlRedacted: true,
       pageContextProvided: false,
+      reservationBudget: expect.objectContaining({
+        inputTokens: expect.any(Number),
+        totalTokens: expect.any(Number),
+      }),
     });
+    expect(JSON.stringify(persistence.insertAiExecution.mock.calls[0][0].inputDiagnostics)).not.toContain('private');
     expect(persistence.settleAiExecution.mock.calls[0][0]).toMatchObject({
       status: 'failed',
       errorCode: code,

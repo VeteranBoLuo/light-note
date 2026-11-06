@@ -2,6 +2,30 @@ import { describe, expect, it } from 'vitest';
 import { buildAiInputDiagnostics, diagnosticUrl, readAiInputDiagnostics } from './diagnostics.js';
 
 describe('AI administrator input diagnostics', () => {
+  it('retains only bounded numeric reservation components without copying arbitrary diagnostics', () => {
+    const reservationBudget = {
+      inputTokens: 1200,
+      evidenceTokens: 8000,
+      protocolTokens: 8000,
+      outputTokens: 8192,
+      visionTokens: 0,
+      totalTokens: 25392,
+      unclampedTokens: 25392,
+    };
+    const result = buildAiInputDiagnostics(
+      { skillId: 'note.transform_text', input: { operation: 'polish', text: 'private body' } },
+      { reservationBudget: { ...reservationBudget, text: 'private body' } },
+    );
+    expect(result).toEqual({ version: 1, operation: 'polish', reservationBudget });
+    expect(readAiInputDiagnostics(result, 'note.transform_text')).toEqual(result);
+    expect(JSON.stringify(result)).not.toContain('private');
+    expect(
+      buildAiInputDiagnostics(
+        { skillId: 'help.answer' },
+        { reservationBudget: { ...reservationBudget, inputTokens: -1 } },
+      ),
+    ).toBeNull();
+  });
   it('retains URL routing parameters but removes credentials, arbitrary query values and fragments', () => {
     expect(diagnosticUrl('https://alice:secret@example.com/watch?v=abc_123&token=secret&q=private#session')).toEqual({
       url: 'https://example.com/watch?v=abc_123',

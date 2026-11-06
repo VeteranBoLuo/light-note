@@ -1,5 +1,6 @@
 import { stableAgentErrorCode } from '../agent/logSafety.js';
 import { AI_QUOTA_ERROR_CODES } from '@lightnote/shared/ai-quota-protocol';
+import { aiQuotaMode } from '../aiQuotaPolicy.js';
 
 const PUBLIC_AI_EXECUTION_ERRORS = Object.freeze({
   [AI_QUOTA_ERROR_CODES.EXHAUSTED]: {
@@ -96,11 +97,14 @@ export function resolvePublicAiExecutionError(error, fallbackMessage = 'AI 能�
     const message =
       code === AI_QUOTA_ERROR_CODES.INSUFFICIENT_FOR_REQUEST && requiredTokens > 0
         ? `本次任务预计最多需要约 ${requiredTokens.toLocaleString('zh-CN')} tokens，当前可用约 ${availableTokens.toLocaleString('zh-CN')}。请减少处理内容、分段执行或补充额度后重试。`
-        : known.message;
+        : code === AI_QUOTA_ERROR_CODES.EXHAUSTED && aiQuotaMode() === 'permanent_only'
+          ? '当前 AI 额度已用完。可通过升级、积分兑换或购买补充额度后继续使用。'
+          : known.message;
     return Object.freeze({
       code,
       ...known,
       message,
+      ...(code.startsWith('AI_QUOTA_') ? { billingMode: aiQuotaMode() } : {}),
       ...(requiredTokens > 0 ? { requiredTokens, availableTokens } : {}),
     });
   }
@@ -119,6 +123,7 @@ export function publicAiExecutionErrorData(failure, extra = {}) {
   return {
     ...extra,
     code: failure.code,
+    ...(failure.billingMode ? { billingMode: failure.billingMode } : {}),
     ...(Number.isFinite(failure.requiredTokens) ? { requiredTokens: failure.requiredTokens } : {}),
     ...(Number.isFinite(failure.availableTokens) ? { availableTokens: failure.availableTokens } : {}),
   };

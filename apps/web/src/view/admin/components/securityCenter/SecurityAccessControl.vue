@@ -5,6 +5,13 @@
       <BButton type="primary" @click="openCreate('accounts')">{{ t('securityV2.access.newPolicy') }}</BButton>
     </header>
 
+    <section v-if="giftControl" class="security-panel">
+      <div class="security-panel-head">
+        <div><h3>AI 等级赠礼</h3><span>{{ !giftControl.enabled ? '赠礼开关关闭' : giftControl.pausedFrom ? '后续新号赠礼已暂停' : '后续新号赠礼正常' }} · 批次暂扣在下方账号限制中单独复核</span></div>
+        <BButton :loading="saving" @click="giftConfirm = true">{{ giftControl.pausedFrom ? '复核后恢复' : '暂停新号赠礼' }}</BButton>
+      </div>
+      <p v-if="giftControl.reason">{{ giftControl.reason }}</p>
+    </section>
     <BLoading :loading="loading">
       <div class="security-control-columns">
         <section class="security-panel">
@@ -12,6 +19,7 @@
             <div><h3>{{ t('securityV2.access.activeAccounts') }}</h3><span>{{ t('securityV2.access.accountsHint') }}</span></div>
             <BButton @click="showHistory = !showHistory">{{ t('securityV2.access.history') }}</BButton>
           </div>
+          <BSelect v-model:value="restrictionFilter" :options="restrictionFilterOptions" aria-label="筛选账号限制" />
           <div v-for="item in visibleRestrictions" :key="item.id" class="security-control-row">
             <div class="security-control-main"><strong>{{ item.email || item.alias || item.userId }}</strong><small>{{ restrictionLabel(item.restrictionType) }} · {{ expiryLabel(item.expiresAt) }} · {{ item.reason }}</small></div>
             <div class="security-control-actions"><BButton size="small" @click="showDetail(item)">{{ t('securityV2.common.detail') }}</BButton><BButton v-if="item.status === 'active'" size="small" @click="revokeRestriction(item)">{{ t('securityV2.common.revoke') }}</BButton></div>
@@ -49,6 +57,7 @@
       </section>
     </BLoading>
 
+    <AdminRiskActionModal v-model:visible="giftConfirm" title="调整 AI 赠礼" :impact="giftControl?.pausedFrom ? '恢复后重新开始全站观察，已有批次暂扣仍须逐项复核；可用补发脚本扫漏。' : '只暂停后续新号未发出的赠礼，已到账额度保留。'" confirm-phrase="确认调整赠礼" :loading="saving" @confirm="setGiftControl" />
     <BModal v-model:visible="modalOpen" :title="modalTitle" width="var(--ui-layout-620, 620px)" modal-class="security-policy-modal" @ok="submitPolicy">
       <div v-if="createType === 'accounts'" class="security-modal-form">
         <label><span>{{ t('securityV2.access.userId') }}</span><BInput v-model:value="accountDraft.userId" /></label>
@@ -85,6 +94,7 @@
   import { computed, onMounted, reactive, ref } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useRoute } from 'vue-router';
+  import AdminRiskActionModal from '@/components/admin/AdminRiskActionModal.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BCheckbox from '@/components/base/BasicComponents/BCheckbox.vue';
   import BDateTimePicker from '@/components/base/BasicComponents/BDateTimePicker.vue';
@@ -103,6 +113,9 @@
   const loading = ref(false);
   const saving = ref(false);
   const showHistory = ref(false);
+  const restrictionFilter = ref('all');
+  const giftControl = ref<any>(null);
+  const giftConfirm = ref(false);
   const createType = ref<Section>('accounts');
   const modalOpen = ref(false);
   const restrictions = ref<any[]>([]);
@@ -114,13 +127,15 @@
   const restrictionOptions = computed(() => [
     { value: 'write_lock', label: t('securityV2.access.writeLock') }, { value: 'login_lock', label: t('securityV2.access.loginLock') },
     { value: 'upload_lock', label: t('securityV2.access.uploadLock') }, { value: 'ai_lock', label: t('securityV2.access.aiLock') },
+    { value: 'gift_hold', label: 'AI 赠礼暂扣（仅未发赠礼）' },
     { value: 'full_lock', label: t('securityV2.access.fullLock') },
   ]);
   const subjectOptions = computed(() => [{ value: 'user', label: t('securityV2.access.user') }, { value: 'ip', label: t('securityV2.access.ip') }]);
   const effectOptions = computed(() => [{ value: 'observe_only', label: t('securityV2.access.observeOnly') }, { value: 'skip_rule', label: t('securityV2.access.skipRule') }, { value: 'score_adjust', label: t('securityV2.access.scoreAdjust') }]);
   const methodOptions = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'].map((value) => ({ value, label: value }));
   const modalTitle = computed(() => createType.value === 'accounts' ? t('securityV2.access.accountDialog') : createType.value === 'exceptions' ? t('securityV2.access.exceptionDialog') : t('securityV2.access.sourceDialog'));
-  const visibleRestrictions = computed(() => showHistory.value ? restrictions.value : restrictions.value.filter((item) => item.status === 'active'));
+  const visibleRestrictions = computed(() => restrictions.value.filter(item => (showHistory.value || item.status === 'active') && (restrictionFilter.value === 'all' || item.restrictionType === restrictionFilter.value)));
+  const restrictionFilterOptions = computed(() => [{ value: 'all', label: '全部限制' }, ...restrictionOptions.value]);
 
   function openCreate(type: Section) { createType.value = type; if (type === 'accounts' && route.query.userId) accountDraft.userId = String(route.query.userId); modalOpen.value = true; }
   function restrictionLabel(type: string) { return restrictionOptions.value.find((item) => item.value === type)?.label || type; }
@@ -129,12 +144,22 @@
   function showDetail(item: any) { Alert.alert({ title: t('securityV2.common.detail'), content: `${item.reason || '-'} · ${expiryLabel(item.expiresAt)}`, okText: t('securityV2.common.close'), cancelText: t('securityV2.common.close'), onOk: () => {} }); }
   async function loadAll() {
     loading.value = true;
-    const [restrictionRes, exceptionRes, sourceRes] = await Promise.all([
+    const [restrictionRes, exceptionRes, sourceRes, giftRes] = await Promise.all([
       apiBasePost('/api/security/v2/restrictions/list', {}, { silent: true }).catch(() => null), apiBasePost('/api/security/v2/exceptions/list', {}, { silent: true }).catch(() => null), apiBasePost('/api/security/v2/source-denies/list', {}, { silent: true }).catch(() => null),
+      apiBasePost('/api/security/v2/ai-gifts/status', {}, { silent: true }).catch(() => null),
     ]).finally(() => { loading.value = false; });
     if (restrictionRes?.status === 200) restrictions.value = restrictionRes.data?.items || [];
     if (exceptionRes?.status === 200) exceptions.value = exceptionRes.data?.items || [];
+    if (giftRes?.status === 200) giftControl.value = giftRes.data;
     if (sourceRes?.status === 200) sourceDenies.value = sourceRes.data?.items || [];
+  }
+  async function setGiftControl(action: { reason: string; confirmed: true; confirmText: string }) {
+    if (saving.value || !giftControl.value) return;
+    saving.value = true;
+    try {
+      const result = await apiBasePost('/api/security/v2/ai-gifts/control', { ...action, paused: !giftControl.value.pausedFrom });
+      if (result?.status === 200) { giftConfirm.value = false; message.success(result.msg); await loadAll(); }
+    } finally { saving.value = false; }
   }
   async function submitPolicy() {
     saving.value = true;

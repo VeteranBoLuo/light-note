@@ -6,6 +6,7 @@ import { queueNotificationChange, queueNotificationSourceChange } from './notifi
 import { deriveScrypt } from './asyncScrypt.js';
 import { acquireAccountAiLifecycleConnection } from './accountAiLifecycleLock.js';
 import pool from '../db/index.js';
+import { preserveAiGiftRiskOnDeletion } from './aiLevelGiftRiskFacts.js';
 import redisClient from './redisClient.js';
 import { sendTrackedEmail } from './emailDelivery.js';
 import { stableAgentErrorCode } from './agent/logSafety.js';
@@ -450,6 +451,7 @@ export async function requestAccountDeletion({ userId, code, confirmation }) {
       );
     }
 
+    await preserveAiGiftRiskOnDeletion(connection, tables, userId);
     const [updateResult] = await connection.query(
       `UPDATE user
           SET alias = '已注销用户',

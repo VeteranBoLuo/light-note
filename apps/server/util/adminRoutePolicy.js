@@ -739,6 +739,8 @@ declare(ADMIN_POLICIES.ADMIN_ONLY, 'admin', [
   ['POST', '/security/v2/exceptions/list'],
   ['POST', '/security/v2/exceptions/save'],
   ['POST', '/security/v2/exceptions/disable'],
+  ['POST', '/security/v2/ai-gifts/status'],
+  ['POST', '/security/v2/ai-gifts/control'],
   ['POST', '/security/v2/restrictions/list'],
   ['POST', '/security/v2/restrictions/apply'],
   ['POST', '/security/v2/restrictions/revoke'],

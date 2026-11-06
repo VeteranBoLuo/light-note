@@ -417,6 +417,14 @@
       streamContent.value = '';
       if (recoverableThreadErrorCodes.has(String(cause?.code || ''))) threads.delete(threadKey);
       const quotaFailure = getAiQuotaErrorPresentation(cause, (key, params) => t(key, params));
+      if (quotaFailure?.billingMode === 'permanent_only' && (!user.id || user.role === 'visitor' || user.id === 'visitor')) {
+        const failure = { code: quotaFailure.code, title: t('personCenter.aiQuotaLoginRequired'), message: t('aiQuotaOneTime.loginRequired'), retryable: false };
+        quotaBlocked.value = false;
+        error.value = failure;
+        window.dispatchEvent(new CustomEvent('light-note:preview-blocked', { detail: { msg: failure.message } }));
+        emit('error', failure);
+        return null;
+      }
       quotaBlocked.value = Boolean(quotaFailure);
       if (quotaFailure) {
         const journey = saveEntitlementJourney({

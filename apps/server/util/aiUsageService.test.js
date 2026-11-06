@@ -92,7 +92,7 @@ describe('aiUsageService', () => {
     const result = await getUserAiUsage('payer-user', { days: 7, page: 1, pageSize: 20 }, database);
 
     expect(database.query).toHaveBeenCalledTimes(4);
-    expect(database.query.mock.calls[0][1]).toEqual(['payer-user', 7, 20, 0]);
+    expect(database.query.mock.calls[0][1]).toEqual(['payer-user', 'payer-user', 7, 20, 0]);
     expect(result.summary).toEqual({
       chargedTokens: 900,
       providerTokens: 1200,
@@ -223,7 +223,7 @@ describe('aiUsageService', () => {
 
     const result = await getUserAiUsageDetail('payer-user', '7bc4f1a8-0d1e-4c60-a9d3-1974332a7c4d', database);
 
-    expect(database.query.mock.calls[0][1]).toEqual(['7bc4f1a8-0d1e-4c60-a9d3-1974332a7c4d', 'payer-user']);
+    expect(database.query.mock.calls[0][1]).toEqual(['7bc4f1a8-0d1e-4c60-a9d3-1974332a7c4d', 'payer-user', 'payer-user']);
     expect(result.calls).toEqual([
       expect.objectContaining({ sequenceNo: 1, stageType: 'image_recognition', billingScope: 'user' }),
       expect.objectContaining({

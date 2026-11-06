@@ -33,6 +33,7 @@ describe('resolvePublicAiExecutionError', () => {
       code,
       status,
       message,
+      ...(code.startsWith('AI_QUOTA_') ? { billingMode: 'daily_and_permanent' } : {}),
     });
   });
 
@@ -51,6 +52,7 @@ describe('resolvePublicAiExecutionError', () => {
       message: '本次任务预计最多需要约 26,903 tokens，当前可用约 21,700。请减少处理内容、分段执行或补充额度后重试。',
       requiredTokens: 26_903,
       availableTokens: 21_700,
+      billingMode: 'daily_and_permanent',
     });
   });
 

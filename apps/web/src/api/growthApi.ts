@@ -42,6 +42,7 @@ export const adminAdjustGrowth = (payload: {
   expDelta?: number;
   setLevel?: number | null;
   cardDelta?: number;
+  aiCreditTokens?: number;
   reason: string;
   confirmed: true;
   confirmText: string;

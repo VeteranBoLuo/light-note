@@ -47,7 +47,7 @@ describe('安全中心 V2 发布门禁', () => {
     const appSource = await readProjectFile('apps/server/app.js');
     const migrationIndex = appSource.indexOf('await ensureSecurityTables();');
     const exitIndex = appSource.indexOf('process.exit(1);', migrationIndex);
-    const listenIndex = appSource.indexOf('app.listen(9001');
+    const listenIndex = appSource.indexOf('app.listen(');
 
     expect(migrationIndex).toBeGreaterThanOrEqual(0);
     expect(exitIndex).toBeGreaterThan(migrationIndex);

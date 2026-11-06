@@ -1,3 +1,4 @@
+import { localTestPorts } from './util/localTestPorts.js';
 import { startSignupSourceSurveyScheduler } from './util/services/signupSourceSurveyService.js';
 import { startPublicResourceReviewScheduler } from './util/publicResources/reviewWorker.js';
 import { startPublicResourceEventScheduler } from './util/publicResources/notifications.js';
@@ -65,6 +66,7 @@ import { ensureAfdianSupportPackageSchema } from './util/afdianSupportPackageSch
 import { startAfdianReconciliationScheduler } from './util/afdianSupportService.js';
 import { startSeoPushScheduler } from './util/services/seoPushService.js';
 import { ensureAiBonusWalletSchema } from './util/aiBonusWalletSchema.js';
+import { ensureAiLevelGiftSchema } from './util/aiLevelGiftSchema.js';
 import { ensureToolboxSchema } from './util/toolboxSchema.js';
 import { ensureDailyBriefSchema } from './util/dailyBriefSchema.js';
 import { knowledgeManorSchemaReady } from './util/services/knowledgeManorSchema.js';
@@ -112,7 +114,11 @@ const allRouter = [
   ...baseRouter,
   {
     path: '/files',
-    router: express.static(process.env.LIGHTNOTE_LOCAL_TEST === '1' ? path.join(process.env.LIGHTNOTE_LOCAL_TEST_DIR, 'files') : '/www/wwwroot/files'),
+    router: express.static(
+      process.env.LIGHTNOTE_LOCAL_TEST === '1'
+        ? path.join(process.env.LIGHTNOTE_LOCAL_TEST_DIR, 'files')
+        : '/www/wwwroot/files',
+    ),
   },
 ];
 allRouter.forEach((item) => {
@@ -141,10 +147,14 @@ await initLogExclude().catch((err) => console.error('内部设备过滤初始化
 try {
   await ensurePointsSchema();
   await ensureAiBonusWalletSchema();
+  await ensureAiLevelGiftSchema();
   await assertPointsEconomyActivationReady();
   await ensureGrowthTaskSchema();
   await ensureGrowthCenterSchema();
-  if (process.env.KNOWLEDGE_MANOR_ENABLED === 'true' && (!(await knowledgeManorSchemaReady(pool)) || !(await knowledgeManorAdminSchemaReady(pool)))) {
+  if (
+    process.env.KNOWLEDGE_MANOR_ENABLED === 'true' &&
+    (!(await knowledgeManorSchemaReady(pool)) || !(await knowledgeManorAdminSchemaReady(pool)))
+  ) {
     throw new Error('KNOWLEDGE_MANOR_SCHEMA_MISSING');
   }
   await ensureDailyReviewSchema();
@@ -345,7 +355,7 @@ process.on('uncaughtException', (err) => {
   process.exit(1);
 });
 
-const httpPort = process.env.LIGHTNOTE_LOCAL_TEST === '1' ? 19001 : 9001;
+const httpPort = process.env.LIGHTNOTE_LOCAL_TEST === '1' ? localTestPorts().api : 9001;
 let listeningReported = false;
 const server = app.listen(httpPort, process.env.LIGHTNOTE_LOCAL_TEST === '1' ? '127.0.0.1' : undefined, () => {
   listeningReported = true;

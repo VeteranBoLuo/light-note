@@ -1,8 +1,10 @@
-import { computed, onMounted, ref, watch } from 'vue';
+import { AI_QUOTA_POLICY_CHANGED, observeAiBillingMode, type AiBillingMode } from '@/utils/aiQuotaPolicyEvents';
+import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue';
 import { apiBasePost } from '@/http/request';
 import { useUserStore } from '@/store';
 
 export interface AiQuotaStatus {
+  billingMode?: AiBillingMode;
   exempt?: boolean;
   unavailable?: boolean;
   type?: string;
@@ -37,8 +39,10 @@ function normalizeQuotaStatus(payload: unknown): AiQuotaStatus {
   const status = payload as AiQuotaStatus | null;
   if (!status || status.unavailable) throw new Error('AI_QUOTA_UNAVAILABLE');
   if (status.exempt) return status;
-  return {
+  if (status.billingMode != null && !['permanent_only', 'daily_and_permanent'].includes(status.billingMode)) throw new Error('AI_QUOTA_INVALID_RESPONSE');
+  const normalized: AiQuotaStatus = {
     ...status,
+    billingMode: status.billingMode === 'permanent_only' ? 'permanent_only' : 'daily_and_permanent',
     used: normalizeQuotaNumber(status.used),
     quota: normalizeQuotaNumber(status.quota),
     remaining: normalizeQuotaNumber(status.remaining),
@@ -49,6 +53,14 @@ function normalizeQuotaStatus(payload: unknown): AiQuotaStatus {
     dailyRemaining: normalizeOptionalQuotaNumber(status.dailyRemaining),
     bonusTokens: normalizeOptionalQuotaNumber(status.bonusTokens),
   };
+  if (normalized.billingMode === 'permanent_only') {
+    normalized.bonusTokens = normalizeQuotaNumber(status.bonusTokens);
+    normalized.pendingReservedTokens ??= 0;
+    normalized.availableRemaining ??= normalized.remaining;
+    delete normalized.dailyQuota; delete normalized.dailyUsed; delete normalized.dailyRemaining;
+  }
+  observeAiBillingMode(normalized.billingMode);
+  return normalized;
 }
 
 async function requestAiQuotaStatus(identityKey: string, force = false) {
@@ -129,9 +141,16 @@ export function useAiQuotaStatus(options: { autoLoad?: boolean } = {}) {
     if (shouldReload) void load();
   });
 
-  if (options.autoLoad !== false) onMounted(() => void load());
+  const onPolicyChanged = () => { cache.clear(); if (hasRequested) void load({ force: true }); };
+  onMounted(() => {
+    window.addEventListener(AI_QUOTA_POLICY_CHANGED, onPolicyChanged);
+    if (options.autoLoad !== false) void load();
+  });
+  onBeforeUnmount(() => window.removeEventListener(AI_QUOTA_POLICY_CHANGED, onPolicyChanged));
+  const permanentOnly = computed(() => status.value?.billingMode === 'permanent_only');
 
   const remainingPercent = computed(() => {
+    if (permanentOnly.value) return 0;
     // 登录用户的 quota/remaining 包含永久加油余额，进度条只表示每天会重置的等级额度。
     // 旧响应没有拆分字段时才回退到总额度，避免永久余额很大时进度条长期看似“满格”。
     const quota = Number(status.value?.dailyQuota ?? status.value?.quota ?? 0);
@@ -140,7 +159,7 @@ export function useAiQuotaStatus(options: { autoLoad?: boolean } = {}) {
     return Math.min(100, Math.max(0, Math.round((remaining / quota) * 100)));
   });
 
-  return { status, loading, unavailable, loginRequired, remainingPercent, load };
+  return { status, loading, unavailable, loginRequired, permanentOnly, remainingPercent, load };
 }
 
 export function resetAiQuotaStatusCacheForTest() {

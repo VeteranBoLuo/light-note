@@ -491,6 +491,7 @@
         : code === AI_QUOTA_ERROR_CODES.INSUFFICIENT_FOR_REQUEST
           ? 'adviceQuotaInsufficient'
           : null;
+    if (quotaKey && state.value?.adviceBillingPolicy === 'system') return t('aiQuotaOneTime.platformBudgetReached');
     if (quotaKey)
       return [
         t(`workbench.dailyBrief.${quotaKey}`),

@@ -1,3 +1,4 @@
+import { aiQuotaMode } from './aiQuotaPolicy.js';
 import { MAKEUP_WINDOW_DAYS } from '@lightnote/shared';
 import { randomUUID } from 'node:crypto';
 import pool from '../db/index.js';
@@ -29,7 +30,11 @@ export const CONSUMABLES = {
     backing: 'user_item',
     effect: 'ai_tokens',
     tokens: 600_000,
-    desc: '历史加油包。转入后成为永久 AI 余额，每日等级额度用完后自动使用。',
+    get desc() {
+      return aiQuotaMode() === 'permanent_only'
+        ? '历史加油包。使用后转入 AI 余额，额度永久保留。'
+        : '历史加油包。转入后成为永久 AI 余额，每日等级额度用完后自动使用。';
+    },
     action: 'use', // 前端:直接「使用」
   },
   makeup_card: {
@@ -168,7 +173,7 @@ export async function useItem(userId, itemId) {
  *  - assets:即时生效类的当前存量(积分余额、永久扩容、永久 AI 加油余额)。
  */
 export async function getInventory(userId) {
-  const empty = { items: [], assets: { points: 0, storageBonusMb: 0, aiBonusTokens: 0 } };
+  const empty = { billingMode: aiQuotaMode(), items: [], assets: { points: 0, storageBonusMb: 0, aiBonusTokens: 0 } };
   if (!userId || userId === 'visitor') return empty;
   const [itemRows] = await pool.query('SELECT item_id, qty FROM user_item WHERE user_id = ? AND qty > 0', [userId]);
   const qtyMap = Object.fromEntries(itemRows.map((r) => [r.item_id, Number(r.qty)]));
@@ -185,12 +190,20 @@ export async function getInventory(userId) {
     qty: qtyOf(def.id),
     action: def.action, // 'use' | 'makeup'
   }));
+  let aiBalance = Number(g?.ai_bonus_tokens || 0);
+  if (aiQuotaMode() === 'permanent_only') {
+    const { getStatusForUser } = await import('./aiQuota.js');
+    const quota = await getStatusForUser(userId, 'user');
+    if (quota.unavailable) throw Object.assign(new Error('AI_QUOTA_UNAVAILABLE'), { code: 'AI_QUOTA_UNAVAILABLE' });
+    aiBalance = quota.bonusTokens;
+  }
   return {
+    billingMode: aiQuotaMode(),
     items,
     assets: {
       points: Number(g?.points || 0),
       storageBonusMb: Number(g?.storage_bonus_mb || 0),
-      aiBonusTokens: Number(g?.ai_bonus_tokens || 0),
+      aiBonusTokens: aiBalance,
     },
   };
 }

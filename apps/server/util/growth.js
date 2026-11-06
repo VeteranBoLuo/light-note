@@ -22,6 +22,9 @@ import { createNotification } from './notification.js';
 import { notificationSchedulerEnabled } from './notificationSchedulerPolicy.js';
 import { stableAgentErrorCode } from './agent/logSafety.js';
 import { finishAdminAction } from './adminActionExecution.js';
+import { levelGiftsEnabled } from './aiQuotaPolicy.js';
+import { aiQuotaMode } from './aiQuotaPolicy.js';
+import { creditAiBonusTokens } from './aiBonusWallet.js';
 import { dayKeyAtOffset, getGrowthCalendarContext } from './growthPreferences.js';
 import {
   POINTS_EARNING_POLICY_VERSION,
@@ -73,6 +76,35 @@ export const RANKS = [
 ];
 
 export const MAX_LEVEL = 15;
+// 首次上线前已确认的整张赠礼表；后续发布新版本时追加，不原地修改旧版本。
+export const AI_LEVEL_GIFT_VERSIONS = Object.freeze([
+  Object.freeze({
+    version: 'ai-level-gifts-v1',
+    effectiveFrom: null,
+    tokens: Object.freeze([12, 8, 9, 10, 12, 14, 16, 18, 22, 26, 32, 40, 50, 65, 85].map((value) => value * 10_000)),
+  }),
+]);
+
+export function levelGiftSchedule(registeredAt, versions = AI_LEVEL_GIFT_VERSIONS) {
+  const timestamp = new Date(registeredAt || 0).getTime();
+  return (
+    [...versions]
+      .reverse()
+      .find((policy) => policy.effectiveFrom === null || new Date(policy.effectiveFrom).getTime() <= timestamp) ||
+    versions[0]
+  );
+}
+
+export function levelGiftEntitlement(level, registeredAt) {
+  const policy = levelGiftSchedule(registeredAt);
+  const boundedLevel = Math.max(1, Math.min(MAX_LEVEL, Math.trunc(Number(level) || 1)));
+  return {
+    version: policy.version,
+    level: boundedLevel,
+    tokens: policy.tokens[boundedLevel - 1],
+    cumulativeTokens: policy.tokens.slice(0, boundedLevel).reduce((sum, value) => sum + value, 0),
+  };
+}
 export { MAKEUP_WINDOW_DAYS };
 const DAILY_EXP_CAP = 200; // 日 EXP 硬顶 —— 唯一不可绕底线(批量导入速通的最后闸)。签到远低于此,为后续创造类预置。
 // 一次性/运营类经验不属于可刷的「每日经验」，既不受 200 日顶限制，也不占用当日额度。
@@ -205,8 +237,13 @@ async function isLevelUpNotificationEnabled(conn, userId) {
 }
 
 // 升级通知统一从这里写入。正常成长可逐级通知；后台调整只发最终等级，避免一笔运营操作刷屏。
-async function writeLevelUpNotification(conn, userId, level, { source = null } = {}) {
+async function writeLevelUpNotification(conn, userId, level, { source = null, giftResult = null } = {}) {
   const rankName = rankOf(level).name;
+  const giftTokens = giftResult?.gifts?.find((gift) => gift.level === level)?.amountTokens || 0;
+  const giftMeta =
+    giftResult && giftResult.status !== 'disabled'
+      ? { aiGiftTokens: giftTokens, aiGiftStatus: giftTokens > 0 ? 'granted' : giftResult.status }
+      : {};
   try {
     await createNotification(
       userId,
@@ -214,7 +251,7 @@ async function writeLevelUpNotification(conn, userId, level, { source = null } =
         type: 'level_up',
         title: `升级到 Lv.${level} ${rankName}`,
         link: '/growth',
-        meta: { level, name: rankName, ...(source ? { source } : {}) },
+        meta: { level, name: rankName, ...giftMeta, ...(source ? { source } : {}) },
       },
       conn,
     );
@@ -283,7 +320,7 @@ export async function grantExp(userId, source, opts = {}, conn = null) {
 
     // 4. 更新快照:exp 增量累加(防并发覆盖);level 随后由 levelForExp 校准
     const beforeExp = Number(gRow?.exp || 0);
-    const fromLevel = gRow ? Number(gRow.level) : 1;
+    const fromLevel = levelForExp(beforeExp);
     const afterExp = beforeExp + grantAmount;
     const toLevel = levelForExp(afterExp);
     await c.query(
@@ -300,7 +337,12 @@ export async function grantExp(userId, source, opts = {}, conn = null) {
 
     // 5. 升级 → 逐级落 level_up 里程碑(唯一键去重;通知中心第三刀读此)
     let leveledUp = false;
+    let giftResult = null;
     if (toLevel > fromLevel) {
+      if (levelGiftsEnabled()) {
+        const { ensureLevelGifts } = await import('./aiLevelGifts.js');
+        giftResult = await ensureLevelGifts(c, userId, { trigger: 'upgrade' });
+      }
       await persistPublicResourceAchievements(userId, { db: c });
       leveledUp = true;
       // 尊重用户「升级提醒」开关(preferences.notifyLevelUp === 'false' 时不发升级通知,但里程碑账本照记)
@@ -310,17 +352,40 @@ export async function grantExp(userId, source, opts = {}, conn = null) {
         await c.query(
           `INSERT IGNORE INTO growth_events (user_id, source, ref_id, day, amount, status, meta)
           VALUES (?, 'milestone', ?, NULL, 0, 'granted', ?)`,
-          [userId, `level_up_L${L}`, JSON.stringify({ from: L - 1, to: L, rank: rankName })],
+          [
+            userId,
+            `level_up_L${L}`,
+            JSON.stringify({
+              from: L - 1,
+              to: L,
+              rank: rankName,
+              ...(giftResult
+                ? {
+                    aiGiftTokens: giftResult.gifts.find((gift) => gift.level === L)?.amountTokens || 0,
+                    aiGiftStatus: giftResult.status,
+                  }
+                : {}),
+            }),
+          ],
         );
         if (MAKEUP_CARD_SUPPLY_POLICY.levelMilestones.includes(L)) {
           await grantItem(c, userId, 'makeup_card', 1, { sourceType: 'level_up', sourceRef: `level:${L}` });
         }
-        if (notifyLevelUp) await writeLevelUpNotification(c, userId, L);
+        if (notifyLevelUp) await writeLevelUpNotification(c, userId, L, { giftResult });
       }
     }
 
     if (ownConn) await c.commit();
-    return { granted: grantAmount, duplicated: false, leveledUp, fromLevel, toLevel, exp: afterExp, level: toLevel };
+    return {
+      granted: grantAmount,
+      duplicated: false,
+      leveledUp,
+      fromLevel,
+      toLevel,
+      exp: afterExp,
+      level: toLevel,
+      ...(giftResult ? { levelGifts: giftResult.gifts, levelGiftStatus: giftResult.status } : {}),
+    };
   } catch (e) {
     if (ownConn) {
       try {
@@ -444,7 +509,12 @@ export async function getGrowth(userId, { userRole = null, db = pool, calendar =
   let equippedFrame = null;
   let equippedBackground = null;
   let storageBonus = 0;
+  let registeredAt = null;
   if (!isGuest) {
+    if (levelGiftsEnabled() || aiQuotaMode() === 'permanent_only') {
+      const [[account]] = await db.query('SELECT create_time FROM user WHERE id = ? LIMIT 1', [userId]);
+      registeredAt = account?.create_time;
+    }
     const [rows] = await db.query(
       'SELECT exp, streak, last_checkin_date, last_notified_level, streak_protect_cards, points, equipped_title, equipped_frame, equipped_background, storage_bonus_mb FROM user_growth WHERE user_id = ?',
       [userId],
@@ -475,6 +545,11 @@ export async function getGrowth(userId, { userRole = null, db = pool, calendar =
       canUseProtectCard = makeupDays.length > 0;
     }
   }
+  let aiLevelGiftStatus = 'disabled';
+  if (!isGuest && levelGiftsEnabled()) {
+    const { inspectLevelGifts } = await import('./aiLevelGifts.js');
+    aiLevelGiftStatus = (await inspectLevelGifts(db, userId)).status;
+  }
   const level = levelForExp(exp);
   const rank = rankOf(level);
   const { nextExp, need } = nextLevelInfo(exp, level);
@@ -497,7 +572,11 @@ export async function getGrowth(userId, { userRole = null, db = pool, calendar =
     name: rank.name,
     spaceMb: rank.spaceMb + storageBonus, // 段位基础 + 积分永久扩容
     spaceBonusMb: storageBonus, // 其中积分兑换的扩容部分(前端可单独标注「已扩容 +X」)
-    aiTokenDaily: rank.aiTokenDaily,
+    aiTokenDaily: aiQuotaMode() === 'permanent_only' ? 0 : rank.aiTokenDaily,
+    billingMode: aiQuotaMode(),
+    aiLevelGift: levelGiftEntitlement(level, registeredAt),
+    aiLevelGiftStatus,
+    aiNextLevelGift: isMax ? null : levelGiftEntitlement(level + 1, registeredAt),
     trashDays: rank.trashDays,
     streak,
     protectCards, // 补签卡当前库存
@@ -640,15 +719,14 @@ export async function getDailyQuestState(
           dayKey: effectiveDayKey,
           ...(usesSpecificTasks ? { activityKinds: C6_DAILY_QUEST_KINDS } : {}),
         });
-    const quests =
-      usesSpecificTasks
-        ? c6DailyQuestsFromFacts({
-            userId,
-            dayKey: effectiveDayKey,
-            checkedInToday: Boolean(growth?.checkedInToday),
-            facts,
-          })
-        : c5DailyQuestsFromFacts({ checkedInToday: Boolean(growth?.checkedInToday), facts });
+    const quests = usesSpecificTasks
+      ? c6DailyQuestsFromFacts({
+          userId,
+          dayKey: effectiveDayKey,
+          checkedInToday: Boolean(growth?.checkedInToday),
+          facts,
+        })
+      : c5DailyQuestsFromFacts({ checkedInToday: Boolean(growth?.checkedInToday), facts });
     return {
       policyVersion: earningPolicyVersion,
       quests,
@@ -1244,7 +1322,10 @@ export async function getGrowthDashboard(userId, { userRole = null, db = pool, c
       ? state.policyVersion || LEGACY_POINTS_EARNING_POLICY_VERSION
       : achievementPolicyVersion;
     const previousReward = state
-      ? applyAchievementEarningPolicy(LEGACY_ACHIEVEMENTS.find((item) => item.key === a.key), rewardPolicyVersion).reward
+      ? applyAchievementEarningPolicy(
+          LEGACY_ACHIEVEMENTS.find((item) => item.key === a.key),
+          rewardPolicyVersion,
+        ).reward
       : null;
     const reward = Number(state?.rewardPointsSnapshot ?? previousReward ?? a.reward);
     return {
@@ -1660,13 +1741,36 @@ export async function useProtectCard(userId, { userRole = null, date = null, cal
 // root 专用,绕过日顶与账本;升级时仅补发最终等级通知，不额外补等级卡或里程碑奖励。
 export async function adminAdjustGrowth(
   userId,
-  { expDelta = 0, setLevel = null, cardDelta = 0 } = {},
+  { expDelta = 0, setLevel = null, cardDelta = 0, aiCreditTokens = 0 } = {},
   { actionContext = null } = {},
 ) {
   if (!userId || userId === 'visitor') return { ok: false, reason: 'no_user' };
+  const aiCredit = Number(aiCreditTokens);
+  if (!Number.isSafeInteger(aiCredit) || aiCredit < 0 || aiCredit > 1_000_000_000) {
+    throw Object.assign(new Error('AI 额度须为 0 至 10 亿的整数'), { code: 'AI_ADMIN_CREDIT_INVALID', status: 400 });
+  }
+  if (aiCredit > 0 && (!actionContext?.intentAuditId || actionContext.baseEntry?.action !== 'growth.adjust')) {
+    throw Object.assign(new Error('AI 额度入账需要管理员审计'), { code: 'AI_ADMIN_AUDIT_REQUIRED', status: 403 });
+  }
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
+    await lockGrowthAccount(conn, userId);
+    let aiCreditResult = null;
+    if (aiCredit > 0) {
+      const [[account]] = await conn.query('SELECT id, role, del_flag FROM user WHERE id = ? LIMIT 1 FOR UPDATE', [userId]);
+      if (!account || !['user', 'root', 'test'].includes(account.role) || Number(account.del_flag || 0) !== 0) {
+        throw Object.assign(new Error('目标账号不可用'), { code: 'AI_ADMIN_ACCOUNT_UNAVAILABLE', status: 409 });
+      }
+      aiCreditResult = await creditAiBonusTokens(conn, {
+        userId: account.id,
+        amountTokens: aiCredit,
+        sourceType: 'admin_grant',
+        sourceRef: actionContext.requestId,
+        idempotencyKey: `admin-ai-grant:${actionContext.requestId}`,
+        policyVersion: 'admin-ai-grant-v1',
+      });
+    }
     const [rows] = await conn.query('SELECT exp, streak_protect_cards FROM user_growth WHERE user_id = ? FOR UPDATE', [
       userId,
     ]);
@@ -1704,8 +1808,18 @@ export async function adminAdjustGrowth(
         sourceRef: actionContext?.requestId,
       });
     }
+    let giftResult = null;
+    if (level > fromLevel && levelGiftsEnabled()) {
+      const { ensureLevelGifts } = await import('./aiLevelGifts.js');
+      giftResult = await ensureLevelGifts(conn, userId, { trigger: 'admin_adjust' });
+    }
     if (level > fromLevel && (await isLevelUpNotificationEnabled(conn, userId))) {
-      await writeLevelUpNotification(conn, userId, level, { source: 'admin_adjust' });
+      await writeLevelUpNotification(conn, userId, level, { source: 'admin_adjust', giftResult });
+    }
+    let aiBalance = null;
+    if (aiCreditResult) {
+      const [[wallet]] = await conn.query('SELECT ai_bonus_tokens FROM user_growth WHERE user_id = ? FOR UPDATE', [userId]);
+      aiBalance = Number(wallet.ai_bonus_tokens);
     }
     const receipt = actionContext
       ? await finishAdminAction(actionContext, {
@@ -1717,13 +1831,17 @@ export async function adminAdjustGrowth(
             resultingExp: exp,
             resultingLevel: level,
             resultingCards: cards,
+            aiCreditTokens: aiCredit,
+            aiCreditLedgerId: aiCreditResult?.ledgerId || null,
+            ...(aiBalance === null ? {} : { resultingAiBalance: aiBalance, aiCreditReplayed: aiCreditResult.replay }),
             acquisitionVersion: ACQUISITION_VERSION,
           },
           db: conn,
         })
       : {};
     await conn.commit();
-    return { ok: true, exp, level, name: rankOf(level).name, cards, leveledUp: level > fromLevel, ...receipt };
+    return { ok: true, exp, level, name: rankOf(level).name, cards, leveledUp: level > fromLevel,
+      ...(aiCreditResult ? { aiCreditTokens: aiCredit, aiBonusTokens: aiBalance, aiCreditReplayed: aiCreditResult.replay } : {}), ...receipt };
   } catch (e) {
     try {
       await conn.rollback();

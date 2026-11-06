@@ -4497,3 +4497,48 @@ WHERE t.table_schema = DATABASE() AND t.table_name = 'update_logs'
     SELECT 1 FROM information_schema.columns c
     WHERE c.table_schema = t.table_schema AND c.table_name = t.table_name AND c.column_name = 'product_version'
   );
+
+-- 一次性 AI 赠礼：运行时只初始化控制行，不在启动时补发历史资产。
+SELECT 'ai_level_gift_controls' AS check_name, 'missing schema' AS detail FROM DUAL
+WHERE NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='ai_level_gift_controls' AND engine='InnoDB');
+SELECT 'ai_level_gift_control_column' AS check_name, required.name AS detail
+FROM (SELECT 'id' AS name UNION ALL SELECT 'paused_from' UNION ALL SELECT 'reviewed_at' UNION ALL SELECT 'reason' UNION ALL SELECT 'updated_by' UNION ALL SELECT 'updated_at') required
+LEFT JOIN information_schema.columns actual ON actual.table_schema=DATABASE() AND actual.table_name='ai_level_gift_controls' AND actual.column_name=required.name
+WHERE actual.column_name IS NULL;
+SELECT 'ai_level_gift_control_seed' AS check_name, 'id=1 missing' AS detail FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM ai_level_gift_controls WHERE id=1);
+SELECT 'ai_level_gift_hold_type' AS check_name, 'gift_hold missing' AS detail FROM DUAL
+WHERE NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='security_account_restrictions' AND column_name='restriction_type' AND LOCATE("'gift_hold'",column_type)>0);
+
+SELECT 'ai_gift_risk_table' AS check_name, required.name AS detail
+FROM (SELECT 'ai_level_gift_registrations' AS name UNION ALL SELECT 'ai_level_gift_risk_usage') required
+LEFT JOIN information_schema.tables actual ON actual.table_schema=DATABASE() AND actual.table_name=required.name AND actual.engine='InnoDB'
+WHERE actual.table_name IS NULL;
+SELECT 'ai_gift_risk_column' AS check_name, CONCAT(required.table_name,'.',required.column_name) AS detail
+FROM (
+  SELECT 'ai_level_gift_registrations' AS table_name,'id' AS column_name
+  UNION ALL SELECT 'ai_level_gift_registrations','user_id'
+  UNION ALL SELECT 'ai_level_gift_registrations','network_key'
+  UNION ALL SELECT 'ai_level_gift_registrations','registered_at'
+  UNION ALL SELECT 'ai_level_gift_registrations','checked_at'
+  UNION ALL SELECT 'ai_level_gift_risk_usage','execution_id'
+  UNION ALL SELECT 'ai_level_gift_risk_usage','provider_tokens'
+  UNION ALL SELECT 'ai_level_gift_risk_usage','known_tokens'
+  UNION ALL SELECT 'ai_level_gift_risk_usage','created_at'
+) required
+LEFT JOIN information_schema.columns actual ON actual.table_schema=DATABASE() AND actual.table_name=required.table_name AND actual.column_name=required.column_name
+WHERE actual.column_name IS NULL;
+SELECT 'ai_gift_registration_unique' AS check_name,'user_id' AS detail FROM DUAL
+WHERE NOT EXISTS (
+  SELECT 1 FROM information_schema.statistics WHERE table_schema=DATABASE() AND table_name='ai_level_gift_registrations'
+    AND index_name='uk_gift_registration_user' AND non_unique=0 AND column_name='user_id' AND seq_in_index=1
+);
+SELECT 'ai_gift_risk_usage_primary' AS check_name,'execution_id' AS detail FROM DUAL
+WHERE NOT EXISTS (
+  SELECT 1 FROM information_schema.statistics WHERE table_schema=DATABASE() AND table_name='ai_level_gift_risk_usage'
+    AND index_name='PRIMARY' AND non_unique=0 AND column_name='execution_id' AND seq_in_index=1
+);
+SELECT 'ai_gift_registration_sequence' AS check_name,'id' AS detail FROM DUAL
+WHERE NOT EXISTS (
+  SELECT 1 FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='ai_level_gift_registrations'
+    AND column_name='id' AND data_type='bigint' AND LOCATE('auto_increment',extra)>0
+);

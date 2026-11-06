@@ -1,8 +1,8 @@
 <template>
-  <div v-if="ranks.length" class="rank-ladder" :class="{ 'rank-ladder--compact': compact }">
+  <div v-if="ranks.length" class="rank-ladder" :class="{ 'rank-ladder--compact': compact, 'is-permanent': permanentOnly }">
     <div class="rl-heading">
       <div class="rl-head">{{ t('growth.rankLadder') }}</div>
-      <p class="rl-hint">{{ t('growth.rankLadderHint') }}</p>
+      <p class="rl-hint">{{ t(permanentOnly ? 'aiQuotaOneTime.ladderHint' : 'growth.rankLadderHint') }}</p>
     </div>
     <div class="rl-colhead">
       <span></span>
@@ -25,11 +25,12 @@
         </span>
         <span class="rl-exp">{{ r.cumExp.toLocaleString('en-US') }}</span>
         <span class="rl-perk">
-          {{ fmtMb(r.spaceMb) }} · {{ fmtToken(r.aiTokenDaily) }} ·
+          {{ fmtMb(r.spaceMb) }} · {{ permanentOnly ? t('aiQuotaOneTime.giftShort', { amount: fmtToken(r.aiLevelGift?.tokens || 0) }) : fmtToken(r.aiTokenDaily) }} ·
           {{ r.trashDays >= 3650 ? t('growth.trashForever') : t('growth.trashDays', { days: r.trashDays })
           }}<span v-if="r.freeDraws" class="rl-free"
             >· <SvgIcon :src="icon.growth.reward" size="12" />{{ r.freeDraws }}</span
           >
+          <small v-if="permanentOnly && r.aiLevelGift" class="rl-gift-total">{{ t('aiQuotaOneTime.cumulative', { amount: fmtToken(r.aiLevelGift.cumulativeTokens) }) }}</small>
         </span>
       </div>
     </div>
@@ -59,6 +60,7 @@
     await Promise.all([load(), loadRanks()]);
   });
 
+  const permanentOnly = computed(() => growth.value?.billingMode === 'permanent_only' || ranks.value[0]?.billingMode === 'permanent_only');
   const curLevel = computed(() => growth.value?.level || 1);
   const maxLevel = computed(() => ranks.value.length || 15);
   const compact = computed(() => props.compact);
@@ -106,6 +108,7 @@
 </script>
 
 <style scoped lang="less">
+  .rl-gift-total { display: block; color: var(--desc-color); font-size: var(--ui-font-10_5, 10.5px); margin-top: var(--ui-space-3, 3px); }
   .rank-ladder {
     display: flex;
     flex-direction: column;
@@ -264,5 +267,21 @@
   .rank-ladder--compact .rl-toggle.b_btn {
     min-height: var(--ui-control-27, 27px);
     font-size: var(--ui-font-10_5, 10.5px);
+  }
+  @media (max-width: 600px) {
+    .rank-ladder.is-permanent .rl-row,
+    .rank-ladder.is-permanent .rl-colhead {
+      grid-template-columns: var(--ui-layout-24, 24px) minmax(0, 1fr) auto;
+    }
+    .rank-ladder.is-permanent .rl-name {
+      white-space: nowrap;
+    }
+    .rank-ladder.is-permanent .rl-perk {
+      grid-column: 2 / -1;
+      white-space: normal;
+    }
+    .rank-ladder.is-permanent .rl-colhead > span:last-child {
+      display: none;
+    }
   }
 </style>

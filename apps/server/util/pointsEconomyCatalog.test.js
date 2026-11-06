@@ -6,6 +6,8 @@ import {
   C7_POINTS_ECONOMY_VERSION,
   C9_POINTS_ECONOMY_VERSION,
   freeDrawsFor,
+  ECONOMY_CATALOGS,
+  getActiveEconomyVersion,
   getEconomyCatalogSnapshot,
   getEconomyRuntime,
   parseRuntimeFlag,
@@ -127,6 +129,22 @@ describe('积分经济 C9 单一目录', () => {
       snapshot.paidPolicy.pool.filter((item) => item.tier === 'rare').reduce((sum, item) => sum + item.weight, 0),
     ).toBe(170);
     expect(snapshot.paidPolicy).toMatchObject({ singleCost: 170, tenCost: 1600, cardOverflowPoints: 120 });
+  });
+
+  it('C11 免费池仅积分，期望 3.5，价格不变且 C10 目录不被修改', () => {
+    const old = getEconomyCatalogSnapshot('points-economy-c10');
+    const current = getEconomyCatalogSnapshot('points-economy-c11');
+    expect(current.freePolicy).toMatchObject({ poolVersion: 'c11-free-v1', countsPaidPity: false });
+    expect(current.freePolicy.pool.map((p) => [p.kind, p.amount, p.weight])).toEqual([
+      ['points', 2, 200], ['points', 3, 600], ['points', 5, 180], ['points', 20, 20],
+    ]);
+    expect(current.freePolicy.pool.reduce((s, p) => s + p.weight, 0)).toBe(1000);
+    expect(current.freePolicy.pool.reduce((s, p) => s + p.weight * p.amount, 0) / 1000).toBe(3.5);
+    expect(current.utilityItems.map((p) => [p.id, p.cost, p.bonusTokens])).toEqual(old.utilityItems.map((p) => [p.id, p.cost, p.bonusTokens]));
+    expect(ECONOMY_CATALOGS['points-economy-c11'].utilityItems.filter((p) => p.effect === 'ai_pack').every((p) => !p.desc.includes('每日等级'))).toBe(true);
+    expect(ECONOMY_CATALOGS['points-economy-c10'].utilityItems.some((p) => p.desc.includes('每日等级'))).toBe(true);
+    expect(getActiveEconomyVersion({ POINTS_ECONOMY_C11_ENABLED: 'true', POINTS_ECONOMY_C10_ENABLED: 'true' })).toBe('points-economy-c11');
+    expect(getActiveEconomyVersion({ POINTS_ECONOMY_C11_ENABLED: 'false', POINTS_ECONOMY_C10_ENABLED: 'true' })).toBe('points-economy-c10');
   });
 
   it('运行时开关未知值失败关闭', () => {

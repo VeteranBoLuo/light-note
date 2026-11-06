@@ -1,3 +1,4 @@
+import { localTestPorts } from '../server/util/localTestPorts.js';
 import { defineConfig, loadEnv } from 'vite';
 import vue from '@vitejs/plugin-vue';
 import vueJsx from '@vitejs/plugin-vue-jsx';
@@ -65,7 +66,7 @@ export default defineConfig(({ command, mode }) => {
       proxy: {
         ...createLocalBackendProxy({ isolated }),
         '/obs': {
-          target: isolated ? 'http://127.0.0.1:19002' : 'https://obs.cn-south-1.myhuaweicloud.com',
+          target: isolated ? `http://127.0.0.1:${localTestPorts(env).storage}` : 'https://obs.cn-south-1.myhuaweicloud.com',
           changeOrigin: true,
           rewrite: (path) => path.replace(/^\/obs/, ''),
           // 可能需要配置secure，如果遇到证书问题可尝试设置为false

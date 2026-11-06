@@ -1,3 +1,4 @@
+import { assessAiLevelGiftRisk } from './aiLevelGiftRisk.js';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import pool from '../db/index.js';
@@ -396,6 +397,7 @@ async function runScheduledCycle() {
   if (cycleRunning) return;
   cycleRunning = true;
   try {
+    await assessAiLevelGiftRisk().catch(error => console.error('[ai-gift-risk] assessment failed code=%s', stableAgentErrorCode(error)));
     await runInfraAlertCycle();
   } catch (error) {
     if (error?.code === 'ER_NO_SUCH_TABLE') {

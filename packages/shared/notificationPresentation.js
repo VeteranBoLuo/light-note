@@ -28,6 +28,8 @@ export const notificationMessages = {
       rewards: "有等级礼物待领取",
     },
     levelUpTitle: "升级到 Lv.{level} · {name}",
+    levelGift: "AI 赠礼 {amount} tokens 已到账",
+    levelGiftPending: "AI 赠礼待到账",
     opinionReplyTitle: "你的反馈收到新回复",
     emailHealthTitle: "请检查账号邮箱",
     emailHealthContent:
@@ -89,6 +91,8 @@ export const notificationMessages = {
       rewards: "Level gifts are ready to collect",
     },
     levelUpTitle: "Leveled up to Lv.{level} · {name}",
+    levelGift: "AI gift of {amount} tokens credited",
+    levelGiftPending: "AI gift pending",
     opinionReplyTitle: "Your feedback got a reply",
     emailHealthTitle: "Check your account email",
     emailHealthContent:
@@ -174,6 +178,12 @@ export function notificationPresentation(item, locale = "zh-CN") {
     title = messages.levelUpTitle
       .replace("{level}", String(meta.level || ""))
       .replace("{name}", messages.ranks[meta.level] || meta.name || "");
+  if (item.type === "level_up") {
+    const amount = Number(meta.aiGiftTokens || 0);
+    content = Number.isSafeInteger(amount) && amount > 0
+      ? messages.levelGift.replace('{amount}', amount.toLocaleString(locale === 'en-US' ? 'en-US' : 'zh-CN'))
+      : ['held', 'missing'].includes(meta.aiGiftStatus) ? messages.levelGiftPending : '';
+  }
   if (item.type === "opinion_reply") title = messages.opinionReplyTitle;
   if (["manor_digest", "manor_water_expiring"].includes(item.type) &&
       typeof meta?.manor?.dayKey === "string" &&
@@ -255,7 +265,7 @@ export function notificationPresentation(item, locale = "zh-CN") {
           : title;
   return {
     title,
-    content: item.type === "level_up" ? "" : content,
+    content,
   };
 }
 export function browserNotificationPresentation(item, locale) {

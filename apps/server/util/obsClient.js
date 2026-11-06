@@ -1,3 +1,4 @@
+import { localTestPorts } from './localTestPorts.js';
 import { Readable } from 'node:stream';
 import { createHash } from 'node:crypto';
 import ObsClientSdk from 'esdk-obs-nodejs';
@@ -22,7 +23,7 @@ export const bucketName = OBS_BUCKET_NAME;
 const normalizeBaseUrl = () => {
   if (process.env.LIGHTNOTE_LOCAL_TEST === '1') {
     const endpoint = new URL(OBS_ENDPOINT);
-    if (endpoint.origin !== 'http://127.0.0.1:19002') throw new Error('LOCAL_TEST_STORAGE_ENDPOINT_INVALID');
+    if (endpoint.origin !== `http://127.0.0.1:${localTestPorts().storage}`) throw new Error('LOCAL_TEST_STORAGE_ENDPOINT_INVALID');
     return `${endpoint.origin}/${bucketName}`;
   }
   const endpointHost = (OBS_ENDPOINT || '').replace(/^https?:\/\//, '').replace(/\/$/, '');

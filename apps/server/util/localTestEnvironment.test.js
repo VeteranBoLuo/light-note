@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { localTestPorts } from './localTestPorts.js';
 import { assertLocalTestEnvironment } from './localTestEnvironment.js';
 import { notificationSchedulerEnabled } from './notificationSchedulerPolicy.js';
 import { isManagedUploadOrigin, uploadOrigin } from './uploadOrigin.js';
@@ -16,6 +17,16 @@ const safe = {
   DRAWING_THUMBNAIL_DIR: '/project/.local-test/drawing',
 };
 describe('independent local environment', () => {
+  it('accepts a consistent independent worktree offset and rejects mixed or invalid profiles', () => {
+    const ports = localTestPorts({ LIGHTNOTE_LOCAL_PORT_OFFSET: '1000' });
+    const isolated = { ...safe, LIGHTNOTE_LOCAL_PORT_OFFSET: '1000', DB_PORT: String(ports.mysql),
+      REDIS_URL: `redis://127.0.0.1:${ports.redis}`, OBS_ENDPOINT: `http://127.0.0.1:${ports.storage}`,
+      SMTP_PORT: String(ports.smtp), SITE_URL: `http://localhost:${ports.web}`, FAVICON_API_BASE_URL: `http://127.0.0.1:${ports.favicon}/` };
+    expect(assertLocalTestEnvironment(isolated)).toBe(true);
+    expect(() => assertLocalTestEnvironment({ ...isolated, DB_PORT: '13306' })).toThrow('LOCAL_TEST_ENVIRONMENT_UNSAFE');
+    for (const offset of ['-1', '0.5', '20001', 'localhost']) expect(() => localTestPorts({ LIGHTNOTE_LOCAL_PORT_OFFSET: offset })).toThrow('LOCAL_TEST_PORT_OFFSET_INVALID');
+    expect(uploadOrigin(isolated)).toBe('http://localhost:16173');
+  });
   it('enables background notifications only after every dependency passes isolation checks', () => {
     expect(assertLocalTestEnvironment(safe)).toBe(true);
     expect(notificationSchedulerEnabled(safe)).toBe(true);

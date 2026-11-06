@@ -1,3 +1,6 @@
+import { assessAiLevelGiftRisk } from '../util/aiLevelGiftRisk.js';
+import { recordAiGiftRegistration } from '../util/aiLevelGiftRiskFacts.js';
+import { levelGiftsEnabled } from '../util/aiQuotaPolicy.js';
 import { USER_LAST_INTERACTION_JOIN } from '../util/services/userActivityService.js';
 import { preserveWorkshopPreference } from '../util/toolbox/projectPreference.js';
 import pool from '../db/index.js';
@@ -16,6 +19,7 @@ import { completeGrowthTask } from '../util/growthTaskCompletion.js';
 import { refreshUserIpLocation } from '../util/services/userIpLocationService.js';
 import { validateQueryParams } from '../util/request.js';
 import { fetchGitHubApiJson, fetchGitHubTokenSafely, GitHubOAuthError } from '../util/githubOAuth.js';
+import { grantOutstandingLevelGifts } from '../util/aiLevelGifts.js';
 import { createNotification } from '../util/notification.js';
 import { verifyPassword, hashPassword, validatePassword } from '../util/password.js';
 import { hasLoginPassword } from '../util/loginPasswordState.js';
@@ -487,7 +491,18 @@ export const registerUser = async (req, res) => {
     // 靠 email 唯一索引报重复(索引见 migrations/20260722_user_email_unique.sql,需线上确认执行)
     const userData = insertData(params);
     try {
-      await pool.query('INSERT INTO user SET ?', [userData]);
+      const connection = await pool.getConnection();
+      try {
+        await connection.beginTransaction();
+        await connection.query('INSERT INTO user SET ?', [userData]);
+        await recordAiGiftRegistration(connection, userData.id, getClientIp(req));
+        await connection.commit();
+      } catch (error) {
+        await connection.rollback();
+        throw error;
+      } finally {
+        connection.release();
+      }
     } catch (e) {
       if (e?.code === 'ER_DUP_ENTRY') {
         recordConversionEvent(req, 'signup_failed', 'email_exists');
@@ -496,17 +511,6 @@ export const registerUser = async (req, res) => {
       throw e;
     }
     const userId = userData.id;
-
-    await initializeNewUserCommunityIdentity(userId);
-
-    // 数据库示例在短事务内同步完成，注册响应前即可看到；失败降级为空账号，不反向删除已创建用户。
-    const samplesReady = await initializeNewUserSamples(userId, req);
-
-    // 欢迎通知(fire-and-forget:失败绝不影响注册主流程)
-    createNotification(userId, buildWelcomeNotification(detectLangFromReq(req), samplesReady)).catch((e) =>
-      console.warn('[register] 欢迎通知发送失败 code=%s', stableAgentErrorCode(e)),
-    );
-
     // 记录日志（非关键，失败不影响注册）。注册路由手动写 api_logs，
     // 不经过全局请求日志中间件，因此必须在这里单独排除本地与内部设备流量。
     if (!isSelfTraffic(req)) {
@@ -532,6 +536,22 @@ export const registerUser = async (req, res) => {
         console.error('[register] 注册日志写入失败 code=%s', stableAgentErrorCode(err));
       }
     }
+
+    let giftRiskReady = true;
+    if (levelGiftsEnabled()) await assessAiLevelGiftRisk().catch(error => { giftRiskReady = false; console.warn('[level-gifts] risk check failed code=%s', stableAgentErrorCode(error)); });
+    if (giftRiskReady) await grantOutstandingLevelGifts(userId).catch((error) =>
+      console.warn('[level-gifts] registration failed code=%s', stableAgentErrorCode(error)),
+    );
+
+    await initializeNewUserCommunityIdentity(userId);
+
+    // 数据库示例在短事务内同步完成，注册响应前即可看到；失败降级为空账号，不反向删除已创建用户。
+    const samplesReady = await initializeNewUserSamples(userId, req);
+
+    // 欢迎通知(fire-and-forget:失败绝不影响注册主流程)
+    createNotification(userId, buildWelcomeNotification(detectLangFromReq(req), samplesReady)).catch((e) =>
+      console.warn('[register] 欢迎通知发送失败 code=%s', stableAgentErrorCode(e)),
+    );
 
     // 注册即登录:签发会话,前端直接进入已经准备好少量示例内容的工作区
     const userInfo = await queryUserInfoById(userId);
@@ -2013,6 +2033,7 @@ export const handleUserDatabaseOperation = async (githubUser, req, { duplicateRe
             defaultPreferences,
           ],
         );
+        await recordAiGiftRegistration(connection, createdUserId, getClientIp(req));
         const [createdUsers] = await connection.query(`SELECT * FROM user WHERE id = ? LIMIT 1`, [createdUserId]);
         user = createdUsers[0];
       }
@@ -2041,6 +2062,13 @@ export const handleUserDatabaseOperation = async (githubUser, req, { duplicateRe
   }
 
   if (!createdUserId) return user;
+  let giftRiskReady = true;
+  if (levelGiftsEnabled()) {
+    await assessAiLevelGiftRisk().catch(error => { giftRiskReady = false; console.warn('[level-gifts] risk check failed code=%s', stableAgentErrorCode(error)); });
+  }
+  if (giftRiskReady) await grantOutstandingLevelGifts(createdUserId).catch((error) =>
+    console.warn('[level-gifts] registration failed code=%s', stableAgentErrorCode(error)),
+  );
 
   // 仅 GitHub 首次建号执行；已有 GitHub 账号登录不会重复初始化。
   await initializeNewUserCommunityIdentity(createdUserId);

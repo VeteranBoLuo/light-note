@@ -7,6 +7,8 @@ const SOURCE_EXTENSIONS = new Set(['.js', '.mjs', '.cjs', '.ts', '.tsx', '.vue']
 const EXCLUDED_DIRECTORIES = new Set(['node_modules', 'dist', 'coverage', '.git']);
 
 export const ALLOWED_GATEWAY_IMPORTERS = Object.freeze([
+  // 显式授权的合成回放：隔离本机守卫先于 DB/Provider，system:quota_calibration，保留 Execution 预留与 Span 审计。
+  'apps/server/scripts/calibrateAiReservations.js',
   'apps/server/util/aiOrganize.js',
   'apps/server/util/snapshot.js',
   'apps/server/util/tagIconService.js',

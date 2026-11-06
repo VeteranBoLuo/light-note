@@ -6,9 +6,12 @@ import {
   useProtectCard,
   adminAdjustGrowth,
   RANKS,
+  levelGiftEntitlement,
   markNoticesRead,
 } from '../util/growth.js';
 import { WEEKLY_REPORT_PERIODS, buildWeeklyReport } from '../util/weeklyReport.js';
+import { aiQuotaMode } from '../util/aiQuotaPolicy.js';
+import pool from '../db/index.js';
 import { L, resultData } from '../util/common.js';
 import { ensureNotVisitor, ensureUserOrAdminPolicy } from '../util/auth.js';
 import {
@@ -170,7 +173,7 @@ export const getUserGrowthForAdmin = async (req, res) => {
 export const doAdminAdjustGrowth = async (req, res) => {
   let actionContext = null;
   try {
-    const { userId, expDelta, setLevel, cardDelta } = req.body || {};
+    const { userId, expDelta, setLevel, cardDelta, aiCreditTokens } = req.body || {};
     if (!userId) return res.send(resultData(null, 400, '缺少目标用户'));
     actionContext = await beginAdminAction(req, {
       action: 'growth.adjust',
@@ -180,9 +183,10 @@ export const doAdminAdjustGrowth = async (req, res) => {
         expDelta: Number(expDelta || 0),
         setLevel: setLevel == null || setLevel === '' ? null : Number(setLevel),
         cardsDelta: Number(cardDelta || 0),
+        aiCreditTokens: Number(aiCreditTokens || 0),
       },
     });
-    const result = await adminAdjustGrowth(userId, { expDelta, setLevel, cardDelta }, { actionContext });
+    const result = await adminAdjustGrowth(userId, { expDelta, setLevel, cardDelta, aiCreditTokens }, { actionContext });
     return res.send(resultData(result));
   } catch (error) {
     if (actionContext) {
@@ -295,12 +299,19 @@ export const claimDailyBonus = async (req, res) => {
 // GET /growth/ranks —— 段位表(前端「段位路线」总览用;公开只读,单一事实源)
 export const getRanks = async (req, res) => {
   try {
+    let registeredAt = null;
+    if (req.user?.id && req.user.id !== 'visitor') {
+      const [[account]] = await pool.query('SELECT create_time FROM user WHERE id = ? LIMIT 1', [req.user.id]);
+      registeredAt = account?.create_time;
+    }
     const ranks = RANKS.map((r) => ({
       level: r.level,
       name: r.name,
       cumExp: r.cumExp,
       spaceMb: r.spaceMb,
-      aiTokenDaily: r.aiTokenDaily,
+      aiTokenDaily: aiQuotaMode() === 'permanent_only' ? 0 : r.aiTokenDaily,
+      billingMode: aiQuotaMode(),
+      aiLevelGift: levelGiftEntitlement(r.level, registeredAt),
       trashDays: r.trashDays,
       freeDraws: freeDrawsFor(r.level), // 每日免费抽奖次数(随等级解锁)
     }));

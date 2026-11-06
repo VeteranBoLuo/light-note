@@ -1,10 +1,10 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const query = vi.fn();
 const getConnection = vi.fn();
 const connection = {
   beginTransaction: vi.fn(),
-  query: vi.fn((sql, ...args) => sql.startsWith('SET TRANSACTION') ? Promise.resolve([[]]) : query(sql, ...args)),
+  query: vi.fn((sql, ...args) => (sql.startsWith('SET TRANSACTION') ? Promise.resolve([[]]) : query(sql, ...args))),
   commit: vi.fn(),
   rollback: vi.fn(),
   release: vi.fn(),
@@ -22,6 +22,11 @@ const removeUserSessions = vi.fn();
 const logoutCurrentSession = vi.fn();
 const createExtensionAuthorizationCode = vi.fn();
 const consumeExtensionAuthorizationCode = vi.fn();
+const assessAiLevelGiftRisk = vi.fn();
+const grantOutstandingLevelGifts = vi.fn();
+vi.mock('../util/aiLevelGiftRisk.js', () => ({ assessAiLevelGiftRisk }));
+vi.mock('../util/aiLevelGifts.js', () => ({ grantOutstandingLevelGifts }));
+afterEach(() => vi.unstubAllEnvs());
 
 vi.mock('../db/index.js', () => ({ default: { query, getConnection } }));
 vi.mock('../util/services/newUserSeedService.js', () => ({
@@ -200,6 +205,8 @@ describe('新用户示例数据接入注册流程', () => {
     seedNewUserCloudFile.mockResolvedValue({ created: true, id: 7, folderId: 42 });
     createNotification.mockResolvedValue(undefined);
     issueLoginSession.mockResolvedValue('sid-1');
+    assessAiLevelGiftRisk.mockReset().mockResolvedValue({ heldAccounts: 0 });
+    grantOutstandingLevelGifts.mockReset().mockResolvedValue({ status: 'disabled' });
   });
 
   it.each(['  轻  ', '  轻笺用户  ', `  ${'轻'.repeat(20)}  `])(
@@ -232,6 +239,13 @@ describe('新用户示例数据接入注册流程', () => {
       await registerUser(req, res);
 
       expect(insertedUser.alias).toBe(alias.trim());
+      const factIndex = connection.query.mock.calls.findIndex(([sql]) =>
+        sql.includes('INSERT INTO ai_level_gift_registrations'),
+      );
+      expect(factIndex).toBeGreaterThan(-1);
+      expect(connection.query.mock.invocationCallOrder[factIndex]).toBeLessThan(
+        connection.commit.mock.invocationCallOrder[0],
+      );
       expect(ensureCommunityChatIdentity).toHaveBeenCalledWith({ userId: insertedUser.id });
       expect(seedNewUserWorkspaceData).toHaveBeenCalledWith({ userId: insertedUser.id, lang: 'en-US' });
       expect(seedNewUserCloudFile).toHaveBeenCalledWith({
@@ -260,6 +274,66 @@ describe('新用户示例数据接入注册流程', () => {
     },
   );
 
+  it('风控失败仍可完成注册，但不能发礼；查询参数不影响领域注册事实', async () => {
+    vi.stubEnv('AI_LEVEL_GIFT_MODE', 'on');
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    assessAiLevelGiftRisk.mockRejectedValue(Object.assign(new Error('synthetic'), { code: 'REVIEW_RISK_FAILURE' }));
+    let insertedUser;
+    query.mockImplementation(async (sql, params) => {
+      const text = compactSql(sql);
+      if (text === 'SELECT * FROM user WHERE email = ?') return [[]];
+      if (text === 'INSERT INTO user SET ?') {
+        insertedUser = params[0];
+        return [{ affectedRows: 1 }];
+      }
+      if (text.includes('FROM user u') && text.endsWith('WHERE u.id = ?'))
+        return [[{ id: insertedUser.id, email: insertedUser.email, role: 'user' }]];
+      return [[]];
+    });
+    try {
+      const res = mockRes();
+      await registerUser(
+        {
+          headers: {},
+          ip: '198.51.100.1',
+          originalUrl: '/user/registerUser?ref=review',
+          body: { email: 'risk@example.com', password: 'secret123', alias: '风控测试' },
+        },
+        res,
+      );
+      expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ status: 200 }));
+      expect(connection.query).toHaveBeenCalledWith(
+        expect.stringContaining('INSERT INTO ai_level_gift_registrations'),
+        [expect.stringMatching(/^[a-f0-9]{64}$/), null, insertedUser.id],
+      );
+      expect(grantOutstandingLevelGifts).not.toHaveBeenCalled();
+    } finally {
+      warn.mockRestore();
+    }
+  });
+  it('注册事实写入失败会回滚建号，不留下能绕过待检查状态的半成品账号', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    query.mockImplementation(async (sql) => {
+      if (sql.includes('SELECT * FROM user WHERE email')) return [[]];
+      if (sql.includes('INSERT INTO ai_level_gift_registrations'))
+        throw Object.assign(new Error('synthetic'), { code: 'REVIEW_FACT_FAILURE' });
+      return [{ affectedRows: 1 }];
+    });
+    try {
+      const res = mockRes();
+      await registerUser(
+        { headers: {}, body: { email: 'failed@example.com', password: 'secret123', alias: '失败测试' } },
+        res,
+      );
+      expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ status: 500 }));
+      expect(connection.rollback).toHaveBeenCalledOnce();
+      expect(connection.commit).not.toHaveBeenCalled();
+      expect(issueLoginSession).not.toHaveBeenCalled();
+      expect(grantOutstandingLevelGifts).not.toHaveBeenCalled();
+    } finally {
+      error.mockRestore();
+    }
+  });
   it('数据库示例初始化失败不会让邮箱注册失败，也不会创建孤立云文件', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     seedNewUserWorkspaceData.mockRejectedValue(
@@ -415,6 +489,13 @@ describe('新用户示例数据接入注册流程', () => {
 
     expect(user.id).toBe(createdUserId);
     expect(user.alias).toBe('octo');
+    const factIndex = connection.query.mock.calls.findIndex(([sql]) =>
+      sql.includes('INSERT INTO ai_level_gift_registrations'),
+    );
+    expect(factIndex).toBeGreaterThan(-1);
+    expect(connection.query.mock.invocationCallOrder[factIndex]).toBeLessThan(
+      connection.commit.mock.invocationCallOrder[0],
+    );
     expect(query).toHaveBeenCalledWith(expect.stringContaining('INSERT INTO user'), expect.arrayContaining(['octo']));
     expect(ensureCommunityChatIdentity).toHaveBeenCalledWith({ userId: createdUserId });
     expect(seedNewUserWorkspaceData).toHaveBeenCalledWith({ userId: createdUserId, lang: 'en-US' });
@@ -444,14 +525,26 @@ describe('新用户示例数据接入注册流程', () => {
     let createdUserId;
     query.mockImplementation(async (sql, params) => {
       const text = compactSql(sql);
-      if (text.startsWith('SELECT * FROM user WHERE github_id') || text.startsWith('SELECT * FROM user WHERE email')) return [[]];
-      if (text.startsWith('INSERT INTO user')) { createdUserId = params[0]; return [{ affectedRows: 1 }]; }
+      if (text.startsWith('SELECT * FROM user WHERE github_id') || text.startsWith('SELECT * FROM user WHERE email'))
+        return [[]];
+      if (text.startsWith('INSERT INTO user')) {
+        createdUserId = params[0];
+        return [{ affectedRows: 1 }];
+      }
       if (text.startsWith('SELECT * FROM user WHERE id')) return [[{ id: createdUserId, role: 'user' }]];
       return [[]];
     });
-    await handleUserDatabaseOperation({ id: 123, login: 'renamed-user', email: 'unverified@example.com', emailMissing: true }, { headers: {}, body: {} });
-    expect(query).toHaveBeenCalledWith('SELECT * FROM user WHERE email = ? LIMIT 1 FOR UPDATE', ['123@users.noreply.github.com']);
-    expect(query).toHaveBeenCalledWith(expect.stringContaining('INSERT INTO user'), expect.arrayContaining(['123@users.noreply.github.com']));
+    await handleUserDatabaseOperation(
+      { id: 123, login: 'renamed-user', email: 'unverified@example.com', emailMissing: true },
+      { headers: {}, body: {} },
+    );
+    expect(query).toHaveBeenCalledWith('SELECT * FROM user WHERE email = ? LIMIT 1 FOR UPDATE', [
+      '123@users.noreply.github.com',
+    ]);
+    expect(query).toHaveBeenCalledWith(
+      expect.stringContaining('INSERT INTO user'),
+      expect.arrayContaining(['123@users.noreply.github.com']),
+    );
   });
 
   it('历史 GitHub 固定初始密码在再次完成 GitHub 认证后自动轮换', async () => {
@@ -483,10 +576,15 @@ describe('新用户示例数据接入注册流程', () => {
       .mockResolvedValueOnce([[]])
       .mockResolvedValueOnce([[{ id: 'email-user', email: 'octo@example.com', role: 'user', ...account }]]);
 
-    await expect(handleUserDatabaseOperation(
-      { id: 123, login: 'octo', email: 'octo@example.com', avatar_url: '' },
-      { headers: { 'x-lang': 'zh-CN' }, user: { id: 'email-user', role: 'user' }, body: {} },
-    )).rejects.toMatchObject({ code: account.github_id ? 'GITHUB_OAUTH_EMAIL_CONFLICT' : 'GITHUB_OAUTH_BINDING_REQUIRED', status: 409 });
+    await expect(
+      handleUserDatabaseOperation(
+        { id: 123, login: 'octo', email: 'octo@example.com', avatar_url: '' },
+        { headers: { 'x-lang': 'zh-CN' }, user: { id: 'email-user', role: 'user' }, body: {} },
+      ),
+    ).rejects.toMatchObject({
+      code: account.github_id ? 'GITHUB_OAUTH_EMAIL_CONFLICT' : 'GITHUB_OAUTH_BINDING_REQUIRED',
+      status: 409,
+    });
 
     expect(connection.rollback).toHaveBeenCalledOnce();
     expect(seedNewUserWorkspaceData).not.toHaveBeenCalled();
@@ -497,8 +595,13 @@ describe('新用户示例数据接入注册流程', () => {
   it('普通资料保存不能更改登录邮箱或连带更新其他字段', async () => {
     query.mockResolvedValueOnce([[{ email: 'owner@example.com' }]]);
     const res = mockRes();
-    await saveUserInfo({ user: { id: 'user-1', role: 'user' }, body: { email: 'victim@example.com', alias: 'changed' } }, res);
-    expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ status: 409, data: { code: 'EMAIL_CHANGE_REQUIRES_VERIFICATION' } }));
+    await saveUserInfo(
+      { user: { id: 'user-1', role: 'user' }, body: { email: 'victim@example.com', alias: 'changed' } },
+      res,
+    );
+    expect(res.send).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 409, data: { code: 'EMAIL_CHANGE_REQUIRES_VERIFICATION' } }),
+    );
     expect(query.mock.calls.every(([sql]) => compactSql(sql).startsWith('SELECT '))).toBe(true);
   });
 

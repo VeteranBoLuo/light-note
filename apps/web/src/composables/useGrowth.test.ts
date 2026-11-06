@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   buyShopItem: vi.fn(),
   equipBackground: vi.fn(),
   getMyGrowth: vi.fn(),
+  getRanks: vi.fn(),
   getGrowthTasks: vi.fn(),
   claimGrowthTask: vi.fn(),
   checkin: vi.fn(),
@@ -24,6 +25,7 @@ vi.mock('@/store', () => ({
 vi.mock('@/api/growthApi.ts', () => ({
   default: {
     getMyGrowth: mocks.getMyGrowth,
+    getRanks: mocks.getRanks,
     getShop: mocks.getShop,
     buyShopItem: mocks.buyShopItem,
     equipBackground: mocks.equipBackground,
@@ -71,6 +73,7 @@ describe('useGrowth load', () => {
     resetGrowth();
     mocks.user.id = 'user-a';
     mocks.getMyGrowth.mockReset();
+    mocks.getRanks.mockReset();
     mocks.getGrowthTasks.mockReset();
     mocks.claimGrowthTask.mockReset();
     mocks.checkin.mockReset();
@@ -90,6 +93,31 @@ describe('useGrowth load', () => {
         weekly: { count: 0, items: [] },
       },
     });
+  });
+
+  it('不同账号的赠礼段位表隔离缓存，忽略旧账号晚到的表', async () => {
+    const pending = deferred<any>();
+    mocks.getRanks.mockReturnValueOnce(pending.promise).mockResolvedValueOnce({ status: 200, data: [{ level: 1, aiLevelGift: { tokens: 200000 } }] });
+    const store = useGrowth();
+    const first = store.loadRanks();
+    mocks.user.id = 'user-b';
+    await store.loadRanks();
+    pending.resolve({ status: 200, data: [{ level: 1, aiLevelGift: { tokens: 120000 } }] });
+    await first;
+    expect(store.ranks.value[0].aiLevelGift?.tokens).toBe(200000);
+    expect(mocks.getRanks).toHaveBeenCalledTimes(2);
+  });
+
+  it('计费模式变化后刷新已经缓存的段位表，回退可恢复日额度说明', async () => {
+    const store = useGrowth();
+    mocks.getMyGrowth.mockResolvedValueOnce({ status: 200, data: { ...growth(1), billingMode: 'permanent_only' } });
+    mocks.getRanks.mockResolvedValueOnce({ status: 200, data: [{ level: 1, billingMode: 'permanent_only', aiTokenDaily: 0 }] });
+    await store.load();await store.loadRanks();
+    mocks.getMyGrowth.mockResolvedValueOnce({ status: 200, data: { ...growth(1), billingMode: 'daily_and_permanent' } });
+    mocks.getRanks.mockResolvedValueOnce({ status: 200, data: [{ level: 1, billingMode: 'daily_and_permanent', aiTokenDaily: 100000 }] });
+    await store.load(true);
+    await vi.waitFor(() => expect(store.ranks.value[0]).toMatchObject({ billingMode: 'daily_and_permanent', aiTokenDaily: 100000 }));
+    expect(mocks.getRanks).toHaveBeenCalledTimes(2);
   });
 
   it('任务页与周挑战面板同时加载时合并请求，完成后允许刷新', async () => {
