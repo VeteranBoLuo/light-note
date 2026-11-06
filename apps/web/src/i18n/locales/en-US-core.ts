@@ -8152,7 +8152,7 @@ export default {
       daily_todo: 'Complete one todo',
       daily_organize: 'Organize one resource',
       wk_bookmark: 'Advance the weekly bookmark challenge',
-      wk_community: 'Share a post this week',
+      wk_community: 'Publish a post this week',
       wk_note: 'Advance the weekly note challenge',
       wk_checkin: 'Advance the weekly check-in challenge',
       wk_todo: 'Advance the weekly todo challenge',
@@ -8502,7 +8502,7 @@ export default {
     weeklyClaimOk: 'Weekly challenge reward claimed · +{n} points',
     weeklyActiveTodayDone: 'Counted today · Continue tomorrow',
     weeklyName: {
-      wk_community: 'Share this week',
+      wk_community: 'Post this week',
       wk_bookmark: 'Save bookmarks this week',
       wk_note: 'Write notes this week',
       wk_checkin: 'Check in this week',
@@ -8600,7 +8600,7 @@ export default {
     },
     pointsSource: {
       wk_bookmark: 'Weekly bookmark challenge',
-      wk_community: 'Share a post this week',
+      wk_community: 'Weekly post challenge',
       wk_note: 'Weekly note challenge',
       wk_checkin: 'Weekly check-in challenge',
       wk_todo: 'Weekly todo challenge',
@@ -9133,8 +9133,8 @@ export default {
       public_resource_200: 'A Forest of Knowledge',
       public_resource_500: 'Knowledge Lighthouse',
 
-      community_post_1: 'First Share',
-      community_post_10: 'Keep Sharing',
+      community_post_1: 'First Post',
+      community_post_10: 'Keep Posting',
       community_post_50: 'Knowledge Keeper',
       community_answer_1: 'Helpful Answer',
 

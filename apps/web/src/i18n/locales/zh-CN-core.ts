@@ -7829,7 +7829,7 @@ export default {
       daily_todo: '完成一个待办',
       daily_organize: '整理一项资源',
       wk_bookmark: '推进本周书签挑战',
-      wk_community: '本周分享一篇帖子',
+      wk_community: '本周发布一篇帖子',
       wk_note: '推进本周笔记挑战',
       wk_checkin: '推进本周签到挑战',
       wk_todo: '推进本周待办挑战',
@@ -8171,7 +8171,7 @@ export default {
     weeklyClaimOk: '已领取周挑战奖励 · 积分 +{n}',
     weeklyActiveTodayDone: '今日已计入 · 明日继续',
     weeklyName: {
-      wk_community: '本周分享',
+      wk_community: '本周发帖',
       wk_bookmark: '本周收藏书签',
       wk_note: '本周记笔记',
       wk_checkin: '本周签到',
@@ -8266,7 +8266,7 @@ export default {
     },
     pointsSource: {
       wk_bookmark: '本周书签挑战',
-      wk_community: '本周分享一篇帖子',
+      wk_community: '本周发帖挑战',
       wk_note: '本周笔记挑战',
       wk_checkin: '本周签到挑战',
       wk_todo: '本周待办挑战',
@@ -8778,8 +8778,8 @@ export default {
       public_resource_200: '聚知成林',
       public_resource_500: '知识灯塔',
 
-      community_post_1: '初次分享',
-      community_post_10: '持续分享',
+      community_post_1: '初次发帖',
+      community_post_10: '持续发帖',
       community_post_50: '经验沉淀',
       community_answer_1: '热心解答',
 
