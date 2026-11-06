@@ -46,11 +46,18 @@ describe('安全中心 V2 发布门禁', () => {
   it('安全初始化失败时阻止应用继续监听', async () => {
     const appSource = await readProjectFile('apps/server/app.js');
     const migrationIndex = appSource.indexOf('await ensureSecurityTables();');
-    const exitIndex = appSource.indexOf('process.exit(1);', migrationIndex);
-    const listenIndex = appSource.indexOf('app.listen(');
+    // 退出必须落在迁移自己的 catch 块内，不能借用后续其他 Schema 初始化的退出。
+    const catchIndex = appSource.indexOf('} catch', migrationIndex);
+    const catchEndIndex = appSource.indexOf('\n}', catchIndex + 1);
+    const exitIndex = appSource.indexOf('process.exit(1);', catchIndex);
+    // 监听端口随运行环境变化（线上 9001，本机测试环境由 localTestPorts 决定），按首个监听调用定位，不绑定端口写法。
+    const listenIndex = appSource.search(/\.listen\(/);
 
     expect(migrationIndex).toBeGreaterThanOrEqual(0);
-    expect(exitIndex).toBeGreaterThan(migrationIndex);
+    expect(catchIndex).toBeGreaterThan(migrationIndex);
+    expect(exitIndex).toBeGreaterThan(catchIndex);
+    expect(exitIndex).toBeLessThan(catchEndIndex);
+    expect(listenIndex).toBeGreaterThanOrEqual(0);
     expect(listenIndex).toBeGreaterThan(exitIndex);
   });
 });
