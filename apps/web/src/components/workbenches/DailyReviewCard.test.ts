@@ -598,6 +598,18 @@ describe('DailyReviewCard', () => {
     expect(host.querySelector('button')).toBeNull();
   });
 
+  it('桌面卡片正常空清单不占位，有内容后恢复显示', async () => {
+    review.value = snapshot({ session: { id: 'session-1', status: 'empty', itemCount: 0 }, items: [] });
+    const host = mountCard();
+    await settle();
+    expect(host.querySelector('.daily-review')).toBeNull();
+
+    review.value = snapshot();
+    await settle();
+    expect(host.querySelector('.daily-review')).not.toBeNull();
+    expect(host.textContent).toContain(zhCN.growth.dailyReviewSubtitle);
+  });
+
   it('7 天后再看位于次级菜单，永久操作必须经过危险确认', async () => {
     review.value = snapshot();
     const host = mountCard();

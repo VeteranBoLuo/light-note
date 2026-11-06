@@ -8,41 +8,51 @@ const desktopSource = readFileSync(
 ).replace(/var\(--ui-(?:space|control|layout|font|card)-[\d_]+, ([\d.]+px)\)/g, '$1');
 
 describe('桌面工作台头部布局稳定性', () => {
-  it('页头不再重复提供快速添加，右侧快速创建面板继续保留', () => {
+  it('新建入口位于页头右侧，右栏只保留成长卡', () => {
+    const headerSource = desktopSource.slice(
+      desktopSource.indexOf('<header class="workbench-header">'),
+      desktopSource.indexOf('</header>'),
+    );
     expect(desktopSource).not.toContain('workbench.header.quickCapture');
-    expect(desktopSource).not.toContain('capture-button');
-    expect(desktopSource).toContain('quick-create-panel');
-    expect(desktopSource).toContain('openQuickCapture(action.type)');
+    expect(desktopSource).not.toContain('quick-create-panel');
+    expect(headerSource).toContain('class="workbench-quick-create"');
+    expect(headerSource).toContain('openQuickCapture(action.type)');
   });
 
-  it('首屏把待处理总览与快速创建、成长卡片组成主次分栏，资源概览继续保留在下方', () => {
-    const firstFoldStart = desktopSource.indexOf('<section class="workbench-first-fold">');
+  it('待处理总览在简报下方单独一行，首屏为今日待处理、继续处理与成长三卡', () => {
+    const briefIndex = desktopSource.indexOf('class="workbench-brief"');
+    const summaryIndex = desktopSource.indexOf('<section class="today-summary"');
+    const firstFoldStart = desktopSource.indexOf('<section class="workbench-first-fold"');
     const firstFoldEnd = desktopSource.indexOf('</section>', desktopSource.indexOf('</aside>', firstFoldStart)) + 10;
     const firstFoldSource = desktopSource.slice(firstFoldStart, firstFoldEnd);
     const resourceOverviewStart = desktopSource.indexOf(
       '<section class="primary-grid" :aria-label="t(\'workbench.panel.resourceOverview\')">',
     );
 
-    expect(firstFoldStart).toBeGreaterThan(-1);
-    expect(firstFoldSource).toContain('class="today-summary"');
-    expect(firstFoldSource).toContain('quick-create-panel');
+    expect(summaryIndex).toBeGreaterThan(briefIndex);
+    expect(firstFoldStart).toBeGreaterThan(summaryIndex);
+    expect(firstFoldSource).toContain('<div v-if="!todayCollapsed" class="today-summary-details">');
+    expect(firstFoldSource).toContain('<article class="today-continue">');
     expect(firstFoldSource).toContain('<WorkbenchGrowth expanded />');
     expect(resourceOverviewStart).toBeGreaterThan(firstFoldEnd);
-    expect(desktopSource).toMatch(
-      /\.workbench-first-fold\s*\{[\s\S]*?grid-template-columns:\s*minmax\(0, 1\.65fr\) minmax\(340px, 1fr\)/,
-    );
-    expect(desktopSource).toMatch(
-      /\.workbench-first-fold__rail\s*\{[\s\S]*?grid-template-rows:\s*auto minmax\(0, 1fr\)[\s\S]*?align-content:\s*stretch/,
-    );
     expect(desktopSource).toMatch(/\.workbench-first-fold__rail :deep\(\.growth-card\)\s*\{[\s\S]*?height:\s*100%/);
-    expect(desktopSource).toMatch(/\.quick-create-panel\s*\{[\s\S]*?height:\s*auto/);
   });
 
-  it('1200–1399 宽桌面仍保留首屏右侧栏，不提前折叠成类移动布局', () => {
+  it('待办格写明其中今天的数量，与导航角标同用注意力口径', () => {
+    expect(desktopSource).toContain('keypath="workbench.today.todoPendingTodayHint"');
+    expect(desktopSource).toContain('{{ inbox.todoAttentionTotal }}');
+  });
+
+  it('今日待处理清空后只在完整加载或回到前台时收起', () => {
+    expect(desktopSource).toContain('settleTodayLayout(!silent || options.settleLayout === true)');
+    expect(desktopSource).toContain('fetchWorkbenchSummary({ silent: true, settleLayout: true })');
+  });
+
+  it('1200 以下首屏改为两列并让成长卡占满，不提前折叠成类移动布局', () => {
     expect(desktopSource).toContain('@media (max-width: 1199px)');
     expect(desktopSource).not.toContain('@media (max-width: 1380px)');
     expect(desktopSource).toMatch(
-      /@media \(max-width: 1199px\)\s*\{[\s\S]*?\.workbench-first-fold\s*\{[\s\S]*?grid-template-columns:\s*minmax\(0, 1fr\)/,
+      /@media \(max-width: 1199px\)\s*\{[\s\S]*?\.workbench-first-fold\s*\{[\s\S]*?grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\)/,
     );
   });
 
@@ -63,9 +73,8 @@ describe('桌面工作台头部布局稳定性', () => {
     expect(desktopSource).toContain('item.list.slice(0, LATEST_UPDATE_ITEM_LIMIT)');
   });
 
-  it('待处理空态复用通用快速创建入口', () => {
-    expect(desktopSource).toContain(':show-empty-action="true"');
-    expect(desktopSource).toContain('@quick-create="openQuickCapture()"');
+  it('待处理卡片不再重复提供快速创建，新建统一走页头入口', () => {
+    expect(desktopSource).not.toContain(':show-empty-action="true"');
     expect(desktopSource).toMatch(
       /function openQuickCapture\(type\?: ActionCaptureType\)[\s\S]*?inbox\.openQuickCapture\(\);/,
     );
@@ -80,9 +89,9 @@ describe('桌面工作台头部布局稳定性', () => {
   });
 
   it('第二分栏展示共享每日回顾，并让初始化与前台刷新共用回顾读模型', () => {
-    const firstFoldIndex = desktopSource.indexOf('<section class="workbench-first-fold">');
-    const routineIndex = desktopSource.indexOf('<section class="workbench-routine-grid">');
-    const reviewIndex = desktopSource.indexOf('<DailyReviewCard class="workbench-daily-review"');
+    const firstFoldIndex = desktopSource.indexOf('<section class="workbench-first-fold"');
+    const routineIndex = desktopSource.indexOf('<section class="workbench-routine-grid"');
+    const reviewIndex = desktopSource.indexOf('<DailyReviewCard :read-only="growthReadOnly" />');
     const dailyQuestsIndex = desktopSource.indexOf('<DailyQuests');
 
     expect(desktopSource).toContain("import DailyReviewCard from '@/components/workbenches/DailyReviewCard.vue'");
@@ -96,7 +105,7 @@ describe('桌面工作台头部布局稳定性', () => {
   });
 
   it('简报通栏置顶，回顾与任务使用独立卡片并复用非弹框回顾', () => {
-    const routineStart = desktopSource.indexOf('<section class="workbench-routine-grid">');
+    const routineStart = desktopSource.indexOf('<section class="workbench-routine-grid"');
     const briefIndex = desktopSource.indexOf('class="workbench-brief"');
     const reviewColumnIndex = desktopSource.indexOf('<div class="workbench-routine-grid__review">');
     const resourceOverviewIndex = desktopSource.indexOf(
@@ -112,14 +121,15 @@ describe('桌面工作台头部布局稳定性', () => {
     );
     expect(desktopSource).toContain('.workbench-brief:empty');
     expect(desktopSource).toContain('class="workbench-routine-grid__tasks"');
-    expect(desktopSource).toContain('<DailyReviewCard class="workbench-daily-review" :read-only="growthReadOnly" />');
+    // 回顾正常为空时不渲染根节点，调用处不能再传 class，否则 Vue 无处挂载并告警。
+    expect(desktopSource).toContain('<DailyReviewCard :read-only="growthReadOnly" />');
     expect(desktopSource).not.toContain('height: 206px');
   });
 
   it('今日简报只在桌面布局加载，默认开启时由独立卡片按日确保生成', () => {
-    const firstFoldIndex = desktopSource.indexOf('<section class="workbench-first-fold">');
+    const firstFoldIndex = desktopSource.indexOf('<section class="workbench-first-fold"');
     const briefIndex = desktopSource.indexOf('<DailyBriefCard');
-    const reviewIndex = desktopSource.indexOf('<DailyReviewCard class="workbench-daily-review"');
+    const reviewIndex = desktopSource.indexOf('<DailyReviewCard :read-only="growthReadOnly" />');
 
     expect(desktopSource).toContain("import DailyBriefCard from '@/components/workbenches/DailyBriefCard.vue'");
     expect(desktopSource).toContain('v-if="bookmark.isDesktop"');

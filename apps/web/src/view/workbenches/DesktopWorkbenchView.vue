@@ -27,6 +27,20 @@
             </span>
           </small>
         </div>
+        <div class="workbench-quick-create" role="group" :aria-label="t('workbench.panel.quickCreate')">
+          <BButton
+            v-for="action in quickCreateActions"
+            :key="action.key"
+            class="quick-create-action"
+            :title="action.desc"
+            @click="openQuickCapture(action.type)"
+          >
+            <span class="quick-create-icon" :class="`quick-create-icon--${action.key}`">
+              <SvgIcon :src="action.icon" size="18" />
+            </span>
+            <strong>{{ action.label }}</strong>
+          </BButton>
+        </div>
       </header>
 
       <div v-if="workbenchError" class="workbench-error" role="alert" aria-live="assertive">
@@ -61,195 +75,182 @@
         「待处理总览」而不是「今日待处理」—— 后者会让人以为它该等于顶栏待办角标
         （逾期 + 今天）。下方待整理明细仍只展示收集工作流，不与治理问题混在一起。
         内部命名沿用 todaySummary*，留给后续专门的工作台命名重构，不在此处机械改名。
+        待办格写明其中「今天」的数量，与导航角标同用 /inbox/count 的逾期 + 今天口径。
       -->
-      <section class="workbench-first-fold">
-        <section class="today-summary" :aria-label="t('workbench.panel.actionOverview')">
-          <div class="today-summary-heading">
-            <span class="today-summary-heading__copy">
-              <strong>{{ t('workbench.panel.actionOverview') }}</strong>
-              <small>{{ t('workbench.panel.actionOverviewHint') }}</small>
-            </span>
-            <span class="today-summary-total">
-              <strong>{{ displayCount(actionOverviewTotal) }}</strong>
-              <small>{{ t('workbench.today.actionTotalUnit') }}</small>
-            </span>
-          </div>
-          <div class="today-summary-grid">
-            <BButton
-              v-for="item in todaySummaryItems"
-              :key="item.key"
-              class="today-summary-item"
-              :class="`today-summary-item--${item.key}`"
-              @click="openTodaySummaryItem(item.key)"
+      <section class="today-summary" :aria-label="t('workbench.panel.actionOverview')">
+        <span class="today-summary-heading">
+          <strong>{{ t('workbench.panel.actionOverview') }}</strong>
+          <span v-if="todayCollapsed" class="today-summary-status" role="status">
+            <SvgIcon :src="icon.message.success" size="14" aria-hidden="true" />
+            {{ t('workbench.today.allDoneTitle') }}
+          </span>
+          <small v-else>{{ t('workbench.panel.actionOverviewHint') }}</small>
+        </span>
+        <BButton
+          v-for="item in todaySummaryItems"
+          :key="item.key"
+          class="today-summary-item"
+          :class="`today-summary-item--${item.key}`"
+          @click="openTodaySummaryItem(item.key)"
+        >
+          <span class="today-summary-item__copy">
+            <span class="today-summary-item__label">{{ item.label }}</span>
+            <strong>{{ item.value }}</strong>
+            <i18n-t
+              v-if="item.key === 'todo'"
+              keypath="workbench.today.todoPendingTodayHint"
+              tag="small"
+              scope="global"
             >
-              <span class="today-summary-item__copy">
-                <span>{{ item.label }}</span>
-                <strong>{{ item.value }}</strong>
-                <small>{{ item.hint }}</small>
-              </span>
+              <template #count>
+                <b>{{ inbox.todoAttentionTotal }}</b>
+              </template>
+            </i18n-t>
+            <small v-else>{{ item.hint }}</small>
+          </span>
+        </BButton>
+        <span class="today-summary-total">
+          <strong>{{ displayCount(actionOverviewTotal) }}</strong>
+          <small>{{ t('workbench.today.actionTotalUnit') }}</small>
+        </span>
+      </section>
+
+      <section class="workbench-first-fold" :class="{ 'is-today-collapsed': todayCollapsed }">
+        <!-- 今日待处理为空时收起；只在完整加载或回到前台时判断，避免处理完最后一条时卡片被立即抽走。 -->
+        <div v-if="!todayCollapsed" class="today-summary-details">
+          <!-- 卡片内不显示分组标题，计数回落到明细条数；不要传 summary 的「全部未完成」总数。 -->
+          <TodayActionSection
+            :overdue-todos="todayOverdueTodos"
+            :due-today-todos="todayDueTodos"
+            :inbox-items="todayInboxItems"
+            :loading="summaryLoading"
+            :show-header="true"
+            contained
+            @refresh="refreshTodayActions"
+          />
+        </div>
+
+        <article class="today-continue">
+          <div class="panel-header today-continue__header">
+            <div>
+              <h2>{{ t('workbench.panel.continueWorking') }}</h2>
+              <p>{{ t('workbench.panel.continueHint') }}</p>
+            </div>
+            <BButton
+              v-if="activeContinueTab !== 'projects' || projectEntryCount > 0"
+              size="small"
+              class="quiet-button"
+              @click="openActiveCollection"
+            >
+              {{ t('workbench.panel.viewAll') }}
             </BButton>
           </div>
-          <div class="today-summary-body">
-            <div class="today-summary-details">
-              <!-- 只传待整理总数：summary 接口的 todoPendingTotal 是「全部未完成」，
-                 不是这里展示的「逾期 + 今天」，传错反而误导；待办计数回落到明细条数。 -->
-              <TodayActionSection
-                :inbox-total="todayStats.inboxPendingTotal"
-                :overdue-todos="todayOverdueTodos"
-                :due-today-todos="todayDueTodos"
-                :inbox-items="todayInboxItems"
-                :loading="summaryLoading"
-                :show-header="true"
-                :show-empty-action="true"
-                contained
-                @refresh="refreshTodayActions"
-                @quick-create="openQuickCapture()"
-              />
-            </div>
 
-            <article class="today-continue">
-              <div class="panel-header today-continue__header">
-                <div>
-                  <h2>{{ t('workbench.panel.continueWorking') }}</h2>
-                  <p>{{ t('workbench.panel.continueHint') }}</p>
-                </div>
-                <BButton
-                  v-if="activeContinueTab !== 'projects' || projectEntryCount > 0"
-                  size="small"
-                  class="quiet-button"
-                  @click="openActiveCollection"
+          <BTabs v-model:active-tab="activeContinueTab" variant="pill" :options="continueTabOptions">
+            <template #label="{ tab }">
+              <span class="continue-tab-label" :class="{ 'is-project': tab.key === 'projects' }">
+                <SvgIcon
+                  v-if="tab.key === 'projects'"
+                  class="continue-tab-label__icon"
+                  :src="icon.toolbox.study"
+                  size="15"
+                />{{ tab.label }}
+              </span>
+            </template>
+          </BTabs>
+
+          <div class="today-continue__body">
+            <WorkshopProjectEntry
+              v-show="activeContinueTab === 'projects'"
+              inline
+              tab-panel
+              @state="
+                projectEntryVisible = $event.visible;
+                projectEntryCount = $event.count;
+              "
+            />
+            <template v-if="activeContinueTab !== 'projects'">
+              <div v-if="summaryLoading" class="content-list content-list--loading content-list--distributed">
+                <div
+                  v-for="index in CONTINUE_ITEM_LIMIT"
+                  :key="`content-skeleton-${index}`"
+                  class="content-skeleton-row"
                 >
-                  {{ t('workbench.panel.viewAll') }}
+                  <span class="skeleton-block skeleton-row-icon"></span>
+                  <span class="content-skeleton-copy">
+                    <span class="skeleton-block content-skeleton-title"></span>
+                    <span class="skeleton-block content-skeleton-subtitle"></span>
+                  </span>
+                  <span class="skeleton-block skeleton-row-meta"></span>
+                </div>
+              </div>
+              <div
+                v-else-if="activeContinueItems.length"
+                class="content-list"
+                :class="{ 'content-list--distributed': activeContinueItems.length === CONTINUE_ITEM_LIMIT }"
+              >
+                <BButton
+                  v-for="item in activeContinueItems"
+                  :key="item.key"
+                  class="content-row"
+                  @click="openContinueItem(item)"
+                >
+                  <span class="content-row-icon" :class="`content-row-icon--${item.type}`">
+                    <SvgIcon :src="item.icon" size="18" />
+                  </span>
+                  <span class="content-row-main">
+                    <strong>{{ item.title }}</strong>
+                    <span>{{ item.description }}</span>
+                  </span>
+                  <span class="content-row-meta">{{ item.meta }}</span>
                 </BButton>
               </div>
-
-              <BTabs v-model:active-tab="activeContinueTab" variant="pill" :options="continueTabOptions">
-                <template #label="{ tab }">
-                  <span class="continue-tab-label" :class="{ 'is-project': tab.key === 'projects' }">
-                    <SvgIcon
-                      v-if="tab.key === 'projects'"
-                      class="continue-tab-label__icon"
-                      :src="icon.toolbox.study"
-                      size="15"
-                    />{{ tab.label }}
-                  </span>
-                </template>
-              </BTabs>
-
-              <div class="today-continue__body">
-                <WorkshopProjectEntry
-                  v-show="activeContinueTab === 'projects'"
-                  inline
-                  tab-panel
-                  @state="
-                    projectEntryVisible = $event.visible;
-                    projectEntryCount = $event.count;
+              <div v-else class="compact-empty compact-empty--continue">
+                <strong>{{ t('workbench.empty.continueTitle') }}</strong>
+                <span>{{ t('workbench.empty.continueDesc') }}</span>
+                <BButton
+                  type="primary"
+                  @click="
+                    openQuickCapture(
+                      activeContinueTab === 'files'
+                        ? 'file'
+                        : activeContinueTab === 'bookmarks'
+                          ? 'bookmark'
+                          : 'note',
+                    )
                   "
-                />
-                <template v-if="activeContinueTab !== 'projects'">
-                  <div v-if="summaryLoading" class="content-list content-list--loading content-list--distributed">
-                    <div
-                      v-for="index in CONTINUE_ITEM_LIMIT"
-                      :key="`content-skeleton-${index}`"
-                      class="content-skeleton-row"
-                    >
-                      <span class="skeleton-block skeleton-row-icon"></span>
-                      <span class="content-skeleton-copy">
-                        <span class="skeleton-block content-skeleton-title"></span>
-                        <span class="skeleton-block content-skeleton-subtitle"></span>
-                      </span>
-                      <span class="skeleton-block skeleton-row-meta"></span>
-                    </div>
-                  </div>
-                  <div
-                    v-else-if="activeContinueItems.length"
-                    class="content-list"
-                    :class="{ 'content-list--distributed': activeContinueItems.length === CONTINUE_ITEM_LIMIT }"
-                  >
-                    <BButton
-                      v-for="item in activeContinueItems"
-                      :key="item.key"
-                      class="content-row"
-                      @click="openContinueItem(item)"
-                    >
-                      <span class="content-row-icon" :class="`content-row-icon--${item.type}`">
-                        <SvgIcon :src="item.icon" size="18" />
-                      </span>
-                      <span class="content-row-main">
-                        <strong>{{ item.title }}</strong>
-                        <span>{{ item.description }}</span>
-                      </span>
-                      <span class="content-row-meta">{{ item.meta }}</span>
-                    </BButton>
-                  </div>
-                  <div v-else class="compact-empty compact-empty--continue">
-                    <strong>{{ t('workbench.empty.continueTitle') }}</strong>
-                    <span>{{ t('workbench.empty.continueDesc') }}</span>
-                    <BButton
-                      type="primary"
-                      @click="
-                        openQuickCapture(
-                          activeContinueTab === 'files'
-                            ? 'file'
-                            : activeContinueTab === 'bookmarks'
-                              ? 'bookmark'
-                              : 'note',
-                        )
-                      "
-                    >
-                      {{
-                        quickCreateActions.find(
-                          (action) =>
-                            action.type ===
-                            (activeContinueTab === 'files'
-                              ? 'file'
-                              : activeContinueTab === 'bookmarks'
-                                ? 'bookmark'
-                                : 'note'),
-                        )?.label
-                      }}
-                    </BButton>
-                  </div>
-                </template>
+                >
+                  {{
+                    quickCreateActions.find(
+                      (action) =>
+                        action.type ===
+                        (activeContinueTab === 'files'
+                          ? 'file'
+                          : activeContinueTab === 'bookmarks'
+                            ? 'bookmark'
+                            : 'note'),
+                    )?.label
+                  }}
+                </BButton>
               </div>
-            </article>
+            </template>
           </div>
-        </section>
+        </article>
 
-        <aside class="workbench-first-fold__rail" :aria-label="t('workbench.panel.quickCreate')">
-          <article class="panel-card quick-create-panel">
-            <div class="panel-header">
-              <div>
-                <h2>{{ t('workbench.panel.quickCreate') }}</h2>
-                <p>{{ t('workbench.panel.quickCreateHint') }}</p>
-              </div>
-            </div>
-            <div class="quick-create-grid">
-              <BButton
-                v-for="action in quickCreateActions"
-                :key="action.key"
-                class="quick-create-action"
-                @click="openQuickCapture(action.type)"
-              >
-                <span class="quick-create-icon" :class="`quick-create-icon--${action.key}`">
-                  <SvgIcon :src="action.icon" size="19" />
-                </span>
-                <span>
-                  <strong>{{ action.label }}</strong>
-                  <small>{{ action.desc }}</small>
-                </span>
-              </BButton>
-            </div>
-          </article>
+        <aside class="workbench-first-fold__rail" :aria-label="t('growth.pageTitle')">
           <WorkbenchGrowth expanded />
         </aside>
       </section>
 
-      <section class="workbench-routine-grid">
+      <!--
+        回顾、每日任务与成长任务共用一个两列网格：回顾正常为空时不渲染（包裹层 :empty 隐藏），
+        成长任务补到每日任务旁；回顾显示时，成长任务另起一行占满。
+      -->
+      <section class="workbench-routine-grid" :class="{ 'workbench-routine-grid--no-tasks': !showDailyTaskSection }">
         <div class="workbench-routine-grid__review">
-          <DailyReviewCard class="workbench-daily-review" :read-only="growthReadOnly" />
+          <DailyReviewCard :read-only="growthReadOnly" />
         </div>
-        <div v-if="dailyGrowthSectionLoading || showDailyGrowthTasks" class="workbench-routine-grid__tasks">
+        <div v-if="showDailyTaskSection" class="workbench-routine-grid__tasks">
           <section
             v-if="dailyGrowthSectionLoading"
             class="growth-task-grid growth-task-grid--single"
@@ -294,42 +295,41 @@
             </article>
           </section>
         </div>
-      </section>
-
-      <section
-        v-if="growthTaskSectionLoading || showGrowthTasks"
-        class="growth-task-grid growth-task-grid--single workbench-growth-tasks"
-        :aria-label="t('growth.pageTitle')"
-      >
-        <article v-if="growthTaskSectionLoading" class="panel-card growth-panel-skeleton" aria-hidden="true">
-          <div class="growth-panel-skeleton__header">
-            <span class="skeleton-block growth-panel-skeleton__title"></span>
-            <span class="skeleton-block growth-panel-skeleton__count"></span>
-          </div>
-          <span class="skeleton-block growth-panel-skeleton__bar"></span>
-          <span class="skeleton-block growth-panel-skeleton__hint"></span>
-          <div class="growth-panel-skeleton__list">
-            <span v-for="row in 2" :key="row" class="growth-panel-skeleton__row">
-              <span class="skeleton-block growth-panel-skeleton__marker"></span>
-              <span class="growth-panel-skeleton__copy">
-                <span class="skeleton-block"></span>
-                <span class="skeleton-block"></span>
+        <section
+          v-if="growthTaskSectionLoading || showGrowthTasks"
+          class="growth-task-grid growth-task-grid--single workbench-growth-tasks"
+          :aria-label="t('growth.pageTitle')"
+        >
+          <article v-if="growthTaskSectionLoading" class="panel-card growth-panel-skeleton" aria-hidden="true">
+            <div class="growth-panel-skeleton__header">
+              <span class="skeleton-block growth-panel-skeleton__title"></span>
+              <span class="skeleton-block growth-panel-skeleton__count"></span>
+            </div>
+            <span class="skeleton-block growth-panel-skeleton__bar"></span>
+            <span class="skeleton-block growth-panel-skeleton__hint"></span>
+            <div class="growth-panel-skeleton__list">
+              <span v-for="row in 2" :key="row" class="growth-panel-skeleton__row">
+                <span class="skeleton-block growth-panel-skeleton__marker"></span>
+                <span class="growth-panel-skeleton__copy">
+                  <span class="skeleton-block"></span>
+                  <span class="skeleton-block"></span>
+                </span>
+                <span class="skeleton-block growth-panel-skeleton__action"></span>
               </span>
-              <span class="skeleton-block growth-panel-skeleton__action"></span>
-            </span>
-          </div>
-          <span class="skeleton-block growth-panel-skeleton__footer"></span>
-        </article>
-        <article v-else class="panel-card today-growth-panel">
-          <GrowthTasks
-            :data="growthTasks"
-            compact
-            :max-visible="2"
-            show-view-all
-            :read-only="growthReadOnly"
-            @view="openGrowthTasks"
-          />
-        </article>
+            </div>
+            <span class="skeleton-block growth-panel-skeleton__footer"></span>
+          </article>
+          <article v-else class="panel-card today-growth-panel">
+            <GrowthTasks
+              :data="growthTasks"
+              compact
+              :max-visible="2"
+              show-view-all
+              :read-only="growthReadOnly"
+              @view="openGrowthTasks"
+            />
+          </article>
+        </section>
       </section>
 
       <section class="primary-grid" :aria-label="t('workbench.panel.resourceOverview')">
@@ -526,6 +526,7 @@
   import { openNotificationPanel } from '@/utils/notificationEntry';
   import { resolveDailyQuestRoute } from '@/utils/growthNavigation';
   import { useManorAttention } from '@/composables/useManorAttention';
+  import { nextTodayCollapsed, readTodayCollapsed, rememberTodayCollapsed } from './workbenchTodayLayout';
 
   type ContinueTab = 'projects' | 'notes' | 'files' | 'bookmarks';
   type ContinueItemType = 'note' | 'file' | 'bookmark';
@@ -572,6 +573,7 @@
   const showDailyGrowthTasks = computed(() => Boolean(dashboard.value));
   const showGrowthTasks = computed(() => Boolean(growthTasks.value?.tasks.some((task) => !task.claimed)));
   const dailyGrowthSectionLoading = computed(() => dashboardLoading.value && !dashboard.value);
+  const showDailyTaskSection = computed(() => dailyGrowthSectionLoading.value || showDailyGrowthTasks.value);
   const growthTaskSectionLoading = computed(() => growthTasksLoading.value && !growthTasks.value);
 
   const loadingWorkbench = ref(true);
@@ -598,6 +600,18 @@
   const todayOverdueTodos = ref<any[]>([]);
   const todayDueTodos = ref<any[]>([]);
   const todayInboxItems = ref<any[]>([]);
+  const workbenchOwnerKey = () =>
+    [user.id || 'visitor', user.role || '', user.adminContext?.subjectUserId || '', user.adminContext?.mode || ''].join(
+      '|',
+    );
+  // 今日待处理为空时收起卡片，规则见 nextTodayCollapsed。
+  const todayCollapsed = ref(readTodayCollapsed(workbenchOwnerKey()));
+  function settleTodayLayout(allowCollapse: boolean) {
+    const hasActions =
+      todayOverdueTodos.value.length + todayDueTodos.value.length + todayInboxItems.value.length > 0;
+    todayCollapsed.value = nextTodayCollapsed(todayCollapsed.value, hasActions, allowCollapse);
+    rememberTodayCollapsed(workbenchOwnerKey(), todayCollapsed.value);
+  }
   const generatedAt = ref('');
   const quickActionUsage = ref<Record<string, number>>(readQuickActionUsage());
   const trendSummary = ref<any[]>([]);
@@ -812,7 +826,8 @@
       key: 'todo',
       label: t('workbench.today.todoPending'),
       value: inbox.todoPendingTotal,
-      hint: t('workbench.today.todoPendingHint'),
+      // 说明行由模板渲染「其中今天 N」，与导航角标同用 inbox.todoAttentionTotal
+      hint: '',
     },
     {
       key: 'organize',
@@ -988,7 +1003,7 @@
    */
   let workbenchRequestId = 0;
 
-  async function fetchWorkbenchSummary(options: { silent?: boolean } = {}) {
+  async function fetchWorkbenchSummary(options: { silent?: boolean; settleLayout?: boolean } = {}) {
     const requestId = ++workbenchRequestId;
     const owner = [user.id, user.role, user.adminContext?.subjectUserId, user.adminContext?.mode].join('|');
     const isCurrent = () =>
@@ -1041,6 +1056,7 @@
       todayOverdueTodos.value = Array.isArray(data.today?.overdueTodos) ? data.today.overdueTodos : [];
       todayDueTodos.value = Array.isArray(data.today?.dueTodayTodos) ? data.today.dueTodayTodos : [];
       todayInboxItems.value = Array.isArray(data.today?.inboxItems) ? data.today.inboxItems : [];
+      settleTodayLayout(!silent || options.settleLayout === true);
       inbox.pendingTotal = todayStats.value.inboxPendingTotal;
       inbox.todoPendingTotal = todayStats.value.todoPendingTotal;
       inbox.actionTotal = todayStats.value.actionTotal;
@@ -1097,6 +1113,7 @@
     if (initializedOwner.value !== owner) {
       inbox.resetForOwner(user.id || 'visitor');
       organizer.resetForOwner(owner);
+      todayCollapsed.value = readTodayCollapsed(owner);
     }
     try {
       await Promise.allSettled([
@@ -1156,7 +1173,8 @@
   useForegroundRefresh({
     refresh: async () => {
       await Promise.all([
-        fetchWorkbenchSummary({ silent: true }),
+        // 离开页面后回来视为重新进入：已清空的今日待处理此时才收起。
+        fetchWorkbenchSummary({ silent: true, settleLayout: true }),
         loadDashboard(),
         loadGrowthTasks(true),
         refreshDailyReview(),
@@ -1222,9 +1240,18 @@
   .workbench-header {
     min-height: var(--ui-layout-56, 56px);
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     justify-content: space-between;
-    gap: var(--ui-space-20, 20px);
+    gap: var(--ui-space-10, 10px) var(--ui-space-20, 20px);
+  }
+
+  .workbench-quick-create {
+    min-width: 0;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: var(--ui-space-8, 8px);
   }
 
   .workbench-heading {
@@ -1316,20 +1343,31 @@
   }
 
   .workbench-first-fold {
+    --today-action-row-height: var(--ui-layout-65, 65px);
+    // 固定容纳标题栏、四条完整待处理行和上下边框，不能随条数或页签变化。
+    /* ui-density-fixed: 末尾 2px 是上下各 1px 边框之和，不能随行高变化。 */
+    --today-work-area-height: calc(var(--ui-layout-40, 40px) + 4 * var(--today-action-row-height) + 2px);
     min-width: 0;
     display: grid;
-    grid-template-columns: minmax(0, 1.65fr) minmax(var(--ui-layout-340, 340px), 1fr);
+    // 今日待处理｜继续处理｜成长；右栏宽度与原「左 1.65 : 右 1」两栏保持一致。
+    grid-template-columns:
+      minmax(0, 0.95fr)
+      minmax(0, 1.05fr)
+      minmax(var(--ui-layout-340, 340px), 1.21fr);
     align-items: stretch;
     gap: var(--ui-space-12, 12px);
+  }
+
+  // 收起时继续处理跨入今日待处理的位置，两种状态共用同一网格，右栏宽度保持不变。
+  .workbench-first-fold.is-today-collapsed > .today-continue {
+    grid-column: span 2;
   }
 
   .workbench-first-fold__rail {
     min-width: 0;
     display: grid;
-    grid-template-rows: auto minmax(0, 1fr);
-    align-content: stretch;
+    grid-template-rows: minmax(0, 1fr);
     align-self: stretch;
-    gap: var(--ui-space-12, 12px);
   }
 
   .workbench-first-fold__rail :deep(.growth-card) {
@@ -1338,53 +1376,55 @@
 
   .today-summary {
     position: relative;
-    overflow: hidden;
+    min-width: 0;
+    padding: var(--ui-space-10, 10px) var(--ui-space-12, 12px) var(--ui-space-10, 10px) var(--ui-space-16, 16px);
+    box-sizing: border-box;
+    display: flex;
+    align-items: stretch;
+    gap: var(--ui-space-10, 10px);
     border: 1px solid var(--card-border-color);
     border-radius: 14px;
     background: var(--card-background);
     box-shadow: 0 12px 30px -28px color-mix(in srgb, var(--text-color) 36%, transparent);
   }
 
-  .today-summary::before {
-    content: none;
-  }
-
   .today-summary-heading {
-    min-width: 0;
-    min-height: var(--ui-layout-54, 54px);
-    padding: var(--ui-space-9, 9px) var(--ui-space-14, 14px);
-    box-sizing: border-box;
+    min-width: var(--ui-layout-190, 190px);
+    flex: 1.15 1 0;
+    align-self: center;
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    align-items: center;
-    gap: var(--ui-space-14, 14px);
-    border-bottom: 1px solid var(--card-border-color);
-    color: var(--text-color);
-    background: var(--card-background);
+    gap: var(--ui-space-5, 5px);
   }
 
-  .today-summary-heading__copy {
-    min-width: 0;
-    display: grid;
-    gap: var(--ui-space-4, 4px);
-  }
-
-  .today-summary-heading__copy strong {
+  .today-summary-heading strong {
     color: var(--text-color);
     font-size: var(--ui-font-16, 16px);
     line-height: 1.2;
   }
 
-  .today-summary-heading__copy small,
+  .today-summary-heading small,
   .today-summary-total small,
-  .today-summary-item__copy > span,
+  .today-summary-item__label,
   .today-summary-item__copy small {
     color: var(--desc-color);
     font-size: var(--ui-font-11, 11px);
   }
 
+  .today-summary-status {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--ui-space-5, 5px);
+    color: var(--success-color);
+    font-size: var(--ui-font-12, 12px);
+    font-weight: 600;
+    line-height: 1.3;
+  }
+
   .today-summary-total {
     min-width: var(--ui-layout-52, 52px);
+    flex: 0 0 auto;
+    align-self: center;
+    padding-left: var(--ui-space-6, 6px);
     display: grid;
     justify-items: end;
     gap: var(--ui-space-1, 1px);
@@ -1398,31 +1438,12 @@
     font-variant-numeric: tabular-nums;
   }
 
-  .today-summary-grid {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: var(--ui-space-10, 10px);
-    margin: 0;
-    padding: var(--ui-space-10, 10px) var(--ui-space-12, 12px) var(--ui-space-9, 9px);
-  }
-
-  .today-summary-body {
-    --today-action-row-height: var(--ui-layout-65, 65px);
-    // 固定容纳标题栏、四条完整待处理行和上下边框，不能随条数或页签变化。
-    /* ui-density-fixed: 末尾 2px 是上下各 1px 边框之和，不能随行高变化。 */
-    --today-work-area-height: calc(var(--ui-layout-40, 40px) + 4 * var(--today-action-row-height) + 2px);
-    display: grid;
-    grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
-    align-items: stretch;
-    gap: var(--ui-space-10, 10px);
-    padding: 0 var(--ui-space-12, 12px) var(--ui-space-12, 12px);
-  }
-
   .today-summary-details {
     min-width: 0;
-    height: var(--today-work-area-height);
-    min-height: 0;
+    min-height: var(--today-work-area-height);
     display: flex;
+    // 行高由最小高度和成长卡共同决定；size 隔离让卡片内容不撑高整行，切换页签时高度不变。
+    contain: size;
   }
 
   .today-summary-details :deep(.today-actions) {
@@ -1465,22 +1486,22 @@
 
   .today-summary-details :deep(.today-actions--contained),
   .today-continue {
-    border-color: var(--workbench-content-border);
-    background: var(--menu-body-bg-color, var(--card-background));
+    border-color: var(--card-border-color);
+    border-radius: 14px;
+    background: var(--card-background);
+    box-shadow: 0 12px 30px -28px color-mix(in srgb, var(--text-color) 36%, transparent);
   }
 
   .today-continue {
     --continue-row-height: var(--ui-layout-44, 44px);
     min-width: 0;
-    height: var(--today-work-area-height);
-    min-height: 0;
-    padding: var(--ui-space-8, 8px) var(--ui-space-10, 10px);
+    min-height: var(--today-work-area-height);
+    padding: var(--ui-space-10, 10px) var(--ui-space-12, 12px);
     box-sizing: border-box;
     display: flex;
     flex-direction: column;
-    border: 1px solid var(--workbench-content-border);
-    border-radius: 12px;
-    background: var(--menu-body-bg-color, var(--card-background));
+    border: 1px solid var(--card-border-color);
+    contain: size;
   }
 
   .today-continue__body {
@@ -1515,11 +1536,10 @@
 
   .today-summary-item {
     --today-accent: var(--primary-color);
-    width: 100%;
     min-width: 0;
-    min-height: var(--ui-layout-72, 72px);
+    flex: 1 1 0;
     height: auto;
-    padding: var(--ui-space-9, 9px) var(--ui-space-12, 12px);
+    padding: var(--ui-space-8, 8px) var(--ui-space-12, 12px);
     display: block;
     border: 1px solid var(--workbench-content-border);
     border-radius: 11px;
@@ -1557,19 +1577,29 @@
   .today-summary-item__copy {
     min-width: 0;
     display: grid;
-    gap: var(--ui-space-2, 2px);
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: baseline;
+    gap: var(--ui-space-3, 3px) var(--ui-space-8, 8px);
   }
 
-  .today-summary-item__copy > span {
-    color: var(--desc-color);
-    font-size: var(--ui-font-11, 11px);
+  .today-summary-item__label {
+    grid-column: 1 / -1;
     font-weight: 500;
+    line-height: 1.3;
   }
 
   .today-summary-item__copy small {
+    min-width: 0;
     overflow: hidden;
+    line-height: 1.3;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  .today-summary-item__copy small b {
+    color: var(--text-color);
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
   }
 
   .today-summary-item__copy strong {
@@ -1601,8 +1631,12 @@
     display: none;
   }
 
-  .workbench-routine-grid__review:empty + .workbench-routine-grid__tasks,
-  .workbench-routine-grid__review:last-child {
+  // 只剩一项时占满整行；回顾显示时成长任务另起一行占满，回顾为空时成长任务补到每日任务旁。
+  .workbench-routine-grid__review:last-child,
+  .workbench-routine-grid--no-tasks > .workbench-routine-grid__review,
+  .workbench-routine-grid__review:empty + .workbench-routine-grid__tasks:last-child,
+  .workbench-routine-grid__review:empty + .workbench-growth-tasks,
+  .workbench-routine-grid__review:not(:empty) ~ .workbench-growth-tasks {
     grid-column: 1 / -1;
   }
 
@@ -1663,7 +1697,12 @@
   }
 
   .workbench-growth-tasks {
+    min-width: 0;
     min-height: 0;
+  }
+
+  .workbench-growth-tasks > .panel-card {
+    box-shadow: none;
   }
 
   .summary-grid {
@@ -2263,27 +2302,12 @@
     margin-left: auto;
   }
 
-  .quick-create-panel {
-    height: auto;
-    padding: var(--ui-space-10, 10px) var(--ui-space-12, 12px);
-  }
-
-  .quick-create-panel .panel-header {
-    margin-bottom: var(--ui-space-7, 7px);
-  }
-
-  .quick-create-grid {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: var(--ui-space-8, 8px);
-  }
-
   .quick-create-action {
-    width: 100%;
-    height: var(--ui-layout-38, 38px);
-    padding: 0 var(--ui-space-9, 9px);
-    gap: var(--ui-space-10, 10px);
+    height: var(--ui-control-36, 36px);
+    padding: 0 var(--ui-space-12, 12px) 0 var(--ui-space-6, 6px);
+    gap: var(--ui-space-8, 8px);
     justify-content: flex-start;
+    border-radius: 10px;
     line-height: 1.2;
     border: 1px solid var(--workbench-action-border);
     background: color-mix(in srgb, var(--primary-color) 3%, var(--menu-body-bg-color));
@@ -2321,22 +2345,11 @@
     background: color-mix(in srgb, var(--resource-file-color, #ff8a00) 10%, transparent);
   }
 
-  .quick-create-action > span:last-child {
-    min-width: 0;
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 0;
-  }
-
   .quick-create-action strong {
     color: var(--text-color);
     font-size: var(--ui-font-12_5, 12.5px);
     font-weight: 650;
-  }
-
-  .quick-create-action small {
-    display: none;
+    white-space: nowrap;
   }
 
   .workbench-first-fold__rail :deep(.growth-card--expanded) {
@@ -2670,28 +2683,23 @@
 
   @media (max-width: 1199px) {
     .workbench-first-fold {
-      grid-template-columns: minmax(0, 1fr);
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .workbench-first-fold.is-today-collapsed > .today-continue {
+      grid-column: 1 / -1;
+    }
+
+    .workbench-first-fold__rail {
+      grid-column: 1 / -1;
     }
 
     .workbench-routine-grid {
       grid-template-columns: minmax(0, 1fr);
     }
 
-    .workbench-routine-grid__tasks,
-    .workbench-routine-grid__review {
+    .workbench-routine-grid > * {
       grid-column: auto;
-    }
-
-    .workbench-first-fold__rail {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      grid-template-rows: minmax(0, 1fr);
-      align-items: stretch;
-      align-self: stretch;
-    }
-
-    .quick-create-panel {
-      height: 100%;
     }
 
     .summary-grid {
@@ -2700,9 +2708,17 @@
   }
 
   @media (max-width: 1050px) {
-    .today-summary-body,
+    .workbench-first-fold,
     .growth-task-grid {
       grid-template-columns: 1fr;
+    }
+
+    .today-summary {
+      flex-wrap: wrap;
+    }
+
+    .today-summary-heading {
+      flex-basis: 100%;
     }
   }
 
@@ -2717,8 +2733,6 @@
     }
 
     .summary-grid,
-    .today-summary-grid,
-    .workbench-first-fold__rail,
     .lower-grid {
       grid-template-columns: 1fr;
     }
@@ -2731,8 +2745,8 @@
       height: auto;
     }
 
-    .today-summary-grid {
-      padding-left: var(--ui-space-9, 9px);
+    .today-summary-item {
+      flex-basis: 100%;
     }
 
     .content-row-meta {

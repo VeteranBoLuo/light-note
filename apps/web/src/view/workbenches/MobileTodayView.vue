@@ -66,7 +66,7 @@
       <div class="mobile-today__pending-details">
         <TodayActionSection
           :todo-total="counts.overdue + counts.dueToday"
-          :inbox-total="counts.inbox"
+          :inbox-total="counts.inboxRecent"
           :overdue-todos="overdueTodos"
           :due-today-todos="dueTodayTodos"
           :inbox-items="inboxItems"
@@ -282,7 +282,8 @@
     if (visible && !count) continueTab.value = 'projects';
     else if (!visible) continueTab.value = 'resources';
   });
-  const counts = ref({ overdue: 0, dueToday: 0, inbox: 0, todoPending: 0, unreadNotification: 0 });
+  // inbox 是全部待整理（资源整理入口与角标口径），inboxRecent 只含近 7 天收集、在今日明细里出现的部分。
+  const counts = ref({ overdue: 0, dueToday: 0, inbox: 0, inboxRecent: 0, todoPending: 0, unreadNotification: 0 });
   const organizeOwnerKey = computed(() =>
     [user.id || 'visitor', user.role || '', user.adminContext?.subjectUserId || '', user.adminContext?.mode || ''].join(
       '|',
@@ -316,7 +317,7 @@
             ? t('workbench.mobileToday.greetingAfternoon')
             : t('workbench.mobileToday.greetingEvening');
     // 问候语只算需要今天优先处理的事，不跟下方「全部待处理」总览混用口径。
-    const pending = counts.value.overdue + counts.value.dueToday + counts.value.inbox;
+    const pending = counts.value.overdue + counts.value.dueToday + counts.value.inboxRecent;
     const tail = pending
       ? t('workbench.mobileToday.pendingSummary', { count: pending })
       : t('workbench.mobileToday.pendingSummaryEmpty');
@@ -463,6 +464,7 @@
           overdue: Number(data.counts?.overdue || 0),
           dueToday: Number(data.counts?.dueToday || 0),
           inbox: Number(data.counts?.inbox || 0),
+          inboxRecent: Number(data.counts?.inboxRecent ?? data.counts?.inbox ?? 0),
           todoPending: Number(data.counts?.todoPending || 0),
           unreadNotification: Number(data.counts?.unreadNotification || 0),
         };
@@ -555,7 +557,7 @@
     dueTodayTodos.value = [];
     inboxItems.value = [];
     continueItems.value = [];
-    counts.value = { overdue: 0, dueToday: 0, inbox: 0, todoPending: 0, unreadNotification: 0 };
+    counts.value = { overdue: 0, dueToday: 0, inbox: 0, inboxRecent: 0, todoPending: 0, unreadNotification: 0 };
     organizer.resetForOwner(organizeOwnerKey.value);
     if (user.id)
       void Promise.all([

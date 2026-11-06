@@ -155,6 +155,10 @@ async function queryWeeklyStats(userId) {
   return rows[0] || { bookmark: 0, note: 0, file: 0, tag: 0 };
 }
 
+// 今日待处理只放近 7 天收集的待整理：线上已完成的整理约九成发生在收集后 7 天内，
+// 更早的积压很少再被处理，天天出现只会让「今日已清空」永远出现不了；它们由资源整理入口承担。
+const TODAY_INBOX_RECENT_DAYS = 7;
+
 // 今日行动条目仅取有限数量,完整列表仍由 /inbox 页面承担;
 // 任一子查询失败都降级为空数组,不拖垮工作台其余统计。
 async function queryTodayActionItems(userId, limits = {}) {
@@ -180,7 +184,14 @@ async function queryTodayActionItems(userId, limits = {}) {
       limit: dueTodayLimit,
       includeTotal,
     }).catch(() => null),
-    listInboxResources(pool, { userId, limit: inboxLimit, view: 'summary', includeTotal: false }).catch(() => null),
+    listInboxResources(pool, {
+      userId,
+      limit: inboxLimit,
+      view: 'summary',
+      includeTotal,
+      includeCounts: false,
+      collectedWithinDays: TODAY_INBOX_RECENT_DAYS,
+    }).catch(() => null),
   ]);
   return {
     overdueTodos: overdue?.items || [],
@@ -189,6 +200,8 @@ async function queryTodayActionItems(userId, limits = {}) {
     // includeTotal=false 时 listTodoPage 用返回条数兜底，此处只在显式请求时才当作权威总数
     overdueTotal: includeTotal ? Number(overdue?.total || 0) : null,
     dueTodayTotal: includeTotal ? Number(dueToday?.total || 0) : null,
+    // 只含近 7 天收集的待整理；全部待整理数量仍是 inboxPendingTotal
+    inboxRecentTotal: includeTotal ? Number(inbox?.total || 0) : null,
   };
 }
 
@@ -452,6 +465,7 @@ export const getWorkbenchToday = async (req, res) => {
           dueToday: Number(today.dueTodayTotal || 0),
           todoPending: today.todoPendingTotal,
           inbox: today.inboxPendingTotal,
+          inboxRecent: Number(today.inboxRecentTotal || 0),
           unreadNotification: today.unreadNotificationTotal,
           action: today.actionTotal,
         },

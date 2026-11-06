@@ -50,7 +50,7 @@ describe('getWorkbenchToday', () => {
         ? { items: [{ id: 'overdue-1' }, { id: 'overdue-2' }, { id: 'overdue-3' }], total: 7 }
         : { items: [{ id: 'today-1' }], total: 4 },
     );
-    mocks.listInboxResources.mockResolvedValue({ items: [{ resourceId: 'r1' }] });
+    mocks.listInboxResources.mockResolvedValue({ items: [{ resourceId: 'r1' }], total: 2 });
   });
 
   it('只跑今日相关查询，不触发趋势、饼图、排行和最近列表', async () => {
@@ -105,8 +105,23 @@ describe('getWorkbenchToday', () => {
       dueToday: 4,
       todoPending: 11,
       inbox: 9,
+      inboxRecent: 2,
       unreadNotification: 2,
     });
+  });
+
+  it('今日待整理只取近 7 天收集的条目，全部待整理数量不受影响', async () => {
+    const res = createResponse();
+    await getWorkbenchToday({ user: { id: 'user-1' } }, res);
+
+    expect(mocks.listInboxResources.mock.calls[0][1]).toMatchObject({
+      collectedWithinDays: 7,
+      includeTotal: true,
+      includeCounts: false,
+    });
+    const payload = res.send.mock.calls.at(-1)?.[0];
+    expect(payload.data.counts.inbox).toBe(9);
+    expect(payload.data.counts.inboxRecent).toBe(2);
   });
 
   it('按今日页展示上限取明细', async () => {

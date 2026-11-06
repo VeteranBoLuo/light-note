@@ -4504,7 +4504,6 @@ export default {
       continueWorking: '继续处理',
       continueHint: '从最近访问和常用内容接着开始',
       quickCreate: '快速创建',
-      quickCreateHint: '先收集，再到待处理统一整理',
       popularTags: '常用标签',
       popularTagsHint: '快速进入关联内容较多的主题',
       latestUpdate: '最近更新',
@@ -4542,7 +4541,7 @@ export default {
       // 明确总数只含待办和待整理，未读通知虽然在下方分项里展示，但不计入行动项总数
       actionTotalUnit: '项待办 / 整理事项',
       todoPending: '未完成待办',
-      todoPendingHint: '全部仍需完成的待办',
+      todoPendingTodayHint: '全部未完成，其中今天 {count}',
       unreadNotification: '未读通知',
       unreadNotificationHint: '尚未查看的消息',
       inboxPending: '资源整理',
@@ -4568,7 +4567,7 @@ export default {
       inboxCompleted: '已完成整理',
       actionFailed: '操作失败，请稍后重试',
       allDoneTitle: '今日待处理已清空',
-      allDoneDesc: '待办和待整理都处理完了，收集或创作点新内容吧',
+      allDoneDesc: '今天要处理的都完成了，收集或创作点新内容吧',
     },
     mobileToday: {
       greetingMorning: '早上好',

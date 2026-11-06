@@ -95,6 +95,39 @@ describe('resourceInbox', () => {
     });
   });
 
+  it('按收集时间窗口过滤，并让数量与明细共用同一条件', async () => {
+    const connection = {
+      query: vi
+        .fn()
+        .mockResolvedValueOnce([[]])
+        .mockResolvedValueOnce([[{ total: 2 }]]),
+    };
+
+    const result = await listInboxResources(connection, {
+      userId: 'u1',
+      limit: 3,
+      view: 'summary',
+      includeCounts: false,
+      collectedWithinDays: 7,
+    });
+
+    const [pageSql, pageParams] = connection.query.mock.calls[0];
+    const [countSql, countParams] = connection.query.mock.calls[1];
+    expect(pageSql).toContain('i.create_time >= DATE_SUB(NOW(), INTERVAL ? DAY)');
+    expect(countSql).toContain('i.create_time >= DATE_SUB(NOW(), INTERVAL ? DAY)');
+    expect(pageParams).toEqual(['u1', 'u1', 'u1', 'u1', 7, 4, 0]);
+    expect(countParams).toEqual(['u1', 'u1', 'u1', 'u1', 7]);
+    expect(result.total).toBe(2);
+  });
+
+  it.each([0, -1, 1.5, 366, 'abc'])('拒绝无效的收集时间窗口 %s', async (value) => {
+    const connection = { query: vi.fn() };
+    await expect(
+      listInboxResources(connection, { userId: 'u1', limit: 3, collectedWithinDays: value }),
+    ).rejects.toMatchObject({ code: 'INBOX_LIST_PARAMS_INVALID' });
+    expect(connection.query).not.toHaveBeenCalled();
+  });
+
   it('总览预览可复用摘要视图并跳过重复数量查询', async () => {
     const connection = {
       query: vi.fn().mockResolvedValueOnce([
