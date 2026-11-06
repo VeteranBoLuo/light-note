@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="day">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>共建轻笺隔离验收</title>
+    <style>
+      html,
+      body,
+      #app {
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        min-width: 0;
+      }
+      body {
+        display: block !important;
+        overflow: hidden;
+      }
+      .co-build-fixture {
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+      }
+      .co-build-fixture-notice {
+        flex: none;
+        margin: 0;
+        padding: var(--ui-space-6, 6px) var(--ui-space-16, 16px);
+        color: var(--desc-color);
+        background: var(--workspace-content);
+        border-bottom: 1px solid var(--workspace-border);
+        font: var(--ui-font-12, 12px)/1.5 sans-serif;
+      }
+      .co-build-fixture-page {
+        flex: 1;
+        min-height: 0;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/e2e/coBuildHarness.ts"></script>
+  </body>
+</html>

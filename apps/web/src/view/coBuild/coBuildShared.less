@@ -1,0 +1,71 @@
+// Shared source, category and progress semantics for the board and its detail page.
+.co-build-semantics() {
+  .co-build-status {
+    --co-build-status-color: var(--desc-color);
+    display: inline-flex;
+    align-items: center;
+    gap: var(--ui-space-6, 6px);
+    width: fit-content;
+    max-width: 100%;
+    padding: var(--ui-space-4, 4px) var(--ui-space-10, 10px);
+    border: 1px solid var(--workspace-border);
+    border-radius: 999px;
+    color: var(--co-build-status-color);
+    background: color-mix(in srgb, var(--co-build-status-color) 7%, var(--workspace-content));
+    font-size: var(--ui-font-12, 12px);
+    line-height: 1.5;
+    white-space: nowrap;
+
+    &::before {
+      content: '';
+      flex: none;
+      width: var(--ui-layout-6, 6px);
+      height: var(--ui-layout-6, 6px);
+      border-radius: 50%;
+      background: currentColor;
+    }
+
+    &.is-planned {
+      --co-build-status-color: var(--workspace-purple-text);
+    }
+    &.is-in_progress {
+      --co-build-status-color: var(--info-color);
+    }
+    &.is-released {
+      --co-build-status-color: var(--success-color);
+    }
+  }
+
+  .co-build-source,
+  .co-build-category,
+  .co-build-moderation {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--ui-space-4, 4px);
+    color: var(--desc-color);
+    font-size: var(--ui-font-12, 12px);
+    line-height: 1.5;
+  }
+  .co-build-source.is-official {
+    color: var(--warning-color);
+  }
+  .co-build-category {
+    &[data-category='bookmark'] {
+      color: var(--workspace-purple-text);
+    }
+    &[data-category='note'] {
+      color: var(--workspace-note-text);
+    }
+    &[data-category='cloud'] {
+      color: var(--workspace-file-text);
+    }
+    &[data-category='tag'] {
+      color: var(--workspace-tag-text);
+    }
+  }
+  .co-build-moderation {
+    padding: var(--ui-space-2, 2px) var(--ui-space-6, 6px);
+    border: 1px solid var(--workspace-border);
+    border-radius: 5px;
+  }
+}

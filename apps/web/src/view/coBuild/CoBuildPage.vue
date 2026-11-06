@@ -1,50 +1,75 @@
 <template>
-  <div class="co-build-page">
+  <div ref="pageRef" class="co-build-page" :class="{ 'is-mobile': bookmark.isMobile }" v-auto-scrollbar>
+    <header v-if="bookmark.isMobile" class="mobile-heading">
+      <BButton icon-only class="mobile-back" :aria-label="t('common.back')" @click="goBack">
+        <SvgIcon :src="icon.arrow_left" size="20" />
+      </BButton>
+      <h1>{{ t('coBuild.mobileTitle') }}</h1>
+      <div class="mobile-actions">
+        <BButton type="primary" :aria-label="submitLabel" @click="startSubmit">
+          {{ t(isVisitor ? 'coBuild.loginShort' : 'coBuild.submitShort') }}
+        </BButton>
+        <BActionMenu
+          v-if="isRoot"
+          :items="officialActions"
+          placement="bottom-right"
+          :aria-label="t('coBuild.moreActions')"
+          @select="openSubmit(true)"
+        >
+          <BButton icon-only class="mobile-more" :aria-label="t('coBuild.moreActions')">
+            <SvgIcon :src="icon.common.more" size="20" />
+          </BButton>
+        </BActionMenu>
+      </div>
+    </header>
+
     <main class="co-build-shell">
-      <header class="co-build-hero">
-        <div class="hero-copy">
-          <div class="hero-kicker">
-            <span class="hero-icon"><SvgIcon :src="icon.coBuild.board" size="20" /></span>
-            <span>{{ t('coBuild.title') }}</span>
-          </div>
-          <h1>{{ t('coBuild.title') }}</h1>
-          <p>{{ t('coBuild.subtitle') }}</p>
-          <div v-if="isVisitor" class="visitor-hint">{{ t('coBuild.visitorHint') }}</div>
+      <header class="page-heading">
+        <span v-if="!bookmark.isMobile" class="heading-icon"><SvgIcon :src="icon.coBuild.board" size="24" /></span>
+        <div class="heading-copy">
+          <h1 v-if="!bookmark.isMobile">{{ t('coBuild.title') }}</h1>
+          <p>{{ t('coBuild.boardSubtitle') }}</p>
+          <p v-if="isVisitor" class="visitor-hint">{{ t('coBuild.visitorHint') }}</p>
         </div>
-        <div class="hero-actions">
-          <BButton v-if="isVisitor" type="primary" size="large" @click="openRegister">
-            {{ t('coBuild.loginToSubmit') }}
+        <div v-if="!bookmark.isMobile" class="heading-actions">
+          <BButton type="primary" size="large" @click="startSubmit">
+            <SvgIcon :src="icon.common.plus" size="17" />{{ submitLabel }}
           </BButton>
-          <BButton v-else type="primary" size="large" @click="openSubmit(false)">
-            <SvgIcon :src="icon.common.add" size="17" />
-            {{ t('coBuild.submit') }}
-          </BButton>
-          <BButton v-if="isRoot" size="large" @click="openSubmit(true)">
-            <SvgIcon :src="icon.coBuild.official" size="17" />
-            {{ t('coBuild.submitOfficial') }}
+          <BButton v-if="isRoot" size="large" class="official-button" @click="openSubmit(true)">
+            <SvgIcon :src="icon.coBuild.official" size="17" />{{ t('coBuild.submitOfficial') }}
           </BButton>
         </div>
       </header>
 
-      <section v-if="activeTab === 'public'" class="summary-grid">
-        <BCard v-for="summary in summaryCards" :key="summary.key" class="summary-card" padding="var(--ui-space-15, 15px) var(--ui-space-18, 18px)">
-          <span class="summary-value">{{ summary.value }}</span>
-          <span class="summary-label">{{ summary.label }}</span>
-        </BCard>
-      </section>
+      <section class="board-section" :aria-label="t('coBuild.publicTab')">
+        <div class="board-navigation">
+          <BTabs v-model:active-tab="activeTab" variant="line" :options="tabOptions" @change="changeTab" />
+        </div>
+        <p v-if="activeTab === 'mine'" class="mine-hint">{{ t('coBuild.myPendingHint') }}</p>
 
-      <section class="board-section">
-        <div class="board-topbar">
-          <BTabs v-model:active-tab="activeTab" variant="pill" :options="tabOptions" @change="changeTab" />
-          <span v-if="activeTab === 'mine'" class="mine-hint">{{ t('coBuild.myPendingHint') }}</span>
+        <div v-if="activeTab === 'public' && !bookmark.isMobile" class="progress-filters">
+          <BTabs
+            v-model:active-tab="filters.progressStatus"
+            variant="pill"
+            :options="progressTabs"
+            :aria-label="t('coBuild.allProgress')"
+            @change="applyFilters"
+          >
+            <template #label="{ tab }">
+              <span class="progress-filter-label">
+                <span class="filter-dot" :class="`is-${tab.key || 'all'}`" aria-hidden="true" />{{ tab.label }}
+              </span>
+            </template>
+          </BTabs>
         </div>
 
-        <div v-if="activeTab !== 'mine'" class="filter-row">
+        <div v-if="activeTab !== 'mine'" class="filter-row" :class="{ 'is-admin': activeTab === 'admin' }">
           <BInput
             v-model:value="filters.keyword"
             class="filter-search"
             clearable
-            :placeholder="t('coBuild.searchPlaceholder')"
+            :aria-label="t('coBuild.boardSearchPlaceholder')"
+            :placeholder="t('coBuild.boardSearchPlaceholder')"
             @input="scheduleSearch"
             @enter="applyFilters"
           >
@@ -53,113 +78,157 @@
           <BSelect
             v-if="activeTab === 'public'"
             v-model:value="filters.category"
-            class="filter-select"
             :options="categoryFilterOptions"
+            :placeholder="t('coBuild.allCategory')"
+            :aria-label="t('coBuild.categoryLabel')"
             @change="applyFilters"
           />
           <BSelect
-            v-if="activeTab === 'admin'"
+            v-else
             v-model:value="filters.moderationStatus"
-            class="filter-select"
             :options="moderationFilterOptions"
+            :placeholder="t('coBuild.allModeration')"
+            :aria-label="t('coBuild.allModeration')"
             @change="applyFilters"
           />
           <BSelect
+            v-if="bookmark.isMobile || activeTab === 'admin'"
             v-model:value="filters.progressStatus"
-            class="filter-select"
             :options="progressFilterOptions"
+            :placeholder="t('coBuild.allProgress')"
+            :aria-label="t('coBuild.allProgress')"
             @change="applyFilters"
           />
           <BSelect
             v-if="activeTab === 'public'"
             v-model:value="filters.sort"
-            class="filter-select"
             :options="sortOptions"
+            :aria-label="t('coBuild.sortLabel')"
             @change="applyFilters"
           />
         </div>
 
-        <div v-if="loading" class="board-loading">
-          <span v-for="index in 6" :key="index" class="loading-card" />
+        <div v-if="activeTab === 'public' && bookmark.isMobile" class="mobile-summary">
+          <span v-for="metric in mobileSummary" :key="metric.key">
+            <i class="filter-dot" :class="`is-${metric.key}`" aria-hidden="true" />{{ metric.label }}
+            <b>{{ metric.value }}</b>
+          </span>
         </div>
 
-        <div v-else-if="items.length" class="request-grid">
-          <BCard
-            v-for="item in items"
-            :key="item.id"
-            interactive
-            class="request-card"
-            padding="var(--ui-space-18, 18px)"
-            @click="openDetail(item.id)"
-          >
-            <div class="card-meta">
-              <span class="source-pill" :class="`is-${item.sourceType}`">
-                <SvgIcon :src="item.sourceType === 'official' ? icon.coBuild.official : icon.coBuild.board" size="13" />
-                {{ t(`coBuild.source${item.sourceType === 'official' ? 'Official' : 'User'}`) }}
-              </span>
-              <span class="category-pill">{{ t(`coBuild.category.${item.category}`) }}</span>
-              <span v-if="activeTab !== 'public'" class="moderation-pill">
-                {{ t(`coBuild.moderation.${item.moderationStatus}`) }}
-              </span>
-            </div>
+        <div v-if="loadError" class="load-error" role="alert">
+          <span>{{ t('coBuild.loadFailed') }}</span>
+          <BButton type="text" :loading="loading" @click="loadData()">{{ t('coBuild.retry') }}</BButton>
+        </div>
 
-            <h2>{{ item.title }}</h2>
-            <p class="request-content">{{ item.content }}</p>
-
-            <div v-if="item.developerReply" class="reply-preview">
-              <strong>{{ t('coBuild.developerReply') }}</strong>
-              <span>{{ item.developerReply }}</span>
-            </div>
-
-            <div class="card-footer">
-              <div class="footer-status">
-                <span class="progress-pill" :class="`is-${item.progressStatus}`">
-                  {{ t(`coBuild.progress.${item.progressStatus}`) }}
-                </span>
-                <span class="updated-time">{{ t('coBuild.updatedAt', { time: formatTime(item.updateTime) }) }}</span>
-              </div>
+        <div class="board-content" :aria-busy="loading">
+          <div v-if="loading && !items.length" class="board-loading" role="status" :aria-label="t('common.loading')">
+            <div v-for="index in 4" :key="index" class="loading-row" aria-hidden="true"><i /><span /><span /></div>
+          </div>
+          <div v-else-if="items.length" class="request-list">
+            <article
+              v-for="item in items"
+              :key="item.id"
+              class="request-row"
+              :class="{ 'has-vote': item.moderationStatus === 'published' }"
+            >
               <BButton
                 v-if="item.moderationStatus === 'published'"
-                size="small"
+                icon-only
                 class="vote-button"
                 :class="{ 'is-voted': Boolean(item.viewerVoted) }"
-                @click.stop="toggleVote(item)"
+                :loading="votingIds.has(item.id)"
+                :disabled="loading"
+                :aria-pressed="Boolean(item.viewerVoted)"
+                :aria-label="
+                  t(item.viewerVoted ? 'coBuild.unvoteRequest' : 'coBuild.voteRequest', {
+                    title: item.title,
+                    count: item.voteCount || 0,
+                  })
+                "
+                @click="toggleVote(item)"
               >
-                <SvgIcon :src="icon.coBuild.vote" size="14" />
-                {{ item.voteCount || 0 }}
+                <span class="vote-content">
+                  <SvgIcon :src="item.viewerVoted ? icon.coBuild.vote : icon.coBuild.voteOutline" size="18" />
+                  <span v-if="bookmark.isMobile">{{ t(item.viewerVoted ? 'coBuild.voted' : 'coBuild.vote') }}</span>
+                  <b>{{ item.voteCount || 0 }}</b>
+                </span>
               </BButton>
-            </div>
-          </BCard>
+              <div class="request-body">
+                <div class="request-meta">
+                  <span class="co-build-source" :class="{ 'is-official': item.sourceType === 'official' }">
+                    <SvgIcon v-if="item.sourceType === 'official'" :src="icon.coBuild.official" size="13" />
+                    {{ t(item.sourceType === 'official' ? 'coBuild.sourceOfficial' : 'coBuild.sourceUser') }}
+                  </span>
+                  <span class="co-build-category" :data-category="item.category">{{
+                    t(`coBuild.category.${item.category}`)
+                  }}</span>
+                  <span v-if="activeTab !== 'public'" class="co-build-moderation">{{
+                    t(`coBuild.moderation.${item.moderationStatus}`)
+                  }}</span>
+                  <time v-if="!bookmark.isMobile" class="updated-time" :datetime="item.updateTime">{{
+                    t('coBuild.updatedAt', { time: formatTime(item.updateTime) })
+                  }}</time>
+                  <span v-if="bookmark.isMobile" class="co-build-status" :class="`is-${item.progressStatus}`">{{
+                    t(`coBuild.progress.${item.progressStatus}`)
+                  }}</span>
+                </div>
+                <h2
+                  ><RouterLink class="request-link" :to="`/co-build/${item.id}`">{{ item.title }}</RouterLink></h2
+                >
+                <p class="request-content">{{ item.content }}</p>
+                <p v-if="item.developerReply" class="reply-preview">
+                  <SvgIcon :src="icon.coBuild.official" size="14" /><strong>{{ t('coBuild.developerReply') }}</strong>
+                  <span>{{ item.developerReply }}</span>
+                </p>
+              </div>
+              <div v-if="!bookmark.isMobile" class="row-status">
+                <span class="co-build-status" :class="`is-${item.progressStatus}`">{{
+                  t(`coBuild.progress.${item.progressStatus}`)
+                }}</span>
+                <SvgIcon :src="icon.arrow_right" size="14" />
+              </div>
+              <time v-if="bookmark.isMobile" class="updated-time mobile-time" :datetime="item.updateTime">{{
+                t('coBuild.updatedAt', { time: formatTime(item.updateTime) })
+              }}</time>
+            </article>
+          </div>
+          <div v-else-if="!loadError" class="board-empty">
+            <span class="empty-icon"><SvgIcon :src="icon.coBuild.board" size="32" /></span>
+            <h2>{{ emptyTitle }}</h2>
+            <p>{{ emptyDescription }}</p>
+            <BButton v-if="hasFilters" type="text" @click="clearFilters">{{ t('coBuild.clearFilters') }}</BButton>
+            <BButton v-else type="text" @click="startSubmit"
+              >{{ submitLabel }}<SvgIcon :src="icon.arrow_right" size="14"
+            /></BButton>
+          </div>
         </div>
 
-        <div v-else class="board-empty">
-          <span class="empty-icon"><SvgIcon :src="icon.coBuild.board" size="30" /></span>
-          <strong>{{ t('coBuild.empty') }}</strong>
-          <p>{{ t('coBuild.emptyDesc') }}</p>
-          <BButton v-if="!isVisitor" type="primary" @click="openSubmit(false)">{{ t('coBuild.submit') }}</BButton>
-        </div>
-
-        <BPagination
-          v-if="total > pageSize"
-          :current="currentPage"
-          :page-size="pageSize"
-          :total="total"
-          @page-change="changePage"
-          @size-change="changePageSize"
-        />
+        <footer v-if="(!loading && !loadError) || items.length" class="board-footer">
+          <span>{{ t('coBuild.resultCount', { count: total }) }}</span>
+          <BPagination
+            v-if="total > pageSize"
+            :current="currentPage"
+            :page-size="pageSize"
+            :total="total"
+            @page-change="changePage"
+            @size-change="changePageSize"
+          />
+        </footer>
       </section>
     </main>
-
     <FeatureRequestFormModal v-model:visible="submitVisible" :official="submitOfficial" @saved="handleSaved" />
   </div>
 </template>
 
 <script setup lang="ts">
-  import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
+  import { computed, onActivated, onBeforeUnmount, onDeactivated, onMounted, reactive, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import { useRouter } from 'vue-router';
+  import { RouterLink, useRouter } from 'vue-router';
+  import { useMobileTopBar } from '@/composables/useMobileTopBar';
+  import { useDensityScrollAnchor } from '@/composables/useDensityScrollAnchor';
+  import { returnToPreviousPage } from '@/utils/pageReturn';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
-  import BCard from '@/components/base/BasicComponents/BCard.vue';
+  import BActionMenu from '@/components/base/BasicComponents/BActionMenu.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import BSelect from '@/components/base/BasicComponents/BSelect.vue';
   import BTabs from '@/components/base/BasicComponents/BTabs.vue';
@@ -180,30 +249,36 @@
     type FeatureRequestModerationStatus,
     type FeatureRequestProgressStatus,
   } from '@/api/featureRequestApi';
-  import message from '@/components/base/BasicComponents/BMessage/BMessage';
   import { recordOperation } from '@/api/commonApi';
 
   type BoardTab = 'public' | 'mine' | 'admin';
-
   const { t, locale } = useI18n();
   const router = useRouter();
   const user = useUserStore();
   const bookmark = bookmarkStore();
+  const pageRef = ref<HTMLElement | null>(null);
+  useDensityScrollAnchor(pageRef);
+  const goBack = () => returnToPreviousPage(router, '/personCenter');
+  useMobileTopBar(['coBuild'], {
+    title: () => t('coBuild.title'),
+    onBack: goBack,
+    ownTopBar: true,
+    showNotification: false,
+  });
   const isVisitor = computed(() => user.role === 'visitor');
   const isRoot = computed(() => user.role === 'root');
+  const submitLabel = computed(() => t(isVisitor.value ? 'coBuild.loginToSubmit' : 'coBuild.submit'));
+  const officialActions = computed(() => [
+    { key: 'official', label: t('coBuild.submitOfficial'), icon: icon.coBuild.official },
+  ]);
   const activeTab = ref<BoardTab>('public');
   const loading = ref(false);
+  const loadError = ref(false);
   const items = ref<FeatureRequestItem[]>([]);
   const total = ref(0);
   const currentPage = ref(1);
   const pageSize = ref(12);
-  const summary = ref<Record<FeatureRequestProgressStatus, number>>({
-    evaluating: 0,
-    planned: 0,
-    in_progress: 0,
-    released: 0,
-    declined: 0,
-  });
+  const summary = ref(normalizeFeatureRequestSummary());
   const filters = reactive({
     keyword: '',
     category: '',
@@ -213,7 +288,10 @@
   });
   const submitVisible = ref(false);
   const submitOfficial = ref(false);
+  const votingIds = ref(new Set<string>());
   let searchTimer: ReturnType<typeof setTimeout> | null = null;
+  let loadGeneration = 0;
+  let pageActive = true;
 
   const categoryKeys: FeatureRequestCategory[] = ['bookmark', 'note', 'cloud', 'tag', 'ai', 'experience', 'other'];
   const progressKeys: FeatureRequestProgressStatus[] = ['evaluating', 'planned', 'in_progress', 'released', 'declined'];
@@ -224,13 +302,16 @@
     'merged',
     'hidden',
   ];
-
-  const tabOptions = computed(() => {
-    const options = [{ key: 'public', label: t('coBuild.publicTab') }];
-    if (!isVisitor.value) options.push({ key: 'mine', label: t('coBuild.mineTab') });
-    if (isRoot.value) options.push({ key: 'admin', label: t('coBuild.adminTab') });
-    return options;
-  });
+  const tabOptions = computed(() => [
+    { key: 'public', label: t('coBuild.publicTab') },
+    ...(!isVisitor.value ? [{ key: 'mine', label: t('coBuild.mineTab') }] : []),
+    ...(isRoot.value ? [{ key: 'admin', label: t('coBuild.adminTab') }] : []),
+  ]);
+  const publicCount = computed(() => progressKeys.reduce((sum, key) => sum + summary.value[key], 0));
+  const progressTabs = computed(() => [
+    { key: '', label: t('coBuild.all'), badge: publicCount.value },
+    ...progressKeys.map((key) => ({ key, label: t(`coBuild.progress.${key}`), badge: summary.value[key] })),
+  ]);
   const categoryFilterOptions = computed(() => [
     { value: '', label: t('coBuild.allCategory') },
     ...categoryKeys.map((value) => ({ value, label: t(`coBuild.category.${value}`) })),
@@ -248,97 +329,139 @@
     { value: 'newest', label: t('coBuild.sortNewest') },
     { value: 'popular', label: t('coBuild.sortPopular') },
   ]);
-  const summaryCards = computed(() => [
-    { key: 'total', label: t('coBuild.totalPublic'), value: total.value },
-    { key: 'planned', label: t('coBuild.plannedCount'), value: summary.value.planned },
-    { key: 'in_progress', label: t('coBuild.progressCount'), value: summary.value.in_progress },
-    { key: 'released', label: t('coBuild.releasedCount'), value: summary.value.released },
+  const mobileSummary = computed(() => [
+    { key: 'all', label: t('coBuild.totalPublic'), value: publicCount.value },
+    { key: 'planned', label: t('coBuild.progress.planned'), value: summary.value.planned },
+    { key: 'in_progress', label: t('coBuild.progress.in_progress'), value: summary.value.in_progress },
+    { key: 'released', label: t('coBuild.progress.released'), value: summary.value.released },
   ]);
+  const hasFilters = computed(() =>
+    Boolean(filters.keyword.trim() || filters.category || filters.progressStatus || filters.moderationStatus),
+  );
+  const emptyTitle = computed(() =>
+    t(
+      hasFilters.value || activeTab.value === 'admin'
+        ? 'coBuild.empty'
+        : activeTab.value === 'mine'
+          ? 'coBuild.mineEmpty'
+          : 'coBuild.publicEmpty',
+    ),
+  );
+  const emptyDescription = computed(() =>
+    t(
+      hasFilters.value || activeTab.value === 'admin'
+        ? 'coBuild.emptyDesc'
+        : activeTab.value === 'mine'
+          ? 'coBuild.mineEmptyDesc'
+          : 'coBuild.publicEmptyDesc',
+    ),
+  );
 
   async function loadData() {
-    if (loading.value) return;
+    if (!pageActive) return;
+    const generation = ++loadGeneration;
+    const tab = activeTab.value;
+    const account = user.id;
+    const role = user.role;
+    const query = { currentPage: currentPage.value, pageSize: pageSize.value };
+    const filterSnapshot = { ...filters };
+    const isCurrent = () => generation === loadGeneration && account === user.id && role === user.role;
     loading.value = true;
+    loadError.value = false;
     try {
-      let res;
-      if (activeTab.value === 'mine') {
-        res = await listMyFeatureRequests({ currentPage: currentPage.value, pageSize: pageSize.value });
-      } else if (activeTab.value === 'admin') {
-        res = await listAdminFeatureRequests({
-          currentPage: currentPage.value,
-          pageSize: pageSize.value,
-          filters: {
-            keyword: filters.keyword,
-            moderationStatus: filters.moderationStatus,
-            progressStatus: filters.progressStatus,
-          },
-        });
-      } else {
-        res = await listPublicFeatureRequests({
-          currentPage: currentPage.value,
-          pageSize: pageSize.value,
-          filters: {
-            keyword: filters.keyword,
-            category: filters.category,
-            progressStatus: filters.progressStatus,
-            sort: filters.sort,
-          },
-        });
-      }
+      const res =
+        tab === 'mine'
+          ? await listMyFeatureRequests(query)
+          : tab === 'admin'
+            ? await listAdminFeatureRequests({
+                ...query,
+                filters: {
+                  keyword: filterSnapshot.keyword,
+                  moderationStatus: filterSnapshot.moderationStatus,
+                  progressStatus: filterSnapshot.progressStatus,
+                },
+              })
+            : await listPublicFeatureRequests({
+                ...query,
+                filters: {
+                  keyword: filterSnapshot.keyword,
+                  category: filterSnapshot.category,
+                  progressStatus: filterSnapshot.progressStatus,
+                  sort: filterSnapshot.sort,
+                },
+              });
+      if (!isCurrent()) return;
       if (res?.status !== 200) {
-        message.warning(t('coBuild.loadFailed'));
+        loadError.value = true;
         return;
       }
       const data = res.data as FeatureRequestListResult;
       items.value = data.items || [];
       total.value = Number(data.total || 0);
-      if (data.summary) summary.value = normalizeFeatureRequestSummary(data.summary);
-    } catch (error) {
-      console.error('加载共建轻笺失败:', error);
-      message.warning(t('coBuild.loadFailed'));
+      if (tab === 'public') summary.value = normalizeFeatureRequestSummary(data.summary);
+    } catch {
+      if (isCurrent()) loadError.value = true;
     } finally {
-      loading.value = false;
+      if (isCurrent()) loading.value = false;
     }
   }
-
+  function cancelSearch() {
+    if (searchTimer) clearTimeout(searchTimer);
+    searchTimer = null;
+  }
   function resetAndLoad() {
+    cancelSearch();
     currentPage.value = 1;
-    loadData();
+    items.value = [];
+    total.value = 0;
+    void loadData();
   }
   function changeTab() {
-    filters.keyword = '';
-    filters.category = '';
-    filters.progressStatus = '';
-    filters.moderationStatus = '';
+    Object.assign(filters, { keyword: '', category: '', progressStatus: '', moderationStatus: '' });
     resetAndLoad();
   }
   function scheduleSearch() {
-    if (searchTimer) clearTimeout(searchTimer);
+    cancelSearch();
+    // Invalidate an in-flight query immediately, not only when the debounce expires.
+    ++loadGeneration;
     searchTimer = setTimeout(resetAndLoad, 350);
   }
   function applyFilters() {
-    if (searchTimer) clearTimeout(searchTimer);
+    resetAndLoad();
+  }
+  function clearFilters() {
+    Object.assign(filters, { keyword: '', category: '', progressStatus: '', moderationStatus: '' });
     resetAndLoad();
   }
   function changePage(page: number) {
+    cancelSearch();
     currentPage.value = page;
-    loadData();
+    items.value = [];
+    void loadData();
   }
   function changePageSize(size: number) {
     pageSize.value = size;
     resetAndLoad();
   }
-  function openDetail(id: string) {
-    router.push(`/co-build/${id}`);
-  }
   function openRegister() {
     bookmark.openAuthModal('注册', 'co_build');
     recordOperation({ module: '共建轻笺', operation: '游客点击注册后提建议' });
   }
+  function startSubmit() {
+    if (isVisitor.value) openRegister();
+    else openSubmit(false);
+  }
   function openSubmit(official: boolean) {
+    if (isVisitor.value) {
+      openRegister();
+      return;
+    }
+    if (official && !isRoot.value) return;
     submitOfficial.value = official;
     submitVisible.value = true;
   }
   function handleSaved() {
+    if (isVisitor.value || (submitOfficial.value && !isRoot.value)) return;
     if (!submitOfficial.value) activeTab.value = 'mine';
     resetAndLoad();
   }
@@ -347,377 +470,622 @@
       openRegister();
       return;
     }
+    if (loading.value || votingIds.value.has(item.id)) return;
+    const account = user.id;
+    const role = user.role;
+    const queryGeneration = loadGeneration;
+    votingIds.value.add(item.id);
     try {
       const res = await toggleFeatureRequestVote(item.id);
-      if (res?.status !== 200) return;
-      item.viewerVoted = Boolean(res.data?.voted);
-      item.voteCount = Number(res.data?.voteCount || 0);
+      if (res?.status !== 200 || user.id !== account || user.role !== role) return;
+      if (queryGeneration !== loadGeneration && pageActive) {
+        if (searchTimer) {
+          currentPage.value = 1;
+          cancelSearch();
+        }
+        await loadData();
+      } else {
+        const current = items.value.find((row) => row.id === item.id);
+        if (current) {
+          current.viewerVoted = Boolean(res.data?.voted);
+          current.voteCount = Number(res.data?.voteCount || 0);
+        }
+      }
+      if (user.id !== account || user.role !== role) return;
       recordOperation({
         module: '共建轻笺',
-        operation: `${item.viewerVoted ? '支持需求' : '取消支持需求'}【${item.title.slice(0, 40)}】`,
+        operation: `${res.data?.voted ? '支持需求' : '取消支持需求'}【${item.title.slice(0, 40)}】`,
       });
-    } catch (error) {
-      console.error('更新建议投票失败:', error);
+    } catch {
+      /* The request layer presents write failures. */
+    } finally {
+      votingIds.value.delete(item.id);
     }
   }
   function formatTime(value: string) {
     if (!value) return '--';
     const date = new Date(value.replace(' ', 'T'));
-    if (Number.isNaN(date.getTime())) return value;
-    return new Intl.DateTimeFormat(locale.value, { month: 'short', day: 'numeric' }).format(date);
+    return Number.isNaN(date.getTime())
+      ? value
+      : new Intl.DateTimeFormat(locale.value, { month: 'short', day: 'numeric' }).format(date);
   }
-
   watch(
-    () => user.role,
+    () => [user.id, user.role],
     () => {
-      if (isVisitor.value && activeTab.value !== 'public') activeTab.value = 'public';
-      resetAndLoad();
+      if ((activeTab.value === 'admin' && !isRoot.value) || isVisitor.value) activeTab.value = 'public';
+      submitVisible.value = false;
+      summary.value = normalizeFeatureRequestSummary();
+      changeTab();
     },
   );
   onMounted(() => {
-    loadData();
+    void loadData();
     recordOperation({ module: '共建轻笺', operation: '查看需求看板' });
   });
+  onActivated(() => {
+    if (!pageActive) {
+      pageActive = true;
+      void loadData();
+    }
+  });
+  onDeactivated(() => {
+    pageActive = false;
+    ++loadGeneration;
+    loading.value = false;
+    cancelSearch();
+  });
   onBeforeUnmount(() => {
-    if (searchTimer) clearTimeout(searchTimer);
+    pageActive = false;
+    ++loadGeneration;
+    cancelSearch();
   });
 </script>
 
 <style scoped lang="less">
+  @import (reference) '@/assets/css/workspace-surfaces.less';
+  @import (reference) './coBuildShared.less';
   .co-build-page {
+    .workspace-canvas-surface();
+    .co-build-semantics();
     height: 100%;
     overflow: auto;
-    color: var(--text-color);
-    background: var(--surface-page-bg);
+    color: var(--workspace-text);
   }
   .co-build-shell {
     width: 100%;
-    min-height: 100%;
+    max-width: calc(var(--ui-layout-1280, 1280px) + 2 * var(--ui-space-24, 24px));
+    margin: 0 auto;
+    padding: var(--ui-space-28, 28px) var(--ui-space-24, 24px) var(--ui-space-48, 48px);
     box-sizing: border-box;
-    padding: var(--ui-space-24, 24px) clamp(var(--ui-space-24, 24px), 3.2vw, var(--ui-space-76, 76px)) var(--ui-space-48, 48px);
   }
-  .co-build-hero {
-    display: flex;
-    align-items: flex-end;
-    justify-content: space-between;
-    gap: var(--ui-space-28, 28px);
-    padding: clamp(var(--ui-space-24, 24px), 3vw, var(--ui-space-42, 42px));
-    border: 1px solid color-mix(in srgb, var(--primary-color) 18%, var(--surface-border-color));
-    border-radius: 20px;
-    background:
-      radial-gradient(circle at 90% 10%, color-mix(in srgb, var(--primary-color) 18%, transparent), transparent 34%),
-      var(--surface-raised-background);
-    box-shadow: var(--surface-raised-shadow);
-  }
-  .hero-copy {
-    max-width: var(--ui-layout-860, 860px);
-  }
-  .hero-kicker {
+  .page-heading {
     display: flex;
     align-items: center;
-    gap: var(--ui-space-9, 9px);
-    color: var(--primary-color);
-    font-size: var(--ui-font-13, 13px);
-    font-weight: 700;
+    gap: var(--ui-space-16, 16px);
+    margin-bottom: var(--ui-space-24, 24px);
   }
-  .hero-icon,
+  .heading-icon,
   .empty-icon {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: var(--ui-layout-38, 38px);
-    height: var(--ui-layout-38, 38px);
+    flex: none;
+    color: var(--workspace-purple-text);
+    background: var(--workspace-purple-selected);
+  }
+  .heading-icon {
+    width: var(--ui-layout-48, 48px);
+    height: var(--ui-layout-48, 48px);
     border-radius: 12px;
-    background: color-mix(in srgb, var(--primary-color) 12%, var(--card-background));
   }
-  .co-build-hero h1 {
-    margin: var(--ui-space-14, 14px) 0 var(--ui-space-8, 8px);
-    font-size: clamp(var(--ui-font-30, 30px), 3vw, var(--ui-font-48, 48px));
-    line-height: 1.1;
-    letter-spacing: -0.04em;
+  .heading-copy {
+    flex: 1;
+    min-width: 0;
   }
-  .co-build-hero p {
+  .heading-copy h1 {
+    margin: 0 0 var(--ui-space-6, 6px);
+    font-size: var(--ui-font-28, 28px);
+    line-height: 1.3;
+  }
+  .heading-copy p {
     margin: 0;
-    color: var(--desc-color);
-    font-size: var(--ui-font-15, 15px);
-    line-height: 1.75;
+    color: var(--workspace-muted);
+    font-size: var(--ui-font-14, 14px);
+    line-height: 1.65;
   }
-  .visitor-hint {
-    margin-top: var(--ui-space-18, 18px);
-    padding-left: var(--ui-space-12, 12px);
-    border-left: 3px solid var(--primary-color);
-    color: var(--desc-color);
+  .heading-copy .visitor-hint {
+    margin-top: var(--ui-space-6, 6px);
+    font-size: var(--ui-font-12, 12px);
+  }
+  .heading-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: var(--ui-space-10, 10px);
+  }
+  .heading-actions .b_btn {
+    gap: var(--ui-space-6, 6px);
+  }
+  .official-button {
+    border: 1px solid var(--workspace-border);
+    background: var(--workspace-content);
+  }
+  .official-button > :first-child {
+    color: var(--warning-color);
+  }
+  .board-section {
+    .workspace-content-surface();
+    border: 1px solid var(--workspace-border);
+    border-radius: 14px;
+    padding: 0 var(--ui-space-24, 24px);
+  }
+  .board-navigation {
+    border-bottom: 1px solid var(--workspace-divider);
+  }
+  .board-navigation :deep(.tab-container.is-line) {
+    width: fit-content;
+    gap: var(--ui-space-12, 12px);
+    border-bottom: 0;
+  }
+  .board-navigation :deep(.tab) {
+    padding: var(--ui-space-16, 16px) var(--ui-space-12, 12px);
+    font-size: var(--ui-font-15, 15px);
+  }
+  .board-navigation :deep(.tab.is-active) {
+    color: var(--workspace-purple-text);
+  }
+  .progress-filters :deep(.tab-badge) {
+    padding: 0;
+    background: transparent;
+    color: inherit;
+    opacity: 1;
+  }
+  .mine-hint {
+    margin: var(--ui-space-16, 16px) 0;
+    color: var(--workspace-muted);
     font-size: var(--ui-font-13, 13px);
     line-height: 1.6;
   }
-  .hero-actions {
-    display: flex;
-    gap: var(--ui-space-10, 10px);
-    flex-wrap: wrap;
-    justify-content: flex-end;
+  .progress-filters {
+    padding: var(--ui-space-16, 16px) 0 0;
+    overflow-x: auto;
   }
-  .hero-actions :deep(.b_btn) {
-    gap: var(--ui-space-7, 7px);
+  .progress-filters :deep(.tab-container) {
+    width: max-content;
+    background: transparent;
+    gap: var(--ui-space-6, 6px);
+    padding: 0;
   }
-  .summary-grid {
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: var(--ui-space-14, 14px);
-    margin-top: var(--ui-space-18, 18px);
-  }
-  .summary-card {
-    display: flex;
-    align-items: baseline;
-    gap: var(--ui-space-10, 10px);
-  }
-  .summary-value {
-    color: var(--text-color);
-    font-size: var(--ui-font-24, 24px);
-    font-weight: 750;
-    font-variant-numeric: tabular-nums;
-  }
-  .summary-label {
-    color: var(--desc-color);
-    font-size: var(--ui-font-13, 13px);
-  }
-  .board-section {
-    margin-top: var(--ui-space-18, 18px);
-    padding: var(--ui-space-20, 20px);
-    border: 1px solid var(--surface-border-color);
-    border-radius: 20px;
-    background: var(--surface-panel-bg);
-  }
-  .board-topbar {
-    display: flex;
+  .progress-filter-label {
+    display: inline-flex;
     align-items: center;
-    justify-content: space-between;
-    gap: var(--ui-space-16, 16px);
+    gap: var(--ui-space-6, 6px);
   }
-  .mine-hint {
-    color: var(--desc-color);
-    font-size: var(--ui-font-12, 12px);
+  .filter-dot {
+    display: inline-block;
+    flex: none;
+    width: var(--ui-layout-7, 7px);
+    height: var(--ui-layout-7, 7px);
+    border-radius: 50%;
+    background: var(--desc-color);
+  }
+  .filter-dot.is-all,
+  .filter-dot.is-planned {
+    background: var(--workspace-purple-text);
+  }
+  .filter-dot.is-in_progress {
+    background: var(--info-color);
+  }
+  .filter-dot.is-released {
+    background: var(--success-color);
   }
   .filter-row {
     display: grid;
-    grid-template-columns: minmax(var(--ui-layout-260, 260px), 1fr) repeat(3, minmax(var(--ui-layout-150, 150px), var(--ui-layout-190, 190px)));
-    gap: var(--ui-space-10, 10px);
-    margin: var(--ui-space-16, 16px) 0;
+    grid-template-columns: minmax(0, 1fr) var(--ui-layout-180, 180px) var(--ui-layout-180, 180px);
+    gap: var(--ui-space-12, 12px);
+    padding: var(--ui-space-16, 16px) 0;
   }
-  .filter-search {
-    min-width: 0;
-  }
-  .filter-select {
+  .filter-row > * {
     min-width: 0;
   }
   .filter-row :deep(.b-input),
   .filter-row :deep(.select-trigger) {
-    height: var(--ui-control-40, 40px);
-    border: 1px solid var(--surface-border-color) !important;
-    background: var(--card-background);
+    min-height: var(--ui-control-40, 40px);
+    box-sizing: border-box;
   }
-  .request-grid,
-  .board-loading {
+  .board-content {
+    border-top: 1px solid var(--workspace-divider);
+  }
+  .request-row {
+    position: relative;
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(min(var(--ui-layout-320, 320px), 100%), 1fr));
-    gap: var(--ui-space-14, 14px);
-    margin-top: var(--ui-space-16, 16px);
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
+    column-gap: var(--ui-space-24, 24px);
+    padding: var(--ui-space-20, 20px) 0;
   }
-  .request-card {
-    min-height: var(--ui-card-260, 260px);
+  .request-row.has-vote {
+    grid-template-columns: var(--ui-layout-54, 54px) minmax(0, 1fr) auto;
+  }
+  .request-row + .request-row {
+    border-top: 1px solid var(--workspace-divider);
+  }
+  .request-body {
     display: flex;
     flex-direction: column;
-    cursor: pointer;
-  }
-  .request-card:hover {
-    border-color: color-mix(in srgb, var(--primary-color) 42%, var(--surface-border-color));
-  }
-  .card-meta {
-    display: flex;
-    align-items: center;
-    gap: var(--ui-space-7, 7px);
-    flex-wrap: wrap;
-  }
-  .source-pill,
-  .category-pill,
-  .moderation-pill,
-  .progress-pill {
-    display: inline-flex;
-    align-items: center;
+    min-width: 0;
     gap: var(--ui-space-5, 5px);
-    min-height: var(--ui-layout-24, 24px);
-    box-sizing: border-box;
-    padding: var(--ui-space-3, 3px) var(--ui-space-8, 8px);
-    border-radius: 999px;
-    font-size: var(--ui-font-11, 11px);
-    line-height: 1;
   }
-  .source-pill.is-official {
-    color: #8a5a00;
-    background: color-mix(in srgb, #f5a623 15%, var(--card-background));
-  }
-  .source-pill.is-user {
-    color: var(--primary-color);
-    background: color-mix(in srgb, var(--primary-color) 10%, var(--card-background));
-  }
-  .category-pill,
-  .moderation-pill {
-    color: var(--desc-color);
-    background: var(--surface-panel-bg);
-  }
-  .request-card h2 {
-    margin: var(--ui-space-16, 16px) 0 var(--ui-space-9, 9px);
-    font-size: var(--ui-font-18, 18px);
+  .request-body h2 {
+    order: 0;
+    margin: 0;
+    font-size: var(--ui-font-17, 17px);
+    font-weight: 650;
     line-height: 1.45;
+    overflow-wrap: anywhere;
+  }
+  .request-link {
+    color: var(--workspace-text);
+    text-decoration: none;
+  }
+  .request-link::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 6px;
+  }
+  .request-link:focus-visible {
+    outline: none;
+  }
+  .request-link:focus-visible::after {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 2px;
+  }
+  .request-meta {
+    order: 2;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--ui-space-6, 6px) var(--ui-space-12, 12px);
   }
   .request-content {
+    order: 1;
     display: -webkit-box;
-    margin: 0;
-    overflow: hidden;
-    color: var(--desc-color);
-    font-size: var(--ui-font-13, 13px);
-    line-height: 1.7;
-    -webkit-line-clamp: 3;
     -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow: hidden;
+    overflow-wrap: anywhere;
+    margin: 0;
+    color: var(--workspace-muted);
+    font-size: var(--ui-font-14, 14px);
+    line-height: 1.6;
   }
   .reply-preview {
-    display: grid;
-    gap: var(--ui-space-4, 4px);
-    margin-top: var(--ui-space-14, 14px);
-    padding: var(--ui-space-10, 10px) var(--ui-space-12, 12px);
-    border-radius: 10px;
-    background: color-mix(in srgb, var(--primary-color) 6%, var(--surface-panel-bg));
-    color: var(--desc-color);
-    font-size: var(--ui-font-12, 12px);
+    order: 3;
+    display: flex;
+    align-items: baseline;
+    gap: var(--ui-space-6, 6px);
+    margin: var(--ui-space-2, 2px) 0 0;
+    min-width: 0;
+    font-size: var(--ui-font-13, 13px);
+    color: var(--workspace-muted);
+    line-height: 1.6;
+  }
+  .reply-preview > :first-child {
+    flex: none;
+    color: var(--warning-color);
+    align-self: center;
   }
   .reply-preview strong {
-    color: var(--primary-color);
+    flex: none;
+    color: var(--workspace-purple-text);
+    font-weight: 550;
   }
-  .reply-preview span {
+  .reply-preview > span {
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  .card-footer {
+  .row-status {
+    align-self: center;
     display: flex;
-    align-items: flex-end;
-    justify-content: space-between;
-    gap: var(--ui-space-12, 12px);
-    margin-top: auto;
-    padding-top: var(--ui-space-18, 18px);
+    align-items: center;
+    gap: var(--ui-space-8, 8px);
+    color: var(--workspace-muted);
   }
-  .footer-status {
-    display: grid;
-    gap: var(--ui-space-7, 7px);
-  }
-  .progress-pill {
-    width: max-content;
-    color: var(--primary-color);
-    background: color-mix(in srgb, var(--primary-color) 9%, var(--card-background));
-  }
-  .progress-pill.is-released {
-    color: #07845d;
-    background: color-mix(in srgb, #10b981 12%, var(--card-background));
-  }
-  .progress-pill.is-declined {
-    color: var(--desc-color);
-    background: var(--surface-panel-bg);
+  .row-status .co-build-status {
+    min-width: var(--ui-layout-80, 80px);
+    justify-content: center;
   }
   .updated-time {
-    color: var(--desc-color);
-    font-size: var(--ui-font-11, 11px);
+    color: var(--workspace-muted);
+    font-size: var(--ui-font-12, 12px);
+    line-height: 1.6;
   }
-  .vote-button {
-    gap: var(--ui-space-5, 5px);
-    color: var(--desc-color);
+  .vote-button.b_btn {
+    position: relative;
+    z-index: 1;
+    align-self: start;
+    width: var(--ui-layout-54, 54px);
+    min-width: 0;
+    height: var(--ui-layout-60, 60px);
+    padding: var(--ui-space-6, 6px);
+    border: 1px solid var(--workspace-border);
+    border-radius: 9px;
+    color: var(--workspace-muted);
+    background: var(--workspace-content);
   }
-  .vote-button.is-voted {
-    color: var(--primary-color);
-    background: color-mix(in srgb, var(--primary-color) 11%, var(--card-background));
-  }
-  .loading-card {
-    height: var(--ui-card-260, 260px);
-    border: 1px solid var(--surface-border-color);
-    border-radius: 14px;
-    background: linear-gradient(
-      100deg,
-      var(--card-background) 20%,
-      var(--surface-panel-bg) 40%,
-      var(--card-background) 60%
-    );
-    background-size: 200% 100%;
-    animation: shimmer 1.3s infinite linear;
-  }
-  .board-empty {
-    min-height: var(--ui-layout-330, 330px);
+  .vote-content {
     display: flex;
-    flex-direction: column;
     align-items: center;
     justify-content: center;
-    text-align: center;
+    flex-direction: column;
+    gap: var(--ui-space-4, 4px);
+    line-height: 1.2;
+    font-size: var(--ui-font-14, 14px);
   }
-  .board-empty strong {
-    margin-top: var(--ui-space-16, 16px);
+  .vote-button.is-voted {
+    color: var(--workspace-purple-text);
+    border-color: var(--workspace-purple-text);
+    background: var(--workspace-purple-selected);
+  }
+  .board-footer {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: var(--ui-space-16, 16px);
+    padding: var(--ui-space-16, 16px) 0;
+    border-top: 1px solid var(--workspace-divider);
+    font-size: var(--ui-font-12, 12px);
+    color: var(--workspace-muted);
+  }
+  .board-empty {
+    min-height: var(--ui-layout-320, 320px);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    padding: var(--ui-space-24, 24px);
+    text-align: center;
+    box-sizing: border-box;
+  }
+  .empty-icon {
+    width: var(--ui-layout-64, 64px);
+    height: var(--ui-layout-64, 64px);
+    border-radius: 50%;
+  }
+  .board-empty h2 {
+    margin: var(--ui-space-20, 20px) 0 var(--ui-space-8, 8px);
     font-size: var(--ui-font-18, 18px);
   }
   .board-empty p {
-    max-width: var(--ui-layout-480, 480px);
-    margin: var(--ui-space-8, 8px) 0 var(--ui-space-18, 18px);
-    color: var(--desc-color);
+    margin: 0 0 var(--ui-space-16, 16px);
+    font-size: var(--ui-font-14, 14px);
     line-height: 1.7;
+    color: var(--workspace-muted);
   }
-  .board-section :deep(.bpagination) {
-    margin-top: var(--ui-space-24, 24px);
+  .board-empty .b_btn {
+    gap: var(--ui-space-6, 6px);
   }
-  @keyframes shimmer {
-    to {
-      background-position: -200% 0;
+  .load-error {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: var(--ui-space-12, 12px);
+    padding: var(--ui-space-20, 20px) 0;
+    font-size: var(--ui-font-14, 14px);
+    color: var(--danger-color);
+  }
+  .board-loading {
+    display: grid;
+  }
+  .loading-row {
+    display: grid;
+    grid-template-columns: var(--ui-layout-54, 54px) minmax(0, 1fr);
+    gap: var(--ui-space-12, 12px) var(--ui-space-24, 24px);
+    padding: var(--ui-space-24, 24px) 0;
+    border-bottom: 1px solid var(--workspace-divider);
+  }
+  .loading-row i,
+  .loading-row span {
+    background: var(--workspace-hover);
+    border-radius: 6px;
+  }
+  .loading-row i {
+    grid-row: span 2;
+    height: var(--ui-layout-60, 60px);
+  }
+  .loading-row span {
+    height: var(--ui-layout-18, 18px);
+    width: 80%;
+  }
+  .loading-row span:last-child {
+    width: 60%;
+  }
+  @media (hover: hover) and (pointer: fine) {
+    .request-row:hover .request-link {
+      color: var(--workspace-purple-text);
+    }
+    .vote-button:hover {
+      border-color: var(--workspace-purple-text);
     }
   }
-  @media (max-width: 1100px) {
-    .filter-row {
-      grid-template-columns: minmax(220px, 1fr) repeat(2, minmax(140px, 180px));
-    }
-    .filter-row > :last-child {
-      grid-column: auto;
-    }
-  }
-  @media (max-width: 767px) {
+
+  .is-mobile {
     .co-build-shell {
-      padding: 14px 12px 34px;
+      padding: var(--ui-space-12, 12px) var(--ui-space-12, 12px) var(--ui-space-32, 32px);
     }
-    .co-build-hero {
-      align-items: stretch;
-      flex-direction: column;
-      padding: 20px;
-      border-radius: 16px;
+    .mobile-heading {
+      position: relative;
+      display: flex;
+      align-items: center;
+      gap: var(--ui-space-8, 8px);
+      min-height: var(--ui-layout-56, 56px);
+      padding: 0 var(--ui-space-12, 12px);
+      background: var(--workspace-content);
+      border-bottom: 1px solid var(--workspace-divider);
+      box-sizing: border-box;
     }
-    .hero-actions,
-    .hero-actions :deep(.b_btn) {
-      width: 100%;
+    .mobile-heading h1 {
+      position: absolute;
+      left: 50%;
+      width: calc(100% - var(--ui-layout-248, 248px));
+      transform: translateX(-50%);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      margin: 0;
+      font-size: var(--ui-font-18, 18px);
+      line-height: 1.4;
+      text-align: center;
     }
-    .summary-grid {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
+    .mobile-back.b_btn,
+    .mobile-more.b_btn {
+      flex: none;
+      width: var(--ui-layout-44, 44px);
+      height: var(--ui-layout-44, 44px);
+      padding: 0;
+      background: transparent;
+    }
+    .mobile-actions {
+      margin-inline-start: auto;
+      display: flex;
+      align-items: center;
+      gap: var(--ui-space-4, 4px);
+    }
+    .mobile-actions > .b_btn {
+      height: var(--ui-control-32, 32px);
+      padding-inline: var(--ui-space-8, 8px);
+    }
+    .page-heading {
+      margin-bottom: var(--ui-space-14, 14px);
+    }
+    .heading-copy p {
+      font-size: var(--ui-font-13, 13px);
     }
     .board-section {
-      padding: 14px;
-      border-radius: 16px;
+      padding: 0 var(--ui-space-12, 12px);
+      border-radius: 12px;
     }
-    .board-topbar {
-      align-items: flex-start;
-      flex-direction: column;
+    .board-navigation :deep(.tab-container.is-line) {
+      width: 100%;
+      gap: 0;
+    }
+    .board-navigation :deep(.tab) {
+      flex: 1;
+      justify-content: center;
+      padding: var(--ui-space-12, 12px) var(--ui-space-4, 4px);
+      font-size: var(--ui-font-14, 14px);
     }
     .filter-row {
-      grid-template-columns: 1fr 1fr;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: var(--ui-space-8, 8px);
+      padding: var(--ui-space-12, 12px) 0;
     }
     .filter-search {
       grid-column: 1 / -1;
     }
-    .request-grid,
-    .board-loading {
-      grid-template-columns: 1fr;
+    .filter-row.is-admin {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
     }
-    .request-card {
-      min-height: 230px;
+    .filter-row :deep(.select-trigger) {
+      min-height: var(--ui-control-32, 32px);
+      padding: 0 var(--ui-space-24, 24px) 0 var(--ui-space-8, 8px);
+      font-size: var(--ui-font-12, 12px);
+    }
+    .filter-row :deep(.select-suffix) {
+      right: var(--ui-space-6, 6px);
+    }
+    .mobile-summary {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--ui-space-8, 8px) var(--ui-space-12, 12px);
+      padding-bottom: var(--ui-space-12, 12px);
+      color: var(--workspace-muted);
+      font-size: var(--ui-font-11, 11px);
+    }
+    .mobile-summary > span {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--ui-space-4, 4px);
+      white-space: nowrap;
+    }
+    .mobile-summary b {
+      color: var(--workspace-text);
+      font-weight: 550;
+    }
+    .request-row,
+    .request-row.has-vote {
+      grid-template-columns: minmax(0, 1fr) auto;
+      column-gap: var(--ui-space-12, 12px);
+      row-gap: var(--ui-space-12, 12px);
+      padding: var(--ui-space-18, 18px) 0;
+    }
+    .request-body {
+      grid-column: 1 / -1;
+      grid-row: 1;
+      gap: var(--ui-space-8, 8px);
+    }
+    .request-meta {
+      order: -1;
+      gap: var(--ui-space-6, 6px) var(--ui-space-8, 8px);
+    }
+    .request-meta .co-build-status {
+      margin-inline-start: auto;
+    }
+    .request-body h2 {
+      font-size: var(--ui-font-16, 16px);
+    }
+    .request-content {
+      font-size: var(--ui-font-13, 13px);
+    }
+    .reply-preview {
+      display: -webkit-box;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 2;
+      overflow: hidden;
+      font-size: var(--ui-font-12, 12px);
+    }
+    .reply-preview > :first-child {
+      vertical-align: middle;
+      margin-inline-end: var(--ui-space-4, 4px);
+    }
+    .reply-preview strong {
+      margin-inline-end: var(--ui-space-6, 6px);
+    }
+    .reply-preview > span {
+      white-space: normal;
+      overflow-wrap: anywhere;
+    }
+    .mobile-time {
+      grid-column: 1;
+      grid-row: 2;
+      align-self: center;
+    }
+    .vote-button.b_btn {
+      grid-column: 2;
+      grid-row: 2;
+      width: auto;
+      height: var(--ui-control-32, 32px);
+      padding: 0 var(--ui-space-10, 10px);
+    }
+    .vote-content {
+      flex-direction: row;
+      gap: var(--ui-space-5, 5px);
+      font-size: var(--ui-font-13, 13px);
+    }
+    .board-empty {
+      min-height: var(--ui-layout-280, 280px);
+      padding-inline: var(--ui-space-8, 8px);
+    }
+    .board-empty p {
+      font-size: var(--ui-font-13, 13px);
+    }
+    .board-footer {
+      justify-content: center;
     }
   }
 </style>
