@@ -17,7 +17,12 @@ vi.mock('@/components/base/TypewriterOutput.vue', () => ({
   default: { props: ['content'], template: '<div>{{ content }}</div>' },
 }));
 vi.mock('@/components/base/BasicComponents/BModal/BModal.vue', () => ({
-  default: { props: ['visible'], template: '<div v-if="visible"><slot /></div>' },
+  default: {
+    props: ['visible'],
+    emits: ['update:visible'],
+    template:
+      '<div v-if="visible" role="dialog"><slot name="title" /><slot /><slot name="footer" :close="() => $emit(\'update:visible\', false)" /></div>',
+  },
 }));
 vi.mock('@/components/base/SvgIcon/src/SvgIcon.vue', () => ({ default: { template: '<span />' } }));
 
@@ -26,6 +31,7 @@ afterEach(() => {
   cleanup?.();
   cleanup = undefined;
   vi.clearAllMocks();
+  mocks.execute.mockReset();
   vi.restoreAllMocks();
 });
 
@@ -150,5 +156,110 @@ describe('笔记 AI 流式失败恢复', () => {
     if (partial) expect(view.host.querySelector('.output-body')?.textContent).toContain(partial);
     else expect(view.host.querySelector('.output-actions')).toBeNull();
     expect(view.host.querySelector('.generation-status')).toBeNull();
+  });
+});
+
+describe('笔记 AI 侧栏与预览操作', () => {
+  it('补充要求默认折叠，折叠后草稿仍用于快捷处理和自定义处理', async () => {
+    mocks.execute.mockResolvedValue(complete);
+    const view = mount('<p>原正文</p>');
+    const toggle = view.host.querySelector<HTMLButtonElement>('button[aria-controls]')!;
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    toggle.click();
+    await nextTick();
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    const input = view.host.querySelector<HTMLTextAreaElement>('.ai-input textarea')!;
+    input.value = '请保留原有结构';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    toggle.click();
+    await nextTick();
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    view.click();
+    await vi.waitFor(() =>
+      expect(view.host.querySelector('.output-footer button')?.hasAttribute('disabled')).toBe(false),
+    );
+    expect(mocks.execute.mock.calls[0][0].input.instruction).toContain('请保留原有结构');
+    toggle.click();
+    await nextTick();
+    expect(input.value).toBe('请保留原有结构');
+    view.host.querySelector<HTMLButtonElement>('.custom-process-btn')!.click();
+    await vi.waitFor(() => expect(mocks.execute).toHaveBeenCalledTimes(2));
+    expect(mocks.execute.mock.calls[1][0].input.operation).toBe('rewrite');
+    expect(mocks.execute.mock.calls[1][0].input.instruction).toContain('请保留原有结构');
+  });
+
+  it('仅标题结果展示并应用标题，不出现替换正文操作', async () => {
+    mocks.execute.mockResolvedValue({ ...complete, result: { kind: 'grounded_markdown', content: '更清楚的新标题' } });
+    const view = mount('<p>保留原正文</p>');
+    view.host.querySelectorAll<HTMLButtonElement>('.action-btn')[1].click();
+    await vi.waitFor(() =>
+      expect(view.host.querySelector('.output-footer button')?.hasAttribute('disabled')).toBe(false),
+    );
+    const apply = view.host.querySelector<HTMLButtonElement>('.output-footer button')!;
+    expect(view.host.querySelectorAll('.output-footer button')).toHaveLength(1);
+    expect(apply.textContent).toBe('ai.reply.replaceTitle');
+    apply.click();
+    await nextTick();
+    expect(view.note.title).toBe('更清楚的新标题');
+    expect(view.note.content).toBe('<p>保留原正文</p>');
+    expect(mocks.applied).toHaveBeenCalledTimes(1);
+    view.host.querySelector<HTMLButtonElement>('.output-actions button[title="ai.reply.expand"]')!.click();
+    await nextTick();
+    const actions = view.host.querySelector('.ai-preview-actions')!;
+    expect(actions.textContent).toContain('ai.reply.replaceTitle');
+    expect(actions.textContent).not.toContain('ai.reply.replaceContent');
+    expect(view.host.querySelector('.ai-preview-col--origin')?.textContent).toContain('更清楚的新标题');
+  });
+
+  it('生成中禁用重复处理，放大预览可以停止，结束后恢复追问入口', async () => {
+    mocks.execute.mockImplementationOnce(
+      (_request, { signal }) =>
+        new Promise((_resolve, reject) => {
+          signal.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')), { once: true });
+        }),
+    );
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const view = mount('<p>有效正文</p>');
+    view.click();
+    await nextTick();
+    expect(
+      Array.from(view.host.querySelectorAll<HTMLButtonElement>('.action-btn')).every((button) => button.disabled),
+    ).toBe(true);
+    expect(view.host.querySelector<HTMLButtonElement>('.custom-process-btn')?.disabled).toBe(true);
+    expect(view.host.querySelector<HTMLButtonElement>('.output-footer button')?.disabled).toBe(true);
+    view.host.querySelector<HTMLButtonElement>('.output-actions button[title="ai.reply.expand"]')!.click();
+    await nextTick();
+    const stop = view.host.querySelector<HTMLButtonElement>('.ai-preview-followup button')!;
+    expect(stop.textContent).toContain('ai.reply.stop');
+    stop.click();
+    await vi.waitFor(() =>
+      expect(view.host.querySelector('.ai-preview-followup button')?.textContent).toContain('ai.reply.followupSend'),
+    );
+    expect(view.host.querySelector('.ai-preview-body .generation-feedback')?.textContent).toContain(
+      'ai.reply.generationStopped',
+    );
+    expect(
+      Array.from(view.host.querySelectorAll<HTMLButtonElement>('.action-btn')).every((button) => !button.disabled),
+    ).toBe(true);
+    expect(mocks.execute).toHaveBeenCalledTimes(1);
+  });
+
+  it('结果正文通过页脚替换，关闭预览保留结果', async () => {
+    mocks.execute.mockResolvedValue(complete);
+    const view = mount('<p>原正文</p>');
+    view.click();
+    await vi.waitFor(() =>
+      expect(view.host.querySelector('.output-footer button')?.hasAttribute('disabled')).toBe(false),
+    );
+    view.host.querySelector<HTMLButtonElement>('.output-actions button[title="ai.reply.expand"]')!.click();
+    await nextTick();
+    view.host.querySelector<HTMLButtonElement>('.ai-preview-actions button')!.click();
+    await nextTick();
+    expect(view.host.querySelector('[role="dialog"]')).toBeNull();
+    expect(view.host.querySelector('.output-body')?.textContent).toContain('已有的 AI 建议');
+    view.host.querySelector<HTMLButtonElement>('.output-footer button')!.click();
+    await nextTick();
+    expect(view.note.content).toBe('<p>已有的 AI 建议</p>');
+    expect(mocks.applied).toHaveBeenCalledTimes(1);
   });
 });

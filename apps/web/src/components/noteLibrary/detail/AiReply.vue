@@ -1,217 +1,128 @@
 <template>
-  <div class="ai-container">
-    <div class="ai-header">
-      <div class="ai-title">
-        <span class="dot"></span>
-        <span>{{ t('ai.reply.title') }}</span>
-      </div>
-      <div class="ai-subtitle">{{ t('ai.reply.subtitle') }}</div>
-    </div>
-
+  <div ref="containerRef" class="ai-container" :class="{ 'is-mobile': isMobileLayout }">
     <div class="ai-note-meta">
-      <div class="meta-row">
-        <span class="label">{{ t('ai.reply.metaTitle') }}</span>
-        <span class="value" :title="note?.title">{{ note?.title || t('ai.reply.untitled') }}</span>
+      <SvgIcon :src="icon.resource.note" aria-hidden="true" />
+      <span class="note-context-title" :title="note?.title">{{ note?.title || t('ai.reply.untitled') }}</span>
+      <span class="note-context-length">{{ textLength }} {{ t('ai.reply.wordCount') }}</span>
+    </div>
+
+    <section class="ai-quick-actions" :aria-label="t('ai.reply.quickTitle')">
+      <div class="section-heading">
+        <span>{{ t('ai.reply.quickTitle') }}</span>
+        <span class="section-hint">{{ t('ai.reply.quickHint') }}</span>
       </div>
-      <div class="meta-row">
-        <span class="label">{{ t('ai.reply.metaContentLength') }}</span>
-        <span class="value">{{ textLength }} {{ t('ai.reply.wordCount') }}</span>
+      <div class="ai-actions">
+        <BButton
+          class="action-btn text-hidden"
+          :disabled="isLoading"
+          @click="runAction('polishFull')"
+          :title="t('ai.reply.actions.polishFull')"
+          v-click-log="{ module: '笔记-AI助手', operation: '润色全文' }"
+          >{{ t('ai.reply.actions.polishFull') }}</BButton
+        >
+        <BButton
+          class="action-btn text-hidden"
+          :disabled="isLoading"
+          @click="runAction('optimizeTitle')"
+          :title="t('ai.reply.actions.optimizeTitle')"
+          v-click-log="{ module: '笔记-AI助手', operation: '优化标题' }"
+          >{{ t('ai.reply.actions.optimizeTitle') }}</BButton
+        >
+        <BButton
+          class="action-btn text-hidden"
+          :disabled="isLoading"
+          @click="runAction('generateSummary')"
+          :title="t('ai.reply.actions.generateSummary')"
+          v-click-log="{ module: '笔记-AI助手', operation: '生成摘要' }"
+          >{{ t('ai.reply.actions.generateSummary') }}</BButton
+        >
+        <BButton
+          class="action-btn text-hidden"
+          :disabled="isLoading"
+          @click="runAction('correctErrors')"
+          :title="t('ai.reply.actions.correctErrors')"
+          v-click-log="{ module: '笔记-AI助手', operation: '纠错与语病' }"
+          >{{ t('ai.reply.actions.correctErrors') }}</BButton
+        >
+        <BButton
+          class="action-btn text-hidden"
+          :disabled="isLoading"
+          @click="runAction('continueWrite')"
+          :title="t('ai.reply.actions.continueWrite')"
+          v-click-log="{ module: '笔记-AI助手', operation: '续写扩展' }"
+          >{{ t('ai.reply.actions.continueWrite') }}</BButton
+        >
+        <BButton
+          class="action-btn text-hidden"
+          :disabled="isLoading"
+          @click="runAction('translate')"
+          :title="t('ai.reply.actions.translate')"
+          v-click-log="{ module: '笔记-AI助手', operation: '翻译' }"
+          >{{ t('ai.reply.actions.translate') }}</BButton
+        >
+        <BButton
+          class="action-btn text-hidden"
+          :disabled="isLoading"
+          @click="runAction('outline')"
+          :title="t('ai.reply.actions.outline')"
+          v-click-log="{ module: '笔记-AI助手', operation: '生成大纲' }"
+          >{{ t('ai.reply.actions.outline') }}</BButton
+        >
       </div>
-    </div>
+    </section>
 
-    <div class="ai-actions">
+    <section class="ai-input">
       <BButton
-        class="action-btn text-hidden"
-        :disabled="isLoading"
-        @click="runAction('polishFull')"
-        :title="t('ai.reply.actions.polishFull')"
-        v-click-log="{ module: '笔记-AI助手', operation: '润色全文' }"
-        >{{ t('ai.reply.actions.polishFull') }}</BButton
+        type="text"
+        class="requirements-toggle"
+        :aria-expanded="requirementsExpanded"
+        :aria-controls="requirementsId"
+        @click="requirementsExpanded = !requirementsExpanded"
       >
-      <BButton
-        class="action-btn text-hidden"
-        :disabled="isLoading"
-        @click="runAction('optimizeTitle')"
-        :title="t('ai.reply.actions.optimizeTitle')"
-        v-click-log="{ module: '笔记-AI助手', operation: '优化标题' }"
-        >{{ t('ai.reply.actions.optimizeTitle') }}</BButton
-      >
-      <BButton
-        class="action-btn text-hidden"
-        :disabled="isLoading"
-        @click="runAction('generateSummary')"
-        :title="t('ai.reply.actions.generateSummary')"
-        v-click-log="{ module: '笔记-AI助手', operation: '生成摘要' }"
-        >{{ t('ai.reply.actions.generateSummary') }}</BButton
-      >
-      <BButton
-        class="action-btn text-hidden"
-        :disabled="isLoading"
-        @click="runAction('correctErrors')"
-        :title="t('ai.reply.actions.correctErrors')"
-        v-click-log="{ module: '笔记-AI助手', operation: '纠错与语病' }"
-        >{{ t('ai.reply.actions.correctErrors') }}</BButton
-      >
-      <BButton
-        class="action-btn text-hidden"
-        :disabled="isLoading"
-        @click="runAction('continueWrite')"
-        :title="t('ai.reply.actions.continueWrite')"
-        v-click-log="{ module: '笔记-AI助手', operation: '续写扩展' }"
-        >{{ t('ai.reply.actions.continueWrite') }}</BButton
-      >
-      <BButton
-        class="action-btn text-hidden"
-        :disabled="isLoading"
-        @click="runAction('translate')"
-        :title="t('ai.reply.actions.translate')"
-        v-click-log="{ module: '笔记-AI助手', operation: '翻译' }"
-        >{{ t('ai.reply.actions.translate') }}</BButton
-      >
-      <BButton
-        class="action-btn text-hidden"
-        :disabled="isLoading"
-        @click="runAction('outline')"
-        :title="t('ai.reply.actions.outline')"
-        v-click-log="{ module: '笔记-AI助手', operation: '生成大纲' }"
-        >{{ t('ai.reply.actions.outline') }}</BButton
-      >
-    </div>
-
-    <div class="ai-input">
-      <div class="input-label">{{ t('ai.reply.inputLabel') }}</div>
-      <BInput v-model:value="prompt" type="textarea" :rows="2" :placeholder="t('ai.reply.inputPlaceholder')" />
-      <BButton
-        v-if="isLoading"
-        class="stop-btn"
-        @click="stopGenerating"
-        :title="t('ai.reply.stop', '停止生成')"
-        v-click-log="{ module: '笔记-AI助手', operation: '停止生成' }"
-      >
-        <span class="stop-icon"></span>
-        {{ t('ai.reply.stop', '停止生成') }}
-      </BButton>
-      <BButton
-        v-else
-        class="primary-btn"
-        :disabled="!prompt.trim()"
-        @click="generate('custom')"
-        :title="t('ai.reply.processButton')"
-        v-click-log="{ module: '笔记-AI助手', operation: '自定义处理' }"
-      >
-        {{ t('ai.reply.processButton') }}
-      </BButton>
-    </div>
-
-    <div class="ai-output">
-      <div class="output-header">
-        <span style="max-width: var(--ui-layout-100, 100px); min-width: 0" class="text-hidden">{{
-          t('ai.reply.outputTitle')
+        <SvgIcon
+          :src="icon.noteTree.chevron"
+          class="requirements-chevron"
+          :class="{ 'is-open': requirementsExpanded }"
+          aria-hidden="true"
+        />
+        <span>{{ t('ai.reply.inputLabel') }}</span>
+        <span v-if="!requirementsExpanded" class="requirements-summary">{{
+          t(prompt.trim() ? 'ai.reply.requirementsFilled' : 'ai.reply.addRequirement')
         }}</span>
-        <div v-if="outputFull" class="output-actions">
-          <BButton
-            v-if="canApplyBody"
-            style="max-width: var(--ui-layout-100, 100px)"
-            class="ghost-btn text-hidden"
-            @click="requestApply('body')"
-            :title="t('ai.reply.replaceContent')"
-            v-click-log="{ module: '笔记-AI助手', operation: '插入到笔记' }"
-            >{{ t('ai.reply.replaceContent') }}</BButton
-          >
-          <BButton
-            v-if="canApplyTitle"
-            style="max-width: var(--ui-layout-100, 100px)"
-            class="ghost-btn text-hidden"
-            @click="requestApply('title')"
-            :title="t('ai.reply.replaceTitle')"
-            v-click-log="{ module: '笔记-AI助手', operation: '替换标题' }"
-            >{{ t('ai.reply.replaceTitle') }}</BButton
-          >
-          <BButton
-            class="ghost-btn icon-btn"
-            @click="previewVisible = true"
-            :title="t('ai.reply.expand')"
-            v-click-log="{ module: '笔记-AI助手', operation: '放大预览' }"
-          >
-            <SvgIcon :src="icon.ai.maximize" aria-hidden="true" />
-          </BButton>
-          <BButton
-            class="ghost-btn icon-btn"
-            :disabled="isLoading"
-            @click="clearOutput"
-            :title="t('ai.reply.clear')"
-            v-click-log="{ module: '笔记-AI助手', operation: '清空输出' }"
-          >
-            <SvgIcon :src="icon.noteDetail.deleteLine" aria-hidden="true" />
-          </BButton>
-        </div>
+      </BButton>
+      <div v-show="requirementsExpanded" :id="requirementsId" class="requirements-fields">
+        <label :for="requirementsInputId" class="section-hint">{{ t('ai.reply.inputHint') }}</label>
+        <BInput
+          :id="requirementsInputId"
+          v-model:value="prompt"
+          type="textarea"
+          :rows="2"
+          :disabled="isLoading"
+          :placeholder="t('ai.reply.inputPlaceholder')"
+        />
+        <BButton
+          class="custom-process-btn"
+          :disabled="isLoading || !prompt.trim()"
+          @click="generate('custom')"
+          v-click-log="{ module: '笔记-AI助手', operation: '自定义处理' }"
+          >{{ t('ai.reply.processButton') }}</BButton
+        >
       </div>
-      <div v-if="formatInvalid" class="format-warning">
-        {{ t('ai.reply.formatInvalid', { markers: missingMarkers.join(t('ai.reply.markerSeparator')) }) }}
-      </div>
-      <div v-if="outputTruncated" class="truncation-warning" role="status">
-        <span>{{ t('ai.reply.truncatedHint') }}</span>
-        <div class="generation-feedback-actions">
-          <BButton class="status-action-btn" @click="retryGeneration">{{ t('ai.reply.retry') }}</BButton>
-          <BButton class="status-action-btn" @click="runAction('generateSummary')">{{
-            t('ai.reply.actions.generateSummary')
-          }}</BButton>
-        </div>
-      </div>
-      <div v-if="showGenerationStatus" class="generation-status" role="status" aria-live="polite">
-        <BLoading inline :loading="true" :title="generationStatusText" />
-      </div>
-      <div v-if="generationFeedback" :class="['generation-feedback', `is-${generationFeedback.type}`]" role="status">
-        <span>{{ generationFeedback.text }}</span>
-        <BButton v-if="generationFeedback.retryable" class="status-action-btn" @click="retryGeneration">
-          {{ t('ai.reply.retry') }}
-        </BButton>
-      </div>
-      <div v-if="hasTitle && hasBody" class="title-suggestion">
-        <span class="title-suggestion-label">{{ t('ai.reply.suggestedTitle') }}</span>
-        <span class="title-suggestion-value">{{ suggestedTitle }}</span>
-      </div>
-      <TypewriterOutput
-        v-if="displayOutput || (!isLoading && !generationFeedback)"
-        v-auto-scrollbar
-        class="output-body"
-        :typing-speed="16"
-        :content="displayOutput"
-        :markdown="isMarkdownNote"
-        :empty-text="t('ai.reply.emptyMessage')"
-      />
-    </div>
+    </section>
 
-    <!-- 放大预览:输出区太窄小时,一键弹大窗舒服阅读,并可直接应用。
-         必须放在 .ai-container 内部 —— 若作为第二个根节点会使组件变多根,导致父级 class="ai-panel"(定宽)无法继承,面板会被内容撑宽。 -->
-    <BModal v-model:visible="previewVisible" :title="t('ai.reply.outputTitle')" :show-footer="false" width="auto">
-      <div class="ai-preview ai-preview--split">
-        <div v-if="hasTitle && hasBody" class="ai-preview-title">
-          <span class="title-suggestion-label">{{ t('ai.reply.suggestedTitle') }}</span>
-          <span class="title-suggestion-value">{{ suggestedTitle }}</span>
+    <section class="ai-output" :aria-label="resultTitle">
+      <div class="output-header">
+        <div class="output-heading">
+          <span class="result-title">{{ resultHeading }}</span>
+          <span v-if="requestCompleted && !formatInvalid" class="result-complete">
+            <SvgIcon :src="icon.organize.check" size="14" aria-hidden="true" />
+            {{ t('ai.reply.completed') }}
+          </span>
         </div>
-        <!-- 左栏=笔记原文(改动前)、右栏=AI 生成(改动后),都渲染后展示,方便对比再决定替换 -->
-        <div class="ai-preview-split">
-          <div class="ai-preview-col ai-preview-col--origin">
-            <div class="ai-preview-col-head">{{ t('ai.reply.previewOrigin') }}</div>
-            <div class="ai-preview-body" v-html="originRenderedHtml" v-mermaid></div>
-          </div>
-          <div class="ai-preview-col">
-            <div class="ai-preview-col-head">{{ t('ai.reply.previewGenerated') }}</div>
-            <div class="ai-preview-body" ref="previewBodyRef" v-html="generatedRenderedHtml" v-mermaid></div>
-          </div>
-        </div>
-        <div class="ai-preview-followup">
-          <BInput
-            v-model:value="followupPrompt"
-            :placeholder="t('ai.reply.followupPlaceholder')"
-            :disabled="isLoading"
-            @enter="runFollowup"
-          />
+        <div v-if="outputFull || isLoading" class="output-actions">
           <BButton
             v-if="isLoading"
-            class="stop-btn ai-preview-followup__send ai-preview-followup__stop"
-            :title="t('ai.reply.stop')"
+            class="stop-btn"
             @click="stopGenerating"
             v-click-log="{ module: '笔记-AI助手', operation: '停止生成' }"
           >
@@ -219,29 +130,209 @@
             {{ t('ai.reply.stop') }}
           </BButton>
           <BButton
-            v-else
-            class="ghost-btn ai-preview-followup__send"
-            :disabled="!followupPrompt.trim() || !outputFull"
-            @click="runFollowup"
-            v-click-log="{ module: '笔记-AI助手', operation: '追问迭代' }"
-            >{{ t('ai.reply.followupSend') }}</BButton
-          >
-        </div>
-        <div class="ai-preview-actions">
-          <BButton class="ghost-btn" :disabled="!canApplyBody" @click="requestApply('body')">{{
-            t('ai.reply.replaceContent')
-          }}</BButton>
-          <BButton class="ghost-btn" :disabled="!canApplyTitle" @click="requestApply('title')">{{
-            t('ai.reply.replaceTitle')
-          }}</BButton>
+            class="icon-btn"
+            icon-only
+            @click="previewVisible = true"
+            :title="t('ai.reply.expand')"
+            :aria-label="t('ai.reply.expand')"
+            v-click-log="{ module: '笔记-AI助手', operation: '放大预览' }"
+            ><SvgIcon :src="icon.ai.maximize" aria-hidden="true"
+          /></BButton>
+          <BButton
+            v-if="!isLoading"
+            class="icon-btn"
+            icon-only
+            @click="clearOutput"
+            :title="t('ai.reply.clear')"
+            :aria-label="t('ai.reply.clear')"
+            v-click-log="{ module: '笔记-AI助手', operation: '清空输出' }"
+            ><SvgIcon :src="icon.noteDetail.deleteLine" aria-hidden="true"
+          /></BButton>
         </div>
       </div>
+      <div class="output-reading">
+        <div v-if="formatInvalid" class="format-warning" role="status">
+          {{ t('ai.reply.formatInvalid', { markers: missingMarkers.join(t('ai.reply.markerSeparator')) }) }}
+        </div>
+        <div v-if="outputTruncated" class="truncation-warning" role="status">
+          <span>{{ t('ai.reply.truncatedHint') }}</span>
+          <div class="generation-feedback-actions">
+            <BButton class="status-action-btn" @click="retryGeneration">{{ t('ai.reply.retry') }}</BButton>
+            <BButton class="status-action-btn" @click="runAction('generateSummary')">{{
+              t('ai.reply.actions.generateSummary')
+            }}</BButton>
+          </div>
+        </div>
+        <div v-if="showGenerationStatus" class="generation-status" role="status" aria-live="polite">
+          <BLoading inline :loading="true" :title="generationStatusText" />
+        </div>
+        <div v-if="generationFeedback" :class="['generation-feedback', `is-${generationFeedback.type}`]" role="status">
+          <span>{{ generationFeedback.text }}</span>
+          <BButton v-if="generationFeedback.retryable" class="status-action-btn" @click="retryGeneration">{{
+            t('ai.reply.retry')
+          }}</BButton>
+        </div>
+        <div v-if="hasTitle && hasBody" class="title-suggestion">
+          <span class="title-suggestion-label">{{ t('ai.reply.suggestedTitle') }}</span>
+          <span class="title-suggestion-value">{{ suggestedTitle }}</span>
+        </div>
+        <TypewriterOutput
+          ref="outputRef"
+          v-if="displayOutput || (!isLoading && !generationFeedback)"
+          v-auto-scrollbar
+          class="output-body"
+          :typing-speed="16"
+          :content="displayOutput"
+          :markdown="isMarkdownNote"
+          :empty-text="t('ai.reply.emptyMessage')"
+        />
+      </div>
+      <div v-if="displayOutput || isLoading" class="output-footer">
+        <span class="apply-hint">{{ applyHint }}</span>
+        <div class="apply-actions">
+          <BButton
+            v-if="resultFormat === 'title' || hasTitle"
+            :type="hasBody ? undefined : 'primary'"
+            :disabled="!canApplyTitle"
+            @click="requestApply('title')"
+            v-click-log="{ module: '笔记-AI助手', operation: '替换标题' }"
+            >{{ t('ai.reply.replaceTitle') }}</BButton
+          >
+          <BButton
+            v-if="resultFormat !== 'title' || hasBody"
+            type="primary"
+            :disabled="!canApplyBody"
+            @click="requestApply('body')"
+            v-click-log="{ module: '笔记-AI助手', operation: '插入到笔记' }"
+            >{{ t('ai.reply.replaceContent') }}</BButton
+          >
+        </div>
+      </div>
+    </section>
+
+    <!-- 预览留在同一根节点中，让父级 ai-panel 的宽高约束继续落在侧栏。 -->
+    <BModal
+      v-model:visible="previewVisible"
+      :title="t('ai.reply.outputTitle')"
+      width="min(var(--ui-layout-1080, 1080px), calc(100% - var(--ui-space-32, 32px)))"
+      modal-class="note-ai-preview-dialog"
+      content-class="note-ai-preview-content"
+      fullscreen-mobile
+    >
+      <template #title>
+        <div class="ai-preview-heading">
+          <span>{{ t('ai.reply.outputTitle') }}</span>
+          <span class="ai-preview-context"
+            >{{ actionLabel }}<template v-if="actionLabel"> · </template
+            >{{ note?.title || t('ai.reply.untitled') }}</span
+          >
+        </div>
+      </template>
+      <div class="ai-preview" :class="{ 'is-mobile': isMobileLayout }">
+        <div v-if="hasTitle && hasBody" class="ai-preview-title">
+          <span class="title-suggestion-label">{{ t('ai.reply.suggestedTitle') }}</span>
+          <span class="title-suggestion-value">{{ suggestedTitle }}</span>
+        </div>
+        <div
+          ref="previewSplitRef"
+          class="ai-preview-split"
+          :style="previewReadingHeight ? { height: `${previewReadingHeight}px` } : undefined"
+        >
+          <section class="ai-preview-col ai-preview-col--origin">
+            <div class="ai-preview-col-head">{{ t('ai.reply.previewOrigin') }}</div>
+            <div ref="previewOriginBodyRef" class="ai-preview-body" v-auto-scrollbar>
+              <p v-if="resultFormat === 'title'">{{ note?.title || t('ai.reply.untitled') }}</p>
+              <div v-else v-html="originRenderedHtml" v-mermaid></div>
+            </div>
+          </section>
+          <section class="ai-preview-col">
+            <div class="ai-preview-col-head">
+              <span>{{ resultTitle }}</span>
+              <span v-if="requestCompleted && !formatInvalid" class="result-complete">
+                <SvgIcon :src="icon.organize.check" size="14" aria-hidden="true" />
+                {{ t('ai.reply.completed') }}
+              </span>
+            </div>
+            <div class="ai-preview-body" ref="previewBodyRef" v-auto-scrollbar>
+              <div v-if="showGenerationStatus" class="generation-status" role="status">
+                <BLoading inline :loading="true" :title="generationStatusText" />
+              </div>
+              <div
+                v-if="generationFeedback"
+                :class="['generation-feedback', `is-${generationFeedback.type}`]"
+                role="status"
+              >
+                <span>{{ generationFeedback.text }}</span>
+                <BButton v-if="generationFeedback.retryable" class="status-action-btn" @click="retryGeneration">{{
+                  t('ai.reply.retry')
+                }}</BButton>
+              </div>
+              <div v-if="formatInvalid" class="format-warning" role="status">{{
+                t('ai.reply.formatInvalid', { markers: missingMarkers.join(t('ai.reply.markerSeparator')) })
+              }}</div>
+              <div v-if="outputTruncated" class="truncation-warning" role="status">{{
+                t('ai.reply.truncatedHint')
+              }}</div>
+              <div v-html="generatedRenderedHtml" v-mermaid></div>
+            </div>
+          </section>
+        </div>
+      </div>
+      <template #footer="{ close }">
+        <div class="ai-preview-footer" :class="{ 'is-mobile': isMobileLayout }">
+          <div class="ai-preview-followup">
+            <BInput
+              v-model:value="followupPrompt"
+              :placeholder="t('ai.reply.followupPlaceholder')"
+              :disabled="isLoading"
+              @enter="runFollowup"
+            />
+            <BButton
+              v-if="isLoading"
+              class="stop-btn ai-preview-followup__send"
+              @click="stopGenerating"
+              v-click-log="{ module: '笔记-AI助手', operation: '停止生成' }"
+            >
+              <span class="stop-icon" aria-hidden="true"></span>
+              {{ t('ai.reply.stop') }}
+            </BButton>
+            <BButton
+              v-else
+              class="ai-preview-followup__send"
+              :disabled="!followupPrompt.trim() || !outputFull"
+              @click="runFollowup"
+              v-click-log="{ module: '笔记-AI助手', operation: '追问迭代' }"
+              >{{ t('ai.reply.followupSend') }}</BButton
+            >
+          </div>
+          <div class="ai-preview-actions">
+            <span class="apply-hint">{{ applyHint }}</span>
+            <div class="apply-actions">
+              <BButton @click="close">{{ t('common.close') }}</BButton>
+              <BButton
+                v-if="resultFormat === 'title' || hasTitle"
+                :type="hasBody ? undefined : 'primary'"
+                :disabled="!canApplyTitle"
+                @click="requestApply('title')"
+                >{{ t('ai.reply.replaceTitle') }}</BButton
+              >
+              <BButton
+                v-if="resultFormat !== 'title' || hasBody"
+                type="primary"
+                :disabled="!canApplyBody"
+                @click="requestApply('body')"
+                >{{ t('ai.reply.replaceContent') }}</BButton
+              >
+            </div>
+          </div>
+        </div>
+      </template>
     </BModal>
   </div>
 </template>
 
 <script lang="ts" setup>
-  import { computed, inject, nextTick, onBeforeUnmount, ref, watch, watchEffect } from 'vue';
+  import { computed, getCurrentInstance, inject, nextTick, onBeforeUnmount, ref, watch, watchEffect } from 'vue';
   import { useI18n } from 'vue-i18n';
   import TypewriterOutput from '@/components/base/TypewriterOutput.vue';
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
@@ -259,8 +350,18 @@
   import { renderStreamingMarkdown } from '@/utils/aiMessageRender';
   import { getAiQuotaErrorPresentation } from '@/utils/aiQuotaErrorPresentation';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
+  import { useUiDensity } from '@/composables/useUiDensity';
+  import { useMobileLayout } from '@/composables/useMobileLayout';
+  import { useDensityScrollAnchor } from '@/composables/useDensityScrollAnchor';
 
   const { t } = useI18n();
+  const { dimension } = useUiDensity();
+  const isMobileLayout = useMobileLayout();
+  const containerRef = ref<HTMLElement | null>(null);
+  const outputRef = ref<{ $el: HTMLElement } | null>(null);
+  const outputScrollElement = computed(() => outputRef.value?.$el ?? null);
+  useDensityScrollAnchor(containerRef);
+  useDensityScrollAnchor(outputScrollElement);
 
   const note = inject<any>('note', null);
   const applyTitleFromAi = inject<((title: string) => void) | null>('applyTitleFromAi', null);
@@ -271,6 +372,10 @@
   const triggerSave = inject<(() => void) | null>('triggerSave', null);
   const focusEditorToEnd = inject<(() => void) | null>('focusEditorToEnd', null);
   const prompt = ref('');
+  const requirementsExpanded = ref(false);
+  const requirementsId = `note-ai-requirements-${getCurrentInstance()?.uid}`;
+  const requirementsInputId = `${requirementsId}-input`;
+  const resultAction = ref('');
   const followupPrompt = ref('');
   const outputFull = ref('');
   const lastAction = ref('');
@@ -333,6 +438,16 @@
   // 是则内容增长后贴到底;上滚离开则自然停住;滚回底部附近下一段又自动恢复。判断每次都基于真实滚动位置,
   // 无粘滞状态、无 wheel 监听,恢复必然可靠(旧写法用 interrupted 标志+wheel,回底后会被紧接的滚轮事件再次关掉)。
   const previewBodyRef = ref<HTMLElement | null>(null);
+  const previewOriginBodyRef = ref<HTMLElement | null>(null);
+  useDensityScrollAnchor(previewBodyRef);
+  useDensityScrollAnchor(previewOriginBodyRef);
+  const previewSplitRef = ref<HTMLElement | null>(null);
+  // 仅在打开中的预览开始生成时记住实际阅读高度，避免流式内容反复推移页脚。
+  const previewReadingHeight = ref<number>();
+  const holdPreviewReadingHeight = () => {
+    if (!previewVisible.value || previewReadingHeight.value) return;
+    previewReadingHeight.value = Math.max(previewSplitRef.value?.getBoundingClientRect().height || 0, dimension(280));
+  };
   const PREVIEW_SCROLL_THRESHOLD = 120;
 
   const isPreviewNearBottom = () => {
@@ -446,7 +561,14 @@
 
   // 打开弹框:正在生成→贴底开始跟随;已完成→停在顶部方便阅读
   watch(previewVisible, (open) => {
-    if (open && isLoading.value) nextTick(scrollPreviewToBottom);
+    if (!open) {
+      previewReadingHeight.value = undefined;
+    } else if (isLoading.value) {
+      nextTick(() => {
+        holdPreviewReadingHeight();
+        scrollPreviewToBottom();
+      });
+    }
   });
 
   const actionConfig: Record<string, { format: ResultFormat }> = {
@@ -459,6 +581,18 @@
     outline: { format: 'body' },
     custom: { format: 'body' },
   };
+
+  const actionLabel = computed(() =>
+    resultAction.value
+      ? t(resultAction.value === 'custom' ? 'ai.reply.customAction' : `ai.reply.actions.${resultAction.value}`)
+      : '',
+  );
+  const resultTitle = computed(() =>
+    resultAction.value ? t(`ai.reply.resultTitles.${resultAction.value}`) : t('ai.reply.outputTitle'),
+  );
+  const resultHeading = computed(() =>
+    isLoading.value ? t('ai.reply.generatingResult', { action: actionLabel.value }) : resultTitle.value,
+  );
 
   // 部分动作需要给模型额外说明(泛化的"任务名"不足以表达期望)
   const ACTION_INSTRUCTION: Record<string, string> = {
@@ -536,7 +670,11 @@
       };
       return;
     }
-    if (mode !== 'followup') lastGenerationMode.value = mode;
+    holdPreviewReadingHeight();
+    if (mode !== 'followup') {
+      lastGenerationMode.value = mode;
+      resultAction.value = action;
+    }
     resultFormat.value = expectedFormat;
     requestCompleted.value = false;
     completedRequestId.value = '';
@@ -717,8 +855,6 @@
   });
   const hasTitle = computed(() => Boolean(suggestedTitle.value));
   const hasBody = computed(() => Boolean(extractSection(outputFull.value, '正文')));
-  const canApplyTitle = computed(() => requestCompleted.value && !isLoading.value && hasTitle.value);
-  const canApplyBody = computed(() => requestCompleted.value && !isLoading.value && hasBody.value);
   const missingMarkers = computed(() => {
     const markers: string[] = [];
     if ((resultFormat.value === 'title' || resultFormat.value === 'both') && !hasTitle.value) markers.push('【标题】');
@@ -727,6 +863,18 @@
   });
   const formatInvalid = computed(
     () => requestCompleted.value && Boolean(outputFull.value) && missingMarkers.value.length > 0,
+  );
+
+  const canApplyTitle = computed(
+    () => requestCompleted.value && !isLoading.value && !formatInvalid.value && hasTitle.value,
+  );
+  const canApplyBody = computed(
+    () => requestCompleted.value && !isLoading.value && !formatInvalid.value && hasBody.value,
+  );
+  const applyHint = computed(() =>
+    !requestCompleted.value || formatInvalid.value
+      ? t('ai.reply.applyWaitingHint')
+      : t(resultFormat.value === 'title' ? 'ai.reply.titleApplyHint' : 'ai.reply.bodyApplyHint'),
   );
 
   // 展示正文结果而非协议标记；Markdown 笔记交给 TypewriterOutput 做增量 Markdown 渲染。
@@ -818,6 +966,7 @@
   };
 
   const clearOutput = () => {
+    resultAction.value = '';
     outputFull.value = '';
     requestCompleted.value = false;
     completedRequestId.value = '';
@@ -833,261 +982,234 @@
 </script>
 
 <style lang="less" scoped>
-  .ai-container {
-    font-size: var(--ui-font-16, 16px);
-    --ai-section-bg: #f8f9ff;
-    --ai-section-border: #e1e5f0;
-    --ai-action-bg: #ffffff;
-    --ai-action-hover-bg: #f0f1ff;
-    --ai-output-header-bg: #f6f7fc;
-    --ai-output-body-bg: #ffffff;
-    height: 100%;
-    background: var(--workspace-panel-bg-color);
-    border-radius: 0;
-    padding: var(--ui-space-16, 16px);
-    box-sizing: border-box;
-    display: flex;
-    flex-direction: column;
-    gap: var(--ui-space-10, 10px);
-    border: 0;
-  }
+  @import (reference) '@/assets/css/workspace-surfaces.less';
 
-  .ai-header {
+  .ai-container {
+    .workspace-canvas-surface();
     display: flex;
     flex-direction: column;
-    gap: var(--ui-space-6, 6px);
-    padding: var(--ui-space-2, 2px) 0 var(--ui-space-12, 12px);
-    border-bottom: 1px solid var(--ai-section-border);
-  }
-  .ai-title {
-    display: flex;
-    align-items: center;
-    gap: var(--ui-space-8, 8px);
-    font-size: var(--ui-font-15, 15px);
-    font-weight: 700;
-    letter-spacing: 0.01em;
-    color: var(--text-color);
-  }
-  .ai-title .dot {
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
-    background: linear-gradient(135deg, #7b8cff, #5b6fff);
-    border: 2px solid #e8eaff;
+    gap: var(--ui-space-12, 12px);
+    height: 100%;
+    min-width: 0;
+    min-height: 0;
+    padding: var(--ui-space-12, 12px) var(--ui-space-16, 16px) var(--ui-space-16, 16px);
     box-sizing: border-box;
-  }
-  .ai-subtitle {
-    font-size: var(--ui-font-12, 12px);
-    color: var(--desc-color);
+    overflow: auto;
+    color: var(--workspace-text);
   }
 
   .ai-note-meta {
-    background: var(--ai-section-bg);
-    border: 1px solid var(--ai-section-border);
-    border-radius: 10px;
-    padding: var(--ui-space-10, 10px) var(--ui-space-12, 12px);
     display: flex;
+    flex: 0 0 auto;
     align-items: center;
-    gap: var(--ui-space-12, 12px);
-  }
-  .meta-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    flex: 1;
-    min-width: 0;
     gap: var(--ui-space-8, 8px);
-    font-size: var(--ui-font-12, 12px);
+    min-width: 0;
+    padding-bottom: var(--ui-space-12, 12px);
+    border-bottom: 1px solid var(--workspace-divider);
+    font-size: var(--ui-font-13, 13px);
   }
-  .meta-row:first-child {
-    flex: 1.6;
+  .ai-note-meta > :first-child {
+    flex-shrink: 0;
+    color: var(--workspace-muted);
   }
-  .meta-row + .meta-row {
-    padding-left: var(--ui-space-12, 12px);
-    border-left: 1px solid var(--surface-divider-color);
-  }
-  .meta-row .label {
-    color: var(--desc-color);
-    font-weight: 500;
-    white-space: nowrap;
-  }
-  .meta-row .value {
-    color: var(--text-color);
+  .note-context-title {
     flex: 1;
     min-width: 0;
-    text-align: right;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    font-weight: 600;
+    font-weight: 500;
+  }
+  .note-context-length {
+    flex-shrink: 0;
+    color: var(--workspace-muted);
+    font-size: var(--ui-font-12, 12px);
   }
 
+  .ai-quick-actions {
+    flex: 0 0 auto;
+  }
+  .section-heading {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: var(--ui-space-4, 4px) var(--ui-space-8, 8px);
+    margin-bottom: var(--ui-space-8, 8px);
+    font-size: var(--ui-font-12, 12px);
+    font-weight: 600;
+  }
+  .section-hint {
+    color: var(--workspace-muted);
+    font-size: var(--ui-font-12, 12px);
+    font-weight: 400;
+    line-height: 1.5;
+  }
   .ai-actions {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    display: flex;
+    flex-wrap: wrap;
     gap: var(--ui-space-8, 8px);
   }
   .action-btn {
-    width: 100%;
-    height: var(--ui-control-32, 32px);
-    border: 1px solid var(--ai-section-border);
-    background: var(--ai-action-bg);
+    .workspace-content-surface();
+    flex: 0 1 auto;
+    max-width: 100%;
+    height: auto;
+    min-height: var(--ui-control-32, 32px);
+    padding: var(--ui-space-6, 6px) var(--ui-space-10, 10px);
+    border-width: 1px;
+    border-style: solid;
     border-radius: 8px;
-    font-size: var(--ui-font-12, 12px);
-    font-weight: 500;
-    color: var(--text-color);
-    cursor: pointer;
+    font-size: var(--ui-font-13, 13px);
+    line-height: 1.35;
+    white-space: normal;
   }
-  .action-btn:disabled {
-    cursor: not-allowed;
-    opacity: 0.6;
+  .action-btn:not(:disabled):hover {
+    background: var(--workspace-hover);
+    border-color: var(--workspace-purple-text);
+    color: var(--workspace-purple-text);
   }
-  .action-btn:hover {
-    color: var(--primary-color);
-    border-color: #bfc3f5;
-    background: var(--ai-action-hover-bg);
-  }
-
   .ai-input {
+    flex: 0 0 auto;
+    min-width: 0;
+    border-top: 1px solid var(--workspace-divider);
+    border-bottom: 1px solid var(--workspace-divider);
+  }
+  .requirements-toggle {
+    display: flex;
+    gap: var(--ui-space-6, 6px);
+    width: 100%;
+    height: auto;
+    min-height: var(--ui-control-32, 32px);
+    padding: var(--ui-space-6, 6px) 0;
+    color: var(--workspace-text);
+    font-size: var(--ui-font-13, 13px);
+    font-weight: 500;
+    line-height: 1.4;
+    text-align: left;
+    white-space: normal;
+  }
+  .requirements-chevron {
+    flex-shrink: 0;
+    transform: rotate(-90deg);
+    transition: transform 0.15s;
+  }
+  .requirements-chevron.is-open {
+    transform: rotate(0);
+  }
+  .requirements-summary {
+    margin-left: auto;
+    flex-shrink: 0;
+    color: var(--workspace-purple-text);
+    font-size: var(--ui-font-12, 12px);
+  }
+  .requirements-fields {
     display: grid;
     gap: var(--ui-space-8, 8px);
-    --ai-requirement-bg: var(--card-background);
-    --ai-requirement-border: var(--surface-border-color);
-    --ai-requirement-text: var(--text-color);
-    --ai-requirement-placeholder: var(--desc-color);
+    padding-bottom: var(--ui-space-12, 12px);
   }
-  .input-label {
-    font-size: var(--ui-font-12, 12px);
-    color: var(--sub-text-color, var(--text-color));
-    font-weight: 600;
-  }
-  .ai-input :deep(.b-textarea) {
-    width: 100%;
+  .requirements-fields :deep(.b-textarea) {
     min-height: var(--ui-layout-56, 56px);
     max-height: var(--ui-layout-120, 120px);
+    font-size: var(--ui-font-13, 13px);
     resize: vertical;
-    border: 1px solid var(--ai-requirement-border);
-    border-radius: 8px;
-    box-sizing: border-box;
-    padding: var(--ui-space-8, 8px) var(--ui-space-10, 10px);
+  }
+  .custom-process-btn {
+    justify-self: end;
     font-size: var(--ui-font-12, 12px);
-    background-color: var(--ai-requirement-bg) !important;
-    color: var(--ai-requirement-text);
-    outline: none;
-    font-family: inherit;
-    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
-    transition:
-      border-color 0.2s ease,
-      box-shadow 0.2s ease,
-      background-color 0.2s ease;
-  }
-  .ai-input :deep(.b-textarea::placeholder) {
-    color: var(--ai-requirement-placeholder);
-    opacity: 1;
-  }
-  .ai-input :deep(.b-textarea:hover) {
-    border-color: color-mix(in srgb, var(--primary-color) 28%, var(--surface-border-color));
-  }
-  .ai-input :deep(.b-textarea:focus) {
-    border-color: var(--primary-color);
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary-color) 15%, transparent);
-  }
-  .primary-btn {
-    width: 100%;
-    height: var(--ui-control-34, 34px);
-    border: none;
-    border-radius: 8px;
-    background: linear-gradient(135deg, #6b7cff, #4e5bff);
-    color: #ffffff;
-    font-size: var(--ui-font-12, 12px);
-    cursor: pointer;
-  }
-  .primary-btn:disabled {
-    cursor: not-allowed;
-    opacity: 0.7;
+    border: 1px solid var(--workspace-border);
+    background: var(--workspace-content);
   }
 
+  .ai-output {
+    .workspace-content-surface();
+    display: flex;
+    flex: 1 0 var(--ui-layout-220, 220px);
+    flex-direction: column;
+    min-width: 0;
+    min-height: var(--ui-layout-180, 180px);
+    border-width: 1px;
+    border-style: solid;
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  .output-header {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: var(--ui-space-6, 6px);
+    padding: var(--ui-space-10, 10px) var(--ui-space-12, 12px);
+    border-bottom: 1px solid var(--workspace-divider);
+  }
+  .output-heading {
+    display: flex;
+    flex: 1 1 var(--ui-layout-120, 120px);
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: var(--ui-space-5, 5px) var(--ui-space-10, 10px);
+    min-width: 0;
+  }
+  .result-title {
+    min-width: 0;
+    font-size: var(--ui-font-13, 13px);
+    font-weight: 600;
+    overflow-wrap: anywhere;
+  }
+  .result-complete {
+    display: inline-flex;
+    flex-shrink: 0;
+    align-items: center;
+    gap: var(--ui-space-3, 3px);
+    color: var(--success-color);
+    font-size: var(--ui-font-11, 11px);
+    font-weight: 400;
+    white-space: nowrap;
+  }
+  .output-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--ui-space-5, 5px);
+    margin-left: auto;
+  }
+  .icon-btn {
+    width: var(--ui-control-28, 28px);
+    height: var(--ui-control-28, 28px);
+    padding: 0;
+    background: transparent;
+    color: var(--workspace-muted);
+  }
+  .icon-btn:not(:disabled):hover {
+    color: var(--workspace-text);
+    background: var(--workspace-hover);
+  }
   .stop-btn {
-    width: 100%;
-    height: var(--ui-control-34, 34px);
-    border: 1px solid color-mix(in srgb, var(--message-error-color) 42%, var(--surface-border-color));
-    border-radius: 8px;
-    background: color-mix(in srgb, var(--message-error-color) 8%, var(--card-background));
-    color: var(--message-error-color);
-    font-size: var(--ui-font-12, 12px);
-    cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
     gap: var(--ui-space-6, 6px);
-    transition: all 0.2s;
+    height: var(--ui-control-28, 28px);
+    padding: 0 var(--ui-space-8, 8px);
+    border: 1px solid var(--surface-border-color);
+    background: var(--card-background);
+    color: var(--text-color);
+    font-size: var(--ui-font-12, 12px);
   }
-  .stop-btn:hover {
-    background: color-mix(in srgb, var(--message-error-color) 14%, var(--card-background));
-    border-color: var(--message-error-color);
-  }
-  .stop-btn .stop-icon {
-    width: 8px;
-    height: 8px;
+  .stop-icon {
+    width: var(--ui-layout-8, 8px);
+    height: var(--ui-layout-8, 8px);
+    flex-shrink: 0;
     background: currentColor;
     border-radius: 1px;
   }
 
-  .ai-output {
-    flex: 1 1 var(--ui-layout-280, 280px);
-    min-height: var(--ui-layout-220, 220px);
-    min-width: 0;
+  .output-reading {
     display: flex;
+    flex: 1 1 auto;
     flex-direction: column;
-    background: var(--ai-output-body-bg);
-    border-radius: 10px;
-    border: 1px solid var(--ai-section-border);
-    overflow: hidden;
-  }
-  .output-header {
-    padding: var(--ui-space-10, 10px) var(--ui-space-12, 12px);
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    border-bottom: 1px solid var(--surface-divider-color);
-    background: var(--ai-output-header-bg);
-    font-size: var(--ui-font-12, 12px);
-    color: var(--sub-text-color, var(--text-color));
-    font-weight: 600;
-  }
-  .output-actions {
-    display: flex;
-    gap: var(--ui-space-6, 6px);
-    flex-shrink: 0;
-  }
-  .ghost-btn {
-    height: var(--ui-control-26, 26px);
-    border: 1px solid var(--surface-border-color);
-    background: var(--workspace-panel-bg-color);
-    border-radius: 6px;
-    font-size: var(--ui-font-11, 11px);
-    padding: 0 var(--ui-space-8, 8px);
-    cursor: pointer;
-    color: var(--desc-color);
-    white-space: nowrap;
-  }
-  .ghost-btn:disabled {
-    cursor: not-allowed;
-    color: color-mix(in srgb, var(--desc-color) 62%, transparent);
-    border-color: var(--surface-divider-color);
-  }
-  /* 放大/清空为图标按钮:窄面板里一行放得下 4 个动作,文字动作(插入/替换标题)保留可读 */
-  .icon-btn {
-    width: var(--ui-layout-28, 28px);
-    padding: 0;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-  }
-  .icon-btn svg {
-    width: 14px;
-    height: 14px;
-    display: block;
+    min-height: 0;
+    overflow: auto;
   }
   .output-body {
     flex: 1 1 auto;
@@ -1095,133 +1217,34 @@
     padding: var(--ui-space-12, 12px);
     overflow: auto;
     box-sizing: border-box;
-    background: var(--ai-output-body-bg);
-  }
-  .format-warning {
-    padding: var(--ui-space-8, 8px) var(--ui-space-12, 12px);
-    border-bottom: 1px solid color-mix(in srgb, var(--resource-file-color) 24%, transparent);
-    background: color-mix(in srgb, var(--resource-file-color) 10%, transparent);
-    color: color-mix(in srgb, var(--resource-file-color) 75%, var(--text-color));
-    font-size: var(--ui-font-11, 11px);
-    line-height: 1.5;
-  }
-  .truncation-warning,
-  .generation-feedback,
-  .generation-status {
-    display: flex;
-    align-items: center;
-    gap: var(--ui-space-8, 8px);
-    padding: var(--ui-space-8, 8px) var(--ui-space-12, 12px);
-    border-bottom: 1px solid var(--card-border-color, rgba(0, 0, 0, 0.08));
-    font-size: var(--ui-font-11, 11px);
-    line-height: 1.5;
-  }
-  .truncation-warning,
-  .generation-feedback {
-    justify-content: space-between;
-  }
-  .truncation-warning {
-    color: color-mix(in srgb, var(--message-warning-color) 78%, var(--text-color));
-    background: color-mix(in srgb, var(--message-warning-color) 9%, var(--card-background));
-    border-bottom-color: color-mix(in srgb, var(--message-warning-color) 24%, transparent);
-  }
-  .generation-status {
-    color: var(--sub-text-color);
-    background: color-mix(in srgb, var(--resource-note-color) 5%, var(--card-background));
-  }
-  .generation-status :deep(.b-loading-inline) {
-    min-height: var(--ui-layout-20, 20px);
-    color: inherit;
-    font-size: inherit;
-  }
-  .generation-feedback {
-    color: var(--sub-text-color);
-  }
-  .generation-feedback.is-warning {
-    color: color-mix(in srgb, var(--message-warning-color) 78%, var(--text-color));
-    background: color-mix(in srgb, var(--message-warning-color) 9%, var(--card-background));
-    border-bottom-color: color-mix(in srgb, var(--message-warning-color) 24%, transparent);
-  }
-  .generation-feedback.is-error {
-    color: color-mix(in srgb, var(--message-error-color) 78%, var(--text-color));
-    background: color-mix(in srgb, var(--message-error-color) 8%, var(--card-background));
-    border-bottom-color: color-mix(in srgb, var(--message-error-color) 24%, transparent);
-  }
-  .truncation-warning > span,
-  .generation-feedback > span {
-    flex: 1 1 var(--ui-layout-140, 140px);
-    min-width: 0;
-  }
-  .generation-feedback-actions {
-    display: flex;
-    flex: 0 0 auto;
-    flex-wrap: wrap;
-    justify-content: flex-end;
-    gap: var(--ui-space-6, 6px);
-  }
-  .status-action-btn {
-    height: var(--ui-control-24, 24px);
-    padding: 0 var(--ui-space-7, 7px);
-    border: 1px solid var(--card-border-color, rgba(0, 0, 0, 0.1));
-    border-radius: 6px;
-    background: var(--card-background);
-    color: inherit;
-    font-size: var(--ui-font-11, 11px);
-    white-space: nowrap;
-  }
-  .title-suggestion {
-    display: grid;
-    gap: var(--ui-space-4, 4px);
-    padding: var(--ui-space-8, 8px) var(--ui-space-12, 12px) var(--ui-space-9, 9px);
-    border-bottom: 1px solid color-mix(in srgb, var(--resource-note-color) 20%, transparent);
-    background: linear-gradient(
-      90deg,
-      color-mix(in srgb, var(--resource-note-color) 6%, var(--card-background)),
-      var(--card-background) 72%
-    );
-  }
-  .title-suggestion .title-suggestion-label {
-    width: fit-content;
-    padding: var(--ui-space-1, 1px) var(--ui-space-6, 6px);
-    border-radius: 4px;
-    background: color-mix(in srgb, var(--resource-note-color) 12%, transparent);
-    font-size: var(--ui-font-10, 10px);
-    line-height: 1.4;
-    letter-spacing: 0.02em;
-  }
-  .title-suggestion .title-suggestion-value {
-    font-size: var(--ui-font-13, 13px);
-    line-height: 1.45;
-  }
-  .title-suggestion-label {
-    flex: 0 0 auto;
-    color: color-mix(in srgb, var(--resource-note-color) 78%, var(--text-color));
-    font-weight: 600;
-    white-space: nowrap;
-  }
-  .title-suggestion-value {
-    min-width: 0;
-    color: var(--text-color);
-    font-weight: 600;
-    overflow-wrap: anywhere;
   }
   .output-body :deep(.typewriter-content) {
     margin: 0;
-    /* ui-density-fixed: AI 结果正文排版独立于界面密度。 */
-    font-size: 12px;
-    line-height: 1.5;
-    color: var(--text-color);
+    /* ui-density-fixed: AI 正文排版独立于界面密度，保留原型的阅读字号。 */
+    font-size: 15px;
+    line-height: 1.65;
+    color: var(--workspace-text);
   }
-  /* 默认侧栏宽度有限，采用紧凑阅读节奏；放大弹窗继续使用下方 .ai-preview-body 的舒展排版。 */
   .output-body :deep(.typewriter-content--markup) {
     white-space: normal;
   }
   .output-body :deep(.typewriter-content--plain) {
     white-space: pre-wrap;
   }
-  .output-body :deep(p) {
-    /* ui-density-fixed: AI 结果正文排版独立于界面密度。 */
-    margin: 0 0 6px;
+  .output-body :deep(p),
+  .output-body :deep(blockquote) {
+    /* ui-density-fixed: 正文段落间距跟随阅读字号。 */
+    margin: 0 0 0.65em;
+  }
+  .output-body :deep(ul),
+  .output-body :deep(ol) {
+    /* ui-density-fixed: 正文列表间距跟随阅读字号。 */
+    margin: 0.5em 0;
+    padding-left: 1.55em;
+  }
+  .output-body :deep(li) {
+    /* ui-density-fixed: 正文列表项间距跟随阅读字号。 */
+    margin: 0.2em 0;
   }
   .output-body :deep(h1),
   .output-body :deep(h2),
@@ -1229,28 +1252,11 @@
   .output-body :deep(h4),
   .output-body :deep(h5),
   .output-body :deep(h6) {
-    /* ui-density-fixed: AI 结果正文排版独立于界面密度。 */
-    margin: 9px 0 4px;
+    /* ui-density-fixed: 正文标题间距跟随阅读字号。 */
+    margin: 0.85em 0 0.4em;
+    /* ui-density-fixed: 结果标题与正文保持文档排版层级。 */
+    font-size: 1.12em;
     line-height: 1.4;
-  }
-  .output-body :deep(ul),
-  .output-body :deep(ol) {
-    /* ui-density-fixed: AI 结果正文排版独立于界面密度。 */
-    margin: 5px 0;
-    padding-left: 1.55em;
-  }
-  .output-body :deep(li) {
-    /* ui-density-fixed: AI 结果正文排版独立于界面密度。 */
-    margin: 2px 0;
-  }
-  .output-body :deep(li > ul),
-  .output-body :deep(li > ol) {
-    /* ui-density-fixed: AI 结果正文排版独立于界面密度。 */
-    margin: 2px 0;
-  }
-  .output-body :deep(blockquote) {
-    /* ui-density-fixed: AI 结果正文排版独立于界面密度。 */
-    margin: 6px 0;
   }
   .output-body :deep(.typewriter-content--markup > :first-child) {
     margin-top: 0;
@@ -1258,227 +1264,313 @@
   .output-body :deep(.typewriter-content--markup > :last-child) {
     margin-bottom: 0;
   }
-  /* 纯文本结果没有块级标签，保留原来的逐行阅读行为。 */
-  .output-body :deep(.typewriter-content--plain) {
+
+  .output-footer,
+  .ai-preview-actions {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: var(--ui-space-8, 8px);
+  }
+  .output-footer {
+    padding: var(--ui-space-10, 10px) var(--ui-space-12, 12px);
+    border-top: 1px solid var(--workspace-divider);
+  }
+  .apply-hint {
+    flex: 1 1 var(--ui-layout-100, 100px);
+    min-width: 0;
+    color: var(--desc-color);
+    font-size: var(--ui-font-11, 11px);
     line-height: 1.5;
   }
-  /* 旧的统一 8px margin 会同时叠加在列表容器和每个 li 上，窄栏里显得松散。 */
-  .output-body :deep(pre) {
-    /* ui-density-fixed: AI 结果正文排版独立于界面密度。 */
-    margin: 6px 0;
+  .apply-actions {
+    display: flex;
+    flex: 0 1 auto;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: var(--ui-space-8, 8px);
+    margin-left: auto;
   }
-  .output-body :deep(p:last-child),
-  .output-body :deep(h1:last-child),
-  .output-body :deep(h2:last-child),
-  .output-body :deep(h3:last-child),
-  .output-body :deep(h4:last-child),
-  .output-body :deep(h5:last-child),
-  .output-body :deep(h6:last-child),
-  .output-body :deep(ul:last-child),
-  .output-body :deep(ol:last-child),
-  .output-body :deep(li:last-child),
-  .output-body :deep(blockquote:last-child) {
-    margin-bottom: 0;
+  .apply-actions > .b_btn {
+    max-width: 100%;
+    padding: 0 var(--ui-space-12, 12px);
+    font-size: var(--ui-font-12, 12px);
   }
-  .empty {
+  .apply-actions > .primary_btn:disabled {
+    background: var(--menu-item-h-bg-color);
     color: var(--desc-color);
+  }
+
+  .format-warning,
+  .truncation-warning,
+  .generation-feedback,
+  .generation-status {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: var(--ui-space-8, 8px);
+    padding: var(--ui-space-8, 8px) var(--ui-space-12, 12px);
+    border-bottom: 1px solid var(--surface-divider-color);
+    font-size: var(--ui-font-12, 12px);
+    line-height: 1.5;
+  }
+  .truncation-warning,
+  .generation-feedback {
+    justify-content: space-between;
+    flex-wrap: wrap;
+  }
+  .format-warning,
+  .truncation-warning,
+  .generation-feedback.is-warning {
+    color: var(--warning-color);
+  }
+  .generation-feedback.is-error {
+    color: var(--error-color);
+  }
+  .generation-status {
+    color: var(--desc-color);
+  }
+  .generation-status :deep(.b-loading-inline) {
+    min-height: var(--ui-layout-20, 20px);
+    font-size: inherit;
+    color: inherit;
+  }
+  .truncation-warning > span,
+  .generation-feedback > span {
+    flex: 1 1 var(--ui-layout-140, 140px);
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  .generation-feedback-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--ui-space-6, 6px);
+  }
+  .status-action-btn {
+    flex-shrink: 0;
+    height: var(--ui-control-28, 28px);
+    padding: 0 var(--ui-space-8, 8px);
+    border: 1px solid var(--surface-border-color);
+    background: var(--card-background);
+    color: inherit;
     font-size: var(--ui-font-12, 12px);
   }
 
-  [data-theme='night'] .ai-container {
-    --ai-section-bg: var(--card-background);
-    --ai-section-border: var(--surface-border-color);
-    --ai-action-bg: var(--card-background);
-    --ai-action-hover-bg: var(--hover-background);
-    --ai-output-header-bg: var(--workspace-panel-bg-color);
-    --ai-output-body-bg: var(--card-background);
-    background: var(--workspace-panel-bg-color);
-    border-color: var(--surface-border-color);
+  .title-suggestion,
+  .ai-preview-title {
+    flex: 0 0 auto;
+    display: grid;
+    gap: var(--ui-space-4, 4px);
+    padding: var(--ui-space-10, 10px) var(--ui-space-12, 12px);
+    border-bottom: 1px solid var(--surface-divider-color);
   }
-  [data-theme='night'] .ai-title,
-  [data-theme='night'] .meta-row .value,
-  [data-theme='night'] .output-body :deep(.typewriter-content) {
+  .title-suggestion-label {
+    color: var(--desc-color);
+    font-size: var(--ui-font-12, 12px);
+  }
+  .title-suggestion-value {
     color: var(--text-color);
-  }
-  [data-theme='night'] .meta-row + .meta-row {
-    border-left-color: var(--surface-divider-color);
+    font-size: var(--ui-font-14, 14px);
+    font-weight: 600;
+    overflow-wrap: anywhere;
   }
 
-  [data-theme='night'] .stop-btn {
-    background: color-mix(in srgb, var(--message-error-color) 8%, var(--card-background));
-    border-color: color-mix(in srgb, var(--message-error-color) 42%, var(--surface-border-color));
-    color: var(--message-error-color);
+  .ai-preview-heading {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: var(--ui-space-4, 4px) var(--ui-space-12, 12px);
+    min-width: 0;
   }
-  [data-theme='night'] .stop-btn:hover {
-    background: color-mix(in srgb, var(--message-error-color) 14%, var(--card-background));
-    border-color: var(--message-error-color);
-  }
-  [data-theme='night'] .output-header,
-  [data-theme='night'] .empty {
+  .ai-preview-context {
+    max-width: min(var(--ui-layout-460, 460px), 50vw);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: var(--ui-font-12, 12px);
+    font-weight: 400;
     color: var(--desc-color);
   }
-  [data-theme='night'] .ai-input {
-    --ai-requirement-bg: var(--card-background);
-    --ai-requirement-border: var(--surface-border-color);
-    --ai-requirement-text: var(--text-color);
-    --ai-requirement-placeholder: var(--desc-color);
-  }
-  [data-theme='night'] .ai-note-meta,
-  [data-theme='night'] .ai-output,
-  [data-theme='night'] .action-btn,
-  [data-theme='night'] .ghost-btn {
-    background: var(--card-background);
-    border-color: var(--surface-border-color);
-    color: var(--text-color);
-  }
-  [data-theme='night'] .action-btn:hover,
-  [data-theme='night'] .ghost-btn:hover {
-    color: var(--text-color);
-  }
-  [data-theme='night'] .action-btn:hover {
-    border-color: var(--primary-color);
-    background: var(--ai-action-hover-bg);
-  }
-  [data-theme='night'] .ai-title .dot {
-    border-color: #3b3f5a;
-  }
-  [data-theme='night'] .ai-input :deep(.b-textarea:focus) {
-    border-color: var(--primary-color);
-    box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary-color) 20%, transparent);
-  }
-  [data-theme='night'] .primary-btn {
-    background: linear-gradient(135deg, #6270f0, #4b5be2);
-  }
-
-  /* 放大预览窗:定宽约束 BModal 的 min-width:max-content,给足阅读空间 */
   .ai-preview {
-    font-size: var(--ui-font-16, 16px);
-    width: var(--ui-layout-680, 680px);
-    max-width: 86vw;
-    box-sizing: border-box;
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
   }
-  /* 放大预览:左「原文」/ 右「AI 生成」对比,窗口更宽 */
-  .ai-preview--split {
-    width: min(var(--ui-layout-980, 980px), 92vw);
+  .ai-preview-title {
+    margin-bottom: var(--ui-space-12, 12px);
+    border: 1px solid var(--surface-border-color);
+    border-radius: 8px;
   }
   .ai-preview-split {
     display: grid;
-    /* minmax(0,1fr) 而非 1fr:grid item 默认 min-width:auto,列内 v-html 的宽元素(code/表格)会按 min-content
-       把本列撑大、把另一列挤没。minmax(0,…) 强制两列可收缩到 0 再均分,两栏才各占稳定的一半宽度。 */
+    flex: 1 1 auto;
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    gap: var(--ui-space-14, 14px);
-    align-items: stretch;
+    gap: var(--ui-space-16, 16px);
+    min-height: 0;
   }
-  /* 每栏 = 列头 + 内容区,整栏定高 68vh、内容区撑满并各自滚动(左右是不同内容,不做联动) */
   .ai-preview-col {
     display: flex;
     flex-direction: column;
     min-width: 0;
-    height: 68vh;
+    min-height: 0;
+    gap: var(--ui-space-8, 8px);
   }
   .ai-preview-col-head {
+    display: flex;
     flex: 0 0 auto;
-    margin-bottom: var(--ui-space-8, 8px);
-    padding-bottom: var(--ui-space-6, 6px);
-    border-bottom: 1px solid var(--card-border-color);
-    font-size: var(--ui-font-12, 12px);
-    font-weight: 600;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: var(--ui-space-6, 6px);
     color: var(--desc-color);
-  }
-  .ai-preview-col--origin .ai-preview-body {
-    background: var(--workbench-subcard-bg, var(--card-background));
-    border-radius: 8px;
-    padding: var(--ui-space-10, 10px) var(--ui-space-12, 12px);
-  }
-  /* 窄屏/移动端:单栏只保留「AI 生成」(原文可回编辑器看),避免两栏挤压 */
-  @media (max-width: 768px) {
-    .ai-preview--split {
-      /* BModal 内容区已有左右 padding；使用视口宽度会把 padding 再叠加一次并产生横向滚动条。 */
-      width: 100%;
-      max-width: 100%;
-    }
-    .ai-preview-split {
-      grid-template-columns: 1fr;
-    }
-    .ai-preview-col {
-      height: auto;
-    }
-    .ai-preview-col--origin {
-      display: none;
-    }
-    .ai-preview-body {
-      max-height: 60vh;
-    }
-  }
-  /* 放大预览里的「追问迭代」输入区 */
-  .ai-preview-followup {
-    display: flex;
-    gap: var(--ui-space-8, 8px);
-    margin-top: var(--ui-space-14, 14px);
-    padding-top: var(--ui-space-12, 12px);
-    border-top: 1px solid var(--card-border-color);
-  }
-  .ai-preview-followup :deep(.b-input) {
-    flex: 1;
-    min-width: 0;
-  }
-  .ai-preview-followup__send {
-    flex: 0 0 auto;
-  }
-  .ai-preview-followup__stop {
-    width: auto;
-    min-width: var(--ui-layout-92, 92px);
-  }
-  .ai-preview-title {
-    display: flex;
-    align-items: baseline;
-    gap: var(--ui-space-8, 8px);
-    margin-bottom: var(--ui-space-12, 12px);
-    padding: var(--ui-space-10, 10px) var(--ui-space-12, 12px);
-    border: 1px solid color-mix(in srgb, var(--resource-note-color) 24%, transparent);
-    border-radius: 8px;
-    background: color-mix(in srgb, var(--resource-note-color) 8%, var(--card-background));
-    /* ui-density-fixed: AI 结果正文排版独立于界面密度。 */
-    font-size: 14px;
-    line-height: 1.5;
+    font-size: var(--ui-font-12, 12px);
+    font-weight: 500;
   }
   .ai-preview-body {
+    display: block;
     flex: 1 1 auto;
     min-height: 0;
-    overflow-y: auto;
-    /* 内容是 v-html 渲染的 HTML 片段,不能用 pre-wrap——否则 AI 输出里标签间的源码换行
-       (<li>…</li> 之间的 \n、标题到列表之间的空行)会被当成可见换行,把行/段间距撑得很大。
-       用 normal 让浏览器折叠 HTML 空白,段间距交给下方 p/li/h* 的 margin 控制。 */
+    padding: var(--ui-space-12, 12px);
+    border: 1px solid var(--surface-divider-color);
+    border-radius: 8px;
+    overflow: auto;
     white-space: normal;
-    word-break: break-word;
-    /* ui-density-fixed: AI 结果正文排版独立于界面密度。 */
+    overflow-wrap: anywhere;
+    /* ui-density-fixed: AI 结果和原文的阅读排版独立于界面密度。 */
     font-size: 15px;
-    line-height: 1.7;
+    line-height: 1.65;
     color: var(--text-color);
-    padding: var(--ui-space-4, 4px) var(--ui-space-2, 2px);
   }
-  .ai-preview-body.is-markdown {
-    white-space: pre-wrap;
-    font-family: 'Fira Code', 'Courier New', monospace;
+  .ai-preview-col--origin .ai-preview-body {
+    background: var(--surface-panel-bg);
   }
   .ai-preview-body :deep(p),
-  .ai-preview-body :deep(li),
   .ai-preview-body :deep(blockquote) {
-    /* ui-density-fixed: AI 结果正文排版独立于界面密度。 */
-    margin: 0 0 10px;
+    /* ui-density-fixed: 原文和结果的段落间距跟随阅读字号。 */
+    margin: 0 0 0.65em;
+  }
+  .ai-preview-body :deep(li) {
+    /* ui-density-fixed: 文档列表项间距跟随阅读字号。 */
+    margin: 0.2em 0;
+  }
+  .ai-preview-body :deep(ul),
+  .ai-preview-body :deep(ol) {
+    /* ui-density-fixed: 文档列表间距跟随阅读字号。 */
+    margin: 0.5em 0;
+    /* ui-density-fixed: 文档列表缩进跟随阅读字号。 */
+    padding-left: 1.6em;
   }
   .ai-preview-body :deep(h1),
   .ai-preview-body :deep(h2),
-  .ai-preview-body :deep(h3) {
-    /* ui-density-fixed: AI 结果正文排版独立于界面密度。 */
-    margin: 14px 0 8px;
+  .ai-preview-body :deep(h3),
+  .ai-preview-body :deep(h4),
+  .ai-preview-body :deep(h5),
+  .ai-preview-body :deep(h6) {
+    /* ui-density-fixed: 文档标题间距跟随阅读字号。 */
+    margin: 0.85em 0 0.4em;
+    /* ui-density-fixed: 预览标题与正文保持文档排版层级。 */
+    font-size: 1.15em;
+    line-height: 1.4;
+  }
+  .ai-preview-body :deep(pre) {
+    max-width: 100%;
+    overflow: auto;
+  }
+  .ai-preview-body :deep(> div > :first-child),
+  .ai-preview-body > :first-child {
+    margin-top: 0;
+  }
+  .ai-preview-body :deep(> div > :last-child),
+  .ai-preview-body > :last-child {
+    margin-bottom: 0;
+  }
+  .ai-preview-body .generation-status,
+  .ai-preview-body .generation-feedback,
+  .ai-preview-body .format-warning,
+  .ai-preview-body .truncation-warning {
+    padding: 0 0 var(--ui-space-10, 10px);
+    margin-bottom: var(--ui-space-10, 10px);
+  }
+
+  .ai-preview-footer {
+    flex: 0 0 auto;
+    min-width: 0;
+    padding: var(--ui-space-12, 12px) var(--ui-space-20, 20px) var(--ui-space-16, 16px);
+    border-top: 1px solid var(--surface-divider-color);
+  }
+  .ai-preview-followup {
+    display: flex;
+    align-items: center;
+    gap: var(--ui-space-8, 8px);
+    min-width: 0;
+  }
+  .ai-preview-followup > .input-container {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+  .ai-preview-followup__send {
+    flex-shrink: 0;
+    height: var(--ui-control-32, 32px);
+    font-size: var(--ui-font-12, 12px);
   }
   .ai-preview-actions {
-    display: flex;
-    justify-content: flex-end;
-    gap: var(--ui-space-10, 10px);
-    margin-top: var(--ui-space-14, 14px);
+    margin-top: var(--ui-space-12, 12px);
     padding-top: var(--ui-space-12, 12px);
-    border-top: 1px solid var(--card-border-color, rgba(0, 0, 0, 0.08));
+    border-top: 1px solid var(--surface-divider-color);
+  }
+  .ai-preview.is-mobile .ai-preview-split {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .ai-preview.is-mobile .ai-preview-col--origin {
+    display: none;
+  }
+  .ai-container.is-mobile .icon-btn {
+    width: var(--ui-control-44, 44px);
+    height: var(--ui-control-44, 44px);
+  }
+  .ai-preview-footer.is-mobile .apply-actions > .b_btn {
+    height: var(--ui-control-44, 44px);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .requirements-chevron {
+      transition: none;
+    }
+  }
+</style>
+
+<style lang="less">
+  // BModal 的 Teleport 外壳用专用类限定；阅读区可收缩，页脚始终留在可见区域。
+  .modal-view.note-ai-preview-dialog {
+    border: 1px solid var(--surface-border-color);
+
+    .modal-title {
+      min-width: 0;
+      flex: 1;
+      margin-right: var(--ui-space-12, 12px);
+    }
+    .modal-header {
+      border-bottom-color: var(--surface-divider-color);
+    }
+    .note-ai-preview-content {
+      display: flex;
+      flex: 0 1 auto;
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    &.is-mobile-fullscreen {
+      .modal-content.note-ai-preview-content {
+        flex: 1 1 auto;
+        padding: var(--ui-space-12, 12px) var(--ui-space-16, 16px);
+      }
+      .ai-preview-footer {
+        padding-bottom: calc(var(--ui-space-16, 16px) + env(safe-area-inset-bottom));
+      }
+    }
   }
 </style>

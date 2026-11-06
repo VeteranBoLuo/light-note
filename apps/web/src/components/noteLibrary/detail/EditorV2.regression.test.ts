@@ -494,20 +494,6 @@ describe('编辑器 V2 交互回归', () => {
     expect(aiReplySource).toContain('text: sourceText');
   });
 
-  it('AI 放大预览在生成中原位提供停止按钮，结束后恢复追问', () => {
-    const followup = sourceBetween(
-      aiReplySource,
-      '<div class="ai-preview-followup">',
-      '<div class="ai-preview-actions">',
-    );
-    expect(followup).toContain('v-if="isLoading"');
-    expect(followup).toContain('@click="stopGenerating"');
-    expect(followup).toContain("{{ t('ai.reply.stop') }}");
-    expect(followup).toContain('v-else');
-    expect(followup).toContain('@click="runFollowup"');
-    expect(followup).not.toContain(':loading="isLoading"');
-  });
-
   it('富文本 Mermaid 仅隐藏相邻源码视图，并保留按钮/双击编辑入口', () => {
     expect(commonStylesSource).toMatch(
       /\.note-editor:not\(\.is-readonly\) pre\.mermaid-source--has-companion,[\s\S]*display:\s*none/u,
@@ -652,12 +638,4 @@ describe('编辑器 V2 交互回归', () => {
     expect(themeStylesSource).toContain('--pre-text-color: #e8ebf2');
   });
 
-  it('浅色 AI 助手用实色分区、描边和标题字重建立层次', () => {
-    expect(aiReplySource).toContain('--ai-section-bg: #f8f9ff');
-    expect(aiReplySource).toContain('--ai-section-border: #e1e5f0');
-    expect(aiReplySource).toMatch(/\.ai-header[\s\S]*border-bottom:\s*1px solid var\(--ai-section-border\)/u);
-    expect(aiReplySource).toMatch(/\.ai-title[\s\S]*font-weight:\s*700/u);
-    expect(aiReplySource).toMatch(/\.action-btn[\s\S]*border:\s*1px solid var\(--ai-section-border\)/u);
-    expect(aiReplySource).toMatch(/\.output-header[\s\S]*background:\s*var\(--ai-output-header-bg\)/u);
-  });
 });
