@@ -154,6 +154,9 @@ export default {
       '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none"><path d="m4 7l4.2 4L12 5l3.8 6L20 7l-1.5 11h-13L4 7Z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M6 15h12" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>',
     tenure:
       '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none"><path d="M12 20v-7m0 0c0-3.5 2.1-5.6 6.25-6.25C18.1 10.8 16 12.9 12 13Zm0 2c0-2.9-1.75-4.65-5.25-5.25c.1 3.45 1.85 5.2 5.25 5.25Z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M7.5 20h9" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>',
+    // 连签天数：火焰轮廓，与「七日不辍」成就同一语义，单色跟随 currentColor。
+    streak:
+      '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none"><path d="M12 21c-3.9 0-6.5-2.6-6.5-6.1c0-3.4 2.4-5.4 3.6-8.4c.4 1.9 1.4 3 2.6 3.6C11.5 7 12.6 4.6 14.6 3c-.2 3 1.7 4.6 2.9 6.6c.8 1.3 1 2.5 1 3.9c0 4.7-2.6 7.5-6.5 7.5Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M12 21c-1.7 0-2.75-1.15-2.75-2.6c0-1.6 1.3-2.4 2.1-3.9c.5 1 1.1 1.5 1.7 1.8c.55.3 1.7 1.05 1.7 2.25C14.75 19.9 13.6 21 12 21Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>',
     // 成就徽记：每个成就拥有独立图形，统一由 AchievementEmblem 组合成同一套徽章视觉。
     achievement: {
       public_resource_1: achievementGlyph('<circle cx="12" cy="12" r="8"/><path d="M4 12h16M12 4c-5 4-5 12 0 16M12 4c5 4 5 12 0 16"/>'),

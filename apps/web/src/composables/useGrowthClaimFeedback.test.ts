@@ -117,4 +117,38 @@ describe('useGrowthClaimFeedback', () => {
       );
     });
   });
+  it('结构化回执给出简短摘要、完整来源和逐项奖励，供概览原位展示', () => {
+    withFeedback('zh-CN', ({ claimReceipt }) => {
+      expect(
+        claimReceipt(
+          {
+            claimed: 2,
+            exp: 30,
+            points: 10,
+            frames: ['frame-a'],
+            receipts: [
+              { type: 'growthTask', status: 'claimed' },
+              { type: 'achievement', status: 'claimed' },
+              { type: 'weekly', status: 'incomplete' },
+            ],
+          },
+          empty,
+        ),
+      ).toEqual({
+        single: false,
+        summary: '已领取 2 项',
+        sources: '成长任务 ×1、成就 ×1',
+        rewards: [
+          { kind: 'exp', value: 30, label: '经验 +30' },
+          { kind: 'points', value: 10, label: '积分 +10' },
+          { kind: 'frames', value: 1, label: '头像框 +1' },
+        ],
+      });
+      expect(claimReceipt({ claimed: 1, exp: 0, points: 5 }, { ...empty, daily: 1 })).toMatchObject({
+        single: true,
+        summary: '已领取日常任务奖励',
+        rewards: [{ kind: 'points', value: 5 }],
+      });
+    });
+  });
 });

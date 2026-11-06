@@ -12,15 +12,15 @@ describe('GrowthPage 宽屏桌面导航布局', () => {
     expect(source).toContain('bookmark.isDesktop && !bookmark.isCompactLayout');
     expect(source).toContain('<aside v-if="useWideDesktopLayout" class="growth-desktop-sidebar">');
     expect(source).toMatch(/<BTabs[\s\S]*?v-if="!useWideDesktopLayout"[\s\S]*?class="growth-section-tabs"/);
-    expect(source).toMatch(/\.growth-workspace--wide\s*\{[\s\S]*?grid-template-columns:\s*208px minmax\(0, 1fr\)/);
+    expect(source).toMatch(/\.growth-workspace--wide\s*\{[\s\S]*?grid-template-columns:\s*200px minmax\(0, 1fr\)/);
     expect(source).toContain('max-width: 1480px');
   });
 
-  it('宽屏把返回、标题和说明纳入同一个固定侧栏，紧凑布局仍显示顶部标题', () => {
+  it('宽屏把返回与标题压缩为侧栏首行，紧凑布局仍显示顶部标题', () => {
     expect(source).toMatch(/<header v-(?:else-)?if="!useWideDesktopLayout" class="growth-hero">/);
-    expect(source).toMatch(
-      /<aside v-if="useWideDesktopLayout" class="growth-desktop-sidebar">[\s\S]*?<header class="growth-hero growth-hero--sidebar">[\s\S]*?growth\.pageTitle[\s\S]*?growth\.pageSubtitle/,
-    );
+    const sidebar = source.match(/<aside v-if="useWideDesktopLayout"[\s\S]*?<\/aside>/)?.[0] || '';
+    expect(sidebar).toMatch(/<header class="growth-sidebar-head">[\s\S]*?:aria-label="t\('common\.back'\)"[\s\S]*?growth\.pageTitle/);
+    expect(sidebar).not.toContain('growth.pageSubtitle');
     expect(source).toMatch(/\.growth-desktop-sidebar\s*\{[\s\S]*?position:\s*static;[\s\S]*?max-height:\s*100%/);
     expect(source).toContain("'growth-page--wide': useWideDesktopLayout");
     expect(source).toMatch(/\.growth-page--wide\s*\{[\s\S]*?overflow:\s*hidden;/);
@@ -37,7 +37,8 @@ describe('GrowthPage 宽屏桌面导航布局', () => {
   });
 
   it('宽屏把奖励页扁平化为一级入口，紧凑布局仍保留顶部二级 Tab', () => {
-    expect(source).toContain('v-for="option in desktopNavigationOptions"');
+    expect(source).toContain('v-for="group in desktopNavigationGroups"');
+    expect(source).toContain('v-for="option in group.options"');
     expect(source).toContain('@click="selectDesktopNavigation(option)"');
     expect(source).toContain('key: `reward-${option.key}`');
     expect(source).not.toContain('growth-side-subnav');
@@ -74,16 +75,25 @@ describe('GrowthPage 宽屏桌面导航布局', () => {
     expect(source).toMatch(/function isDesktopNavigationActive[\s\S]*?option\.reward === activeRewardSection\.value/);
   });
 
-  it('当前项同时使用实色描边、左侧标记和实心图标底表达', () => {
-    expect(source).toMatch(
-      /\.growth-side-nav-item\.b_btn\.is-active\s*\{[\s\S]*?border-color:\s*var\(--primary-color\)/,
-    );
+  it('当前项使用实色左侧标记与强调文字表达，不只依赖混色背景', () => {
     expect(source).toMatch(
       /\.growth-side-nav-item\.b_btn\.is-active::before\s*\{[\s\S]*?background:\s*var\(--primary-color\)/,
     );
+    expect(source).toMatch(/\.growth-side-nav-item\.b_btn\.is-active\s*\{[\s\S]*?color:\s*var\(--primary-color\)/);
     expect(source).toMatch(
-      /\.growth-side-nav-item\.is-active \.growth-side-nav-icon\s*\{[\s\S]*?background:\s*var\(--primary-color\)[\s\S]*?color:\s*#fff/,
+      /\.growth-side-nav-item\.is-active \.growth-side-nav-icon\s*\{[\s\S]*?color:\s*var\(--primary-color\)/,
     );
+  });
+
+  it('侧栏按成长与奖励分组，任务进度与免费抽奖挂在入口上，周报、年度报告和成长偏好放在底部', () => {
+    expect(source).toContain("label: t('growth.overview.navGrowth')");
+    expect(source).toContain("label: t('growth.overview.navRewards')");
+    expect(source).toMatch(/option\.key === 'tasks' && quests\.value\.length/);
+    expect(source).toMatch(/option\.key === 'lottery' && preferences\.value && !lowPressureMode\.value/);
+    const links = source.match(/<div class="growth-side-links">[\s\S]*?<\/div>/)?.[0] || '';
+    expect(links).toContain('openWeeklyReport');
+    expect(links).toContain('openAnnualReport');
+    expect(links).toContain('preferencesVisible = true');
   });
 
   it('侧栏交互继续使用 BButton 与统一 SvgIcon', () => {
@@ -124,17 +134,20 @@ describe('GrowthPage 宽屏桌面导航布局', () => {
     expect(source).toMatch(/function handleWeeklyLoaded[\s\S]*?route\.hash === '#growth-weekly'[\s\S]*?scrollToHash/);
   });
 
-  it('概览将知识足迹与签到日历合并，任务页按日常、每周与新手路线切换', () => {
-    expect(source).toContain('class="growth-panel growth-knowledge-panel"');
-    const knowledgeStart = source.indexOf('class="growth-panel growth-knowledge-panel"');
-    const calendarIndex = source.indexOf('<SigninCalendar', knowledgeStart);
-    const heatmapIndex = source.indexOf(
-      '<ActivityHeatmap ref="heatmapRef" class="growth-knowledge-panel__heatmap" />',
-      knowledgeStart,
-    );
-    expect(calendarIndex).toBeGreaterThan(knowledgeStart);
-    expect(heatmapIndex).toBeGreaterThan(calendarIndex);
-    expect(source).toContain(':show-calendar="!useWideDesktopLayout"');
+  it('概览按今天、段位与成就、知识足迹排列，签到日历和成长偏好改为弹框', () => {
+    const overview = source.match(/<template v-if="activeSection === 'overview'">[\s\S]*?<\/template>\n\n/)?.[0] || '';
+    const todayIndex = overview.indexOf('<GrowthTodayPanel');
+    const rankIndex = overview.indexOf('<GrowthRankPanel');
+    const achievementIndex = overview.indexOf('<GrowthAchievementPanel');
+    const footprintIndex = overview.indexOf('<GrowthFootprintPanel');
+    expect(todayIndex).toBeGreaterThan(-1);
+    expect(rankIndex).toBeGreaterThan(todayIndex);
+    expect(achievementIndex).toBeGreaterThan(rankIndex);
+    expect(footprintIndex).toBeGreaterThan(achievementIndex);
+    expect(overview).not.toContain('<SigninCalendar');
+    expect(overview).not.toContain('<GrowthPreferencesCard');
+    expect(source).toMatch(/<BModal\s+v-model:visible="calendarVisible"[\s\S]*?<SigninCalendar[\s\S]*?@makeup="onUseProtectCard"/);
+    expect(source).toMatch(/<BModal\s+v-if="growthV2Enabled"\s+v-model:visible="preferencesVisible"[\s\S]*?<GrowthPreferencesCard/);
     expect(source).toContain('v-model:active-tab="taskView"');
     expect(source).toContain(':options="taskViewOptions"');
     expect(source).toContain('class="growth-task-summary"');
@@ -150,31 +163,11 @@ describe('GrowthPage 宽屏桌面导航布局', () => {
     );
   });
 
-  it('宽屏概览按原型先展示状态条和等级资产，再并排展示下一步与每日任务', () => {
-    const todayIndex = source.indexOf('<TodayGrowthCard');
-    const growthIndex = source.indexOf('<GrowthCard');
-    const statsIndex = source.indexOf('<GrowthStats');
-    const routineIndex = source.indexOf('class="growth-overview-routine"');
-    const nextActionIndex = source.indexOf('<GrowthNextActionCard', routineIndex);
-    const dailyIndex = source.indexOf('<DailyQuests', routineIndex);
-
-    expect(todayIndex).toBeGreaterThan(-1);
-    expect(growthIndex).toBeGreaterThan(todayIndex);
-    expect(statsIndex).toBeGreaterThan(growthIndex);
-    expect(routineIndex).toBeGreaterThan(statsIndex);
-    expect(nextActionIndex).toBeGreaterThan(routineIndex);
-    expect(dailyIndex).toBeGreaterThan(nextActionIndex);
-    expect(source).toContain(':compact="useWideDesktopLayout"');
-    expect(source).toContain(':show-next-action="!useWideDesktopLayout"');
-    expect(source).toMatch(/\.growth-overview-routine\s*\{[\s\S]*?grid-template-columns:/);
-  });
-
   it('成长页只保留成长足迹时间线，不再展示或自动加载旧内容回顾卡', () => {
     expect(source).not.toContain('RecapCard');
     expect(source).not.toContain('loadRecap');
     expect(source).not.toContain('recapLoading');
     expect(source).not.toContain('recapError');
-    expect(source).toContain('<GrowthTimeline v-if="timeline.length" :items="timeline" />');
-    expect(source).toContain('<div v-else class="growth-state">{{ t(\'growth.footprintEmpty\') }}</div>');
+    expect(source).toContain('<GrowthFootprintPanel ref="heatmapRef" :timeline="timeline"');
   });
 });

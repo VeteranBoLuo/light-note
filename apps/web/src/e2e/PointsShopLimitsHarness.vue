@@ -7,7 +7,6 @@
     </header>
 
     <section class="points-shop-limits-harness__surface">
-      <GrowthCard :read-only="true" :show-calendar="false" />
       <MilestoneLadder :current-streak="67" :milestones="milestones" />
       <SigninCalendar v-if="calendarVisible" :checkin-days="checkinDays" :makeup-days="makeupDays" @makeup="onMakeup" />
       <PointsShop :read-only="readOnly" />
@@ -32,7 +31,6 @@
     checkinDays.value.push(date);
     makeupDays.value = makeupDays.value.filter((day) => day !== date);
   }
-  import GrowthCard from '@/components/growth/GrowthCard.vue';
   import MilestoneLadder from '@/components/growth/MilestoneLadder.vue';
   const readOnly = new URLSearchParams(location.search).get('state') === 'readonly';
   const milestones = [

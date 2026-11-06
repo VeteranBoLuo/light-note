@@ -57,6 +57,7 @@
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BTabs from '@/components/base/BasicComponents/BTabs.vue';
   import { achievementVisualStyle } from '@/config/achievements';
+  import { rankAchievements } from '@/utils/growthOverview';
   import type { Achievement } from '@/composables/useGrowth';
   const props = withDefaults(defineProps<{ achievements: Achievement[]; animated?: boolean }>(), { animated: true });
   const emit = defineEmits<{ select: [achievement: Achievement] }>();
@@ -67,23 +68,13 @@
     { key: 'recent', label: t('growth.recentUnlockedTitle') },
     { key: 'near', label: t('growth.nearestAchievementTitle') },
   ]);
-  const progress = (item: Achievement) => (item.target ? Math.min(100, (item.cur / item.target) * 100) : 0);
   const time = (value?: string | null) => {
     const number = value ? Date.parse(value) : 0;
     return Number.isFinite(number) ? number : 0;
   };
-  const recent = computed(() =>
-    props.achievements
-      .filter((item) => item.unlocked)
-      .sort((a, b) => time(b.unlockedAt) - time(a.unlockedAt) || a.key.localeCompare(b.key))
-      .slice(0, 3),
-  );
-  const near = computed(() =>
-    props.achievements
-      .filter((item) => !item.unlocked)
-      .sort((a, b) => progress(b) - progress(a) || a.target - b.target)
-      .slice(0, 3),
-  );
+  const ranked = computed(() => rankAchievements(props.achievements));
+  const recent = computed(() => ranked.value.recent);
+  const near = computed(() => ranked.value.near);
   const selected = computed(() => (active.value === 'recent' ? recent.value : near.value));
   function formatTime(value?: string | null) {
     return time(value)

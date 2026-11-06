@@ -130,6 +130,8 @@ export interface StreakMilestone {
   storageMb: number;
   cards: number;
   reached: boolean;
+  /** 该档是否已发放过；里程碑每个账号只发一次。旧后端未下发时按未发放处理。 */
+  granted?: boolean;
 }
 
 export interface GrowthDashboard {

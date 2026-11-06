@@ -1,42 +1,55 @@
 <template>
-  <div v-if="ranks.length" class="rank-ladder" :class="{ 'rank-ladder--compact': compact, 'is-permanent': permanentOnly }">
-    <div class="rl-heading">
-      <div class="rl-head">{{ t('growth.rankLadder') }}</div>
-      <p class="rl-hint">{{ t(permanentOnly ? 'aiQuotaOneTime.ladderHint' : 'growth.rankLadderHint') }}</p>
-    </div>
-    <div class="rl-colhead">
-      <span></span>
-      <span>{{ t('growth.colRank') }}</span>
-      <span class="rl-colhead-r">{{ t('growth.colExp') }}</span>
-      <span class="rl-colhead-r">{{ t('growth.colPerks') }}</span>
-    </div>
-    <div ref="listEl" class="rl-list">
-      <div
-        v-for="r in displayedRanks"
-        :key="r.level"
-        class="rl-row"
-        :class="{ cur: r.level === curLevel, done: r.level < curLevel }"
-      >
-        <span class="rl-lv" :style="{ background: TIER_GRADIENTS[tierOf(r.level)] }">{{ r.level }}</span>
-        <span class="rl-name">
-          {{ t('growth.ranks.' + r.level) }}
-          <BChip v-if="r.level === curLevel" tone="pin">{{ t('growth.currentRank') }}</BChip>
-          <span v-if="r.level === maxLevel" class="rl-max">{{ t('growth.max') }}</span>
-        </span>
-        <span class="rl-exp">{{ r.cumExp.toLocaleString('en-US') }}</span>
-        <span class="rl-perk">
-          {{ fmtMb(r.spaceMb) }} · {{ permanentOnly ? t('aiQuotaOneTime.giftShort', { amount: fmtToken(r.aiLevelGift?.tokens || 0) }) : fmtToken(r.aiTokenDaily) }} ·
-          {{ r.trashDays >= 3650 ? t('growth.trashForever') : t('growth.trashDays', { days: r.trashDays })
-          }}<span v-if="r.freeDraws" class="rl-free"
-            >· <SvgIcon :src="icon.growth.reward" size="12" />{{ r.freeDraws }}</span
+  <div v-if="ranks.length" class="rank-ladder">
+    <p class="rl-hint">{{ t(permanentOnly ? 'aiQuotaOneTime.ladderHint' : 'growth.rankLadderHint') }}</p>
+    <div class="rl-table" role="table" :aria-label="t('growth.rankLadder')">
+      <div class="rl-row rl-row--head" role="row">
+        <span role="columnheader">{{ t('growth.colRank') }}</span>
+        <span class="rl-num" role="columnheader">{{ t('growth.colExp') }}</span>
+        <span class="rl-num" role="columnheader">{{ t('growth.space') }}</span>
+        <span class="rl-num" role="columnheader">{{
+          t(permanentOnly ? 'growth.overview.aiGiftColumn' : 'growth.overview.aiDailyColumn')
+        }}</span>
+        <span class="rl-num" role="columnheader">{{ t('growth.trashRetain') }}</span>
+        <span class="rl-num" role="columnheader">{{ t('growth.dailySurprise') }}</span>
+      </div>
+      <div ref="listEl" class="rl-list" role="rowgroup">
+        <div
+          v-for="r in ranks"
+          :key="r.level"
+          class="rl-row"
+          :class="{ cur: r.level === curLevel, done: r.level < curLevel }"
+          role="row"
+        >
+          <span class="rl-rank" role="cell">
+            <span class="rl-lv" :style="{ background: TIER_GRADIENTS[tierOf(r.level)] }">{{ r.level }}</span>
+            <span class="rl-name">{{ t('growth.ranks.' + r.level) }}</span>
+            <BChip v-if="r.level === curLevel" tone="pin">{{ t('growth.currentRank') }}</BChip>
+            <span v-else-if="r.level === maxLevel" class="rl-max">{{ t('growth.max') }}</span>
+          </span>
+          <span class="rl-num" role="cell">{{ r.cumExp.toLocaleString('en-US') }}</span>
+          <span class="rl-num" role="cell">{{ fmtMb(r.spaceMb) }}</span>
+          <span
+            class="rl-num"
+            role="cell"
+            :title="
+              permanentOnly && r.aiLevelGift
+                ? t('aiQuotaOneTime.cumulative', { amount: r.aiLevelGift.cumulativeTokens.toLocaleString('en-US') })
+                : undefined
+            "
+            >{{ permanentOnly ? `+${fmtToken(r.aiLevelGift?.tokens || 0)}` : fmtToken(r.aiTokenDaily) }}</span
           >
-          <small v-if="permanentOnly && r.aiLevelGift" class="rl-gift-total">{{ t('aiQuotaOneTime.cumulative', { amount: fmtToken(r.aiLevelGift.cumulativeTokens) }) }}</small>
-        </span>
+          <span class="rl-num" role="cell">{{
+            r.trashDays >= 3650 ? t('growth.trashForever') : t('growth.daysVal', { n: r.trashDays })
+          }}</span>
+          <span class="rl-num rl-draws" :class="{ 'is-empty': !r.freeDraws }" role="cell">
+            <template v-if="r.freeDraws"
+              ><SvgIcon :src="icon.growth.reward" size="12" />{{ t('growth.timesVal', { n: r.freeDraws }) }}</template
+            >
+            <template v-else>—</template>
+          </span>
+        </div>
       </div>
     </div>
-    <BButton v-if="compact && ranks.length > 3" class="rl-toggle" size="small" @click="showAll = !showAll">
-      {{ showAll ? t('common.collapse') : t('growth.viewAllRanks') }}
-    </BButton>
   </div>
 </template>
 
@@ -46,39 +59,29 @@
   import { useGrowth } from '@/composables/useGrowth.ts';
   import { tierOf, TIER_GRADIENTS } from '@/config/growthTier';
   import BChip from '@/components/base/BasicComponents/BChip.vue';
-  import BButton from '@/components/base/BasicComponents/BButton.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon.ts';
 
-  const { t } = useI18n();
-  const props = withDefaults(defineProps<{ compact?: boolean }>(), { compact: false });
+  const { t, locale } = useI18n();
   const { growth, ranks, load, loadRanks } = useGrowth();
   const listEl = ref<HTMLElement | null>(null);
-  const showAll = ref(false);
 
   onMounted(async () => {
     await Promise.all([load(), loadRanks()]);
   });
 
-  const permanentOnly = computed(() => growth.value?.billingMode === 'permanent_only' || ranks.value[0]?.billingMode === 'permanent_only');
+  const permanentOnly = computed(
+    () => growth.value?.billingMode === 'permanent_only' || ranks.value[0]?.billingMode === 'permanent_only',
+  );
   const curLevel = computed(() => growth.value?.level || 1);
   const maxLevel = computed(() => ranks.value.length || 15);
-  const compact = computed(() => props.compact);
-  const displayedRanks = computed(() => {
-    if (!compact.value || showAll.value || ranks.value.length <= 3) return ranks.value;
-    const currentIndex = Math.max(
-      0,
-      ranks.value.findIndex((rank) => rank.level === curLevel.value),
-    );
-    const start = Math.min(Math.max(0, currentIndex - 1), Math.max(0, ranks.value.length - 3));
-    return ranks.value.slice(start, start + 3);
-  });
 
   function fmtMb(mb: number) {
-    return mb >= 1024 ? `${+(mb / 1024).toFixed(1)}G` : `${mb}M`;
+    return mb >= 1024 ? `${+(mb / 1024).toFixed(2)} GB` : `${mb} MB`;
   }
-  function fmtToken(n: number) {
-    return n >= 1000 ? `${n / 1000}k` : String(n);
+  // 「每日额度」切换为「每级一次性赠礼」前后分别展示对应口径，金额都来自服务端等级表。
+  function fmtToken(value: number) {
+    return new Intl.NumberFormat(locale.value, { notation: 'compact' }).format(Number(value || 0));
   }
 
   // 当前段位仅在段位小列表内滚动到可见。scrollIntoView 会继续滚动外层 growth-page，
@@ -108,180 +111,124 @@
 </script>
 
 <style scoped lang="less">
-  .rl-gift-total { display: block; color: var(--desc-color); font-size: var(--ui-font-10_5, 10.5px); margin-top: var(--ui-space-3, 3px); }
   .rank-ladder {
     display: flex;
     flex-direction: column;
-    gap: var(--ui-space-8, 8px);
-    margin-top: var(--ui-space-16, 16px);
-  }
-  .rl-head {
-    font-size: var(--ui-font-12, 12px);
-    font-weight: 600;
-    color: var(--desc-color);
-    letter-spacing: 0.03em;
+    gap: var(--ui-space-10, 10px);
   }
   .rl-hint {
-    margin: var(--ui-space-3, 3px) 0 0;
+    margin: 0;
     color: var(--desc-color);
-    font-size: var(--ui-font-10_5, 10.5px);
-    line-height: 1.45;
+    font-size: var(--ui-font-12, 12px);
+    line-height: 1.5;
+  }
+  .rl-table {
+    min-width: 0;
+  }
+  /* 表头与每行共用同一组固定列宽，数字列右对齐并使用等宽数字，保证上下对齐。 */
+  .rl-row {
+    display: grid;
+    grid-template-columns:
+      minmax(var(--ui-layout-140, 140px), 1fr) var(--ui-layout-80, 80px) var(--ui-layout-80, 80px)
+      var(--ui-layout-80, 80px) var(--ui-layout-80, 80px) var(--ui-layout-80, 80px);
+    align-items: center;
+    gap: var(--ui-space-12, 12px);
+    padding: var(--ui-space-7, 7px) var(--ui-space-10, 10px);
+    border: 1px solid transparent;
+    border-radius: 8px;
+    color: var(--text-color);
+    font-size: var(--ui-font-13, 13px);
+  }
+  .rl-row--head {
+    padding-bottom: var(--ui-space-8, 8px);
+    border-bottom-color: var(--surface-divider-color);
+    border-radius: 0;
+    color: var(--desc-color);
+    font-size: var(--ui-font-12, 12px);
+    font-weight: 600;
   }
   .rl-list {
     display: flex;
     flex-direction: column;
     gap: var(--ui-space-2, 2px);
-    max-height: var(--ui-layout-264, 264px);
+    max-height: min(var(--ui-layout-460, 460px), 60vh);
+    margin-top: var(--ui-space-4, 4px);
     overflow-y: auto;
-    padding-right: var(--ui-space-4, 4px);
-  }
-  .rl-colhead {
-    display: grid;
-    grid-template-columns: var(--ui-layout-24, 24px) 1fr auto auto;
-    align-items: center;
-    gap: var(--ui-space-10, 10px);
-    padding: 0 var(--ui-space-8, 8px) var(--ui-space-6, 6px);
-    font-size: var(--ui-font-10_5, 10.5px);
-    font-weight: 600;
-    color: var(--desc-color);
-    opacity: 0.75;
-    border-bottom: 1px solid color-mix(in srgb, var(--card-border-color) 45%, transparent);
-    margin-bottom: var(--ui-space-4, 4px);
-  }
-  .rl-colhead-r {
-    text-align: right;
-  }
-  .rl-row {
-    display: grid;
-    grid-template-columns: var(--ui-layout-24, 24px) 1fr auto auto;
-    align-items: center;
-    gap: var(--ui-space-10, 10px);
-    padding: var(--ui-space-6, 6px) var(--ui-space-8, 8px);
-    border: 1px solid transparent;
-    border-radius: 8px;
-    font-size: var(--ui-font-12_5, 12.5px);
-    transition: background 0.15s;
   }
   .rl-row.done {
-    opacity: 0.55;
+    color: var(--desc-color);
   }
   .rl-row.cur {
     border-color: var(--primary-color);
-    background: color-mix(in srgb, var(--primary-color) 12%, transparent);
-    opacity: 1;
+    background: color-mix(in srgb, var(--primary-color) 10%, transparent);
   }
-  .rl-lv {
-    width: var(--ui-layout-22, 22px);
-    height: var(--ui-layout-22, 22px);
-    border-radius: 6px;
+  .rl-rank {
     display: flex;
     align-items: center;
+    gap: var(--ui-space-8, 8px);
+    min-width: 0;
+  }
+  .rl-lv {
+    display: flex;
+    width: var(--ui-layout-22, 22px);
+    height: var(--ui-layout-22, 22px);
+    flex: 0 0 auto;
+    align-items: center;
     justify-content: center;
+    border-radius: 6px;
     color: #fff;
     font-size: var(--ui-font-11, 11px);
     font-weight: 700;
   }
   .rl-name {
-    font-weight: 600;
-    display: flex;
-    align-items: center;
-    gap: var(--ui-space-5, 5px);
-    min-width: 0;
-  }
-  .rl-max {
-    font-size: var(--ui-font-10, 10px);
-    font-weight: 600;
-    padding: 0 var(--ui-space-6, 6px);
-    border-radius: 999px;
-    color: #fff;
-    background: linear-gradient(135deg, #f43f5e, #fb923c);
-  }
-  .rl-exp {
-    color: var(--desc-color);
-    font-variant-numeric: tabular-nums;
-  }
-  .rl-perk {
-    color: var(--desc-color);
-    font-size: var(--ui-font-11, 11px);
-    white-space: nowrap;
-  }
-  .rl-free {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--ui-space-2, 2px);
-    color: #d97706;
-    font-weight: 600;
-    margin-left: var(--ui-space-2, 2px);
-  }
-  .rl-toggle.b_btn {
-    width: 100%;
-    min-height: var(--ui-control-30, 30px);
-    border-color: var(--card-border-color);
-    color: var(--text-color);
-    background: var(--background-color);
-  }
-  .rank-ladder--compact {
-    gap: var(--ui-space-5, 5px);
-    margin-top: 0;
-  }
-  .rank-ladder--compact .rl-head {
-    color: var(--text-color);
-    font-size: var(--ui-font-12, 12px);
-  }
-  .rank-ladder--compact .rl-hint {
-    margin-top: var(--ui-space-1, 1px);
     overflow: hidden;
-    font-size: var(--ui-font-9_5, 9.5px);
+    font-weight: 600;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  .rank-ladder--compact .rl-colhead {
-    gap: var(--ui-space-6, 6px);
-    margin-bottom: var(--ui-space-1, 1px);
-    padding: 0 var(--ui-space-5, 5px) var(--ui-space-4, 4px);
-    font-size: var(--ui-font-9_5, 9.5px);
-  }
-  .rank-ladder--compact .rl-list {
-    gap: var(--ui-space-2, 2px);
-    padding-right: 0;
-  }
-  .rank-ladder--compact .rl-row {
-    grid-template-columns: var(--ui-layout-22, 22px) minmax(var(--ui-layout-64, 64px), 1fr) auto auto;
-    gap: var(--ui-space-6, 6px);
-    min-height: var(--ui-layout-30, 30px);
-    box-sizing: border-box;
-    padding: var(--ui-space-3, 3px) var(--ui-space-5, 5px);
+  .rl-max {
+    padding: 0 var(--ui-space-6, 6px);
+    border: 1px solid var(--warning-color);
+    border-radius: 999px;
+    color: var(--warning-color);
     font-size: var(--ui-font-11, 11px);
+    font-weight: 600;
+    white-space: nowrap;
   }
-  .rank-ladder--compact .rl-lv {
-    width: var(--ui-layout-20, 20px);
-    height: var(--ui-layout-20, 20px);
-    font-size: var(--ui-font-10, 10px);
+  .rl-num {
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+    white-space: nowrap;
   }
-  .rank-ladder--compact .rl-perk {
-    font-size: var(--ui-font-9_5, 9.5px);
+  .rl-draws {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: var(--ui-space-3, 3px);
+    color: var(--warning-color);
+    font-weight: 600;
   }
-  .rank-ladder--compact .rl-exp {
-    font-size: var(--ui-font-10, 10px);
+  .rl-draws.is-empty {
+    color: var(--desc-color);
+    font-weight: 400;
   }
-  .rank-ladder--compact .rl-toggle.b_btn {
-    min-height: var(--ui-control-27, 27px);
-    font-size: var(--ui-font-10_5, 10.5px);
-  }
-  @media (max-width: 600px) {
-    .rank-ladder.is-permanent .rl-row,
-    .rank-ladder.is-permanent .rl-colhead {
-      grid-template-columns: var(--ui-layout-24, 24px) minmax(0, 1fr) auto;
+  @media (max-width: 640px) {
+    /* 窄屏保持各列对齐，表格整体可横向滚动，不把段位名称挤成一列。 */
+    .rl-table {
+      overflow-x: auto;
     }
-    .rank-ladder.is-permanent .rl-name {
-      white-space: nowrap;
+    .rl-row {
+      grid-template-columns:
+        minmax(var(--ui-layout-120, 120px), 1fr) var(--ui-layout-64, 64px) var(--ui-layout-64, 64px)
+        var(--ui-layout-64, 64px) var(--ui-layout-60, 60px) var(--ui-layout-60, 60px);
+      gap: var(--ui-space-8, 8px);
+      padding: var(--ui-space-7, 7px) var(--ui-space-6, 6px);
+      font-size: var(--ui-font-12, 12px);
+      width: max-content;
+      min-width: 100%;
     }
-    .rank-ladder.is-permanent .rl-perk {
-      grid-column: 2 / -1;
-      white-space: normal;
-    }
-    .rank-ladder.is-permanent .rl-colhead > span:last-child {
-      display: none;
+    .rl-row--head {
+      font-size: var(--ui-font-11, 11px);
     }
   }
 </style>

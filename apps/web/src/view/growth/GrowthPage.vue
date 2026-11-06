@@ -55,6 +55,14 @@
             <SvgIcon :src="icon.todoWorkspace.star" size="15" />
             {{ t('annualReport.entry.button', { year: annualYear }) }}
           </BButton>
+          <BButton
+            v-if="growthV2Enabled"
+            class="growth-report-btn"
+            v-click-log="{ module: '成长', operation: '打开成长偏好' }"
+            @click="preferencesVisible = true"
+          >
+            <SvgIcon :src="icon.userCenter.settingsGear" size="15" /> {{ t('growth.preferencesTitle') }}
+          </BButton>
         </div>
       </header>
 
@@ -67,51 +75,71 @@
 
       <div class="growth-workspace" :class="{ 'growth-workspace--wide': useWideDesktopLayout }">
         <aside v-if="useWideDesktopLayout" class="growth-desktop-sidebar">
-          <header class="growth-hero growth-hero--sidebar">
-            <BButton class="growth-back" v-click-log="{ module: '成长', operation: '返回上一页' }" @click="goBack">
+          <header class="growth-sidebar-head">
+            <BButton
+              icon-only
+              class="growth-sidebar-back"
+              :aria-label="t('common.back')"
+              v-click-log="{ module: '成长', operation: '返回上一页' }"
+              @click="goBack"
+            >
               <SvgIcon :src="icon.arrow_left" size="16" />
-              <span>{{ t('common.back') }}</span>
             </BButton>
-            <h1 class="growth-title">{{ t('growth.pageTitle') }}</h1>
-            <p class="growth-subtitle">{{ t('growth.pageSubtitle') }}</p>
+            <h1 class="growth-sidebar-title">{{ t('growth.pageTitle') }}</h1>
           </header>
 
           <nav class="growth-side-nav" :aria-label="t('growth.pageTitle')">
-            <BButton
-              v-for="option in desktopNavigationOptions"
-              :key="option.key"
-              class="growth-side-nav-item"
-              :class="{ 'is-active': isDesktopNavigationActive(option) }"
-              :aria-current="isDesktopNavigationActive(option) ? 'page' : undefined"
-              v-click-log="{ module: '成长', operation: `切换成长模块-${option.key}` }"
-              @click="selectDesktopNavigation(option)"
-            >
-              <span class="growth-side-nav-icon" aria-hidden="true">
-                <SvgIcon :src="option.icon" size="17" />
-              </span>
-              <span class="growth-side-nav-label">{{ option.label }}</span>
-              <span v-if="option.badge !== undefined" class="growth-side-nav-badge">{{ option.badge }}</span>
-            </BButton>
+            <template v-for="group in desktopNavigationGroups" :key="group.key">
+              <span class="growth-side-group">{{ group.label }}</span>
+              <BButton
+                v-for="option in group.options"
+                :key="option.key"
+                class="growth-side-nav-item"
+                :class="{ 'is-active': isDesktopNavigationActive(option) }"
+                :aria-current="isDesktopNavigationActive(option) ? 'page' : undefined"
+                v-click-log="{ module: '成长', operation: `切换成长模块-${option.key}` }"
+                @click="selectDesktopNavigation(option)"
+              >
+                <span class="growth-side-nav-icon" aria-hidden="true">
+                  <SvgIcon :src="option.icon" size="17" />
+                </span>
+                <span class="growth-side-nav-label">{{ option.label }}</span>
+                <span v-if="option.badge !== undefined" class="growth-side-nav-badge">{{ option.badge }}</span>
+                <span v-else-if="option.hint" class="growth-side-nav-hint">{{ option.hint }}</span>
+                <span v-else-if="option.meta" class="growth-side-nav-meta">{{ option.meta }}</span>
+              </BButton>
+            </template>
           </nav>
 
-          <BButton
-            class="growth-side-report"
-            v-click-log="{ module: '成长', operation: '打开成长周报' }"
-            @click="openWeeklyReport"
-          >
-            <SvgIcon :src="icon.growth.rank" size="16" />
-            <span>{{ t('growth.weeklyReportEntry') }}</span>
-          </BButton>
-          <BButton
-            v-if="annualVisible"
-            class="growth-side-report growth-annual-btn"
-            :class="{ 'has-dot': annualUnseen }"
-            v-click-log="{ module: '成长', operation: '打开年度报告' }"
-            @click="openAnnualReport"
-          >
-            <SvgIcon :src="icon.todoWorkspace.star" size="16" />
-            <span>{{ t('annualReport.entry.button', { year: annualYear }) }}</span>
-          </BButton>
+          <div class="growth-side-links">
+            <BButton
+              class="growth-side-link"
+              v-click-log="{ module: '成长', operation: '打开成长周报' }"
+              @click="openWeeklyReport"
+            >
+              <SvgIcon :src="icon.growth.rank" size="15" />
+              <span>{{ t('growth.weeklyReportEntry') }}</span>
+            </BButton>
+            <BButton
+              v-if="annualVisible"
+              class="growth-side-link growth-annual-btn"
+              :class="{ 'has-dot': annualUnseen }"
+              v-click-log="{ module: '成长', operation: '打开年度报告' }"
+              @click="openAnnualReport"
+            >
+              <SvgIcon :src="icon.todoWorkspace.star" size="15" />
+              <span>{{ t('annualReport.entry.button', { year: annualYear }) }}</span>
+            </BButton>
+            <BButton
+              v-if="growthV2Enabled"
+              class="growth-side-link"
+              v-click-log="{ module: '成长', operation: '打开成长偏好' }"
+              @click="preferencesVisible = true"
+            >
+              <SvgIcon :src="icon.userCenter.settingsGear" size="15" />
+              <span>{{ t('growth.preferencesTitle') }}</span>
+            </BButton>
+          </div>
         </aside>
 
         <main ref="growthMainRef" class="growth-main">
@@ -126,146 +154,95 @@
           />
 
           <template v-if="activeSection === 'overview'">
-            <section v-if="growthV2Enabled" class="growth-panel growth-panel--today">
-              <TodayGrowthCard
-                :data="claimable"
+            <section class="growth-panel growth-panel--today">
+              <GrowthTodayPanel
                 :growth="growth"
-                :loading="
-                  claimableLoading ||
-                  (!claimable && !claimableError) ||
-                  preferencesLoading ||
-                  (!preferences && !preferencesError)
-                "
-                :error="claimableError"
+                :quests="quests"
+                :bonus="questBonus"
+                :checkin-days="stats.checkinDays || []"
+                :total-checkins="stats.totalCheckins"
+                :max-streak="stats.maxStreak"
+                :milestones="streakMilestones"
+                :claimable-count="claimableCount"
+                :show-claim-all="growthV2Enabled"
+                :next-step="growthV2Enabled ? overviewNextStep : null"
+                :manor="dailyQuestManor"
+                :loading="!dashboard && (dashboardLoading || !dashboardError)"
+                :error="Boolean(dashboardError)"
+                :read-only="isAdminContext"
+                :low-pressure="lowPressureMode"
                 :claiming="claimingRewards"
-                :read-only="isAdminContext"
-                :low-pressure="lowPressureMode"
-                :compact="useWideDesktopLayout"
-                :free-draws="freeLotteryRemaining"
-                :show-next-action="!useWideDesktopLayout"
-                @retry="loadClaimable"
-                @claim-all="onClaimAll"
-                @action="handleGrowthAction"
+                :checking="checking"
+                :stacked="bookmark.isMobile"
+                @checkin="checkin"
+                :receipt="overviewReceipt"
+                @claim-all="onClaimAll('overview')"
+                @claim-stage="onClaim('overview')"
+                @dismiss-receipt="clearOverviewReceipt"
+                @quest="handleQuestAction"
+                @next-step="handleOverviewNextStep"
+                @open-calendar="calendarVisible = true"
+                @manor="handleQuestAction('manor')"
+                @retry="loadDashboard"
               />
             </section>
 
-            <section class="growth-panel growth-panel--level">
-              <div v-if="!growth && (growthLoading || !growthError)" class="growth-state"
-                ><BLoading inline loading
-              /></div>
-              <div v-else-if="growthError && !growth" class="growth-state growth-state--error">
-                <span>{{ t('growth.growthLoadFailed') }}</span>
-                <BButton size="small" @click="load(true)">{{ t('common.retry') }}</BButton>
-              </div>
-              <GrowthCard
-                v-else
-                :read-only="isAdminContext"
-                :show-calendar="!useWideDesktopLayout"
-                :compact="useWideDesktopLayout"
-                @activity-changed="refreshOverview"
-              />
-            </section>
-
-            <section class="growth-panel growth-panel--stats">
-              <div v-if="!dashboard && (dashboardLoading || !dashboardError)" class="growth-state"
-                ><BLoading inline loading
-              /></div>
-              <div v-else-if="dashboardError && !dashboard" class="growth-state growth-state--error">
-                <span>{{ t('growth.dashboardLoadFailed') }}</span>
-                <BButton size="small" @click="loadDashboard">{{ t('common.retry') }}</BButton>
-              </div>
-              <GrowthStats v-else :stats="stats" />
-            </section>
-
-            <section
-              v-if="useWideDesktopLayout"
-              class="growth-overview-routine"
-              :class="{ 'growth-overview-routine--single': !claimable?.nextAction }"
-            >
-              <GrowthNextActionCard
-                v-if="claimable?.nextAction"
-                :next-action="claimable.nextAction"
-                :additional-actions="claimable.nextActions?.slice(1) || []"
-                :read-only="isAdminContext"
-                :low-pressure="lowPressureMode"
-                @action="handleGrowthAction"
-                @view-all="selectSection('tasks')"
-              />
-              <section class="growth-panel growth-overview-daily">
-                <div v-if="!dashboard && (dashboardLoading || !dashboardError)" class="growth-state">
-                  <BLoading inline loading />
+            <div class="growth-overview-row">
+              <section class="growth-panel growth-panel--rank">
+                <div v-if="!growth && (growthLoading || !growthError)" class="growth-state"
+                  ><BLoading inline loading
+                /></div>
+                <div v-else-if="growthError && !growth" class="growth-state growth-state--error">
+                  <span>{{ t('growth.growthLoadFailed') }}</span>
+                  <BButton size="small" @click="load(true)">{{ t('common.retry') }}</BButton>
                 </div>
+                <GrowthRankPanel
+                  v-else-if="growth"
+                  :growth="growth"
+                  :ranks="ranks"
+                  :stats="stats"
+                  :ai-balance="inventory?.assets?.aiBonusTokens ?? null"
+                  :stacked="bookmark.isMobile"
+                  @open-ranks="ranksVisible = true"
+                  @open-shop="selectRewardSection('shop')"
+                  @open-tasks="selectSection('tasks')"
+                />
+              </section>
+
+              <section class="growth-panel growth-panel--achievements">
+                <div v-if="!dashboard && (dashboardLoading || !dashboardError)" class="growth-state"
+                  ><BLoading inline loading
+                /></div>
                 <div v-else-if="dashboardError && !dashboard" class="growth-state growth-state--error">
                   <span>{{ t('growth.dashboardLoadFailed') }}</span>
                   <BButton size="small" @click="loadDashboard">{{ t('common.retry') }}</BButton>
                 </div>
-                <DailyQuests
+                <GrowthAchievementPanel
                   v-else
-                  :quests="quests"
-                  :bonus="questBonus"
-                  :claiming="claimingRewards"
-                  :read-only="isAdminContext"
-                  :daily-exp="growth?.dailyExp || 0"
-                  :daily-cap="growth?.dailyCap || 0"
-                  :daily-cap-reached="Boolean(growth?.dailyCapReached)"
-                  compact
-                  :manor="dailyQuestManor"
-                  :show-claim-action="false"
-                  @claim="onClaim"
-                  @go="handleQuestAction"
+                  :achievements="achievements"
+                  :unlocked-count="dashboard?.unlockedCount || 0"
+                  :total-count="dashboard?.totalAchievements || achievements.length"
+                  :claimable-count="achievementClaimableCount"
+                  :stacked="bookmark.isMobile"
+                  @open="selectSection('achievements')"
                 />
               </section>
+            </div>
+
+            <section class="growth-panel growth-panel--footprint">
+              <GrowthFootprintPanel ref="heatmapRef" :timeline="timeline" :stacked="bookmark.isMobile" />
             </section>
 
-            <section v-if="useWideDesktopLayout" id="growth-heatmap" class="growth-panel growth-knowledge-panel">
-              <header id="growth-checkin" class="growth-panel-heading">
-                <div>
-                  <h2>{{ t('growth.knowledgeCheckinTitle') }}</h2>
-                  <p>{{ t('growth.knowledgeCheckinSubtitle') }}</p>
-                </div>
-              </header>
-              <div class="growth-knowledge-panel__content">
-                <div class="growth-knowledge-panel__calendar">
-                  <SigninCalendar
-                    wide
-                    :checkin-days="stats.checkinDays || []"
-                    :checked-in-today="Boolean(growth?.checkedInToday)"
-                    :streak="growth?.streak || 0"
-                    :makeup-days="growth?.makeupDays || []"
-                    :read-only="isAdminContext"
-                    @makeup="onUseProtectCard"
-                  />
-                </div>
-                <ActivityHeatmap ref="heatmapRef" class="growth-knowledge-panel__heatmap" />
-              </div>
-            </section>
-
-            <section v-else id="growth-heatmap" class="growth-panel">
-              <ActivityHeatmap ref="heatmapRef" />
-            </section>
-
-            <section v-if="growthV2Enabled" id="growth-recap" class="growth-panel growth-footprint">
-              <header class="growth-panel-heading">
-                <div>
-                  <h2>{{ t('growth.footprintTitle') }}</h2>
-                  <p>{{ t('growth.footprintSubtitle') }}</p>
-                </div>
-              </header>
-              <GrowthTimeline v-if="timeline.length" :items="timeline" />
-              <div v-else class="growth-state">{{ t('growth.footprintEmpty') }}</div>
-            </section>
-
-            <section v-if="growthV2Enabled" class="growth-panel">
-              <GrowthPreferencesCard
-                :preferences="preferences"
-                :loading="preferencesLoading || (!preferences && !preferencesError)"
-                :error="preferencesError"
-                :saving="preferencesSaving"
-                :read-only="isAdminContext"
-                @save="onSavePreferences"
-                @retry="loadPreferences"
-              />
-            </section>
+            <BButton
+              v-if="bookmark.isMobile && growthV2Enabled"
+              class="growth-preferences-entry"
+              v-click-log="{ module: '成长', operation: '打开成长偏好' }"
+              @click="preferencesVisible = true"
+            >
+              <SvgIcon :src="icon.userCenter.settingsGear" size="17" />
+              <span>{{ t('growth.preferencesTitle') }}</span>
+              <SvgIcon :src="icon.arrow_right" size="14" />
+            </BButton>
           </template>
 
           <template v-if="activeSection === 'tasks'">
@@ -280,7 +257,7 @@
                   type="primary"
                   :loading="claimingRewards"
                   :disabled="isAdminContext || claimingRewards"
-                  @click="onClaimAll"
+                  @click="onClaimAll()"
                 >
                   <SvgIcon :src="icon.growth.reward" size="15" />
                   {{ t('growth.claimAllCount', { n: claimableCount }) }}
@@ -462,6 +439,55 @@
     </div>
 
     <WeeklyReportModal v-model:visible="wrVisible" />
+
+    <BModal
+      v-model:visible="calendarVisible"
+      :title="t('growth.calTitle')"
+      :show-footer="false"
+      width="400px"
+    >
+      <SigninCalendar
+        :show-title="false"
+        :checkin-days="stats.checkinDays || []"
+        :checked-in-today="Boolean(growth?.checkedInToday)"
+        :streak="growth?.streak || 0"
+        :makeup-days="growth?.makeupDays || []"
+        :read-only="isAdminContext"
+        @makeup="onUseProtectCard"
+      />
+    </BModal>
+
+    <BModal v-model:visible="ranksVisible" :title="t('growth.rankModalTitle')" :show-footer="false" width="720px">
+      <RankLadder />
+    </BModal>
+
+    <BModal
+      v-if="growthV2Enabled"
+      v-model:visible="preferencesVisible"
+      :title="t('growth.preferencesTitle')"
+      :show-footer="false"
+      width="560px"
+    >
+      <GrowthPreferencesCard
+        :show-header="false"
+        :preferences="preferences"
+        :loading="preferencesLoading || (!preferences && !preferencesError)"
+        :error="preferencesError"
+        :saving="preferencesSaving"
+        :read-only="isAdminContext"
+        @save="onSavePreferences"
+        @retry="loadPreferences"
+      />
+    </BModal>
+
+    <LevelUpOverlay
+      v-if="levelUp"
+      :level="levelUp.level"
+      :name="levelUp.name"
+      :ai-gift-tokens="levelUp.aiGiftTokens"
+      :gift-pending="levelUp.giftPending"
+      @close="levelUp = null"
+    />
   </div>
 </template>
 
@@ -470,23 +496,25 @@
   import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useRoute, useRouter } from 'vue-router';
-  import GrowthCard from '@/components/growth/GrowthCard.vue';
   import GrowthTasks from '@/components/growth/GrowthTasks.vue';
-  import ActivityHeatmap from '@/components/growth/ActivityHeatmap.vue';
   import SigninCalendar from '@/components/growth/SigninCalendar.vue';
   import DailyQuests from '@/components/growth/DailyQuests.vue';
-  import GrowthStats from '@/components/growth/GrowthStats.vue';
+  import RankLadder from '@/components/growth/RankLadder.vue';
+  import LevelUpOverlay from '@/components/growth/LevelUpOverlay.vue';
+  import GrowthTodayPanel from '@/components/growth/overview/GrowthTodayPanel.vue';
+  import GrowthRankPanel from '@/components/growth/overview/GrowthRankPanel.vue';
+  import GrowthAchievementPanel from '@/components/growth/overview/GrowthAchievementPanel.vue';
+  import GrowthFootprintPanel from '@/components/growth/overview/GrowthFootprintPanel.vue';
   import AchievementCollection from '@/components/growth/AchievementCollection.vue';
   import GrowthTimeline from '@/components/growth/GrowthTimeline.vue';
   import PointsShop from '@/components/growth/PointsShop.vue';
   import LotteryDraw from '@/components/growth/LotteryDraw.vue';
   import MyInventory from '@/components/growth/MyInventory.vue';
   import WeeklyChallenge from '@/components/growth/WeeklyChallenge.vue';
-  import TodayGrowthCard from '@/components/growth/TodayGrowthCard.vue';
   import GrowthPreferencesCard from '@/components/growth/GrowthPreferencesCard.vue';
-  import GrowthNextActionCard from '@/components/growth/GrowthNextActionCard.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
+  import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
   import BTabs from '@/components/base/BasicComponents/BTabs.vue';
   import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
@@ -494,7 +522,8 @@
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
   import { recordOperation } from '@/api/commonApi.ts';
   import { useGrowth } from '@/composables/useGrowth.ts';
-  import { useGrowthClaimFeedback } from '@/composables/useGrowthClaimFeedback';
+  import { useGrowthClaimFeedback, useTransientClaimReceipt } from '@/composables/useGrowthClaimFeedback';
+  import { useGrowthCheckin } from '@/composables/useGrowthCheckin';
   import WeeklyReportModal from '@/components/growth/WeeklyReportModal.vue';
   import AnnualReportEntry from '@/components/growth/annualReport/AnnualReportEntry.vue';
   import { useAnnualReportEntry } from '@/composables/useAnnualReportEntry';
@@ -503,7 +532,12 @@
   import { useForegroundRefresh } from '@/composables/useForegroundRefresh';
   import { useUiDensity } from '@/composables/useUiDensity';
   import { resolveDailyQuestClaimFeedback } from '@/utils/dailyQuestClaim';
-  import { resolveDailyQuestRoute, resolveGrowthActionRoute } from '@/utils/growthNavigation';
+  import {
+    resolveDailyQuestRoute,
+    resolveGrowthActionRoute,
+    resolveWeeklyChallengeRoute,
+  } from '@/utils/growthNavigation';
+  import { pickOverviewNextStep } from '@/utils/growthOverview';
   import { useManorAttention } from '@/composables/useManorAttention';
   import {
     findVerticalScrollContainer,
@@ -527,6 +561,10 @@
     label: string;
     icon: string;
     badge?: number;
+    /** 次要状态（如今日任务进度），以普通文字显示。 */
+    meta?: string;
+    /** 需要提醒但不计入角标的状态（如今日免费抽奖）。 */
+    hint?: string;
     section: GrowthSection;
     reward?: RewardSection;
   };
@@ -605,17 +643,40 @@
     if (growthV2Enabled.value) return options;
     return [options[1], options[2], options[0]];
   });
-  const desktopNavigationOptions = computed<DesktopGrowthNavOption[]>(() => [
-    ...sectionOptions.value
-      .filter((option) => option.key !== 'rewards')
-      .map((option) => ({ ...option, section: option.key })),
-    ...rewardSectionOptions.value.map((option) => ({
-      ...option,
-      key: `reward-${option.key}`,
-      section: 'rewards' as const,
-      reward: option.key,
-    })),
-  ]);
+  // 宽屏侧栏按「成长 / 奖励」分组；任务进度与免费抽奖挂在对应入口，替代概览顶部的统计条。
+  const desktopNavigationGroups = computed<Array<{ key: string; label: string; options: DesktopGrowthNavOption[] }>>(
+    () => [
+      {
+        key: 'growth',
+        label: t('growth.overview.navGrowth'),
+        options: sectionOptions.value
+          .filter((option) => option.key !== 'rewards')
+          .map((option) => ({
+            ...option,
+            section: option.key,
+            meta:
+              option.key === 'tasks' && quests.value.length
+                ? `${dailyQuestDoneCount.value}/${quests.value.length}`
+                : undefined,
+          })),
+      },
+      {
+        key: 'rewards',
+        label: t('growth.overview.navRewards'),
+        options: rewardSectionOptions.value.map((option) => ({
+          ...option,
+          key: `reward-${option.key}`,
+          section: 'rewards' as const,
+          reward: option.key,
+          // 低打扰模式隐藏抽奖提示；偏好加载前不显示，避免提示一闪而过。
+          hint:
+            option.key === 'lottery' && preferences.value && !lowPressureMode.value && freeLotteryRemaining.value > 0
+              ? t('growth.overview.freeDraws', { n: freeLotteryRemaining.value })
+              : undefined,
+        })),
+      },
+    ],
+  );
   const isAdminContext = computed(() => Boolean(user.adminContext));
   const {
     growth,
@@ -631,8 +692,6 @@
     dashboardError,
     growthTasksLoading,
     growthTasksError,
-    claimableLoading,
-    claimableError,
     preferencesLoading,
     preferencesError,
     claimingRewards,
@@ -648,15 +707,32 @@
     claimDailyBonus,
     claimAchievement,
     useProtectCard,
+    ranks,
+    loadRanks,
+    inventory,
+    loadInventory,
   } = useGrowth();
   // 成长中心 V2 已全量开放：只有服务端明确下发 false（应急回退）才显示旧版，加载期间不先闪旧版。
   const growthV2Enabled = computed(() => growth.value?.features?.growthCenterV2 !== false);
   const pointsCenterEnabled = computed(() => growth.value?.features?.pointsCenter ?? import.meta.env.DEV);
   const claimableCount = computed(() => Number(claimable.value?.count || 0));
-  const { achievementClaimableCount, claimAllTooltip, snapshotClaimableBreakdown, claimSuccessMessage } =
+  const { achievementClaimableCount, claimAllTooltip, snapshotClaimableBreakdown, claimSuccessMessage, claimReceipt } =
     useGrowthClaimFeedback(claimable);
+  // 概览「今天」卡在原位展示领取回执，不再弹出多行全局提示；任务页的一键领取仍沿用全局提示。
+  const {
+    receipt: overviewReceipt,
+    show: showOverviewReceipt,
+    clear: clearOverviewReceipt,
+  } = useTransientClaimReceipt();
   const lowPressureMode = computed(() => Boolean(preferences.value?.lowPressureMode));
   const freeLotteryRemaining = computed(() => Number(lottery.value?.freeRemaining || 0));
+  const calendarVisible = ref(false);
+  const ranksVisible = ref(false);
+  const preferencesVisible = ref(false);
+  const { checking, levelUp, checkin, announceUnreadLevelUp } = useGrowthCheckin({
+    readOnly: isAdminContext,
+    onChanged: refreshOverview,
+  });
   const preferencesSaving = ref(false);
   const usingProtectCard = ref(false);
   const heatmapRef = ref<{ reload: () => void | Promise<void> } | null>(null);
@@ -748,7 +824,7 @@
 
   function refreshOverview() {
     void heatmapRef.value?.reload();
-    const requests: Array<Promise<unknown>> = [loadDashboard(), loadClaimable()];
+    const requests: Array<Promise<unknown>> = [loadDashboard(), loadClaimable(), loadWeekly()];
     if (useWideDesktopLayout.value) requests.push(loadLottery());
     void Promise.all(requests);
   }
@@ -931,16 +1007,30 @@
   const timeline = computed(() => dashboard.value?.timeline || []);
   const questBonus = computed(() => dashboard.value?.questBonus || EMPTY_BONUS);
   const streakMilestones = computed(() => dashboard.value?.streakMilestones || []);
+  const overviewNextStep = computed(() =>
+    pickOverviewNextStep(claimable.value?.nextActions, weekly.value?.challenges, {
+      pendingResourceCount: dashboard.value?.stats?.pendingResourceCount,
+    }),
+  );
   const currentStreak = computed(() => dashboard.value?.currentStreak ?? growth.value?.streak ?? 0);
 
-  async function onClaim() {
+  async function onClaim(origin?: 'overview') {
     if (isAdminContext.value || claimingRewards.value) return;
     try {
       const res = await claimDailyBonus();
       if (res?.status === 200 && res.data?.ok) {
         const feedback = resolveDailyQuestClaimFeedback(res.data);
         if (feedback.level === 'success') {
-          message.success(t(feedback.key, feedback.params));
+          if (origin === 'overview') {
+            showOverviewReceipt(
+              claimReceipt(
+                { exp: res.data.expGained, points: res.data.pointsEarned, claimed: 1 },
+                { daily: 1, growthTasks: 0, achievements: 0, weekly: 0, community: 0 },
+              ),
+            );
+          } else {
+            message.success(t(feedback.key, feedback.params));
+          }
           recordOperation({ module: '成长', operation: '领取日常任务阶段奖励' });
         } else {
           message.info(t(feedback.key, feedback.params));
@@ -951,7 +1041,7 @@
     }
   }
 
-  async function onClaimAll() {
+  async function onClaimAll(origin?: 'overview') {
     if (isAdminContext.value || claimingRewards.value) return;
     const pendingBreakdown = snapshotClaimableBreakdown();
     try {
@@ -959,7 +1049,8 @@
       if (res?.status === 200 && res.data?.ok) {
         const claimed = Number(res.data.claimed || 0);
         if (claimed > 0) {
-          message.success(claimSuccessMessage(res.data, pendingBreakdown));
+          if (origin === 'overview') showOverviewReceipt(claimReceipt(res.data, pendingBreakdown));
+          else message.success(claimSuccessMessage(res.data, pendingBreakdown));
           recordOperation({ module: '成长', operation: '一键领取成长奖励成功' });
         } else {
           message.info(t('growth.claimAllEmpty'));
@@ -981,6 +1072,18 @@
     }
     if (key === 'checkin') activeSection.value = 'overview';
     else activeSection.value = 'tasks';
+  }
+
+  function handleOverviewNextStep() {
+    const step = overviewNextStep.value;
+    if (!step) return;
+    if (step.kind === 'starter') {
+      handleGrowthAction(step.action);
+      return;
+    }
+    const target = resolveWeeklyChallengeRoute(step.metric, bookmark.isMobile);
+    if (target) void router.push(target);
+    else selectSection('tasks');
   }
 
   function handleGrowthAction(action: string) {
@@ -1056,9 +1159,22 @@
     { flush: 'post' },
   );
 
+  // 升级提示需要最新等级与庆祝偏好；两者就绪且停留在概览时才提示并清除未读。
+  const levelNoticeReady = ref(false);
+  watch(
+    () => [levelNoticeReady.value, activeSection.value === 'overview', Boolean(growth.value?.hasUnreadLevelUp)] as const,
+    ([ready, overview, unread]) => {
+      if (ready && overview && unread) announceUnreadLevelUp();
+    },
+  );
+
   onMounted(() => {
-    void load(); // 任务分区也需要今日经验与每日上限；共享请求会与概览卡片自动合并。
-    void Promise.all([loadDashboard(), loadClaimable(), loadPreferences()]);
+    // 进入成长页强制取最新等级；任务分区也需要今日经验与每日上限。
+    void Promise.allSettled([load(true), loadPreferences()]).then(() => {
+      levelNoticeReady.value = true;
+    });
+    void Promise.all([loadDashboard(), loadClaimable(), loadRanks()]);
+    if (activeSection.value === 'overview') void Promise.all([loadWeekly(), loadInventory()]);
     if (activeSection.value === 'tasks') void Promise.all([loadGrowthTasks(true), loadWeekly()]);
     if (activeSection.value === 'rewards' || (activeSection.value === 'overview' && useWideDesktopLayout.value)) {
       void loadLottery();
@@ -1089,6 +1205,7 @@
     refresh: () => {
       const requests: Array<Promise<unknown>> = [loadDashboard(), load(true), loadClaimable()];
       if (activeSection.value === 'tasks') requests.push(loadGrowthTasks(true), loadWeekly());
+      if (activeSection.value === 'overview') requests.push(loadWeekly(), loadInventory());
       if (activeSection.value === 'rewards' || (activeSection.value === 'overview' && useWideDesktopLayout.value)) {
         requests.push(loadLottery());
       }
@@ -1112,6 +1229,7 @@
 
   watch(activeSection, (section) => {
     if (section === 'tasks') void Promise.all([loadGrowthTasks(), loadWeekly()]);
+    if (section === 'overview') void Promise.all([loadWeekly(), loadInventory()]);
     if (section === 'rewards' || (section === 'overview' && useWideDesktopLayout.value)) void loadLottery();
   });
 
@@ -1216,7 +1334,7 @@
     flex-direction: column;
     gap: var(--ui-space-18, 18px);
   }
-  /* 大屏放宽容器,容纳 GrowthCard 的左右两栏,消除 PC 两侧大片留白 */
+  /* 大屏放宽容器,容纳概览的主次两栏,消除 PC 两侧大片留白 */
   @media (min-width: 900px) {
     .growth-container {
       max-width: var(--ui-layout-1120, 1120px);
@@ -1234,7 +1352,7 @@
     display: grid;
     min-height: 0;
     flex: 1 1 auto;
-    grid-template-columns: var(--ui-layout-208, 208px) minmax(0, 1fr);
+    grid-template-columns: var(--ui-layout-200, 200px) minmax(0, 1fr);
     align-items: start;
     gap: var(--ui-space-18, 18px);
     overflow: hidden;
@@ -1248,9 +1366,16 @@
   .growth-desktop-sidebar {
     position: static;
     display: flex;
+    height: 100%;
     max-height: 100%;
     min-width: 0;
+    box-sizing: border-box;
     flex-direction: column;
+    padding: var(--ui-space-12, 12px) var(--ui-space-10, 10px);
+    border: 1px solid color-mix(in srgb, var(--card-border-color) 62%, transparent);
+    border-radius: 16px;
+    background: var(--workbench-subcard-bg);
+    box-shadow: 0 12px 28px -24px rgba(30, 35, 70, 0.45);
     overflow-y: auto;
     scrollbar-width: thin;
   }
@@ -1259,40 +1384,67 @@
     overflow-y: auto;
     scrollbar-width: thin;
   }
-  .growth-hero--sidebar {
+  .growth-sidebar-head {
+    display: flex;
     flex: 0 0 auto;
-    padding: 0 var(--ui-space-4, 4px) var(--ui-space-16, 16px);
+    align-items: center;
+    gap: var(--ui-space-8, 8px);
+    padding: 0 var(--ui-space-4, 4px) var(--ui-space-4, 4px);
+  }
+  .growth-sidebar-back.b_btn {
+    width: var(--ui-control-30, 30px);
+    height: var(--ui-control-30, 30px);
+    flex: 0 0 auto;
+    border: 1px solid var(--card-border-color);
+    border-radius: 8px;
+    background: transparent;
+    color: var(--desc-color);
+  }
+  .growth-sidebar-back.b_btn:hover {
+    border-color: var(--primary-color);
+    color: var(--primary-color);
+  }
+  .growth-sidebar-title {
+    min-width: 0;
+    margin: 0;
+    overflow: hidden;
+    color: var(--text-color);
+    font-size: var(--ui-font-17, 17px);
+    font-weight: 700;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   .growth-side-nav {
     display: flex;
     flex-direction: column;
-    gap: var(--ui-space-6, 6px);
-    padding: var(--ui-space-10, 10px);
-    border: 1px solid var(--card-border-color);
-    border-radius: 16px;
-    background: var(--workbench-subcard-bg);
-    box-shadow: 0 12px 28px -24px rgba(30, 35, 70, 0.45);
+    gap: var(--ui-space-2, 2px);
+  }
+  .growth-side-group {
+    padding: var(--ui-space-12, 12px) var(--ui-space-10, 10px) var(--ui-space-4, 4px);
+    color: var(--desc-color);
+    font-size: var(--ui-font-12, 12px);
   }
   .growth-side-nav-item.b_btn,
-  .growth-side-report.b_btn {
+  .growth-side-link.b_btn {
     width: 100%;
     margin: 0;
     box-sizing: border-box;
+    justify-content: flex-start;
     border: 1px solid transparent;
     background: transparent;
-    color: var(--desc-color);
+    color: var(--text-color);
     box-shadow: none;
+    line-height: normal;
+    text-align: left;
   }
   .growth-side-nav-item.b_btn {
     position: relative;
-    justify-content: flex-start;
     gap: var(--ui-space-10, 10px);
-    height: var(--ui-control-46, 46px);
-    padding: 0 var(--ui-space-11, 11px);
+    height: var(--ui-control-40, 40px);
+    padding: 0 var(--ui-space-10, 10px);
     overflow: hidden;
-    border-radius: 11px;
-    line-height: normal;
-    text-align: left;
+    border-radius: 9px;
+    font-size: var(--ui-font-14, 14px);
   }
   .growth-side-nav-item.b_btn::before {
     content: '';
@@ -1304,35 +1456,27 @@
     border-radius: 0 3px 3px 0;
     background: transparent;
   }
-  .growth-side-nav-item.b_btn:hover {
-    border-color: var(--card-border-color);
+  .growth-side-nav-item.b_btn:hover,
+  .growth-side-link.b_btn:hover {
     background: var(--hover-background);
     color: var(--text-color);
   }
   .growth-side-nav-item.b_btn.is-active {
-    border-color: var(--primary-color);
     background: color-mix(in srgb, var(--primary-color) 10%, var(--workbench-subcard-bg));
     color: var(--primary-color);
-    font-weight: 700;
+    font-weight: 600;
   }
   .growth-side-nav-item.b_btn.is-active::before {
     background: var(--primary-color);
   }
   .growth-side-nav-icon {
     display: grid;
-    width: var(--ui-layout-30, 30px);
-    height: var(--ui-layout-30, 30px);
-    flex: 0 0 var(--ui-layout-30, 30px);
+    flex: 0 0 auto;
     place-items: center;
-    border: 1px solid var(--card-border-color);
-    border-radius: 9px;
-    background: var(--background-color);
-    color: currentColor;
+    color: var(--desc-color);
   }
   .growth-side-nav-item.is-active .growth-side-nav-icon {
-    border-color: var(--primary-color);
-    background: var(--primary-color);
-    color: #fff;
+    color: var(--primary-color);
   }
   .growth-side-nav-label {
     min-width: 0;
@@ -1356,20 +1500,39 @@
     font-weight: 700;
     line-height: 1;
   }
-  .growth-side-report.b_btn {
-    justify-content: flex-start;
-    gap: var(--ui-space-8, 8px);
-    height: var(--ui-control-42, 42px);
-    margin-top: var(--ui-space-12, 12px);
-    padding: 0 var(--ui-space-14, 14px);
-    border-color: var(--primary-color);
-    border-radius: 11px;
-    background: color-mix(in srgb, var(--primary-color) 8%, var(--background-color));
-    color: var(--primary-color);
-    font-weight: 600;
+  .growth-side-nav-meta {
+    margin-left: auto;
+    color: var(--desc-color);
+    font-size: var(--ui-font-12, 12px);
+    font-weight: 500;
   }
-  .growth-side-report.b_btn:hover {
-    background: color-mix(in srgb, var(--primary-color) 14%, var(--background-color));
+  .growth-side-nav-hint {
+    margin-left: auto;
+    padding: 0 var(--ui-space-6, 6px);
+    border: 1px solid var(--warning-color);
+    border-radius: 999px;
+    color: var(--warning-color);
+    font-size: var(--ui-font-11, 11px);
+    font-weight: 600;
+    line-height: 1.6;
+    white-space: nowrap;
+  }
+  .growth-side-links {
+    display: flex;
+    flex-direction: column;
+    gap: var(--ui-space-2, 2px);
+    margin-top: auto;
+    padding-top: var(--ui-space-10, 10px);
+    border-top: 1px solid var(--surface-divider-color);
+  }
+  .growth-side-link.b_btn {
+    position: relative;
+    gap: var(--ui-space-10, 10px);
+    height: var(--ui-control-36, 36px);
+    padding: 0 var(--ui-space-10, 10px);
+    border-radius: 8px;
+    color: var(--desc-color);
+    font-size: var(--ui-font-13, 13px);
   }
   .growth-hero {
     display: flex;
@@ -1499,7 +1662,7 @@
   .growth-page--inventory .growth-desktop-sidebar {
     background: var(--workspace-content);
   }
-  .growth-page--inventory .growth-hero:not(.growth-hero--sidebar) {
+  .growth-page--inventory .growth-hero {
     display: grid;
     grid-template-columns: auto minmax(0, 1fr) auto;
     align-items: center;
@@ -1524,81 +1687,36 @@
     flex: 1 1 0;
     min-width: 0;
   }
-  .growth-panel--today {
-    padding: 0;
-    border: 0;
-    background: transparent;
-    box-shadow: none;
-  }
-  .growth-page--wide .growth-panel--stats {
-    padding: var(--ui-space-14, 14px);
-  }
-  .growth-page--wide .growth-panel--level {
-    padding: var(--ui-space-14, 14px);
-  }
-  .growth-page--wide .growth-panel--stats :deep(.gs) {
+  .growth-overview-row {
     display: grid;
-    grid-template-columns: minmax(var(--ui-layout-220, 220px), 0.42fr) minmax(0, 1fr);
-    align-items: stretch;
-    gap: var(--ui-space-12, 12px);
-  }
-  .growth-page--wide .growth-panel--stats :deep(.gs-hero) {
-    padding: var(--ui-space-10, 10px) var(--ui-space-12, 12px);
-  }
-  .growth-page--wide .growth-panel--stats :deep(.gs-grid) {
-    grid-template-columns: repeat(9, minmax(var(--ui-layout-64, 64px), 1fr));
-    gap: var(--ui-space-6, 6px);
-  }
-  .growth-page--wide .growth-panel--stats :deep(.gs-tile) {
     min-width: 0;
-    padding: var(--ui-space-8, 8px) var(--ui-space-4, 4px);
-  }
-  .growth-knowledge-panel {
-    display: flex;
-    flex-direction: column;
-    gap: var(--ui-space-14, 14px);
-  }
-  .growth-knowledge-panel__content {
-    min-width: 0;
-    display: grid;
-    grid-template-columns: minmax(var(--ui-layout-300, 300px), 0.72fr) minmax(0, 1.45fr);
-    align-items: stretch;
-    gap: var(--ui-space-16, 16px);
-  }
-  .growth-knowledge-panel__heatmap,
-  .growth-knowledge-panel__calendar {
-    min-width: 0;
-    padding: var(--ui-space-14, 14px);
-    box-sizing: border-box;
-    border: 1px solid var(--card-border-color);
-    border-radius: 13px;
-    background: var(--background-color);
-  }
-  .growth-knowledge-panel__calendar {
-    display: flex;
-    align-items: center;
-  }
-  .growth-knowledge-panel__calendar :deep(.cal) {
-    width: 100%;
-  }
-  .growth-knowledge-panel__calendar :deep(.cal-cell) {
-    min-height: var(--ui-control-34, 34px);
-  }
-  .growth-overview-routine {
-    min-width: 0;
-    display: grid;
-    grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+    grid-template-columns: minmax(0, 1.72fr) minmax(var(--ui-layout-300, 300px), 1fr);
     align-items: stretch;
     gap: var(--ui-space-18, 18px);
   }
-  .growth-overview-routine--single {
-    grid-template-columns: minmax(0, 1fr);
+  .growth-panel--today,
+  .growth-panel--achievements,
+  .growth-panel--footprint {
+    padding: var(--ui-space-18, 18px) var(--ui-space-20, 20px);
   }
-  .growth-overview-daily {
-    height: 100%;
-    min-width: 0;
-    padding: var(--ui-space-12, 12px);
-    box-sizing: border-box;
+  .growth-panel--rank {
+    padding: var(--ui-space-20, 20px) var(--ui-space-22, 22px) var(--ui-space-18, 18px);
+  }
+  .growth-preferences-entry.b_btn {
+    width: 100%;
+    height: var(--ui-control-48, 48px);
+    justify-content: flex-start;
+    gap: var(--ui-space-10, 10px);
+    padding: 0 var(--ui-space-14, 14px);
+    border: 1px solid color-mix(in srgb, var(--card-border-color) 62%, transparent);
+    border-radius: 14px;
+    background: var(--workbench-subcard-bg);
+    color: var(--text-color);
+    font-size: var(--ui-font-14, 14px);
+  }
+  .growth-preferences-entry span {
+    flex: 1;
+    text-align: left;
   }
   .growth-task-center {
     flex: 0 0 auto;
@@ -1739,29 +1857,21 @@
     border-radius: 999px;
     background: var(--workbench-subcard-bg);
   }
-  .growth-section-heading,
-  .growth-panel-heading {
+  .growth-section-heading {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: var(--ui-space-16, 16px);
   }
-  .growth-section-heading h2,
-  .growth-panel-heading h2 {
+  .growth-section-heading h2 {
     margin: 0;
     color: var(--text-color);
     font-size: var(--ui-font-18, 18px);
   }
-  .growth-section-heading p,
-  .growth-panel-heading p {
+  .growth-section-heading p {
     margin: var(--ui-space-3, 3px) 0 0;
     color: var(--desc-color);
     font-size: var(--ui-font-12, 12px);
-  }
-  .growth-footprint {
-    display: flex;
-    flex-direction: column;
-    gap: var(--ui-space-18, 18px);
   }
   .growth-state {
     min-height: var(--ui-layout-112, 112px);
@@ -1825,7 +1935,7 @@
   }
   @media (max-width: 900px) {
     .growth-task-workspace,
-    .growth-knowledge-panel__content {
+    .growth-overview-row {
       grid-template-columns: minmax(0, 1fr);
     }
   }
