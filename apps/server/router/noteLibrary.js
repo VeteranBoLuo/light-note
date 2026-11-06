@@ -10,6 +10,7 @@ import * as noteShareHandle from '../router_handle/noteShareHandle.js';
 import { ensureNotVisitor } from '../util/auth.js';
 import { L, resultData } from '../util/common.js';
 import { NOTE_IMAGE_MAX_BYTES, noteImageExtensionForMimeType } from '../util/noteImageUpload.js';
+import { NOTE_IMAGE_DIR } from '../util/noteImages.js';
 
 const noteShareAccessLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -48,7 +49,7 @@ const blockVisitorUpload = (req, res, next) => {
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    cb(null, '/www/wwwroot/images');
+    cb(null, NOTE_IMAGE_DIR);
   },
   filename: (req, file, cb) => {
     const extension = noteImageExtensionForMimeType(file.mimetype);

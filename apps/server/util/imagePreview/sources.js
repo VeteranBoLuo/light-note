@@ -1,3 +1,4 @@
+import { uploadOrigin, isManagedUploadOrigin } from '../uploadOrigin.js';
 import { readAudioCover } from './audioCover.js';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -13,8 +14,8 @@ import { MAX_SOURCE_BYTES, imageError } from './compress.js';
 export const hash = (value) => createHash('sha256').update(value).digest('hex');
 export function localImageLocator(url) {
   try {
-    const u = new URL(url, String(url).startsWith('/uploads/') ? 'https://boluo66.top' : undefined);
-    if (!['http:', 'https:'].includes(u.protocol) || u.hostname !== 'boluo66.top') return '';
+    const u = new URL(url, String(url).startsWith('/uploads/') ? uploadOrigin() : undefined);
+    if (!isManagedUploadOrigin(u.origin)) return '';
     const decoded = decodeURIComponent(u.pathname);
     const name = path.basename(decoded);
     if (decoded !== `/uploads/${name}` || /[\x00\[\]\\]/u.test(name)) return '';

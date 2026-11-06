@@ -1,3 +1,4 @@
+import { managedUploadUrl } from '../uploadOrigin.js';
 import { imagePreviewWorkerEnabled } from './workerPolicy.js';
 import { CARD_IMAGE_PROFILE, HEAVY_PREVIEW_FORMATS } from '@lightnote/shared';
 import { classifyImageError, imageFailure } from './errors.js';
@@ -275,7 +276,7 @@ export async function cleanupImageAssets({
         await remove(key);
       if (asset.storage_kind === 'local') {
         const { deleteNoteImageThumbnail } = await import('../noteImageThumbnail.js');
-        await deleteNoteImageThumbnail(`https://boluo66.top/uploads/${asset.source_locator}`);
+        await deleteNoteImageThumbnail(managedUploadUrl(asset.source_locator));
       }
       await removeSource(asset);
       // Retain the object ledger for 24h after deletion starts, covering a late response from an expired upload lease.

@@ -1,3 +1,4 @@
+import { managedUploadUrl } from '../uploadOrigin.js';
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
@@ -87,7 +88,7 @@ export async function imageBytes(source, owner, db, signal) {
   }
   const locator = localImageLocator(source);
   if (locator) {
-    const canonical = 'https://boluo66.top/uploads/' + locator;
+    const canonical = managedUploadUrl(locator);
     const owned = await filterOwnedImageUrls({ urls: [canonical], userId: owner, connection: db });
     if (!owned.length) throw exportError('DATA_EXPORT_IMAGE_DENIED');
     stream = fs.createReadStream(localSourcePath(locator), { signal });

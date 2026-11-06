@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const mock = vi.hoisted(() => ({
   client: {
     initiateMultipartUpload: vi.fn(),
@@ -26,7 +26,15 @@ const response = (InterfaceResult, status = 200, code = '') => ({
 beforeEach(() => {
   Object.values(mock.client).forEach((fn) => fn.mockReset());
 });
+afterEach(() => vi.unstubAllEnvs());
 describe('OBS 分片响应与签名边界', () => {
+  it('本机 S3 的 XML 引号实体还原后能作为同一分片的 ETag 提交', async () => {
+    vi.stubEnv('LIGHTNOTE_LOCAL_TEST', '1');
+    mock.client.listParts.mockImplementation((_p, cb) => cb(null, response({ Parts: [{ PartNumber: 1, ETag: '&#34;abc123&#34;' }] })));
+    expect(await listCloudMultipartParts('key', 'upload')).toEqual([{ PartNumber: 1, ETag: '"abc123"' }]);
+    vi.stubEnv('LIGHTNOTE_LOCAL_TEST', undefined);
+    expect(await listCloudMultipartParts('key', 'upload')).toEqual([{ PartNumber: 1, ETag: '&#34;abc123&#34;' }]);
+  });
   it('不能把 HTTP 200 但无合并结果当成功', async () => {
     mock.client.completeMultipartUpload.mockImplementation((_p, cb) => cb(null, response({})));
     await expect(completeCloudMultipart('key', 'upload', [{ PartNumber: 1, ETag: 'tag' }])).rejects.toMatchObject({

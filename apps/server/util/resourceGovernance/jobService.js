@@ -1,3 +1,4 @@
+import { managedUploadUrl } from '../uploadOrigin.js';
 import { createHash, createHmac, randomUUID, timingSafeEqual } from 'node:crypto';
 import { promises as fsP } from 'node:fs';
 import pool from '../../db/index.js';
@@ -320,7 +321,7 @@ async function executeCleanupItem(job, item, db) {
     return { status: 'skipped_referenced', resultCode: 'IMAGE_REFERENCED', releasedBytes: 0 };
   }
   try {
-    await deleteNoteImageThumbnail(`https://boluo66.top/uploads/${inspection.fileName}`).catch(() => false);
+    await deleteNoteImageThumbnail(managedUploadUrl(inspection.fileName)).catch(() => false);
     await fsP.unlink(inspection.filePath);
   } catch (error) {
     if (error?.code === 'ENOENT') {

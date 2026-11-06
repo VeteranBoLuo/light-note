@@ -1,3 +1,4 @@
+import { managedUploadUrl } from '../util/uploadOrigin.js';
 import { postDetail as getCommunitySaveSource } from '../util/communityFeed/posts.js';
 import { insertNoteVersion } from '../util/insertNoteVersion.js';
 import { readNoteExportScope, readScopedNotesForExport } from '../util/services/noteExportService.js';
@@ -200,7 +201,7 @@ export const uploadNoteImage = async (req, res) => {
       );
     }
     const userId = req.user.id;
-    const fileUrl = `https://boluo66.top/uploads/${req.file.filename}`;
+    const fileUrl = managedUploadUrl(req.file.filename);
     const noteId = String(req.body.noteId || '').trim();
 
     if (noteId) {

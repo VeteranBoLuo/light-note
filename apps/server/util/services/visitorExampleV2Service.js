@@ -1,3 +1,4 @@
+import { managedUploadUrl } from '../uploadOrigin.js';
 import { insertData } from '../agent/data.js';
 import { ensureTag } from './tagService.js';
 import { batchWriteResourceTags } from './resourceTagWriteService.js';
@@ -109,7 +110,7 @@ export async function applyVisitorV2(connection, { snapshot, images, now = new D
       size: image.size,
       reconciled: true,
     });
-    urls[image.key] = `https://boluo66.top/uploads/${image.locator}`;
+    urls[image.key] = managedUploadUrl(image.locator);
   }
   if (!['welcome', 'weekend', 'inspiration'].every((key) => urls[key])) throw exampleError('VISITOR_IMAGE_MISSING');
   const bodies = definitions.buildNoteBodies(urls);

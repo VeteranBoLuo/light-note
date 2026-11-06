@@ -34,6 +34,12 @@ describe('Vite 本地后端代理边界', () => {
     expect(isPublicUploadReadMethod(method)).toBe(true);
   });
 
+  it('独立沙箱的 API、图片与实时连接全部指向独立本机后端', () => {
+    const proxy = createLocalBackendProxy({ isolated: true });
+    for (const config of Object.values(proxy)) expect(config.target).toBe('http://127.0.0.1:19001');
+    expect(proxy['^/uploads(?:/|$)'].bypass?.({ method: 'POST' } as never, undefined, {} as never)).toBe(false);
+  });
+
   it.each(['POST', 'PUT', 'PATCH', 'DELETE', undefined])('rejects public upload non-read method %s', (method) => {
     expect(isPublicUploadReadMethod(method)).toBe(false);
   });

@@ -1,3 +1,4 @@
+import { managedUploadOrigins } from './uploadOrigin.js';
 import pool from '../db/index.js';
 import { promises as fsP } from 'node:fs';
 import path from 'node:path';
@@ -6,7 +7,7 @@ import path from 'node:path';
 // 生产环境保留既有默认值；真实链路测试和非标准部署可在进程启动前显式覆盖，
 // 避免把服务器目录结构写死进所有运行环境。
 export const NOTE_IMAGE_DIR = path.resolve(process.env.LIGHT_NOTE_IMAGE_DIR || '/www/wwwroot/images');
-const NOTE_IMAGE_URL_RE = /https?:\/\/boluo66\.top\/uploads\/[^\s"'()<>\][]+/g;
+const NOTE_IMAGE_URL_RE = new RegExp(`(?:${managedUploadOrigins().map(origin => origin.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})/uploads/[^\\s"'()<>\\]\\[]+`, 'g');
 
 /** 从笔记/模板正文(html 或 markdown 源文本)提取本站上传图片 URL,去重 */
 export function extractNoteImageUrls(content) {

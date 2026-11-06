@@ -41,6 +41,27 @@ pnpm preview
 
 本地 preview 是可选验收工具，不是所有上线的强制二次确认门槛。
 
+### 独立本机测试环境
+
+macOS 可用 `pnpm local:start` 运行当前工作树的完整本机测试环境；在 `develop` 上启动即可查看待发版代码及尚未提交的本地修改。它使用独立 API、六个 Worker、Vite、MySQL 5.7、Redis、SeaweedFS 私有对象存储和 Mailpit 邮件捕获，保留 `main` 的正式发布流程。
+
+首次准备依赖：`brew install colima docker redis seaweedfs mailpit`。书签图标服务复用同级 `toolkit/favimg/src/index.js` 的解析器，在独立回环进程中运行；源码位置可在本机配置的 `LIGHTNOTE_LOCAL_FAVICON_ENTRY` 覆盖。MySQL 5.7 在专属 Colima 中以 amd64 容器运行，Apple Silicon 使用 Rosetta；首次启动会下载虚拟机与数据库镜像。MySQL 8 不能代替这里的 5.7 Schema 门禁。OCR、Office、视频与图片功能仍依赖对应的本机 CLI，通过本节及下文的运行时检查验证。
+
+```bash
+pnpm local:start    # 后台启动；首次初始化空库、迁移与合成测试账号
+pnpm local:status   # 查看依赖和进程状态
+pnpm local:check    # Schema、私有存储/分片、邮件、登录与 Worker 联通检查
+pnpm local:stop    # 停止应用和依赖，保留本地数据
+```
+
+- 网页为 `http://localhost:15173`，邮件箱为 `http://localhost:18025`，API 仅监听 `127.0.0.1:19001`。MySQL、Redis、S3 分别使用回环端口 13306、16379、19002；不复用已有本机实例。
+- 数据、日志、配置及 root/test/user/visitor 账号保存在 Git 忽略的 `.local-test/`；初始账号凭据只在 `.local-test/accounts.json` 查看，不写入文档、输出或提交。自行修改密码后以新密码为准，启动不重置密码；联通检查使用仍有效的已存测试凭据。停止服务不清空数据，重启不覆盖已有账号和资料。
+- 本机进程只读取 `.local-test/server.env`，不加载后端原 `.env`，也不继承终端中的服务凭据。数据库、Redis、存储、邮件及写入目录须通过隔离校验后才允许启动或消费本地提醒。
+- 首次建库优先读取本机 `.local-test/schema.sql` 的纯结构快照，不复制线上记录、账号、会话或队列；缺失时使用仓库结构基线并执行明确登记的本地迁移与现有 ensure。Schema 门禁失败即停止，不自动修改生产数据库。
+- 前端随 Vite 热更新；后端和 Worker 代码变化后停止、重新启动本机环境。`local:start` 会执行已登记的未完成迁移及结构补齐；停止应用后也可运行 `pnpm local:migrate` 单独初始化/升级，再重新启动。迁移执行记录在本地库，不自动重放历史数据迁移。
+- 开发涉及数据库、依赖或配置时，交付要求统一遵守[本机测试环境同步维护](./development.md#本机测试环境同步维护)。
+- 邮件全部捕获在本机；真实 AI、第三方登录、支付、厂商推送与 Host Agent 运维需要各自的独立配置或对应运行平台，不属于本地模拟通过即已完成的真实服务验收。默认不配置真实服务凭据，支付和外部推送保持关闭。
+
 ### 静态资源缓存
 
 - Service Worker 资源缓存发布后在浏览器与 App 各验证：页面已被接管；Wi-Fi 下空闲后 Cache Storage 的 `light-note-assets-v1` 含当前版本全部代码，蜂窝网络下只预取常驻入口；断网后打开未访问过的模块仍能加载；再次发布后只保留两版文件；App 的分享入口与网络出错页行为不变。紧急停用时把 `public/light-note-sw.js` 的 `ASSET_CACHE_ENABLED` 改为 `false` 并发布网页，客户端下次打开页面即更新 Service Worker 并清空资源缓存，回退为 HTTP 缓存。

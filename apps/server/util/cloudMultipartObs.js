@@ -52,7 +52,10 @@ export async function listCloudMultipartParts(key, uploadId) {
   let marker = 0;
   for (;;) {
     const page = await request('listParts', { Key: key, UploadId: uploadId, PartNumberMarker: marker, MaxParts: 1000 });
-    parts.push(...(page.Parts || []));
+    parts.push(...(page.Parts || []).map(part => process.env.LIGHTNOTE_LOCAL_TEST === '1'
+      // SeaweedFS 的 XML 用数字实体表示引号；OBS SDK 不会解码这类 ETag。
+      ? { ...part, ETag: String(part.ETag || '').replace(/&#(?:34|x22);|&quot;/gi, '"') }
+      : part));
     if (parts.length > 10000) throw Object.assign(new Error('OBS_PART_LIST_INVALID'), { status: 503 });
     if (!page.IsTruncated || page.IsTruncated === 'false') return parts;
     const next = Number(page.NextPartNumberMarker);

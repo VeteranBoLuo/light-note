@@ -16,6 +16,7 @@ import staticPrewarmManifestPlugin, { publicArtworkPlugin } from './src/vite/sta
 import path from 'path';
 export default defineConfig(({ command, mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
+  const isolated = env.LIGHTNOTE_LOCAL_TEST === '1';
   // 构建产物在生产域名下直接走同源请求；Vite serve 只允许连接本机后端，
   // 避免缺失或误配 .env 时把调试请求、游客在线状态写入生产运行时。
   if (command === 'serve') assertLocalViteBackend(env.VITE_ENV);
@@ -62,19 +63,19 @@ export default defineConfig(({ command, mode }) => {
       // 读 PORT 环境变量(便于 CI / 多实例 / 预览工具用分配端口);缺省仍用 vite 默认端口
       port: process.env.PORT ? Number(process.env.PORT) : undefined,
       proxy: {
-        ...createLocalBackendProxy(),
+        ...createLocalBackendProxy({ isolated }),
         '/obs': {
-          target: 'https://obs.cn-south-1.myhuaweicloud.com',
+          target: isolated ? 'http://127.0.0.1:19002' : 'https://obs.cn-south-1.myhuaweicloud.com',
           changeOrigin: true,
           rewrite: (path) => path.replace(/^\/obs/, ''),
           // 可能需要配置secure，如果遇到证书问题可尝试设置为false
           // secure: false,
         },
       },
-      open: true,
+      open: !isolated,
     },
     preview: {
-      proxy: createLocalBackendProxy(),
+      proxy: createLocalBackendProxy({ isolated }),
     },
     resolve: {
       alias: [

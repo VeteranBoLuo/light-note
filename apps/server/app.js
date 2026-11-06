@@ -80,8 +80,7 @@ import pool from './db/index.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-dotenv.config({ path: path.resolve(__dirname, '.env') });
-console.log('Loaded env from: 【.env】');
+dotenv.config({ path: process.env.DOTENV_CONFIG_PATH || path.resolve(__dirname, '.env') });
 
 // 建立一个Express服务器
 const app = express();
@@ -113,7 +112,7 @@ const allRouter = [
   ...baseRouter,
   {
     path: '/files',
-    router: express.static('/www/wwwroot/files'), // 设置静态文件目录,
+    router: express.static(process.env.LIGHTNOTE_LOCAL_TEST === '1' ? path.join(process.env.LIGHTNOTE_LOCAL_TEST_DIR, 'files') : '/www/wwwroot/files'),
   },
 ];
 allRouter.forEach((item) => {
@@ -346,8 +345,9 @@ process.on('uncaughtException', (err) => {
   process.exit(1);
 });
 
+const httpPort = process.env.LIGHTNOTE_LOCAL_TEST === '1' ? 19001 : 9001;
 let listeningReported = false;
-const server = app.listen(9001, () => {
+const server = app.listen(httpPort, process.env.LIGHTNOTE_LOCAL_TEST === '1' ? '127.0.0.1' : undefined, () => {
   listeningReported = true;
   console.log('服务器已启动：' + new Date().toLocaleString('zh-CN'));
 });
@@ -360,9 +360,8 @@ registerCommunityChatRealtimeHub(server);
 server.on('error', (error) => {
   if (error?.code === 'EADDRINUSE') {
     if (listeningReported) console.error('[启动失败] 上一行「服务器已启动」是误报，进程即将退出。');
-    console.error('[启动失败] 端口 9001 已被占用，多半是上一个 dev server 还在跑。');
-    console.error('           查看占用：lsof -nP -iTCP:9001 -sTCP:LISTEN');
-    console.error('           结束占用：pnpm free:server-port');
+    console.error(`[启动失败] 端口 ${httpPort} 已被占用，请先结束原服务后重试。`);
+    console.error(`           查看占用：lsof -nP -iTCP:${httpPort} -sTCP:LISTEN`);
     process.exit(1);
   }
   console.error('[启动失败] code=%s', stableAgentErrorCode(error));

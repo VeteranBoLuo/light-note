@@ -1,3 +1,4 @@
+import { managedUploadUrl } from '../uploadOrigin.js';
 import { createProgressReporter } from './progress.js';
 import { registerAsset } from '../imagePreview/references.js';
 import fs from 'node:fs/promises';
@@ -308,7 +309,7 @@ export async function processImportTask() {
     for (const key of payload.images) {
       const filename = `import-${id}-${key}`;
       await publishImportImage(path.join(directory, 'assets', key), path.join(NOTE_IMAGE_DIR, filename));
-      const url = `https://boluo66.top/uploads/${filename}`;
+      const url = managedUploadUrl(filename);
       content = content.replaceAll(`https://note-import.invalid/${key}`, url);
       const size = (await fs.stat(path.join(NOTE_IMAGE_DIR, filename))).size;
       await transaction((db) =>

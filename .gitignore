@@ -56,3 +56,6 @@ apps/web/public/downloads/android/*.apk
 
 # 本地后端生成的可再生派生资源（如手绘卡片缩略图）。
 apps/server/.runtime/
+
+# 独立本机测试环境：数据库、文件、邮件、配置和本地账号。
+.local-test/
