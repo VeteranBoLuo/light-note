@@ -280,6 +280,9 @@
     font-size: var(--ui-font-14, 14px);
     line-height: normal;
   }
+  .navigation-tab .navigation-todo-entry:hover {
+    text-decoration: none;
+  }
   .navigation-pill-entry {
     position: relative;
     min-height: var(--ui-control-34, 34px);
