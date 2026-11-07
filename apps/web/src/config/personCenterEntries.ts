@@ -1,6 +1,6 @@
 import icon from '@/config/icon';
 
-export type PersonCenterEntryTone = 'neutral' | 'growth' | 'store' | 'community' | 'support';
+export type PersonCenterEntryTone = 'neutral' | 'growth' | 'store' | 'community';
 
 export interface PersonCenterEntry {
   name: string;
@@ -106,14 +106,6 @@ export const PERSON_CENTER_ENTRIES = {
     icon: icon.noteDetail.history,
     tone: 'neutral',
   },
-  support: {
-    name: 'support',
-    labelKey: 'support.entry',
-    descriptionKey: 'support.entryDescription',
-    path: '/support',
-    icon: icon.support.heart,
-    tone: 'support',
-  },
 } as const satisfies Record<string, PersonCenterEntry>;
 
 export const DESKTOP_PERSON_CENTER_PRIMARY_ENTRIES = [
@@ -126,8 +118,6 @@ export const DESKTOP_PERSON_CENTER_PRIMARY_ENTRIES = [
   PERSON_CENTER_ENTRIES.help,
   PERSON_CENTER_ENTRIES.updateLogs,
 ] as const;
-
-export const DESKTOP_PERSON_CENTER_SECONDARY_ENTRIES = [PERSON_CENTER_ENTRIES.support] as const;
 
 export const MOBILE_PERSON_CENTER_QUICK_ENTRIES = [
   PERSON_CENTER_ENTRIES.growth,
@@ -144,5 +134,4 @@ export const MOBILE_PERSON_CENTER_COMMUNICATION_ENTRIES = [
   PERSON_CENTER_ENTRIES.feedback,
   PERSON_CENTER_ENTRIES.help,
   PERSON_CENTER_ENTRIES.updateLogs,
-  PERSON_CENTER_ENTRIES.support,
 ] as const;

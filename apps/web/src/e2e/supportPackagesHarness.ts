@@ -5,6 +5,7 @@ import { createMemoryHistory, createRouter } from 'vue-router';
 import { SUPPORT_PACKAGE_CATALOG, SUPPORT_PACKAGE_CATALOG_VERSION } from '@lightnote/shared';
 import globalDirect from '@/config/globalDirect';
 import { RoleEnum } from '@/config/bookmarkCfg';
+import { usesMobileDeviceLayout } from '@/config/responsive';
 import request from '@/http/request';
 import enUS from '@/i18n/locales/en-US';
 import zhCN from '@/i18n/locales/zh-CN';
@@ -26,7 +27,10 @@ const isGuest = visualState === 'guest';
 
 document.documentElement.dataset.theme = theme;
 document.documentElement.lang = locale;
-document.documentElement.classList.toggle('light-note-mobile-rendering', window.innerWidth < 768);
+document.documentElement.classList.toggle(
+  'light-note-mobile-rendering',
+  params.get('renderProfile') === 'mobile' || usesMobileDeviceLayout(window.innerWidth),
+);
 document.body.dataset.visualState = visualState;
 
 function apiResponse<TConfig>(config: TConfig, data: unknown) {
@@ -48,6 +52,7 @@ function regularPackages(): SupportPackage[] {
   return SUPPORT_PACKAGE_CATALOG.map((item) => ({
     ...item,
     firstPurchaseStatus: 'not_applicable',
+    checkoutAvailable: visualState !== 'unmapped' && visualState !== 'preview',
   }));
 }
 
@@ -55,53 +60,54 @@ function storeState(): EntitlementStoreState {
   return {
     authenticated: !isGuest,
     orderSyncAvailable: true,
-    orderCount: isGuest ? 0 : 2,
-    totalAmount: isGuest ? '0.00' : '94.00',
+    orderCount: isGuest || visualState === 'empty' ? 0 : 2,
+    totalAmount: isGuest || visualState === 'empty' ? '0.00' : '94.00',
     grantedTokens: isGuest ? 0 : 7_100_000,
     grantedStorageMb: isGuest ? 0 : 2_048,
     lastPurchaseAt: isGuest ? null : '2026-08-25 12:30:00',
-    recentOrders: isGuest
-      ? []
-      : [
-          {
-            id: 'visual-combo-order',
-            amount: '88.00',
-            month: 1,
-            productType: 0,
-            optionKey: null,
-            orderPurpose: 'entitlement_purchase',
-            ownershipSource: 'checkout',
-            confirmedAt: '2026-08-25 12:30:00',
-            rewardStatus: 'credited',
-            rewardReasonCode: null,
-            rewardTokens: 6_500_000,
-            grantedTokens: 6_500_000,
-            rewardStorageMb: 2_048,
-            grantedStorageMb: 2_048,
-            intentType: 'permanent',
-            skuId: 'combo-88',
-            firstPurchaseApplied: true,
-          },
-          {
-            id: 'visual-ai-order',
-            amount: '6.00',
-            month: 1,
-            productType: 0,
-            optionKey: null,
-            orderPurpose: 'entitlement_purchase',
-            ownershipSource: 'checkout',
-            confirmedAt: '2026-08-24 09:10:00',
-            rewardStatus: 'credited',
-            rewardReasonCode: null,
-            rewardTokens: 600_000,
-            grantedTokens: 600_000,
-            rewardStorageMb: 0,
-            grantedStorageMb: 0,
-            intentType: 'campaign',
-            skuId: 'summer-ai-6',
-            firstPurchaseApplied: false,
-          },
-        ],
+    recentOrders:
+      isGuest || visualState === 'empty'
+        ? []
+        : [
+            {
+              id: 'visual-combo-order',
+              amount: '88.00',
+              month: 1,
+              productType: 0,
+              optionKey: null,
+              orderPurpose: 'entitlement_purchase',
+              ownershipSource: 'checkout',
+              confirmedAt: '2026-08-25 12:30:00',
+              rewardStatus: 'credited',
+              rewardReasonCode: null,
+              rewardTokens: 6_500_000,
+              grantedTokens: 6_500_000,
+              rewardStorageMb: 2_048,
+              grantedStorageMb: 2_048,
+              intentType: 'permanent',
+              skuId: 'combo-88',
+              firstPurchaseApplied: true,
+            },
+            {
+              id: 'visual-ai-order',
+              amount: '6.00',
+              month: 1,
+              productType: 0,
+              optionKey: null,
+              orderPurpose: 'entitlement_purchase',
+              ownershipSource: 'checkout',
+              confirmedAt: '2026-08-24 09:10:00',
+              rewardStatus: 'credited',
+              rewardReasonCode: null,
+              rewardTokens: 600_000,
+              grantedTokens: 600_000,
+              rewardStorageMb: 0,
+              grantedStorageMb: 0,
+              intentType: 'campaign',
+              skuId: 'summer-ai-6',
+              firstPurchaseApplied: false,
+            },
+          ],
   };
 }
 
@@ -141,12 +147,14 @@ function catalogFixture() {
               remainingPurchases: campaignLimitReached ? 0 : 1,
               limitReached: campaignLimitReached,
               hasActiveCheckout: campaignPending,
+              checkoutAvailable: visualState !== 'preview',
             },
           ],
   };
 }
 
 let queryCount = 0;
+let quote = { amount: 9.9, benefit: benefit(100000, 256) };
 let publicPreference = { participateInRanking: true, showIdentity: true, adminHidden: false };
 const campaignFixture = () => ({
   campaignKey: 'autumn',
@@ -177,6 +185,7 @@ const campaignFixture = () => ({
     remainingPurchases: 1,
     limitReached: visualState === 'limited',
     hasActiveCheckout: false,
+    checkoutAvailable: true,
     startsAt: new Date().toISOString(),
     endsAt: new Date(Date.now() + 86400000 * 7).toISOString(),
   })),
@@ -191,22 +200,59 @@ request.defaults.adapter = async (config) => {
       return { ...apiResponse(config, null), data: { status: 404, msg: 'Hidden', data: null } };
     return apiResponse(config, campaignFixture());
   }
-  if (config.url === '/api/support/checkout-intents')
+  if (config.url === '/api/support/checkout-intents') {
+    const { skuId } = JSON.parse(String(config.data));
+    const index = SUPPORT_PACKAGE_CATALOG.findIndex((item) => item.skuId === skuId);
+    const item = index < 0 ? null : SUPPORT_PACKAGE_CATALOG[index];
+    quote = item ? { amount: item.amount, benefit: { ...item.base } } : { amount: 9.9, benefit: benefit(100000, 256) };
+    queryCount = 0;
+    const url = new URL('https://ifdian.net/order/create');
+    url.search = new URLSearchParams({
+      product_type: '1',
+      plan_id: 'a'.repeat(32),
+      sku: JSON.stringify([{ sku_id: (index + 1).toString(16).padStart(32, '0'), count: 1 }]),
+      custom_order_id: 'visual_fixture_only_not_a_real_token',
+    }).toString();
     return apiResponse(config, {
       intentId: '33333333-3333-4333-8333-333333333333',
-      url: 'https://afdian.com/a/lightnote',
+      url: url.toString(),
     });
+  }
   if (String(config.url).startsWith('/api/support/checkout-intents/'))
     return apiResponse(config, {
       intentId: '33333333-3333-4333-8333-333333333333',
       status: visualState === 'review' ? 'review' : ++queryCount > 1 ? 'credited' : 'pending',
-      amount: 9.9,
-      benefit: { aiTokens: 100000, storageMb: 256 },
+      ...quote,
     });
-  if (config.url === '/api/support/state')
+  if (config.url === '/api/support/store/orders') {
+    const items =
+      config.params?.scope === 'history' && !isGuest && visualState !== 'empty'
+        ? [
+            {
+              ...storeState().recentOrders[0],
+              id: 'visual-donation-order',
+              amount: '18.00',
+              orderPurpose: 'donation',
+              confirmedAt: '2026-07-05 12:30:00',
+              rewardStatus: null,
+              rewardTokens: 0,
+              grantedTokens: 0,
+              rewardStorageMb: 0,
+              grantedStorageMb: 0,
+              intentType: 'donation',
+              skuId: null,
+              firstPurchaseApplied: false,
+            },
+          ]
+        : storeState().recentOrders;
+    return apiResponse(config, { items, total: items.length, page: 1, pageSize: 10 });
+  }
+  if (config.url === '/api/support/state') {
+    if (visualState === 'support-error') throw new Error('Support fixture unavailable');
+    if (visualState === 'support-loading') await new Promise(() => {});
     return apiResponse(config, {
       authenticated: !isGuest,
-      oauthAvailable: true,
+      oauthAvailable: visualState !== 'empty',
       orderSyncAvailable: true,
       linked: false,
       orderCount: 0,
@@ -214,8 +260,7 @@ request.defaults.adapter = async (config) => {
       publicPreference,
       recentOrders: [],
     });
-  if (config.url === '/api/support/leaderboard')
-    return apiResponse(config, { scope: 'all_time', items: [], mine: null, totalParticipants: 0 });
+  }
   if (config.url === '/api/support/public-preference') {
     publicPreference = { ...publicPreference, ...JSON.parse(String(config.data)) };
     return apiResponse(config, publicPreference);
@@ -274,7 +319,13 @@ request.defaults.adapter = async (config) => {
 const router = createRouter({
   history: createMemoryHistory(),
   routes: [
-    { path: '/campaign/:campaignKey', component: { render: () => null } },
+    { path: '/store', name: 'entitlementStore', component: { render: () => null } },
+    {
+      path: '/support',
+      name: 'support',
+      redirect: (to) => ({ name: 'entitlementStore', query: { ...to.query, records: 'history' } }),
+    },
+    { path: '/campaign/:campaignKey', name: 'campaign', component: { render: () => null } },
     { path: '/:pathMatch(.*)*', component: { render: () => null } },
   ],
 });
@@ -287,7 +338,7 @@ await router.push({
         : params.get('page') === 'draft'
           ? '/draft'
           : '/store',
-  query: { category: requestedCategory },
+  query: { category: requestedCategory, ...(params.has('records') ? { records: params.get('records') } : {}) },
 });
 
 const pinia = createPinia();

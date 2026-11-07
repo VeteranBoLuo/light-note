@@ -1,126 +1,53 @@
-import {
-  AFDIAN_CHECKOUT_OPTIONS as SHARED_AFDIAN_CHECKOUT_OPTIONS,
-  AFDIAN_CREATOR_URL,
-  type AfdianCheckoutOptionKey,
-} from '@lightnote/shared';
-
-const AFDIAN_CREATOR_HOSTS = new Set(['afdian.com', 'www.afdian.com']);
 const AFDIAN_ORDER_HOSTS = new Set(['ifdian.net', 'www.ifdian.net']);
-const AFDIAN_CREATOR_PATH = /^\/a\/[^/]+(?:\/.*)?$/;
 const AFDIAN_ORDER_PATH = '/order/create';
 const AFDIAN_ID_PATTERN = /^[0-9a-f]{32}$/i;
-const AFDIAN_ORDER_QUERY_KEYS = new Set([
-  'plan_id',
-  'product_type',
-  'user_id',
-  // 爱发电“复制链接”会附带下列空值或来源参数；校验后会统一丢弃。
-  'remark',
-  'affiliate_code',
-  'fr',
-  // 轻笺后端签发的一次性归属凭证。只允许 URL 安全字符，且不写入日志。
-  'custom_order_id',
-  // 套餐结算由后端锁定金额，禁止与 plan_id 同时出现。
-  'custom_price',
-]);
+const AFDIAN_PRODUCT_QUERY_KEYS = ['product_type', 'plan_id', 'sku', 'custom_order_id'];
 
-export type AfdianSupportOptionKey = AfdianCheckoutOptionKey;
-
-export interface AfdianSupportOption {
-  key: AfdianSupportOptionKey;
-  amount: number | null;
-  url: string;
-  configured: boolean;
-}
-
-/**
- * 只接受爱发电官方 HTTPS 创作者页，或结构严格受限的官方下单页。
- * 订单链接仅保留方案 ID / 创作者 ID 等核心字段，不向第三方续传空留言或推广参数。
- */
-export function normalizeAfdianSupportUrl(value: unknown): string {
+export function normalizeAfdianPackageCheckoutUrl(value: unknown): string {
   if (typeof value !== 'string' || !value.trim()) return '';
 
   try {
     const url = new URL(value.trim());
-    const hostname = url.hostname.toLowerCase();
+    if (
+      url.protocol !== 'https:' ||
+      url.username ||
+      url.password ||
+      url.port ||
+      url.hash ||
+      !AFDIAN_ORDER_HOSTS.has(url.hostname) ||
+      url.pathname !== AFDIAN_ORDER_PATH
+    )
+      return '';
 
-    if (url.protocol !== 'https:' || url.username || url.password) return '';
+    const params = url.searchParams;
+    if (
+      Array.from(params).length !== AFDIAN_PRODUCT_QUERY_KEYS.length ||
+      AFDIAN_PRODUCT_QUERY_KEYS.some((key) => params.getAll(key).length !== 1)
+    )
+      return '';
 
-    if (AFDIAN_CREATOR_HOSTS.has(hostname)) {
-      if (!AFDIAN_CREATOR_PATH.test(url.pathname)) return '';
-      return url.toString();
-    }
+    const planId = params.get('plan_id') || '';
+    const token = params.get('custom_order_id') || '';
+    const raw = params.get('sku') || '';
+    if (
+      params.get('product_type') !== '1' ||
+      !AFDIAN_ID_PATTERN.test(planId) ||
+      !/^[A-Za-z0-9_-]{32,128}$/.test(token) ||
+      raw.length > 128
+    )
+      return '';
 
-    if (!AFDIAN_ORDER_HOSTS.has(hostname) || url.pathname !== AFDIAN_ORDER_PATH || url.hash) return '';
+    const lines = JSON.parse(raw);
+    const item = Array.isArray(lines) && lines.length === 1 ? lines[0] : null;
+    if (item?.count !== 1 || typeof item.sku_id !== 'string' || !AFDIAN_ID_PATTERN.test(item.sku_id)) return '';
 
-    const queryKeys = Array.from(url.searchParams.keys());
-    if (queryKeys.some((key) => !AFDIAN_ORDER_QUERY_KEYS.has(key))) return '';
-
-    const coreKeys = ['plan_id', 'product_type', 'user_id', 'custom_order_id', 'custom_price'];
-    if (coreKeys.some((key) => url.searchParams.getAll(key).length > 1)) return '';
-
-    const planId = url.searchParams.get('plan_id') || '';
-    const productType = url.searchParams.get('product_type') || '';
-    const userId = url.searchParams.get('user_id') || '';
-    const hasPlanId = url.searchParams.has('plan_id');
-    const hasProductType = url.searchParams.has('product_type');
-    const hasUserId = url.searchParams.has('user_id');
-    const customOrderId = url.searchParams.get('custom_order_id') || '';
-    const hasCustomOrderId = url.searchParams.has('custom_order_id');
-    const customPrice = url.searchParams.get('custom_price') || '';
-    const hasCustomPrice = url.searchParams.has('custom_price');
-    const normalizedUrl = new URL(`https://${hostname}${AFDIAN_ORDER_PATH}`);
-
-    if (hasCustomOrderId && !/^[A-Za-z0-9_-]{32,128}$/.test(customOrderId)) return '';
-
-    if (hasPlanId) {
-      if (!AFDIAN_ID_PATTERN.test(planId) || !hasProductType || productType !== '0' || hasUserId || hasCustomPrice)
-        return '';
-      normalizedUrl.searchParams.set('plan_id', planId.toLowerCase());
-      normalizedUrl.searchParams.set('product_type', '0');
-      if (hasCustomOrderId) normalizedUrl.searchParams.set('custom_order_id', customOrderId);
-      return normalizedUrl.toString();
-    }
-
-    if (!hasUserId || !AFDIAN_ID_PATTERN.test(userId) || hasProductType) return '';
-    if (hasCustomPrice && (!hasCustomOrderId || !/^(?:[1-9]\d{0,7})(?:\.\d{1,2})?$/.test(customPrice))) return '';
-    normalizedUrl.searchParams.set('user_id', userId.toLowerCase());
-    if (hasCustomPrice) normalizedUrl.searchParams.set('custom_price', Number(customPrice).toFixed(2));
-    if (hasCustomOrderId) normalizedUrl.searchParams.set('custom_order_id', customOrderId);
-    return normalizedUrl.toString();
+    params.set('plan_id', planId.toLowerCase());
+    params.set('sku', JSON.stringify([{ sku_id: item.sku_id.toLowerCase(), count: 1 }]));
+    return url.toString();
   } catch {
     return '';
   }
 }
-
-function resolveCreatorUrl(value: unknown): string {
-  if (typeof value === 'string' && value.trim()) return normalizeAfdianSupportUrl(value);
-  return normalizeAfdianSupportUrl(AFDIAN_CREATOR_URL);
-}
-
-function createSupportOption(
-  key: AfdianSupportOptionKey,
-  amount: number | null,
-  sourceUrl: string,
-): AfdianSupportOption {
-  const url = normalizeAfdianSupportUrl(sourceUrl);
-  return Object.freeze({ key, amount, url, configured: Boolean(url) });
-}
-
-export const AFDIAN_SUPPORT_URL = resolveCreatorUrl(import.meta.env.VITE_AFDIAN_SUPPORT_URL);
-export const AFDIAN_SUPPORT_CONFIGURED = Boolean(AFDIAN_SUPPORT_URL);
-
-export const AFDIAN_SUPPORT_OPTIONS: readonly AfdianSupportOption[] = Object.freeze([
-  ...SHARED_AFDIAN_CHECKOUT_OPTIONS.map((option) => {
-    const url = new URL('https://ifdian.net/order/create');
-    if (option.planId) {
-      url.searchParams.set('plan_id', option.planId);
-      url.searchParams.set('product_type', '0');
-    } else if (option.creatorId) {
-      url.searchParams.set('user_id', option.creatorId);
-    }
-    return createSupportOption(option.key, option.amount, url.toString());
-  }),
-]);
 
 type ExternalWindowOpener = (url: string, target: string, features: string) => unknown;
 
@@ -135,42 +62,11 @@ function openNewPage(url: string, openWindow?: ExternalWindowOpener): boolean {
   return true;
 }
 
-/**
- * 浏览器/PWA 会新开标签页；轻笺 Android WebView 会拦截这个 _blank 请求，
- * 交给应用内浏览页打开，因此网页与 APK 共用同一入口。
- */
-export function openAfdianSupportPage(value: unknown = AFDIAN_SUPPORT_URL, openWindow?: ExternalWindowOpener): boolean {
-  const url = normalizeAfdianSupportUrl(value);
-  if (!url) return false;
-
-  return openNewPage(url, openWindow);
+/** Android WebView 拦截同一个 _blank 请求并交给应用内浏览页。 */
+export function openAfdianPackageCheckout(value: unknown, openWindow?: ExternalWindowOpener): boolean {
+  const url = normalizeAfdianPackageCheckoutUrl(value);
+  return Boolean(url) && openNewPage(url, openWindow);
 }
-
-/** 同步打开轻笺后端跳转端点，避免等待接口后再开窗被浏览器或 Android WebView 拦截。 */
-export function openTrackedAfdianCheckout(
-  optionKey: AfdianSupportOptionKey,
-  openWindow?: ExternalWindowOpener,
-): boolean {
-  if (!SHARED_AFDIAN_CHECKOUT_OPTIONS.some((option) => option.key === optionKey)) return false;
-  return openNewPage(`/api/support/donation/checkout?option=${encodeURIComponent(optionKey)}`, openWindow);
-}
-
-export function openTrackedSupportPackageCheckout(
-  skuId: string,
-  catalogVersion: string,
-  openWindow?: ExternalWindowOpener,
-  flowId?: string,
-): boolean {
-  if (!/^[A-Za-z0-9_-]{3,64}$/.test(String(skuId || '')) || !/^[-A-Za-z0-9:]{3,64}$/.test(catalogVersion)) {
-    return false;
-  }
-  const query = new URLSearchParams({ skuId, catalogVersion });
-  if (flowId && /^[a-f0-9-]{36}$/.test(flowId)) query.set('flowId', flowId);
-  return openNewPage(`/api/support/checkout?${query.toString()}`, openWindow);
-}
-
-/** 资源商店购买仍复用现有安全结算端点，名称与用户语义保持一致。 */
-export const openTrackedEntitlementCheckout = openTrackedSupportPackageCheckout;
 
 export function openAfdianOAuthPage(openWindow?: ExternalWindowOpener): boolean {
   return openNewPage('/api/support/afdian/oauth/start', openWindow);

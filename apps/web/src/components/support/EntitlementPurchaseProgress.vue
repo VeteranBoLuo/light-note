@@ -1,5 +1,7 @@
 <template>
-  <BButton v-if="intentId && !visible" size="small" @click="visible = true">{{ t('autumn.viewOrder') }}</BButton>
+  <BButton v-if="!hideTrigger && intentId && !visible" size="small" @click="visible = true">{{
+    t('autumn.viewOrder')
+  }}</BButton>
   <BModal
     v-model:visible="visible"
     :title="t('autumn.checkoutTitle')"
@@ -16,12 +18,16 @@
           {{ formatAiQuotaTokens(status.benefit.aiTokens, locale) }} Token · {{ status.benefit.storageMb }} MB</p
         >
         <p v-if="error" role="alert">{{ t(intentId ? 'autumn.queryError' : 'autumn.createFailed') }}</p>
+        <p v-if="paymentUrl && (!status || status.status === 'pending')">{{
+          t('entitlementStore.layout.paymentInstructions')
+        }}</p>
+        <p v-if="status?.status === 'review'">{{ t('entitlementStore.layout.paymentReview') }}</p>
         <p>{{ t('autumn.paymentHint') }}</p>
         <div class="purchase-progress__actions">
           <BButton
             v-if="paymentUrl && (!status || status.status === 'pending')"
             type="primary"
-            @click="openAfdianSupportPage(paymentUrl)"
+            @click="openAfdianPackageCheckout(paymentUrl)"
             >{{ t('autumn.pay') }}</BButton
           >
           <BButton v-if="intentId" :loading="querying" @click="refresh">{{ t('common.refresh') }}</BButton>
@@ -32,15 +38,16 @@
 </template>
 <script setup lang="ts">
   import { useForegroundRefresh } from '@/composables/useForegroundRefresh';
-  import { ref, watch, onBeforeUnmount } from 'vue';
+  import { computed, ref, watch, onBeforeUnmount } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useUserStore } from '@/store';
   import { createCheckoutIntent, queryCheckoutIntent, type CheckoutStatus } from '@/api/supportApi';
-  import { openAfdianSupportPage } from '@/config/support';
+  import { normalizeAfdianPackageCheckoutUrl, openAfdianPackageCheckout } from '@/config/support';
   import { formatAiQuotaTokens } from '@/composables/useAiQuotaStatus';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
+  defineProps<{ hideTrigger?: boolean }>();
   const emit = defineEmits<{ credited: [] }>();
   const { t, locale } = useI18n();
   const user = useUserStore();
@@ -115,8 +122,13 @@
     try {
       const result = await createCheckoutIntent(skuId, version, flowId);
       if (gen !== generation || owner !== user.id) return;
+      const fixedProductUrl = normalizeAfdianPackageCheckoutUrl(result.url);
+      if (!fixedProductUrl) {
+        error.value = true;
+        return;
+      }
       intentId.value = result.intentId;
-      paymentUrl.value = result.url;
+      paymentUrl.value = fixedProductUrl;
       try {
         sessionStorage.setItem(
           savedKey,
@@ -133,8 +145,12 @@
     }
   }
   useForegroundRefresh({
-    refresh: async () => { attempts = 0; await refresh(); },
-    trailingWake: true, staleMs: 1000,
+    refresh: async () => {
+      attempts = 0;
+      await refresh();
+    },
+    trailingWake: true,
+    staleMs: 1000,
     canRefresh: () => visible.value && Boolean(intentId.value) && !creating.value,
   });
   function foreground() {
@@ -170,7 +186,11 @@
     stop();
     document.removeEventListener('visibilitychange', foreground);
   });
-  defineExpose({ start });
+  const hasOrder = computed(() => Boolean(intentId.value));
+  function showOrder() {
+    if (hasOrder.value) visible.value = true;
+  }
+  defineExpose({ start, hasOrder, showOrder });
 </script>
 <style scoped>
   .purchase-progress {

@@ -1,6 +1,5 @@
 <template>
   <EntitlementStore v-if="route.path === '/store'" :data-visual-state="visualState" />
-  <SupportUs v-else-if="route.path === '/support'" />
   <CampaignPage v-else-if="route.path.startsWith('/campaign/')" />
   <CampaignShowcase v-else-if="route.path === '/draft'" draft />
   <main v-else style="padding: 24px">原书签任务 · 视觉验收</main>
@@ -8,7 +7,6 @@
 </template>
 
 <script setup lang="ts">
-  import SupportUs from '@/view/support/SupportUs.vue';
   import CampaignPage from '@/view/campaign/CampaignPage.vue';
   import CampaignShowcase from '@/components/support/CampaignShowcase.vue';
   import EntitlementStore from '@/view/entitlementStore/EntitlementStore.vue';

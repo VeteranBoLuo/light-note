@@ -42,7 +42,7 @@ it('预热的导航入口覆盖手机底栏、PC 侧栏与“我的”页，且�
     'route.searchCenter',
     'route.growth',
     'route.personCenter',
-    'route.support',
+    'route.entitlementStore',
   ]) {
     expect(navigation.groups).toContain(group);
   }

@@ -107,10 +107,56 @@ function connectionFor({
 }
 
 const ENABLED_ENV = { SUPPORT_PACKAGES_GRANT_ENABLED: 'true' };
+const FIXED_PLAN = 'a'.repeat(32);
+const FIXED_SKU = 'b'.repeat(32);
+
+function fixedProductOrder(overrides = {}) {
+  return packageOrder({
+    sku_id: 'ai-50',
+    catalog_version: SUPPORT_PACKAGE_CATALOG_VERSION,
+    product_type: 1,
+    plan_id: FIXED_PLAN,
+    product_sku_id: FIXED_SKU,
+    afdian_plan_id: FIXED_PLAN,
+    afdian_sku_id: FIXED_SKU,
+    total_amount: '50.00',
+    quoted_amount: '50.00',
+    base_ai_tokens: 2_500_000,
+    quoted_ai_tokens: 2_500_000,
+    base_storage_mb: 0,
+    quoted_storage_mb: 0,
+    first_purchase_candidate: 0,
+    ...overrides,
+  });
+}
+
 
 beforeEach(() => {
   entitlementMocks.creditAi.mockClear();
   entitlementMocks.earnStorage.mockReset().mockResolvedValue(true);
+});
+
+describe('固定商品到账核验', () => {
+  it('准确匹配时只到账所选套餐的固定权益', async () => {
+    const connection = connectionFor();
+    await expect(syncAfdianPackageEntitlementForOrder(connection, fixedProductOrder(), { env: ENABLED_ENV }))
+      .resolves.toMatchObject({ status: SUPPORT_ENTITLEMENT_STATUS.CREDITED, aiTokens: 2_500_000, storageMb: 0 });
+    expect(entitlementMocks.creditAi).toHaveBeenCalledOnce();
+    expect(entitlementMocks.earnStorage).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['同价的云空间型号', { product_sku_id: 'c'.repeat(32) }],
+    ['其他商品方案', { plan_id: 'c'.repeat(32) }],
+    ['没有单件明细证明', { product_sku_id: null }],
+    ['赞助订单', { product_type: 0 }],
+    ['通过旧结算意图购买固定商品', { afdian_plan_id: null, afdian_sku_id: null }],
+  ])('%s 进入人工复核', async (_case, overrides) => {
+    await expect(syncAfdianPackageEntitlementForOrder(connectionFor(), fixedProductOrder(overrides), { env: ENABLED_ENV }))
+      .resolves.toMatchObject({ status: SUPPORT_ENTITLEMENT_STATUS.MANUAL_REVIEW, reasonCode: 'product_mismatch' });
+    expect(entitlementMocks.creditAi).not.toHaveBeenCalled();
+    expect(entitlementMocks.earnStorage).not.toHaveBeenCalled();
+  });
 });
 
 describe('爱发电 v2 通用权益原子发放', () => {

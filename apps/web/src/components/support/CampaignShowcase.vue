@@ -65,11 +65,11 @@
                     ? t('entitlementStore.limitReached')
                     : item.hasActiveCheckout
                       ? t('entitlementStore.checkoutPending')
-                      : presentation?.checkoutEnabled
+                      : presentation?.checkoutEnabled && item.checkoutAvailable === true
                         ? t('autumn.purchase')
                         : t(`autumn.${presentation?.lifecycle || 'upcoming'}`)
               "
-              :disabled="draft || !presentation?.checkoutEnabled || item.limitReached || item.hasActiveCheckout"
+              :disabled="draft || !presentation?.checkoutEnabled || item.checkoutAvailable !== true || item.limitReached || item.hasActiveCheckout"
               @select="emit('select', item)"
             />
           </div> </section

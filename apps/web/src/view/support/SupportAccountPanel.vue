@@ -12,11 +12,12 @@
           </span>
         </div>
         <p v-if="!state.authenticated">{{ t('support.accountGuestDescription') }}</p>
+        <p v-else-if="archived">{{ t('entitlementStore.layout.supportAccountHint') }}</p>
         <p v-else-if="state.linked">{{ t('support.accountLinkedDescription') }}</p>
         <p v-else>{{ t('support.accountUnlinkedDescription') }}</p>
       </div>
       <BButton
-        v-if="state.authenticated && state.oauthAvailable"
+        v-if="state.authenticated && (state.linked || state.oauthAvailable)"
         class="support-account-panel__action"
         :type="state.linked ? undefined : 'primary'"
         :loading="unlinking"
@@ -65,7 +66,11 @@
           <div class="support-account-panel__privacy-title">
             <h3>{{ t('support.rankingPreferenceTitle') }}</h3>
             <BChip
-              v-if="state.publicPreference.participateInRanking && state.publicPreference.showIdentity"
+              v-if="
+                state.publicPreference.participateInRanking &&
+                state.publicPreference.showIdentity &&
+                !state.publicPreference.adminHidden
+              "
               tone="success"
             >
               {{ t('support.rankingPublicBadge') }}
@@ -79,8 +84,14 @@
         <div class="support-account-panel__privacy-control">
           <span>{{ t('support.rankingShowIdentity') }}</span>
           <BSwitch
-            :checked="state.publicPreference.showIdentity"
-            :disabled="preferenceSaving || !state.publicPreference.participateInRanking"
+            controlled
+            :checked="state.publicPreference.showIdentity && !state.publicPreference.adminHidden"
+            :disabled="
+              preferenceSaving ||
+              unlinking ||
+              !state.publicPreference.participateInRanking ||
+              state.publicPreference.adminHidden
+            "
             :aria-label="t('support.rankingShowIdentity')"
             @change="toggleIdentity"
           />
@@ -108,7 +119,7 @@
       </div>
 
       <p v-if="!state.orderSyncAvailable" class="support-account-panel__warning" role="status">
-        {{ t('support.accountSyncUnavailable') }}
+        {{ t(archived ? 'entitlementStore.layout.supportSyncUnavailable' : 'support.accountSyncUnavailable') }}
       </p>
     </template>
   </BCard>
@@ -129,6 +140,7 @@
     state: AfdianSupportState;
     unlinking: boolean;
     preferenceSaving: boolean;
+    archived?: boolean;
   }>();
   const emit = defineEmits<{
     link: [];
@@ -140,7 +152,7 @@
   const providerInitial = computed(() => (props.state.providerAccount?.name || t('support.platformName')).slice(0, 1));
   const rankingDescription = computed(() =>
     props.state.publicPreference.participateInRanking
-      ? props.state.publicPreference.showIdentity
+      ? props.state.publicPreference.showIdentity && !props.state.publicPreference.adminHidden
         ? t('support.rankingNamedDescription')
         : t('support.rankingAnonymousDescription')
       : t('support.rankingExcludedDescription'),

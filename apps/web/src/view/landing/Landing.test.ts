@@ -465,18 +465,18 @@ describe('Landing CTA', () => {
     expect(mocks.bookmark.openAuthModal).not.toHaveBeenCalled();
   });
 
-  it('把官网的支持入口收敛到站内说明页', async () => {
+  it('官网的购买入口统一打开资源商店', async () => {
     const host = await mountLanding();
-    const reasonLink = host.querySelector<HTMLAnchorElement>('.reason-support-link');
-    const footerLink = host.querySelector<HTMLAnchorElement>('.footer-support-link');
+    const reasonLink = host.querySelector<HTMLAnchorElement>('.reason-store-link');
+    const footerLink = host.querySelector<HTMLAnchorElement>('.footer-store-link');
 
-    expect(reasonLink?.getAttribute('href')).toBe('/support');
-    expect(footerLink?.getAttribute('href')).toBe('/support');
-    expect(host.querySelectorAll<HTMLAnchorElement>('a[href="/support"]')).toHaveLength(2);
+    expect(reasonLink?.getAttribute('href')).toBe('/store');
+    expect(footerLink?.getAttribute('href')).toBe('/store');
+    expect(host.querySelectorAll<HTMLAnchorElement>('a[href="/store"]')).toHaveLength(2);
 
     reasonLink?.click();
     await nextTick();
-    expect(mocks.routerPush).toHaveBeenCalledWith('/support');
+    expect(mocks.routerPush).toHaveBeenCalledWith('/store');
   });
 
   it('展示浏览器扩展独立展区、长期商店链接与六段导航', async () => {

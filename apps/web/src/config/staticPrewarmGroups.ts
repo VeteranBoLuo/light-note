@@ -10,7 +10,6 @@ export const PREWARM_RUNTIME_ENTRIES: Record<string, string> = {
   'route.cloudSpace': 'view/cloudSpace/cloudSpace.vue',
   'route.tagMg': 'components/tagSpace/TagSpaceEntry.vue',
   'route.searchCenter': 'view/search/SearchCenter.vue',
-  'route.support': 'view/support/SupportUs.vue',
   'route.entitlementStore': 'view/entitlementStore/EntitlementStore.vue',
   'route.campaign': 'view/campaign/CampaignPage.vue',
   'route.inbox': 'view/inbox/Inbox.vue',

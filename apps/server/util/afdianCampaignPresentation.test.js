@@ -7,12 +7,16 @@ import {
 } from './afdianCampaignPresentation.js';
 import { lockCampaignSkuForCheckout } from './afdianSupportCampaignService.js';
 const id = '11111111-1111-4111-8111-111111111111';
+const skuId = '22222222-2222-4222-8222-222222222222';
 const now = new Date('2026-09-26T00:00:00Z');
 const env = {
   SUPPORT_PACKAGES_CATALOG_ENABLED: 'true',
   SUPPORT_PACKAGES_GRANT_ENABLED: 'true',
   SUPPORT_PACKAGES_CHECKOUT_ENABLED: 'true',
   SUPPORT_CAMPAIGNS_ENABLED: 'true',
+  SUPPORT_PACKAGES_AFDIAN_PRODUCTS: JSON.stringify({
+    [`campaign:${id}:v1/${skuId}`]: { planId: 'a'.repeat(32), skuId: 'b'.repeat(32) },
+  }),
 };
 const campaign = {
   id,
@@ -68,7 +72,7 @@ describe('manual campaign visibility', () => {
       commit: vi.fn(),
       rollback: vi.fn(),
       release: vi.fn(),
-      query: vi.fn(async (sql) => (sql.startsWith('SELECT id, status') ? [[campaign], []] : [[], []])),
+      query: vi.fn(async (sql) => (sql.startsWith('SELECT id, version, status') ? [[campaign], []] : [[], []])),
     };
     await setCampaignVisibility({
       campaignId: id,
@@ -87,7 +91,7 @@ describe('manual campaign visibility', () => {
       commit: vi.fn(),
       rollback: vi.fn(),
       release: vi.fn(),
-      query: vi.fn(async (sql) => (sql.startsWith('SELECT id, status') ? [[{ ...campaign, status }], []] : [[], []])),
+      query: vi.fn(async (sql) => (sql.startsWith('SELECT id, version, status') ? [[{ ...campaign, status }], []] : [[], []])),
     };
     await expect(
       setCampaignVisibility({
@@ -142,14 +146,14 @@ describe('owner-bound order status', () => {
 });
 
 describe('opening a concrete version', () => {
-  function database(row = campaign, skus = [{ amount: 18, ai_tokens: 1000, storage_mb: 10 }]) {
+  function database(row = campaign, skus = [{ id: skuId, amount: 18, ai_tokens: 1000, storage_mb: 10 }]) {
     const connection = {
       beginTransaction: vi.fn(),
       commit: vi.fn(),
       rollback: vi.fn(),
       release: vi.fn(),
       query: vi.fn(async (sql) =>
-        sql.startsWith('SELECT id, status') ? [[row], []] : sql.startsWith('SELECT amount') ? [skus, []] : [[], []],
+        sql.startsWith('SELECT id, version, status') ? [[row], []] : sql.startsWith('SELECT id, amount') ? [skus, []] : [[], []],
       ),
     };
     return { connection, db: { getConnection: async () => connection } };

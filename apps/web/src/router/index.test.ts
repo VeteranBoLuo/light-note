@@ -66,12 +66,15 @@ describe('官网与应用入口路由', () => {
     expect(task.meta.mobileBottomNav).toBe(false);
   });
 
-  it('支持轻笺页面允许游客直达，且使用统一的双端路径', () => {
-    const resolved = router.resolve('/support');
-    expect(resolved.name).toBe('support');
-    expect(resolved.meta.roles).toContain('visitor');
-    expect(resolved.meta.mobileTopSwitcher).not.toBe(true);
-    expect(resolved.meta.mobileBottomNav).not.toBe(true);
+  it('旧支持页链接重定向到资源商店的历史赞助', () => {
+    const resolved = router.resolve('/support?afdian=linked');
+    const redirect = router.getRoutes().find((record) => record.name === 'support')?.redirect;
+    expect(typeof redirect).toBe('function');
+    if (typeof redirect !== 'function') throw new Error('missing support redirect');
+    expect(redirect(resolved, resolved)).toMatchObject({
+      name: 'entitlementStore',
+      query: { afdian: 'linked', records: 'history' },
+    });
   });
 
   it('AI 用量保留独立页，桌面 AI 设置深链接留在设置壳内', () => {

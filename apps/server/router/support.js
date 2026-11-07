@@ -26,6 +26,7 @@ const adminActionLimiter = limiter({ prefix: 'afdian-admin-action', windowMs: 10
 router.post('/events', readLimiter, handle.events);
 router.get('/state', handle.state);
 router.get('/store/state', readLimiter, handle.storeState);
+router.get('/store/orders', readLimiter, handle.storeOrders);
 router.get('/campaign-entry', readLimiter, handle.campaignEntry);
 router.get('/campaigns/:campaignKey', readLimiter, handle.campaignPresentation);
 router.post('/checkout-intents', checkoutLimiter, handle.checkoutCreate);

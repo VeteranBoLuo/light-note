@@ -5,12 +5,34 @@ import {
   getSupportCatalog,
   getSupportPackageFeatureState,
   normalizeSupportCampaignSkus,
+  readAfdianPackageProducts,
   supportFirstPurchaseClaimKey,
   supportFirstPurchaseCompatibleClaimKeys,
   supportProviderIdentityHash,
 } from './afdianSupportPackageCatalog.js';
 
 describe('爱发电 v5 常驻与活动套餐目录', () => {
+  it('按目录型号提供结算状态并拒绝映射到同一外部型号的不同套餐', async () => {
+    const externalProduct = { planId: 'a'.repeat(32), skuId: 'b'.repeat(32) };
+    const key = `${SUPPORT_PACKAGE_CATALOG_VERSION}/ai-50`;
+    const env = {
+      SUPPORT_PACKAGES_CATALOG_ENABLED: 'true',
+      SUPPORT_PACKAGES_CHECKOUT_ENABLED: 'true',
+      SUPPORT_PACKAGES_GRANT_ENABLED: 'true',
+      SUPPORT_PACKAGES_AFDIAN_PRODUCTS: JSON.stringify({ [key]: externalProduct }),
+    };
+    const { packages, checkoutEnabled } = await getSupportCatalog({ env });
+    expect(checkoutEnabled).toBe(true);
+    expect(packages.filter((item) => item.checkoutAvailable).map((item) => item.skuId)).toEqual(['ai-50']);
+    expect(readAfdianPackageProducts({
+      SUPPORT_PACKAGES_AFDIAN_PRODUCTS: JSON.stringify({
+        [key]: externalProduct,
+        [`${SUPPORT_PACKAGE_CATALOG_VERSION}/storage-50`]: externalProduct,
+      }),
+    }).size).toBe(0);
+    expect(readAfdianPackageProducts({ SUPPORT_PACKAGES_AFDIAN_PRODUCTS: '{' }).size).toBe(0);
+  });
+
   it('常驻目录锁定 12 个 SKU、固定永久权益和组合节省金额', () => {
     expect(SUPPORT_PACKAGE_CATALOG_VERSION).toBe('support-packages-v5');
     expect(SUPPORT_PACKAGE_CATALOG).toHaveLength(12);

@@ -187,6 +187,26 @@ describe('爱发电客户端协议', () => {
     expect(String(options.body)).not.toContain('test-api-token');
   });
 
+  it('只把唯一一条、数量为一的商品明细记为已核验型号', () => {
+    const sku = 'A'.repeat(32);
+    const line = { sku_id: sku, count: 1 };
+    const productOrder = {
+      out_trade_no: 'order-fixed-sku',
+      user_id: 'provider-user',
+      total_amount: '50.00',
+      status: 2,
+      product_type: 1,
+    };
+    expect(normalizeAfdianOrder({ ...productOrder, sku_detail: [line] }).productSkuId).toBe(sku.toLowerCase());
+    expect(normalizeAfdianOrder({
+      ...productOrder, sku_detail: [{ ...line, count: '1' }],
+    }).productSkuId).toBe(sku.toLowerCase());
+    for (const skuDetail of [undefined, [], [{ ...line, count: 2 }], [line, line], [{ ...line, sku_id: 'invalid' }]]) {
+      expect(normalizeAfdianOrder({ ...productOrder, sku_detail: skuDetail }).productSkuId).toBeNull();
+    }
+    expect(normalizeAfdianOrder({ ...productOrder, product_type: 0, sku_detail: [line] }).productSkuId).toBeNull();
+  });
+
   it('归一化订单时保留可信的服务商创建时间，并拒绝异常时间', () => {
     const baseOrder = {
       out_trade_no: 'order-12345678',

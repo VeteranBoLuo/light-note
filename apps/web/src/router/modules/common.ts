@@ -102,14 +102,13 @@ const commonRouter: RouteRecordRaw[] = [
   },
   {
     meta: {
-      title: '支持轻笺',
-      keepAlive: true,
+      title: '资源商店',
       requireAuth: true,
       roles: ALL_ROLES,
     },
     path: '/support',
     name: 'support',
-    component: () => import('@/view/support/SupportUs.vue'),
+    redirect: (to) => ({ name: 'entitlementStore', query: { ...to.query, records: 'history' } }),
   },
   {
     meta: { title: '秋日活动', requireAuth: true, roles: ALL_ROLES },

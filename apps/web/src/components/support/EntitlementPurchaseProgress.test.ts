@@ -6,7 +6,6 @@ const mocks = vi.hoisted(() => ({ create: vi.fn(), query: vi.fn(), credited: vi.
 let user = reactive({ id: 'owner', alias: 'Owner', userName: 'owner' });
 vi.mock('@/store', () => ({ useUserStore: () => user }));
 vi.mock('@/api/supportApi', () => ({ createCheckoutIntent: mocks.create, queryCheckoutIntent: mocks.query }));
-vi.mock('@/config/support', () => ({ openAfdianSupportPage: vi.fn() }));
 vi.mock('@/composables/useAiQuotaStatus', () => ({ formatAiQuotaTokens: (n: number) => String(n) }));
 vi.mock('@/components/base/BasicComponents/BModal/BModal.vue', () => ({
   default: {
@@ -39,7 +38,13 @@ beforeEach(() => {
   sessionStorage.clear();
   user = reactive({ id: 'owner', alias: 'Owner', userName: 'owner' });
   Object.defineProperty(document, 'hidden', { configurable: true, value: false });
-  mocks.create.mockResolvedValue({ intentId: 'safe-id', url: 'https://afdian.com/a/test' });
+  const params = new URLSearchParams({
+    product_type: '1',
+    plan_id: 'a'.repeat(32),
+    sku: JSON.stringify([{ sku_id: 'b'.repeat(32), count: 1 }]),
+    custom_order_id: 'c'.repeat(43),
+  });
+  mocks.create.mockResolvedValue({ intentId: 'safe-id', url: `https://ifdian.net/order/create?${params}` });
 });
 afterEach(() => {
   app?.unmount();
@@ -47,6 +52,16 @@ afterEach(() => {
   vi.useRealTimers();
 });
 describe('safe checkout recovery', () => {
+  it('不会继续打开旧版自选金额页面', async () => {
+    mocks.create.mockResolvedValueOnce({ intentId: 'unsafe', url: 'https://afdian.com/a/test' });
+    const vm = mount();
+    await vm.start('sku', 'v1');
+    await flush();
+    expect(root.querySelector('[role="alert"]')).toBeTruthy();
+    expect(root.textContent).not.toContain('前往爱发电付款');
+    expect(mocks.query).not.toHaveBeenCalled();
+  });
+
   it('discards a late credited response after switching accounts and clears recovery state', async () => {
     let resolve!: (v: unknown) => void;
     mocks.query.mockImplementation(

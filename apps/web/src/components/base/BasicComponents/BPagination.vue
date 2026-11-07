@@ -33,6 +33,7 @@
     </div>
 
     <BSelect
+      v-if="showSizeSelector"
       class="bpagination__sizer"
       dropdown-class-name="bpagination__sizer-dropdown"
       dropdown-width="content"
@@ -60,6 +61,7 @@
     current: { type: Number, default: 1 },
     pageSize: { type: Number, default: 10 },
     total: { type: Number, default: 0 },
+    showSizeSelector: { type: Boolean, default: true },
   });
 
   const emit = defineEmits<{

@@ -46,8 +46,37 @@ export function supportFirstPurchaseCompatibleClaimKeys(item, catalogVersion = S
   return claimKey === SUPPORT_AI_FIRST_PURCHASE_CLAIM_KEY ? [claimKey, ...LEGACY_AI_FIRST_PURCHASE_KEYS] : [claimKey];
 }
 
-function campaignCatalogVersion(campaignId, version) {
+export function campaignCatalogVersion(campaignId, version) {
   return `campaign:${campaignId}:v${Number(version)}`;
+}
+
+const AFDIAN_PRODUCT_ID = /^[a-f0-9]{32}$/i;
+const PRODUCT_MAPPING_KEY = /^[a-z0-9:_-]{3,64}\/[a-z0-9_-]{3,64}$/i;
+
+export function readAfdianPackageProducts(env = process.env) {
+  let mappings;
+  try {
+    mappings = JSON.parse(env.SUPPORT_PACKAGES_AFDIAN_PRODUCTS || '{}');
+  } catch {
+    return new Map();
+  }
+  if (!mappings || typeof mappings !== 'object' || Array.isArray(mappings)) return new Map();
+  const products = new Map();
+  const usedSkus = new Set();
+  for (const [key, product] of Object.entries(mappings)) {
+    if (
+      !PRODUCT_MAPPING_KEY.test(key) ||
+      typeof product?.planId !== 'string' ||
+      !AFDIAN_PRODUCT_ID.test(product.planId) ||
+      typeof product.skuId !== 'string' ||
+      !AFDIAN_PRODUCT_ID.test(product.skuId)
+    ) return new Map();
+    const skuId = product.skuId.toLowerCase();
+    if (usedSkus.has(skuId)) return new Map();
+    usedSkus.add(skuId);
+    products.set(key, { planId: product.planId.toLowerCase(), skuId });
+  }
+  return products;
 }
 
 function runtimeFlag(value, fallback = false) {
@@ -245,9 +274,19 @@ export async function getSupportCatalog({
   const campaigns = feature.campaignsEnabled
     ? await loadActiveCampaignPackages({ userId: effectiveUserId, db, now })
     : [];
+  const products = readAfdianPackageProducts(env);
+  const packages = SUPPORT_PACKAGE_CATALOG.map((item) => ({
+    ...item,
+    firstPurchaseStatus: 'not_applicable',
+    checkoutAvailable: products.has(`${feature.catalogVersion}/${item.skuId}`),
+  }));
+  for (const item of campaigns) {
+    item.checkoutAvailable = products.has(`${item.catalogVersion}/${item.campaignSkuId}`);
+  }
   return {
     ...feature,
-    packages: SUPPORT_PACKAGE_CATALOG.map((item) => ({ ...item, firstPurchaseStatus: 'not_applicable' })),
+    checkoutEnabled: feature.checkoutEnabled && [...packages, ...campaigns].some((item) => item.checkoutAvailable),
+    packages,
     campaigns,
   };
 }

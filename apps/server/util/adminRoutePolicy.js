@@ -526,6 +526,7 @@ declare(ADMIN_POLICIES.ACCOUNT_WRITE, 'user', [
 declare(ADMIN_POLICIES.ACCOUNT_WRITE, 'support', [
   ['GET', '/support/state'],
   ['GET', '/support/store/state'],
+  ['GET', '/support/store/orders'],
   ['POST', '/support/public-preference'],
   ['GET', '/support/donation/checkout'],
   ['GET', '/support/checkout'],

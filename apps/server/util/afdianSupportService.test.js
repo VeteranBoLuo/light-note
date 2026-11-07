@@ -12,7 +12,6 @@ vi.mock('./afdianSupportRewardService.js', () => ({
 
 import {
   applyVerifiedAfdianOrder,
-  createAfdianCheckoutIntent,
   ingestAfdianWebhookOrder,
   linkAfdianAccount,
   refreshAfdianAccountProfile,
@@ -24,6 +23,7 @@ import {
 describe('爱发电订单归属合并', () => {
   it('以不可变订单用途区分历史赞助、纯赞助、权益购买和未知凭证', () => {
     expect(resolveAfdianOrderPurpose()).toBe('donation');
+    expect(resolveAfdianOrderPurpose({ productType: 1 })).toBe('unknown');
     expect(resolveAfdianOrderPurpose({ intent: { intent_type: 'donation' }, hasCustomOrderId: true })).toBe('donation');
     expect(resolveAfdianOrderPurpose({ intent: { intent_type: 'permanent' }, hasCustomOrderId: true })).toBe(
       'entitlement_purchase',
@@ -206,32 +206,9 @@ describe('爱发电订单归属合并', () => {
     ).toEqual({ userId: null, source: 'conflict' });
   });
 
-  it('数据库只保存下单随机码摘要，Webhook 不使用未签名随机码归属用户', async () => {
-    vi.stubEnv('AFDIAN_CREATOR_USER_ID', 'test-creator');
-    vi.stubEnv('AFDIAN_API_TOKEN', 'test-token');
-    const checkoutDb = { query: vi.fn().mockResolvedValue([{ affectedRows: 1 }]) };
-    const checkout = await createAfdianCheckoutIntent({
-      userId: 'light-note-user-1',
-      optionKey: 'coffee',
-      db: checkoutDb,
-    });
-    const token = new URL(checkout.url).searchParams.get('custom_order_id');
-    const preferenceCall = checkoutDb.query.mock.calls.find(([sql]) =>
-      String(sql).includes('INSERT IGNORE INTO support_public_preferences'),
-    );
-    const checkoutCall = checkoutDb.query.mock.calls.find(([sql]) =>
-      String(sql).includes('INSERT INTO support_checkout_intents'),
-    );
-    expect(preferenceCall).toBeTruthy();
-    expect(checkoutCall).toBeTruthy();
-    expect(preferenceCall?.[0]).toContain('VALUES (?, ?, 1, 1, NULL)');
-    const checkoutParams = checkoutCall[1];
-    expect(token).toMatch(/^[A-Za-z0-9_-]{32,128}$/);
-    expect(checkoutParams).not.toContain(token);
-    expect(checkoutParams[1]).toMatch(/^[a-f0-9]{64}$/);
-    expect(checkoutCall?.[0]).toContain("'donation'");
-    expect(checkoutParams).toContain('support-pure-v2');
-
+  it('Webhook 不使用未签名的随机码或商品明细归属用户', async () => {
+    const token = 'a'.repeat(43);
+    const skuId = 'b'.repeat(32);
     const webhookDb = { query: vi.fn().mockResolvedValue([{ affectedRows: 1 }]) };
     await ingestAfdianWebhookOrder(
       {
@@ -240,7 +217,8 @@ describe('爱发电订单归属合并', () => {
         user_private_id: 'provider-private',
         custom_order_id: token,
         plan_id: 'plan-id',
-        product_type: 0,
+        product_type: 1,
+        sku_detail: [{ sku_id: skuId, count: 1 }],
         month: 1,
         total_amount: '6.00',
         show_amount: '6.00',
@@ -252,6 +230,8 @@ describe('爱发电订单归属合并', () => {
     expect(webhookSql).not.toContain('light_note_user_id');
     expect(webhookSql).not.toContain('checkout_intent_id');
     expect(webhookParams).not.toContain(token);
+    expect(webhookParams).not.toContain(skuId);
+    expect(webhookSql).not.toContain('product_sku_id');
     expect(webhookSql).toContain('ranking_observed_at');
     expect(webhookSql).toContain("verification_state = 'pending'");
   });

@@ -20,7 +20,7 @@ export function scheduleAppStartupPrewarm() {
         'route.growth',
         'route.workbenches',
         'route.personCenter',
-        'route.support',
+        'route.entitlementStore',
       ],
       priority: PREWARM_PRIORITY.browsing,
     }),

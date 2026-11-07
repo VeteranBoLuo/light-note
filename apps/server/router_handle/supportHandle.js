@@ -18,7 +18,6 @@ import {
 } from '../util/afdianClient.js';
 import { createAfdianOAuthState, consumeAfdianOAuthState } from '../util/afdianOAuthState.js';
 import {
-  createAfdianCheckoutIntent,
   createAfdianPackageCheckoutIntent,
   getAfdianEntitlementStoreState,
   getAfdianSupportState,
@@ -41,6 +40,7 @@ import {
   getAfdianAdminOverview,
   getAfdianLeaderboard,
   getAfdianPublicAvatar,
+  getAfdianUserOrders,
   queryAfdianAdminOrders,
   queryAfdianAdminSupporters,
   setAfdianAdminIdentityHidden,
@@ -66,8 +66,8 @@ function sendError(req, res, error) {
 }
 
 function redirectOAuthResult(res, code) {
-  const query = new URLSearchParams({ afdian: code });
-  return res.redirect(302, `/support?${query.toString()}`);
+  const query = new URLSearchParams({ records: 'history', afdian: code });
+  return res.redirect(302, `/store?${query.toString()}`);
 }
 
 function ensurePrivateSupportAccess(req, res) {
@@ -129,6 +129,18 @@ export async function storeState(req, res) {
   }
 }
 
+export async function storeOrders(req, res) {
+  if (!ensurePrivateSupportAccess(req, res)) return;
+  if (!req.user.isAuthenticated) return res.status(401).send(resultData(null, 401, '请先登录'));
+  const scope = req.query.scope === 'history' ? 'support' : 'purchase';
+  try {
+    const data = await getAfdianUserOrders({ userId: req.user.id, page: req.query.page, scope });
+    return res.send(resultData(data));
+  } catch (error) {
+    return sendError(req, res, error);
+  }
+}
+
 export async function catalog(req, res) {
   try {
     const authenticated = Boolean(
@@ -144,23 +156,18 @@ export async function catalog(req, res) {
   }
 }
 
-export async function donationCheckout(req, res) {
-  if (!ensurePrivateSupportAccess(req, res)) return;
-  try {
-    const { url } = await createAfdianCheckoutIntent({
-      userId: req.user.id,
-      optionKey: req.query.option,
-    });
-    return res.redirect(302, url);
-  } catch (error) {
-    return sendError(req, res, error);
-  }
+export function donationCheckout(req, res) {
+  return res.status(410).send(resultData(
+    { code: 'SUPPORT_DONATION_CHECKOUT_RETIRED' },
+    410,
+    L(req, '自愿支持入口已停用，请前往资源商店', 'Voluntary support has retired. Visit the Resource Store.'),
+  ));
 }
 
 export async function checkout(req, res) {
   if (!ensurePrivateSupportAccess(req, res)) return;
   // 旧版前端曾用 /checkout?option= 发起“赞助赠 AI”。拆分发布后必须失败关闭，
-  // 不能把旧页面承诺的赠送静默改成零权益赞助。新版纯支持使用独立 donation 端点。
+  // 旧版赞助链接不能改成资源购买。
   if (!req.query.skuId) {
     return res
       .status(410)

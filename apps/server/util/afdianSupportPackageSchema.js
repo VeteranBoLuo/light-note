@@ -124,6 +124,8 @@ const CHECKOUT_INTENT_COLUMNS = Object.freeze([
   ['campaign_starts_at', 'datetime DEFAULT NULL AFTER campaign_user_limit'],
   ['campaign_ends_at', 'datetime DEFAULT NULL AFTER campaign_starts_at'],
   ['consumed_order_id', 'char(36) CHARACTER SET ascii COLLATE ascii_bin DEFAULT NULL AFTER first_used_at'],
+  ['afdian_plan_id', 'char(32) CHARACTER SET ascii COLLATE ascii_bin DEFAULT NULL'],
+  ['afdian_sku_id', 'char(32) CHARACTER SET ascii COLLATE ascii_bin DEFAULT NULL'],
 ]);
 
 async function ensureColumn(db, table, column, definition) {
@@ -194,6 +196,7 @@ export function ensureAfdianSupportPackageSchema({ db = pool } = {}) {
       for (const [column, definition] of CHECKOUT_INTENT_COLUMNS) {
         await ensureColumn(db, 'support_checkout_intents', column, definition);
       }
+      await ensureColumn(db, 'support_orders', 'product_sku_id', 'char(32) CHARACTER SET ascii COLLATE ascii_bin DEFAULT NULL');
       await ensureIndex(
         db,
         'support_checkout_intents',

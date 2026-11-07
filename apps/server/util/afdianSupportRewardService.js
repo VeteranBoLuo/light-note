@@ -51,6 +51,7 @@ async function loadOrder(connection, supportOrderId) {
   const [rows] = await connection.query(
     `SELECT o.id, o.provider_order_no, o.provider_user_id, o.provider_private_id,
             o.checkout_intent_id, o.light_note_user_id, o.ownership_source, o.order_purpose, o.product_type,
+            o.plan_id, o.product_sku_id, i.afdian_plan_id, i.afdian_sku_id,
             o.total_amount, o.provider_status, o.verification_state,
             UNIX_TIMESTAMP(o.provider_created_at) AS provider_created_epoch,
             UNIX_TIMESTAMP(i.create_time) AS checkout_created_epoch,

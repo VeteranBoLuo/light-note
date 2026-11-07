@@ -61,6 +61,7 @@ export interface SupportPackage {
   firstPurchase: SupportBenefit;
   comboSavings: number;
   firstPurchaseStatus: FirstPurchaseStatus;
+  checkoutAvailable?: boolean;
 }
 
 export interface SupportCampaignPackage {
@@ -83,6 +84,7 @@ export interface SupportCampaignPackage {
   remainingPurchases: number | null;
   limitReached: boolean;
   hasActiveCheckout: boolean;
+  checkoutAvailable?: boolean;
 }
 
 export interface SupportCatalog {
@@ -105,6 +107,14 @@ export interface EntitlementStoreState {
   grantedStorageMb: number;
   lastPurchaseAt?: string | null;
   recentOrders: AfdianSupportOrder[];
+}
+
+export type EntitlementOrderScope = 'purchase' | 'history';
+
+export async function getEntitlementOrders(scope: EntitlementOrderScope, page: number) {
+  const response = await apiBaseGet('/api/support/store/orders', { scope, page }, { silent: true });
+  if (response.status !== 200 || !response.data) throw new Error('SUPPORT_ORDERS_UNAVAILABLE');
+  return response.data as { items: AfdianSupportOrder[]; total: number; page: number; pageSize: number };
 }
 
 export interface AfdianLeaderboardItem {

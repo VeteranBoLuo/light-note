@@ -27,6 +27,7 @@ const migrations = [
   '20260813_points_economy_c4.sql', '20260826_points_economy_c5_storage_limits.sql',
   '20260814_points_earning_c5.sql', '20260825_ai_bonus_wallet_and_afdian_rewards.sql',
   '20261105_update_logs_product_version.sql',
+  '20261107_afdian_fixed_products.sql',
 ];
 const ensureModules = [
   ['security/index.js', 'ensureSecurityTables'], ['notification.js', 'ensureNotificationTable'],
@@ -70,6 +71,7 @@ try {
     console.log('[local-bootstrap] applying %s', file);
     if (file === '20260814_points_earning_c5.sql') await (await import('../util/growthCenterSchema.js')).ensureGrowthCenterSchema();
     if (file === '20260905_organize_ai_group.sql') await (await import('../util/organizeSchema.js')).ensureOrganizeSchema();
+    if (file === '20261107_afdian_fixed_products.sql') await (await import('../util/afdianSupportSchema.js')).ensureAfdianSupportSchema();
     await applySql(await fs.readFile(new URL(`../migrations/${file}`, import.meta.url), 'utf8'));
     await pool.query('INSERT INTO local_test_migrations (name) VALUES (?)', [file]);
     if (file === '20260708_growth.sql') {
