@@ -327,17 +327,17 @@
                 <div class="reason-title">{{ r.title }}</div>
                 <div class="reason-desc">{{ r.desc }}</div>
                 <a
-                  v-if="r.supportCta"
-                  class="reason-support-link"
-                  href="/support"
-                  @pointerdown="prefetchSupportIntent"
-                  @focus="prefetchSupportIntent"
-                  @click="openSupport"
-                  v-click-log="{ module: '官网首页', operation: '从永久免费说明了解支持轻笺' }"
+                  v-if="r.storeCta"
+                  class="reason-store-link"
+                  href="/store"
+                  @pointerdown="prefetchStoreIntent"
+                  @focus="prefetchStoreIntent"
+                  @click="openStore"
+                  v-click-log="{ module: '官网首页', operation: '从永久免费说明了解资源商店' }"
                 >
-                  <SvgIcon :src="icon.support.heart" size="14" aria-hidden="true" />
-                  <span>{{ r.supportCta }}</span>
-                  <SvgIcon class="reason-support-link__arrow" :src="icon.arrow_right" size="14" aria-hidden="true" />
+                  <SvgIcon :src="icon.support.store" size="14" aria-hidden="true" />
+                  <span>{{ r.storeCta }}</span>
+                  <SvgIcon class="reason-store-link__arrow" :src="icon.arrow_right" size="14" aria-hidden="true" />
                 </a>
               </div>
             </div>
@@ -442,14 +442,14 @@
             <a href="#" @click.prevent="handleContact">{{ t('landing.contactUs') }}</a>
             <span class="footer-sep">|</span>
             <a
-              class="footer-support-link"
-              href="/support"
-              @pointerdown="prefetchSupportIntent"
-              @focus="prefetchSupportIntent"
-              @click="openSupport"
-              v-click-log="{ module: '官网首页', operation: '从官网页脚打开支持轻笺' }"
+              class="footer-store-link"
+              href="/store"
+              @pointerdown="prefetchStoreIntent"
+              @focus="prefetchStoreIntent"
+              @click="openStore"
+              v-click-log="{ module: '官网首页', operation: '从官网页脚打开资源商店' }"
             >
-              {{ t('support.entry') }}
+              {{ t('entitlementStore.pageTitle') }}
             </a>
             <span class="footer-sep">|</span>
             <a href="https://github.com/VeteranBoLuo" target="_blank" rel="noopener noreferrer">GitHub</a>
@@ -585,7 +585,7 @@
   const showContactModal = ref(false);
   const feedbackContent = ref('');
   const submitting = ref(false);
-  type LandingNavigationAction = 'primary' | 'account' | 'support' | 'extension' | 'document';
+  type LandingNavigationAction = 'primary' | 'account' | 'store' | 'extension' | 'document';
   type LandingNavigationKind = 'app' | 'registration' | 'page';
   const activeLandingAction = ref<LandingNavigationAction | null>(null);
   const navigationFeedbackKind = ref<LandingNavigationKind>('app');
@@ -741,8 +741,8 @@
     void loadUserAuthModal().catch(() => undefined);
   }
 
-  function prefetchSupportIntent() {
-    void preloadRoute('/support').catch(() => undefined);
+  function prefetchStoreIntent() {
+    void preloadRoute('/store').catch(() => undefined);
   }
 
   function prefetchExtensionIntent() {
@@ -827,7 +827,7 @@
     return event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey;
   }
 
-  async function navigateFromLink(event: MouseEvent, target: string, action: 'support' | 'extension') {
+  async function navigateFromLink(event: MouseEvent, target: string, action: 'store' | 'extension') {
     if (!isPlainLeftClick(event)) return;
     event.preventDefault();
     if (!beginLandingNavigation(action, 'page')) return;
@@ -840,8 +840,8 @@
     }
   }
 
-  function openSupport(event: MouseEvent) {
-    void navigateFromLink(event, '/support', 'support');
+  function openStore(event: MouseEvent) {
+    void navigateFromLink(event, '/store', 'store');
   }
   function openExtensionFromLink(event: MouseEvent) {
     if (!isPlainLeftClick(event)) return;
@@ -922,7 +922,7 @@
     title: string;
     desc: string;
     bg: string;
-    supportCta?: string;
+    storeCta?: string;
   };
 
   const reasons = computed<LandingReason[]>(() => [
@@ -937,7 +937,7 @@
       title: t('landing.reasonFreeTitle'),
       desc: t('landing.reasonFreeDesc'),
       bg: 'rgba(0,168,132,.12)',
-      supportCta: t('support.entryDescription'),
+      storeCta: t('entitlementStore.layout.storeEntryHint'),
     },
     { icon: '🌱', title: t('landing.reasonSmartTitle'), desc: t('landing.reasonSmartDesc'), bg: 'rgba(255,138,0,.12)' },
     {
@@ -2169,7 +2169,7 @@
   .reason-copy {
     min-width: 0;
   }
-  .reason-support-link {
+  .reason-store-link {
     width: max-content;
     max-width: 100%;
     min-height: 28px;
@@ -2183,16 +2183,16 @@
     text-decoration: none;
     transition: color 0.2s ease;
   }
-  .reason-support-link:hover,
-  .reason-support-link:focus-visible {
+  .reason-store-link:hover,
+  .reason-store-link:focus-visible {
     color: #aaa6f2;
   }
-  .reason-support-link:focus-visible {
+  .reason-store-link:focus-visible {
     border-radius: 5px;
     outline: 2px solid rgba(97, 92, 237, 0.6);
     outline-offset: 2px;
   }
-  .reason-support-link__arrow {
+  .reason-store-link__arrow {
     opacity: 0.72;
   }
 
@@ -2957,7 +2957,7 @@
     .reason-desc {
       font-size: 12px;
     }
-    .reason-support-link {
+    .reason-store-link {
       min-height: 44px;
       margin-top: 2px;
     }

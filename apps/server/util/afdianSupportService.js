@@ -1,6 +1,5 @@
 import crypto from 'node:crypto';
 import {
-  AFDIAN_CHECKOUT_OPTIONS,
   AFDIAN_ORDER_PURPOSE,
   AFDIAN_PURE_SUPPORT_POLICY,
   SUPPORT_PACKAGE_CATALOG_VERSION,
@@ -19,6 +18,7 @@ import { syncAfdianRewardForOrder, syncAfdianRewardsForUser } from './afdianSupp
 import {
   getSupportPackage,
   getSupportPackageFeatureState,
+  readAfdianPackageProducts,
   supportFirstPurchaseCompatibleClaimKeys,
   supportProviderIdentityHash,
 } from './afdianSupportPackageCatalog.js';
@@ -32,7 +32,6 @@ const FULL_SYNC_INTERVAL_MS = 6 * 60 * 60 * 1000;
 const PROFILE_REFRESH_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const PROFILE_REFRESH_RETRY_INTERVAL_MS = 10 * 60 * 1000;
 const MAX_SYNC_PAGES = 200;
-const CHECKOUT_OPTION_BY_KEY = new Map(AFDIAN_CHECKOUT_OPTIONS.map((option) => [option.key, option]));
 
 function sha256(value) {
   return crypto
@@ -54,13 +53,13 @@ const KNOWN_ORDER_PURPOSES = new Set([
 
 /**
  * 只使用数据库里已经冻结的旧用途或权威 custom_order_id 意图分类。
- * 无意图的新增爱发电主页订单是纯支持；带未知凭证的订单保持 unknown 进入人工复核，
- * 绝不能因金额相同而降级成支持或误发套餐。
+ * 售卖订单必须由套餐意图归属，未识别商品或凭证保留为 unknown。
  */
 export function resolveAfdianOrderPurpose({
   existingPurpose = '',
   intent = null,
   hasCustomOrderId = false,
+  productType = 0,
   providerCreatedAt = null,
   pureSupportActivatedEpoch = 0,
 } = {}) {
@@ -70,7 +69,7 @@ export function resolveAfdianOrderPurpose({
   if (['permanent', 'campaign'].includes(intentType)) return AFDIAN_ORDER_PURPOSE.ENTITLEMENT_PURCHASE;
   if (intentType === 'donation') return AFDIAN_ORDER_PURPOSE.DONATION;
   if (intentType === 'legacy') return AFDIAN_ORDER_PURPOSE.LEGACY_SUPPORT;
-  if (hasCustomOrderId) return AFDIAN_ORDER_PURPOSE.UNKNOWN;
+  if (hasCustomOrderId || Number(productType) === 1) return AFDIAN_ORDER_PURPOSE.UNKNOWN;
   const activatedEpoch = Number(pureSupportActivatedEpoch || 0);
   if (activatedEpoch > 0) {
     const providerEpoch = Number(providerCreatedAt || 0);
@@ -95,22 +94,11 @@ async function loadPureSupportActivatedEpoch(connection) {
   return activatedEpoch;
 }
 
-function buildCheckoutUrl(option, token) {
+function buildPackageCheckoutUrl(product, token) {
   const url = new URL('https://ifdian.net/order/create');
-  if (option.planId) {
-    url.searchParams.set('plan_id', option.planId);
-    url.searchParams.set('product_type', '0');
-  } else {
-    url.searchParams.set('user_id', option.creatorId);
-  }
-  url.searchParams.set('custom_order_id', token);
-  return url.toString();
-}
-
-function buildPackageCheckoutUrl({ creatorId, amount }, token) {
-  const url = new URL('https://ifdian.net/order/create');
-  url.searchParams.set('user_id', creatorId);
-  url.searchParams.set('custom_price', Number(amount).toFixed(2));
+  url.searchParams.set('product_type', '1');
+  url.searchParams.set('plan_id', product.planId);
+  url.searchParams.set('sku', JSON.stringify([{ sku_id: product.skuId, count: 1 }]));
   url.searchParams.set('custom_order_id', token);
   return url.toString();
 }
@@ -154,31 +142,6 @@ export async function refreshAfdianAccountProfile({
   }
 }
 
-export async function createAfdianCheckoutIntent({ userId, optionKey, db = pool }) {
-  // 没有查询 API 时无法对 URL 参数进行权威复核，不生成一个看似可追踪但实际不可认领的凭证。
-  getAfdianApiConfig();
-  const option = CHECKOUT_OPTION_BY_KEY.get(String(optionKey || ''));
-  if (!option) throw afdianError('AFDIAN_CHECKOUT_OPTION_INVALID', '请选择有效的赞助档位');
-  const token = crypto.randomBytes(32).toString('base64url');
-  const id = crypto.randomUUID();
-  await ensureDefaultAfdianPublicPreference({ userId, db });
-  await db.query(
-    `INSERT INTO support_checkout_intents
-      (id, token_hash, user_id, option_key, intent_type, catalog_version, quoted_amount, expires_at)
-     VALUES (?, ?, ?, ?, 'donation', ?, ?, DATE_ADD(NOW(), INTERVAL ? DAY))`,
-    [
-      id,
-      sha256(token),
-      userId,
-      option.key,
-      AFDIAN_PURE_SUPPORT_POLICY.version,
-      option.amount == null ? null : Number(option.amount).toFixed(2),
-      CHECKOUT_TOKEN_TTL_DAYS,
-    ],
-  );
-  return { url: buildCheckoutUrl(option, token), expiresIn: CHECKOUT_TOKEN_TTL_DAYS * 24 * 60 * 60 };
-}
-
 async function regularFirstPurchaseCandidate(connection, { userId, definition }) {
   const claimKeys = supportFirstPurchaseCompatibleClaimKeys(definition);
   if (!claimKeys.length) return false;
@@ -202,7 +165,7 @@ async function regularFirstPurchaseCandidate(connection, { userId, definition })
   return !identityClaims.length;
 }
 
-/** 生成金额固定、权益快照不可变的一次性套餐结算意图。 */
+/** 生成固定商品、单份权益和金额的一次性结算快照。 */
 export async function createAfdianPackageCheckoutIntent({
   userId,
   skuId,
@@ -219,7 +182,7 @@ export async function createAfdianPackageCheckoutIntent({
   if (!normalizedUserId) {
     throw afdianError('SUPPORT_PACKAGE_AUTH_REQUIRED', '请先登录后再选择套餐', 401);
   }
-  const apiConfig = getAfdianApiConfig();
+  getAfdianApiConfig();
   const normalizedSkuId = String(skuId || '').trim();
   const normalizedVersion = String(catalogVersion || '').trim();
   const token = crypto.randomBytes(32).toString('base64url');
@@ -284,15 +247,17 @@ export async function createAfdianPackageCheckoutIntent({
       expiresIn = CAMPAIGN_CHECKOUT_TTL_HOURS * 60 * 60;
     }
 
+    const product = readAfdianPackageProducts(env).get(`${normalizedVersion}/${normalizedSkuId}`);
+    if (!product) throw afdianError('SUPPORT_PACKAGE_PRODUCT_UNAVAILABLE', '此套餐的固定商品尚不可购买', 503);
     await connection.query(
       `INSERT INTO support_checkout_intents
         (id, token_hash, user_id, option_key, intent_type, intent_status, sku_id,
          catalog_version, quoted_amount, base_ai_tokens, base_storage_mb,
          quoted_ai_tokens, quoted_storage_mb, first_purchase_candidate,
          campaign_id, campaign_sku_id, campaign_version, campaign_starts_at,
-         campaign_user_limit, campaign_ends_at, expires_at)
+         campaign_user_limit, campaign_ends_at, afdian_plan_id, afdian_sku_id, expires_at)
        VALUES (?, ?, ?, 'package', ?, 'issued', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-               DATE_ADD(NOW(), INTERVAL ? SECOND))`,
+               ?, ?, DATE_ADD(NOW(), INTERVAL ? SECOND))`,
       [
         id,
         sha256(token),
@@ -312,6 +277,8 @@ export async function createAfdianPackageCheckoutIntent({
         campaignStartsAt,
         campaignUserLimit,
         campaignEndsAt,
+        product.planId,
+        product.skuId,
         expiresIn,
       ],
     );
@@ -325,7 +292,7 @@ export async function createAfdianPackageCheckoutIntent({
     }
     await connection.commit();
     return {
-      url: buildPackageCheckoutUrl({ creatorId: apiConfig.creatorUserId, amount }, token),
+      url: buildPackageCheckoutUrl(product, token),
       intentId: id,
       expiresIn,
       firstPurchaseCandidate,
@@ -524,12 +491,13 @@ export async function applyVerifiedAfdianOrder(input, { db = pool } = {}) {
     const hasCustomOrderId = Boolean(order.customOrderId);
     const persistedPurpose = String(existing?.order_purpose || '');
     const pureSupportActivatedEpoch =
-      !intent && !hasCustomOrderId && !KNOWN_ORDER_PURPOSES.has(persistedPurpose)
+      !intent && !hasCustomOrderId && order.productType !== 1 && !KNOWN_ORDER_PURPOSES.has(persistedPurpose)
         ? await loadPureSupportActivatedEpoch(connection)
         : 0;
     const purposeEvidence = {
       intent,
       hasCustomOrderId,
+      productType: order.productType,
       providerCreatedAt: order.providerCreatedAt,
       pureSupportActivatedEpoch,
     };
@@ -569,8 +537,8 @@ export async function applyVerifiedAfdianOrder(input, { db = pool } = {}) {
         (id, provider_order_no, provider_user_id, provider_private_id, checkout_intent_id,
          light_note_user_id, ownership_source, order_purpose, plan_id, product_type, month, total_amount,
          show_amount, provider_status, provider_created_at, verification_state, verified_at, ranking_observed_at,
-         retry_count, next_retry_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, FROM_UNIXTIME(?), 'api_verified', NOW(), NOW(), 0, NULL)
+         retry_count, next_retry_at, product_sku_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, FROM_UNIXTIME(?), 'api_verified', NOW(), NOW(), 0, NULL, ?)
        ON DUPLICATE KEY UPDATE
          provider_user_id = VALUES(provider_user_id),
          provider_private_id = VALUES(provider_private_id),
@@ -583,6 +551,7 @@ export async function applyVerifiedAfdianOrder(input, { db = pool } = {}) {
          END,
          plan_id = VALUES(plan_id),
          product_type = VALUES(product_type),
+         product_sku_id = VALUES(product_sku_id),
          month = VALUES(month),
          total_amount = VALUES(total_amount),
          show_amount = VALUES(show_amount),
@@ -608,6 +577,7 @@ export async function applyVerifiedAfdianOrder(input, { db = pool } = {}) {
         order.showAmount,
         order.providerStatus,
         order.providerCreatedAt || null,
+        order.productSkuId || null,
       ],
     );
     if (intent) {

@@ -7,13 +7,13 @@
       <div class="mobile-changelog-nav__heading">
         <strong class="mobile-changelog-nav__title">{{ t('changelog.title') }}</strong>
         <BButton
-          class="mobile-changelog-nav__support"
+          class="mobile-changelog-nav__store"
           size="small"
-          :aria-label="t('support.entry')"
-          v-click-log="{ module: '更新日志', operation: '从更新日志标题打开支持轻笺' }"
-          @click="openSupport"
+          :aria-label="t('entitlementStore.pageTitle')"
+          v-click-log="{ module: '更新日志', operation: '从更新日志标题打开资源商店' }"
+          @click="openStore"
         >
-          <SvgIcon :src="icon.support.heart" size="17" aria-hidden="true" />
+          <SvgIcon :src="icon.support.store" size="17" aria-hidden="true" />
         </BButton>
       </div>
       <BButton v-if="user.role === 'root'" class="mobile-changelog-nav__create" :loading="creating" @click="createLog">
@@ -38,13 +38,13 @@
         <div class="logs-intro__heading">
           <h1 class="intro-title">{{ t('changelog.pageTitle') }}</h1>
           <BButton
-            class="logs-intro__support"
+            class="logs-intro__store"
             size="small"
-            v-click-log="{ module: '更新日志', operation: '从更新日志标题打开支持轻笺' }"
-            @click="openSupport"
+            v-click-log="{ module: '更新日志', operation: '从更新日志标题打开资源商店' }"
+            @click="openStore"
           >
-            <SvgIcon :src="icon.support.heart" size="16" aria-hidden="true" />
-            <span>{{ t('support.entry') }}</span>
+            <SvgIcon :src="icon.support.store" size="16" aria-hidden="true" />
+            <span>{{ t('entitlementStore.pageTitle') }}</span>
           </BButton>
         </div>
         <p class="intro-desc">{{ t('changelog.pageDesc') }}</p>
@@ -302,8 +302,8 @@
     void getLogs();
   }
 
-  function openSupport() {
-    void router.push('/support');
+  function openStore() {
+    void router.push('/store');
   }
 
   onMounted(getLogs);
@@ -361,7 +361,7 @@
     font-size: 14px;
   }
 
-  .logs-intro :deep(.logs-intro__support.b_btn) {
+  .logs-intro :deep(.logs-intro__store.b_btn) {
     gap: 5px;
     border: 1px solid var(--support-entry-border-color);
     color: var(--support-entry-text-color);
@@ -369,11 +369,11 @@
     box-shadow: none;
   }
 
-  .logs-intro :deep(.logs-intro__support.b_btn:hover) {
+  .logs-intro :deep(.logs-intro__store.b_btn:hover) {
     background: var(--support-entry-hover-background);
   }
 
-  .logs-intro :deep(.logs-intro__support.b_btn) {
+  .logs-intro :deep(.logs-intro__store.b_btn) {
     min-height: 32px;
     padding-inline: 10px;
     font-size: 12px;
@@ -658,7 +658,7 @@
     gap: 1px;
   }
 
-  .mobile-changelog-nav__heading :deep(.mobile-changelog-nav__support.b_btn) {
+  .mobile-changelog-nav__heading :deep(.mobile-changelog-nav__store.b_btn) {
     width: 44px;
     min-width: 44px;
     min-height: 44px;
@@ -670,7 +670,7 @@
     box-shadow: none;
   }
 
-  .mobile-changelog-nav__heading :deep(.mobile-changelog-nav__support.b_btn:hover) {
+  .mobile-changelog-nav__heading :deep(.mobile-changelog-nav__store.b_btn:hover) {
     background: var(--support-entry-hover-background) !important;
   }
 

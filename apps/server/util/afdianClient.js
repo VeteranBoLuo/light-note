@@ -210,6 +210,14 @@ export function normalizeAfdianOrder(order) {
     throw afdianError('AFDIAN_ORDER_INVALID', '订单状态不合法');
   }
   const customOrderId = String(order?.custom_order_id || '').trim();
+  const singleProduct = productType === 1 && Array.isArray(order.sku_detail) && order.sku_detail.length === 1
+    ? order.sku_detail[0]
+    : null;
+  const productSkuId =
+    (singleProduct?.count === 1 || singleProduct?.count === '1') &&
+    typeof singleProduct.sku_id === 'string' && /^[a-f0-9]{32}$/i.test(singleProduct.sku_id)
+      ? singleProduct.sku_id.toLowerCase()
+      : null;
   return {
     providerOrderNo,
     providerUserId: normalizeProviderId(order?.user_id, 'user_id'),
@@ -217,6 +225,7 @@ export function normalizeAfdianOrder(order) {
     customOrderId: /^[A-Za-z0-9_-]{32,128}$/.test(customOrderId) ? customOrderId : '',
     planId: normalizeOptionalProviderId(order?.plan_id, 'plan_id'),
     productType,
+    productSkuId,
     month,
     totalAmount: normalizeAmount(order?.total_amount, 'total_amount'),
     showAmount: normalizeAmount(order?.show_amount ?? order?.total_amount, 'show_amount'),

@@ -138,20 +138,6 @@
           <div class="menu-group-divider" aria-hidden="true" />
 
           <BButton
-            v-for="menuItem in desktopSecondaryMenuOptions"
-            :key="menuItem.name"
-            block
-            class="menu-entry"
-            :class="`menu-entry--${menuItem.tone}`"
-            v-click-log="{ module: '个人中心', operation: t(menuItem.labelKey) }"
-            @click="menuItemClick(menuItem)"
-          >
-            <span class="menu-entry__icon">
-              <svg-icon size="16" :src="menuItem.icon" aria-hidden="true" />
-            </span>
-            <span class="menu-entry__label">{{ t(menuItem.labelKey) }}</span>
-          </BButton>
-          <BButton
             block
             class="menu-entry menu-entry--danger"
             v-click-log="{
@@ -215,7 +201,6 @@
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import {
     DESKTOP_PERSON_CENTER_PRIMARY_ENTRIES,
-    DESKTOP_PERSON_CENTER_SECONDARY_ENTRIES,
     type PersonCenterEntry,
   } from '@/config/personCenterEntries';
   import { useI18n } from 'vue-i18n';
@@ -307,7 +292,6 @@
     const entries: PersonCenterEntry[] = [...DESKTOP_PERSON_CENTER_PRIMARY_ENTRIES];
     return entries;
   });
-  const desktopSecondaryMenuOptions = DESKTOP_PERSON_CENTER_SECONDARY_ENTRIES;
 
   const userStats = computed(() => [
     {
@@ -491,11 +475,6 @@
     .menu-entry--community .menu-entry__icon {
       color: var(--person-center-menu-community-fg);
       background: var(--person-center-menu-community-bg);
-    }
-
-    .menu-entry--support .menu-entry__icon {
-      color: var(--support-entry-text-color);
-      background: var(--support-entry-background);
     }
 
     .menu-entry--danger .menu-entry__icon {

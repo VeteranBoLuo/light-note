@@ -91,7 +91,7 @@
     confirmVisible.value = true;
   }
   function canPurchase(item: SupportCampaignPackage | null) {
-    return Boolean(item && presentation.value?.checkoutEnabled && !item.limitReached && !item.hasActiveCheckout);
+    return Boolean(item?.checkoutAvailable === true && presentation.value?.checkoutEnabled && !item.limitReached && !item.hasActiveCheckout);
   }
   function purchase() {
     const item = selected.value;

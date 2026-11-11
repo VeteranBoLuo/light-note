@@ -18,6 +18,7 @@ for (const theme of ['day', 'night']) {
     for (const width of [320, 390]) cases.push({ width, density: 'small', theme, locale });
   }
 }
+for (const width of [1920, 2560]) cases.push({ width, density: 'default', theme: 'day', locale: 'zh-CN' });
 for (const state of ['guest', 'preview', 'state-loading', 'state-error']) {
   cases.push({ width: 390, density: 'small', theme: 'day', locale: 'zh-CN', state });
 }
@@ -28,14 +29,15 @@ async function measure(page) {
       const box = document.querySelector(selector).getBoundingClientRect();
       return { top: box.top, height: box.height };
     };
-    const scroll = document.querySelector('.store-page__scroll');
+    const scroll = document.querySelector('.commerce-page__scroll');
     return {
       catalog: rect('.store-catalog'),
       tabs: rect('.store-tabs'),
       packages: rect('.package-panels'),
-      following: rect('.store-bottom-grid'),
+      following: rect('.store-lower'),
       scrollTop: scroll.scrollTop,
       scrollHeight: scroll.scrollHeight,
+      contentWidth: document.querySelector('.commerce-page__content').getBoundingClientRect().width,
       cards: [...document.querySelectorAll('[role="tabpanel"][aria-hidden="false"] .package-card')].map((card) => {
         const box = card.getBoundingClientRect();
         if (card.scrollWidth > card.clientWidth + 1) throw new Error('Package content overflows');
@@ -79,11 +81,12 @@ try {
     await page.goto(`${origin}/e2e/support-packages.html?${params}`, { waitUntil: 'networkidle' });
     await page.locator('[role="tabpanel"][aria-hidden="false"] .package-card').first().waitFor();
     await page.evaluate(() => document.fonts.ready);
-    await page.locator('.store-page__scroll').evaluate((scroll) => {
+    await page.locator('.commerce-page__scroll').evaluate((scroll) => {
       const catalog = scroll.querySelector('.store-catalog');
       scroll.scrollTop += catalog.getBoundingClientRect().top - scroll.getBoundingClientRect().top - 24;
     });
     const baseline = await measure(page);
+    if (fixture.width >= 1920) assert.equal(baseline.contentWidth, 1280, name);
     const labels =
       fixture.locale === 'zh-CN' ? ['AI 额度', '云空间', '组合套餐'] : ['AI quota', 'Cloud storage', 'Bundles'];
     for (const index of [1, 2, 0, 2, 1, 0]) {

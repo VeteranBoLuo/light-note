@@ -155,10 +155,16 @@ async function saveGrant(
 }
 
 function isProviderPaid(order) {
+  return String(order.verification_state) === 'api_verified' && Number(order.provider_status) === 2;
+}
+
+function matchesCheckoutProduct(order) {
+  if (!order.afdian_plan_id && !order.afdian_sku_id) return Number(order.product_type) === 0;
   return (
-    String(order.verification_state) === 'api_verified' &&
-    Number(order.provider_status) === 2 &&
-    Number(order.product_type) === 0
+    Number(order.product_type) === 1 &&
+    Boolean(order.afdian_plan_id && order.afdian_sku_id) &&
+    String(order.plan_id || '').toLowerCase() === order.afdian_plan_id &&
+    order.product_sku_id === order.afdian_sku_id
   );
 }
 
@@ -167,6 +173,7 @@ async function preserveCreditedGrant(connection, order, grant) {
   if (!isProviderPaid(order)) reasonCode = 'provider_reversal';
   else if (String(order.ownership_source) === 'conflict') reasonCode = 'ownership_conflict';
   else if (String(order.light_note_user_id || '') !== String(grant.user_id || '')) reasonCode = 'credited_owner_changed';
+  else if (!matchesCheckoutProduct(order)) reasonCode = 'credited_product_changed';
   else if (amountCents(order.total_amount) !== amountCents(grant.paid_amount)) reasonCode = 'credited_amount_changed';
   return saveGrant(connection, {
     grant,
@@ -349,6 +356,10 @@ export async function syncAfdianPackageEntitlementForOrder(connection, order, { 
   ) {
     await clearCampaignActiveIntent(connection, order);
     return pending(SUPPORT_ENTITLEMENT_STATUS.MANUAL_REVIEW, 'ownership_conflict');
+  }
+  if (!matchesCheckoutProduct(order)) {
+    await clearCampaignActiveIntent(connection, order);
+    return pending(SUPPORT_ENTITLEMENT_STATUS.MANUAL_REVIEW, 'product_mismatch');
   }
   if (
     amountCents(order.total_amount) == null ||

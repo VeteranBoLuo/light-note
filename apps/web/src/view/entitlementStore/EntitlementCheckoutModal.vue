@@ -6,7 +6,7 @@
     width="var(--ui-layout-520, 520px)"
     initial-focus=".checkout-modal__confirm"
   >
-    <div v-if="item" class="checkout-modal">
+    <div v-if="item" class="checkout-modal" :class="{ 'is-mobile': bookmark.isMobile }">
       <div class="checkout-modal__product">
         <span class="checkout-modal__icon" aria-hidden="true">
           <SvgIcon :src="packageIcon" size="21" />
@@ -15,7 +15,6 @@
           <span>{{ categoryLabel }}</span>
           <h3>{{ packageName }}</h3>
         </div>
-        <strong>¥{{ item.amount }}</strong>
       </div>
 
       <dl class="checkout-modal__facts">
@@ -28,6 +27,10 @@
           <dd>{{ formatBenefit(expectedBenefit) }}</dd>
         </div>
         <div>
+          <dt>{{ t('entitlementStore.layout.quantity') }}</dt>
+          <dd>{{ t('entitlementStore.layout.onePackage') }}</dd>
+        </div>
+        <div>
           <dt>{{ t('entitlementStore.confirm.account') }}</dt>
           <dd>{{ accountName }}</dd>
         </div>
@@ -35,16 +38,21 @@
           <dt>{{ t('entitlementStore.confirm.provider') }}</dt>
           <dd>{{ t('entitlementStore.confirm.afdian') }}</dd>
         </div>
+        <div class="checkout-modal__amount">
+          <dt>{{ t('entitlementStore.layout.paymentAmount') }}</dt>
+          <dd>¥{{ item.amount }}</dd>
+        </div>
       </dl>
 
       <p class="checkout-modal__notice">
-        <SvgIcon :src="icon.message.info" size="17" aria-hidden="true" />
+        <SvgIcon class="checkout-modal__notice-icon" :src="icon.settings.privacy" size="17" aria-hidden="true" />
         <span>{{ notice }}</span>
       </p>
       <div class="checkout-modal__actions">
         <BButton @click="visible = false">{{ t('entitlementStore.confirm.cancel') }}</BButton>
         <BButton class="checkout-modal__confirm" type="primary" :disabled="!canConfirm" @click="emit('confirm')">
-          {{ t('autumn.createOrder', { amount: item.amount }) }}
+          {{ t('entitlementStore.layout.confirmAction') }}
+          <SvgIcon :src="icon.arrow_right" size="14" aria-hidden="true" />
         </BButton>
       </div>
     </div>
@@ -53,6 +61,7 @@
 
 <script setup lang="ts">
   import { computed } from 'vue';
+  import { bookmarkStore } from '@/store';
   import { useI18n } from 'vue-i18n';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
@@ -73,6 +82,7 @@
   const emit = defineEmits<{ confirm: [] }>();
   const visible = defineModel<boolean>('visible', { required: true });
   const { t, locale } = useI18n();
+  const bookmark = bookmarkStore();
 
   const isCampaign = computed(() => Boolean(props.item && 'campaignSkuId' in props.item));
   const regularItem = computed(() => props.item as SupportPackage);
@@ -85,12 +95,7 @@
   const notice = computed(() => {
     if (!props.item) return '';
     if ('campaignSkuId' in props.item) return t('entitlementStore.confirm.campaignNotice');
-    if (props.item.firstPurchaseScope === 'none')
-      return t(
-        props.item.category === 'storage'
-          ? 'entitlementStore.confirm.storageNotice'
-          : 'entitlementStore.confirm.aiNotice',
-      );
+    if (props.item.firstPurchaseScope === 'none') return t('entitlementStore.layout.paymentInstructions');
     if (props.item.firstPurchaseStatus === 'available') return t('entitlementStore.confirm.availableNotice');
     return t('entitlementStore.confirm.usedNotice');
   });
@@ -114,7 +119,7 @@
 <style scoped lang="less">
   .checkout-modal__product {
     display: grid;
-    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-columns: auto minmax(0, 1fr);
     align-items: center;
     gap: var(--ui-space-12, 12px);
   }
@@ -128,7 +133,7 @@
     border: 1px solid var(--primary-color);
     border-radius: 11px;
     color: var(--primary-color);
-    background: var(--primary-color-light);
+    background: var(--workspace-purple-selected);
   }
   .checkout-modal__product > div {
     min-width: 0;
@@ -141,14 +146,11 @@
     margin: var(--ui-space-3, 3px) 0 0;
     font-size: var(--ui-font-17, 17px);
   }
-  .checkout-modal__product > strong {
-    font-size: var(--ui-font-25, 25px);
-  }
   .checkout-modal__facts {
     display: grid;
     gap: 0;
     margin: var(--ui-space-18, 18px) 0 0;
-    padding: 0 var(--ui-space-13, 13px);
+    overflow: hidden;
     border: 1px solid var(--surface-border-color);
     border-radius: 13px;
   }
@@ -156,7 +158,7 @@
     display: grid;
     grid-template-columns: minmax(var(--ui-layout-100, 100px), auto) minmax(0, 1fr);
     gap: var(--ui-space-16, 16px);
-    padding: var(--ui-space-11, 11px) 0;
+    padding: var(--ui-space-9, 9px) var(--ui-space-13, 13px);
     border-bottom: 1px solid var(--surface-border-color);
   }
   .checkout-modal__facts > div:last-child {
@@ -172,26 +174,31 @@
   }
   .checkout-modal__facts dd {
     text-align: right;
+    overflow-wrap: anywhere;
     font-size: var(--ui-font-13, 13px);
     font-weight: 600;
     line-height: 1.45;
   }
+  .checkout-modal__facts .is-emphasis {
+    background: var(--workspace-purple-selected);
+  }
   .checkout-modal__facts .is-emphasis dd {
-    color: var(--primary-color);
+    color: var(--workspace-purple-text);
+  }
+  .checkout-modal__facts .checkout-modal__amount dd {
+    font-size: var(--ui-font-21, 21px);
+    font-weight: 600;
   }
   .checkout-modal__notice {
     display: flex;
     align-items: flex-start;
     gap: var(--ui-space-8, 8px);
     margin: var(--ui-space-13, 13px) 0 0;
-    padding: var(--ui-space-11, 11px) var(--ui-space-12, 12px);
-    border: 1px solid var(--surface-border-color);
-    border-radius: 11px;
     color: var(--text-color-secondary);
     font-size: var(--ui-font-12, 12px);
     line-height: 1.55;
   }
-  .checkout-modal__notice :deep(.svg-icon) {
+  .checkout-modal__notice-icon {
     flex: 0 0 auto;
     margin-top: var(--ui-space-1, 1px);
     color: var(--primary-color);
@@ -202,20 +209,20 @@
     gap: var(--ui-space-10, 10px);
     margin-top: var(--ui-space-18, 18px);
   }
-  @media (max-width: 640px) {
-    .checkout-modal__facts > div {
-      grid-template-columns: 1fr;
-      gap: 4px;
-    }
-    .checkout-modal__facts dd {
-      text-align: left;
-    }
-    .checkout-modal__actions {
-      flex-direction: column-reverse;
-    }
-    .checkout-modal__actions :deep(.b_btn) {
-      width: 100%;
-      min-height: 44px;
-    }
+  .is-mobile .checkout-modal__facts > div {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.85fr);
+    gap: var(--ui-space-8, 8px);
+  }
+  .is-mobile .checkout-modal__actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr);
+  }
+  .is-mobile .checkout-modal__actions .b_btn {
+    width: 100%;
+    min-height: var(--ui-control-44, 44px);
+    height: auto;
+    padding-block: var(--ui-space-8, 8px);
+    white-space: normal;
+    line-height: 1.4;
   }
 </style>

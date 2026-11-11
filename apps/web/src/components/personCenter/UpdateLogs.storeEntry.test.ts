@@ -74,8 +74,8 @@ afterEach(() => {
   mocks.listManagedUpdateLogs.mockReset();
 });
 
-describe('UpdateLogs support entry', () => {
-  it('在更新日志标题旁用克制入口进入站内支持页', async () => {
+describe('UpdateLogs resource store entry', () => {
+  it('更新日志标题旁打开资源商店', async () => {
     host = document.createElement('div');
     document.body.append(host);
     app = createApp(UpdateLogs);
@@ -83,7 +83,7 @@ describe('UpdateLogs support entry', () => {
       createI18n({
         legacy: false,
         locale: 'zh-CN',
-        messages: { 'zh-CN': { support: { entry: '支持轻笺' } } },
+        messages: { 'zh-CN': { entitlementStore: { pageTitle: '资源商店' } } },
         missingWarn: false,
         fallbackWarn: false,
       }),
@@ -97,15 +97,15 @@ describe('UpdateLogs support entry', () => {
     await nextTick();
 
     expect(host.querySelector('.changelog-support-card')).toBeNull();
-    const mobileAction = host.querySelector<HTMLButtonElement>('button.mobile-changelog-nav__support');
-    expect(mobileAction?.getAttribute('aria-label')).toBe('支持轻笺');
+    const mobileAction = host.querySelector<HTMLButtonElement>('button.mobile-changelog-nav__store');
+    expect(mobileAction?.getAttribute('aria-label')).toBe('资源商店');
     expect(mobileAction?.textContent?.trim()).toBe('');
 
-    const action = host.querySelector<HTMLButtonElement>('button.logs-intro__support');
+    const action = host.querySelector<HTMLButtonElement>('button.logs-intro__store');
     expect(action).not.toBeNull();
     action?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
     await nextTick();
 
-    expect(mocks.routerPush).toHaveBeenCalledWith('/support');
+    expect(mocks.routerPush).toHaveBeenCalledWith('/store');
   });
 });

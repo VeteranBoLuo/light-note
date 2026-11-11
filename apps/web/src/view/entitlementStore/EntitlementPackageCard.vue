@@ -2,85 +2,101 @@
   <BCard
     as="article"
     class="package-card"
-    :class="{ 'is-campaign': isCampaign, 'is-recommended': isRecommended }"
-    padding="var(--ui-space-12, 12px)"
+    :class="{
+      'is-campaign': isCampaign,
+      'is-recommended': isRecommended,
+      'is-storage': item.category === 'storage',
+      'is-mobile': bookmark.isMobile,
+    }"
+    :padding="bookmark.isMobile ? 'var(--ui-space-14, 14px) var(--ui-space-12, 12px)' : 'var(--ui-space-20, 20px)'"
     radius="12px"
   >
     <span v-if="isRecommended" class="package-card__recommendation">{{ t('entitlementStore.recommended') }}</span>
     <div class="package-card__top">
-      <span class="package-card__icon" aria-hidden="true">
-        <SvgIcon :src="packageIcon" size="20" />
-      </span>
-      <BChip v-if="isCampaign" tone="pending" max-width="var(--ui-layout-160, 160px)">{{
-        campaignItem.campaignTitle
-      }}</BChip>
-      <BChip v-else :tone="firstPurchaseTone">{{ firstPurchaseLabel }}</BChip>
+      <span class="package-card__icon" aria-hidden="true"><SvgIcon :src="packageIcon" size="18" /></span>
+      <h3>{{ isCampaign ? campaignItem.title : tierLabel }}</h3>
     </div>
-
-    <div class="package-card__price"
-      ><small>¥</small><strong>{{ item.amount }}</strong></div
-    >
-
     <template v-if="isCampaign">
-      <h3>{{ campaignItem.title }}</h3>
-
-      <div class="package-card__benefits">
-        <div class="package-card__benefit-row is-highlighted">
-          <span>{{ t('entitlementStore.campaigns.arrival') }}</span>
-          <strong>{{ formatBenefit(campaignItem.benefit) }}</strong>
-        </div>
-      </div>
+      <BChip class="package-card__tag" tone="pending">{{ campaignItem.campaignTitle }}</BChip>
+      <div class="package-card__benefits"
+        ><div class="package-card__benefit-row is-highlighted"
+          ><span>{{ t('entitlementStore.campaigns.arrival') }}</span
+          ><strong>{{ formatBenefit(campaignItem.benefit) }}</strong></div
+        ></div
+      >
       <div class="package-card__meta-list">
         <span>{{ t('entitlementStore.campaigns.endsAt', { time: formatDate(campaignItem.endsAt) }) }}</span>
-        <span>
-          {{
-            campaignItem.remainingPurchases === null
-              ? t('entitlementStore.campaigns.limit', { count: campaignItem.perUserLimit })
-              : t('entitlementStore.campaigns.remaining', { count: campaignItem.remainingPurchases })
-          }}
-        </span>
+        <span>{{
+          campaignItem.remainingPurchases === null
+            ? t('entitlementStore.campaigns.limit', { count: campaignItem.perUserLimit })
+            : t('entitlementStore.campaigns.remaining', { count: campaignItem.remainingPurchases })
+        }}</span>
       </div>
     </template>
-
     <template v-else>
-      <h3>{{ tierLabel }}</h3>
       <p class="package-card__scenario">{{ scenarioLabel }}</p>
+      <BChip v-if="hasFirstPurchase" class="package-card__tag" :tone="firstPurchaseTone">{{
+        firstPurchaseLabel
+      }}</BChip>
       <div class="package-card__benefits">
         <div
           v-if="hasFirstPurchase && regularItem.firstPurchaseStatus !== 'used'"
           class="package-card__benefit-row package-card__benefit-row--primary"
           :class="{ 'is-highlighted': regularItem.firstPurchaseStatus === 'available' && !previewMode }"
         >
-          <span>{{ expectedArrivalLabel }}</span>
-          <strong>{{ formatBenefit(expectedBenefit) }}</strong>
+          <span>{{ expectedArrivalLabel }}</span
+          ><strong>{{ formatBenefit(expectedBenefit) }}</strong>
         </div>
         <div class="package-card__benefit-row package-card__benefit-row--base">
           <span>{{ t(hasFirstPurchase ? 'entitlementStore.baseArrival' : 'entitlementStore.purchaseArrival') }}</span>
-          <strong>{{ formatBenefit(regularItem.base) }}</strong>
+          <strong v-if="hasFirstPurchase">{{ formatBenefit(regularItem.base) }}</strong>
+          <template v-else>
+            <div v-if="regularItem.base.aiTokens" class="package-card__value"
+              ><strong>{{ aiDisplay.number }}</strong
+              ><span>{{ aiDisplay.suffix }}{{ ' ' + t('entitlementStore.layout.aiUnit') }}</span></div
+            >
+            <div v-else class="package-card__value"
+              ><strong>{{ storageDisplay[0] }}</strong
+              ><span>{{ ' ' + storageDisplay[1] }}</span></div
+            >
+            <div v-if="regularItem.base.aiTokens && regularItem.base.storageMb" class="package-card__supplement">
+              <span class="package-card__storage">
+                <SvgIcon :src="icon.growth.storage" size="14" aria-hidden="true" />{{
+                  t('entitlementStore.storageAmount', { amount: formatStorage(regularItem.base.storageMb) })
+                }}
+              </span>
+              <span
+                v-if="regularItem.comboSavings"
+                class="package-card__saving"
+                :aria-label="t('entitlementStore.comboSaving', { amount: regularItem.comboSavings })"
+              >
+                {{ t('entitlementStore.layout.saving', { amount: regularItem.comboSavings }) }}
+              </span>
+            </div>
+          </template>
         </div>
       </div>
-      <p class="package-card__status-note">{{ firstPurchaseNote }}</p>
-      <p v-if="regularItem.comboSavings" class="package-card__saving">
-        {{ t('entitlementStore.comboSaving', { amount: regularItem.comboSavings }) }}
-      </p>
+      <p v-if="hasFirstPurchase" class="package-card__status-note">{{ firstPurchaseNote }}</p>
     </template>
-
-    <div class="package-card__action-wrap">
+    <div class="package-card__footer">
+      <div class="package-card__price"
+        ><small>¥</small><strong>{{ item.amount }}</strong></div
+      >
       <BButton
         class="package-card__action"
-        type="primary"
-        size="large"
+        :type="isRecommended ? 'primary' : undefined"
         :disabled="disabled"
+        :aria-label="actionLabel + ' · ' + (isCampaign ? campaignItem.title : tierLabel)"
         @click="emit('select', item)"
+        >{{ actionLabel }}</BButton
       >
-        {{ actionLabel }}
-      </BButton>
     </div>
   </BCard>
 </template>
 
 <script setup lang="ts">
   import { computed } from 'vue';
+  import { bookmarkStore } from '@/store';
   import { useI18n } from 'vue-i18n';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BCard from '@/components/base/BasicComponents/BCard.vue';
@@ -110,14 +126,20 @@
   );
   const emit = defineEmits<{ select: [item: StoreItem] }>();
   const { t, locale } = useI18n();
+  const bookmark = bookmarkStore();
 
   const isCampaign = computed(() => 'campaignSkuId' in props.item);
   const isRecommended = computed(() => !isCampaign.value && props.index === (props.item.category === 'ai' ? 0 : 1));
   const campaignItem = computed(() => props.item as SupportCampaignPackage);
   const regularItem = computed(() => props.item as SupportPackage);
-  const hasFirstPurchase = computed(() => regularItem.value.firstPurchaseScope !== 'none');
+  const hasFirstPurchase = computed(() => !isCampaign.value && regularItem.value.firstPurchaseScope !== 'none');
+  const aiDisplay = computed(() => {
+    const formatted = formatAiQuotaTokens(regularItem.value.base?.aiTokens || 0, locale.value);
+    const match = formatted.match(/^([\d.,]+)(.*)$/);
+    return { number: match?.[1] || formatted, suffix: match?.[2] || '' };
+  });
+  const storageDisplay = computed(() => formatStorage(regularItem.value.base?.storageMb || 0).split(' '));
   const tierKey = computed(() => ['light', 'regular', 'frequent', 'heavy'][Math.min(Math.max(props.index, 0), 3)]);
-  const categoryLabel = computed(() => t(`entitlementStore.categoryNames.${props.item.category}`));
   const tierLabel = computed(() => t(`entitlementStore.tiers.${tierKey.value}`));
   const scenarioLabel = computed(() => t(`entitlementStore.scenarios.${regularItem.value.category}.${tierKey.value}`));
   const packageIcon = computed(() => {
@@ -191,128 +213,209 @@
     display: flex;
     flex-direction: column;
     min-width: 0;
-    border: 1px solid var(--surface-border-color);
-    background: var(--card-background);
-    box-shadow: 0 5px 15px #5b54aa05;
+  }
+  .package-card.is-recommended {
+    border-color: var(--primary-color);
   }
   .package-card__recommendation {
     position: absolute;
     top: calc(-1 * var(--ui-space-10, 10px));
-    right: var(--ui-space-12, 12px);
-    padding: var(--ui-space-2, 2px) var(--ui-space-10, 10px);
-    border-radius: 13px;
-    background: var(--primary-color);
-    color: white;
-    font-size: var(--ui-font-12, 12px);
+    right: var(--ui-space-14, 14px);
+    padding: var(--ui-space-2, 2px) var(--ui-space-7, 7px);
+    border: 1px solid var(--primary-color);
+    border-radius: 5px;
+    background: var(--card-background);
+    color: var(--workspace-purple-text);
+    font-size: var(--ui-font-11, 11px);
     line-height: 1.5;
   }
   .package-card__top {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    gap: var(--ui-space-6, 6px);
-    margin-bottom: var(--ui-space-8, 8px);
-    min-height: var(--ui-layout-32, 32px);
+    gap: var(--ui-space-8, 8px);
+    min-width: 0;
   }
   .package-card__icon {
-    width: var(--ui-layout-32, 32px);
-    height: var(--ui-layout-32, 32px);
+    width: var(--ui-layout-30, 30px);
+    height: var(--ui-layout-30, 30px);
     flex-shrink: 0;
     display: grid;
     place-items: center;
-    border: 1px solid var(--primary-color);
     border-radius: 8px;
-    background: var(--primary-color-light);
-    color: var(--primary-color);
-  }
-  .package-card__top :deep(.b-chip) {
-    font-size: var(--ui-font-12, 12px);
-    white-space: normal;
-    line-height: 1.4;
-  }
-  .package-card__price {
-    display: flex;
-    align-items: baseline;
-    gap: var(--ui-space-3, 3px);
-    line-height: 1.2;
-  }
-  .package-card__price small {
-    font-size: var(--ui-font-15, 15px);
-  }
-  .package-card__price strong {
-    font-size: var(--ui-font-32, 32px);
-    font-weight: 700;
-    letter-spacing: -0.035em;
+    background: var(--workspace-purple-selected);
+    color: var(--workspace-purple-text);
   }
   h3 {
-    font:
-      700 var(--ui-font-16, 16px)/1.5 'Songti SC',
-      serif;
-    margin: var(--ui-space-4, 4px) 0 0;
+    margin: 0;
+    font-size: var(--ui-font-15, 15px);
+    font-weight: 600;
+    line-height: 1.5;
+    overflow-wrap: anywhere;
   }
   .package-card__scenario {
-    font-size: var(--ui-font-14, 14px);
-    line-height: 1.6;
-    margin: var(--ui-space-3, 3px) 0 var(--ui-space-10, 10px);
+    min-height: var(--ui-layout-33, 33px);
+    margin: var(--ui-space-10, 10px) 0 0;
+    font-size: var(--ui-font-12, 12px);
     color: var(--desc-color);
+    line-height: 1.6;
+  }
+  .package-card__tag {
+    align-self: flex-start;
+    max-width: 100%;
+    margin-top: var(--ui-space-8, 8px);
   }
   .package-card__benefits {
+    flex: 1;
     display: grid;
-    grid-template-columns: 1fr;
-    gap: var(--ui-space-5, 5px);
-    margin-top: auto;
-    margin-bottom: var(--ui-space-8, 8px);
-    padding-top: var(--ui-space-10, 10px);
+    align-content: center;
+    gap: var(--ui-space-8, 8px);
+    margin-top: var(--ui-space-13, 13px);
+    padding: var(--ui-space-12, 12px) 0;
+    border-block: 1px solid var(--surface-divider-color);
   }
   .package-card__benefit-row {
     display: flex;
     flex-direction: column;
-    justify-content: center;
+    gap: var(--ui-space-5, 5px);
     min-width: 0;
-    padding: var(--ui-space-6, 6px) var(--ui-space-7, 7px);
-    background: var(--primary-color-light);
-    border: 1px solid var(--surface-border-color);
-    border-radius: 6px;
   }
-  .package-card__benefit-row span {
-    font-size: var(--ui-font-12, 12px);
+  .package-card__benefit-row > span {
+    font-size: var(--ui-font-11, 11px);
     color: var(--desc-color);
-    line-height: 1.5;
   }
-  .package-card__benefit-row strong {
+  .package-card__benefit-row > strong {
     font-size: var(--ui-font-13, 13px);
-    line-height: 1.6;
-    overflow-wrap: break-word;
+    font-weight: 600;
+    overflow-wrap: anywhere;
   }
-  .package-card__benefit-row--primary strong {
-    color: var(--primary-color);
+  .package-card__benefit-row.is-highlighted > strong {
+    color: var(--workspace-purple-text);
+  }
+  .package-card__value {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    column-gap: var(--ui-space-4, 4px);
+    color: var(--workspace-purple-text);
+    line-height: 1.3;
+  }
+  .package-card__value strong {
+    font-size: var(--ui-font-31, 31px);
+    font-weight: 500;
+  }
+  .package-card__value > span {
+    font-size: var(--ui-font-13, 13px);
+    white-space: pre-wrap;
+  }
+  .is-storage .package-card__value,
+  .is-storage .package-card__icon,
+  .package-card__storage {
+    color: var(--workspace-file-text);
+  }
+  .is-storage .package-card__icon {
+    background: var(--workspace-file-selected);
+  }
+  .package-card__storage {
+    display: flex;
+    align-items: center;
+    gap: var(--ui-space-6, 6px);
+    font-size: var(--ui-font-12, 12px);
+    line-height: 1.5;
   }
   .package-card__status-note,
-  .package-card__saving {
-    font-size: var(--ui-font-12, 12px);
-    line-height: 1.5;
-    margin: 0 0 var(--ui-space-8, 8px);
+  .package-card__meta-list {
+    margin: var(--ui-space-8, 8px) 0 0;
+    font-size: var(--ui-font-11, 11px);
     color: var(--desc-color);
+    line-height: 1.7;
   }
-  .package-card__action-wrap {
-    margin-top: auto;
+  .package-card__saving {
+    color: var(--success-color);
+    font-size: var(--ui-font-11, 11px);
   }
-  .package-card__action.b_btn {
-    width: 100%;
-    min-height: var(--ui-layout-34, 34px);
-    font-size: var(--ui-font-13, 13px);
-  }
-  .is-campaign .package-card__benefits {
-    grid-template-columns: 1fr;
+  .package-card__supplement {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--ui-space-4, 4px) var(--ui-space-9, 9px);
   }
   .package-card__meta-list {
     display: grid;
     gap: var(--ui-space-3, 3px);
-    font-size: var(--ui-font-12, 12px);
-    color: var(--desc-color);
-    margin: var(--ui-space-4, 4px) 0 var(--ui-space-10, 10px);
+  }
+  .package-card__footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: var(--ui-space-8, 8px) var(--ui-space-12, 12px);
+    margin-top: auto;
+    padding-top: var(--ui-space-11, 11px);
+  }
+  .package-card__price {
+    display: flex;
+    align-items: baseline;
+    gap: var(--ui-space-2, 2px);
+    line-height: 1.3;
+    white-space: nowrap;
+  }
+  .package-card__price small {
+    font-size: var(--ui-font-14, 14px);
+  }
+  .package-card__price strong {
+    font-size: var(--ui-font-27, 27px);
+    font-weight: 500;
+  }
+  .package-card__action.b_btn {
+    height: auto;
+    min-height: var(--ui-control-36, 36px);
+    max-width: 100%;
+    padding: var(--ui-space-7, 7px) var(--ui-space-14, 14px);
+    font-size: var(--ui-font-13, 13px);
+    line-height: 1.4;
+    white-space: normal;
+    border: 1px solid var(--surface-border-color);
+    border-radius: 7px;
+  }
+  .package-card__action.default_btn {
+    background: var(--card-background);
+  }
+  .is-mobile h3 {
+    font-size: var(--ui-font-13, 13px);
+  }
+  .is-mobile .package-card__top {
+    gap: var(--ui-space-7, 7px);
+    flex-wrap: wrap;
+  }
+  .is-mobile .package-card__icon {
+    width: var(--ui-layout-25, 25px);
+    height: var(--ui-layout-25, 25px);
+  }
+  .is-mobile .package-card__scenario {
+    min-height: var(--ui-layout-18, 18px);
+    font-size: var(--ui-font-11, 11px);
+    margin-top: var(--ui-space-9, 9px);
+  }
+  .is-mobile .package-card__benefits {
+    margin-top: var(--ui-space-10, 10px);
+    padding: var(--ui-space-10, 10px) 0;
+  }
+  .is-mobile .package-card__value strong {
+    font-size: var(--ui-font-26, 26px);
+  }
+  .is-mobile .package-card__value > span,
+  .is-mobile .package-card__storage {
+    font-size: var(--ui-font-11, 11px);
+  }
+  .is-mobile .package-card__footer {
+    gap: var(--ui-space-6, 6px);
+  }
+  .is-mobile .package-card__price strong {
+    font-size: var(--ui-font-21, 21px);
   }
   .is-mobile .package-card__action.b_btn {
-    min-height: 40px;
+    min-height: var(--ui-control-32, 32px);
+    padding: var(--ui-space-7, 7px) var(--ui-space-6, 6px);
+    font-size: var(--ui-font-12, 12px);
   }
 </style>

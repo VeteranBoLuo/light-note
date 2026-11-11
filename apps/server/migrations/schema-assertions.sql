@@ -2227,6 +2227,9 @@ FROM (
   SELECT 'support_checkout_intents', 'campaign_starts_at', 'support_checkout_intents.campaign_starts_at' UNION ALL
   SELECT 'support_checkout_intents', 'campaign_ends_at', 'support_checkout_intents.campaign_ends_at' UNION ALL
   SELECT 'support_checkout_intents', 'consumed_order_id', 'support_checkout_intents.consumed_order_id' UNION ALL
+  SELECT 'support_checkout_intents', 'afdian_plan_id', 'support_checkout_intents.afdian_plan_id' UNION ALL
+  SELECT 'support_checkout_intents', 'afdian_sku_id', 'support_checkout_intents.afdian_sku_id' UNION ALL
+  SELECT 'support_orders', 'product_sku_id', 'support_orders.product_sku_id' UNION ALL
   SELECT 'support_entitlement_grants', 'granted_storage_mb', 'support_entitlement_grants.granted_storage_mb' UNION ALL
   SELECT 'support_entitlement_grants', 'first_purchase_applied', 'support_entitlement_grants.first_purchase_applied' UNION ALL
   SELECT 'support_first_purchase_claims', 'provider_identity_hash', 'support_first_purchase_claims.provider_identity_hash'

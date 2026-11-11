@@ -1,6 +1,11 @@
 import pool from '../db/index.js';
 import { afdianError } from './afdianConfig.js';
-import { getSupportPackageFeatureState, calculateSupportPackageCost } from './afdianSupportPackageCatalog.js';
+import {
+  campaignCatalogVersion,
+  getSupportPackageFeatureState,
+  calculateSupportPackageCost,
+  readAfdianPackageProducts,
+} from './afdianSupportPackageCatalog.js';
 
 const ID = /^[0-9a-f-]{36}$/i;
 export function campaignLifecycle(campaign, now = new Date()) {
@@ -17,7 +22,7 @@ export async function setCampaignVisibility({ campaignId, enabled, actorUserId, 
     await connection.beginTransaction();
     // The same lock is acquired before creating a campaign checkout intent.
     await connection.query('SELECT id FROM support_campaign_visibility_lock WHERE id = 1 FOR UPDATE');
-    const [rows] = await connection.query('SELECT id, status, ends_at FROM support_campaigns WHERE id = ? FOR UPDATE', [
+    const [rows] = await connection.query('SELECT id, version, status, ends_at FROM support_campaigns WHERE id = ? FOR UPDATE', [
       campaignId,
     ]);
     const campaign = rows[0];
@@ -34,7 +39,7 @@ export async function setCampaignVisibility({ campaignId, enabled, actorUserId, 
         throw afdianError('SUPPORT_CAMPAIGN_OPEN_BLOCKED', '请检查活动发布状态、日期与服务开关', 409);
       }
       const [skus] = await connection.query(
-        'SELECT amount, ai_tokens, storage_mb FROM support_campaign_skus WHERE campaign_id = ? FOR UPDATE',
+        'SELECT id, amount, ai_tokens, storage_mb FROM support_campaign_skus WHERE campaign_id = ? FOR UPDATE',
         [campaignId],
       );
       if (
@@ -46,6 +51,11 @@ export async function setCampaignVisibility({ campaignId, enabled, actorUserId, 
         )
       ) {
         throw afdianError('SUPPORT_CAMPAIGN_COST_BLOCKED', '当前成本核验未通过', 409);
+      }
+      const products = readAfdianPackageProducts(env);
+      const version = campaignCatalogVersion(campaignId, campaign.version);
+      if (skus.some((sku) => !products.has(`${version}/${sku.id}`))) {
+        throw afdianError('SUPPORT_CAMPAIGN_PRODUCT_UNAVAILABLE', '请为活动套餐配置固定商品后再开放', 409);
       }
       await connection.query(
         'UPDATE support_campaigns SET public_enabled = 0, public_updated_by = ?, public_updated_at = NOW() WHERE public_enabled = 1 AND id <> ?',
@@ -86,7 +96,10 @@ export async function getCampaignPresentation({
   const c = rows[0];
   if (!c) return null;
   const lifecycle = campaignLifecycle(c, now);
-  if (entryOnly && (lifecycle === 'ended' || lifecycle === 'paused' || !feature.checkoutEnabled)) return null;
+  const catalogVersion = campaignCatalogVersion(c.id, c.version);
+  const products = readAfdianPackageProducts(env);
+  const hasProducts = [...products.keys()].some((key) => key.startsWith(catalogVersion + '/'));
+  if (entryOnly && (lifecycle === 'ended' || lifecycle === 'paused' || !feature.checkoutEnabled || !hasProducts)) return null;
   const result = {
     campaignKey: c.campaign_key,
     campaignVersion: Number(c.version),
@@ -96,7 +109,7 @@ export async function getCampaignPresentation({
     startsAt: new Date(c.starts_at).toISOString(),
     endsAt: new Date(c.ends_at).toISOString(),
     lifecycle,
-    checkoutEnabled: feature.checkoutEnabled && lifecycle === 'active',
+    checkoutEnabled: feature.checkoutEnabled && lifecycle === 'active' && hasProducts,
     themeKey: 'autumn-desk-v1',
   };
   if (entryOnly) return result;
@@ -110,7 +123,7 @@ export async function getCampaignPresentation({
     campaignId: c.id,
     campaignKey: c.campaign_key,
     campaignVersion: Number(c.version),
-    catalogVersion: `campaign:${c.id}:v${Number(c.version)}`,
+    catalogVersion,
     campaignTitle: c.title,
     description: c.description,
     startsAt: result.startsAt,
@@ -126,7 +139,9 @@ export async function getCampaignPresentation({
     remainingPurchases: Math.max(0, Number(s.per_user_limit) - Number(s.completed_count)),
     limitReached: Number(s.completed_count) >= Number(s.per_user_limit),
     hasActiveCheckout: Boolean(s.active_intent_id && new Date(s.active_until).getTime() > now.getTime()),
+    checkoutAvailable: products.has(`${catalogVersion}/${s.id}`),
   }));
+  result.checkoutEnabled &&= result.packages.some((item) => item.checkoutAvailable);
   return result;
 }
 

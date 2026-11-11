@@ -4,13 +4,19 @@ import { createI18n } from 'vue-i18n';
 import { SUPPORT_PACKAGE_CATALOG, SUPPORT_PACKAGE_CATALOG_VERSION } from '@lightnote/shared';
 import zhCN from '@/i18n/locales/zh-CN';
 
-const routeState = vi.hoisted(() => ({ query: {} as Record<string, string> }));
+const routeState = vi.hoisted(() => ({ name: 'entitlementStore', query: {} as Record<string, string> }));
 const mocks = vi.hoisted(() => ({
   getCatalog: vi.fn(),
   getState: vi.fn(),
+  getOrders: vi.fn(),
   createIntent: vi.fn(async () => ({
     intentId: '11111111-1111-4111-8111-111111111111',
-    url: 'https://afdian.com/a/lightnote',
+    url: `https://ifdian.net/order/create?${new URLSearchParams({
+      product_type: '1',
+      plan_id: 'a'.repeat(32),
+      sku: JSON.stringify([{ sku_id: 'b'.repeat(32), count: 1 }]),
+      custom_order_id: 'c'.repeat(43),
+    })}`,
   })),
   queryIntent: vi.fn(async () => ({
     intentId: '11111111-1111-4111-8111-111111111111',
@@ -26,7 +32,10 @@ const mocks = vi.hoisted(() => ({
   messageWarning: vi.fn(),
 }));
 
-vi.mock('@/config/support', () => ({ openAfdianSupportPage: mocks.openCheckout }));
+vi.mock('@/config/support', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/config/support')>()),
+  openAfdianPackageCheckout: mocks.openCheckout,
+}));
 vi.mock('@/utils/mobileOverlayHistory', () => ({
   closeCurrentMobileOverlayThen: async (close: () => void, next: () => void) => {
     close();
@@ -37,6 +46,7 @@ vi.mock('@/utils/mobileOverlayHistory', () => ({
 vi.mock('@/api/supportApi', () => ({
   getEntitlementStoreCatalog: mocks.getCatalog,
   getEntitlementStoreState: mocks.getState,
+  getEntitlementOrders: mocks.getOrders,
   getCampaignEntry: vi.fn(async () => null),
   createCheckoutIntent: mocks.createIntent,
   queryCheckoutIntent: mocks.queryIntent,
@@ -110,6 +120,7 @@ const comboPackage = {
   firstPurchase: { aiTokens: 720_000, storageMb: 256 },
   comboSavings: 2,
   firstPurchaseStatus: 'available',
+  checkoutAvailable: true,
 };
 const campaign = {
   campaignId: '11111111-1111-4111-8111-111111111111',
@@ -131,6 +142,7 @@ const campaign = {
   remainingPurchases: 1,
   limitReached: false,
   hasActiveCheckout: false,
+  checkoutAvailable: true,
 };
 
 let cleanup: (() => void) | undefined;
@@ -156,6 +168,7 @@ describe('独立资源商店', () => {
     vi.clearAllMocks();
     routeState.query = { category: 'combo' };
     mocks.getState.mockResolvedValue(state);
+    mocks.getOrders.mockResolvedValue({ items: [], page: 1, pageSize: 10, total: 0 });
     mocks.getCatalog.mockResolvedValue({
       catalogVersion: 'support-packages-v4',
       catalogEnabled: true,
@@ -220,7 +233,6 @@ describe('独立资源商店', () => {
     ]);
     for (const card of cards) {
       expect(card.querySelectorAll('.package-card__benefit-row')).toHaveLength(1);
-      expect(card.textContent).toContain('一次购买，永久扩容');
       expect(card.textContent).not.toContain('首购');
     }
     expect(
@@ -237,20 +249,25 @@ describe('独立资源商店', () => {
       checkoutEnabled: true,
       grantEnabled: true,
       campaignsEnabled: false,
-      packages: [{ ...definition, firstPurchaseStatus: 'not_applicable' }],
+      packages: [{ ...definition, firstPurchaseStatus: 'not_applicable', checkoutAvailable: true }],
       campaigns: [],
     });
     const host = await mountStore();
-    await vi.waitFor(() => expect(host.textContent).toContain('购买 ¥6'));
-    expect(host.querySelector('.package-card__benefits')?.textContent).toBe('每次购买到账256 MB 云空间');
+    await vi.waitFor(() => expect(host.textContent).toContain('购买套餐'));
+    expect(host.querySelector('.package-card__benefits')?.textContent).toContain('每次购买到账256 MB');
+    expect(host.textContent).toContain('一次购买，按标示容量永久扩容');
     host.querySelector<HTMLButtonElement>('.package-card__action')?.click();
     await nextTick();
     const modal = document.body.querySelector('.checkout-modal')!;
-    expect(modal.textContent).toContain('一次购买，永久扩容');
+    expect(modal.textContent).toContain('付款确认后，资源自动加入当前轻笺账号');
     expect(modal.textContent).not.toContain('首购');
     expect(modal.textContent).not.toContain('基础到账');
     expect(modal.querySelectorAll('.checkout-modal__facts .is-emphasis')).toHaveLength(1);
     expect(modal.textContent?.match(/256 MB 云空间/g)).toHaveLength(1);
+    expect(modal.textContent?.replace(/\s/g, '').split('¥6')).toHaveLength(2);
+    expect(modal.querySelector('.checkout-modal__confirm')?.textContent?.trim()).toBe('前往付款');
+    expect(modal.textContent).toContain('购买数量1 份');
+    expect(modal.textContent).not.toContain('1 个月');
     modal.querySelector<HTMLButtonElement>('.checkout-modal__confirm')?.click();
     await vi.waitFor(() =>
       expect(mocks.createIntent).toHaveBeenCalledWith('storage-6', SUPPORT_PACKAGE_CATALOG_VERSION, undefined),
@@ -265,20 +282,27 @@ describe('独立资源商店', () => {
       checkoutEnabled: true,
       grantEnabled: true,
       campaignsEnabled: false,
-      packages: SUPPORT_PACKAGE_CATALOG.map((item) => ({ ...item, firstPurchaseStatus: 'not_applicable' })),
+      packages: SUPPORT_PACKAGE_CATALOG.map((item) => ({
+        ...item,
+        firstPurchaseStatus: 'not_applicable',
+        checkoutAvailable: true,
+      })),
       campaigns: [],
     });
     const host = await mountStore();
-    await vi.waitFor(() => expect(host.textContent).toContain(category === 'ai' ? '购买 ¥6' : '购买 ¥10'));
+    await vi.waitFor(() => expect(host.textContent).toContain('购买套餐'));
     const cards = [...host.querySelectorAll<HTMLElement>('[role="tabpanel"][aria-hidden="false"] .package-card')];
     expect(cards).toHaveLength(4);
     const quotaLabels = ['30万', '90万', '250万', '500万'];
     const prices = category === 'ai' ? [6, 18, 50, 100] : [10, 30, 88, 168];
     cards.forEach((card, index) => {
-      expect(card.querySelector('.package-card__benefits')?.textContent).toContain(`${quotaLabels[index]} AI 额度`);
+      expect(card.querySelector('.package-card__benefits')?.textContent?.replace(/\s+/g, '')).toContain(
+        `${quotaLabels[index]}AI额度`,
+      );
       expect(card.querySelector('.package-card__price')?.textContent).toBe(`¥${prices[index]}`);
       expect(card.querySelectorAll('.package-card__benefit-row')).toHaveLength(1);
-      expect(card.textContent).toContain('一次购买，永久有效；优先使用每日免费额度');
+      expect(card.querySelector('.package-card__action')?.textContent?.trim()).toBe('购买套餐');
+      expect(card.textContent?.replace(/\s/g, '').split('¥' + prices[index])).toHaveLength(2);
       expect(card.textContent).not.toContain('首购');
     });
     // 历史已到账订单继续展示原发放事实，不被当前目录额度覆盖。
@@ -286,7 +310,7 @@ describe('独立资源商店', () => {
     cards[0]?.querySelector<HTMLButtonElement>('.package-card__action')?.click();
     await nextTick();
     const modal = document.body.querySelector('.checkout-modal')!;
-    expect(modal.textContent).toContain('一次购买，永久有效；优先使用每日免费额度');
+    expect(modal.textContent).toContain('购买数量1 份');
     expect(modal.textContent).toContain('本次预计到账30万 AI 额度');
     expect(modal.textContent).not.toContain('首购');
     expect(modal.textContent).not.toContain('基础到账');
@@ -309,7 +333,11 @@ describe('独立资源商店', () => {
       checkoutEnabled: true,
       grantEnabled: true,
       campaignsEnabled: false,
-      packages: SUPPORT_PACKAGE_CATALOG.map((item) => ({ ...item, firstPurchaseStatus: 'not_applicable' })),
+      packages: SUPPORT_PACKAGE_CATALOG.map((item) => ({
+        ...item,
+        firstPurchaseStatus: 'not_applicable',
+        checkoutAvailable: true,
+      })),
       campaigns: [],
     });
     const host = await mountStore();
@@ -338,6 +366,33 @@ describe('独立资源商店', () => {
     expect(mocks.createIntent).not.toHaveBeenCalled();
   });
 
+  it('旧支持链接打开历史赞助，切换资源购买时按类别读取订单', async () => {
+    routeState.query = { records: 'history' };
+    await mountStore();
+    await vi.waitFor(() => expect(mocks.getOrders).toHaveBeenLastCalledWith('history', 1));
+    const tabs = [...document.querySelectorAll<HTMLButtonElement>('[role="tab"]')];
+    const history = tabs.find((tab) => tab.textContent?.includes('历史赞助'));
+    expect(history?.getAttribute('aria-selected')).toBe('true');
+    tabs.find((tab) => tab.textContent?.includes('资源购买'))?.click();
+    await vi.waitFor(() => expect(mocks.getOrders).toHaveBeenLastCalledWith('purchase', 1));
+  });
+
+  it('旧后端目录没有固定商品绑定时禁止购买', async () => {
+    mocks.getCatalog.mockResolvedValueOnce({
+      catalogVersion: SUPPORT_PACKAGE_CATALOG_VERSION,
+      catalogEnabled: true,
+      checkoutEnabled: true,
+      grantEnabled: true,
+      campaignsEnabled: false,
+      packages: [{ ...comboPackage, checkoutAvailable: undefined }],
+      campaigns: [],
+    });
+    const host = await mountStore();
+    await vi.waitFor(() => expect(host.textContent).toContain('暂不可购买'));
+    expect(host.querySelector<HTMLButtonElement>('.package-card__action')?.disabled).toBe(true);
+    expect(mocks.createIntent).not.toHaveBeenCalled();
+  });
+
   it('未登录时仍可浏览目录，但不能创建购买订单', async () => {
     mocks.getState.mockResolvedValueOnce({
       authenticated: false,
@@ -359,7 +414,7 @@ describe('独立资源商店', () => {
   it('购买状态读取失败时明确报错并失败关闭，不把登录用户误报成未登录', async () => {
     mocks.getState.mockRejectedValueOnce(new Error('state unavailable'));
     const host = await mountStore();
-    await vi.waitFor(() => expect(host.textContent).toContain('账号与购买状态暂时无法读取'));
+    await vi.waitFor(() => expect(host.textContent).toContain('订单记录暂时无法读取'));
     expect(host.textContent).toContain('账号状态暂不可用');
     expect(host.textContent).not.toContain('登录后购买');
     expect(
@@ -373,7 +428,7 @@ describe('独立资源商店', () => {
     const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(baseTime);
     try {
       const host = await mountStore();
-      await vi.waitFor(() => expect(host.textContent).toContain('购买 ¥10'));
+      await vi.waitFor(() => expect(host.textContent).toContain('购买套餐'));
       host.querySelectorAll<HTMLButtonElement>('.package-card__action')[0]?.click();
       await nextTick();
       expect(document.body.querySelector<HTMLButtonElement>('.checkout-modal__confirm')?.disabled).toBe(false);
@@ -408,7 +463,7 @@ describe('独立资源商店', () => {
       expect(mocks.openCheckout).not.toHaveBeenCalled();
 
       finishRefresh?.(state);
-      await vi.waitFor(() => expect(host.textContent).toContain('购买 ¥10'));
+      await vi.waitFor(() => expect(host.textContent).toContain('购买套餐'));
       expect(document.body.querySelector<HTMLButtonElement>('.checkout-modal__confirm')?.disabled).toBe(false);
       expect(document.body.textContent).toContain('本次预计到账60万 AI 额度 + 256 MB 云空间');
       expect(document.body.textContent).toContain('本账号对应的首购加量已使用');

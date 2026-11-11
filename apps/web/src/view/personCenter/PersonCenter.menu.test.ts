@@ -4,7 +4,6 @@ import { describe, expect, it } from 'vitest';
 import icon from '@/config/icon';
 import {
   DESKTOP_PERSON_CENTER_PRIMARY_ENTRIES,
-  DESKTOP_PERSON_CENTER_SECONDARY_ENTRIES,
   MOBILE_PERSON_CENTER_COMMUNICATION_ENTRIES,
   MOBILE_PERSON_CENTER_MANAGEMENT_ENTRIES,
   MOBILE_PERSON_CENTER_QUICK_ENTRIES,
@@ -28,7 +27,6 @@ describe('personal center menu contract', () => {
       'help',
       'updateLogs',
     ]);
-    expect(DESKTOP_PERSON_CENTER_SECONDARY_ENTRIES.map((entry) => entry.name)).toEqual(['support']);
     expect(desktopSource).toContain('<div class="menu-group-divider" aria-hidden="true" />');
     expect(PERSON_CENTER_ENTRIES.trash.tone).toBe('neutral');
   });
@@ -50,7 +48,6 @@ describe('personal center menu contract', () => {
       'feedback',
       'help',
       'updateLogs',
-      'support',
     ]);
     expect(mobileSource).toContain('goToProfileModule(entry.mobilePath || entry.path)');
   });
