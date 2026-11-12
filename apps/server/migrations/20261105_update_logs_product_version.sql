@@ -8,8 +8,9 @@ DELIMITER $$
 CREATE PROCEDURE `migrate_update_log_product_version`()
 BEGIN
   DECLARE v_matches INT DEFAULT 0;
-  DECLARE v_id VARCHAR(64);
-  DECLARE v_version VARCHAR(32);
+  -- 显式排序规则：库默认 utf8mb4_general_ci 时，与表列 utf8mb4_unicode_ci 比较会报 1267。
+  DECLARE v_id VARCHAR(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+  DECLARE v_version VARCHAR(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
   DECLARE EXIT HANDLER FOR SQLEXCEPTION
   BEGIN
     ROLLBACK;
