@@ -1,6 +1,6 @@
 import { enqueueBookmarkArchive, getBookmarkArchiveStatus } from '../util/bookmarkArchiveJobs.js';
 import pool from '../db/index.js';
-import { resultData, snakeCaseKeys, mergeExistingProperties } from '../util/common.js';
+import { L, resultData, snakeCaseKeys, mergeExistingProperties } from '../util/common.js';
 import { getDerivedRelatedTags } from '../util/services/tagRelationService.js';
 import {
   RESOURCE_TYPE,
@@ -37,7 +37,7 @@ import {
 import { invalidatePersonalKnowledgeCache } from '../util/personalKnowledgeSearch.js';
 import { stableAgentErrorCode } from '../util/agent/logSafety.js';
 import { buildPagedResult, normalizeOptionalPagination } from '../util/pagination.js';
-import { AnchoredSortError, moveOwnedResourceByAnchors } from '../util/anchoredSort.js';
+import { AnchoredSortError, moveOwnedResourceByAnchors, writeResourceSortBatches } from '../util/anchoredSort.js';
 import { completeGrowthTask } from '../util/growthTaskCompletion.js';
 import crypto from 'node:crypto';
 import { AI_QUOTA_ERROR_CODES, isAiQuotaErrorCode } from '@lightnote/shared/ai-quota-protocol';
@@ -260,8 +260,6 @@ const SORT_UUID =
 // Only the unambiguous legacy input shape is batched. Other values retain
 // the original per-row SQL coercion, duplicate handling and error messages.
 async function tryBatchResourceSort(connection, table, userId, items) {
-  if (table !== "tag" && table !== "bookmark")
-    throw new Error("INVALID_SORT_TABLE");
   if (!Array.isArray(items) || items.length < 2) return false;
   const ids = new Set();
   for (const item of items) {
@@ -278,19 +276,7 @@ async function tryBatchResourceSort(connection, table, userId, items) {
     if (ids.has(key)) return false;
     ids.add(key);
   }
-  // table is supplied only by the two internal callers below.
-  for (let offset = 0; offset < items.length; offset += SORT_BATCH_SIZE) {
-    const batch = items.slice(offset, offset + SORT_BATCH_SIZE);
-    await connection.query(
-      `UPDATE ${table} SET sort = CASE id ${batch.map(() => "WHEN ? THEN ?").join(" ")} ELSE sort END
-        WHERE id IN (${batch.map(() => "?").join(",")}) AND user_id = ?`,
-      [
-        ...batch.flatMap(({ id, sort }) => [id, sort]),
-        ...batch.map(({ id }) => id),
-        userId,
-      ],
-    );
-  }
+  await writeResourceSortBatches(connection, table, userId, items, { batchSize: SORT_BATCH_SIZE, includeDeleted: true });
   return true;
 }
 
@@ -973,6 +959,13 @@ export const updateBookmarkSort = async (req, res) => {
   } catch (e) {
     await connection.rollback(); // 如果发生错误，回滚事务
     if (e instanceof AnchoredSortError) {
+      if (e.code === 'BOOKMARK_SORT_TAG_CHANGED') {
+        return res.send(resultData(
+          { errorCode: e.code },
+          409,
+          L(req, e.message, 'A bookmark is no longer in this tag. Refresh and try again.'),
+        ));
+      }
       return res.send(resultData(null, e.code === 'RESOURCE_NOT_FOUND' ? 404 : 400, e.message));
     }
     console.error('[bookmark] update sort failed code=%s', stableAgentErrorCode(e));

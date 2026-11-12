@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  buildFilteredResourceSortMove,
   buildResourceSortMove,
   hasResourceOrderChanged,
   isNearResourceScrollEnd,
@@ -70,5 +71,24 @@ describe('resource pagination helpers', () => {
     expect(move).toEqual({ id: 'a', previousId: 'b', nextId: 'c' });
     expect(hasResourceOrderChanged(items, [...items])).toBe(false);
     expect(hasResourceOrderChanged(items, [items[0], items[2], items[1], items[3]])).toBe(true);
+  });
+
+  it.each([
+    { id: 'a', after: ['a', 'b'], expected: null },
+    { id: 'a', after: ['b', 'a'], expected: { id: 'a', previousId: 'b', nextId: null } },
+    { id: 'b', after: ['b', 'a'], expected: { id: 'b', previousId: null, nextId: 'a' } },
+    { id: 'b', after: ['a', 'b'], expected: null },
+  ])('keeps the dragged bookmark and direction when moving $id to $after', ({ id, after, expected }) => {
+    const items = (ids: string[]) => ids.map((id) => ({ id }));
+    expect(buildFilteredResourceSortMove(items(['a', 'b']), items(after), id)).toEqual(expected);
+  });
+
+  it('uses the crossed bookmark when both visible neighbors surround the drop', () => {
+    const before = ['a', 'b', 'c'].map((id) => ({ id }));
+    expect(buildFilteredResourceSortMove(before, [before[0], before[2], before[1]], 'c')).toEqual({
+      id: 'c',
+      previousId: null,
+      nextId: 'b',
+    });
   });
 });

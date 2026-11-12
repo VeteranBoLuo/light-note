@@ -88,3 +88,43 @@ for (const [key, table, handler] of [
       }
     });
   });
+
+it('returns a conflict when an anchor leaves the selected tag', async () => {
+  const rows = [{ id: id(1), isTop: 0, sort: 0 }, { id: id(2), isTop: 0, sort: 1 }];
+  const move = { id: id(1), previousId: id(2), tagId: 'work' };
+  c.query.mockResolvedValueOnce([rows]).mockResolvedValueOnce([[{ resource_id: move.id }]]);
+
+  const res = { send: vi.fn() };
+  await updateBookmarkSort({ user: { id: 'subject', role: 'user' }, body: { move } }, res);
+  expect(res.send).toHaveBeenCalledWith(expect.objectContaining({
+    status: 409,
+    data: { errorCode: 'BOOKMARK_SORT_TAG_CHANGED' },
+  }));
+  expect(c.query).toHaveBeenCalledTimes(2);
+  expect(c.rollback).toHaveBeenCalledTimes(1);
+  expect(c.commit).not.toHaveBeenCalled();
+});
+
+it('rolls back a tagged move when a later sort batch fails', async () => {
+  const rows = Array.from({ length: 102 }, (_, sort) => ({ id: id(sort + 1), isTop: 0, sort }));
+  const move = { id: id(1), previousId: id(102), tagId: 'work' };
+  c.query
+    .mockResolvedValueOnce([rows])
+    .mockResolvedValueOnce([[{ resource_id: move.id }, { resource_id: move.previousId }]])
+    .mockResolvedValueOnce([{ affectedRows: 50 }])
+    .mockRejectedValueOnce(new Error('fixture failure'));
+
+  const res = { send: vi.fn() };
+  const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+  try {
+    await updateBookmarkSort({ user: { id: 'subject', role: 'user' }, body: { move } }, res);
+    expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ status: 500 }));
+    expect(c.query).toHaveBeenCalledTimes(4);
+    expect(c.query.mock.calls[2][1]).toHaveLength(151);
+    expect(c.rollback).toHaveBeenCalledTimes(1);
+    expect(c.commit).not.toHaveBeenCalled();
+    expect(c.release).toHaveBeenCalledTimes(1);
+  } finally {
+    spy.mockRestore();
+  }
+});

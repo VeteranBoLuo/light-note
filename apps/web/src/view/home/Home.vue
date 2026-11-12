@@ -90,8 +90,10 @@
             :range-selection="rangeSelection"
             :batch-mode="batchMode"
             :selected-ids="selectedIds"
+            :sort-saving="bookmarkSortSaving"
             @load-more="loadMoreBookmarks"
             @toggle-selection="toggleSelection"
+            @sort-bookmarks="saveBookmarkOrder"
           />
         </main>
       </div>
@@ -177,7 +179,7 @@
   import GuestBrowseNudge from '@/components/home/GuestBrowseNudge.vue';
   import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch } from 'vue';
   import { bookmarkStore, useUserStore } from '@/store';
-  import { apiQueryPost } from '@/http/request.ts';
+  import { apiBasePost, apiQueryPost } from '@/http/request.ts';
   import { loadBookmarkIconsProgressively } from '@/api/commonApi.ts';
   import { useRoute, useRouter } from 'vue-router';
   import { useI18n } from 'vue-i18n';
@@ -190,7 +192,7 @@
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon.ts';
   import { useMobileTopBar } from '@/composables/useMobileTopBar';
-  import { RESOURCE_LIST_PAGE_SIZE, mergeResourcePage } from '@/utils/resourcePagination';
+  import { RESOURCE_LIST_PAGE_SIZE, mergeResourcePage, type BookmarkSortMove } from '@/utils/resourcePagination';
   import ResourceBatchActionsDrawer from '@/components/resourceActions/ResourceBatchActionsDrawer.vue';
   import MobilePageActionsDrawer, { type MobilePageActionItem } from '@/components/mobile/MobilePageActionsDrawer.vue';
   import { createMobileResourceHubActions, mobileResourceHubPath } from '@/utils/mobileResourceHubActions';
@@ -271,6 +273,7 @@
   const batchMutating = ref(false);
   const bookmarkLoadError = ref(false);
   const bookmarkLoadMoreError = ref(false);
+  const bookmarkSortSaving = ref(false);
   const mobilePageActionsOpen = ref(false);
   const workspaceRef = ref<HTMLElement | null>(null);
   const desktopManagementMode = computed(() => bookmark.isDesktop && String(route.query.mode || '') === 'manage');
@@ -284,7 +287,9 @@
    */
   const pullRefresh = useAndroidPullRefresh({
     enabled: computed(() => !batchMode.value),
-    externalBusy: computed(() => bookmark.bookmarkLoading || bookmark.bookmarkLoadingMore || batchMutating.value),
+    externalBusy: computed(
+      () => bookmark.bookmarkLoading || bookmark.bookmarkLoadingMore || batchMutating.value || bookmarkSortSaving.value,
+    ),
     getScrollContainer: () => workspaceRef.value?.querySelector<HTMLElement>('[data-mobile-resource-scroll]') ?? null,
     onRefresh: () => Promise.all([loadCurrentBookmarkPage({ silent: true }), queryTagList(true)]),
   });
@@ -292,7 +297,11 @@
   useForegroundRefresh({
     refresh: () => Promise.all([loadCurrentBookmarkPage({ silent: true }), queryTagList(true)]),
     canRefresh: () =>
-      !batchMode.value && !bookmark.bookmarkLoading && !bookmark.bookmarkLoadingMore && !batchMutating.value,
+      !batchMode.value &&
+      !bookmark.bookmarkLoading &&
+      !bookmark.bookmarkLoadingMore &&
+      !batchMutating.value &&
+      !bookmarkSortSaving.value,
   });
   const mobilePageActions = computed<MobilePageActionItem[]>(() => [
     ...createMobileResourceHubActions(t),
@@ -309,6 +318,7 @@
   );
   let bookmarkSearchTimer = 0;
   let bookmarkRequestSequence = 0;
+  let bookmarkViewDisposed = false;
 
   const pageSubtitle = computed(() => {
     const tagData = bookmark.tagData as any;
@@ -580,7 +590,7 @@
   }
 
   async function loadMoreBookmarks() {
-    if (bookmark.bookmarkLoading || bookmark.bookmarkLoadingMore || !bookmark.bookmarkHasMore) return false;
+    if (bookmarkSortSaving.value || bookmark.bookmarkLoading || bookmark.bookmarkLoadingMore || !bookmark.bookmarkHasMore) return false;
     const requestSequence = bookmarkRequestSequence;
     const requestType = bookmark.type;
     const params = getBookmarkRequestParams(requestType);
@@ -729,6 +739,47 @@
     }
   }
 
+  async function saveBookmarkOrder(move: BookmarkSortMove, items: typeof bookmark.bookmarkList) {
+    if (bookmarkSortSaving.value || bookmark.bookmarkLoading || bookmark.bookmarkLoadingMore) return;
+    const ownerId = user.id;
+    const path = route.fullPath;
+    const type = bookmark.type;
+    const originalList = bookmark.bookmarkList;
+    const requestSequence = ++bookmarkRequestSequence;
+    bookmarkSortSaving.value = true;
+    bookmark.bookmarkList = items;
+    const optimisticList = bookmark.bookmarkList;
+    let saved = false;
+    let needsReload = false;
+    try {
+      const result = await apiBasePost('/api/bookmark/updateBookmarkSort', { move });
+      saved = result.status === 200;
+      needsReload = result.data?.moved === false;
+    } catch (error) {
+      console.error('Error updating bookmark sort:', error);
+    } finally {
+      bookmarkSortSaving.value = false;
+    }
+
+    if (ownerId !== user.id) return;
+    if (bookmarkViewDisposed) {
+      bookmark.refreshData();
+      return;
+    }
+    const sameView =
+      requestSequence === bookmarkRequestSequence &&
+      path === route.fullPath &&
+      type === bookmark.type &&
+      optimisticList === bookmark.bookmarkList;
+    if (!saved && sameView) bookmark.bookmarkList = originalList;
+    if (!saved || !sameView || needsReload) {
+      await loadCurrentBookmarkPage({
+        silent: !bookmark.bookmarkLoading && !bookmark.bookmarkLoadingMore,
+        preserveLoaded: true,
+      });
+    }
+  }
+
   async function refreshBookmarkTags() {
     const [updated] = await Promise.all([
       loadCurrentBookmarkPage({ silent: true, preserveLoaded: true }),
@@ -831,6 +882,7 @@
   });
 
   onBeforeUnmount(() => {
+    bookmarkViewDisposed = true;
     window.clearTimeout(bookmarkSearchTimer);
     bookmarkRequestSequence += 1;
   });

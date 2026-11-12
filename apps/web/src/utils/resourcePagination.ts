@@ -8,6 +8,10 @@ export interface ResourceSortMove {
   nextId: string | null;
 }
 
+export interface BookmarkSortMove extends ResourceSortMove {
+  tagId?: string;
+}
+
 function getResourceId(item: any) {
   return String(item?.id ?? '').trim();
 }
@@ -75,4 +79,20 @@ export function buildResourceSortMove<T>(
     previousId: index > 0 ? getResourceId(group[index - 1]) : null,
     nextId: index < group.length - 1 ? getResourceId(group[index + 1]) : null,
   };
+}
+
+/** Use the crossed item as the sole anchor, since visible neighbors may have hidden resources between them. */
+export function buildFilteredResourceSortMove<T>(
+  before: T[],
+  after: T[],
+  movedId: string,
+): ResourceSortMove | null {
+  const id = String(movedId || '').trim();
+  const from = before.findIndex((item) => getResourceId(item) === id);
+  const to = after.findIndex((item) => getResourceId(item) === id);
+  if (!id || from < 0 || to < 0 || from === to || before.length !== after.length) return null;
+
+  const anchor = getResourceId(before[to]);
+  if (!anchor) return null;
+  return { id, previousId: to > from ? anchor : null, nextId: to < from ? anchor : null };
 }

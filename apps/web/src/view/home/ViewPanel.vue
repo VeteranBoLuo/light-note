@@ -5,8 +5,10 @@
       :range-selection="rangeSelection"
       :batch-mode="batchMode"
       :selected-ids="selectedIds"
+      :sort-saving="sortSaving"
       @load-more="emit('load-more')"
       @toggle-selection="emit('toggle-selection', $event)"
+      @sort-bookmarks="(move, items) => emit('sort-bookmarks', move, items)"
     />
   </div>
 </template>
@@ -16,16 +18,19 @@
   import TagInfo from '@/components/home/TagInfo.vue';
   import CardPanel from '@/components/home/CardPanel.vue';
   import { bookmarkStore } from '@/store';
+  import type { BookmarkSortMove } from '@/utils/resourcePagination';
 
   const bookmark = bookmarkStore();
   defineProps<{
     rangeSelection?: RangeSelectionController;
     batchMode?: boolean;
     selectedIds?: string[];
+    sortSaving?: boolean;
   }>();
   const emit = defineEmits<{
     'load-more': [];
     'toggle-selection': [id: string];
+    'sort-bookmarks': [move: BookmarkSortMove, items: typeof bookmark.bookmarkList];
   }>();
 </script>
 

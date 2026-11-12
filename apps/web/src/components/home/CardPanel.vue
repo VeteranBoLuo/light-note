@@ -36,18 +36,13 @@
     <VueDraggable
       v-else
       :animation="200"
-      :disabled="
-        batchMode || bookmark.isMobile ||
-        bookmark.type !== 'all' ||
-        bookmark.bookmarkLoading ||
-        bookmark.bookmarkLoadingMore ||
-        bookmark.bookmarkList.length < 2
-      "
+      :disabled="sortDisabled"
       ref="el"
-      v-model="bookmark.bookmarkList"
+      :model-value="bookmark.bookmarkList"
       class="card-panel"
       id="card-panel"
       @start="onDragStart"
+      @update:model-value="onDragReorder"
       @end="onEnd"
       :scroll-sensitivity="50"
       :forceFallback="true"
@@ -92,7 +87,9 @@
       aria-live="polite"
     >
       <BLoading v-if="bookmark.bookmarkLoadingMore" inline loading :title="$t('common.loading')" />
-      <BButton v-else size="small" @click="emit('load-more')">{{ $t('common.loadMore') }}</BButton>
+      <BButton v-else size="small" :disabled="isDragging || sortSaving" @click="emit('load-more')">
+        {{ $t('common.loadMore') }}
+      </BButton>
     </div>
     <BookmarkAiDialog v-model:visible="bookmarkAiVisible" :bookmarks="bookmarkAiItems" />
   </div>
@@ -103,9 +100,9 @@
   import { vRangeSelect, vRangeSelectionScroll } from '@/directives/rangeSelection';
   import { useProjectResourceAction } from '@/composables/useProjectResourceAction';
   const { canJoinProject, joinProject } = useProjectResourceAction();
-  import { VueDraggable } from 'vue-draggable-plus';
+  import { VueDraggable, type DraggableEvent } from 'vue-draggable-plus';
   import TagCard from '@/components/home/TagCard.vue';
-  import { bookmarkStore } from '@/store';
+  import { bookmarkStore, useUserStore } from '@/store';
   import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
   import RightMenu from '@/components/base/RightMenu.vue';
   import router from '@/router';
@@ -123,35 +120,64 @@
   import icon from '@/config/icon.ts';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import BCheckbox from '@/components/base/BasicComponents/BCheckbox.vue';
-  import { buildResourceSortMove, hasResourceOrderChanged } from '@/utils/resourcePagination';
+  import {
+    buildFilteredResourceSortMove,
+    buildResourceSortMove,
+    hasResourceOrderChanged,
+    type BookmarkSortMove,
+  } from '@/utils/resourcePagination';
   import BookmarkAiDialog from '@/components/manage/bookmarkMg/BookmarkAiDialog.vue';
   const bookmark = bookmarkStore();
+  const user = useUserStore();
   const route = useRoute();
   const { t } = useI18n();
   const { addResourcesToInbox, removeResourcesFromInbox } = useInboxEnqueue();
-  withDefaults(
+  const props = withDefaults(
     defineProps<{
       rangeSelection?: RangeSelectionController;
       batchMode?: boolean;
       selectedIds?: string[];
+      sortSaving?: boolean;
     }>(),
     {
       batchMode: false,
       selectedIds: () => [],
+      sortSaving: false,
     },
   );
   const emit = defineEmits<{
     'load-more': [];
     'toggle-selection': [id: string];
+    'sort-bookmarks': [move: BookmarkSortMove, items: typeof bookmark.bookmarkList];
   }>();
   const loadMoreSentinel = ref<HTMLElement | null>(null);
   const isDragging = ref(false);
+  const tagViewId = computed(() => {
+    const id = route.params.id;
+    return bookmark.type === 'normal' && typeof id === 'string' && bookmark.tagData?.id === id ? id : '';
+  });
+  const sortDisabled = computed(
+    () =>
+      props.batchMode ||
+      bookmark.isMobile ||
+      (bookmark.type !== 'all' && !tagViewId.value) ||
+      bookmark.bookmarkLoading ||
+      bookmark.bookmarkLoadingMore ||
+      props.sortSaving ||
+      bookmark.bookmarkList.length < 2,
+  );
   const bookmarkAiVisible = ref(false);
   const bookmarkAiItems = ref<any[]>([]);
   let loadMoreObserver: IntersectionObserver | null = null;
 
   function requestNextPageIfVisible() {
-    if (isDragging.value || !bookmark.bookmarkHasMore || bookmark.bookmarkLoading || bookmark.bookmarkLoadingMore) {
+    if (
+      isDragging.value ||
+      props.sortSaving ||
+      !bookmark.bookmarkHasMore ||
+      bookmark.bookmarkLoading ||
+      bookmark.bookmarkLoadingMore
+    ) {
       return;
     }
     const sentinel = loadMoreSentinel.value;
@@ -170,7 +196,7 @@
     if (!sentinel || !root) return;
     loadMoreObserver = new IntersectionObserver(
       (entries) => {
-        if (!isDragging.value && entries.some((entry) => entry.isIntersecting)) emit('load-more');
+        if (!isDragging.value && !props.sortSaving && entries.some((entry) => entry.isIntersecting)) emit('load-more');
       },
       { root, rootMargin: '0px 0px 360px', threshold: 0 },
     );
@@ -186,12 +212,15 @@
     },
   );
   watch(
-    () => bookmark.bookmarkLoading,
-    (loading) => {
-      if (!loading) requestNextPageIfVisible();
+    () => [bookmark.bookmarkLoading, props.sortSaving],
+    ([loading, saving]) => {
+      if (!loading && !saving) requestNextPageIfVisible();
     },
   );
-  onBeforeUnmount(() => loadMoreObserver?.disconnect());
+  onBeforeUnmount(() => {
+    loadMoreObserver?.disconnect();
+    if (activeDrag) document.body.classList.remove('drag-active');
+  });
 
   const getBookList = computed(() => {
     return bookmark.bookmarkList;
@@ -297,68 +326,63 @@
       });
     }
   }
-  let dragSnapshot: any[] = [];
-  let draggedBookmarkId = '';
+  let activeDrag: {
+    source: typeof bookmark.bookmarkList;
+    reordered?: typeof bookmark.bookmarkList;
+    id: string;
+    tagId: string;
+    path: string;
+    userId: string;
+  } | null = null;
 
   const sortPinnedFirst = (items: any[]) =>
     [...items].sort((left: any, right: any) => Number(Boolean(right.isTop)) - Number(Boolean(left.isTop)));
 
-  const onDragStart = (event?: { oldIndex?: number }) => {
+  function onDragStart(event: DraggableEvent) {
     document.body.classList.add('drag-active');
     isDragging.value = true;
-    dragSnapshot = [...bookmark.bookmarkList];
-    const oldIndex = Number(event?.oldIndex);
-    draggedBookmarkId = Number.isInteger(oldIndex) ? String(dragSnapshot[oldIndex]?.id || '') : '';
-  };
+    activeDrag = {
+      source: bookmark.bookmarkList,
+      id: event.item.dataset.bookmarkId || '',
+      tagId: tagViewId.value,
+      path: route.fullPath,
+      userId: user.id,
+    };
+  }
 
-  async function onEnd() {
+  function onDragReorder(items: typeof bookmark.bookmarkList) {
+    // The drag library reports its preview before the drop is checked against the current view.
+    if (activeDrag) activeDrag.reordered = items;
+  }
+
+  function onEnd() {
     document.body.classList.remove('drag-active');
-    const source = dragSnapshot.length ? dragSnapshot : [...bookmark.bookmarkList];
+    const drag = activeDrag;
+    activeDrag = null;
+    isDragging.value = false;
     try {
-      // 游客:拖拽库已把本地顺序改了,这里拦截并回滚、弹撞墙引导、不发写请求。
-      if (blockGuestWrite('bookmark-sort')) {
-        bookmark.bookmarkList = source;
-        bookmark.refreshData();
-        return;
-      }
-
-      // 置顶书签始终在普通书签之前；组内保留本次拖拽结果。
-      const reordered = sortPinnedFirst(bookmark.bookmarkList);
-      bookmark.bookmarkList = reordered;
-      const moved = reordered.find((item: any) => String(item.id) === draggedBookmarkId);
-      if (!moved) {
-        bookmark.bookmarkList = source;
-        return;
-      }
-
-      const sameGroup = (item: any) => Boolean(item.isTop) === Boolean(moved.isTop);
-      const beforeGroup = sortPinnedFirst(source).filter(sameGroup);
+      if (
+        !drag?.reordered ||
+        sortDisabled.value ||
+        drag.path !== route.fullPath ||
+        drag.userId !== user.id ||
+        drag.tagId !== tagViewId.value ||
+        drag.source !== bookmark.bookmarkList
+      ) return;
+      const reordered = sortPinnedFirst(drag.reordered);
+      const moved = drag.source.find((item) => String(item.id) === drag.id);
+      if (!moved) return;
+      const sameGroup = (item: typeof moved) => Boolean(item.isTop) === Boolean(moved.isTop);
+      const beforeGroup = drag.source.filter(sameGroup);
       const afterGroup = reordered.filter(sameGroup);
       if (!hasResourceOrderChanged(beforeGroup, afterGroup)) return;
 
-      const move = buildResourceSortMove(
-        reordered,
-        draggedBookmarkId,
-        (candidate: any, target: any) => Boolean(candidate.isTop) === Boolean(target.isTop),
-      );
-      if (!move) {
-        bookmark.bookmarkList = source;
-        return;
-      }
-
-      const res = await apiBasePost('/api/bookmark/updateBookmarkSort', { move });
-      if (res.status !== 200) {
-        bookmark.bookmarkList = source;
-        bookmark.refreshData();
-      }
-    } catch (error) {
-      bookmark.bookmarkList = source;
-      bookmark.refreshData();
-      console.error('Error updating bookmark sort:', error);
+      const move = drag.tagId
+        ? buildFilteredResourceSortMove(beforeGroup, afterGroup, drag.id)
+        : buildResourceSortMove(afterGroup, drag.id);
+      if (!move || blockGuestWrite('bookmark-sort')) return;
+      emit('sort-bookmarks', drag.tagId ? { ...move, tagId: drag.tagId } : move, reordered);
     } finally {
-      isDragging.value = false;
-      dragSnapshot = [];
-      draggedBookmarkId = '';
       requestNextPageIfVisible();
     }
   }

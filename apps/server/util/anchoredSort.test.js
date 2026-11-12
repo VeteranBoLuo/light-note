@@ -18,6 +18,7 @@ describe('anchored resource sorting', () => {
       { id: 'c', isTop: 0, sort: 2 },
       { id: 'unloaded', isTop: 0, sort: 3 },
     ]);
+    connection.query.mockResolvedValueOnce([{ affectedRows: 2 }]);
 
     const result = await moveOwnedResourceByAnchors(connection, {
       resourceType: 'bookmark',
@@ -28,17 +29,10 @@ describe('anchored resource sorting', () => {
     });
 
     expect(result).toMatchObject({ id: 'a', moved: true, updatedCount: 2 });
-    expect(connection.query).toHaveBeenCalledTimes(3);
-    expect(connection.query).toHaveBeenNthCalledWith(2, expect.stringContaining('UPDATE bookmark SET sort = ?'), [
-      0,
-      'b',
-      'u1',
-    ]);
-    expect(connection.query).toHaveBeenNthCalledWith(3, expect.stringContaining('UPDATE bookmark SET sort = ?'), [
-      1,
-      'a',
-      'u1',
-    ]);
+    expect(connection.query).toHaveBeenCalledTimes(2);
+    expect(connection.query).toHaveBeenNthCalledWith(
+      2, expect.stringContaining('UPDATE bookmark SET sort = CASE id'), ['b', 0, 'a', 1, 'b', 'a', 'u1'],
+    );
     expect(connection.query.mock.calls.some(([, params]) => params?.includes('unloaded'))).toBe(false);
   });
 
@@ -97,5 +91,39 @@ describe('anchored resource sorting', () => {
       code: 'INVALID_SORT_ANCHOR',
     });
     expect(AnchoredSortError.prototype).toBeInstanceOf(Error);
+  });
+
+  it.each([
+    { id: 'a', previousId: 'b', nextId: null, order: ['hidden', 'b', 'a'] },
+    { id: 'b', previousId: null, nextId: 'a', order: ['b', 'a', 'hidden'] },
+  ])('inserts the dragged bookmark $id beside the tagged anchor in the complete order', async (entry) => {
+    const { id, previousId, nextId, order } = entry;
+    const connection = createConnection([
+      { id: 'a', isTop: 0, sort: 0 },
+      { id: 'hidden', isTop: 0, sort: 1 },
+      { id: 'b', isTop: 0, sort: 2 },
+      { id: 'unloaded', isTop: 0, sort: 3 },
+    ]);
+    connection.query.mockResolvedValueOnce([[{ resource_id: 'a' }, { resource_id: 'b' }]]);
+    connection.query.mockResolvedValueOnce([{ affectedRows: 3 }]);
+
+    await expect(moveOwnedResourceByAnchors(connection, {
+      resourceType: 'bookmark', userId: 'u1', tagId: 'work', id, previousId, nextId,
+    })).resolves.toMatchObject({ moved: true, updatedCount: 3 });
+    expect(connection.query.mock.calls[1][1]).toEqual(['work', id, previousId || nextId, 'u1', 'u1']);
+    expect(connection.query.mock.calls[2][1]).toEqual([...order.flatMap((key, sort) => [key, sort]), ...order, 'u1']);
+  });
+
+  it('rejects a stale tag membership without updating the order', async () => {
+    const connection = createConnection([
+      { id: 'a', isTop: 0, sort: 0 },
+      { id: 'b', isTop: 0, sort: 1 },
+    ]);
+    connection.query.mockResolvedValueOnce([[{ resource_id: 'a' }]]);
+
+    await expect(moveOwnedResourceByAnchors(connection, {
+      resourceType: 'bookmark', userId: 'u1', tagId: 'work', id: 'a', previousId: 'b',
+    })).rejects.toMatchObject({ code: 'BOOKMARK_SORT_TAG_CHANGED' });
+    expect(connection.query).toHaveBeenCalledTimes(2);
   });
 });
