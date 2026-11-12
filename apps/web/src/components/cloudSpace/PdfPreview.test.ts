@@ -16,6 +16,7 @@ const pdfMocks = vi.hoisted(() => ({
 vi.mock('pdfjs-dist/legacy/build/pdf.mjs', () => ({
   GlobalWorkerOptions: pdfMocks.workerOptions,
   getDocument: pdfMocks.getDocument,
+  TextLayer: undefined,
 }));
 
 vi.mock('pdfjs-dist/legacy/build/pdf.worker.min.mjs?worker&url', () => ({
@@ -135,6 +136,8 @@ describe('PdfPreview', () => {
     expect(pdfMocks.getDocument).toHaveBeenCalledWith({
       data: expect.any(Uint8Array),
       isEvalSupported: false,
+      cMapUrl: expect.stringMatching(/\/cmaps\/$/),
+      cMapPacked: true,
     });
     expect(getPage).toHaveBeenCalledWith(1);
     expect(render).toHaveBeenCalledWith(

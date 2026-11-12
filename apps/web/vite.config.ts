@@ -12,6 +12,7 @@ import macosPwaManifest from './src/vite/macosPwaManifest';
 import { assertLocalViteBackend, createLocalBackendProxy } from './src/vite/localBackendProxy';
 import seoPreviewRoutes from './src/vite/seoPreviewRoutes';
 import manorRuntime from './src/vite/manorRuntime';
+import pdfJsCmaps from './src/vite/pdfJsCmaps';
 import staticPrewarmManifestPlugin, { publicArtworkPlugin } from './src/vite/staticPrewarm';
 
 import path from 'path';
@@ -33,6 +34,7 @@ export default defineConfig(({ command, mode }) => {
     },
     plugins: [
       manorRuntime(),
+      pdfJsCmaps(),
       publicArtworkPlugin(),
       staticPrewarmManifestPlugin(),
       earlyAppEntryBootstrap(),
