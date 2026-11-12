@@ -44,7 +44,7 @@ export default {
     token1: 'Model input and output usage',
     token2: 'Usage varies with your material',
     token3: 'See the actual usage breakdown',
-    credit1: 'Daily allowance is used first',
+    credit1: 'Sign-up and level-up gifts',
     credit2: 'Permanent credits carry forward',
     credit3: 'Connected to notes and sources',
     note: 'Good ideas.\nRoom to grow.',
@@ -76,7 +76,7 @@ export default {
   description: 'Give the ideas and resources you treasure room to grow.',
   valueTitle: 'Made for the work behind the numbers',
   valueDescription:
-    'Your daily free quota is used first, followed by your permanent balance. Purchased tokens do not reset daily. Use them for notes, research and writing.',
+    'Sign-up gifts, level-up gifts and purchases share one permanent balance that never resets daily. Use it for notes, research and writing.',
   meterTitle: 'Measured by actual usage',
   meterDescription:
     'Input, output and frequency affect consumption. There is no fixed number of articles or guaranteed duration.',

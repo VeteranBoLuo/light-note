@@ -444,7 +444,7 @@ export default {
     inspectionEnded: 'Checks ended',
     inspectionDone: 'All objects checked',
     resumeAi: 'Resume AI',
-    quotaResumeHint: 'After adding quota or your daily quota resets, select “{action}” to process the remaining items.',
+    quotaResumeHint: 'After adding quota, select “{action}” to process the remaining items.',
     pausing: 'No new AI work will start. In-flight analysis will finish.',
     pauseReasons: {
       user: 'AI is paused. Checks and direct processing can continue.',
@@ -1478,7 +1478,7 @@ export default {
       quoteExpired: 'This confirmation expired. Start generating again to continue.',
       pointsInsufficient: 'There are not enough points. Reduce the material scope or earn more points.',
       aiQuotaInsufficient: 'There is not enough AI quota. Switch to points or add more AI quota first.',
-      aiQuotaExhausted: 'Your AI quota is used up. Switch to points, add permanent quota, or wait for the daily reset.',
+      aiQuotaExhausted: 'Your AI quota is used up. Switch to points or add permanent quota.',
       aiQuotaTaskInsufficient:
         'You still have AI quota, but not enough for this task. Reduce the material scope, switch to points, or add quota.',
       executionUnavailable:
@@ -6814,7 +6814,7 @@ export default {
       catalogRefreshing: 'Updating packages',
       checkoutPaused: 'Purchase unavailable',
       quotaHelp: 'How do purchased resources work?',
-      quotaExplanation: 'Daily free AI credits are used first, followed by your purchased balance. Check usage details for actual consumption. Purchased storage is added to your account.',
+      quotaExplanation: 'Purchased AI quota joins your sign-up and level-up gifts in one permanent balance. Check usage details for actual consumption. Purchased storage is added to your account.',
       historyAction: 'Order history',
       viewHistory: 'View records',
       historyLoading: 'Loading orders',
@@ -6846,7 +6846,7 @@ export default {
     assuranceChoiceTitle: 'Review before paying',
     assuranceChoiceDescription: 'See the price and delivery at a glance',
     catalogTitle: 'Choose your resource package',
-    catalogDescription: 'Buy once, valid forever. Daily free quota is used first; purchased AI balance never resets daily.',
+    catalogDescription: 'Buy once, valid forever. Purchased AI balance never resets daily.',
     storageDescription:
       'Buy once, expand forever. Every purchase adds the listed storage to this account with no renewal fees.',
     localPreviewHint:
@@ -6892,7 +6892,7 @@ export default {
     storagePermanentTitle: 'Permanent',
     storagePermanentNote: 'Buy once, expand forever. No renewal fees.',
     aiPermanentTitle: 'Permanent',
-    aiPermanentNote: 'Buy once, valid forever. Daily free quota is used first.',
+    aiPermanentNote: 'Buy once, valid forever. Never resets daily.',
     expectedArrival: 'Expected for this account',
     possibleFirstArrival: 'Up to this much on a first purchase',
     availableNote: 'Final eligibility is checked again before payment.',
@@ -6955,7 +6955,7 @@ export default {
         'This campaign package delivers the final benefit shown here. Its active period, purchase limits, and order are verified again.',
       storageNotice:
         'Buy once, expand forever. After payment is confirmed, the listed storage is added to this account with no renewal fees.',
-      aiNotice: 'Buy once, valid forever. Daily free quota is used first; purchased quota never resets daily.',
+      aiNotice: 'Buy once, valid forever. Purchased quota never resets daily.',
       cancel: 'Not now',
     },
   },
