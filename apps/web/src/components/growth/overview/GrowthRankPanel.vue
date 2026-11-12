@@ -7,7 +7,6 @@
           :frame-id="frameId"
           :src="avatarSrc"
           :size="avatarSize"
-          layout-mode="slot"
           pause-when-offscreen
         />
         <SvgIcon v-else :src="avatarSrc" :size="avatarSize" class="rank-panel__face" />
@@ -339,6 +338,10 @@
     flex: 0 0 auto;
     place-items: center;
     margin: .ui-space(8px) [] .ui-space(6px) [] .ui-space(8px) [] .ui-space(10px) [];
+  }
+  /* 头像框按主题真实外径占位（默认 outer 模式），满级等大外框不压住名字或溢出卡片。 */
+  .rank-panel__avatar.has-frame {
+    margin: 0;
   }
   .rank-panel__face {
     border: 2px solid var(--surface-card-bg);
