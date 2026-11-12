@@ -11,10 +11,7 @@
     /></picture>
     <div class="brand-scene__inner">
       <p class="brand-scene__eyebrow"
-        ><SvgIcon
-          :src="scene === 'support' ? icon.support.heart : scene === 'store' ? icon.support.store : icon.support.autumn"
-          size="15"
-        />{{ eyebrow }}</p
+        ><SvgIcon :src="scene === 'store' ? icon.support.store : icon.support.autumn" size="15" />{{ eyebrow }}</p
       >
       <h1
         ><template v-for="(line, i) in title.split('\n')" :key="i"
@@ -46,7 +43,7 @@
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import './commerceScene.less';
   const props = defineProps<{
-    scene: 'support' | 'store' | 'campaign';
+    scene: 'store' | 'campaign';
     title: string;
     description: string;
     eyebrow?: string;
@@ -54,24 +51,18 @@
   const bookmark = bookmarkStore();
   const { t } = useI18n();
   const features = computed(() =>
-    props.scene === 'support'
+    props.scene === 'store'
       ? [
-          { key: 'free', icon: icon.growth.reward },
-          { key: 'privacy', icon: icon.settings.account },
-          { key: 'separate', icon: icon.support.heart },
+          { key: 'permanent', icon: icon.growth.storage },
+          { key: 'verified', icon: icon.growth.reward },
+          { key: 'daily', icon: icon.growth.ai },
         ]
-      : props.scene === 'store'
-        ? [
-            { key: 'permanent', icon: icon.growth.storage },
-            { key: 'verified', icon: icon.growth.reward },
-            { key: 'daily', icon: icon.growth.ai },
-          ]
-        : [
-            { key: 'work', icon: icon.growth.ai },
-            { key: 'storage', icon: icon.growth.storage },
-            { key: 'independent', icon: icon.growth.reward },
-            { key: 'creative', icon: icon.resource.note },
-          ],
+      : [
+          { key: 'work', icon: icon.growth.ai },
+          { key: 'storage', icon: icon.growth.storage },
+          { key: 'independent', icon: icon.growth.reward },
+          { key: 'creative', icon: icon.resource.note },
+        ],
   );
 </script>
 <style scoped>

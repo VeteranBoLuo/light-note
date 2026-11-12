@@ -108,7 +108,8 @@ const commonRouter: RouteRecordRaw[] = [
     },
     path: '/support',
     name: 'support',
-    redirect: (to) => ({ name: 'entitlementStore', query: { ...to.query, records: 'history' } }),
+    // 原「支持轻笺」赞助页已下线，旧链接只回到资源商店。
+    redirect: { name: 'entitlementStore' },
   },
   {
     meta: { title: '秋日活动', requireAuth: true, roles: ALL_ROLES },

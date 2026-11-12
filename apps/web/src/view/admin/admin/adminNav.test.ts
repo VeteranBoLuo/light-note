@@ -56,7 +56,7 @@ function nav(pendingOpinion = 0, pendingSecurity = 0, pendingModeration = 0) {
     productInsightsTitle: '产品运营分析',
     adminGovernanceTitle: '运行策略与权限',
     communityModerationTitle: '消息审核',
-    supportManagementTitle: '赞助管理',
+    supportManagementTitle: '资源商店订单',
   });
 }
 
@@ -165,7 +165,7 @@ describe('后台导航菜单', () => {
       productInsightsTitle: '产品运营分析',
       adminGovernanceTitle: '运行策略与权限',
       communityModerationTitle: '消息审核',
-      supportManagementTitle: '赞助管理',
+      supportManagementTitle: '资源商店订单',
     });
 
     expect(groups.map((group) => group.items[0].id)).toEqual([
@@ -269,7 +269,7 @@ describe('手机后台菜单', () => {
       productInsightsTitle: '产品运营分析',
       adminGovernanceTitle: '运行策略与权限',
       communityModerationTitle: '消息审核',
-      supportManagementTitle: '赞助管理',
+      supportManagementTitle: '资源商店订单',
     });
 
   it('每一项都指向真实存在的手机路由（点出 404 是最糟的菜单 bug）', () => {

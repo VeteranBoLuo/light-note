@@ -522,33 +522,24 @@ declare(ADMIN_POLICIES.ACCOUNT_WRITE, 'user', [
   ['POST', '/opinion/recordOpinion'],
 ]);
 
-// 赞助归属与第三方账号关联属于账号隐私，不允许管理员在代管上下文中读取或变更。
+// 资源商店的购买记录与结算属于账号隐私，不允许管理员在代管上下文中读取或变更。
 declare(ADMIN_POLICIES.ACCOUNT_WRITE, 'support', [
-  ['GET', '/support/state'],
   ['GET', '/support/store/state'],
   ['GET', '/support/store/orders'],
-  ['POST', '/support/public-preference'],
-  ['GET', '/support/donation/checkout'],
   ['GET', '/support/checkout'],
   ['POST', '/support/checkout-intents'],
   ['GET', '/support/checkout-intents/:intentId'],
   ['GET', '/support/campaigns/:campaignKey'],
   ['POST', '/support/events'],
-  ['GET', '/support/afdian/oauth/start'],
-  ['GET', '/support/afdian/oauth/callback'],
-  ['POST', '/support/afdian/oauth/unlink'],
   ['POST', '/support/afdian/webhook'],
 ]);
 declare(ADMIN_POLICIES.READ, 'support', [
   ['GET', '/support/catalog'],
   ['GET', '/support/campaign-entry'],
-  ['GET', '/support/leaderboard'],
-  ['GET', '/support/leaderboard/avatar/:publicId'],
 ]);
 declare(ADMIN_POLICIES.ADMIN_ONLY, 'support', [
   ['GET', '/support/admin/overview'],
   ['GET', '/support/admin/orders'],
-  ['GET', '/support/admin/supporters'],
   ['GET', '/support/admin/campaigns'],
   ['GET', '/support/admin/campaigns/:campaignId/grants'],
   ['POST', '/support/admin/campaigns/cost-preview'],
@@ -559,7 +550,6 @@ declare(ADMIN_POLICIES.ADMIN_ONLY, 'support', [
   ['POST', '/support/admin/sync'],
   ['POST', '/support/admin/orders/:providerOrderNo/reconcile'],
   ['POST', '/support/admin/orders/:providerOrderNo/reward-approve'],
-  ['POST', '/support/admin/supporters/:userId/identity-visibility'],
 ]);
 
 declare(ADMIN_POLICIES.ACCOUNT_WRITE, 'notification', [
@@ -867,15 +857,9 @@ function resolvePolicy(method, path) {
   if (/^\/note\/drawing-thumbnail\/[^/]+\/[^/]+$/.test(path)) {
     return routePolicies.get(`${method} /note/drawing-thumbnail/:noteId/:fileName`);
   }
-  if (/^\/support\/leaderboard\/avatar\/[^/]+$/.test(path)) {
-    return routePolicies.get(`${method} /support/leaderboard/avatar/:publicId`);
-  }
   if (/^\/support\/admin\/orders\/[^/]+\/(?:reconcile|reward-approve)$/.test(path)) {
     const action = path.endsWith('/reward-approve') ? 'reward-approve' : 'reconcile';
     return routePolicies.get(`${method} /support/admin/orders/:providerOrderNo/${action}`);
-  }
-  if (/^\/support\/admin\/supporters\/[^/]+\/identity-visibility$/.test(path)) {
-    return routePolicies.get(`${method} /support/admin/supporters/:userId/identity-visibility`);
   }
   if (/^\/support\/admin\/campaigns\/[^/]+\/(?:grants|publish|suspend)$/.test(path)) {
     const action = path.split('/').pop();

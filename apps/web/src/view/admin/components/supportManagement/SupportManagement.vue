@@ -15,13 +15,6 @@
 
     <template #metrics>
       <li class="admin-stat-card is-success">
-        <span class="admin-stat-label">{{ t('adminSupport.metrics.supportAmount') }}</span>
-        <strong class="admin-stat-value">¥{{ overview.supportAmount }}</strong>
-        <span class="admin-stat-hint">{{
-          t('adminSupport.metrics.supportAmountHint', { count: overview.supportOrders })
-        }}</span>
-      </li>
-      <li class="admin-stat-card">
         <span class="admin-stat-label">{{ t('adminSupport.metrics.purchaseAmount') }}</span>
         <strong class="admin-stat-value">¥{{ overview.purchaseAmount }}</strong>
         <span class="admin-stat-hint">{{
@@ -32,16 +25,6 @@
         <span class="admin-stat-label">{{ t('adminSupport.metrics.orders') }}</span>
         <strong class="admin-stat-value">{{ overview.verifiedOrders }}</strong>
         <span class="admin-stat-hint">{{ t('adminSupport.metrics.ordersHint') }}</span>
-      </li>
-      <li class="admin-stat-card">
-        <span class="admin-stat-label">{{ t('adminSupport.metrics.supporters') }}</span>
-        <strong class="admin-stat-value">{{ overview.assignedSupporters }}</strong>
-        <span class="admin-stat-hint">{{ t('adminSupport.metrics.supportersHint') }}</span>
-      </li>
-      <li class="admin-stat-card">
-        <span class="admin-stat-label">{{ t('adminSupport.metrics.links') }}</span>
-        <strong class="admin-stat-value">{{ overview.linkedAccounts }}</strong>
-        <span class="admin-stat-hint">{{ t('adminSupport.metrics.linksHint') }}</span>
       </li>
       <li class="admin-stat-card">
         <span class="admin-stat-label">{{ t('adminSupport.metrics.grantedTokens') }}</span>
@@ -135,23 +118,11 @@
           <BChip :tone="rewardTone(record)">{{ rewardLabel(record) }}</BChip>
         </template>
         <template v-else-if="column.key === 'time'">{{
-          formatTime(record.lastSupportAt || record.rankingObservedAt || record.verifiedAt)
+          formatTime(record.rankingObservedAt || record.verifiedAt)
         }}</template>
-        <template v-else-if="column.key === 'visibility'">
-          <BChip :tone="visibilityTone(record as AdminSupporter)">{{
-            visibilityLabel(record as AdminSupporter)
-          }}</BChip>
-        </template>
         <template v-else-if="column.key === 'actions'">
           <BButton
-            v-if="activeTab === 'supporters'"
-            size="small"
-            @click.stop="openVisibility(record as AdminSupporter)"
-          >
-            {{ record.adminHidden ? t('adminSupport.restoreIdentity') : t('adminSupport.hideIdentity') }}
-          </BButton>
-          <BButton
-            v-else-if="record.grantStatus === 'manual_review' && record.reasonCode === 'large_amount'"
+            v-if="record.grantStatus === 'manual_review' && record.reasonCode === 'large_amount'"
             size="small"
             :loading="actingKey === `reward:${record.providerOrderNo}`"
             @click.stop="confirmRewardApproval(record as AdminSupportOrder)"
@@ -171,28 +142,6 @@
       </template>
     </BTable>
   </AdminDataPage>
-
-  <BModal
-    v-model:visible="visibilityModal"
-    :title="visibilityTarget?.adminHidden ? t('adminSupport.restoreIdentity') : t('adminSupport.hideIdentity')"
-    width="min(var(--ui-layout-520, 520px), 94vw)"
-    :show-footer="true"
-    @ok="saveVisibility"
-  >
-    <p class="support-admin__modal-copy">{{ t('adminSupport.hideIdentityDescription') }}</p>
-    <BInput
-      v-if="!visibilityTarget?.adminHidden"
-      v-model:value="visibilityReason"
-      :placeholder="t('adminSupport.hideReasonPlaceholder')"
-      :maxlength="255"
-    />
-    <template #footer>
-      <div class="support-admin__modal-footer">
-        <BButton @click="visibilityModal = false">{{ t('common.cancel') }}</BButton>
-        <BButton type="primary" :loading="visibilitySaving" @click="saveVisibility">{{ t('common.confirm') }}</BButton>
-      </div>
-    </template>
-  </BModal>
 </template>
 
 <script setup lang="ts">
@@ -204,7 +153,6 @@
   import BCard from '@/components/base/BasicComponents/BCard.vue';
   import BChip from '@/components/base/BasicComponents/BChip.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
-  import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
   import BSelect from '@/components/base/BasicComponents/BSelect.vue';
   import BTable from '@/components/base/BasicComponents/BTable/BTable.vue';
   import BTabs from '@/components/base/BasicComponents/BTabs.vue';
@@ -215,29 +163,22 @@
     approveAdminSupportReward,
     getAdminSupportOrders,
     getAdminSupportOverview,
-    getAdminSupporters,
     reconcileAdminSupportOrder,
-    setAdminSupportIdentityHidden,
     type AdminSupportOrder,
     type AdminSupportOverview,
-    type AdminSupporter,
   } from '@/api/adminSupportApi';
   import { formatAiQuotaTokens } from '@/composables/useAiQuotaStatus';
   import { formatStorageSize } from '@/utils/common';
 
-  type TabKey = 'overview' | 'orders' | 'supporters' | 'exceptions' | 'campaigns';
-  type Row = (AdminSupportOrder | AdminSupporter) & { rowKey?: string };
+  type TabKey = 'overview' | 'orders' | 'exceptions' | 'campaigns';
+  type Row = AdminSupportOrder & { rowKey?: string };
 
   const EMPTY_OVERVIEW: AdminSupportOverview = {
     verifiedOrders: 0,
-    assignedSupporters: 0,
     totalAmount: '0.00',
-    supportOrders: 0,
-    supportAmount: '0.00',
     purchaseOrders: 0,
     purchaseAmount: '0.00',
     monthAmount: '0.00',
-    linkedAccounts: 0,
     pendingOrders: 0,
     conflictOrders: 0,
     unlinkedOrders: 0,
@@ -259,10 +200,6 @@
   const loading = ref(false);
   const syncing = ref(false);
   const actingKey = ref('');
-  const visibilityModal = ref(false);
-  const visibilityTarget = ref<AdminSupporter | null>(null);
-  const visibilityReason = ref('');
-  const visibilitySaving = ref(false);
 
   const exceptionCount = computed(
     () =>
@@ -275,7 +212,6 @@
   const tabs = computed(() => [
     { key: 'overview', label: t('adminSupport.tabs.overview') },
     { key: 'orders', label: t('adminSupport.tabs.orders') },
-    { key: 'supporters', label: t('adminSupport.tabs.supporters') },
     { key: 'campaigns', label: t('adminSupport.tabs.campaigns') },
     { key: 'exceptions', label: t('adminSupport.tabs.exceptions'), badge: exceptionCount.value || undefined },
   ]);
@@ -294,28 +230,16 @@
         ? t('adminSupport.campaigns.hint')
         : t('adminSupport.listHint'),
   );
-  const columns = computed(() =>
-    activeTab.value === 'supporters'
-      ? [
-          { title: t('adminSupport.columns.supporter'), key: 'identity' },
-          { title: t('adminSupport.columns.amount'), key: 'amount', width: 'var(--ui-layout-110, 110px)' },
-          { title: t('adminSupport.columns.reward'), key: 'reward', width: 'var(--ui-layout-150, 150px)' },
-          { title: t('adminSupport.columns.orders'), key: 'orderCount', width: 'var(--ui-layout-90, 90px)' },
-          { title: t('adminSupport.columns.visibility'), key: 'visibility', width: 'var(--ui-layout-130, 130px)' },
-          { title: t('adminSupport.columns.lastSupport'), key: 'time', width: 'var(--ui-layout-150, 150px)' },
-          { title: t('adminSupport.columns.operation'), key: 'actions', width: 'var(--ui-layout-110, 110px)' },
-        ]
-      : [
-          { title: t('adminSupport.columns.order'), key: 'providerOrderNo' },
-          { title: t('adminSupport.columns.supporter'), key: 'identity' },
-          { title: t('adminSupport.columns.amount'), key: 'amount', width: 'var(--ui-layout-110, 110px)' },
-          { title: t('adminSupport.columns.purpose'), key: 'purpose', width: 'var(--ui-layout-120, 120px)' },
-          { title: t('adminSupport.columns.status'), key: 'status', width: 'var(--ui-layout-110, 110px)' },
-          { title: t('adminSupport.columns.reward'), key: 'reward', width: 'var(--ui-layout-160, 160px)' },
-          { title: t('adminSupport.columns.time'), key: 'time', width: 'var(--ui-layout-150, 150px)' },
-          { title: t('adminSupport.columns.operation'), key: 'actions', width: 'var(--ui-layout-120, 120px)' },
-        ],
-  );
+  const columns = computed(() => [
+    { title: t('adminSupport.columns.order'), key: 'providerOrderNo' },
+    { title: t('adminSupport.columns.buyer'), key: 'identity' },
+    { title: t('adminSupport.columns.amount'), key: 'amount', width: 'var(--ui-layout-110, 110px)' },
+    { title: t('adminSupport.columns.purpose'), key: 'purpose', width: 'var(--ui-layout-120, 120px)' },
+    { title: t('adminSupport.columns.status'), key: 'status', width: 'var(--ui-layout-110, 110px)' },
+    { title: t('adminSupport.columns.reward'), key: 'reward', width: 'var(--ui-layout-160, 160px)' },
+    { title: t('adminSupport.columns.time'), key: 'time', width: 'var(--ui-layout-150, 150px)' },
+    { title: t('adminSupport.columns.operation'), key: 'actions', width: 'var(--ui-layout-120, 120px)' },
+  ]);
 
   async function loadOverview() {
     overview.value = await getAdminSupportOverview();
@@ -329,20 +253,13 @@
     }
     loading.value = true;
     try {
-      const result =
-        activeTab.value === 'supporters'
-          ? await getAdminSupporters({ page: page.value, pageSize: pageSize.value, search: search.value })
-          : await getAdminSupportOrders({
-              page: page.value,
-              pageSize: pageSize.value,
-              search: search.value,
-              state:
-                activeTab.value === 'exceptions' ? 'exceptions' : orderState.value === 'all' ? '' : orderState.value,
-            });
-      rows.value = result.items.map((item: AdminSupportOrder | AdminSupporter) => ({
-        ...item,
-        rowKey: 'providerOrderNo' in item ? item.providerOrderNo : item.userId,
-      }));
+      const result = await getAdminSupportOrders({
+        page: page.value,
+        pageSize: pageSize.value,
+        search: search.value,
+        state: activeTab.value === 'exceptions' ? 'exceptions' : orderState.value === 'all' ? '' : orderState.value,
+      });
+      rows.value = result.items.map((item) => ({ ...item, rowKey: item.providerOrderNo }));
       total.value = result.total;
     } catch {
       message.error(t('adminSupport.loadFailed'));
@@ -437,36 +354,6 @@
     });
   }
 
-  function openVisibility(record: AdminSupporter) {
-    visibilityTarget.value = record;
-    visibilityReason.value = '';
-    visibilityModal.value = true;
-  }
-
-  async function saveVisibility() {
-    const target = visibilityTarget.value;
-    if (!target) return;
-    if (!target.adminHidden && !visibilityReason.value.trim()) {
-      message.warning(t('adminSupport.hideReasonRequired'));
-      return;
-    }
-    visibilitySaving.value = true;
-    try {
-      await setAdminSupportIdentityHidden({
-        userId: target.userId,
-        hidden: !Boolean(target.adminHidden),
-        reason: visibilityReason.value,
-      });
-      visibilityModal.value = false;
-      message.success(t('adminSupport.visibilitySaved'));
-      await loadRows();
-    } catch {
-      message.error(t('adminSupport.visibilityFailed'));
-    } finally {
-      visibilitySaving.value = false;
-    }
-  }
-
   function statusLabel(record: AdminSupportOrder) {
     if (record.verificationState === 'pending') return t('adminSupport.states.pending');
     if (record.providerStatus !== 2) return t('adminSupport.states.notCompleted');
@@ -501,10 +388,8 @@
   }
 
   function rewardLabel(record: Row) {
-    if ('providerOrderNo' in record && record.orderPurpose === 'donation') {
-      return t('adminSupport.rewardStates.no_entitlement');
-    }
-    if (!('providerOrderNo' in record) || record.grantStatus === 'credited') {
+    if (record.orderPurpose === 'donation') return t('adminSupport.rewardStates.no_entitlement');
+    if (record.grantStatus === 'credited') {
       if (record.grantedTokens > 0 && record.grantedStorageMb > 0) {
         return t('adminSupport.rewardGrantedCombo', {
           tokens: formatAiQuotaTokens(record.grantedTokens, locale.value),
@@ -520,20 +405,10 @@
   }
 
   function rewardTone(record: Row): 'success' | 'pending' | 'neutral' | 'danger' {
-    if (!('providerOrderNo' in record) || record.grantStatus === 'credited') return 'success';
+    if (record.grantStatus === 'credited') return 'success';
     if (record.grantStatus === 'reversal_review') return 'danger';
     if (['manual_review', 'pending_link'].includes(record.grantStatus || '')) return 'pending';
     return 'neutral';
-  }
-
-  function visibilityLabel(record: AdminSupporter) {
-    if (!record.participateInRanking) return t('adminSupport.visibility.excluded');
-    if (record.adminHidden) return t('adminSupport.visibility.hidden');
-    return record.showIdentity ? t('adminSupport.visibility.public') : t('adminSupport.visibility.anonymous');
-  }
-
-  function visibilityTone(record: AdminSupporter) {
-    return record.adminHidden ? 'pending' : record.showIdentity ? 'success' : 'neutral';
   }
 
   function formatTime(value?: string | null) {
@@ -570,8 +445,7 @@
     font-size: var(--ui-font-14, 14px);
   }
 
-  .support-admin__overview p,
-  .support-admin__modal-copy {
+  .support-admin__overview p {
     margin: var(--ui-space-7, 7px) 0 0;
     color: var(--desc-color);
     font-size: var(--ui-font-12, 12px);
@@ -583,18 +457,6 @@
     margin-top: var(--ui-space-2, 2px);
     color: var(--desc-color);
     font-size: var(--ui-font-11, 11px);
-  }
-
-  .support-admin__modal-copy {
-    margin: 0 0 var(--ui-space-12, 12px);
-  }
-
-  .support-admin__modal-footer {
-    padding: var(--ui-space-12, 12px) var(--ui-space-16, 16px);
-    display: flex;
-    justify-content: flex-end;
-    gap: var(--ui-space-8, 8px);
-    border-top: 1px solid var(--surface-border-color);
   }
 
   @media (max-width: 820px) {

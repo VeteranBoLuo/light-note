@@ -155,7 +155,6 @@ function catalogFixture() {
 
 let queryCount = 0;
 let quote = { amount: 9.9, benefit: benefit(100000, 256) };
-let publicPreference = { participateInRanking: true, showIdentity: true, adminHidden: false };
 const campaignFixture = () => ({
   campaignKey: 'autumn',
   campaignVersion: 1,
@@ -225,45 +224,8 @@ request.defaults.adapter = async (config) => {
       ...quote,
     });
   if (config.url === '/api/support/store/orders') {
-    const items =
-      config.params?.scope === 'history' && !isGuest && visualState !== 'empty'
-        ? [
-            {
-              ...storeState().recentOrders[0],
-              id: 'visual-donation-order',
-              amount: '18.00',
-              orderPurpose: 'donation',
-              confirmedAt: '2026-07-05 12:30:00',
-              rewardStatus: null,
-              rewardTokens: 0,
-              grantedTokens: 0,
-              rewardStorageMb: 0,
-              grantedStorageMb: 0,
-              intentType: 'donation',
-              skuId: null,
-              firstPurchaseApplied: false,
-            },
-          ]
-        : storeState().recentOrders;
+    const items = storeState().recentOrders;
     return apiResponse(config, { items, total: items.length, page: 1, pageSize: 10 });
-  }
-  if (config.url === '/api/support/state') {
-    if (visualState === 'support-error') throw new Error('Support fixture unavailable');
-    if (visualState === 'support-loading') await new Promise(() => {});
-    return apiResponse(config, {
-      authenticated: !isGuest,
-      oauthAvailable: visualState !== 'empty',
-      orderSyncAvailable: true,
-      linked: false,
-      orderCount: 0,
-      totalAmount: '0.00',
-      publicPreference,
-      recentOrders: [],
-    });
-  }
-  if (config.url === '/api/support/public-preference') {
-    publicPreference = { ...publicPreference, ...JSON.parse(String(config.data)) };
-    return apiResponse(config, publicPreference);
   }
 
   if (config.url === '/api/search/batchSelectionPreview') {
@@ -323,7 +285,7 @@ const router = createRouter({
     {
       path: '/support',
       name: 'support',
-      redirect: (to) => ({ name: 'entitlementStore', query: { ...to.query, records: 'history' } }),
+      redirect: { name: 'entitlementStore' },
     },
     { path: '/campaign/:campaignKey', name: 'campaign', component: { render: () => null } },
     { path: '/:pathMatch(.*)*', component: { render: () => null } },

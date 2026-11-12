@@ -66,15 +66,9 @@ describe('官网与应用入口路由', () => {
     expect(task.meta.mobileBottomNav).toBe(false);
   });
 
-  it('旧支持页链接重定向到资源商店的历史赞助', () => {
-    const resolved = router.resolve('/support?afdian=linked');
+  it('旧支持页链接只回到资源商店，不再打开历史赞助', () => {
     const redirect = router.getRoutes().find((record) => record.name === 'support')?.redirect;
-    expect(typeof redirect).toBe('function');
-    if (typeof redirect !== 'function') throw new Error('missing support redirect');
-    expect(redirect(resolved, resolved)).toMatchObject({
-      name: 'entitlementStore',
-      query: { afdian: 'linked', records: 'history' },
-    });
+    expect(redirect).toEqual({ name: 'entitlementStore' });
   });
 
   it('AI 用量保留独立页，桌面 AI 设置深链接留在设置壳内', () => {

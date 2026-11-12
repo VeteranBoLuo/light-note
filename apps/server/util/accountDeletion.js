@@ -10,7 +10,6 @@ import { preserveAiGiftRiskOnDeletion } from './aiLevelGiftRiskFacts.js';
 import redisClient from './redisClient.js';
 import { sendTrackedEmail } from './emailDelivery.js';
 import { stableAgentErrorCode } from './agent/logSafety.js';
-import { invalidateAfdianLeaderboardCache } from './afdianSupportReadService.js';
 import {
   ACCOUNT_DELETION_STALE_PROCESSING_MINUTES,
   classifyAccountResourceCleanup,
@@ -477,7 +476,6 @@ export async function requestAccountDeletion({ userId, code, confirmation }) {
     queueNotificationChange(connection, [userId]);
     queueNotificationSourceChange(connection, { kind: 'actor', ids: [userId] });
     await connection.commit();
-    invalidateAfdianLeaderboardCache();
   } catch (error) {
     await connection.rollback().catch(() => {});
     if (error?.code === 'ER_DUP_ENTRY') {
@@ -1072,7 +1070,6 @@ async function purgeDatabaseForUser(userId) {
       await connection.query("DELETE FROM user WHERE id = ? AND role = 'deleted' AND del_flag = 1", [userId]);
     }
     await connection.commit();
-    invalidateAfdianLeaderboardCache();
   } catch (error) {
     await connection.rollback();
     throw error;

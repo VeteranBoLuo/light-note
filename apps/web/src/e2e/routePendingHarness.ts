@@ -52,7 +52,7 @@ const router = createRouter({
         { path: 'inbox', name: 'inbox', component: delayed('待办'), meta: { mobileShell: 'todo', mobileBottomNav: true } },
         { path: 'growth', name: 'growth', component: delayed('成长中心') },
         { path: 'settings', name: 'settings', component: delayed('设置') },
-        { path: 'support', name: 'support', component: delayed('支持轻笺') },
+        { path: 'support', name: 'support', component: delayed('资源商店') },
       ],
     },
     {

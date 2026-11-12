@@ -1,20 +1,14 @@
 import crypto from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  buildAfdianAuthorizationUrl,
   buildAfdianWebhookSignText,
-  exchangeAfdianAuthorizationCode,
   isAfdianDashboardWebhookTestPayload,
   normalizeAfdianOrder,
-  queryAfdianPublicProfile,
   queryAfdianOrders,
   verifyAfdianWebhookSignature,
 } from './afdianClient.js';
 
 beforeEach(() => {
-  vi.stubEnv('AFDIAN_OAUTH_CLIENT_ID', 'test-client');
-  vi.stubEnv('AFDIAN_OAUTH_CLIENT_SECRET', 'test-secret');
-  vi.stubEnv('AFDIAN_OAUTH_REDIRECT_URI', 'https://example.com/api/support/afdian/oauth/callback');
   vi.stubEnv('AFDIAN_CREATOR_USER_ID', 'creator-user');
   vi.stubEnv('AFDIAN_API_TOKEN', 'test-api-token');
 });
@@ -25,89 +19,6 @@ afterEach(() => {
 });
 
 describe('爱发电客户端协议', () => {
-  it('OAuth 授权地址包含 state 与回调，但永不包含 secret', () => {
-    const url = new URL(buildAfdianAuthorizationUrl('A'.repeat(43)));
-    expect(url.origin + url.pathname).toBe('https://afdian.com/oauth2/authorize');
-    expect(url.searchParams.get('client_id')).toBe('test-client');
-    expect(url.searchParams.get('state')).toBe('A'.repeat(43));
-    expect(url.toString()).not.toContain('test-secret');
-  });
-
-  it('接受爱发电实际长度的 OAuth 授权码，并只采用官方 basic 返回的身份 ID', async () => {
-    const authorizationCode = 'A'.repeat(864);
-    const fetchMock = vi.fn(async () => ({
-      ok: true,
-      json: async () => ({
-        ec: 200,
-        data: {
-          user_id: 'provider-user',
-          name: '不应从 OAuth 响应读取',
-          avatar: 'https://pic.example.com/ignored.png',
-        },
-      }),
-    }));
-    vi.stubGlobal('fetch', fetchMock);
-
-    await expect(exchangeAfdianAuthorizationCode(authorizationCode)).resolves.toEqual({
-      providerUserId: 'provider-user',
-      providerPrivateId: null,
-    });
-    const [url, options] = fetchMock.mock.calls[0];
-    const body = new URLSearchParams(String(options.body));
-    expect(url).toBe('https://afdian.com/api/oauth2/access_token');
-    expect(body.get('code')).toBe(authorizationCode);
-    expect(body.get('redirect_uri')).toBe('https://example.com/api/support/afdian/oauth/callback');
-  });
-
-  it('从公开用户资料补全昵称和 HTTPS 头像，并校验响应身份', async () => {
-    const fetchMock = vi.fn(async () => ({
-      ok: true,
-      json: async () => ({
-        ec: 200,
-        data: {
-          user: {
-            user_id: 'provider-user',
-            name: '  菠萝\u0000  ',
-            avatar: 'https://pic.example.com/avatar.png',
-          },
-        },
-      }),
-    }));
-    vi.stubGlobal('fetch', fetchMock);
-
-    await expect(queryAfdianPublicProfile('provider-user')).resolves.toEqual({
-      providerName: '菠萝',
-      providerAvatarUrl: 'https://pic.example.com/avatar.png',
-    });
-    expect(String(fetchMock.mock.calls[0][0])).toBe('https://afdian.com/api/user/get-profile?user_id=provider-user');
-  });
-
-  it('公开资料响应身份不匹配时拒绝写入其他账号资料', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async () => ({
-        ok: true,
-        json: async () => ({
-          ec: 200,
-          data: { user: { user_id: 'another-user', name: '错误账号' } },
-        }),
-      })),
-    );
-
-    await expect(queryAfdianPublicProfile('provider-user')).rejects.toMatchObject({
-      code: 'AFDIAN_RESPONSE_INVALID',
-    });
-  });
-
-  it('仍拒绝异常膨胀的 OAuth 授权码', async () => {
-    const fetchMock = vi.fn();
-    vi.stubGlobal('fetch', fetchMock);
-
-    await expect(exchangeAfdianAuthorizationCode('A'.repeat(4097))).rejects.toMatchObject({
-      code: 'AFDIAN_OAUTH_CODE_INVALID',
-    });
-    expect(fetchMock).not.toHaveBeenCalled();
-  });
 
   it('Webhook 官方签名文本不覆盖 custom_order_id，不能据此直接认领用户', () => {
     const order = {

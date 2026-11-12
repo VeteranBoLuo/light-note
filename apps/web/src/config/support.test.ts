@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { normalizeAfdianPackageCheckoutUrl, openAfdianOAuthPage, openAfdianPackageCheckout } from './support';
+import { normalizeAfdianPackageCheckoutUrl, openAfdianPackageCheckout } from './support';
 
 const PLAN = 'a'.repeat(32);
 const SKU = 'b'.repeat(32);
@@ -46,11 +46,5 @@ describe('爱发电固定商品入口', () => {
     const opener = vi.fn();
     expect(openAfdianPackageCheckout(url, opener)).toBe(false);
     expect(opener).not.toHaveBeenCalled();
-  });
-
-  it('历史赞助仍可通过本地地址打开账号关联', () => {
-    const opener = vi.fn();
-    expect(openAfdianOAuthPage(opener)).toBe(true);
-    expect(opener).toHaveBeenCalledWith('/api/support/afdian/oauth/start', '_blank', 'noopener,noreferrer');
   });
 });

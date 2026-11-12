@@ -10,6 +10,7 @@ import UserMgMobile from '@/view/admin/components/userMg/UserMgMobile.vue';
 import OperationLog from '@/view/admin/components/operationLog/OperationLog.vue';
 import ConversionFunnel from '@/view/admin/components/conversion/ConversionFunnel.vue';
 import ManorManagement from '@/view/admin/components/manorManagement/ManorManagement.vue';
+import SupportManagement from '@/view/admin/components/supportManagement/SupportManagement.vue';
 import { createManorAdminFixture } from './manorAdminFixture';
 import { bookmarkStore, useUserStore } from '@/store';
 import { isMobileViewport, usesMobileDeviceLayout } from '@/config/responsive';
@@ -315,6 +316,75 @@ request.defaults.adapter = async (config) => {
     });
   }
   if (url.includes('community')) return response(config, { items: [], total: 0 });
+  if (url.endsWith('/support/admin/overview'))
+    return response(config, {
+      verifiedOrders: 3,
+      totalAmount: '74.00',
+      purchaseOrders: 2,
+      purchaseAmount: '68.00',
+      monthAmount: '18.00',
+      pendingOrders: 0,
+      conflictOrders: 0,
+      unlinkedOrders: 1,
+      grantedTokens: 1_200_000,
+      grantedStorageMb: 1024,
+      manualReviewRewards: 0,
+      reversalReviewRewards: 0,
+    });
+  if (url.endsWith('/support/admin/orders')) {
+    const order = (no: string, amount: string, purpose: string, extra: Record<string, unknown> = {}) => ({
+      providerOrderNo: no,
+      totalAmount: amount,
+      providerStatus: 2,
+      verificationState: 'api_verified',
+      ownershipSource: 'checkout',
+      orderPurpose: purpose,
+      lightNoteUserId: 'fixture-user',
+      retryCount: 0,
+      nextRetryAt: null,
+      rankingObservedAt: '2026-11-10 20:15:00',
+      verifiedAt: '2026-11-10 20:15:30',
+      createTime: '2026-11-10 20:14:00',
+      alias: '轻笺用户',
+      providerName: null,
+      grantStatus: 'credited',
+      reasonCode: null,
+      calculatedTokens: 900_000,
+      grantedTokens: 900_000,
+      grantedStorageMb: 0,
+      calculatedStorageMb: 0,
+      intentType: 'permanent',
+      skuId: 'ai-18',
+      reviewedAt: null,
+      creditedAt: '2026-11-10 20:15:31',
+      ...extra,
+    });
+    const items =
+      state === 'empty'
+        ? []
+        : [
+            order('202611102015000001', '18.00', 'entitlement_purchase'),
+            order('202611092140000002', '50.00', 'entitlement_purchase', {
+              grantedTokens: 0,
+              calculatedTokens: 0,
+              grantedStorageMb: 1024,
+              calculatedStorageMb: 1024,
+              skuId: 'storage-50',
+            }),
+            order('202611080930000003', '6.00', 'donation', {
+              lightNoteUserId: null,
+              alias: null,
+              ownershipSource: 'unlinked',
+              grantStatus: null,
+              grantedTokens: 0,
+              calculatedTokens: 0,
+              intentType: null,
+              skuId: null,
+            }),
+          ];
+    return response(config, { items, total: items.length, page: 1, pageSize: 20 });
+  }
+  if (url.endsWith('/support/admin/campaigns')) return response(config, []);
   // No unhandled endpoint can reach the live API, including mutation endpoints.
   throw new Error(`UNEXPECTED_ADMIN_FIXTURE_REQUEST: ${url}`);
 };
@@ -330,6 +400,7 @@ const router = createRouter({
         { path: 'operationLog', component: OperationLog },
         { path: 'conversion', component: ConversionFunnel },
         { path: 'manorManagement', component: ManorManagement },
+        { path: 'supportManagement', component: SupportManagement },
       ],
     },
     { path: '/overview', component: AdminOverview },
@@ -337,6 +408,7 @@ const router = createRouter({
     { path: '/operationLog', component: OperationLog },
     { path: '/conversion', component: ConversionFunnel },
     { path: '/manorManagement', component: ManorManagement },
+    { path: '/supportManagement', component: SupportManagement },
   ],
 });
 // Navigation in the production shell imports its router directly. Keep those
@@ -344,7 +416,9 @@ const router = createRouter({
 const navigationRouter = (await import('@/router')).default;
 navigationRouter.push = router.push.bind(router);
 navigationRouter.replace = router.replace.bind(router);
-const page = ['overview', 'userMg', 'operationLog', 'conversion'].includes(params.get('page') || '')
+const page = ['overview', 'userMg', 'operationLog', 'conversion', 'supportManagement'].includes(
+  params.get('page') || '',
+)
   ? params.get('page')!
   : 'overview';
 const app = createApp({

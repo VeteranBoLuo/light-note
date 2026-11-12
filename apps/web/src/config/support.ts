@@ -67,7 +67,3 @@ export function openAfdianPackageCheckout(value: unknown, openWindow?: ExternalW
   const url = normalizeAfdianPackageCheckoutUrl(value);
   return Boolean(url) && openNewPage(url, openWindow);
 }
-
-export function openAfdianOAuthPage(openWindow?: ExternalWindowOpener): boolean {
-  return openNewPage('/api/support/afdian/oauth/start', openWindow);
-}
