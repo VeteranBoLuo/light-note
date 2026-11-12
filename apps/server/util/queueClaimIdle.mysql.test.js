@@ -23,8 +23,6 @@ vi.mock('./personalKnowledgeSearch.js', () => ({ invalidatePersonalKnowledgeCach
 
 const { claimTasks } = await import('./bookmarkIconWorkerService.js');
 const { ARCHIVE_JOB_SCHEMA, claimBookmarkArchive } = await import('./bookmarkArchiveJobs.js');
-const { claimExtraction } = await import('./extraction/worker.js');
-const { EXTRACTION_SCHEMA } = await import('./extraction/schema.js');
 
 const socketPath = process.env.LIGHTNOTE_TEST_MYSQL_SOCKET;
 
@@ -63,7 +61,6 @@ describe.skipIf(!socketPath)('队列领取空闲时不写库（隔离 MySQL）',
       PRIMARY KEY (id), KEY idx_icon_job_queue (status, available_at, id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
     await state.pool.query(ARCHIVE_JOB_SCHEMA);
-    for (const statement of EXTRACTION_SCHEMA) await state.pool.query(statement);
   });
 
   afterAll(async () => {
@@ -104,19 +101,5 @@ describe.skipIf(!socketPath)('队列领取空闲时不写库（隔离 MySQL）',
     );
     expect(stuck).toEqual({ status: 'failed', reason_code: 'INTERRUPTED' });
     expect(await updatesDuring(() => claimBookmarkArchive())).toEqual({ result: null, updates: 0 });
-  });
-
-  it('资料提取：空闲时零 UPDATE；过期租约仍会被回收', async () => {
-    const idle = await updatesDuring(() => claimExtraction(state.pool));
-    expect(idle).toEqual({ result: null, updates: 0 });
-
-    await state.pool.query(
-      `INSERT INTO toolbox_extractions (id, user_id, request_id, input_digest, title, status, phase, lease_token, lease_until, available_at)
-       VALUES (?, 'u1', ?, REPEAT('d', 64), 'x', 'analyzing', 'ai', 'old', DATE_SUB(NOW(), INTERVAL 1 MINUTE), DATE_SUB(NOW(), INTERVAL 1 MINUTE))`,
-      [randomUUID(), randomUUID()],
-    );
-    const reclaimed = await updatesDuring(() => claimExtraction(state.pool));
-    expect(reclaimed.result).toMatchObject({ status: 'queued', lease_token: expect.any(String) });
-    expect(reclaimed.updates).toBe(2);
   });
 });

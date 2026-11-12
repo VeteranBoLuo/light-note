@@ -9,7 +9,8 @@ export const C6_POINTS_ECONOMY_VERSION = 'points-economy-c6';
 export const C7_POINTS_ECONOMY_VERSION = 'points-economy-c7';
 export const C8_POINTS_ECONOMY_VERSION = 'points-economy-c8';
 export const C9_POINTS_ECONOMY_VERSION = 'points-economy-c9';
-export const POINTS_ECONOMY_VERSION = 'points-economy-c10';
+export const C10_POINTS_ECONOMY_VERSION = 'points-economy-c10';
+export const POINTS_ECONOMY_VERSION = 'points-economy-c11';
 
 const LEGACY_UTILITY_ITEMS = [
   {
@@ -294,12 +295,29 @@ const C9_ECONOMY_CATALOGS = Object.freeze({
 });
 
 // C10 仅收紧免费惊喜；已发布的 C9 奖池、商品和历史收据继续可解释。
-export const ECONOMY_CATALOGS = Object.freeze({
+const C10_ECONOMY_CATALOGS = Object.freeze({
   ...C9_ECONOMY_CATALOGS,
-  [POINTS_ECONOMY_VERSION]: Object.freeze({
+  [C10_POINTS_ECONOMY_VERSION]: Object.freeze({
     ...C9_ECONOMY_CATALOGS[C9_POINTS_ECONOMY_VERSION],
-    version: POINTS_ECONOMY_VERSION,
+    version: C10_POINTS_ECONOMY_VERSION,
     freePolicy: freezePolicy({ poolVersion: 'c10-free-v1', pool: C10_FREE_POOL, countsPaidPity: false }),
+  }),
+});
+
+// C11 只替换免费惊喜和当前商品说明；历史目录及其收据不可变。
+export const ECONOMY_CATALOGS = Object.freeze({
+  ...C10_ECONOMY_CATALOGS,
+  [POINTS_ECONOMY_VERSION]: Object.freeze({
+    ...C10_ECONOMY_CATALOGS[C10_POINTS_ECONOMY_VERSION],
+    version: POINTS_ECONOMY_VERSION,
+    utilityItems: freezeItems(C10_ECONOMY_CATALOGS[C10_POINTS_ECONOMY_VERSION].utilityItems.map((item) =>
+      item.effect === 'ai_pack' ? { ...item, desc: item.desc.replace('，每日等级额度用完后自动使用', '') } : item)),
+    freePolicy: freezePolicy({ poolVersion: 'c11-free-v1', countsPaidPity: false, pool: [
+      { id: 'p2', kind: 'points', amount: 2, name: '+2 积分', weight: 200 },
+      { id: 'p3', kind: 'points', amount: 3, name: '+3 积分', weight: 600 },
+      { id: 'p5', kind: 'points', amount: 5, name: '+5 积分', weight: 180 },
+      { id: 'p20', kind: 'points', amount: 20, name: '+20 积分', weight: 20 },
+    ] }),
   }),
 });
 
@@ -311,7 +329,8 @@ export function parseRuntimeFlag(value, defaultValue) {
 }
 
 export function getActiveEconomyVersion(env = process.env) {
-  if (parseRuntimeFlag(env.POINTS_ECONOMY_C10_ENABLED, false)) return POINTS_ECONOMY_VERSION;
+  if (parseRuntimeFlag(env.POINTS_ECONOMY_C11_ENABLED, false)) return POINTS_ECONOMY_VERSION;
+  if (parseRuntimeFlag(env.POINTS_ECONOMY_C10_ENABLED, false)) return C10_POINTS_ECONOMY_VERSION;
   if (parseRuntimeFlag(env.POINTS_ECONOMY_C9_ENABLED, false)) return C9_POINTS_ECONOMY_VERSION;
   if (parseRuntimeFlag(env.POINTS_ECONOMY_C8_ENABLED, false)) return C8_POINTS_ECONOMY_VERSION;
   if (parseRuntimeFlag(env.POINTS_ECONOMY_C7_ENABLED, false)) return C7_POINTS_ECONOMY_VERSION;
@@ -338,6 +357,7 @@ export function getEconomyRuntime(env = process.env) {
       C7_POINTS_ECONOMY_VERSION,
       C8_POINTS_ECONOMY_VERSION,
       C9_POINTS_ECONOMY_VERSION,
+      C10_POINTS_ECONOMY_VERSION,
       POINTS_ECONOMY_VERSION,
     ].includes(catalog.version),
     // C4 及其后续版本激活后协议不可降级；该开关只用于 C3 兼容代码提前上线时主动收紧旧写入口。

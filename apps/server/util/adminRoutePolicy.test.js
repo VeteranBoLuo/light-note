@@ -108,16 +108,6 @@ describe('adminRoutePolicyMiddleware', () => {
     }
   });
 
-  it.each(['readonly', 'maintain'])('社区本人偏好拒绝 %s 代管，能力元数据允许读取', (mode) => {
-    for (const method of ['GET', 'PUT']) {
-      const next = vi.fn();
-      adminRoutePolicyMiddleware(createReq('/community/preferences/me', method, mode), createRes(), next);
-      expect(next).not.toHaveBeenCalled();
-    }
-    const next = vi.fn();
-    adminRoutePolicyMiddleware(createReq('/community/capabilities', 'GET', mode), createRes(), next);
-    expect(next).toHaveBeenCalledOnce();
-  });
   it.each(['readonly', 'maintain'])('项目删除拒绝 %s 代管上下文', (mode) => {
     const next = vi.fn();
     const res = createRes();
@@ -197,7 +187,6 @@ describe('adminRoutePolicyMiddleware', () => {
       '/toolbox/quotes',
       '/toolbox/workspaces',
       '/toolbox/workspaces/workspace-1/resources',
-      '/toolbox/workspaces/workspace-1/items',
       '/toolbox/workspaces/workspace-1/sessions',
       '/toolbox/workspaces/workspace-1/open',
       '/toolbox/jobs',
@@ -303,25 +292,9 @@ describe('adminRoutePolicyMiddleware', () => {
     }
   });
 
-  it('整理 AI 的动态批次详情可代管只读，创建与复审动作在两种代管模式都失败关闭', () => {
+  it('整理建议的批量应用在两种代管模式都失败关闭', () => {
     for (const mode of ['readonly', 'maintain']) {
-      const detailNext = vi.fn();
-      const detailRes = createRes();
-      adminRoutePolicyMiddleware(
-        createReq('/organize/ai-suggestions/batches/batch-1', 'GET', mode),
-        detailRes,
-        detailNext,
-      );
-      expect(detailNext).toHaveBeenCalledTimes(1);
-      expect(detailRes.json).not.toHaveBeenCalled();
-
-      for (const [method, path] of [
-        ['POST', '/organize/suggestions/runs/run-1/apply-batch'],
-        ['POST', '/organize/ai-suggestions/batches'],
-        ['PUT', '/organize/ai-suggestions/batches/batch-1/suggestions/suggestion-1'],
-        ['POST', '/organize/ai-suggestions/batches/batch-1/suggestions/suggestion-1/accept'],
-        ['POST', '/organize/ai-suggestions/batches/batch-1/suggestions/suggestion-1/ignore'],
-      ]) {
+      for (const [method, path] of [['POST', '/organize/suggestions/runs/run-1/apply-batch']]) {
         const next = vi.fn();
         const res = createRes();
         adminRoutePolicyMiddleware(createReq(path, method, mode), res, next);
@@ -342,7 +315,6 @@ describe('adminRoutePolicyMiddleware', () => {
       ['POST', '/organize/duplicate-bookmarks/group-1/ignore'],
       ['DELETE', '/organize/duplicate-bookmarks/group-1/ignore'],
       ['POST', '/organize/bookmark-health/scan'],
-      ['POST', '/organize/bookmark-health/check-batch'],
       ['POST', '/organize/bookmark-health/bookmark-1/recheck'],
       ['POST', '/organize/bookmark-health/bookmark-1/mark-normal'],
       ['DELETE', '/organize/bookmark-health/bookmark-1/mark-normal'],
@@ -492,28 +464,6 @@ describe('adminRoutePolicyMiddleware', () => {
     }
   });
 
-  it('AI 整理"应用"是内容写:readonly 阻断、maintain 放行;只读的 quote/run 仍放行', () => {
-    // apply = 真实写(建标签/关系/补名称),必须 maintain-only
-    const denyNext = vi.fn();
-    const denyRes = createRes();
-    adminRoutePolicyMiddleware(createReq('/bookmark/ai/organize/apply', 'POST', 'readonly'), denyRes, denyNext);
-    expect(denyNext).not.toHaveBeenCalled();
-    expect(denyRes.json).toHaveBeenCalledWith(expect.objectContaining({ data: { code: 'ADMIN_PREVIEW_READONLY' } }));
-
-    const allowNext = vi.fn();
-    const allowReq = createReq('/bookmark/ai/organize/apply', 'POST', 'maintain');
-    adminRoutePolicyMiddleware(allowReq, createRes(), allowNext);
-    expect(allowNext).toHaveBeenCalledTimes(1);
-    expect(allowReq.suppressUserRewards).toBe(true);
-
-    // quote/run 只产建议、不落库,仍属 AI_USE,readonly 可用
-    for (const path of ['/bookmark/ai/organize/quote', '/bookmark/ai/organize/run']) {
-      const next = vi.fn();
-      adminRoutePolicyMiddleware(createReq(path, 'POST', 'readonly'), createRes(), next);
-      expect(next).toHaveBeenCalledTimes(1);
-    }
-  });
-
   it('管理员上下文可读取目标账号成长数据，但成长权益写入始终拒绝', () => {
     for (const path of [
       '/growth/me',
@@ -527,7 +477,6 @@ describe('adminRoutePolicyMiddleware', () => {
       '/growth/inventory/acquisitions',
       '/growth/lottery',
       '/growth/lottery/history',
-      '/growth/recap',
       '/growth/claimable',
       '/growth/preferences',
       '/growth/weekly',
@@ -547,7 +496,6 @@ describe('adminRoutePolicyMiddleware', () => {
         '/growth/achievement/claim',
         '/growth/claimAll',
         '/growth/weekly/claim',
-        '/growth/recap/state',
       ]) {
         const next = vi.fn();
         const res = createRes();

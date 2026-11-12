@@ -168,9 +168,30 @@ html.light-note-mobile-rendering {
     border-color: var(--surface-border-color, var(--card-border-color)) !important;
   }
 
+  // 成长概览的关键状态用实色语义描边表达（今天、已签、当前段位、可补签、可领取、已领取），不随上面的中性边框统一。
+  .growth-page .growth-panel .today-quest.is-cta,
+  .growth-page .growth-panel .today-week__day.is-checked .today-week__mark,
+  .growth-page .growth-panel .today-week__day.is-today .today-week__mark,
+  .growth-page .growth-panel .today-track__node.is-reached:not(.is-gift) .today-track__dot,
+  .growth-page .growth-panel .rank-track__node.is-on,
+  .growth-page .growth-panel .rank-track__node.is-current,
+  .growth-page .growth-panel .rank-track__node.is-next {
+    border-color: var(--primary-color) !important;
+  }
+  .growth-page .growth-panel .today-week__day.is-makeup .today-week__mark,
+  .growth-page .growth-panel .today-track__node.is-ready .today-track__dot,
+  .growth-page .growth-panel .today-track__node.is-gift.is-reached .today-track__dot,
+  .growth-page .growth-panel .rank-track__node.is-crown,
+  .growth-page .growth-panel .rank-panel__max,
+  .growth-page .growth-panel .ach-panel__claimable,
+  .growth-page .growth-panel .ach-panel__tag {
+    border-color: var(--warning-color) !important;
+  }
+  .growth-page .growth-panel .today-track__node.is-claimed .today-track__dot {
+    border-color: var(--success-color) !important;
+  }
+
   .growth-page .growth-panel,
-  .growth-page .gc-badge,
-  .growth-page .gc-checkin,
   .growth-page .cal-cell,
   .growth-page .rl-row,
   .growth-page .aw-badge,

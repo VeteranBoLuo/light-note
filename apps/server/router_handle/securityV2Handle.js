@@ -1,3 +1,6 @@
+import { grantOutstandingLevelGifts } from '../util/aiLevelGifts.js';
+import { aiGiftRiskPolicy } from '../util/aiLevelGiftRisk.js';
+import { levelGiftsEnabled } from '../util/aiQuotaPolicy.js';
 import pool from '../db/index.js';
 import { resultData } from '../util/common.js';
 import { SECURITY_CONFIG } from '../util/security/rules.js';
@@ -1149,7 +1152,11 @@ export const revokeSecurityRestriction = async (req, res) => {
     );
     await connection.commit();
     clearSecurityRestrictionCache(restriction.user_id);
-    res.send(resultData(null, 200, '账号安全限制已解除'));
+    connection.release();
+    connection = null;
+    const gifts = restriction.restriction_type === 'gift_hold'
+      ? await grantOutstandingLevelGifts(restriction.user_id, { trigger: 'security_review' }).catch(() => ({ status: 'retry_pending' })) : null;
+    res.send(resultData(gifts ? { gifts } : null, 200, '账号安全限制已解除'));
   } catch {
     if (connection) await connection.rollback().catch(() => {});
     res.status(500).send(resultData(null, 500, '解除账号限制失败'));
@@ -1227,4 +1234,36 @@ export const revokeSourceDeny = async (req, res) => {
   } finally {
     connection?.release();
   }
+};
+
+// Root 审核后恢复时重新开始全站观察窗口，避免同一批已审核事实立即再次熔断。
+export const getAiGiftControls = async (req, res) => {
+  if (!ensureRootRole(req, res)) return;
+  try {
+    const [[control]] = await pool.query('SELECT paused_from,reviewed_at,reason,updated_at FROM ai_level_gift_controls WHERE id=1');
+    res.send(resultData({ pausedFrom: control?.paused_from || null, reviewedAt: control?.reviewed_at || null,
+      reason: control?.reason || '', updatedAt: control?.updated_at || null,
+      enabled: levelGiftsEnabled(), policy: aiGiftRiskPolicy() }));
+  } catch { res.status(503).send(resultData(null, 503, '赠礼控制暂不可用')); }
+};
+export const setAiGiftControls = async (req, res) => {
+  let connection, context;
+  try {
+    if (!ensureRootRole(req, res)) return;
+    if (typeof req.body?.paused !== 'boolean') return res.status(400).send(resultData(null, 400, '缺少暂停状态'));
+    context = await beginAdminAction(req, { action: 'ai_gifts.control', targetId: '1', expectedConfirmText: '确认调整赠礼', metadata: { paused: req.body.paused } });
+    connection = await pool.getConnection(); await connection.beginTransaction();
+    await connection.query('SELECT id FROM ai_level_gift_controls WHERE id=1 FOR UPDATE');
+    await connection.query(req.body.paused
+      ? 'UPDATE ai_level_gift_controls SET paused_from=COALESCE(paused_from,NOW(3)),reason=?,updated_by=? WHERE id=1'
+      : 'UPDATE ai_level_gift_controls SET paused_from=NULL,reviewed_at=NOW(3),reason=?,updated_by=? WHERE id=1', [context.reason, req.user.id]);
+    const receipt = await finishAdminAction(context, { outcome: 'succeeded', metadata: { paused: req.body.paused }, db: connection });
+    await connection.commit();
+    res.send(resultData({ ...receipt, paused: req.body.paused }, 200, req.body.paused ? '后续新号赠礼已暂停' : '赠礼暂停已解除；批次暂扣仍须逐项复核，可用补发脚本扫漏'));
+  } catch (error) {
+    await connection?.rollback().catch(() => {});
+    if (context) await finishAdminAction(context, { outcome: 'failed', metadata: { errorCode: stableAgentErrorCode(error) } }).catch(() => {});
+    const failure = adminActionErrorResponse(error, '调整赠礼控制失败');
+    res.status(failure.status).send(resultData(null, failure.status, failure.message));
+  } finally { connection?.release(); }
 };

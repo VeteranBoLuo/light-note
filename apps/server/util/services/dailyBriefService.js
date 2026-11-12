@@ -13,6 +13,7 @@ import { parseTimeRange, normalizeAgentTimeZone } from '../agent/timeRange.js';
 import { executeAiSkill } from '../aiSkill/runtime.js';
 import { withActiveUserAiDispatch } from '../aiOutboundDispatchGuard.js';
 import { isDailyBriefFeatureEnabled } from '../dailyBriefFeature.js';
+import { platformDailyBriefEnabled } from '../aiQuotaPolicy.js';
 import { normalizeTodoLocale } from '../todoDateFormat.js';
 import { compileDailyBriefFacts, selectDailyBriefFacts } from './dailyBriefFacts.js';
 import {
@@ -458,6 +459,7 @@ function rowStatus({ featureEnabled, preference, calendar, row }) {
   if (!featureEnabled || !preference.enabled) {
     return {
       featureEnabled,
+      adviceBillingPolicy: platformDailyBriefEnabled() ? 'system' : 'user',
       enabled: preference.enabled,
       date: calendar.date,
       nextDateAt: calendar.nextDateAt || null,
@@ -470,6 +472,7 @@ function rowStatus({ featureEnabled, preference, calendar, row }) {
   if (!row) {
     return {
       featureEnabled,
+      adviceBillingPolicy: platformDailyBriefEnabled() ? 'system' : 'user',
       enabled: true,
       date: calendar.date,
       nextDateAt: calendar.nextDateAt || null,
@@ -485,6 +488,7 @@ function rowStatus({ featureEnabled, preference, calendar, row }) {
   if (staleReadyBrief) {
     return {
       featureEnabled,
+      adviceBillingPolicy: platformDailyBriefEnabled() ? 'system' : 'user',
       enabled: true,
       date: calendar.date,
       nextDateAt: calendar.nextDateAt || null,
@@ -498,6 +502,7 @@ function rowStatus({ featureEnabled, preference, calendar, row }) {
     String(row.status || '') === 'generating' && Number(row.leaseExpired ?? row.lease_expired ?? 0) === 1;
   return {
     featureEnabled,
+    adviceBillingPolicy: platformDailyBriefEnabled() ? 'system' : 'user',
     enabled: true,
     date: calendar.date,
     nextDateAt: calendar.nextDateAt || null,
@@ -653,7 +658,8 @@ async function generateDailyBriefForActiveUser(
     previousAdviceFailed &&
     Boolean(advice.key) &&
     (previousBrief.adviceAttemptKey === advice.key || !previousBrief.adviceAttemptKey);
-  const quotaBlocked = /^AI_QUOTA_(EXCEEDED|INSUFFICIENT_FOR_REQUEST)$/.test(
+  const sameBillingPolicy = (previousBrief?.adviceBillingPolicy || 'user') === (platformDailyBriefEnabled() ? 'system' : 'user');
+  const quotaBlocked = sameBillingPolicy && /^AI_QUOTA_(EXCEEDED|INSUFFICIENT_FOR_REQUEST)$/.test(
     previousBrief?.adviceFailureCode || existing?.lastErrorCode || '',
   );
   const modelAllowed =
@@ -732,6 +738,7 @@ async function generateDailyBriefForActiveUser(
               : previousBrief?.adviceAttemptedAt || (lastAttempt ? new Date(lastAttempt).toISOString() : null),
           }
         : {}),
+      adviceBillingPolicy: platformDailyBriefEnabled() ? 'system' : 'user',
       ...(adviceFailed ? { adviceStatus: 'failed', adviceFailureReason, adviceFailureCode } : {}),
     };
     // 保留最近一次完成的分析结果，与本轮调度/失败状态分开，刷新或重进页面不会丢失。
@@ -805,6 +812,9 @@ async function generateDailyBriefForActiveUser(
           {
             database,
             internalCaller: 'daily_brief_service',
+            ...(platformDailyBriefEnabled()
+              ? { executionConfigOverrides: { billingPolicy: 'system', systemId: 'daily_brief' } }
+              : {}),
             commitValidatedResult: async ({ response }) => {
               if (
                 modelSignals.length &&

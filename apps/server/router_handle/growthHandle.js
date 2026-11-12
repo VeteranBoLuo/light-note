@@ -6,9 +6,12 @@ import {
   useProtectCard,
   adminAdjustGrowth,
   RANKS,
+  levelGiftEntitlement,
   markNoticesRead,
 } from '../util/growth.js';
 import { WEEKLY_REPORT_PERIODS, buildWeeklyReport } from '../util/weeklyReport.js';
+import { aiQuotaMode } from '../util/aiQuotaPolicy.js';
+import pool from '../db/index.js';
 import { L, resultData } from '../util/common.js';
 import { ensureNotVisitor, ensureUserOrAdminPolicy } from '../util/auth.js';
 import {
@@ -36,7 +39,6 @@ import { getEconomyRuntime } from '../util/pointsEconomyCatalog.js';
 import { PointsEconomyError } from '../util/pointsEconomyOperations.js';
 import { getInventory, useItem } from '../util/items.js';
 import { getWeeklyChallenges } from '../util/weeklyChallenge.js';
-import { getRecap, updateRecapState } from '../util/recap.js';
 import { getGrowthTasks } from '../util/growthTaskService.js';
 import { claimGrowthRewards, getGrowthClaimableSnapshot } from '../util/growthClaimService.js';
 import { stableAgentErrorCode } from '../util/agent/logSafety.js';
@@ -80,7 +82,7 @@ export const getMyGrowth = async (req, res) => {
     const userRole = req.user?.role || 'visitor';
     const growth = await getGrowth(userId, { userRole });
     growth.features = {
-      growthCenterV2: isGrowthCenterV2Enabled({ userId, userRole }),
+      growthCenterV2: isGrowthCenterV2Enabled(),
       pointsCenter: getPointsEarningRuntime().pointsCenterEnabled,
       manor: knowledgeManorEnabled() && canEnterManor(userRole) && !req.adminContext,
     };
@@ -171,7 +173,7 @@ export const getUserGrowthForAdmin = async (req, res) => {
 export const doAdminAdjustGrowth = async (req, res) => {
   let actionContext = null;
   try {
-    const { userId, expDelta, setLevel, cardDelta } = req.body || {};
+    const { userId, expDelta, setLevel, cardDelta, aiCreditTokens } = req.body || {};
     if (!userId) return res.send(resultData(null, 400, '缺少目标用户'));
     actionContext = await beginAdminAction(req, {
       action: 'growth.adjust',
@@ -181,9 +183,10 @@ export const doAdminAdjustGrowth = async (req, res) => {
         expDelta: Number(expDelta || 0),
         setLevel: setLevel == null || setLevel === '' ? null : Number(setLevel),
         cardsDelta: Number(cardDelta || 0),
+        aiCreditTokens: Number(aiCreditTokens || 0),
       },
     });
-    const result = await adminAdjustGrowth(userId, { expDelta, setLevel, cardDelta }, { actionContext });
+    const result = await adminAdjustGrowth(userId, { expDelta, setLevel, cardDelta, aiCreditTokens }, { actionContext });
     return res.send(resultData(result));
   } catch (error) {
     if (actionContext) {
@@ -296,12 +299,19 @@ export const claimDailyBonus = async (req, res) => {
 // GET /growth/ranks —— 段位表(前端「段位路线」总览用;公开只读,单一事实源)
 export const getRanks = async (req, res) => {
   try {
+    let registeredAt = null;
+    if (req.user?.id && req.user.id !== 'visitor') {
+      const [[account]] = await pool.query('SELECT create_time FROM user WHERE id = ? LIMIT 1', [req.user.id]);
+      registeredAt = account?.create_time;
+    }
     const ranks = RANKS.map((r) => ({
       level: r.level,
       name: r.name,
       cumExp: r.cumExp,
       spaceMb: r.spaceMb,
-      aiTokenDaily: r.aiTokenDaily,
+      aiTokenDaily: aiQuotaMode() === 'permanent_only' ? 0 : r.aiTokenDaily,
+      billingMode: aiQuotaMode(),
+      aiLevelGift: levelGiftEntitlement(r.level, registeredAt),
       trashDays: r.trashDays,
       freeDraws: freeDrawsFor(r.level), // 每日免费抽奖次数(随等级解锁)
     }));
@@ -546,27 +556,6 @@ export const doClaimAll = async (req, res) => {
   } catch (error) {
     console.error('一键领取失败 code=%s', stableAgentErrorCode(error));
     res.send(resultData(null, 500, '领取失败'));
-  }
-};
-
-// GET /growth/recap —— 那年今日 + 尘封回顾(旧内容重新推到面前)
-export const getRecapHandle = async (req, res) => {
-  try {
-    const userId = req.user?.id || 'visitor';
-    res.send(resultData(await getRecap(userId)));
-  } catch (error) {
-    console.error('获取回顾失败 code=%s', stableAgentErrorCode(error));
-    res.send(resultData(null, 500, L(req, '获取回顾失败', 'Failed to load recap')));
-  }
-};
-
-export const setRecapState = async (req, res) => {
-  if (!ensureNotVisitor(req, res)) return;
-  try {
-    res.send(resultData(await updateRecapState(req.user.id, req.body || {})));
-  } catch (error) {
-    console.error('更新回顾偏好失败 code=%s', stableAgentErrorCode(error));
-    res.send(resultData(null, 500, L(req, '更新回顾偏好失败', 'Failed to update recap preference')));
   }
 };
 

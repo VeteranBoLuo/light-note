@@ -8,6 +8,12 @@ export interface BookmarkRecognitionFailure {
   focusTarget: 'name' | 'url';
 }
 type Translate = (key: string, params?: any) => string;
+const PAGE_FAILURE_REASONS = new Map([
+  ['BOOKMARK_PAGE_NOT_FOUND', 'NOT_FOUND'],
+  ['BOOKMARK_PAGE_DNS_FAILED', 'DNS_FAILED'],
+  ['BOOKMARK_PAGE_TLS_FAILED', 'TLS_FAILED'],
+  ['BOOKMARK_PAGE_TLS_HANDSHAKE_FAILED', 'TLS_HANDSHAKE_FAILED'],
+]);
 
 export function bookmarkRecognitionFailure(error: unknown, t: Translate): BookmarkRecognitionFailure {
   const code = String((error as { code?: unknown })?.code || '');
@@ -19,6 +25,16 @@ export function bookmarkRecognitionFailure(error: unknown, t: Translate): Bookma
       retryable: false,
       focusTarget: 'name',
     };
+  const pageReason = PAGE_FAILURE_REASONS.get(code);
+  if (pageReason) {
+    const checkUrl = ['NOT_FOUND', 'DNS_FAILED'].includes(pageReason);
+    return {
+      message: t(`bookmarkMg.archiveFailure.${pageReason}`),
+      hint: t(`bookmarkMeta.recovery.${checkUrl ? 'checkUrlHint' : 'manualHint'}`),
+      retryable: ['DNS_FAILED', 'TLS_HANDSHAKE_FAILED'].includes(pageReason),
+      focusTarget: checkUrl ? 'url' : 'name',
+    };
+  }
   const kind = ['BOOKMARK_PAGE_AUTH_REQUIRED', 'BOOKMARK_PAGE_ACCESS_PROTECTED'].includes(code)
     ? 'restricted'
     : code === 'BOOKMARK_PAGE_URL_BLOCKED'

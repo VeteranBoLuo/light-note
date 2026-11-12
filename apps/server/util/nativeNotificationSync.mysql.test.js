@@ -793,10 +793,12 @@ describe.skipIf(!socketPath)('native notification real SQL', () => {
     expect(page.items.map((x) => x.id)).toEqual([own]);
     expect(page.owner).toBe('alice');
   });
-  it('邮箱检查提醒只留在站内，不进入原生前台通知同步', async () => {
+  it('限站内通知及需要独立时效复核的庄园提醒不进入旧前台同步', async () => {
     const { since } = await readNativeNotifications(db, 'alice');
     await add({ type: 'email_health' });
     await add({ type: 'signup_source_survey' });
+    await add({ type: 'manor_digest' });
+    await add({ type: 'manor_water_expiring' });
     const regular = await add({ type: 'system' });
     expect((await readNativeNotifications(db, 'alice', { since })).items.map((item) => item.id)).toEqual([regular]);
   });

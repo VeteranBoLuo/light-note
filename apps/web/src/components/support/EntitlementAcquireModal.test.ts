@@ -65,7 +65,7 @@ afterEach(() => {
 });
 
 describe('永久权益统一获取入口', () => {
-  it('AI 额度分别深链积分商城 AI 商品和赞助 AI 套餐', async () => {
+  it('AI 额度分别深链积分商城 AI 商品和资源商店 AI 套餐', async () => {
     const actions = await mount('ai');
     actions[0]?.click();
     actions[1]?.click();
@@ -78,7 +78,7 @@ describe('永久权益统一获取入口', () => {
     expect(mocks.closeCurrentMobileOverlayThen).toHaveBeenCalledTimes(2);
   });
 
-  it('云空间分别深链积分商城空间商品和赞助空间套餐', async () => {
+  it('云空间分别深链积分商城空间商品和资源商店空间套餐', async () => {
     const actions = await mount('storage');
     actions[0]?.click();
     actions[1]?.click();

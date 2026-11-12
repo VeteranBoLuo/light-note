@@ -6,8 +6,6 @@ export const NOTE_IMPORT_LIMITS: Readonly<{
   contentLength: number;
 }>;
 export const NOTE_IMPORT_EXTENSIONS: readonly string[];
-export const NOTE_IMPORT_STATES: readonly string[];
-export const NOTE_IMPORT_WARNINGS: readonly string[];
 export interface NoteImportItem {
   id: string;
   title: string;

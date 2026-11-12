@@ -68,16 +68,6 @@ export function normalizeTodoDraft(input = {}, { now } = {}) {
   });
 }
 
-export function normalizeCreateTodoArgs(input = {}) {
-  const draft = normalizeTodoDraft(input);
-  return {
-    title: draft.title,
-    description: draft.description,
-    dueAt: firstValue(input, ['dueAt', 'due_at', 'dueDate', 'due_date', 'deadline', 'remindAt', 'remind_at', 'time']),
-    priority: draft.priority,
-  };
-}
-
 export const todoDraftNormalizerInternals = Object.freeze({
   firstValue,
   MAX_TITLE_CHARS: TODO_DRAFT_MAX_TITLE_CHARS,

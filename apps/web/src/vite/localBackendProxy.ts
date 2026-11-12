@@ -1,3 +1,4 @@
+import { localTestPorts } from '../../../server/util/localTestPorts.js';
 import type { ClientRequest, IncomingMessage } from 'node:http';
 import type { ProxyOptions } from 'vite';
 
@@ -36,15 +37,16 @@ export function assertLocalViteBackend(viteEnv: unknown) {
   throw new Error('VITE_REMOTE_BACKEND_PROXY_BLOCKED: Vite 开发服务器只允许代理本机后端，请使用 VITE_ENV=local。');
 }
 
-export function createLocalBackendProxy(): Record<string, ProxyOptions> {
+export function createLocalBackendProxy({ isolated = process.env.LIGHTNOTE_LOCAL_TEST === '1' } = {}): Record<string, ProxyOptions> {
+  const backendTarget = isolated ? `http://127.0.0.1:${localTestPorts().api}` : LOCAL_VITE_BACKEND_TARGET;
   return {
     '^/api(?:/|$)': {
-      target: LOCAL_VITE_BACKEND_TARGET,
+      target: backendTarget,
       changeOrigin: true,
       rewrite: (path: string) => path.replace(/^\/api/, ''),
     },
     '^/uploads(?:/|$)': {
-      target: PUBLIC_UPLOAD_ORIGIN,
+      target: isolated ? backendTarget : PUBLIC_UPLOAD_ORIGIN,
       changeOrigin: true,
       bypass: (req) => (isPublicUploadReadMethod(req.method) ? undefined : false),
       configure: (proxy) => {
@@ -53,12 +55,12 @@ export function createLocalBackendProxy(): Record<string, ProxyOptions> {
       },
     },
     '/realtime/chat': {
-      target: LOCAL_VITE_BACKEND_TARGET,
+      target: backendTarget,
       changeOrigin: false,
       ws: true,
     },
     '/realtime/notifications': {
-      target: LOCAL_VITE_BACKEND_TARGET,
+      target: backendTarget,
       changeOrigin: false,
       ws: true,
     },

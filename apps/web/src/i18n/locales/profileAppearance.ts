@@ -1,6 +1,5 @@
 export const profileAppearanceZh = {
   title: '个人装扮',
-  changeAvatar: '更换头像',
   avatar: '头像',
   uploadAvatar: '上传图片',
   avatarImmediate: '使用后立即生效',
@@ -58,7 +57,6 @@ export const profileAppearanceZh = {
 
 export const profileAppearanceEn = {
   title: 'Appearance',
-  changeAvatar: 'Change avatar',
   avatar: 'Avatar',
   uploadAvatar: 'Upload image',
   avatarImmediate: 'Applied immediately after you choose Use',

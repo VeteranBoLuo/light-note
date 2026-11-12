@@ -849,7 +849,7 @@
     min-width: 0;
     height: 86px;
     padding: 9px 4px;
-    gap: 6px;
+    gap: var(--ui-space-10, 10px);
     flex-direction: column;
     align-items: center;
     justify-content: center;
@@ -859,6 +859,7 @@
     background: var(--card-background) !important;
     box-shadow: 0 8px 22px rgba(37, 40, 72, 0.045);
     font-size: 12px;
+    line-height: 1.4;
   }
 
   .mobile-today__capture-action:active,

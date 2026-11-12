@@ -207,7 +207,7 @@ export const FEATURE_SHORTCUTS: readonly FeatureShortcutDefinition[] = [
     platforms: BOTH,
     requiresLogin: false,
     route: { path: '/toolbox' },
-    aliases: ['工坊', '资料转表格', '表格提取', '学习项目', '研究项目', '写作项目', 'OCR', 'workshop'],
+    aliases: ['工坊', '学习项目', '研究项目', '写作项目', 'OCR', 'workshop'],
   },
   {
     id: 'manor',

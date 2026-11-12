@@ -22,9 +22,20 @@ function mountUpload(props: Record<string, unknown> = {}) {
     },
   });
   app.use(createPinia());
-  app.use(createI18n({ legacy: false, locale: 'en', messages: { en: { cloudSpace: {
-    uploadFile: 'Upload file', uploadSelectionLimit: 'Select up to {count} files at a time',
-  } } } }));
+  app.use(
+    createI18n({
+      legacy: false,
+      locale: 'en',
+      messages: {
+        en: {
+          cloudSpace: {
+            uploadFile: 'Upload file',
+            uploadSelectionLimit: 'Select up to {count} files at a time',
+          },
+        },
+      },
+    }),
+  );
   app.mount(host);
   cleanup = () => {
     app.unmount();
@@ -92,7 +103,9 @@ describe('BUpload semantics', () => {
     expect(input).not.toBeNull();
     if (!input) throw new Error('native file input was not mounted');
     const file = new File(['content'], 'archive.zip', { type: 'application/zip' });
-    Object.defineProperty(file, 'size', { configurable: true, value: 20 * 1024 * 1024 });
+    const readSize = vi.spyOn(file, 'size', 'get').mockImplementation(() => {
+      throw new Error('Raw uploads must defer metadata reads to the upload queue');
+    });
     Object.defineProperty(input, 'files', {
       configurable: true,
       value: [file],
@@ -100,24 +113,34 @@ describe('BUpload semantics', () => {
 
     input.dispatchEvent(new Event('change'));
 
-    expect(onChange).toHaveBeenCalledWith([file]);
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange.mock.calls[0][0][0]).toBe(file);
+    expect(readSize).not.toHaveBeenCalled();
   });
 
-  it.each([101, 3000])('rejects %i selections before enumerating files or reading metadata and resets the input', async (count) => {
-    const warning = vi.spyOn(message, 'warning').mockImplementation(() => {});
-    const onChange = vi.fn();
-    mountUpload({ rawFile: true, maxCount: 100, maxTotalSize: null, onChange });
-    await nextTick();
-    const input = document.body.querySelector<HTMLInputElement>('.b-upload-native-input')!;
-    const enumerate = vi.fn(() => { throw new Error('Oversized selection must not be enumerated'); });
-    Object.defineProperty(input, 'files', { configurable: true, value: { length: count, [Symbol.iterator]: enumerate } });
-    const reset = vi.spyOn(input, 'value', 'set');
-    input.dispatchEvent(new Event('change'));
-    expect(enumerate).not.toHaveBeenCalled();
-    expect(onChange).not.toHaveBeenCalled();
-    expect(warning).toHaveBeenCalledWith('Select up to 100 files at a time');
-    expect(reset).toHaveBeenCalledWith('');
-  });
+  it.each([101, 3000])(
+    'rejects %i selections before enumerating files or reading metadata and resets the input',
+    async (count) => {
+      const warning = vi.spyOn(message, 'warning').mockImplementation(() => {});
+      const onChange = vi.fn();
+      mountUpload({ rawFile: true, maxCount: 100, maxTotalSize: null, onChange });
+      await nextTick();
+      const input = document.body.querySelector<HTMLInputElement>('.b-upload-native-input')!;
+      const enumerate = vi.fn(() => {
+        throw new Error('Oversized selection must not be enumerated');
+      });
+      Object.defineProperty(input, 'files', {
+        configurable: true,
+        value: { length: count, [Symbol.iterator]: enumerate },
+      });
+      const reset = vi.spyOn(input, 'value', 'set');
+      input.dispatchEvent(new Event('change'));
+      expect(enumerate).not.toHaveBeenCalled();
+      expect(onChange).not.toHaveBeenCalled();
+      expect(warning).toHaveBeenCalledWith('Select up to 100 files at a time');
+      expect(reset).toHaveBeenCalledWith('');
+    },
+  );
 
   it('accepts exactly 100 raw files in order without using FileReader', async () => {
     const read = vi.spyOn(FileReader.prototype, 'readAsDataURL');

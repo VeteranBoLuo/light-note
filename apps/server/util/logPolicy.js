@@ -33,9 +33,7 @@ const PASSIVE_API_PATHS = new Set([
   '/updateLog/featured', // 快捷搜索打开时读取「最近上线」，属于被动展示。
   '/inbox/count', // 待处理角标读取，页面加载及构建预渲染会高频调用。
   '/growth/manor/attention', // 庄园入口提醒点：页面加载与回到前台时读取，属于被动状态同步。
-  '/support/state', // 支持页与 App 前台恢复读取，不包含操作审计价值。
   '/support/afdian/webhook', // 第三方订单载荷含留言/收货信息，绝不写入通用 API 日志。
-  '/support/afdian/oauth/callback', // 回调查询参数含短时 code/state，由领域日志只记稳定结果码。
   '/community-chat/access', // 公共聊天室权限快照：前台恢复/安全刷新会反复读取，无操作审计价值。
   '/community-chat/rooms', // 频道目录与未读快照：属于被动状态同步。
   '/infra/dashboard', // 服务器管理前台默认每 3 秒读取一次快照，由独立运维审计记录真正的写动作。

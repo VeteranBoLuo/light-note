@@ -5,7 +5,6 @@ const mocks = vi.hoisted(() => ({ get: vi.fn(), operation: vi.fn(), write: vi.fn
 vi.mock('@/store', () => ({ useUserStore: () => ({ id: 'a', role: 'user' }) }));
 vi.mock('vue-i18n', () => ({ useI18n: () => ({ t: (key: string) => key }) }));
 vi.mock('@/api/communityFeedApi', () => ({ feedGet: mocks.get, feedOperation: mocks.operation }));
-vi.mock('./CommunityPreferencesPanel.vue', () => ({ default: { template: '<div><slot /></div>' } }));
 vi.mock('@/components/communityChat/CommunityChatNotificationSettingsPanel.vue', () => ({
   default: { template: '<div><slot /></div>' },
 }));

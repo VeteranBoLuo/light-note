@@ -1,6 +1,6 @@
 <template>
   <section class="growth-preferences" :aria-busy="loading">
-    <header>
+    <header v-if="showHeader">
       <span class="growth-preferences__icon"><SvgIcon :src="icon.userCenter.settingsGear" size="20" /></span>
       <div><h2>{{ t('growth.preferencesTitle') }}</h2><p>{{ t('growth.preferencesSubtitle') }}</p></div>
     </header>
@@ -51,8 +51,10 @@
       error?: boolean;
       saving?: boolean;
       readOnly?: boolean;
+      /** 放进带标题的弹框时由弹框提供标题，避免重复。 */
+      showHeader?: boolean;
     }>(),
-    { loading: false, error: false, saving: false, readOnly: false },
+    { loading: false, error: false, saving: false, readOnly: false, showHeader: true },
   );
   const emit = defineEmits<{ save: [value: Partial<GrowthPreferences>]; retry: [] }>();
   const { t } = useI18n();
@@ -102,6 +104,7 @@
   p { margin: var(--ui-space-2, 2px) 0 0; color: var(--desc-color); font-size: var(--ui-font-12, 12px); }
   .growth-preferences__icon { display: grid; width: var(--ui-layout-36, 36px); height: var(--ui-layout-36, 36px); place-items: center; border: 1px solid var(--primary-color); border-radius: 10px; color: var(--primary-color); }
   .growth-preferences__row { display: flex; align-items: center; justify-content: space-between; gap: var(--ui-space-14, 14px); padding: var(--ui-space-10, 10px) 0; border-top: 1px solid var(--card-border-color); }
+  .growth-preferences > .growth-preferences__row:first-child { border-top: 0; }
   .growth-preferences__row > div { display: flex; min-width: 0; flex-direction: column; }
   .growth-preferences__row strong { color: var(--text-color); font-size: var(--ui-font-13, 13px); }
   .growth-preferences__row span { color: var(--desc-color); font-size: var(--ui-font-11_5, 11.5px); }

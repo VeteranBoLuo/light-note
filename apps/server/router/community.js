@@ -3,7 +3,6 @@ import os from 'node:os';
 import express from 'express';
 import * as feed from '../router_handle/communityFeedHandle.js';
 import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
-import { capabilities, preferences, updatePreferences } from '../router_handle/communityPreferenceHandle.js';
 const router = express.Router();
 const writeLimit = rateLimit({
   windowMs: 60_000,
@@ -34,9 +33,6 @@ router.get('/resources/:id', feed.resource);
 router.post('/resources/:id/discard', writeLimit, feed.discardResource);
 router.get('/images/:id', feed.image);
 router.post('/images/:id/discard', writeLimit, feed.discardImage);
-router.get('/capabilities', capabilities);
-router.get('/preferences/me', preferences);
-router.put('/preferences/me', writeLimit, updatePreferences);
 router.get('/feed/capabilities', feed.feedCapabilities);
 router.get('/topics', feed.topics);
 router.get('/topics/:slug', feed.topicDetail);

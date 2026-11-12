@@ -1,3 +1,4 @@
+import { managedUploadUrl, uploadOrigin, managedUploadOrigins } from './uploadOrigin.js';
 import { parseDocument } from 'htmlparser2';
 import { marked } from 'marked';
 import path from 'node:path';
@@ -7,7 +8,7 @@ export const NOTE_CARD_PREVIEW_MAX_BLOCKS = 3;
 export const NOTE_CARD_PREVIEW_SUMMARY_MAX_LENGTH = 300;
 const NOTE_CARD_PREVIEW_SOURCE_MAX_LENGTH = 4000;
 
-const TRUSTED_ORIGINS = new Set(['https://boluo66.top', 'http://boluo66.top']);
+const TRUSTED_ORIGINS = new Set(managedUploadOrigins());
 const SAFE_IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif']);
 const BLOCK_TAGS = new Set([
   'address',
@@ -61,7 +62,7 @@ function cleanCandidateUrl(value) {
   if (!raw) return '';
   let parsed;
   try {
-    parsed = new URL(raw, 'https://boluo66.top');
+    parsed = new URL(raw, uploadOrigin());
   } catch {
     return '';
   }
@@ -77,7 +78,7 @@ function cleanCandidateUrl(value) {
   if (!fileName || pathname !== `/uploads/${fileName}` || fileName.includes('\0')) return '';
   if (!SAFE_IMAGE_EXTENSIONS.has(path.extname(fileName).toLowerCase())) return '';
   // 保留登记时的原始文件名形态，缩略图接口才能用 note_images.url 的索引做精确归属校验。
-  return `https://boluo66.top/uploads/${fileName}`;
+  return managedUploadUrl(fileName);
 }
 
 function sourceFromSrcset(value) {

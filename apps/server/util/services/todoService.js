@@ -16,7 +16,6 @@ import {
   replaceTodoResourceRefs,
 } from './todoReferenceService.js';
 import {
-  deleteTodoPlan,
   loadV2ReminderMap,
   loadV2SeriesMap,
   setV2TodoStatus,
@@ -25,29 +24,15 @@ import {
 import { recordTodoCompletion, recordTodoCreation } from '../growthActivityHistory.js';
 import { resolveTodoConfiguredReminderAt, resolveTodoNextReminderAt } from '@lightnote/shared/todo-reminder';
 import { nextTodoReminderAtSql } from './todoReminderSql.js';
+import { todoDueSql } from './todoAttentionSql.js';
 
 const STATUS = new Set(['pending', 'completed']);
 const FILTER_STATUS = new Set(['all', ...STATUS]);
 const TODO_PAGE_CURSOR_SCOPE = 'todos';
-const TODO_STATUS_LABELS = Object.freeze({ pending: '待处理', completed: '已完成' });
-const TODO_DELETE_SCOPES = new Set(['current', 'future', 'series']);
-const TODO_STATUS_TARGET_FIELDS = `id, title, description, checklist, priority, status,
-  start_at AS startAt, due_at AS dueAt, sort_order AS sortOrder, recurrence_rule AS recurrenceRule,
-  completed_at AS completedAt, update_time AS updatedAt,
-  plan_version AS planVersion, series_id AS seriesId, occurrence_no AS occurrenceNo`;
 // 工作台今日行动流的时间窗筛选：有截止时间按当前时刻，无截止的固定日程按实例日；
 // today 与 overdue 保持互斥，未来预生成实例不会提前计入今日摘要。
 const DUE_FILTERS = new Set(['overdue', 'today']);
-const DUE_SQL = Object.freeze({
-  overdue: `((due_at IS NOT NULL AND due_at < NOW())
-    OR (due_at IS NULL AND occurrence_date IS NOT NULL AND occurrence_date < CURDATE()))`,
-  today: `((due_at IS NOT NULL AND due_at >= NOW() AND due_at < DATE_ADD(CURDATE(), INTERVAL 1 DAY))
-    OR (due_at IS NULL AND occurrence_date = CURDATE()))`,
-  week: `((due_at IS NOT NULL AND due_at >= NOW()
-    AND due_at < DATE_ADD(CURDATE(), INTERVAL (7 - WEEKDAY(CURDATE())) DAY))
-    OR (due_at IS NULL AND occurrence_date >= CURDATE()
-    AND occurrence_date < DATE_ADD(CURDATE(), INTERVAL (7 - WEEKDAY(CURDATE())) DAY)))`,
-});
+const DUE_SQL = Object.freeze(todoDueSql());
 const NEXT_REMINDER_AT_SQL = nextTodoReminderAtSql('todo_items');
 const ACTION_AT_SQL = `NULLIF(LEAST(
   COALESCE(${NEXT_REMINDER_AT_SQL}, '9999-12-31 23:59:59'),
@@ -160,110 +145,6 @@ function todoStatusError(code, message, status = 400, data) {
   error.status = status;
   if (data !== undefined) error.data = data;
   return error;
-}
-
-function normalizeTodoStatusChange(input = {}) {
-  const todoId = String(input?.todoId || '')
-    .trim()
-    .slice(0, 64);
-  const keyword = String(input?.keyword || '')
-    .trim()
-    .slice(0, 100);
-  const status = String(input?.status || '')
-    .trim()
-    .toLowerCase();
-  if (!STATUS.has(status)) {
-    throw todoStatusError('TODO_STATUS_INVALID', '待办状态只能设为“待处理”或“已完成”。');
-  }
-  if (!todoId && !keyword) {
-    throw todoStatusError('TODO_TARGET_REQUIRED', '请指定要修改的待办。');
-  }
-  return { todoId, keyword, status };
-}
-
-function normalizeTodoDeletion(input = {}) {
-  const todoId = String(input?.todoId || '')
-    .trim()
-    .slice(0, 64);
-  const keyword = String(input?.keyword || '')
-    .trim()
-    .slice(0, 100);
-  const scope = String(input?.scope || '')
-    .trim()
-    .toLowerCase();
-  if (!todoId && !keyword) {
-    throw todoStatusError('TODO_TARGET_REQUIRED', '请指定要删除的待办。');
-  }
-  if (scope && !TODO_DELETE_SCOPES.has(scope)) {
-    throw todoStatusError('TODO_DELETE_SCOPE_INVALID', '删除范围无效。');
-  }
-  return { todoId, keyword, scope };
-}
-
-function todoTitleLikePattern(keyword) {
-  // LIKE 的通配符必须按字面标题处理；否则用户写“100%”时可能冻结到另一条待办。
-  return `%${String(keyword).replace(/[\\%_]/g, '\\$&')}%`;
-}
-
-function snapshotValue(value) {
-  if (value === null || value === undefined) return null;
-  if (value instanceof Date) return Number.isFinite(value.getTime()) ? value.toISOString() : 'invalid-date';
-  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') return value;
-  try {
-    return JSON.stringify(value);
-  } catch {
-    return String(value);
-  }
-}
-
-function todoStatusVersion(row) {
-  return crypto
-    .createHash('sha256')
-    .update(
-      JSON.stringify({
-        id: String(row?.id || ''),
-        title: String(row?.title || ''),
-        description: snapshotValue(row?.description),
-        checklist: snapshotValue(row?.checklist),
-        priority: Number(row?.priority ?? 0),
-        status: String(row?.status || ''),
-        dueAt: snapshotValue(row?.dueAt),
-        recurrenceRule: snapshotValue(row?.recurrenceRule),
-        planVersion: Number(row?.planVersion || 1),
-        seriesId: snapshotValue(row?.seriesId),
-        occurrenceNo: snapshotValue(row?.occurrenceNo),
-        completedAt: snapshotValue(row?.completedAt),
-        updatedAt: snapshotValue(row?.updatedAt),
-      }),
-    )
-    .digest('hex');
-}
-
-function todoStatusTarget(row) {
-  return {
-    todoId: String(row?.id || ''),
-    title: String(row?.title || '未命名待办').slice(0, 200),
-    status: String(row?.status || 'pending'),
-    dueAt: row?.dueAt || null,
-    priority: Number(row?.priority || 0),
-    recurring:
-      Boolean(parseJsonObject(row?.recurrenceRule)) || (Number(row?.planVersion || 1) === 2 && Boolean(row?.seriesId)),
-    planVersion: Number(row?.planVersion || 1),
-    seriesId: row?.seriesId || null,
-    occurrenceNo: row?.occurrenceNo === null || row?.occurrenceNo === undefined ? null : Number(row.occurrenceNo),
-    expectedVersion: todoStatusVersion(row),
-  };
-}
-
-function todoStatusCandidate(row) {
-  const target = todoStatusTarget(row);
-  return {
-    todoId: target.todoId,
-    title: target.title,
-    status: target.status,
-    dueAt: target.dueAt,
-    priority: target.priority,
-  };
 }
 
 function parseChecklist(value) {
@@ -495,6 +376,7 @@ async function syncReminder(connection, { todoId, userId, reminder }) {
   }
 }
 
+/** @deprecated 仅承接历史客户端的 v1 写入；内部新入口使用 createSingleTodoPlan 或 createTodoPlan。 */
 export async function createTodo(
   connection,
   userId,
@@ -724,267 +606,6 @@ export async function setTodoStatus(connection, userId, id, status, { undoComple
   return Number(result.affectedRows || 0);
 }
 
-/**
- * 为 Agent 状态修改冻结单个待办目标。这个阶段只读，不产生任何业务副作用；
- * 关键字段会被计算为 expectedVersion 指纹，确认执行时必须在同一事务内再次校验。
- */
-export async function prepareTodoStatusChange(db, userId, input = {}) {
-  const { todoId, keyword, status } = normalizeTodoStatusChange(input);
-  let rows;
-  if (todoId) {
-    [rows] = await db.query(
-      `SELECT ${TODO_STATUS_TARGET_FIELDS}
-       FROM todo_items
-       WHERE id = ? AND user_id = ? AND del_flag = 0
-       LIMIT 1`,
-      [todoId, userId],
-    );
-  } else {
-    [rows] = await db.query(
-      `SELECT ${TODO_STATUS_TARGET_FIELDS}
-       FROM todo_items
-       WHERE user_id = ? AND del_flag = 0 AND title LIKE ?
-       ORDER BY update_time DESC, id DESC
-       LIMIT 6`,
-      [userId, todoTitleLikePattern(keyword)],
-    );
-  }
-
-  if (!rows?.length) {
-    throw todoStatusError('TODO_NOT_FOUND', '没有找到可修改的待办，请核对名称后重试。', 404);
-  }
-  if (rows.length > 5) {
-    throw todoStatusError('TODO_KEYWORD_AMBIGUOUS', '匹配到多条待办，请补充更具体的标题后重试。', 409);
-  }
-  if (rows.length > 1) {
-    throw todoStatusError('TODO_SELECTION_REQUIRED', '匹配到多条待办，请先选择要修改的一条。', 409, {
-      candidates: rows.map(todoStatusCandidate),
-    });
-  }
-
-  const target = todoStatusTarget(rows[0]);
-  if (target.status === status) {
-    throw todoStatusError(
-      'TODO_STATUS_NOOP',
-      `待办“${target.title}”已是${TODO_STATUS_LABELS[status]}，无需修改。`,
-      409,
-    );
-  }
-  const [reminderRows] = await db.query(
-    `SELECT (
-       (SELECT COUNT(*) FROM todo_reminders
-         WHERE todo_id = ? AND user_id = ? AND status IN ('pending','processing')) +
-       (SELECT COUNT(*) FROM todo_reminder_jobs
-         WHERE todo_id = ? AND user_id = ? AND status IN ('pending','processing','paused'))
-     ) AS activeReminderCount`,
-    [target.todoId, userId, target.todoId, userId],
-  );
-  return {
-    todoId: target.todoId,
-    status,
-    expectedVersion: target.expectedVersion,
-    targetTitle: target.title,
-    currentStatus: target.status,
-    dueAt: target.dueAt,
-    priority: target.priority,
-    recurring: target.recurring,
-    activeReminderCount: Number(reminderRows?.[0]?.activeReminderCount || 0),
-  };
-}
-
-/**
- * Agent 确认后的状态变更。调用方必须已经开启事务；函数通过 FOR UPDATE 重新读取
- * 目标并校验 prepare 阶段的快照，避免确认卡展示的是 A、实际写入的是后来变化的 B。
- */
-export async function applyTodoStatusChange(connection, userId, input = {}) {
-  const { todoId, status } = normalizeTodoStatusChange(input);
-  const expectedVersion = String(input?.expectedVersion || '').trim();
-  if (!expectedVersion) {
-    throw todoStatusError('TODO_STATUS_PREVIEW_REQUIRED', '待办状态修改需要重新生成确认预览。', 409);
-  }
-  const [rows] = await connection.query(
-    `SELECT ${TODO_STATUS_TARGET_FIELDS}
-     FROM todo_items
-     WHERE id = ? AND user_id = ? AND del_flag = 0
-     LIMIT 1 FOR UPDATE`,
-    [todoId, userId],
-  );
-  const row = rows?.[0];
-  if (!row) {
-    throw todoStatusError('TODO_NOT_FOUND', '该待办已不存在或不再可修改，请重新发起操作。', 404);
-  }
-  const target = todoStatusTarget(row);
-  if (target.status === status) {
-    return {
-      state: 'noop',
-      todoId: target.todoId,
-      title: target.title,
-      status,
-      previousStatus: target.status,
-      pausedReminderCount: 0,
-    };
-  }
-  if (target.expectedVersion !== expectedVersion) {
-    throw todoStatusError('TODO_STATUS_CONFLICT', '待办在确认前已发生变化，请重新查看后再确认。', 409);
-  }
-
-  let pausedReminderCount = 0;
-  if (status === 'completed') {
-    const [reminderRows] = await connection.query(
-      `SELECT (
-         (SELECT COUNT(*) FROM todo_reminders
-           WHERE todo_id = ? AND user_id = ? AND status IN ('pending','processing')) +
-         (SELECT COUNT(*) FROM todo_reminder_jobs
-           WHERE todo_id = ? AND user_id = ? AND status IN ('pending','processing','paused'))
-       ) AS activeReminderCount`,
-      [target.todoId, userId, target.todoId, userId],
-    );
-    pausedReminderCount = Number(reminderRows?.[0]?.activeReminderCount || 0);
-  }
-  const affected = await setTodoStatus(connection, userId, target.todoId, status);
-  if (affected !== 1) {
-    throw todoStatusError('TODO_STATUS_CONFLICT', '待办状态未能更新，请重新查看后再确认。', 409);
-  }
-
-  return {
-    state: 'changed',
-    todoId: target.todoId,
-    title: target.title,
-    previousStatus: target.status,
-    status,
-    dueAt: target.dueAt,
-    pausedReminderCount,
-  };
-}
-
-/**
- * 为 Agent 删除操作冻结单个待办目标。任务系列的删除范围会改变实际影响，
- * 因此必须由用户或 Planner 基于用户原话明确提供，不在 Service 内猜测。
- */
-export async function prepareTodoDeletion(db, userId, input = {}) {
-  const { todoId, keyword, scope } = normalizeTodoDeletion(input);
-  let rows;
-  if (todoId) {
-    [rows] = await db.query(
-      `SELECT ${TODO_STATUS_TARGET_FIELDS}
-       FROM todo_items
-       WHERE id = ? AND user_id = ? AND del_flag = 0
-       LIMIT 1`,
-      [todoId, userId],
-    );
-  } else {
-    [rows] = await db.query(
-      `SELECT ${TODO_STATUS_TARGET_FIELDS}
-       FROM todo_items
-       WHERE user_id = ? AND del_flag = 0 AND title LIKE ?
-       ORDER BY update_time DESC, id DESC
-       LIMIT 6`,
-      [userId, todoTitleLikePattern(keyword)],
-    );
-  }
-
-  if (!rows?.length) {
-    throw todoStatusError('TODO_NOT_FOUND', '没有找到可删除的待办，请核对名称后重试。', 404);
-  }
-  if (rows.length > 5) {
-    throw todoStatusError('TODO_KEYWORD_AMBIGUOUS', '匹配到多条待办，请补充更具体的标题后重试。', 409);
-  }
-  if (rows.length > 1) {
-    throw todoStatusError('TODO_SELECTION_REQUIRED', '匹配到多条待办，请先选择要删除的一条。', 409, {
-      candidates: rows.map(todoStatusCandidate),
-    });
-  }
-
-  const target = todoStatusTarget(rows[0]);
-  const isV2Series = target.planVersion === 2 && Boolean(target.seriesId);
-  if (isV2Series && !scope) {
-    throw todoStatusError(
-      'TODO_DELETE_SCOPE_REQUIRED',
-      `待办“${target.title}”属于任务系列，请说明只删除当前项、当前及以后，还是整个系列。`,
-      409,
-      { target: todoStatusCandidate(rows[0]) },
-    );
-  }
-  const resolvedScope = scope || 'current';
-  if (resolvedScope !== 'current' && !isV2Series) {
-    throw todoStatusError('TODO_DELETE_SCOPE_UNAVAILABLE', '该待办不属于可按范围删除的任务系列。', 409);
-  }
-
-  const [reminderRows] = await db.query(
-    `SELECT (
-       (SELECT COUNT(*) FROM todo_reminders
-         WHERE todo_id = ? AND user_id = ? AND status IN ('pending','processing')) +
-       (SELECT COUNT(*) FROM todo_reminder_jobs
-         WHERE todo_id = ? AND user_id = ? AND status IN ('pending','processing','paused'))
-     ) AS activeReminderCount`,
-    [target.todoId, userId, target.todoId, userId],
-  );
-  return {
-    todoId: target.todoId,
-    scope: resolvedScope,
-    expectedVersion: target.expectedVersion,
-    targetTitle: target.title,
-    currentStatus: target.status,
-    dueAt: target.dueAt,
-    priority: target.priority,
-    planVersion: target.planVersion,
-    seriesId: target.seriesId,
-    recurring: target.recurring,
-    activeReminderCount: Number(reminderRows?.[0]?.activeReminderCount || 0),
-  };
-}
-
-/**
- * Agent 确认后的删除入口。调用方必须已经开启事务；执行前会锁定目标并校验
- * 确认卡冻结的版本，然后复用页面端相同的软删除与任务系列 Service。
- */
-export async function applyTodoDeletion(connection, userId, input = {}) {
-  const { todoId, scope } = normalizeTodoDeletion(input);
-  const expectedVersion = String(input?.expectedVersion || '').trim();
-  if (!expectedVersion) {
-    throw todoStatusError('TODO_DELETE_PREVIEW_REQUIRED', '删除待办需要重新生成确认预览。', 409);
-  }
-  const [rows] = await connection.query(
-    `SELECT ${TODO_STATUS_TARGET_FIELDS}
-     FROM todo_items
-     WHERE id = ? AND user_id = ? AND del_flag = 0
-     LIMIT 1 FOR UPDATE`,
-    [todoId, userId],
-  );
-  const row = rows?.[0];
-  if (!row) {
-    throw todoStatusError('TODO_NOT_FOUND', '该待办已不存在或不再可删除，请重新发起操作。', 404);
-  }
-  const target = todoStatusTarget(row);
-  if (target.expectedVersion !== expectedVersion) {
-    throw todoStatusError('TODO_DELETE_CONFLICT', '待办在确认前已发生变化，请重新查看后再确认。', 409);
-  }
-  const resolvedScope = scope || 'current';
-  const isV2Series = target.planVersion === 2 && Boolean(target.seriesId);
-  if (resolvedScope !== 'current' && !isV2Series) {
-    throw todoStatusError('TODO_DELETE_SCOPE_UNAVAILABLE', '该待办不属于可按范围删除的任务系列。', 409);
-  }
-
-  let result;
-  if (target.planVersion === 2) {
-    result = await deleteTodoPlan(connection, userId, { todoId: target.todoId, scope: resolvedScope });
-    await invalidatePersonalKnowledgeCache(userId, { database: connection });
-  } else {
-    const affectedItems = await deleteTodo(connection, userId, target.todoId);
-    if (affectedItems !== 1) {
-      throw todoStatusError('TODO_DELETE_CONFLICT', '待办未能删除，请重新查看后再确认。', 409);
-    }
-    result = { todoId: target.todoId, scope: 'current', affectedItems };
-  }
-
-  return {
-    state: 'deleted',
-    title: target.title,
-    previousStatus: target.status,
-    ...result,
-  };
-}
-
 export async function deleteTodo(connection, userId, id, { invalidateSearch = true } = {}) {
   const [result] = await connection.query(
     `UPDATE todo_items SET del_flag = 1, deleted_at = NOW(), update_time = NOW()
@@ -1122,52 +743,6 @@ export async function snoozeTodo(connection, userId, id, targetAt) {
     ]);
   }
   return { id, scheduledAt };
-}
-
-/**
- * AI 显式引用待办时的精确读取入口。只接受稳定 ID 并重新校验 owner；
- * 返回待办正文与清单，但不返回提醒邮箱等不需要进入模型的敏感字段。
- */
-export async function findOwnedTodoForAi(db, userId, todoId) {
-  const ownerId = String(userId || '').trim();
-  const id = String(todoId || '').trim();
-  if (!ownerId || !id || id.length > 64) return null;
-  const [rows] = await db.query(
-    `SELECT id, title, description, checklist, priority, status,
-            due_at AS dueAt, completed_at AS completedAt,
-            recurrence_rule AS recurrence, start_at AS startAt,
-            plan_version AS planVersion, series_id AS seriesId,
-            occurrence_no AS occurrenceNo, DATE_FORMAT(occurrence_date, '%Y-%m-%d') AS occurrenceDate,
-            instance_timezone AS instanceTimezone, update_time AS updatedAt
-       FROM todo_items
-      WHERE id = ? AND user_id = ? AND del_flag = 0
-      LIMIT 1`,
-    [id, ownerId],
-  );
-  const row = rows?.[0];
-  if (!row) return null;
-  return {
-    id: String(row.id),
-    title: String(row.title || '未命名待办'),
-    description: String(row.description || ''),
-    checklist: parseChecklist(row.checklist).map((item) => ({
-      id: String(item?.id || ''),
-      text: String(item?.text || ''),
-      done: Boolean(item?.done),
-    })),
-    priority: Number(row.priority || 0),
-    status: row.status === 'completed' ? 'completed' : 'pending',
-    dueAt: row.dueAt || null,
-    startAt: row.startAt || null,
-    completedAt: row.completedAt || null,
-    recurrence: parseJsonObject(row.recurrence),
-    planVersion: Number(row.planVersion || 1),
-    seriesId: row.seriesId || null,
-    occurrenceNo: row.occurrenceNo === null ? null : Number(row.occurrenceNo),
-    occurrenceDate: row.occurrenceDate || null,
-    instanceTimezone: row.instanceTimezone || null,
-    updatedAt: row.updatedAt || null,
-  };
 }
 
 function normalizeTodoListOptions(input = {}) {

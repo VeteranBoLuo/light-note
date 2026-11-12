@@ -6,8 +6,7 @@ import {
   canonicalToolboxToolId,
   TOOLBOX_DEFAULT_QUICK_TOOL_IDS,
   TOOLBOX_HOME_GROUPS,
-  TOOLBOX_PRIMARY_OUTCOME_TOOL_IDS,
-  TOOLBOX_STARTER_TOOL_IDS,
+  TOOLBOX_RETIRED_TOOL_IDS,
   TOOLBOX_WORKFLOW_PRESENTATION,
   resolveToolboxQuickToolIds,
   toolboxToolPath,
@@ -44,25 +43,14 @@ describe('知识工具箱前端边界', () => {
       'src/view/toolbox/components/PdfOrganizer.vue',
       'src/view/toolbox/components/PdfWorkbench.vue',
       'src/view/toolbox/components/PdfImageConverter.vue',
-      'src/view/toolbox/components/ImageOptimizer.vue',
       'src/view/toolbox/components/ImageToPdf.vue',
       'src/view/toolbox/components/PdfToImages.vue',
-      'src/view/toolbox/components/MarkdownConverter.vue',
-      'src/view/toolbox/components/TableConverter.vue',
-      'src/view/toolbox/components/MermaidEditor.vue',
-      'src/view/toolbox/components/BrowserSqlWorkbench.vue',
-      'src/view/toolbox/components/CodeSnapshotWorkbench.vue',
-      'src/view/toolbox/components/DatasetWorkbench.vue',
       'src/view/toolbox/components/DocumentTextWorkbench.vue',
-      'src/view/toolbox/components/KnowledgeTextWorkbench.vue',
       'src/utils/pdfOrganizer.ts',
       'src/utils/imageOptimizer.ts',
       'src/utils/imageToPdf.ts',
       'src/utils/pdfToImages.ts',
-      'src/utils/toolboxBrowserSql.ts',
-      'src/utils/toolboxDataset.ts',
       'src/utils/toolboxDocumentText.ts',
-      'src/utils/toolboxKnowledgeText.ts',
       'src/utils/toolboxLocal.ts',
       'src/utils/toolboxTextTools.ts',
     ]) {
@@ -71,70 +59,27 @@ describe('知识工具箱前端边界', () => {
     }
   });
 
-  it('表格转换复用解析结果提供受限预览，并保留完整原始结果', () => {
-    const converter = source('src/view/toolbox/components/TableConverter.vue');
-
-    expect(converter).toContain("BTable from '@/components/base/BasicComponents/BTable/BTable.vue'");
-    expect(converter).toContain('resultTable.value = converted.table');
-    expect(converter).toContain("resultView.value = 'preview'");
-    expect(converter).toContain('resultTable.value.slice(1, 101)');
-    expect(converter).toContain('(resultTable.value[0] || []).slice(0, 20)');
-    expect(converter).toContain("{ value: 'raw' as const");
-    expect(converter).toContain('overflow: auto');
-    expect(converter).toContain('downloadToolboxBlob(new Blob([output.value]');
-  });
-
-  it('Markdown 文件工具只保留真实文件入口，空态操作保持同组展示', () => {
-    const workbench = source('src/view/toolbox/components/KnowledgeTextWorkbench.vue');
-    const emptyStart = workbench.indexOf('<section v-if="sourceFiles.length === 0"');
-    const emptyEnd = workbench.indexOf('</section>', emptyStart);
-    const emptyState = workbench.slice(emptyStart, emptyEnd);
-
-    expect(emptyStart).toBeGreaterThan(-1);
-    expect(emptyEnd).toBeGreaterThan(emptyStart);
-    expect(emptyState).toContain('class="knowledge-file-empty__actions"');
-    expect(emptyState).toContain('directory');
-    expect(emptyState).toContain("t('toolbox.knowledgeText.chooseMarkdownFolder')");
-    expect(emptyState).toContain("t('toolbox.knowledgeText.chooseMarkdownFiles')");
-    expect(emptyState).not.toContain('@click="loadSample"');
-    expect(workbench).toContain('grid-template-columns: repeat(2, minmax(0, 1fr))');
-  });
-
   it('本地与知识库免费工作台统一通过注册表扩展，全部免费工具均已接入', () => {
     const registry = source('src/view/toolbox/localToolRegistry.ts');
-    for (const toolId of [
-      'pdf_organizer',
-      'image_optimizer',
-      'image_to_pdf',
-      'pdf_to_images',
+    for (const toolId of ['pdf_organizer', 'image_to_pdf', 'pdf_to_images', 'pdf_text_extractor']) {
+      expect(registry).toContain(`${toolId}: PdfWorkbench`);
+    }
+    for (const retiredId of [
       'markdown_converter',
-      'table_converter',
       'mermaid_editor',
-      'data_workbench',
-      'data_quality_report',
-      'data_cleaner',
-      'data_validator',
-      'pivot_analysis',
-      'table_diff',
-      'table_merge_split',
-      'data_anonymizer',
-      'data_chart',
-      'regex_extractor',
-      'pdf_text_extractor',
-      'frontmatter_batch',
-      'citation_converter',
       'browser_sql',
-      'structured_data_lab',
+      'image_optimizer',
+      'table_converter',
+      'data_workbench',
       'docx_to_markdown',
-      'code_snapshot',
     ]) {
-      expect(registry).toContain(`${toolId}:`);
+      expect(registry).not.toContain(`${retiredId}:`);
     }
     const serviceRegistry = source('src/view/toolbox/serviceToolRegistry.ts');
     expect(serviceRegistry).toContain('research_workspace:');
     expect(serviceRegistry).toContain('learning_workspace:');
     expect(serviceRegistry).toContain('writing_workspace:');
-    expect(serviceRegistry).toContain('knowledge_structure_audit:');
+    expect(serviceRegistry).not.toContain('knowledge_structure_audit:');
     expect(serviceRegistry).not.toContain('directory_index:');
     const workbench = source('src/view/toolbox/ToolboxWorkbench.vue');
     expect(workbench).toContain('localToolComponent');
@@ -143,9 +88,11 @@ describe('知识工具箱前端边界', () => {
     expect(workbench).toContain('getToolboxServiceComponent');
     expect(workbench).toContain('recordToolboxRecentUse');
     expect(workbench).not.toContain("toolId === 'pdf_organizer'");
+    expect(workbench).toContain("isToolboxRetiredToolId(routeToolId) ? 'toolbox.retired' : 'toolbox.unavailable'");
+    expect(source('src/config/toolbox.ts')).toContain('export const TOOLBOX_RETIRED_TOOL_IDS');
   });
 
-  it('所有工具箱页面复用同一滚动基线，图片压缩明确呈现前后双预览', () => {
+  it('所有工具箱页面复用同一滚动基线，资料工作流在窄屏分步切换', () => {
     const scrollMixin = source('src/view/toolbox/toolboxPageScroll.less');
     expect(scrollMixin).toContain('min-height: 0');
     expect(scrollMixin).toContain('overflow-y: auto');
@@ -161,13 +108,6 @@ describe('知识工具箱前端边界', () => {
       expect(content).toContain('.toolbox-page-scroll()');
     }
 
-    const imageOptimizer = source('src/view/toolbox/components/ImageOptimizer.vue');
-    expect(imageOptimizer).toContain("t('toolbox.local.before')");
-    expect(imageOptimizer).toContain("t('toolbox.local.after')");
-    expect(imageOptimizer).toContain(':src="entry.previewUrl"');
-    expect(imageOptimizer).toContain(':src="entry.result.previewUrl"');
-    expect(imageOptimizer).not.toContain("t('toolbox.local.maxDimension')");
-    expect(imageOptimizer).not.toContain("BInput from '@/components/base/BasicComponents/BInput.vue'");
 
     const workbench = source('src/view/toolbox/ToolboxWorkbench.vue');
     expect(workbench).toContain("'is-resource-workspace': resourceWorkspaceActive");
@@ -175,8 +115,8 @@ describe('知识工具箱前端边界', () => {
     expect(workbench).toContain('.toolbox-workbench.is-resource-workspace');
     expect(workbench).toContain('overflow-y: hidden');
     expect(workbench).toContain('@media (max-width: 1199px)');
-    expect(workbench).toContain("'is-compact-sources': !isPromptTool && compactWorkflowStep === 'sources'");
-    expect(workbench).toContain("'is-compact-design': !isPromptTool && compactWorkflowStep === 'design'");
+    expect(workbench).toContain("'is-compact-sources': compactWorkflowStep === 'sources'");
+    expect(workbench).toContain("'is-compact-design': compactWorkflowStep === 'design'");
     expect(workbench).toContain("selectCompactWorkflowStep('design')");
     expect(workbench).toContain('page.scrollTo({ top: Math.max(0, paidPanel.offsetTop - 10)');
     expect(workbench).not.toContain('canUseStickyPanel');
@@ -222,18 +162,13 @@ describe('知识工具箱前端边界', () => {
 
     expect(groupedToolIds).toEqual(activeToolIds);
     expect(new Set(groupedToolIds).size).toBe(groupedToolIds.length);
-    expect(activeToolIds).toContain('extraction');
-    expect(TOOLBOX_HOME_GROUPS.find((group) => group.id === 'create')?.toolIds).toContain('extraction');
-    expect(TOOLBOX_HOME_GROUPS.find((group) => group.id === 'prepare')?.toolIds).toEqual([
-      'pdf_organizer',
-      'image_optimizer',
-      'docx_to_markdown',
-      'ocr_to_text',
+    expect(TOOLBOX_HOME_GROUPS.find((group) => group.id === 'create')?.toolIds).toEqual([
+      'translation',
+      'material_to_note',
+      'study_kit',
     ]);
-    expect(TOOLBOX_HOME_GROUPS.find((group) => group.id === 'data')?.toolIds).toEqual([
-      'data_workbench',
-      'table_converter',
-    ]);
+    expect(TOOLBOX_HOME_GROUPS.find((group) => group.id === 'prepare')?.toolIds).toEqual(['pdf_organizer', 'ocr_to_text']);
+    expect(TOOLBOX_HOME_GROUPS.map((group) => group.id)).toEqual(['workspace', 'create', 'prepare']);
     expect(home).toContain('class="toolbox-overview"');
     expect(homeTemplate).toContain("router.push({ name: 'aiUsage' })");
     expect(home).not.toContain('.toolbox-asset > :first-child');
@@ -259,32 +194,16 @@ describe('知识工具箱前端边界', () => {
     expect(home).toContain('overviewFailed');
     expect(home).toContain('class="toolbox-guest-guide"');
     expect(home).toContain('readToolboxRecentUses');
-    expect(home).toContain('readToolboxPinnedTools');
     expect(home).toContain('TOOLBOX_DEFAULT_QUICK_TOOL_IDS');
     expect(home).toContain('resolveToolboxQuickToolIds(pinnedToolIds.value)');
     expect(TOOLBOX_DEFAULT_QUICK_TOOL_IDS[0]).toBe('material_to_note');
-    expect(resolveToolboxQuickToolIds(['image_optimizer', 'pdf_organizer']).slice(0, 3)).toEqual([
-      'image_optimizer',
+    expect(resolveToolboxQuickToolIds(['ocr_to_text', 'pdf_organizer']).slice(0, 3)).toEqual([
+      'ocr_to_text',
       'pdf_organizer',
       'material_to_note',
     ]);
-    expect(
-      resolveToolboxQuickToolIds(['image_optimizer', 'knowledge_structure_audit']).filter(
-        (toolId) => toolId === 'knowledge_structure_audit',
-      ),
-    ).toHaveLength(1);
     expect(home).toContain('tool.id !== TOOLBOX_DEFAULT_QUICK_TOOL_IDS[0]');
     expect(homeTemplate).not.toContain('icon.toolbox.arrow');
-    expect(zhCN.toolbox.maintenance.issue).not.toHaveProperty('unlinked');
-    expect(zhCN.toolbox.maintenance.recommendation).not.toHaveProperty('build_links');
-    expect(enUS.toolbox.maintenance.issue).not.toHaveProperty('unlinked');
-    expect(enUS.toolbox.maintenance.recommendation).not.toHaveProperty('build_links');
-    expect(TOOLBOX_PRIMARY_OUTCOME_TOOL_IDS).toEqual([
-      'material_to_note',
-      'research_brief',
-      'source_comparison',
-      'study_kit',
-    ]);
     expect(home).not.toContain('PRIMARY_PRODUCTION_STUDIOS');
     expect(homeTemplate).not.toContain('class="toolbox-production-grid"');
     expect(homeTemplate).not.toContain('continueProjects');
@@ -326,24 +245,18 @@ describe('知识工具箱前端边界', () => {
         accept: ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'],
       },
     });
-    for (const legacyId of [
+    // 已删除的工具（含数据工作台的模式别名）只作为下架深链展示提示，不再跳转到合并入口。
+    for (const retiredId of [
+      'data_workbench',
       'data_quality_report',
-      'data_cleaner',
-      'data_validator',
-      'pivot_analysis',
-      'table_diff',
-      'table_merge_split',
-      'data_anonymizer',
       'data_chart',
+      'table_converter',
+      'extraction',
     ] as const) {
-      expect(canonicalToolboxToolId(legacyId)).toBe('data_workbench');
-      expect(toolboxToolPath(legacyId)).toBe('/toolbox/data_workbench');
-      expect(TOOLBOX_TOOL_CATALOG.find((tool) => tool.id === legacyId)?.availability.enabled).toBe(false);
+      expect(canonicalToolboxToolId(retiredId)).toBe(retiredId);
+      expect(TOOLBOX_RETIRED_TOOL_IDS).toContain(retiredId);
+      expect(TOOLBOX_TOOL_CATALOG.find((tool) => tool.id === retiredId)).toBeUndefined();
     }
-    expect(TOOLBOX_TOOL_CATALOG.find((tool) => tool.id === 'data_workbench')).toMatchObject({
-      availability: { enabled: true },
-      input: { maxItems: 2, maxBytes: 30 * 1024 * 1024 },
-    });
   });
 
   it('移动端新建只突出真实产出能力，项目保留兼容路由并成为首页主入口', () => {
@@ -351,24 +264,15 @@ describe('知识工具箱前端边界', () => {
     const homeTemplate = home.slice(0, home.indexOf('<script setup'));
     const serviceRegistry = source('src/view/toolbox/serviceToolRegistry.ts');
 
-    expect(TOOLBOX_STARTER_TOOL_IDS).toEqual([
-      'writing_workspace',
-      'learning_workspace',
-      'research_workspace',
-      'idea_to_draft',
-    ]);
-    for (const toolId of TOOLBOX_STARTER_TOOL_IDS) {
-      expect(TOOLBOX_TOOL_CATALOG.find((tool) => tool.id === toolId)?.availability.enabled).toBe(true);
-    }
     for (const toolId of ['writing_workspace', 'learning_workspace', 'research_workspace']) {
       expect(serviceRegistry).toContain(`${toolId}: KnowledgeWorkspace`);
-      expect(TOOLBOX_TOOL_CATALOG.find((tool) => tool.id === toolId)?.executionMode).toBe('service');
+      expect(TOOLBOX_TOOL_CATALOG.find((tool) => tool.id === toolId)).toMatchObject({
+        executionMode: 'service',
+        availability: { enabled: true },
+      });
     }
-    expect(TOOLBOX_WORKFLOW_PRESENTATION.idea_to_draft).toBeTruthy();
-    expect(TOOLBOX_TOOL_CATALOG.find((tool) => tool.id === 'idea_to_draft')).toMatchObject({
-      executionMode: 'ai_skill',
-      input: { kind: 'prompt', minItems: 0 },
-    });
+    expect(Object.keys(TOOLBOX_WORKFLOW_PRESENTATION)).toEqual(['material_to_note', 'study_kit']);
+    expect(TOOLBOX_TOOL_CATALOG.find((tool) => tool.id === 'idea_to_draft')?.availability.enabled).toBe(false);
 
     expect(homeTemplate).not.toContain('class="toolbox-section toolbox-start toolbox-outcomes"');
     expect(homeTemplate.indexOf('toolbox-continue')).toBeLessThan(homeTemplate.indexOf('toolbox-tasks'));
@@ -376,33 +280,6 @@ describe('知识工具箱前端边界', () => {
     expect(home).not.toContain("query: { create: '1' }");
     expect(home).not.toContain('starterAccessibleLabel(tool)');
     expect(home).not.toMatch(/\.toolbox-start(?:-grid|-card)?[^}]*overflow-y:\s*(?:auto|scroll)/u);
-  });
-
-  it('知识库整理聚焦结构问题且不再提供 Markdown 目录导出，表格体检载入后自动运行', () => {
-    const maintenance = source('src/view/toolbox/components/KnowledgeMaintenanceWorkbench.vue');
-    const dataset = source('src/view/toolbox/components/DatasetWorkbench.vue');
-    expect(maintenance).not.toContain("activeView === 'audit'");
-    expect(maintenance).not.toContain("value: 'directory' as const");
-    expect(maintenance).not.toContain('class="maintenance-mode-switch"');
-    expect(maintenance).not.toContain('generateKnowledgeDirectoryIndex');
-    expect(maintenance).toContain('query: { from: route.fullPath }');
-    expect(maintenance).not.toContain("const ALL_NOTES_SCOPE = '__all_notes__'");
-    expect(maintenance).not.toContain('directory-preview');
-    expect(maintenance).not.toContain("    'unlinked',");
-    expect(maintenance).not.toContain("key: 'links'");
-    expect(dataset).toContain("activeToolId.value === 'data_quality_report'");
-    expect(dataset).toContain('v-if="!isQualityTool" class="dataset-control-card"');
-    expect(dataset).toContain('if (isQualityTool.value) await runTool()');
-    expect(dataset).toContain('class="dataset-operation-rail"');
-    expect(dataset).toContain('class="dataset-mode-select"');
-    expect(dataset).toContain('class="dataset-empty__actions"');
-    expect(dataset).toContain('.dataset-operation:focus-visible');
-    expect(dataset).toContain("path: '/toolbox/data_workbench'");
-    expect(dataset).toContain('TOOLBOX_DATASET_MAX_TOTAL_BYTES');
-    expect(dataset).toContain('watch(activeToolId');
-    expect(dataset).toContain('resetOutcome();');
-    expect(dataset).not.toContain('() => clearAll()');
-    expect(dataset).not.toMatch(/overflow-y:\s*(?:auto|scroll)/u);
   });
 
   it('研究、学习与写作复用同一持续工作区，并坚持单一页面主滚动', () => {
@@ -474,13 +351,11 @@ describe('知识工具箱前端边界', () => {
     const task = source('src/view/toolbox/ToolboxTask.vue');
     const home = source('src/view/toolbox/ToolboxHome.vue');
     expect(workbench).toContain("'toolbox.pointsRule'");
-    expect(workbench).toContain("'toolbox.promptPointsRule'");
+    expect(workbench).not.toContain("'toolbox.promptPointsRule'");
     expect(workbench).toContain("selectedBillingMedium.value = loaded.billingMedia.includes('ai_quota')");
     expect(workbench).toContain('billingMedium: selectedBillingMedium.value');
     expect(workbench).toContain("result.billingMedium === 'ai_quota'");
     expect(workbench).toContain("selectedBillingMedium.value === 'ai_quota'");
-    expect(workbench).toContain("'toolbox.workbench.promptIntentDescription'");
-    expect(workbench).toContain("'toolbox.workbench.promptDetailDescription'");
     expect(workbench).toContain('question: String(question.value');
     expect(task).toContain("'toolbox.task.continueResultHint'");
     expect(task).not.toContain('createToolboxArtifactProjectRequestId');
@@ -561,9 +436,8 @@ describe('知识工具箱前端边界', () => {
     expect(workspace).toContain('grid-template-rows: minmax(0, 1fr)');
   });
 
-  it('材料弹窗、文本清理选项与 PDF 编排保持可发现、无断行且有明确拖拽反馈', () => {
+  it('材料弹窗与 PDF 编排保持可发现，并有明确拖拽反馈', () => {
     const workspace = source('src/view/toolbox/components/KnowledgeWorkspace.vue');
-    const textWorkbench = source('src/view/toolbox/components/KnowledgeTextWorkbench.vue');
     const pdfOrganizer = source('src/view/toolbox/components/PdfOrganizer.vue');
 
     expect(workspace).toContain(':show-footer="true"');
@@ -572,7 +446,6 @@ describe('知识工具箱前端边界', () => {
     expect(workspace).toMatch(/<BDateTimePicker\b[^>]*v-model:value="createForm.targetDate"/su);
     expect(source('src/view/toolbox/components/WorkspaceItemEditor.vue')).toContain('v-model:value="form.dueOn"');
     expect(workspace).not.toMatch(/<BInput[^>]+type="date"/su);
-    expect(textWorkbench).toContain('white-space: nowrap');
     expect(pdfOrganizer).toContain("import { VueDraggable } from 'vue-draggable-plus'");
     expect(pdfOrganizer).toContain('handle=".pdf-page-card__drag"');
     expect(pdfOrganizer).toContain('ghost-class="pdf-page-card--ghost"');
@@ -590,13 +463,13 @@ describe('知识工具箱前端边界', () => {
     const presentation = source('src/utils/toolboxArtifactPresentation.ts');
     const home = source('src/view/toolbox/ToolboxHome.vue');
 
+    // 已下架 AI 工具保留展示配置，用于历史任务的名称与图标。
     for (const toolId of [
       'idea_to_draft',
       'material_to_note',
       'research_brief',
       'study_kit',
       'concept_map',
-      'action_plan',
       'source_comparison',
       'knowledge_audit',
     ]) {
@@ -606,8 +479,9 @@ describe('知识工具箱前端边界', () => {
     expect(workbench).toContain('intent: selectedIntent.value || undefined');
     expect(workbench).not.toContain('intentInstruction()');
     expect(workbench).toContain("workflowText('questionLabel')");
-    expect(workbench).toContain("tool.value?.input.kind === 'prompt'");
-    expect(workbench).toContain('v-if="!isPromptTool" class="toolbox-workflow-card is-sources"');
+    expect(workbench).not.toContain('isPromptTool');
+    expect(workbench).not.toContain('ComparisonTableSetup');
+    expect(workbench).toContain('<section class="toolbox-workflow-card is-sources">');
     expect(task).toContain("job.value?.toolId === 'idea_to_draft'");
     expect(task).toContain('stagePrompt');
     expect(workbench).not.toContain('v-model:value="instruction"');

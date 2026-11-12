@@ -1,4 +1,5 @@
 import { lockCloudObjectForPublication } from '../util/services/cloudObjectPublication.js';
+import { cloudMultipartUploads } from '../util/services/cloudMultipartUploadService.js';
 import { freezeCloudUpload, publishedUploadKey, trackCloudUpload } from '../util/services/cloudUploadFinalization.js';
 import { assertOwnedCloudFolder } from '../util/services/cloudFolderAccess.js';
 import {
@@ -25,8 +26,6 @@ import {
   buildObjectKey,
   buildObjectUrl,
   createDownloadSignedUrl,
-  deleteObjectFromObs,
-  getObjectMetadataFromObs,
 } from '../util/obsClient.js';
 import {
   FILE_CATEGORY_ORDER,
@@ -323,6 +322,40 @@ router.post('/abortManagedUpload', async (req, res) => {
 });
 
 // 前端直传 OBS 成功后回调此接口，将文件信息写入数据库
+function sendMultipartFailure(req, res, error) {
+  const status = Number(error.status) || 503;
+  const code = /^(MULTIPART_|STORAGE_QUOTA_|FOLDER_)/u.test(error.code || '') ? error.code : 'MULTIPART_UNAVAILABLE';
+  return res.send(
+    resultData(
+      { errorCode: code, retryAfter: status === 429 ? 2 : 0, shortfallMB: Number(error.shortfallMB || 0) },
+      status,
+      L(
+        req,
+        status === 413 ? '云空间容量不足，请清理或扩容后重试' : '大文件上传暂未完成，请重试；若会话已过期，请重新上传',
+        status === 413
+          ? 'Cloud storage is full. Free space or expand your quota and retry.'
+          : 'Large file upload is incomplete. Retry, or upload again if the session expired.',
+      ),
+    ),
+  );
+}
+for (const [path, method] of [
+  ['/initMultipartUpload', 'initialize'],
+  ['/signMultipartParts', 'signParts'],
+  ['/multipartUploadStatus', 'status'],
+  ['/completeMultipartUpload', 'complete'],
+  ['/abortMultipartUpload', 'abort'],
+])
+  router.post(path, async (req, res) => {
+    if (!ensureNotVisitor(req, res)) return;
+    try {
+      const data = await cloudMultipartUploads[method]({ ...req.body, userId: req.user.id, userRole: req.user.role });
+      return res.send(resultData(data));
+    } catch (error) {
+      return sendMultipartFailure(req, res, error);
+    }
+  });
+
 router.post('/confirmUpload', async (req, res) => {
   if (!ensureNotVisitor(req, res)) return;
   let connection;
@@ -343,6 +376,8 @@ router.post('/confirmUpload', async (req, res) => {
     // 浏览器直传完成后以 OBS 元数据为准，客户端 fileSize 只用于签名阶段的提前提示，不能作为最终容量依据。
     const reservedFiles = await Promise.all(
       files.map(async (file) => {
+        if (file?.multipartSessionId)
+          return cloudMultipartUploads.reserveConfirmation({ userId, sessionId: file.multipartSessionId, folderId });
         const parsedName = parseLegacyUploadName(file?.fileName);
         if (parsedName.validationError) return parsedName;
         const { fileName } = parsedName;
@@ -377,13 +412,15 @@ router.post('/confirmUpload', async (req, res) => {
     const verifiedFiles = await Promise.all(
       reservedFiles.map(async (file) => {
         if (!file.fileName) return file;
-        const publicationKey = publishedUploadKey(userId, file.objectKey);
+        if (file.confirmedFile) return { ...file, confirmedBeforeFreeze: true };
+        const publicationKey = file.publicationKey || publishedUploadKey(userId, file.objectKey);
         const [confirmed] = await pool.query(
           'SELECT id, file_name, del_flag FROM files WHERE create_by = ? AND obs_key IN (?, ?) LIMIT 1',
           [userId, file.objectKey, publicationKey],
         );
         // 已入库文件不依赖暂存对象继续存活；账号事务内仍复核当前记录。
         if (confirmed.length) return { ...file, publicationKey, confirmedBeforeFreeze: true };
+        if (file.multipartSessionId) return cloudMultipartUploads.verifyPublication(userId, file);
         await trackCloudUpload(pool, userId, file.objectKey);
         const frozen = await freezeCloudUpload(pool, userId, file.objectKey);
         return { ...file, publicationKey: frozen.objectKey, fileSize: frozen.contentLength };
@@ -398,6 +435,8 @@ router.post('/confirmUpload', async (req, res) => {
     await lockActiveUploadOwner(connection, userId);
 
     for (const file of verifiedFiles) {
+      if (file.multipartSessionId)
+        await cloudMultipartUploads.lockForPublication(connection, userId, file.multipartSessionId);
       if (file.fileName && file.generation)
         await lockLegacyUploadForConfirmation(connection, userId, file.fileName, file.generation);
     }
@@ -406,10 +445,15 @@ router.post('/confirmUpload', async (req, res) => {
     // even if it was renamed or moved after the first successful confirmation.
     for (const file of verifiedFiles) {
       if (!file.fileName) continue;
-      const [rows] = await connection.query(
-        'SELECT id, file_name, del_flag FROM files WHERE create_by = ? AND obs_key IN (?, ?) LIMIT 1 FOR UPDATE',
-        [userId, file.objectKey, publishedUploadKey(userId, file.objectKey)],
-      );
+      const [rows] = file.confirmedFile
+        ? await connection.query('SELECT id,file_name,del_flag FROM files WHERE id=? AND create_by=? FOR UPDATE', [
+            file.confirmedFile.id,
+            userId,
+          ])
+        : await connection.query(
+            'SELECT id, file_name, del_flag FROM files WHERE create_by = ? AND obs_key IN (?, ?) LIMIT 1 FOR UPDATE',
+            [userId, file.objectKey, file.publicationKey || publishedUploadKey(userId, file.objectKey)],
+          );
       if (rows.length) {
         if (Number(rows[0].del_flag) === 1) {
           throw Object.assign(new Error('文件已在回收站，请先恢复'), { code: 'UPLOAD_FILE_TRASHED', status: 409 });
@@ -455,6 +499,8 @@ router.post('/confirmUpload', async (req, res) => {
       }
 
       if (file.confirmed) {
+        if (file.multipartSessionId)
+          await cloudMultipartUploads.markConfirmed(connection, userId, file.multipartSessionId, file.confirmed.id);
         results.push({
           filename: file.confirmed.file_name,
           status: '已上传',
@@ -500,6 +546,8 @@ router.post('/confirmUpload', async (req, res) => {
         fileId = insertResult.insertId;
       }
       await registerCloudImage(connection, { ...fileInfo, id: fileId });
+      if (file.multipartSessionId)
+        await cloudMultipartUploads.markConfirmed(connection, userId, file.multipartSessionId, fileId);
 
       if (addToInbox === true) {
         await enqueueResources(connection, {
@@ -547,6 +595,7 @@ router.post('/confirmUpload', async (req, res) => {
     }
   } catch (error) {
     if (transactionStarted) await connection.rollback();
+    if (String(error.code || '').startsWith('MULTIPART_')) return sendMultipartFailure(req, res, error);
     if (
       [
         'FILE_UPLOAD_OBJECT_BUSY',
@@ -872,7 +921,6 @@ router.post('/queryTotalFileSize', async (req, res) => {
 router.post('/updateFile', fileHandle.updateFile);
 router.post('/getFileInfo', fileHandle.getFileInfo);
 // 已打开的旧客户端收到关闭信号后回到原图链路，不再准备派生任务。
-router.post('/image-previews/resolve', (_req, res) => res.send({ status: 200, data: { enabled: false, items: [] } }));
 router.post('/image-previews/prepare', (_req, res) => res.send({ status: 200, data: { enabled: false, items: [] } }));
 router.post('/preview/resolve', filePreviewHandle.resolveOwnedFilePreview);
 router.post('/preview/prepare', localProcessingRateLimiter, (req, res) => {
@@ -910,7 +958,6 @@ router.post('/updateFolder', fileHandle.updateFolder);
 router.post('/moveFolder', fileHandle.moveFolder);
 router.post('/deleteFolder', fileHandle.deleteFolder);
 router.post('/clearFolderFiles', fileHandle.clearFolderFiles);
-router.post('/updateFolderSort', fileHandle.updateFolderSort);
 router.post('/getFileTags', fileHandle.getFileTags);
 router.post('/updateFileTags', fileHandle.updateFileTags);
 

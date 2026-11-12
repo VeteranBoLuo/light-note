@@ -195,7 +195,8 @@
                 }}</span>
                 <span>{{ t('settings.ai.usage.providerCalls', { n: item.providerCallCount }) }}</span>
               </div>
-              <small v-if="item.platformCoveredTokens > 0" class="record-covered">
+              <small v-if="item.billingPolicy === 'system'" class="record-covered">{{ t('aiQuotaOneTime.platformBrief', { amount: formatExactTokens(item.providerTokens) }) }}</small>
+              <small v-else-if="item.platformCoveredTokens > 0" class="record-covered">
                 {{ t('settings.ai.usage.recordPlatformCovered', { n: formatExactTokens(item.platformCoveredTokens) }) }}
               </small>
               <small v-if="item.quotaSettlementStatus === 'deferred'" class="record-settlement">
@@ -345,6 +346,7 @@
     modelCalled: boolean;
     providerCallCount: number;
     providerTokens: number;
+    billingPolicy?: 'user' | 'system';
     chargedTokens: number;
     platformCoveredTokens: number;
     usageComplete: boolean;

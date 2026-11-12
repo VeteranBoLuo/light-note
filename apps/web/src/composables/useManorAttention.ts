@@ -5,12 +5,15 @@ import { useGrowth } from '@/composables/useGrowth.ts';
 import { useUserStore } from '@/store';
 import { showManorEntry } from '@/utils/manorAccess';
 
-/** 服务端只统计现在就能收的东西：每日任务水滴（已扣水桶余量）、成熟地块和等级礼物。 */
+/** 服务端只统计现在就能收的东西：每日任务水滴（已扣水桶余量）、成熟地块、满仓产出、工坊成品和等级礼物。 */
 export interface ManorAttention {
   fresh: boolean;
   water: number;
   ripe: number;
   rewards: number;
+  tankFull?: number;
+  compostFull?: boolean;
+  crafted?: boolean;
   /** 每完成一项每日任务得到的水滴与全部完成的额外水滴，供每日任务卡说明规则。 */
   perTask: number;
   bonus: number;
@@ -65,14 +68,18 @@ export function useManorAttention() {
   const visibleAttention = computed(() =>
     attention.value && showManorEntry(growth.value, user.adminContext, locale.value) ? attention.value : null,
   );
-  /** 入口提醒的原因，按「新开放 → 水滴 → 收获 → 等级礼物」排列，空数组表示没有要提醒的。 */
+  /** 入口提醒的原因，按「新开放 → 水滴 → 收获 → 存满／成品 → 等级礼物」排列，空数组表示没有要提醒的。 */
   const reasons = computed(() => {
+    if (user.preferences?.manorEntryDot === false) return [];
     const value = attention.value;
     if (!value) return [];
     if (value.fresh) return [t('manor.attention.fresh')];
     return [
       value.water > 0 ? t('manor.attention.water', { n: value.water }) : '',
       value.ripe > 0 ? t('manor.attention.ripe', { n: value.ripe }) : '',
+      (value.tankFull || 0) > 0 ? t('manor.attention.tankFull') : '',
+      value.compostFull ? t('manor.attention.compostFull') : '',
+      value.crafted ? t('manor.attention.crafted') : '',
       value.rewards > 0 ? t('manor.attention.rewards') : '',
     ].filter(Boolean);
   });

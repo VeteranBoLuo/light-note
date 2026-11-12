@@ -11,6 +11,7 @@ export class AiSkillApiError extends Error {
   code: string;
   status: number;
   isPublicMessage: boolean;
+  billingMode?: 'daily_and_permanent' | 'permanent_only';
   requiredTokens?: number;
   availableTokens?: number;
 
@@ -19,13 +20,14 @@ export class AiSkillApiError extends Error {
     message: string,
     status = 500,
     isPublicMessage = false,
-    details: { requiredTokens?: unknown; availableTokens?: unknown } = {},
+    details: { requiredTokens?: unknown; availableTokens?: unknown; billingMode?: unknown } = {},
   ) {
     super(message);
     this.name = 'AiSkillApiError';
     this.code = code;
     this.status = status;
     this.isPublicMessage = isPublicMessage;
+    if (details.billingMode === 'permanent_only' || details.billingMode === 'daily_and_permanent') this.billingMode = details.billingMode;
     const requiredTokens = Number(details.requiredTokens);
     const availableTokens = Number(details.availableTokens);
     if (Number.isFinite(requiredTokens)) this.requiredTokens = Math.max(0, Math.floor(requiredTokens));

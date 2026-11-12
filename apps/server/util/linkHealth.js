@@ -1,7 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import pool from '../db/index.js';
 import { checkUrlLiveness } from './fetchWebMeta.js';
-import { ensureOrganizeSchema } from './organizeSchema.js';
 import { createBookmarkExactUrlHash } from './services/bookmarkExactUrlService.js';
 
 const BATCH = 25;
@@ -9,10 +8,6 @@ const CONCURRENCY = 4;
 const MAX_ATTEMPTS = 3;
 const SCAN_LEASE_MINUTES = 5;
 const ACTIVE_SCAN_STATUSES = new Set(['pending', 'running']);
-
-export async function ensureBookmarkHealthTable() {
-  await ensureOrganizeSchema();
-}
 
 async function runPool(items, worker) {
   let index = 0;
@@ -148,13 +143,6 @@ async function getScanRow(userId, { db = pool, lock = false } = {}) {
 export async function isChecking(userId) {
   const row = await getScanRow(userId);
   return ACTIVE_SCAN_STATUSES.has(String(row?.status || ''));
-}
-
-/**
- * 兼容旧入口：用户动作始终创建或复用一次全量持久任务，不在 HTTP 请求内等待外链检测。
- */
-export async function checkBookmarkHealth(userId) {
-  return startFullCheck(userId);
 }
 
 /**

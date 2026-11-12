@@ -118,7 +118,6 @@ export function buildAdminNav({
         { id: 'adminAudit', title: adminAuditTitle },
         { id: 'apiLog', title: 'API 日志' },
         { id: 'logCleanup', title: '日志清理' },
-        { id: 'logExclude', title: '日志白名单' },
       ],
     },
     {
@@ -233,7 +232,6 @@ const MOBILE_PATHS: Record<string, string> = {
   adminAudit: '/adminAudit',
   apiLog: '/apiLog',
   logCleanup: '/logCleanup',
-  logExclude: '/logExclude',
   securityCenter: '/securityCenterMobile',
   resourceGovernance: '/resourceGovernance',
   adminGovernance: '/adminGovernance',

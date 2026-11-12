@@ -7,7 +7,7 @@ vi.mock('../../db/index.js', () => ({
   default: { getConnection: (...args) => state.db.getConnection(...args), query: (...args) => state.db.query(...args) },
 }));
 vi.mock('../personalKnowledgeSearch.js', () => ({ invalidatePersonalKnowledgeCache: vi.fn() }));
-vi.mock('./noteTreeService.js', () => ({ previewOwnedNoteTrashRestore: vi.fn(), restoreOwnedNoteTrash: vi.fn() }));
+vi.mock('./noteTreeService.js', () => ({ restoreOwnedNoteTrash: vi.fn() }));
 vi.mock('../obsClient.js', () => ({
   buildObjectKey: (user, name) => `files/${user}/${name}`,
   bucketBaseUrl: 'https://obs.invalid',

@@ -11,10 +11,3 @@ export interface CloudFolderNode {
   fullPath: string;
   createTime?: string;
 }
-
-export interface CloudFolderTreeResult {
-  items: CloudFolderNode[];
-  total: number;
-  maxDepth: number;
-  allFileCount: number;
-}

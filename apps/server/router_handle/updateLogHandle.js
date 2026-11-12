@@ -76,6 +76,10 @@ function inputErrorMessage(req, code) {
   const messages = {
     INVALID_TITLE: ['标题不能为空且不能超过 200 个字符', 'Title is required and must be at most 200 characters'],
     INVALID_PUBLISH_DATE: ['请选择有效的发布日期', 'Please select a valid publish date'],
+    INVALID_PRODUCT_VERSION: [
+      '请输入三段式产品版本号（如 1.1.0），历史记录可留空',
+      'Enter a three-part product version such as 1.1.0, or leave it blank for historical entries',
+    ],
     SUMMARY_TOO_LONG: ['摘要不能超过 500 个字符', 'Summary must be at most 500 characters'],
     CONTENT_TOO_LONG: ['Markdown 正文不能超过 200000 个字符', 'Markdown content is too long'],
     INVALID_HIGHLIGHTS: ['重点更新最多 30 条，每条不超过 500 个字符', 'Highlights are invalid'],
@@ -127,7 +131,7 @@ export async function list(req, res) {
     const limit = normalizePublicListLimit(req.body?.limit);
     if (await updateLogTableExists()) {
       const [rows] = await pool.query(
-        `SELECT id, title, publish_date, summary, highlights, tags, content_markdown,
+        `SELECT id, title, publish_date, product_version, summary, highlights, tags, content_markdown,
                 image_keys, status, sort, created_time, updated_time
            FROM update_logs
           WHERE status = 'published'
@@ -185,7 +189,7 @@ export async function manageList(req, res) {
   try {
     if (!(await updateLogTableExists())) return sendSchemaRequired(req, res);
     const [rows] = await pool.query(
-      `SELECT id, title, publish_date, summary, highlights, tags, content_markdown,
+      `SELECT id, title, publish_date, product_version, summary, highlights, tags, content_markdown,
               image_keys, status, sort, created_time, updated_time
          FROM update_logs
         ORDER BY publish_date DESC, sort DESC, created_time DESC`,
@@ -212,7 +216,7 @@ export async function createDraft(req, res) {
       return res.send(resultData(null, 500, L(req, '创建草稿失败', 'Failed to create draft')));
     }
     const [created] = await pool.query(
-      `SELECT id, title, publish_date, summary, highlights, tags, content_markdown,
+      `SELECT id, title, publish_date, product_version, summary, highlights, tags, content_markdown,
               image_keys, status, sort, created_time, updated_time
          FROM update_logs WHERE id = ? LIMIT 1`,
       [id],
@@ -264,12 +268,13 @@ export async function save(req, res) {
 
     await connection.query(
       `UPDATE update_logs
-          SET title = ?, publish_date = ?, summary = ?, highlights = ?, tags = ?,
+          SET title = ?, publish_date = ?, ${Object.hasOwn(normalized.value, 'productVersion') ? 'product_version = ?, ' : ''}summary = ?, highlights = ?, tags = ?,
               content_markdown = ?, image_keys = ?, status = ?
         WHERE id = ?`,
       [
         normalized.value.title,
         normalized.value.publishDate,
+        ...(Object.hasOwn(normalized.value, 'productVersion') ? [normalized.value.productVersion || null] : []),
         normalized.value.summary,
         JSON.stringify(normalized.value.highlights),
         JSON.stringify(normalized.value.tags),
@@ -283,7 +288,7 @@ export async function save(req, res) {
     await cleanupObsObjects(removedKeys, 'save');
 
     const [saved] = await pool.query(
-      `SELECT id, title, publish_date, summary, highlights, tags, content_markdown,
+      `SELECT id, title, publish_date, product_version, summary, highlights, tags, content_markdown,
               image_keys, status, sort, created_time, updated_time
          FROM update_logs WHERE id = ? LIMIT 1`,
       [id],

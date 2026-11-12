@@ -1,15 +1,8 @@
 import crypto from 'node:crypto';
-import { afdianError, getAfdianApiConfig, getAfdianOAuthConfig } from './afdianConfig.js';
+import { afdianError, getAfdianApiConfig } from './afdianConfig.js';
 
-const AFDIAN_OAUTH_AUTHORIZE_URL = 'https://afdian.com/oauth2/authorize';
-const AFDIAN_OAUTH_TOKEN_URL = 'https://afdian.com/api/oauth2/access_token';
-const AFDIAN_PUBLIC_PROFILE_URL = 'https://afdian.com/api/user/get-profile';
 const AFDIAN_QUERY_ORDER_URL = 'https://afdian.com/api/open/query-order';
 const REQUEST_TIMEOUT_MS = 10_000;
-const MAX_OAUTH_CODE_LENGTH = 4096;
-const MAX_PROVIDER_NAME_LENGTH = 100;
-const MAX_PROVIDER_AVATAR_URL_LENGTH = 1024;
-
 // 爱发电官方于 2025-07-01 公布的 Webhook RSA 公钥。
 export const AFDIAN_WEBHOOK_PUBLIC_KEY = `-----BEGIN PUBLIC KEY-----
 MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAwwdaCg1Bt+UKZKs0R54y
@@ -32,25 +25,6 @@ function normalizeProviderId(value, field) {
 function normalizeOptionalProviderId(value, field) {
   const normalized = String(value || '').trim();
   return normalized ? normalizeProviderId(normalized, field) : null;
-}
-
-function normalizeOptionalProviderName(value) {
-  const normalized = String(value || '')
-    .replace(/[\u0000-\u001F\u007F]/g, '')
-    .trim();
-  return normalized ? normalized.slice(0, MAX_PROVIDER_NAME_LENGTH) : null;
-}
-
-function normalizeOptionalProviderAvatarUrl(value) {
-  const normalized = String(value || '').trim();
-  if (!normalized || normalized.length > MAX_PROVIDER_AVATAR_URL_LENGTH) return null;
-  try {
-    const url = new URL(normalized);
-    if (url.protocol !== 'https:' || url.username || url.password) return null;
-    return url.toString();
-  } catch {
-    return null;
-  }
 }
 
 function normalizeAmount(value, field) {
@@ -84,61 +58,6 @@ async function requestJson(url, options) {
   } finally {
     timeout.clear();
   }
-}
-
-export function buildAfdianAuthorizationUrl(state) {
-  const normalizedState = String(state || '').trim();
-  if (!/^[A-Za-z0-9_-]{32,128}$/.test(normalizedState)) {
-    throw afdianError('AFDIAN_OAUTH_STATE_INVALID', '爱发电授权校验失败');
-  }
-  const { clientId, redirectUri } = getAfdianOAuthConfig();
-  const url = new URL(AFDIAN_OAUTH_AUTHORIZE_URL);
-  url.searchParams.set('response_type', 'code');
-  url.searchParams.set('scope', 'basic');
-  url.searchParams.set('client_id', clientId);
-  url.searchParams.set('redirect_uri', redirectUri);
-  url.searchParams.set('state', normalizedState);
-  return url.toString();
-}
-
-export async function exchangeAfdianAuthorizationCode(code) {
-  const normalizedCode = String(code || '').trim();
-  if (!normalizedCode || normalizedCode.length > MAX_OAUTH_CODE_LENGTH) {
-    throw afdianError('AFDIAN_OAUTH_CODE_INVALID', '爱发电授权码无效');
-  }
-  const { clientId, clientSecret, redirectUri } = getAfdianOAuthConfig();
-  const form = new URLSearchParams({
-    grant_type: 'authorization_code',
-    client_id: clientId,
-    client_secret: clientSecret,
-    code: normalizedCode,
-    redirect_uri: redirectUri,
-  });
-  const payload = await requestJson(AFDIAN_OAUTH_TOKEN_URL, {
-    method: 'POST',
-    headers: { 'content-type': 'application/x-www-form-urlencoded' },
-    body: form.toString(),
-  });
-  return {
-    providerUserId: normalizeProviderId(payload.data?.user_id, 'user_id'),
-    providerPrivateId: normalizeOptionalProviderId(payload.data?.user_private_id, 'user_private_id'),
-  };
-}
-
-/** OAuth basic 只返回用户 ID；昵称和头像需从爱发电公开用户资料中补全。 */
-export async function queryAfdianPublicProfile(providerUserId) {
-  const normalizedUserId = normalizeProviderId(providerUserId, 'user_id');
-  const url = new URL(AFDIAN_PUBLIC_PROFILE_URL);
-  url.searchParams.set('user_id', normalizedUserId);
-  const payload = await requestJson(url, { method: 'GET' });
-  const user = payload.data?.user;
-  if (normalizeProviderId(user?.user_id, 'user_id') !== normalizedUserId) {
-    throw afdianError('AFDIAN_RESPONSE_INVALID', '爱发电返回的用户资料不匹配', 502);
-  }
-  return {
-    providerName: normalizeOptionalProviderName(user?.name),
-    providerAvatarUrl: normalizeOptionalProviderAvatarUrl(user?.avatar),
-  };
 }
 
 export function verifyAfdianWebhookSignature(payload, { publicKey = AFDIAN_WEBHOOK_PUBLIC_KEY } = {}) {

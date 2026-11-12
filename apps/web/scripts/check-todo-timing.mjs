@@ -232,7 +232,9 @@ try {
           } else if (view === 'list') {
             await page.locator('.todo-item.is-workspace').first().waitFor();
             assert.equal(await page.locator('.is-workspace .todo-start-label').count(), 0);
-            assert((await page.locator('.todo-item__no-deadline').first().textContent()).includes('—'));
+            const allDayTime = await page.locator('.todo-item').filter({ hasText: '全天任务' }).locator('.todo-item__meta').textContent();
+            assert(allDayTime.includes('计划日期'));
+            assert(!allDayTime.includes('截止'));
             assert(
               (await page.locator('.todo-item__next-reminder').allTextContents()).some((text) =>
                 text.includes('已暂停'),

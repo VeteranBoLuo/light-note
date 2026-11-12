@@ -8,7 +8,6 @@ vi.mock('../../db/index.js', () => ({ default: { query: vi.fn() } }));
 const {
   deleteToolboxWorkspace,
   addToolboxWorkspaceResources,
-  createToolboxWorkspaceItem,
   calculateWorkspaceStreak,
   createToolboxWorkspaceSession,
   listToolboxHomeWorkspaces,
@@ -16,6 +15,7 @@ const {
   markToolboxWorkspaceOpened,
   toolboxWorkspaceInternals,
 } = await import('./workspace.js');
+const { operateBoard } = await import('./board.js');
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -335,7 +335,12 @@ describe('project material atomic limits', () => {
       if (sql.includes('MAX(position)')) return [[{ next_position: 0 }]];
       return [[]];
     }) };
-    await createToolboxWorkspaceItem({ userId: 'owner', workspaceId: 'workspace-1', input: { lane, title: '知识' }, database });
+    await operateBoard({
+      userId: 'owner',
+      workspaceId: 'workspace-1',
+      input: { requestId: 'request-create-1', expectedVersion: 0, command: { type: 'create', lane, title: '知识' } },
+      database,
+    });
     const insert = database.query.mock.calls.find(([sql]) => sql.includes('INSERT INTO toolbox_workspace_items'));
     expect(insert[1][6]).toBe(status);
     expect(Boolean(insert[1][9])).toBe(status === 'done');

@@ -4,7 +4,6 @@
     class="toolbox-workbench"
     :class="{
       'is-resource-workspace': resourceWorkspaceActive,
-      'is-prompt-workspace': isPromptTool,
       'has-source-guide': hasSourceGuide,
       'is-local-workspace': Boolean(localToolComponent),
       'is-utility-workspace': isUtilityWorkbench,
@@ -30,13 +29,7 @@
         ><BLoading inline loading :title="t('common.loading')"
       /></div>
       <div v-else-if="!tool" class="toolbox-workbench__state is-error" role="alert">
-        <span>{{
-          t(
-            ['text_batch', 'text_diff', 'markdown_checker'].includes(routeToolId)
-              ? 'toolbox.retired'
-              : 'toolbox.unavailable',
-          )
-        }}</span>
+        <span>{{ t(isToolboxRetiredToolId(routeToolId) ? 'toolbox.retired' : 'toolbox.unavailable') }}</span>
         <BButton size="small" @click="returnToToolboxParent">{{ t('toolbox.back') }}</BButton>
       </div>
 
@@ -49,13 +42,7 @@
           <component :is="localToolComponent" :tool-id="routeToolId" />
         </section>
         <section v-else-if="tool.executionMode === 'browser'" class="toolbox-workbench__state is-error" role="alert">
-          <span>{{
-            t(
-              ['text_batch', 'text_diff', 'markdown_checker'].includes(routeToolId)
-                ? 'toolbox.retired'
-                : 'toolbox.unavailable',
-            )
-          }}</span>
+          <span>{{ t(isToolboxRetiredToolId(routeToolId) ? 'toolbox.retired' : 'toolbox.unavailable') }}</span>
           <BButton size="small" @click="returnToToolboxParent">{{ t('toolbox.back') }}</BButton>
         </section>
 
@@ -67,13 +54,7 @@
           <component :is="serviceToolComponent" :tool-id="tool.id" @return-to-workshop="openWorkshopHome" />
         </section>
         <section v-else-if="tool.executionMode === 'service'" class="toolbox-workbench__state is-error" role="alert">
-          <span>{{
-            t(
-              ['text_batch', 'text_diff', 'markdown_checker'].includes(routeToolId)
-                ? 'toolbox.retired'
-                : 'toolbox.unavailable',
-            )
-          }}</span>
+          <span>{{ t(isToolboxRetiredToolId(routeToolId) ? 'toolbox.retired' : 'toolbox.unavailable') }}</span>
           <BButton size="small" @click="returnToToolboxParent">{{ t('toolbox.back') }}</BButton>
         </section>
 
@@ -81,7 +62,6 @@
           <div class="toolbox-paid-panel">
             <template v-if="!quote">
               <nav
-                v-if="!isPromptTool"
                 ref="workflowSwitchRef"
                 class="toolbox-workflow-switch"
                 :aria-label="t('toolbox.workbench.stepInput')"
@@ -105,35 +85,11 @@
                 class="toolbox-workflow-grid"
                 :class="{
                   'is-ocr': tool.id === 'ocr_to_text',
-                  'is-prompt': isPromptTool,
-                  'is-compact-sources': !isPromptTool && compactWorkflowStep === 'sources',
-                  'is-compact-design': !isPromptTool && compactWorkflowStep === 'design',
+                  'is-compact-sources': compactWorkflowStep === 'sources',
+                  'is-compact-design': compactWorkflowStep === 'design',
                 }"
               >
-                <section v-if="isPromptTool" class="toolbox-workflow-card is-idea">
-                  <div class="toolbox-workflow-card__head">
-                    <span>{{ t('toolbox.workbench.promptStep') }}</span>
-                    <h2>{{ t('toolbox.workbench.promptInputTitle') }}</h2>
-                  </div>
-                  <div class="toolbox-field">
-                    <label for="toolbox-question">
-                      {{ workflowText('questionLabel') }}
-                      <small>{{ t('toolbox.workbench.required') }}</small>
-                    </label>
-                    <BInput
-                      id="toolbox-question"
-                      v-model:value="question"
-                      type="textarea"
-                      :maxlength="TOOLBOX_PROCESSING_REQUIREMENT_MAX_CHARS"
-                      :rows="10"
-                      :disabled="quoting || uploading"
-                      :placeholder="requestPlaceholder"
-                    />
-                    <small class="toolbox-field__hint">{{ t('toolbox.workbench.promptInputHint') }}</small>
-                  </div>
-                </section>
-
-                <section v-if="!isPromptTool" class="toolbox-workflow-card is-sources">
+                <section class="toolbox-workflow-card is-sources">
                   <div class="toolbox-workflow-card__head">
                     <span>{{ t('toolbox.workbench.sourceStep') }}</span>
                     <h2>{{
@@ -216,123 +172,80 @@
                 <aside v-auto-scrollbar class="toolbox-workflow-rail">
                   <section v-if="workflow" class="toolbox-workflow-card is-design">
                     <div class="toolbox-workflow-card__head">
-                      <span>{{
-                        isPromptTool ? t('toolbox.workbench.promptDesignStep') : t('toolbox.workbench.designStep')
-                      }}</span>
-                      <h2>{{
-                        toolId === 'source_comparison' ? t('comparisonTable.title') : workflowText('designTitle')
-                      }}</h2>
-                      <p v-if="!isPromptTool && !isComparisonTable">{{ workflowText('designDescription') }}</p>
+                      <span>{{ t('toolbox.workbench.designStep') }}</span>
+                      <h2>{{ workflowText('designTitle') }}</h2>
+                      <p>{{ workflowText('designDescription') }}</p>
                     </div>
 
-                    <div
-                      v-if="toolId === 'source_comparison'"
-                      class="toolbox-detail-options comparison-mode"
-                      role="group"
-                      :aria-label="t('comparisonTable.title')"
-                    >
-                      <BButton
-                        v-for="mode in ['report', 'table'] as const"
-                        :key="mode"
-                        :aria-pressed="comparisonMode === mode"
-                        :class="{ 'is-selected': comparisonMode === mode }"
-                        :disabled="quoting"
-                        @click="comparisonMode = mode"
-                        >{{ t(`comparisonTable.${mode}`) }}</BButton
-                      >
+                    <div class="toolbox-intents">
+                      <div class="toolbox-intents__head">
+                        <strong>{{ t('toolbox.workbench.intentTitle') }}</strong>
+                        <span>{{ t('toolbox.workbench.intentDescription') }}</span>
+                      </div>
+                      <div class="toolbox-intents__grid">
+                        <BButton
+                          v-for="intent in workflow.intents"
+                          :key="intent"
+                          class="toolbox-intent"
+                          :class="{ 'is-selected': selectedIntent === intent }"
+                          :aria-pressed="selectedIntent === intent"
+                          :disabled="quoting || uploading"
+                          @click="selectedIntent = intent"
+                        >
+                          <strong>{{ workflowText(`intents.${intent}.label`) }}</strong>
+                          <span>{{ workflowText(`intents.${intent}.description`) }}</span>
+                        </BButton>
+                      </div>
                     </div>
-                    <ComparisonTableSetup
-                      v-if="isComparisonTable"
-                      ref="comparisonSetup"
-                      v-model:question="question"
-                      v-model:columns="comparisonColumns"
-                      :disabled="quoting"
-                    />
-                    <template v-else>
-                      <div class="toolbox-intents">
-                        <div v-if="!isPromptTool" class="toolbox-intents__head">
-                          <strong>{{ t('toolbox.workbench.intentTitle') }}</strong>
-                          <span>{{
-                            t(
-                              isPromptTool
-                                ? 'toolbox.workbench.promptIntentDescription'
-                                : 'toolbox.workbench.intentDescription',
-                            )
-                          }}</span>
-                        </div>
-                        <div class="toolbox-intents__grid">
+
+                    <div class="toolbox-options">
+                      <div class="toolbox-field is-wide">
+                        <label for="toolbox-question">
+                          {{ workflowText('questionLabel') }}
+                          <small>{{ t('toolbox.workbench.optional') }}</small>
+                        </label>
+                        <BInput
+                          id="toolbox-question"
+                          v-model:value="question"
+                          type="textarea"
+                          :maxlength="TOOLBOX_PROCESSING_REQUIREMENT_MAX_CHARS"
+                          :rows="3"
+                          :disabled="quoting || uploading"
+                          :placeholder="requestPlaceholder"
+                        />
+                        <small class="toolbox-field__hint">{{ t('toolbox.workbench.requestHint') }}</small>
+                      </div>
+                      <div class="toolbox-field">
+                        <label id="toolbox-detail-label">{{ t('toolbox.workbench.detailLabel') }}</label>
+                        <div class="toolbox-detail-options" role="group" aria-labelledby="toolbox-detail-label">
                           <BButton
-                            v-for="intent in workflow.intents"
-                            :key="intent"
-                            class="toolbox-intent"
-                            :class="{ 'is-selected': selectedIntent === intent }"
-                            :aria-pressed="selectedIntent === intent"
+                            v-for="option in detailOptions"
+                            :key="option.value"
+                            size="small"
+                            :class="{ 'is-selected': detailLevel === option.value }"
+                            :aria-pressed="detailLevel === option.value"
                             :disabled="quoting || uploading"
-                            @click="selectedIntent = intent"
+                            @click="detailLevel = option.value"
                           >
-                            <strong>{{ workflowText(`intents.${intent}.label`) }}</strong>
-                            <span>{{ workflowText(`intents.${intent}.description`) }}</span>
+                            {{ option.label }}
                           </BButton>
                         </div>
+                        <small class="toolbox-field__hint">{{ t('toolbox.workbench.detailDescription') }}</small>
                       </div>
+                    </div>
 
-                      <div class="toolbox-options">
-                        <div v-if="!isPromptTool" class="toolbox-field is-wide">
-                          <label for="toolbox-question">
-                            {{ workflowText('questionLabel') }}
-                            <small>{{
-                              t(isPromptTool ? 'toolbox.workbench.required' : 'toolbox.workbench.optional')
-                            }}</small>
-                          </label>
-                          <BInput
-                            id="toolbox-question"
-                            v-model:value="question"
-                            type="textarea"
-                            :maxlength="TOOLBOX_PROCESSING_REQUIREMENT_MAX_CHARS"
-                            :rows="3"
-                            :disabled="quoting || uploading"
-                            :placeholder="requestPlaceholder"
-                          />
-                          <small class="toolbox-field__hint">{{ t('toolbox.workbench.requestHint') }}</small>
-                        </div>
-                        <div class="toolbox-field">
-                          <label id="toolbox-detail-label">{{ t('toolbox.workbench.detailLabel') }}</label>
-                          <div class="toolbox-detail-options" role="group" aria-labelledby="toolbox-detail-label">
-                            <BButton
-                              v-for="option in detailOptions"
-                              :key="option.value"
-                              size="small"
-                              :class="{ 'is-selected': detailLevel === option.value }"
-                              :aria-pressed="detailLevel === option.value"
-                              :disabled="quoting || uploading"
-                              @click="detailLevel = option.value"
-                            >
-                              {{ option.label }}
-                            </BButton>
-                          </div>
-                          <small v-if="!isPromptTool" class="toolbox-field__hint">{{
-                            t(
-                              isPromptTool
-                                ? 'toolbox.workbench.promptDetailDescription'
-                                : 'toolbox.workbench.detailDescription',
-                            )
-                          }}</small>
-                        </div>
+                    <div class="toolbox-outcomes">
+                      <div>
+                        <strong>{{ t('toolbox.workbench.outputPreviewTitle') }}</strong>
+                        <span>{{ t('toolbox.workbench.outputPreviewDescription') }}</span>
                       </div>
-
-                      <div v-if="!isPromptTool" class="toolbox-outcomes">
-                        <div>
-                          <strong>{{ t('toolbox.workbench.outputPreviewTitle') }}</strong>
-                          <span>{{ t('toolbox.workbench.outputPreviewDescription') }}</span>
-                        </div>
-                        <ol>
-                          <li v-for="(outcome, index) in workflow.outcomes" :key="outcome">
-                            <span>{{ index + 1 }}</span
-                            >{{ workflowText(`outcomes.${outcome}`) }}
-                          </li>
-                        </ol>
-                      </div>
-                    </template>
+                      <ol>
+                        <li v-for="(outcome, index) in workflow.outcomes" :key="outcome">
+                          <span>{{ index + 1 }}</span
+                          >{{ workflowText(`outcomes.${outcome}`) }}
+                        </li>
+                      </ol>
+                    </div>
                   </section>
 
                   <section v-else class="toolbox-workflow-card is-ocr-output">
@@ -382,32 +295,17 @@
                   </section>
 
                   <section class="toolbox-paid-panel__footer" :class="{ 'has-billing-choice': supportsAiQuota }">
-                    <strong v-if="!isPromptTool" class="toolbox-run-summary__title">{{
-                      t('toolbox.workbench.runSummaryTitle')
-                    }}</strong>
-                    <dl v-if="!isPromptTool" class="toolbox-run-summary">
+                    <strong class="toolbox-run-summary__title">{{ t('toolbox.workbench.runSummaryTitle') }}</strong>
+                    <dl class="toolbox-run-summary">
                       <div>
-                        <dt>{{
-                          t(isPromptTool ? 'toolbox.workbench.runSummaryIdea' : 'toolbox.workbench.runSummaryInput')
-                        }}</dt>
+                        <dt>{{ t('toolbox.workbench.runSummaryInput') }}</dt>
                         <dd>{{
-                          isPromptTool
-                            ? t(
-                                question.trim()
-                                  ? 'toolbox.workbench.runSummaryPromptReady'
-                                  : 'toolbox.workbench.runSummaryPromptMissing',
-                              )
-                            : t('toolbox.workbench.runSummarySelected', {
-                                count: selectedCount,
-                                max: tool.input.maxItems,
-                              })
+                          t('toolbox.workbench.runSummarySelected', { count: selectedCount, max: tool.input.maxItems })
                         }}</dd>
                       </div>
                       <div>
                         <dt>{{ t('toolbox.workbench.runSummaryOutput') }}</dt>
-                        <dd>{{
-                          isComparisonTable ? t('comparisonTable.table') : t(`toolbox.tool.${tool.id}.output`)
-                        }}</dd>
+                        <dd>{{ t(`toolbox.tool.${tool.id}.output`) }}</dd>
                       </div>
                       <div>
                         <dt>{{ t('toolbox.workbench.runSummaryBilling') }}</dt>
@@ -437,7 +335,7 @@
                         >
                       </BButton>
                     </div>
-                    <p v-if="!isPromptTool && tool.executionMode === 'ai_skill'" class="toolbox-reading-scope">{{
+                    <p v-if="tool.executionMode === 'ai_skill'" class="toolbox-reading-scope">{{
                       t('toolbox.workbench.readingScope')
                     }}</p>
                     <div class="toolbox-billing-note"
@@ -507,15 +405,8 @@
         </section>
       </template>
     </div>
-    <section
-      v-if="tool && !isPromptTool && ['ai_skill', 'worker'].includes(tool.executionMode)"
-      class="toolbox-mobile-execute"
-    >
-      <span>{{
-        isPromptTool
-          ? selectedBillingSummary
-          : t('toolbox.workbench.runSummarySelected', { count: selectedCount, max: tool.input.maxItems })
-      }}</span>
+    <section v-if="tool && ['ai_skill', 'worker'].includes(tool.executionMode)" class="toolbox-mobile-execute">
+      <span>{{ t('toolbox.workbench.runSummarySelected', { count: selectedCount, max: tool.input.maxItems }) }}</span>
       <BButton v-if="quote" type="primary" :loading="starting" :disabled="insufficientBilling" @click="startJob">{{
         t('toolbox.workbench.start')
       }}</BButton>
@@ -523,13 +414,9 @@
         v-else
         type="primary"
         :loading="quoting || uploading"
-        :disabled="compactWorkflowStep === 'sources' && !isPromptTool ? !selectedCount : !canQuote"
-        @click="
-          compactWorkflowStep === 'sources' && !isPromptTool ? selectCompactWorkflowStep('design') : requestQuote()
-        "
-        >{{
-          compactWorkflowStep === 'sources' && !isPromptTool ? t('toolbox.workbench.designStep') : generateLabel
-        }}</BButton
+        :disabled="compactWorkflowStep === 'sources' ? !selectedCount : !canQuote"
+        @click="compactWorkflowStep === 'sources' ? selectCompactWorkflowStep('design') : requestQuote()"
+        >{{ compactWorkflowStep === 'sources' ? t('toolbox.workbench.designStep') : generateLabel }}</BButton
       >
     </section>
   </main>
@@ -538,8 +425,6 @@
 <script setup lang="ts">
   import ToolboxPageHeader from './components/ToolboxPageHeader.vue';
   import { TOOLBOX_OCR_FILE_EXTENSIONS } from '@lightnote/shared/toolbox-protocol';
-  import ComparisonTableSetup from './components/ComparisonTableSetup.vue';
-  import { normalizeComparisonColumns, type ComparisonColumn } from '@lightnote/shared/comparison-table';
   import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useRoute, useRouter } from 'vue-router';
@@ -572,7 +457,12 @@
   import { useGrowth } from '@/composables/useGrowth';
   import { useMobileTopBar } from '@/composables/useMobileTopBar';
   import icon from '@/config/icon';
-  import { canonicalToolboxToolId, isToolboxWorkflowTool, TOOLBOX_WORKFLOW_PRESENTATION } from '@/config/toolbox';
+  import {
+    canonicalToolboxToolId,
+    isToolboxRetiredToolId,
+    isToolboxWorkflowTool,
+    TOOLBOX_WORKFLOW_PRESENTATION,
+  } from '@/config/toolbox';
   import { useUserStore } from '@/store';
   import { createLocalId, formatToolboxBytes, TOOLBOX_LOCAL_DELIVERY_EVENT } from '@/utils/toolboxLocal';
   import {
@@ -625,10 +515,6 @@
     restoreFailed = ref(false),
     restoreMessage = ref('');
   const retrySourceWorkspace = ref<string | undefined>();
-  const comparisonMode = ref<'report' | 'table'>('report');
-  const comparisonColumns = ref<ComparisonColumn[]>([]);
-  const comparisonSetup = ref<InstanceType<typeof ComparisonTableSetup> | null>(null);
-  const isComparisonTable = computed(() => toolId.value === 'source_comparison' && comparisonMode.value === 'table');
   const detailLevel = ref<'concise' | 'balanced' | 'detailed'>('balanced');
   const ocrMode = ref<'ai' | 'basic'>('ai');
   const isBasicOcr = computed(() => tool.value?.id === 'ocr_to_text' && ocrMode.value === 'basic');
@@ -645,24 +531,18 @@
   const workflow = computed(() =>
     isToolboxWorkflowTool(toolId.value) ? TOOLBOX_WORKFLOW_PRESENTATION[toolId.value] : null,
   );
-  const hasSourceGuide = computed(() => ['material_to_note', 'research_brief', 'study_kit'].includes(toolId.value));
+  const hasSourceGuide = computed(() => ['material_to_note', 'study_kit'].includes(toolId.value));
   const generateLabel = computed(() =>
-    isComparisonTable.value
-      ? t(comparisonColumns.value.length ? 'comparisonTable.generate' : 'comparisonTable.next')
-      : isBasicOcr.value
-        ? t('toolbox.workbench.startFreeOcr')
-        : hasSourceGuide.value
-          ? workflowText('generateLabel')
-          : t('toolbox.workbench.getQuote'),
+    isBasicOcr.value
+      ? t('toolbox.workbench.startFreeOcr')
+      : hasSourceGuide.value
+        ? workflowText('generateLabel')
+        : t('toolbox.workbench.getQuote'),
   );
   const selectedIntent = ref(workflow.value?.defaultIntent || '');
   const ocrOutcomeKeys = ['searchable', 'separated', 'reusable'] as const;
   const localToolComponent = computed(() => getToolboxLocalComponent(routeToolId.value));
-  const isUtilityWorkbench = computed(
-    () =>
-      Boolean(localToolComponent.value) ||
-      ['knowledge_structure_audit', 'knowledge_audit', 'ocr_to_text'].includes(toolId.value),
-  );
+  const isUtilityWorkbench = computed(() => Boolean(localToolComponent.value) || toolId.value === 'ocr_to_text');
   const serviceToolComponent = computed(() => getToolboxServiceComponent(toolId.value));
   const allowedTypes = computed<ResourcePickerType[]>(
     () => [...(tool.value?.input.resourceTypes || [])] as ResourcePickerType[],
@@ -670,12 +550,10 @@
   const selectedCount = computed(
     () => selectedResources.value.length + uploadFiles.value.length + restoredSources.value.length,
   );
-  const isPromptTool = computed(() => tool.value?.input.kind === 'prompt');
   const resourceWorkspaceActive = computed(
     () =>
       Boolean(tool.value) &&
       !quote.value &&
-      !isPromptTool.value &&
       tool.value?.executionMode !== 'browser' &&
       tool.value?.executionMode !== 'service',
   );
@@ -694,7 +572,6 @@
             item.type === 'file' &&
             TOOLBOX_OCR_FILE_EXTENSIONS.includes(item.title.split('.').pop()?.toLowerCase() || ''),
         )) &&
-      (!(isPromptTool.value || isComparisonTable.value) || question.value.trim()) &&
       !uploading.value,
     ),
   );
@@ -730,13 +607,7 @@
   const selectedBillingRule = computed(() =>
     isBasicOcr.value
       ? freeOcrDescription.value
-      : t(
-          selectedBillingMedium.value === 'ai_quota'
-            ? 'toolbox.aiQuotaRule'
-            : isPromptTool.value
-              ? 'toolbox.promptPointsRule'
-              : 'toolbox.pointsRule',
-        ),
+      : t(selectedBillingMedium.value === 'ai_quota' ? 'toolbox.aiQuotaRule' : 'toolbox.pointsRule'),
   );
   const billingChoices = computed(() => [
     {
@@ -770,9 +641,7 @@
         : Number(growth.value.points).toLocaleString(),
   );
   const quoteBillingRule = computed(() =>
-    quote.value?.billingMedium === 'ai_quota'
-      ? t('toolbox.aiQuotaRule')
-      : t(isPromptTool.value ? 'toolbox.promptPointsRule' : 'toolbox.pointsRule'),
+    quote.value?.billingMedium === 'ai_quota' ? t('toolbox.aiQuotaRule') : t('toolbox.pointsRule'),
   );
   const executionTitle = computed(() => {
     if (tool.value?.executionMode === 'browser') return t('toolbox.workbench.localExecutionTitle');
@@ -787,7 +656,6 @@
     if (tool.value?.executionMode === 'worker')
       return isBasicOcr.value ? freeOcrDescription.value : t('toolbox.workbench.aiOcrHint');
     if (supportsAiQuota.value) return t('toolbox.workbench.flexibleBillingExecutionDescription');
-    if (isPromptTool.value) return t('toolbox.workbench.promptPointsExecutionDescription');
     return t('toolbox.workbench.pointsExecutionDescription');
   });
   const executionIcon = computed(() => {
@@ -869,8 +737,6 @@
     restoreMessage.value = '';
     retrySourceWorkspace.value = undefined;
     question.value = '';
-    comparisonMode.value = 'report';
-    comparisonColumns.value = [];
     detailLevel.value = 'balanced';
     selectedBillingMedium.value = 'points';
     selectedIntent.value = workflow.value?.defaultIntent || '';
@@ -983,18 +849,6 @@
   async function requestQuote() {
     if (!tool.value || !canQuote.value || quoting.value) return;
     if (blockGuestWrite('toolbox-paid', t('inbox.guestPrompt'))) return;
-    if (isComparisonTable.value) {
-      if (!comparisonColumns.value.length) {
-        comparisonSetup.value?.suggest();
-        return;
-      }
-      try {
-        normalizeComparisonColumns(comparisonColumns.value);
-      } catch {
-        message.warning(t('comparisonTable.invalidColumns'));
-        return;
-      }
-    }
     const version = stateVersion;
     const activeTool = tool.value;
     quoting.value = true;
@@ -1027,9 +881,6 @@
           sourceIds,
           options: {
             ...(activeTool.id === 'ocr_to_text' ? { recognitionMode: 'ai' as const } : {}),
-            ...(isComparisonTable.value
-              ? { resultMode: 'table' as const, columns: normalizeComparisonColumns(comparisonColumns.value) }
-              : {}),
             question: String(question.value || '').trim(),
             intent: selectedIntent.value || undefined,
             detailLevel: detailLevel.value,
@@ -1127,10 +978,6 @@
       if (options?.detailLevel) detailLevel.value = options.detailLevel;
       if (options?.intent && workflow.value?.intents.includes(options.intent as never))
         selectedIntent.value = options.intent;
-      if (options?.resultMode === 'table' && options.columns) {
-        comparisonMode.value = 'table';
-        comparisonColumns.value = normalizeComparisonColumns(options.columns);
-      }
       if (options?.recognitionMode === 'basic') ocrMode.value = 'basic';
       if (previous.billing.medium !== 'free' && tool.value?.billingMedia.includes(previous.billing.medium))
         selectedBillingMedium.value = previous.billing.medium;
@@ -1165,16 +1012,7 @@
     await restoreInput();
   });
   watch(
-    [
-      selectedResources,
-      restoredSources,
-      question,
-      detailLevel,
-      selectedIntent,
-      selectedBillingMedium,
-      comparisonMode,
-      comparisonColumns,
-    ],
+    [selectedResources, restoredSources, question, detailLevel, selectedIntent, selectedBillingMedium],
     () => {
       quote.value = null;
     },
@@ -1250,10 +1088,6 @@
     font-size: var(--ui-font-12, 12px);
   }
 
-  .toolbox-detail-options.comparison-mode {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    margin-bottom: var(--ui-space-16, 16px);
-  }
   .toolbox-ocr-mode {
     margin-bottom: var(--ui-space-16, 16px);
   }
@@ -1609,8 +1443,8 @@
     .toolbox-workbench__inner {
       padding-bottom: var(--ui-space-110, 110px);
     }
-    .toolbox-workbench:not(.is-prompt-workspace) .toolbox-paid-panel__footer > :deep(.b_btn),
-    .toolbox-workbench:not(.is-prompt-workspace) .toolbox-quote__actions > :deep(.primary_btn) {
+    .toolbox-workbench .toolbox-paid-panel__footer > :deep(.b_btn),
+    .toolbox-workbench .toolbox-quote__actions > :deep(.primary_btn) {
       display: none;
     }
     .toolbox-mobile-execute > span {
@@ -2082,17 +1916,17 @@
       grid-template-rows: auto minmax(0, 1fr);
     }
 
-    .toolbox-workbench:is(.is-resource-workspace, .is-prompt-workspace) .toolbox-workbench__price {
+    .toolbox-workbench.is-resource-workspace .toolbox-workbench__price {
       min-width: 0;
       padding: var(--ui-space-8, 8px) var(--ui-space-10, 10px);
       display: flex;
       align-items: center;
       border-radius: 12px;
     }
-    .toolbox-workbench:is(.is-resource-workspace, .is-prompt-workspace) .toolbox-workbench__price small {
+    .toolbox-workbench.is-resource-workspace .toolbox-workbench__price small {
       display: none;
     }
-    .toolbox-workbench:is(.is-resource-workspace, .is-prompt-workspace) .toolbox-workbench__price strong {
+    .toolbox-workbench.is-resource-workspace .toolbox-workbench__price strong {
       font-size: var(--ui-font-13, 13px);
     }
     .toolbox-workbench.is-resource-workspace .toolbox-workbench__paid,
@@ -2293,19 +2127,16 @@
       background: var(--card-background);
       box-shadow: none;
     }
-    .toolbox-workflow-grid:not(.is-prompt) {
+    .toolbox-workflow-grid {
       grid-template-columns: 1fr;
     }
-    .toolbox-workflow-grid.is-compact-sources:not(.is-prompt) .toolbox-workflow-rail,
-    .toolbox-workflow-grid.is-compact-design:not(.is-prompt) .toolbox-workflow-card.is-sources {
+    .toolbox-workflow-grid.is-compact-sources .toolbox-workflow-rail,
+    .toolbox-workflow-grid.is-compact-design .toolbox-workflow-card.is-sources {
       display: none;
     }
-    .toolbox-workflow-grid.is-compact-sources:not(.is-prompt) .toolbox-workflow-card.is-sources,
-    .toolbox-workflow-grid.is-compact-design:not(.is-prompt) .toolbox-workflow-rail {
+    .toolbox-workflow-grid.is-compact-sources .toolbox-workflow-card.is-sources,
+    .toolbox-workflow-grid.is-compact-design .toolbox-workflow-rail {
       display: grid;
-    }
-    .toolbox-workflow-grid.is-prompt .toolbox-workflow-rail {
-      grid-template-columns: 1fr;
     }
   }
   @media (max-width: 767px) {
@@ -2430,51 +2261,6 @@
   @media (min-width: 1200px) {
     .toolbox-workbench.is-project-detail .toolbox-workbench__inner {
       max-width: none;
-    }
-  }
-
-  .toolbox-workbench.is-prompt-workspace {
-    padding: var(--ui-space-12, 12px) clamp(var(--ui-space-14, 14px), 2vw, var(--ui-space-28, 28px))
-      var(--ui-space-24, 24px);
-  }
-  .is-prompt-workspace .toolbox-workbench__inner {
-    position: relative;
-    width: min(var(--ui-layout-1500, 1500px), 100%);
-  }
-  .is-prompt-workspace .toolbox-workbench__paid {
-    margin-top: var(--ui-space-10, 10px);
-  }
-  .is-prompt-workspace .toolbox-workflow-grid {
-    align-items: stretch;
-  }
-  .is-prompt-workspace .toolbox-workflow-rail {
-    overflow: visible;
-  }
-  .is-prompt-workspace .is-idea :deep(textarea) {
-    min-height: var(--ui-layout-260, 260px);
-  }
-  .is-prompt-workspace .toolbox-workflow-card__head h2 {
-    font-size: var(--ui-font-18, 18px);
-  }
-  .is-prompt-workspace .toolbox-options {
-    grid-template-columns: minmax(0, 1fr);
-  }
-  .is-prompt-workspace .toolbox-billing-note {
-    max-width: none;
-  }
-  @media (max-width: 1199px) {
-    .is-prompt-workspace .toolbox-workflow-grid {
-      grid-template-columns: minmax(0, 1fr);
-    }
-  }
-  @media (max-width: 767px) {
-    .is-prompt-workspace .toolbox-workbench__inner {
-      padding-bottom: 0;
-    }
-
-    .is-prompt-workspace .is-idea :deep(textarea) {
-      min-height: var(--ui-layout-160, 160px);
-      height: var(--ui-layout-160, 160px);
     }
   }
 

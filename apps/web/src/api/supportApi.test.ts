@@ -146,7 +146,7 @@ describe('权益商店开发环境只读目录', () => {
     expect(catalog.previewMode).toBeUndefined();
   });
 
-  it('权益商店订单摘要从独立接口读取，不复用赞助状态', async () => {
+  it('资源商店订单摘要从独立接口读取', async () => {
     mocks.apiBaseGet.mockResolvedValueOnce({
       status: 200,
       data: { authenticated: true, orderCount: 2, totalAmount: '94.00', grantedTokens: 7_100_000 },

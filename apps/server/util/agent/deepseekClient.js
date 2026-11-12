@@ -182,12 +182,6 @@ export function getNoteAssistMaxTokens(cfg = getProviderConfig()) {
   return Math.min(Math.max(requested, NOTE_ASSIST_MIN_TOKENS), fallback);
 }
 
-// 供 agentHandle.js 的用量日志按当前生效供应商计费(不同供应商单价不同)
-export function getActiveProviderPricing() {
-  const cfg = getProviderConfig();
-  return { provider: cfg.name, price: getAiModelPrice(cfg.name, getModel(cfg)) || null };
-}
-
 export function getActiveProviderInfo(providerOverride, modelOverride) {
   const cfg = getProviderConfig(providerOverride);
   return {
@@ -501,18 +495,6 @@ export async function requestDeepSeekStream(messages, options = {}) {
   }
 }
 
-/**
- * 检测 content 是否是"泄漏的工具调用标记"。
- * DeepSeek 偶发不把工具调用放进标准 tool_calls 字段,而是把内部特殊 token 以文本吐进 content,
- * 例如: <｜｜DSML｜｜tool_calls> ... <｜｜DSML｜｜invoke name="query_users"> ...,
- * 或标准的 <｜tool▁calls▁begin｜> 系列。这类内容绝不能当作回答返回给用户。
- * @param {string|null|undefined} content
- * @returns {boolean}
- */
-export function looksLikeLeakedToolCall(content) {
-  return findLeakedToolCallStart(content) >= 0;
-}
-
 function findLeakedToolCallStart(content) {
   if (!content || typeof content !== 'string') return -1;
   const patterns = [
@@ -528,35 +510,4 @@ function findLeakedToolCallStart(content) {
     const index = content.search(pattern);
     return index < 0 ? result : result < 0 ? index : Math.min(result, index);
   }, -1);
-}
-
-/**
- * 从"泄漏成文本的工具调用"里把真实调用解析出来。
- * DeepSeek 偶发把调用以 <｜｜DSML｜｜invoke name="X"><｜｜DSML｜｜parameter name="k">v</...> 文本吐进 content
- * (工具名和参数其实都对),直接解析出来当标准 tool_calls 执行,比重试更稳、更省一次调用。
- * @param {string|null|undefined} content
- * @returns {Array<{id:string,type:'function',function:{name:string,arguments:string}}>}
- */
-export function parseLeakedToolCalls(content) {
-  if (!content || typeof content !== 'string') return [];
-  const calls = [];
-  const invokeRe = /invoke\s+name\s*=\s*["']([^"']+)["']([\s\S]*?)<\/[^>]*?invoke\s*>/gi;
-  let m;
-  while ((m = invokeRe.exec(content)) !== null) {
-    const name = m[1].trim();
-    if (!name) continue;
-    const body = m[2] || '';
-    const args = {};
-    const paramRe = /parameter\s+name\s*=\s*["']([^"']+)["'][^>]*?>([\s\S]*?)<\/[^>]*?parameter\s*>/gi;
-    let p;
-    while ((p = paramRe.exec(body)) !== null) {
-      args[p[1].trim()] = (p[2] || '').trim();
-    }
-    calls.push({
-      id: `leaked_${calls.length}`,
-      type: 'function',
-      function: { name, arguments: JSON.stringify(args) },
-    });
-  }
-  return calls;
 }

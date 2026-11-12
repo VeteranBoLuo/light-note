@@ -1,3 +1,4 @@
+import { observeAiBillingMode } from './aiQuotaPolicyEvents';
 import { classifyAiQuotaErrorCode } from '@lightnote/shared/ai-quota-protocol';
 
 type Translate = (key: string, params?: Record<string, unknown>) => string;
@@ -6,6 +7,7 @@ const FALLBACK_MESSAGES: Readonly<Record<string, string>> = Object.freeze({
   'aiQuotaErrors.exhaustedTitle': 'AI 额度已用完',
   'aiQuotaErrors.exhaustedMessage':
     '当前 AI 额度已用完。可前往「AI 用量与计费」补充永久额度，或等待每日额度重置。',
+  'aiQuotaOneTime.exhausted': '当前 AI 额度已用完。可通过升级、积分兑换或购买补充额度后继续使用。',
   'aiQuotaErrors.insufficientTitle': '本次任务所需额度不足',
   'aiQuotaErrors.insufficientMessage':
     '当前仍有 AI 额度，但不足以完成本次任务。请减少处理内容、分段执行或补充额度后重试。',
@@ -31,7 +33,10 @@ export function extractAiQuotaError(error: unknown) {
     const parsed = Number(raw);
     return Number.isFinite(parsed) ? Math.max(0, Math.floor(parsed)) : undefined;
   };
+  const billingMode = values.find(value => value?.billingMode)?.billingMode;
+  observeAiBillingMode(billingMode);
   return {
+    ...(billingMode === 'permanent_only' || billingMode === 'daily_and_permanent' ? { billingMode } : {}),
     code: String(coded.code),
     kind,
     requiredTokens: numberFromValues('requiredTokens'),
@@ -46,7 +51,7 @@ export function getAiQuotaErrorPresentation(error: unknown, translate: Translate
     return {
       ...quotaError,
       title: translate('aiQuotaErrors.exhaustedTitle'),
-      message: translate('aiQuotaErrors.exhaustedMessage'),
+      message: translate(quotaError.billingMode === 'permanent_only' ? 'aiQuotaOneTime.exhausted' : 'aiQuotaErrors.exhaustedMessage'),
       retryable: false,
     };
   }

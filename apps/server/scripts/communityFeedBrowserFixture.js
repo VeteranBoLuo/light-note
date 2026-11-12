@@ -31,8 +31,6 @@ const chatProfiles = await import('../util/services/communityChatProfileService.
 const governance = await import('../util/communityFeed/governance.js');
 const { capabilities, operationReceipt } = await import('../util/communityFeed/core.js');
 const { consumeCommunityEvent, feedNotificationVisibleSql } = await import('../util/communityFeed/notifications.js');
-const { getCommunityPreferences, updateCommunityPreferences } =
-  await import('../util/services/communityPreferenceService.js');
 const socketPath = process.env.LIGHTNOTE_TEST_MYSQL_SOCKET;
 if (!/^\/(?:private\/)?tmp\//.test(socketPath || '')) throw new Error('Temporary MySQL socket required');
 const admin = await mysql.createConnection({ socketPath, user: 'root' });
@@ -269,8 +267,6 @@ const routes = {
   'POST moderation/posts': posts.moderatePost,
   'POST moderation/comments': comments.moderateComment,
   'POST moderation/appeals': governance.reviewAppeal,
-  'GET preferences/me': getCommunityPreferences,
-  'PUT preferences/me': updateCommunityPreferences,
 };
 const imageObjects = new Map();
 app.use(

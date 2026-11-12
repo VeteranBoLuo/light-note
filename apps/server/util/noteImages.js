@@ -1,3 +1,4 @@
+import { managedUploadOrigins } from './uploadOrigin.js';
 import pool from '../db/index.js';
 import { promises as fsP } from 'node:fs';
 import path from 'node:path';
@@ -6,7 +7,7 @@ import path from 'node:path';
 // 生产环境保留既有默认值；真实链路测试和非标准部署可在进程启动前显式覆盖，
 // 避免把服务器目录结构写死进所有运行环境。
 export const NOTE_IMAGE_DIR = path.resolve(process.env.LIGHT_NOTE_IMAGE_DIR || '/www/wwwroot/images');
-const NOTE_IMAGE_URL_RE = /https?:\/\/boluo66\.top\/uploads\/[^\s"'()<>\][]+/g;
+const NOTE_IMAGE_URL_RE = new RegExp(`(?:${managedUploadOrigins().map(origin => origin.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})/uploads/[^\\s"'()<>\\]\\[]+`, 'g');
 
 /** 从笔记/模板正文(html 或 markdown 源文本)提取本站上传图片 URL,去重 */
 export function extractNoteImageUrls(content) {
@@ -49,34 +50,6 @@ export async function filterOwnedImageUrls({ urls, userId, connection = null }) 
     if (tplRows[0].n > 0) owned.add(url);
   }
   return urls.filter((u) => owned.has(u));
-}
-
-/**
- * 汇总全站"仍被引用"的图片文件名(不含扩展名)集合——供后台图库判定失效与清理校验。
- * 引用来源:书签图标、笔记图片登记(note_images)、模板正文。
- * 模板正文在内存提取(当前模板量小:每人≤20;规模增长后应改引用表)。
- */
-export async function collectUsedImageNames() {
-  const [bookmarkRows] = await pool.query('SELECT icon_url FROM bookmark');
-  const [noteRows] = await pool.query('SELECT url FROM note_images');
-  const [templateRows] = await pool.query('SELECT content FROM note_template');
-  const [versionRows] = await pool.query('SELECT content FROM note_versions');
-  const [assetRows] = await pool.query("SELECT source_locator FROM image_assets WHERE storage_kind='local'");
-  const urls = [
-    ...bookmarkRows.map((r) => r.icon_url),
-    ...noteRows.map((r) => r.url),
-    ...templateRows.flatMap((r) => extractNoteImageUrls(r.content)),
-    ...versionRows.flatMap((r) => extractNoteImageUrls(r.content)),
-    ...assetRows.map(r=>`https://boluo66.top/uploads/${r.source_locator}`),
-  ];
-  const usedNames = new Set();
-  for (const url of urls) {
-    if (typeof url !== 'string' || !url) continue;
-    const seg = url.split('?')[0].split('/').pop() || '';
-    const base = seg.replace(/\.[^.]+$/, '');
-    if (base) usedNames.add(base);
-  }
-  return usedNames;
 }
 
 /**

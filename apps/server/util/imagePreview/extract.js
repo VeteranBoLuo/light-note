@@ -1,3 +1,4 @@
+import { managedUploadUrl } from '../uploadOrigin.js';
 import { parseDocument } from 'htmlparser2';
 import { marked } from 'marked';
 import { localImageLocator } from './sources.js';
@@ -13,7 +14,7 @@ export function extractManagedImages(content, type = 'html') {
     if (['script', 'style', 'code', 'pre'].includes(node.name)) continue;
     if (node.name === 'img') {
       const locator = localImageLocator(String(node.attribs?.src || ''));
-      if (locator) found.set(locator, `https://boluo66.top/uploads/${encodeURIComponent(locator)}`);
+      if (locator) found.set(locator, managedUploadUrl(encodeURIComponent(locator)));
     }
     if (node.children) stack.push(...node.children);
   }

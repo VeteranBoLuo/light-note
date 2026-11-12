@@ -1,5 +1,6 @@
 import { stableAgentErrorCode } from '../agent/logSafety.js';
 import { AI_QUOTA_ERROR_CODES } from '@lightnote/shared/ai-quota-protocol';
+import { aiQuotaMode } from '../aiQuotaPolicy.js';
 
 const PUBLIC_AI_EXECUTION_ERRORS = Object.freeze({
   [AI_QUOTA_ERROR_CODES.EXHAUSTED]: {
@@ -47,6 +48,13 @@ const PUBLIC_AI_EXECUTION_ERRORS = Object.freeze({
     status: 502,
     message: '简报建议包含当前状态无法支持的数字、日期或时间',
   },
+  BOOKMARK_PAGE_NOT_FOUND: { status: 422, message: '该页面不存在或内容已被删除，请检查书签网址' },
+  BOOKMARK_PAGE_DNS_FAILED: { status: 503, message: '暂时无法解析网站地址，请检查网址或稍后重试' },
+  BOOKMARK_PAGE_TLS_FAILED: { status: 422, message: '网站证书验证失败，请检查原网站或手动填写书签信息' },
+  BOOKMARK_PAGE_TLS_HANDSHAKE_FAILED: {
+    status: 503,
+    message: '与网站建立安全连接失败，请稍后重试或手动填写书签信息',
+  },
   BOOKMARK_PAGE_AUTH_REQUIRED: {
     status: 422,
     message: '该网页需要登录后才能查看，轻笺不会使用你的站点账号或 Cookie，请手动填写书签信息',
@@ -89,11 +97,14 @@ export function resolvePublicAiExecutionError(error, fallbackMessage = 'AI 能�
     const message =
       code === AI_QUOTA_ERROR_CODES.INSUFFICIENT_FOR_REQUEST && requiredTokens > 0
         ? `本次任务预计最多需要约 ${requiredTokens.toLocaleString('zh-CN')} tokens，当前可用约 ${availableTokens.toLocaleString('zh-CN')}。请减少处理内容、分段执行或补充额度后重试。`
-        : known.message;
+        : code === AI_QUOTA_ERROR_CODES.EXHAUSTED && aiQuotaMode() === 'permanent_only'
+          ? '当前 AI 额度已用完。可通过升级、积分兑换或购买补充额度后继续使用。'
+          : known.message;
     return Object.freeze({
       code,
       ...known,
       message,
+      ...(code.startsWith('AI_QUOTA_') ? { billingMode: aiQuotaMode() } : {}),
       ...(requiredTokens > 0 ? { requiredTokens, availableTokens } : {}),
     });
   }
@@ -112,6 +123,7 @@ export function publicAiExecutionErrorData(failure, extra = {}) {
   return {
     ...extra,
     code: failure.code,
+    ...(failure.billingMode ? { billingMode: failure.billingMode } : {}),
     ...(Number.isFinite(failure.requiredTokens) ? { requiredTokens: failure.requiredTokens } : {}),
     ...(Number.isFinite(failure.availableTokens) ? { availableTokens: failure.availableTokens } : {}),
   };

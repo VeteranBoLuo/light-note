@@ -12,12 +12,6 @@ export const TOOLBOX_PROTOCOL_VERSION = 1;
 export const TOOLBOX_PRICING_VERSION = "toolbox-billing-v2";
 export const TOOLBOX_PROCESSING_REQUIREMENT_MAX_CHARS = 1_000;
 
-export const TOOLBOX_EXECUTION_MODES = Object.freeze([
-  "browser",
-  "service",
-  "worker",
-  "ai_skill",
-]);
 export const TOOLBOX_BILLING_MEDIA = Object.freeze(["free", "points", "ai_quota"]);
 export const TOOLBOX_JOB_STATUSES = Object.freeze([
   "queued",
@@ -28,45 +22,14 @@ export const TOOLBOX_JOB_STATUSES = Object.freeze([
   "cancelled",
   "expired",
 ]);
-export const TOOLBOX_BILLING_STATUSES = Object.freeze([
-  "quoted",
-  "reserved",
-  "settled",
-  "partially_settled",
-  "released",
-  "refunded",
-]);
-export const TOOLBOX_SAVE_STATUSES = Object.freeze([
-  "unsaved",
-  "saving",
-  "saved",
-  "save_failed",
-]);
-export const TOOLBOX_ARTIFACT_TYPES = Object.freeze([
-  "translation",
-  "note_draft",
-  "research_brief",
-  "study_kit",
-  "concept_map",
-  "action_plan",
-  "knowledge_audit",
-  "comparison",
-  "ocr_text",
-]);
 export const TOOLBOX_RESOURCE_TYPES = Object.freeze([
   "note",
   "bookmark",
   "file",
 ]);
 export const TOOLBOX_TOOL_INTENTS = Object.freeze({
-  idea_to_draft: Object.freeze(["article", "proposal", "script"]),
   material_to_note: Object.freeze(["synthesize", "outline", "merge"]),
-  research_brief: Object.freeze(["decision", "landscape", "verify"]),
   study_kit: Object.freeze(["understand", "memorize", "practice"]),
-  concept_map: Object.freeze(["overview", "causal", "compare"]),
-  action_plan: Object.freeze(["meeting", "project", "decision"]),
-  source_comparison: Object.freeze(["claims", "viewpoints", "options"]),
-  knowledge_audit: Object.freeze(["cleanup", "freshness", "gaps"]),
 });
 
 function tool(definition) {
@@ -93,9 +56,6 @@ function tool(definition) {
  * 运行时 feature flag 灰度开放。availability.enabled 是代码默认值，服务端仍可关闭工具。
  */
 export const TOOLBOX_TOOL_CATALOG = Object.freeze([
-  tool({ id: 'extraction', phase: 'launch', executionMode: 'service', billingMedium: 'ai_quota',
-    input: { kind: 'resources', minItems: 1, maxItems: 20, resourceTypes: TOOLBOX_RESOURCE_TYPES },
-    output: { artifactType: null, contentType: 'application/json', canSaveToNote: false }, availability: { enabled: true } }),
   tool({ id: 'translation', phase: 'launch', executionMode: 'ai_skill', billingMedium: 'ai_quota', billingMedia: ['ai_quota'],
     input: { kind: 'translation', minItems: 0, maxItems: 1, resourceTypes: ['note', 'bookmark', 'file'], maxChars: TOOLBOX_TRANSLATION_MAX_CHARS },
     output: { artifactType: 'translation', contentType: 'text/markdown', canSaveToNote: true }, availability: { enabled: true } }),
@@ -151,7 +111,7 @@ export const TOOLBOX_TOOL_CATALOG = Object.freeze([
       contentType: "markdown",
       canSaveToNote: true,
     },
-    availability: { enabled: true },
+    availability: { enabled: false },
   }),
   tool({
     id: "material_to_note",
@@ -189,7 +149,7 @@ export const TOOLBOX_TOOL_CATALOG = Object.freeze([
       contentType: "markdown",
       canSaveToNote: true,
     },
-    availability: { enabled: true },
+    availability: { enabled: false },
   }),
   tool({
     id: "study_kit",
@@ -227,25 +187,6 @@ export const TOOLBOX_TOOL_CATALOG = Object.freeze([
       contentType: "markdown",
       canSaveToNote: true,
     },
-    availability: { enabled: true },
-  }),
-  tool({
-    id: "action_plan",
-    phase: "launch",
-    executionMode: "ai_skill",
-    billingMedium: "points",
-    billingMedia: ["points", "ai_quota"],
-    input: {
-      kind: "resources",
-      minItems: 1,
-      maxItems: 10,
-      resourceTypes: TOOLBOX_RESOURCE_TYPES,
-    },
-    output: {
-      artifactType: "action_plan",
-      contentType: "markdown",
-      canSaveToNote: true,
-    },
     availability: { enabled: false },
   }),
   tool({
@@ -265,7 +206,7 @@ export const TOOLBOX_TOOL_CATALOG = Object.freeze([
       contentType: "markdown",
       canSaveToNote: true,
     },
-    availability: { enabled: true },
+    availability: { enabled: false },
   }),
   tool({
     id: "knowledge_audit",
@@ -284,7 +225,7 @@ export const TOOLBOX_TOOL_CATALOG = Object.freeze([
       contentType: "markdown",
       canSaveToNote: true,
     },
-    availability: { enabled: true },
+    availability: { enabled: false },
   }),
   tool({
     id: "pdf_organizer",
@@ -301,25 +242,6 @@ export const TOOLBOX_TOOL_CATALOG = Object.freeze([
     output: {
       artifactType: null,
       contentType: "application/octet-stream",
-      canSaveToNote: false,
-    },
-    availability: { enabled: true },
-  }),
-  tool({
-    id: "image_optimizer",
-    phase: "launch",
-    executionMode: "browser",
-    billingMedium: "free",
-    input: {
-      kind: "local_files",
-      minItems: 1,
-      maxItems: 20,
-      accept: ["image/jpeg", "image/png", "image/webp"],
-      maxBytes: 80 * 1024 * 1024,
-    },
-    output: {
-      artifactType: null,
-      contentType: "image/*",
       canSaveToNote: false,
     },
     availability: { enabled: true },
@@ -364,334 +286,6 @@ export const TOOLBOX_TOOL_CATALOG = Object.freeze([
     availability: { enabled: false },
   }),
   tool({
-    id: "markdown_converter",
-    phase: "launch",
-    executionMode: "browser",
-    billingMedium: "free",
-    input: {
-      kind: "local_text",
-      minItems: 1,
-      maxItems: 1,
-      maxChars: 500_000,
-    },
-    output: {
-      artifactType: null,
-      contentType: "text/*",
-      canSaveToNote: false,
-    },
-    availability: { enabled: false },
-  }),
-  tool({
-    id: "text_diff",
-    phase: "launch",
-    executionMode: "browser",
-    billingMedium: "free",
-    input: {
-      kind: "local_text",
-      minItems: 2,
-      maxItems: 2,
-      maxChars: 300_000,
-    },
-    output: {
-      artifactType: null,
-      contentType: "text/plain",
-      canSaveToNote: false,
-    },
-    availability: { enabled: false },
-  }),
-  tool({
-    id: "table_converter",
-    phase: "launch",
-    executionMode: "browser",
-    billingMedium: "free",
-    input: {
-      kind: "local_text",
-      minItems: 1,
-      maxItems: 1,
-      maxChars: 1_000_000,
-    },
-    output: {
-      artifactType: null,
-      contentType: "text/*",
-      canSaveToNote: false,
-    },
-    availability: { enabled: true },
-  }),
-  tool({
-    id: "mermaid_editor",
-    phase: "launch",
-    executionMode: "browser",
-    billingMedium: "free",
-    input: {
-      kind: "local_text",
-      minItems: 1,
-      maxItems: 1,
-      maxChars: 100_000,
-    },
-    output: {
-      artifactType: null,
-      contentType: "image/svg+xml",
-      canSaveToNote: false,
-    },
-    availability: { enabled: false },
-  }),
-  tool({
-    id: "data_workbench",
-    phase: "launch",
-    executionMode: "browser",
-    billingMedium: "free",
-    input: {
-      kind: "local_files",
-      minItems: 1,
-      maxItems: 2,
-      accept: [
-        "text/csv",
-        "text/tab-separated-values",
-        "application/json",
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      ],
-      maxBytes: 30 * 1024 * 1024,
-    },
-    output: {
-      artifactType: null,
-      contentType: "application/octet-stream",
-      canSaveToNote: false,
-    },
-    availability: { enabled: true },
-  }),
-  tool({
-    id: "data_quality_report",
-    phase: "launch",
-    executionMode: "browser",
-    billingMedium: "free",
-    input: {
-      kind: "local_files",
-      minItems: 1,
-      maxItems: 1,
-      accept: [
-        "text/csv",
-        "text/tab-separated-values",
-        "application/json",
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      ],
-      maxBytes: 20 * 1024 * 1024,
-    },
-    output: {
-      artifactType: null,
-      contentType: "application/json",
-      canSaveToNote: false,
-    },
-    // 历史深链兼容 ID；公开入口已合并到 data_workbench。
-    availability: { enabled: false },
-  }),
-  tool({
-    id: "data_cleaner",
-    phase: "launch",
-    executionMode: "browser",
-    billingMedium: "free",
-    input: {
-      kind: "local_files",
-      minItems: 1,
-      maxItems: 1,
-      accept: [
-        "text/csv",
-        "text/tab-separated-values",
-        "application/json",
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      ],
-      maxBytes: 20 * 1024 * 1024,
-    },
-    output: {
-      artifactType: null,
-      contentType: "text/csv",
-      canSaveToNote: false,
-    },
-    // 历史深链兼容 ID；公开入口已合并到 data_workbench。
-    availability: { enabled: false },
-  }),
-  tool({
-    id: "data_validator",
-    phase: "launch",
-    executionMode: "browser",
-    billingMedium: "free",
-    input: {
-      kind: "local_files",
-      minItems: 1,
-      maxItems: 1,
-      accept: [
-        "text/csv",
-        "text/tab-separated-values",
-        "application/json",
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      ],
-      maxBytes: 20 * 1024 * 1024,
-    },
-    output: {
-      artifactType: null,
-      contentType: "application/json",
-      canSaveToNote: false,
-    },
-    availability: { enabled: false },
-  }),
-  tool({
-    id: "pivot_analysis",
-    phase: "launch",
-    executionMode: "browser",
-    billingMedium: "free",
-    input: {
-      kind: "local_files",
-      minItems: 1,
-      maxItems: 1,
-      accept: [
-        "text/csv",
-        "text/tab-separated-values",
-        "application/json",
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      ],
-      maxBytes: 20 * 1024 * 1024,
-    },
-    output: {
-      artifactType: null,
-      contentType: "text/csv",
-      canSaveToNote: false,
-    },
-    availability: { enabled: false },
-  }),
-  tool({
-    id: "table_diff",
-    phase: "launch",
-    executionMode: "browser",
-    billingMedium: "free",
-    input: {
-      kind: "local_files",
-      minItems: 2,
-      maxItems: 2,
-      accept: [
-        "text/csv",
-        "text/tab-separated-values",
-        "application/json",
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      ],
-      maxBytes: 30 * 1024 * 1024,
-    },
-    output: {
-      artifactType: null,
-      contentType: "application/json",
-      canSaveToNote: false,
-    },
-    // 历史深链兼容 ID；公开入口已合并到 data_workbench。
-    availability: { enabled: false },
-  }),
-  tool({
-    id: "table_merge_split",
-    phase: "launch",
-    executionMode: "browser",
-    billingMedium: "free",
-    input: {
-      kind: "local_files",
-      minItems: 1,
-      maxItems: 2,
-      accept: [
-        "text/csv",
-        "text/tab-separated-values",
-        "application/json",
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      ],
-      maxBytes: 30 * 1024 * 1024,
-    },
-    output: {
-      artifactType: null,
-      contentType: "text/csv",
-      canSaveToNote: false,
-    },
-    availability: { enabled: false },
-  }),
-  tool({
-    id: "data_anonymizer",
-    phase: "launch",
-    executionMode: "browser",
-    billingMedium: "free",
-    input: {
-      kind: "local_files",
-      minItems: 1,
-      maxItems: 1,
-      accept: [
-        "text/csv",
-        "text/tab-separated-values",
-        "application/json",
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      ],
-      maxBytes: 20 * 1024 * 1024,
-    },
-    output: {
-      artifactType: null,
-      contentType: "text/csv",
-      canSaveToNote: false,
-    },
-    // 历史深链兼容 ID；公开入口已合并到 data_workbench。
-    availability: { enabled: false },
-  }),
-  tool({
-    id: "data_chart",
-    phase: "launch",
-    executionMode: "browser",
-    billingMedium: "free",
-    input: {
-      kind: "local_files",
-      minItems: 1,
-      maxItems: 1,
-      accept: [
-        "text/csv",
-        "text/tab-separated-values",
-        "application/json",
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      ],
-      maxBytes: 20 * 1024 * 1024,
-    },
-    output: {
-      artifactType: null,
-      contentType: "image/png",
-      canSaveToNote: false,
-    },
-    availability: { enabled: false },
-  }),
-  tool({
-    id: "text_batch",
-    phase: "launch",
-    executionMode: "browser",
-    billingMedium: "free",
-    input: {
-      kind: "local_text",
-      minItems: 1,
-      maxItems: 1,
-      maxChars: 1_000_000,
-    },
-    output: {
-      artifactType: null,
-      contentType: "text/plain",
-      canSaveToNote: false,
-    },
-    availability: { enabled: false },
-  }),
-  tool({
-    id: "regex_extractor",
-    phase: "launch",
-    executionMode: "browser",
-    billingMedium: "free",
-    input: {
-      kind: "local_text",
-      minItems: 1,
-      maxItems: 1,
-      maxChars: 1_000_000,
-    },
-    output: {
-      artifactType: null,
-      contentType: "text/plain",
-      canSaveToNote: false,
-    },
-    availability: { enabled: false },
-  }),
-  tool({
     id: "pdf_text_extractor",
     phase: "launch",
     executionMode: "browser",
@@ -709,158 +303,6 @@ export const TOOLBOX_TOOL_CATALOG = Object.freeze([
       canSaveToNote: false,
     },
     // 历史深链兼容 ID；公开入口已合并到 pdf_organizer 的 PDF 工作台。
-    availability: { enabled: false },
-  }),
-  tool({
-    id: "markdown_checker",
-    phase: "launch",
-    executionMode: "browser",
-    billingMedium: "free",
-    input: {
-      kind: "local_files",
-      minItems: 1,
-      maxItems: 50,
-      accept: ["text/markdown", "text/plain"],
-      maxBytes: 20 * 1024 * 1024,
-    },
-    output: {
-      artifactType: null,
-      contentType: "application/json",
-      canSaveToNote: false,
-    },
-    availability: { enabled: false },
-  }),
-  tool({
-    id: "frontmatter_batch",
-    phase: "launch",
-    executionMode: "browser",
-    billingMedium: "free",
-    input: {
-      kind: "local_files",
-      minItems: 1,
-      maxItems: 100,
-      accept: ["text/markdown", "text/plain"],
-      maxBytes: 40 * 1024 * 1024,
-    },
-    output: {
-      artifactType: null,
-      contentType: "application/zip",
-      canSaveToNote: false,
-    },
-    availability: { enabled: false },
-  }),
-  tool({
-    id: "citation_converter",
-    phase: "launch",
-    executionMode: "browser",
-    billingMedium: "free",
-    input: { kind: "local_text", minItems: 1, maxItems: 1, maxChars: 500_000 },
-    output: {
-      artifactType: null,
-      contentType: "text/plain",
-      canSaveToNote: false,
-    },
-    availability: { enabled: false },
-  }),
-  tool({
-    id: "browser_sql",
-    phase: "launch",
-    executionMode: "browser",
-    billingMedium: "free",
-    input: {
-      kind: "local_files",
-      minItems: 1,
-      maxItems: 4,
-      accept: [
-        "text/csv",
-        "application/json",
-        "application/vnd.apache.parquet",
-      ],
-      maxBytes: 80 * 1024 * 1024,
-    },
-    output: {
-      artifactType: null,
-      contentType: "text/csv",
-      canSaveToNote: false,
-    },
-    availability: { enabled: false },
-  }),
-  tool({
-    id: "structured_data_lab",
-    phase: "launch",
-    executionMode: "browser",
-    billingMedium: "free",
-    input: {
-      kind: "local_text",
-      minItems: 1,
-      maxItems: 1,
-      maxChars: 1_000_000,
-    },
-    output: {
-      artifactType: null,
-      contentType: "application/json",
-      canSaveToNote: false,
-    },
-    availability: { enabled: false },
-  }),
-  tool({
-    id: "docx_to_markdown",
-    phase: "launch",
-    executionMode: "browser",
-    billingMedium: "free",
-    input: {
-      kind: "local_files",
-      minItems: 1,
-      maxItems: 5,
-      accept: [
-        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-      ],
-      maxBytes: 50 * 1024 * 1024,
-    },
-    output: {
-      artifactType: null,
-      contentType: "text/markdown",
-      canSaveToNote: false,
-    },
-    availability: { enabled: true },
-  }),
-  tool({
-    id: "code_snapshot",
-    phase: "launch",
-    executionMode: "browser",
-    billingMedium: "free",
-    input: { kind: "local_text", minItems: 1, maxItems: 1, maxChars: 200_000 },
-    output: {
-      artifactType: null,
-      contentType: "image/png",
-      canSaveToNote: false,
-    },
-    availability: { enabled: false },
-  }),
-  tool({
-    id: "knowledge_structure_audit",
-    phase: "launch",
-    executionMode: "service",
-    billingMedium: "free",
-    input: { kind: "account", minItems: 1, maxItems: 1 },
-    output: {
-      artifactType: null,
-      contentType: "application/json",
-      canSaveToNote: false,
-    },
-    availability: { enabled: true },
-  }),
-  tool({
-    id: "directory_index",
-    phase: "launch",
-    executionMode: "service",
-    billingMedium: "free",
-    input: { kind: "account", minItems: 1, maxItems: 1 },
-    output: {
-      artifactType: null,
-      contentType: "text/markdown",
-      canSaveToNote: false,
-    },
     availability: { enabled: false },
   }),
   tool({

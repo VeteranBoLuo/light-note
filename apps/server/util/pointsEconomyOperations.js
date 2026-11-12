@@ -7,6 +7,7 @@ import {
   C7_POINTS_ECONOMY_VERSION,
   C8_POINTS_ECONOMY_VERSION,
   C9_POINTS_ECONOMY_VERSION,
+  C10_POINTS_ECONOMY_VERSION,
   getEconomyRuntime,
   LEGACY_POINTS_ECONOMY_VERSION,
   POINTS_ECONOMY_VERSION,
@@ -261,6 +262,7 @@ export async function assertPointsEconomyActivationReady({ db = pool, runtime = 
       C7_POINTS_ECONOMY_VERSION,
       C8_POINTS_ECONOMY_VERSION,
       C9_POINTS_ECONOMY_VERSION,
+      C10_POINTS_ECONOMY_VERSION,
       POINTS_ECONOMY_VERSION,
     ].includes(runtime.economyVersion)
   ) {

@@ -1139,7 +1139,7 @@ public final class MainActivity extends Activity {
                 IncomingShareStore.complete(this, payload.optString("shareId"));
             } else if ("share.finish".equals(messageType)) {
                 // 「完成」只把任务移到后台：从别的应用分享进来时，用户会回到原来的应用。
-                runOnUiThread(() -> moveTaskToBack(true));
+                runOnUiThread(this::stopUploadsAndMoveTaskToBackground);
             } else if ("app.ready".equals(messageType)) {
                 runOnUiThread(this::hideLaunchOverlay);
             } else if ("auth.session.persist".equals(messageType)) {
@@ -1596,12 +1596,28 @@ public final class MainActivity extends Activity {
             && now - lastRootBackPressedAt <= BACK_TO_DESKTOP_CONFIRM_WINDOW_MS) {
             lastRootBackPressedAt = 0L;
             hideBackToDesktopHintImmediately();
-            // 只把任务移到后台；singleTask 桌面入口会恢复同一实例和 WebView 状态。
-            moveTaskToBack(true);
+            stopUploadsAndMoveTaskToBackground();
             return;
         }
         lastRootBackPressedAt = now;
         showBackToDesktopHint();
+    }
+
+    /** 显式退出停止当前原件队列；桌面入口仍可恢复其他页面状态，不启动后台上传服务。 */
+    private void stopUploadsAndMoveTaskToBackground() {
+        if (webView == null) {
+            moveTaskToBack(true);
+            return;
+        }
+        boolean[] moved = {false};
+        Runnable move = () -> {
+            if (moved[0]) return;
+            moved[0] = true;
+            moveTaskToBack(true);
+        };
+        // 先让网页同步 abort，再移到后台；WebView 失去响应时仍允许用户退出。
+        webView.evaluateJavascript("window.dispatchEvent(new Event('light-note:app-exit'))", ignored -> move.run());
+        webView.postDelayed(move, 500L);
     }
 
     @Override

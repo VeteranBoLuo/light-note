@@ -11,7 +11,7 @@ const FishingInput = (() => {
       doc.removeEventListener("visibilitychange", token.visibility);
       doc.defaultView?.removeEventListener("blur", token.blur);
     }
-    function start({ target, canReel, onReel }) {
+    function start({ target, canReel, onReel, passThrough = () => false }) {
       stop();
       const token = { target, reeled: false };
       active = token;
@@ -23,6 +23,7 @@ const FishingInput = (() => {
         // The game back button stays usable while the scene catches reel input.
         if (e.target.closest?.('[data-action="exit"]')) return;
         if (!inside(e.target)) return;
+        if (passThrough(e.target)) return;
         e.preventDefault();
         e.stopImmediatePropagation();
         reel();

@@ -1,3 +1,4 @@
+import { managedUploadUrl } from '../util/uploadOrigin.js';
 import { postDetail as getCommunitySaveSource } from '../util/communityFeed/posts.js';
 import { insertNoteVersion } from '../util/insertNoteVersion.js';
 import { readNoteExportScope, readScopedNotesForExport } from '../util/services/noteExportService.js';
@@ -13,7 +14,7 @@ import {
   DrawingSceneValidationError,
   serializeDrawingScene,
 } from '@lightnote/shared/drawing-note';
-import { snakeCaseKeys, resultData, mergeExistingProperties, insertData, L } from '../util/common.js';
+import { snakeCaseKeys, resultData, insertData, L } from '../util/common.js';
 import { RESOURCE_TYPE, replaceResourceTagRelations, validateUserTags } from '../util/resourceTags.js';
 import { ensureNotVisitor } from '../util/auth.js';
 import { attachPendingStatus } from '../util/resourceInbox.js';
@@ -29,7 +30,6 @@ import {
   resolveOwnedResourceRefSummaries,
   syncNoteResourceRefs,
 } from '../util/services/noteReferenceService.js';
-import { createTag } from '../util/services/tagService.js';
 import { cleanupOrphanNoteImages, extractNoteImageUrls, filterOwnedImageUrls } from '../util/noteImages.js';
 import { buildNoteCardPreview } from '../util/noteCardPreview.js';
 import { buildDrawingScenePreview } from '../util/drawingPreview.js';
@@ -201,7 +201,7 @@ export const uploadNoteImage = async (req, res) => {
       );
     }
     const userId = req.user.id;
-    const fileUrl = `https://boluo66.top/uploads/${req.file.filename}`;
+    const fileUrl = managedUploadUrl(req.file.filename);
     const noteId = String(req.body.noteId || '').trim();
 
     if (noteId) {
@@ -1645,94 +1645,6 @@ export const deleteNoteSubtree = async (req, res) => {
   }
 };
 
-export const updateNoteSort = async (req, res) => {
-  if (!ensureNotVisitor(req, res)) return;
-  const userId = req.user.id;
-  let connection;
-  try {
-    if (req.body?.move) assertNoteTreeFeature(req, NOTE_TREE_FEATURE.WRITE);
-    connection = await pool.getConnection();
-    await connection.beginTransaction(); // 开始事务
-    if (req.body?.move) {
-      const result = await moveOwnedNoteNode(connection, {
-        ...req.body.move,
-        userId,
-      });
-      await connection.commit();
-      return res.send(resultData(result, 200, 'Sort updated successfully'));
-    }
-
-    const notes = Array.isArray(req.body?.notes) ? req.body.notes : [];
-    const normalizedNotes = notes.map((note) => ({
-      id: String(note?.id ?? '').trim(),
-      sort: Number(note?.sort),
-    }));
-    if (
-      normalizedNotes.length === 0 ||
-      normalizedNotes.length > 500 ||
-      normalizedNotes.some((note) => !note.id || !Number.isInteger(note.sort) || note.sort < 0)
-    ) {
-      await connection.rollback();
-      return res.send(resultData(null, 400, '排序参数无效'));
-    }
-    const uniqueIds = [...new Set(normalizedNotes.map((note) => note.id))];
-    if (uniqueIds.length !== normalizedNotes.length) {
-      await connection.rollback();
-      return res.send(resultData(null, 400, '排序参数无效'));
-    }
-    const placeholders = uniqueIds.map(() => '?').join(',');
-    const [ownedRows] = await connection.query(
-      `SELECT id, parent_id
-         FROM note
-        WHERE id IN (${placeholders}) AND create_by = ? AND del_flag = 0
-        FOR UPDATE`,
-      [...uniqueIds, userId],
-    );
-    if (ownedRows.length !== uniqueIds.length) {
-      throw new NoteTreeError('NOTE_TREE_NODE_NOT_FOUND', '笔记不存在', 404);
-    }
-    const authoritativeParentId =
-      ownedRows[0]?.parent_id == null ? null : String(ownedRows[0].parent_id).trim() || null;
-    if (
-      ownedRows.some(
-        (row) => (row.parent_id == null ? null : String(row.parent_id).trim() || null) !== authoritativeParentId,
-      )
-    ) {
-      throw new NoteTreeError('INVALID_SORT_ANCHOR', '只能调整同一目录中的页面顺序', 409);
-    }
-    if (
-      Object.prototype.hasOwnProperty.call(req.body || {}, 'parentId') &&
-      (String(req.body.parentId ?? '').trim() || null) !== authoritativeParentId
-    ) {
-      throw new NoteTreeError('INVALID_SORT_ANCHOR', '目录状态已变化，请刷新后重试', 409);
-    }
-    // 校验与锁定完成后一次写入同目录排序，保留内容更新时间。
-    const sortCases = normalizedNotes.map(() => 'WHEN ? THEN ?').join(' ');
-    await connection.query(
-      `UPDATE note
-          SET sort = CASE id ${sortCases} ELSE sort END, update_time = update_time
-        WHERE id IN (${placeholders}) AND create_by = ? AND del_flag = 0 AND parent_id <=> ?`,
-      [...normalizedNotes.flatMap(({ id, sort }) => [id, sort]), ...uniqueIds, userId, authoritativeParentId],
-    );
-    await connection.commit(); // 提交事务
-    res.send(resultData(null, 200, 'Sort updated successfully'));
-  } catch (e) {
-    if (connection) {
-      try {
-        await connection.rollback(); // 如果发生错误，回滚事务
-      } catch {
-        // 保留最初的排序错误，避免回滚异常覆盖稳定业务错误。
-      }
-    }
-    if (e instanceof NoteTreeError || e instanceof NoteTreeFeatureError) {
-      return sendNoteTreeError(req, res, 'update-note-sort', e);
-    }
-    return sendNoteServerError(res, 'update-note-sort', e);
-  } finally {
-    connection?.release(); // 释放连接回连接池
-  }
-};
-
 export const toggleNoteTop = async (req, res) => {
   if (!ensureNotVisitor(req, res)) return;
   const noteId = String(req.body?.id || '').trim();
@@ -1771,72 +1683,6 @@ export const toggleNoteTop = async (req, res) => {
     return sendNoteServerError(res, 'toggle-note-top', e);
   } finally {
     connection?.release();
-  }
-};
-
-export const addNoteTag = async (req, res) => {
-  if (!ensureNotVisitor(req, res)) return;
-  try {
-    const userId = req.user.id;
-    const name = String(req.body.name || '').trim();
-    if (!name) {
-      return res.send(resultData(null, 400, '标签名称不能为空'));
-    }
-    try {
-      const createdTag = await createTag({ userId, name });
-      res.send(resultData({ id: createdTag.id, name: createdTag.name }));
-    } catch (err) {
-      if (String(err?.message || '').startsWith('TAG_DUPLICATE:')) {
-        return res.send(resultData(null, 409, '标签已存在'));
-      }
-      return sendNoteServerError(res, 'add-note-tag', err);
-    }
-  } catch (e) {
-    console.warn('[note-library] add tag rejected code=%s', stableAgentErrorCode(e));
-    return res.send(resultData(null, 400, '客户端请求参数无效'));
-  }
-};
-
-export const editNoteTag = async (req, res) => {
-  if (!ensureNotVisitor(req, res)) return;
-  try {
-    const userId = req.user.id;
-    const name = String(req.body.name || '').trim();
-    if (!name) {
-      return res.send(resultData(null, 400, '标签名称不能为空'));
-    }
-    const params = {
-      name,
-    };
-    const connection = await pool.getConnection();
-    try {
-      await connection.beginTransaction();
-      const [checkRes] = await connection.query('SELECT id FROM tag WHERE user_id = ? AND name = ? AND del_flag = 0', [
-        userId,
-        name,
-      ]);
-      if (checkRes.length > 0 && checkRes[0].id !== req.body.id) {
-        throw new Error('标签已存在');
-      }
-      const [result] = await connection.query('update tag set ? where id=? and user_id=?', [
-        snakeCaseKeys(mergeExistingProperties(params, [], ['id'])),
-        req.body.id,
-        userId,
-      ]);
-      await connection.commit();
-      res.send(resultData(result));
-    } catch (err) {
-      await connection.rollback();
-      if (String(err?.message || '') === '标签已存在') {
-        return res.send(resultData(null, 409, '标签已存在'));
-      }
-      return sendNoteServerError(res, 'edit-note-tag', err);
-    } finally {
-      connection.release();
-    }
-  } catch (e) {
-    console.warn('[note-library] edit tag rejected code=%s', stableAgentErrorCode(e));
-    return res.send(resultData(null, 400, '客户端请求参数无效'));
   }
 };
 
@@ -1915,25 +1761,6 @@ export const getNoteTags = async (req, res) => {
     res.send(resultData(result));
   } catch (e) {
     return sendNoteServerError(res, 'query-note-tags', e);
-  }
-};
-
-export const delNoteTag = (req, res) => {
-  if (!ensureNotVisitor(req, res)) return;
-  try {
-    const userId = req.user.id;
-    const tagId = req.body.id;
-    pool
-      .query('DELETE FROM tag WHERE id = ? AND user_id = ?', [tagId, userId])
-      .then(() => {
-        res.send(resultData('删除标签成功'));
-      })
-      .catch((err) => {
-        return sendNoteServerError(res, 'delete-note-tag', err);
-      });
-  } catch (e) {
-    console.warn('[note-library] delete tag rejected code=%s', stableAgentErrorCode(e));
-    return res.send(resultData(null, 400, '客户端请求参数无效'));
   }
 };
 

@@ -45,6 +45,7 @@ vi.mock('../util/adminActionExecution.js', () => {
 });
 
 const {
+  getAiGiftControls,
   batchSetSecurityReviewDisposition,
   getSecurityOverviewV2,
   getSecurityReviewClusters,
@@ -89,6 +90,18 @@ describe('securityV2Handle 批量事件复核', () => {
       auditId: options.outcome === 'succeeded' ? 'audit-1' : 'audit-failed-1',
       requestId: 'request-1',
     }));
+  });
+
+  it('将赠礼暂停状态按界面协议返回，且普通用户不能读取控制', async () => {
+    const res = createResponse();
+    mocks.pool.query.mockResolvedValue([[{ paused_from: '2026-11-06 10:00:00', reviewed_at: null, reason: '复核新号', updated_at: '2026-11-06 10:00:00' }]]);
+    await getAiGiftControls({ user: { id: 'root-1', role: 'root' } }, res);
+    expect(res.body.data).toMatchObject({ pausedFrom: '2026-11-06 10:00:00', reviewedAt: null, reason: '复核新号' });
+    const rejected = createResponse();
+    mocks.pool.query.mockClear();
+    await getAiGiftControls({ user: { id: 'user-1', role: 'user' } }, rejected);
+    expect(rejected.statusCode).toBe(403);
+    expect(mocks.pool.query).not.toHaveBeenCalled();
   });
 
   it('在同一事务中处理所选事件簇内的全部事件', async () => {

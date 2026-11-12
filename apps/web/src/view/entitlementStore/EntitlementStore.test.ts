@@ -366,15 +366,20 @@ describe('独立资源商店', () => {
     expect(mocks.createIntent).not.toHaveBeenCalled();
   });
 
-  it('旧支持链接打开历史赞助，切换资源购买时按类别读取订单', async () => {
-    routeState.query = { records: 'history' };
+  it('订单记录链接只读取资源购买，不再出现历史赞助', async () => {
+    routeState.query = { records: 'purchase' };
     await mountStore();
-    await vi.waitFor(() => expect(mocks.getOrders).toHaveBeenLastCalledWith('history', 1));
-    const tabs = [...document.querySelectorAll<HTMLButtonElement>('[role="tab"]')];
-    const history = tabs.find((tab) => tab.textContent?.includes('历史赞助'));
-    expect(history?.getAttribute('aria-selected')).toBe('true');
-    tabs.find((tab) => tab.textContent?.includes('资源购买'))?.click();
-    await vi.waitFor(() => expect(mocks.getOrders).toHaveBeenLastCalledWith('purchase', 1));
+    await vi.waitFor(() => expect(mocks.getOrders).toHaveBeenLastCalledWith(1));
+    expect(mocks.routerReplace).toHaveBeenCalledWith({ query: {} });
+    expect(document.body.textContent).not.toContain('历史赞助');
+    expect(document.querySelector('[role="tab"][aria-selected]')?.textContent ?? '').not.toContain('资源购买');
+  });
+
+  it('旧的历史赞助与爱发电回跳参数只清理地址，不打开订单记录', async () => {
+    routeState.query = { records: 'history', afdian: 'bound' };
+    await mountStore();
+    await vi.waitFor(() => expect(mocks.routerReplace).toHaveBeenCalledWith({ query: {} }));
+    expect(mocks.getOrders).not.toHaveBeenCalled();
   });
 
   it('旧后端目录没有固定商品绑定时禁止购买', async () => {

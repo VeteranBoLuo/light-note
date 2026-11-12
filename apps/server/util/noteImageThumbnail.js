@@ -1,3 +1,4 @@
+import { managedUploadUrl, uploadOrigin, isManagedUploadOrigin } from './uploadOrigin.js';
 import { execFile } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
 import { constants as fsConstants } from 'node:fs';
@@ -30,11 +31,11 @@ export const NOTE_IMAGE_THUMBNAIL_DIR = path.resolve(
 function safeSource(url, imageRoot = NOTE_IMAGE_DIR) {
   let parsed;
   try {
-    parsed = new URL(String(url || ''), 'https://boluo66.top');
+    parsed = new URL(String(url || ''), uploadOrigin());
   } catch {
     return null;
   }
-  if (!['https:', 'http:'].includes(parsed.protocol) || parsed.hostname !== 'boluo66.top') return null;
+  if (!isManagedUploadOrigin(parsed.origin)) return null;
   let pathname;
   try {
     pathname = decodeURIComponent(parsed.pathname);
@@ -56,7 +57,7 @@ function safeSource(url, imageRoot = NOTE_IMAGE_DIR) {
   return {
     fileName,
     filePath: path.join(imageRoot || '/www/wwwroot/images', fileName),
-    canonicalUrl: `https://boluo66.top/uploads/${fileName}`,
+    canonicalUrl: managedUploadUrl(fileName),
   };
 }
 
@@ -246,9 +247,9 @@ export async function resolveOwnedNoteThumbnailSource({ key, sourceUrl, userId, 
   const candidateUrls = [
     ...new Set([
       source.canonicalUrl,
-      `https://boluo66.top/uploads/${encodedFileName}`,
-      `http://boluo66.top/uploads/${source.fileName}`,
-      `http://boluo66.top/uploads/${encodedFileName}`,
+      managedUploadUrl(encodedFileName),
+      managedUploadUrl(source.fileName).replace(/^https:/u, 'http:'),
+      managedUploadUrl(encodedFileName).replace(/^https:/u, 'http:'),
     ]),
   ];
   const [rows] = await db.query(

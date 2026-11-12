@@ -15,6 +15,13 @@ vi.mock('./agent/aiGateway.js', () => ({ requestAi: mocks.requestAi }));
 
 const { suggestBookmarkMeta, suggestTagsFromText } = await import('./aiOrganize.js');
 
+function bookmarkResponse(fields) {
+  return {
+    content: '',
+    toolCalls: [{ function: { name: 'suggest_bookmark_metadata', arguments: JSON.stringify(fields) } }],
+  };
+}
+
 describe('suggestBookmarkMeta cancellation', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -24,13 +31,13 @@ describe('suggestBookmarkMeta cancellation', () => {
       description: '示例描述',
       bodyText: '正文',
     });
-    mocks.requestAi.mockResolvedValue({
-      content: JSON.stringify({
+    mocks.requestAi.mockResolvedValue(
+      bookmarkResponse({
         name: '示例',
         description: '示例描述',
         tagSuggestions: [],
       }),
-    });
+    );
   });
 
   it('把同一个停止信号传给网页抓取与模型请求', async () => {
@@ -51,7 +58,7 @@ describe('suggestBookmarkMeta cancellation', () => {
       expect.any(Array),
       expect.objectContaining({
         signal: controller.signal,
-        toolChoice: 'none',
+        toolChoice: { type: 'function', function: { name: 'suggest_bookmark_metadata' } },
         maxTokens: 600,
         trace: expect.objectContaining({ taskType: 'organize', stage: 'organize_bookmark_meta' }),
       }),
@@ -158,11 +165,28 @@ describe('suggestBookmarkMeta cancellation', () => {
     expect(mocks.requestAi).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ['NOT_FOUND', 'BOOKMARK_PAGE_NOT_FOUND', 422],
+    ['DNS_FAILED', 'BOOKMARK_PAGE_DNS_FAILED', 503],
+    ['TLS_FAILED', 'BOOKMARK_PAGE_TLS_FAILED', 422],
+    ['TLS_HANDSHAKE_FAILED', 'BOOKMARK_PAGE_TLS_HANDSHAKE_FAILED', 503],
+    ['ACCESS_DENIED', 'BOOKMARK_PAGE_ACCESS_PROTECTED', 422],
+  ])('网页读取失败 %s 保留独立错误码且不调用模型', async (reason, code, status) => {
+    mocks.fetchWebMeta.mockResolvedValueOnce({ ok: false, reason });
+    await expect(suggestBookmarkMeta({ url: 'https://example.com' })).rejects.toMatchObject({
+      name: 'BookmarkPageReadError',
+      reason,
+      code,
+      status,
+    });
+    expect(mocks.requestAi).not.toHaveBeenCalled();
+  });
+
   it('网页不可读取但已有部分人工内容时，只基于已有内容补全', async () => {
     mocks.fetchWebMeta.mockResolvedValueOnce({ ok: false, reason: 'AUTH_REQUIRED' });
-    mocks.requestAi.mockResolvedValueOnce({
-      content: JSON.stringify({ name: '已有名称', description: '补全描述', tagSuggestions: [] }),
-    });
+    mocks.requestAi.mockResolvedValueOnce(
+      bookmarkResponse({ name: '已有名称', description: '补全描述', tagSuggestions: [] }),
+    );
 
     await expect(
       suggestBookmarkMeta({ url: 'https://example.com/private', name: '已有名称', userTags: [] }),
@@ -173,9 +197,9 @@ describe('suggestBookmarkMeta cancellation', () => {
   });
 
   it('浏览器扩展显式提供当前页可见内容时直接使用，不再由服务器重复抓取', async () => {
-    mocks.requestAi.mockResolvedValueOnce({
-      content: JSON.stringify({ name: '真实页面', description: '根据当前页内容生成', tagSuggestions: [] }),
-    });
+    mocks.requestAi.mockResolvedValueOnce(
+      bookmarkResponse({ name: '真实页面', description: '根据当前页内容生成', tagSuggestions: [] }),
+    );
 
     await expect(
       suggestBookmarkMeta({
@@ -197,6 +221,7 @@ describe('suggestBookmarkMeta cancellation', () => {
   });
 
   it('明确告诉模型 0-3 是上限而不是目标数量', async () => {
+    mocks.requestAi.mockResolvedValueOnce({ content: '{"tagSuggestions":[]}' });
     await expect(suggestTagsFromText({ text: '单一主题内容', userTags: [] })).resolves.toEqual({
       matchedTagIds: [],
       newTags: [],
@@ -220,12 +245,61 @@ describe('suggestBookmarkMeta cancellation', () => {
     ).resolves.toEqual({ matchedTagIds: [], newTags: [], suggestions: [] });
   });
 
-  it('书签持久建议要求显式标签数组，但旧版补全仍可保留有效名称描述', async () => {
-    mocks.requestAi.mockResolvedValue({ content: '{"name":"示例","description":"说明"}' });
+  it('书签缺失标签数组时最多修复一次，不把字段缺失伪装成合法空建议', async () => {
+    mocks.requestAi.mockResolvedValue(bookmarkResponse({ name: '示例', description: '说明' }));
     const input = { url: 'https://example.com', name: '已有名称', description: '已有说明', userTags: [] };
 
-    await expect(suggestBookmarkMeta({ ...input, includeSuggestionDetails: true })).resolves.toBeNull();
-    await expect(suggestBookmarkMeta(input)).resolves.toMatchObject({ name: '示例', description: '说明' });
+    await expect(suggestBookmarkMeta(input)).rejects.toMatchObject({ code: 'AI_SKILL_STRUCTURED_OUTPUT_INVALID' });
+    expect(mocks.requestAi).toHaveBeenCalledTimes(2);
+    expect(mocks.requestAi.mock.calls[1][1]).toMatchObject({
+      billingScope: 'platform',
+      trace: { stage: 'organize_bookmark_meta_repair' },
+    });
+  });
+
+  it.each([
+    { content: 'invalid JSON response', toolCalls: [] },
+    bookmarkResponse({ name: ' ', description: '\n', tagSuggestions: [] }),
+    bookmarkResponse({
+      name: '',
+      description: '',
+      tagSuggestions: [
+        { name: '无依据', source: 'new', relevance: 'strong', confidence: 0.99, evidence: '不存在的原文' },
+      ],
+    }),
+  ])('格式错误或无可用字段时只做一次平台修复，修复成功才交付：%j', async (invalid) => {
+    mocks.requestAi.mockResolvedValueOnce(invalid);
+    const result = await suggestBookmarkMeta({ url: 'https://example.com' });
+    expect(result).toMatchObject({ name: '示例', description: '示例描述' });
+    expect(mocks.requestAi).toHaveBeenCalledTimes(2);
+    expect(mocks.requestAi.mock.calls[1][1]).toMatchObject({ billingScope: 'platform' });
+  });
+
+  it('两次都无可用字段则失败，不再调用第三次；网络错误不重放', async () => {
+    mocks.requestAi.mockResolvedValue(bookmarkResponse({ name: '', description: '', tagSuggestions: [] }));
+    await expect(suggestBookmarkMeta({ url: 'https://example.com' })).rejects.toMatchObject({
+      code: 'AI_SKILL_OUTPUT_EMPTY',
+    });
+    expect(mocks.requestAi).toHaveBeenCalledTimes(2);
+    mocks.requestAi
+      .mockReset()
+      .mockRejectedValue(Object.assign(new Error('provider unavailable'), { code: 'AI_NETWORK_ERROR' }));
+    await expect(suggestBookmarkMeta({ url: 'https://example.com' })).rejects.toMatchObject({
+      code: 'AI_NETWORK_ERROR',
+    });
+    expect(mocks.requestAi).toHaveBeenCalledOnce();
+  });
+
+  it('第一次返回无效结果后取消，不再进行平台修复', async () => {
+    const controller = new AbortController();
+    mocks.requestAi.mockImplementationOnce(async () => {
+      controller.abort();
+      return bookmarkResponse({ name: '', description: '', tagSuggestions: [] });
+    });
+    await expect(suggestBookmarkMeta({ url: 'https://example.com', signal: controller.signal })).rejects.toMatchObject({
+      name: 'AbortError',
+    });
+    expect(mocks.requestAi).toHaveBeenCalledOnce();
   });
 
   it('即使模型返回四个合格候选，用户可见建议也只保留前三个', async () => {

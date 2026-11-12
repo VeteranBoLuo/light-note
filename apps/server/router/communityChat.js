@@ -152,8 +152,6 @@ router.get('/messages/:publicId/author-avatar', handle.messageAuthorAvatar);
 router.get('/presence/members/:token/avatar', handle.presenceMemberAvatar);
 router.get('/profile/me', handle.ownProfile);
 router.put('/profile/me', profileWriteLimiter, handle.updateOwnProfile);
-// 兼容尚未升级的本地或旧版客户端；生产代理使用 PUT 作为公开写入方法。
-router.patch('/profile/me', profileWriteLimiter, handle.updateOwnProfile);
 router.get('/profile/me/avatar', handle.ownProfileAvatar);
 router.put('/messages/:publicId/like', messageWriteLimiter, handle.toggleMessageLike);
 router.put('/messages/:publicId/poll/vote', messageWriteLimiter, handle.votePoll);
@@ -165,9 +163,6 @@ router.post('/messages/:publicId/delete', governanceWriteLimiter, handle.deleteM
 router.post('/messages/:publicId/save-sticker', imageWriteLimiter, handle.saveMessageSticker);
 router.post('/messages/:publicId/report', governanceWriteLimiter, handle.reportMessage);
 router.post('/messages/:publicId/block-author', governanceWriteLimiter, handle.blockMessageAuthor);
-// 已打开的旧客户端收到关闭信号后回到原图链路，不再准备派生任务。
-router.post('/image-previews/resolve', (_req, res) => res.send({ status: 200, data: { enabled: false, items: [] } }));
-router.post('/image-previews/prepare', (_req, res) => res.send({ status: 200, data: { enabled: false, items: [] } }));
 router.get('/images/:publicId', handle.image);
 router.post('/images/:publicId/discard', imageWriteLimiter, handle.discardImage);
 router.get('/blocks', handle.blocks);

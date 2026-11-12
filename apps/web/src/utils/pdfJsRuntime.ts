@@ -1,4 +1,13 @@
-let pdfRuntimePromise: Promise<typeof import('pdfjs-dist/legacy/build/pdf.mjs')> | null = null;
+import type { PDFDocumentLoadingTask, TextLayer } from 'pdfjs-dist';
+import type { DocumentInitParameters } from 'pdfjs-dist/types/src/display/api';
+import cMapUrl from 'virtual:lightnote-pdf-cmaps';
+
+type PdfJsRuntime = {
+  TextLayer: typeof TextLayer;
+  getDocument(options: DocumentInitParameters): PDFDocumentLoadingTask;
+};
+
+let pdfRuntimePromise: Promise<PdfJsRuntime> | null = null;
 
 /**
  * PDF.js 的统一浏览器运行时入口。
@@ -14,7 +23,12 @@ export function loadPdfJsRuntime() {
       import('pdfjs-dist/legacy/build/pdf.worker.min.mjs?worker&url'),
     ]).then(([pdfjs, workerModule]) => {
       pdfjs.GlobalWorkerOptions.workerSrc = workerModule.default;
-      return pdfjs;
+      return {
+        TextLayer: pdfjs.TextLayer,
+        getDocument(options: DocumentInitParameters) {
+          return pdfjs.getDocument({ ...options, cMapUrl, cMapPacked: true });
+        },
+      };
     });
   }
   return pdfRuntimePromise;

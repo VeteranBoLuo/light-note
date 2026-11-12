@@ -1,3 +1,4 @@
+import { managedUploadUrl } from '../uploadOrigin.js';
 import { CARD_IMAGE_PROFILE, cloudPreviewFormat } from '@lightnote/shared';
 import { isImagePreviewCandidate } from '@lightnote/shared/file-category';
 import { extractManagedImages } from './extract.js';
@@ -105,7 +106,7 @@ export async function syncContentReferences(db, { owner, refType, refId, content
     const [owned] = await db.query(
       `SELECT ni.id FROM note_images ni JOIN note n ON n.id=ni.note_id
       WHERE n.create_by=? AND (ni.url=? OR ni.url=?) LIMIT 1`,
-      [owner, url, `https://boluo66.top/uploads/${locator}`],
+      [owner, url, managedUploadUrl(locator)],
     );
     const [[existing]] = await db.query('SELECT * FROM image_assets WHERE identity_hash=?', [
       hash(`${owner}:local:${locator}`),

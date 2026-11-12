@@ -183,7 +183,6 @@
     <template #overlays>
       <EntitlementOrderRecords
         v-model:visible="historyVisible"
-        v-model:scope="historyScope"
         :authenticated="storeState.authenticated"
         :ready="stateReady"
         :state-error="stateError"
@@ -237,7 +236,6 @@
     getEntitlementStoreCatalog,
     getEntitlementStoreState,
     type EntitlementStoreState,
-    type EntitlementOrderScope,
     type SupportBenefit,
     type SupportCampaignPackage,
     type SupportCatalog,
@@ -288,7 +286,6 @@
   const purchaseProgress = ref<InstanceType<typeof EntitlementPurchaseProgress> | null>(null);
   const selectedItem = ref<StoreItem | null>(null);
   const historyVisible = ref(false);
-  const historyScope = ref<EntitlementOrderScope>('purchase');
   const historyRevision = ref(0);
   const quotaHelpOpen = ref(false);
   const requestedCategory = String(route.query.category || '');
@@ -422,8 +419,7 @@
   function goBack() {
     returnToPreviousPage(router, bookmark.isMobile ? '/personCenter' : '/home');
   }
-  function openOrderRecords(scope: EntitlementOrderScope = 'purchase') {
-    historyScope.value = scope;
+  function openOrderRecords() {
     historyVisible.value = true;
   }
   function showCurrentOrder() {
@@ -436,13 +432,11 @@
   }
   function consumeRecordsLink() {
     if (route.name !== 'entitlementStore') return;
+    // 旧的历史赞助与爱发电关联回跳参数已停用，只清理地址，不再打开对应面板。
     const { records, afdian, ...query } = route.query;
-    if (records !== 'history' && records !== 'purchase') return;
-    openOrderRecords(records);
+    if (records === undefined && afdian === undefined) return;
+    if (records === 'purchase') openOrderRecords();
     void router.replace({ query });
-    if (afdian === 'bound') message.success(t('support.accountLinkSuccess'));
-    if (afdian === 'failed') message.error(t('support.accountLinkFailed'));
-    if (afdian === 'session_required') message.warning(t('support.accountLinkSessionRequired'));
   }
   function syncSelectedItem(nextCatalog: SupportCatalog) {
     const current = selectedItem.value;

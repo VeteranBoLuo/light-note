@@ -107,21 +107,6 @@ export async function getBookmarkArchiveStatus(userId, bookmarkId, { db = pool }
   };
 }
 
-export async function retryFailedBookmarkArchives(userId) {
-  const [rows] = await pool.query(
-    `SELECT j.bookmark_id FROM bookmark_archive_jobs j
-    JOIN bookmark b ON CONVERT(b.id USING utf8mb4) COLLATE utf8mb4_unicode_ci = j.bookmark_id
-      AND CONVERT(b.user_id USING utf8mb4) COLLATE utf8mb4_unicode_ci = j.user_id
-    WHERE j.user_id = ? AND j.status = 'failed' AND b.del_flag = 0 ORDER BY j.update_time LIMIT 20`,
-    [userId],
-  );
-  let queued = 0;
-  for (const row of rows) {
-    if ((await enqueueBookmarkArchive(userId, row.bookmark_id, { failedOnly: true }))?.ok) queued++;
-  }
-  return { ok: true, queued };
-}
-
 // MySQL 5.7 使用原子 UPDATE 领取；租约过期可恢复，旧 Worker 的结果不能覆盖新任务。
 // 两条 UPDATE 前都先只读确认有活可干：空闲时每 1.5 秒的零行 UPDATE 也会写入 binlog 并刷盘。
 export async function claimBookmarkArchive() {

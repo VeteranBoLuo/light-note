@@ -1,242 +1,329 @@
 <template>
-  <div class="detail-page">
+  <div
+    ref="pageRef"
+    class="co-build-detail"
+    :class="{ 'is-mobile': bookmark.isMobile, 'is-stacked': !bookmark.isDesktop }"
+    v-auto-scrollbar
+  >
+    <header v-if="bookmark.isMobile" class="mobile-heading">
+      <BButton icon-only class="mobile-back" :aria-label="t('coBuild.detailBack')" @click="goBack"
+        ><SvgIcon :src="icon.arrow_left" size="20"
+      /></BButton>
+      <span>{{ t('coBuild.detailTitle') }}</span>
+    </header>
     <main class="detail-shell">
-      <BButton class="back-button" @click="router.push('/co-build')">
-        <SvgIcon :src="icon.arrow_left" size="15" />
-        {{ t('coBuild.detailBack') }}
+      <BButton v-if="!bookmark.isMobile" type="text" class="back-button" @click="goBack">
+        <SvgIcon :src="icon.arrow_left" size="17" />{{ t('coBuild.detailBack') }}
       </BButton>
-
-      <div v-if="loading" class="detail-loading">
-        <span />
-        <span />
+      <div v-if="loadError" class="detail-error" role="alert">
+        <span>{{ t(detail && !isCurrentDetail ? 'coBuild.detailSwitchFailed' : 'coBuild.detailLoadFailed') }}</span>
+        <BButton type="text" :loading="loading" :disabled="saving || voting" @click="loadDetail()">{{
+          t('coBuild.retry')
+        }}</BButton>
       </div>
-
+      <div v-if="loading && !detail" class="detail-loading" role="status" :aria-label="t('common.loading')"
+        ><span /><span
+      /></div>
       <template v-else-if="detail">
-        <div class="detail-grid">
-          <div class="detail-main">
-            <BCard variant="raised" class="request-detail-card" padding="clamp(var(--ui-space-20, 20px), 3vw, var(--ui-space-38, 38px))">
+        <BCard class="reading-surface" padding="0" :aria-busy="loading">
+          <div class="reading-grid">
+            <article class="request-article">
               <div class="detail-meta">
-                <span class="source-pill" :class="`is-${detail.sourceType}`">
+                <span class="co-build-source" :class="{ 'is-official': detail.sourceType === 'official' }">
                   <SvgIcon
                     :src="detail.sourceType === 'official' ? icon.coBuild.official : icon.coBuild.board"
                     size="14"
                   />
                   {{ t(detail.sourceType === 'official' ? 'coBuild.sourceOfficial' : 'coBuild.sourceUser') }}
                 </span>
-                <span class="meta-pill">{{ t(`coBuild.category.${detail.category}`) }}</span>
-                <span class="progress-pill" :class="`is-${detail.progressStatus}`">
-                  {{ t(`coBuild.progress.${detail.progressStatus}`) }}
-                </span>
-                <span v-if="detail.moderationStatus !== 'published'" class="meta-pill">
-                  {{ t(`coBuild.moderation.${detail.moderationStatus}`) }}
-                </span>
+                <span class="co-build-category" :data-category="detail.category">{{
+                  t(`coBuild.category.${detail.category}`)
+                }}</span>
+                <span class="co-build-status" :class="`is-${detail.progressStatus}`">{{
+                  t(`coBuild.progress.${detail.progressStatus}`)
+                }}</span>
+                <span v-if="detail.moderationStatus !== 'published'" class="co-build-moderation">{{
+                  t(`coBuild.moderation.${detail.moderationStatus}`)
+                }}</span>
               </div>
-
               <h1>{{ detail.title }}</h1>
-              <div class="author-row">
-                <span>{{ authorName }}</span>
-                <span>·</span>
-                <span>{{ formatDate(detail.createTime) }}</span>
-              </div>
+              <div class="author-row"
+                ><span>{{ authorName }}</span
+                ><span aria-hidden="true">·</span
+                ><time :datetime="detail.createTime">{{ formatDate(detail.createTime) }}</time></div
+              >
               <p class="detail-content">{{ detail.content }}</p>
-
               <div v-if="detail.mergedTo" class="merged-banner">
                 <span>{{ t('coBuild.mergedInto', { title: detail.mergedTo.title }) }}</span>
-                <BButton size="small" @click="router.push(`/co-build/${detail.mergedTo.id}`)">
-                  {{ t('coBuild.openMerged') }}
-                </BButton>
+                <BButton :disabled="detailBusy" size="small" @click="router.push(`/co-build/${detail.mergedTo.id}`)">{{
+                  t('coBuild.openMerged')
+                }}</BButton>
               </div>
-
-              <div v-if="detail.developerReply" class="developer-reply">
-                <div class="reply-heading">
-                  <span class="reply-icon"><SvgIcon :src="icon.coBuild.official" size="16" /></span>
-                  <strong>{{ t('coBuild.developerReply') }}</strong>
-                </div>
+              <section v-if="detail.developerReply" class="developer-reply" :aria-label="t('coBuild.developerReply')">
+                <h2><SvgIcon :src="icon.coBuild.official" size="16" />{{ t('coBuild.developerReply') }}</h2>
                 <p>{{ detail.developerReply }}</p>
-              </div>
-
+              </section>
               <div class="detail-actions">
                 <BButton
                   v-if="detail.moderationStatus === 'published'"
+                  class="support-button"
                   :class="{ 'is-voted': Boolean(detail.viewerVoted) }"
+                  :aria-pressed="Boolean(detail.viewerVoted)"
+                  :loading="voting"
+                  :disabled="detailBusy"
                   @click="toggleVote"
                 >
-                  <SvgIcon :src="icon.coBuild.vote" size="16" />
-                  {{ t(Boolean(detail.viewerVoted) ? 'coBuild.voted' : 'coBuild.vote') }}
-                  · {{ detail.voteCount || 0 }}
+                  <SvgIcon :src="detail.viewerVoted ? icon.coBuild.vote : icon.coBuild.voteOutline" size="18" />
+                  {{ t(detail.viewerVoted ? 'coBuild.voted' : 'coBuild.vote') }} · {{ detail.voteCount || 0 }}
                 </BButton>
-                <BButton v-if="detail.releaseUrl" type="primary" @click="openReleaseUrl">
-                  {{ t('coBuild.releaseLink') }}
-                </BButton>
+                <BButton v-if="detail.releaseUrl" type="primary" :disabled="detailBusy" @click="openReleaseUrl">{{
+                  t('coBuild.releaseLink')
+                }}</BButton>
               </div>
-            </BCard>
-
-            <BCard
-              v-if="
-                detail.viewerIsOwner && !isRoot && ['pending_review', 'published'].includes(detail.moderationStatus)
-              "
-              class="addition-card"
-              :title="t('coBuild.addUpdate')"
-            >
-              <BInput
-                v-model:value="addition"
-                type="textarea"
-                :rows="4"
-                :maxlength="2000"
-                :placeholder="t('coBuild.addUpdatePlaceholder')"
-              />
-              <div class="panel-actions">
-                <BButton type="primary" :loading="saving" :disabled="addition.trim().length < 2" @click="saveAddition">
-                  {{ t('coBuild.addUpdate') }}
-                </BButton>
-              </div>
-            </BCard>
-
-            <BCard v-if="isRoot" class="admin-panel" :title="t('coBuild.adminPanel')">
-              <BTabs v-model:active-tab="adminTab" variant="segment" :options="adminTabOptions" />
-
-              <div v-if="adminTab === 'review'" class="admin-form">
-                <p>{{ t('coBuild.reviewHint') }}</p>
-                <BInput
-                  v-model:value="adminReply"
-                  type="textarea"
-                  :rows="4"
-                  :maxlength="4000"
-                  :placeholder="t('coBuild.replyPlaceholder')"
-                />
-                <div class="panel-actions panel-actions--wrap">
-                  <BButton type="primary" :loading="saving" @click="review('published')">{{
-                    t('coBuild.publish')
-                  }}</BButton>
-                  <BButton :loading="saving" @click="review('rejected')">{{ t('coBuild.reject') }}</BButton>
-                  <BButton type="danger" :loading="saving" @click="review('hidden')">{{ t('coBuild.hide') }}</BButton>
-                </div>
-              </div>
-
-              <div v-else-if="adminTab === 'reply'" class="admin-form">
-                <BInput
-                  v-model:value="adminReply"
-                  type="textarea"
-                  :rows="5"
-                  :maxlength="4000"
-                  :placeholder="t('coBuild.replyPlaceholder')"
-                />
-                <div class="panel-actions">
-                  <BButton type="primary" :loading="saving" :disabled="!adminReply.trim()" @click="saveReply">
-                    {{ t('coBuild.saveReply') }}
-                  </BButton>
-                </div>
-              </div>
-
-              <div v-else-if="adminTab === 'progress'" class="admin-form">
-                <BSelect v-model:value="progressDraft" :options="progressOptions" />
-                <BInput v-model:value="releaseUrl" :maxlength="500" :placeholder="t('coBuild.releaseUrl')" />
-                <div class="panel-actions">
-                  <BButton
-                    type="primary"
-                    :loading="saving"
-                    :disabled="detail.moderationStatus !== 'published'"
-                    @click="saveProgress"
-                  >
-                    {{ t('coBuild.saveProgress') }}
-                  </BButton>
-                </div>
-              </div>
-
-              <div v-else-if="adminTab === 'edit'" class="admin-form">
-                <BInput v-model:value="editDraft.title" :maxlength="160" :placeholder="t('coBuild.titlePlaceholder')" />
-                <BInput
-                  v-model:value="editDraft.content"
-                  type="textarea"
-                  :rows="6"
-                  :maxlength="6000"
-                  :placeholder="t('coBuild.contentPlaceholder')"
-                />
-                <BSelect v-model:value="editDraft.category" :options="categoryOptions" />
-                <div class="panel-actions">
-                  <BButton type="primary" :loading="saving" :disabled="!editValid" @click="saveEdit">
-                    {{ t('coBuild.saveEdit') }}
-                  </BButton>
-                </div>
-              </div>
-
-              <div v-else class="admin-form">
-                <BInput v-model:value="mergeTargetId" :placeholder="t('coBuild.mergeTarget')" />
-                <BInput
-                  v-model:value="mergeContent"
-                  type="textarea"
-                  :rows="3"
-                  :maxlength="2000"
-                  :placeholder="t('coBuild.mergeHint')"
-                />
-                <div class="panel-actions">
-                  <BButton
-                    type="danger"
-                    :loading="saving"
-                    :disabled="detail.moderationStatus !== 'published' || !mergeTargetId.trim()"
-                    @click="saveMerge"
-                  >
-                    {{ t('coBuild.confirmMerge') }}
-                  </BButton>
-                </div>
-              </div>
-            </BCard>
-          </div>
-
-          <aside class="timeline-column">
-            <BCard class="timeline-card" :title="t('coBuild.timeline')">
-              <div v-if="detail.updates?.length" class="timeline-list">
-                <div v-for="update in detail.updates" :key="update.id" class="timeline-item">
-                  <span class="timeline-dot" :class="{ 'is-developer': update.actorType === 'developer' }" />
+            </article>
+            <aside class="timeline-column" :aria-label="t('coBuild.timeline')">
+              <h2>{{ t('coBuild.timeline') }}</h2>
+              <ol v-if="detail.updates?.length" class="timeline-list">
+                <li
+                  v-for="update in detail.updates"
+                  :key="update.id"
+                  class="timeline-item"
+                  :class="{ 'is-developer': update.actorType === 'developer' }"
+                >
                   <div class="timeline-body">
-                    <div class="timeline-head">
-                      <strong>{{ timelineTitle(update) }}</strong>
-                      <div class="timeline-meta">
-                        <time>{{ formatDate(update.createTime) }}</time>
+                    <div class="timeline-meta">
+                      <time :datetime="update.createTime">{{ formatDate(update.createTime) }}</time>
+                      <BActionMenu
+                        v-if="isRoot && canDeleteTimelineUpdate(update)"
+                        :items="timelineActions"
+                        placement="bottom-right"
+                        :disabled="detailBusy || saving || Boolean(deletingUpdateId)"
+                        :aria-label="t('coBuild.timelineActions')"
+                        @select="confirmDeleteTimelineUpdate(update)"
+                      >
                         <BButton
                           icon-only
-                          v-if="isRoot && canDeleteTimelineUpdate(update)"
-                          class="timeline-delete"
-                          size="small"
+                          class="timeline-more"
+                          :disabled="detailBusy || saving"
                           :loading="deletingUpdateId === update.id"
-                          :title="t('coBuild.deleteTimeline')"
-                          @click="confirmDeleteTimelineUpdate(update)"
+                          :aria-label="t('coBuild.timelineActionsAt', { time: formatDate(update.createTime) })"
                         >
-                          <SvgIcon :src="icon.table_delete" size="13" />
+                          <SvgIcon :src="icon.common.more" size="16" />
                         </BButton>
-                      </div>
+                      </BActionMenu>
                     </div>
+                    <h3>{{ timelineTitle(update) }}</h3>
                     <p v-if="update.content">{{ update.content }}</p>
-                    <span v-if="update.toStatus" class="timeline-status">
-                      {{ statusLabel(update.toStatus) }}
-                    </span>
+                    <span v-if="update.toStatus" class="timeline-status">{{ statusLabel(update.toStatus) }}</span>
                   </div>
-                </div>
-              </div>
-              <div v-else class="timeline-empty">{{ t('coBuild.timelineEmpty') }}</div>
-            </BCard>
-          </aside>
-        </div>
-      </template>
+                </li>
+              </ol>
+              <p v-else class="timeline-empty">{{ t('coBuild.timelineEmpty') }}</p>
+            </aside>
+          </div>
+        </BCard>
 
-      <div v-else class="not-found">
-        <span><SvgIcon :src="icon.coBuild.board" size="32" /></span>
-        <strong>{{ t('coBuild.notFound') }}</strong>
-        <BButton @click="router.push('/co-build')">{{ t('coBuild.detailBack') }}</BButton>
-      </div>
+        <BCard
+          v-if="canAddUpdate && isCurrentDetail"
+          class="addition-panel"
+          :title="t('coBuild.addUpdate')"
+          :padding="bookmark.isMobile ? 'var(--ui-space-16, 16px)' : 'var(--ui-space-24, 24px)'"
+        >
+          <BInput
+            v-model:value="addition"
+            type="textarea"
+            :rows="4"
+            :maxlength="2000"
+            :disabled="saving || detailBusy"
+            :aria-label="t('coBuild.addUpdate')"
+            :placeholder="t('coBuild.addUpdatePlaceholder')"
+          />
+          <div class="panel-actions"
+            ><BButton
+              type="primary"
+              :loading="saving"
+              :disabled="detailBusy || addition.trim().length < 2"
+              @click="saveAddition"
+              >{{ t('coBuild.addUpdate') }}</BButton
+            ></div
+          >
+        </BCard>
+
+        <BCard
+          v-if="isRoot && isCurrentDetail"
+          class="admin-panel"
+          :padding="bookmark.isMobile ? 'var(--ui-space-16, 16px)' : 'var(--ui-space-24, 24px)'"
+        >
+          <div class="admin-heading">
+            <h2><SvgIcon :src="icon.coBuild.official" size="19" />{{ t('coBuild.adminPanel') }}</h2>
+            <div class="admin-heading-actions">
+              <span>{{ t('coBuild.developerOnly') }}</span>
+              <BButton
+                type="text"
+                :aria-expanded="adminExpanded"
+                aria-controls="co-build-admin-body"
+                @click="adminExpanded = !adminExpanded"
+              >
+                {{ t(adminExpanded ? 'coBuild.collapse' : 'coBuild.expand') }}
+                <SvgIcon
+                  :src="icon.noteTree.chevron"
+                  size="14"
+                  class="collapse-icon"
+                  :class="{ 'is-open': adminExpanded }"
+                />
+              </BButton>
+            </div>
+          </div>
+          <div v-show="adminExpanded" id="co-build-admin-body" class="admin-body">
+            <BTabs v-model:active-tab="adminTab" variant="line" :options="adminTabOptions" />
+            <div v-if="adminTab === 'review'" class="admin-form">
+              <p>{{ t('coBuild.reviewHint') }}</p>
+              <BInput
+                v-model:value="adminReply"
+                type="textarea"
+                :rows="4"
+                :maxlength="4000"
+                :disabled="saving || detailBusy"
+                :aria-label="t('coBuild.reply')"
+                :placeholder="t('coBuild.replyPlaceholder')"
+              />
+              <div class="panel-actions panel-actions--wrap">
+                <BButton type="primary" :loading="saving" :disabled="detailBusy" @click="review('published')">{{
+                  t('coBuild.publish')
+                }}</BButton>
+                <BButton :disabled="saving || detailBusy" @click="review('rejected')">{{
+                  t('coBuild.reject')
+                }}</BButton>
+                <BButton type="danger" :disabled="saving || detailBusy" @click="review('hidden')">{{
+                  t('coBuild.hide')
+                }}</BButton>
+              </div>
+            </div>
+            <div v-else-if="adminTab === 'reply'" class="admin-form">
+              <BInput
+                v-model:value="adminReply"
+                type="textarea"
+                :rows="5"
+                :maxlength="4000"
+                :disabled="saving || detailBusy"
+                :aria-label="t('coBuild.reply')"
+                :placeholder="t('coBuild.replyPlaceholder')"
+              />
+              <div class="panel-actions"
+                ><BButton
+                  type="primary"
+                  :loading="saving"
+                  :disabled="detailBusy || !adminReply.trim()"
+                  @click="saveReply"
+                  >{{ t('coBuild.saveReply') }}</BButton
+                ></div
+              >
+            </div>
+            <div v-else-if="adminTab === 'progress'" class="admin-form progress-form">
+              <label class="form-field"
+                ><span>{{ t('coBuild.progressLabel') }}</span
+                ><BSelect
+                  v-model:value="progressDraft"
+                  :options="progressOptions"
+                  :disabled="saving || detailBusy"
+                  :aria-label="t('coBuild.progressLabel')"
+              /></label>
+              <label class="form-field"
+                ><span>{{ t('coBuild.releaseUrl') }}</span
+                ><BInput
+                  v-model:value="releaseUrl"
+                  :maxlength="500"
+                  :disabled="saving || detailBusy"
+                  :aria-label="t('coBuild.releaseUrl')"
+                  :placeholder="t('coBuild.releaseUrlPlaceholder')"
+              /></label>
+              <BButton
+                type="primary"
+                :loading="saving"
+                :disabled="detailBusy || detail.moderationStatus !== 'published'"
+                @click="saveProgress"
+                >{{ t('coBuild.saveProgress') }}</BButton
+              >
+            </div>
+            <div v-else-if="adminTab === 'edit'" class="admin-form">
+              <BInput
+                v-model:value="editDraft.title"
+                :maxlength="160"
+                :disabled="saving || detailBusy"
+                :aria-label="t('coBuild.titleLabel')"
+                :placeholder="t('coBuild.titlePlaceholder')"
+              />
+              <BInput
+                v-model:value="editDraft.content"
+                type="textarea"
+                :rows="6"
+                :maxlength="6000"
+                :disabled="saving || detailBusy"
+                :aria-label="t('coBuild.contentLabel')"
+                :placeholder="t('coBuild.contentPlaceholder')"
+              />
+              <BSelect
+                v-model:value="editDraft.category"
+                :options="categoryOptions"
+                :disabled="saving || detailBusy"
+                :aria-label="t('coBuild.categoryLabel')"
+              />
+              <div class="panel-actions"
+                ><BButton type="primary" :loading="saving" :disabled="detailBusy || !editValid" @click="saveEdit">{{
+                  t('coBuild.saveEdit')
+                }}</BButton></div
+              >
+            </div>
+            <div v-else class="admin-form">
+              <BInput
+                v-model:value="mergeTargetId"
+                :disabled="saving || detailBusy"
+                :aria-label="t('coBuild.mergeTarget')"
+                :placeholder="t('coBuild.mergeTarget')"
+              />
+              <BInput
+                v-model:value="mergeContent"
+                type="textarea"
+                :rows="3"
+                :maxlength="2000"
+                :disabled="saving || detailBusy"
+                :aria-label="t('coBuild.mergeHint')"
+                :placeholder="t('coBuild.mergeHint')"
+              />
+              <div class="panel-actions"
+                ><BButton
+                  type="danger"
+                  :loading="saving"
+                  :disabled="detailBusy || detail.moderationStatus !== 'published' || !mergeTargetId.trim()"
+                  @click="saveMerge"
+                  >{{ t('coBuild.confirmMerge') }}</BButton
+                ></div
+              >
+            </div>
+          </div>
+        </BCard>
+      </template>
+      <div v-else-if="!loadError" class="not-found"
+        ><SvgIcon :src="icon.coBuild.board" size="32" /><h1>{{ t('coBuild.notFound') }}</h1
+        ><BButton @click="goBack">{{ t('coBuild.detailBack') }}</BButton></div
+      >
     </main>
   </div>
 </template>
 
 <script setup lang="ts">
-  import { computed, onMounted, reactive, ref, watch } from 'vue';
+  import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useRoute, useRouter } from 'vue-router';
+  import { useMobileTopBar } from '@/composables/useMobileTopBar';
+  import { useDensityScrollAnchor } from '@/composables/useDensityScrollAnchor';
+  import { returnToPreviousPage } from '@/utils/pageReturn';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BCard from '@/components/base/BasicComponents/BCard.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import BSelect from '@/components/base/BasicComponents/BSelect.vue';
   import BTabs from '@/components/base/BasicComponents/BTabs.vue';
+  import BActionMenu from '@/components/base/BasicComponents/BActionMenu.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
   import Alert from '@/components/base/BasicComponents/BModal/Alert';
@@ -261,18 +348,24 @@
   import { recordOperation } from '@/api/commonApi';
 
   type AdminTab = 'review' | 'reply' | 'progress' | 'edit' | 'merge';
-
   const { t, locale } = useI18n();
   const route = useRoute();
   const router = useRouter();
+  const goBack = () => returnToPreviousPage(router, '/co-build');
+  useMobileTopBar(['coBuildDetail'], { ownTopBar: true, onBack: goBack });
   const user = useUserStore();
   const bookmark = bookmarkStore();
+  const pageRef = ref<HTMLElement | null>(null);
+  useDensityScrollAnchor(pageRef);
   const loading = ref(true);
+  const loadError = ref(false);
   const saving = ref(false);
+  const voting = ref(false);
   const deletingUpdateId = ref('');
   const detail = ref<FeatureRequestDetail | null>(null);
   const addition = ref('');
   const adminTab = ref<AdminTab>('review');
+  const adminExpanded = ref(true);
   const adminReply = ref('');
   const progressDraft = ref<FeatureRequestProgressStatus>('evaluating');
   const releaseUrl = ref('');
@@ -284,19 +377,33 @@
     category: 'experience' as FeatureRequestCategory,
     showIdentity: true,
   });
-
+  let loadGeneration = 0;
+  let actionGeneration = 0;
   const isRoot = computed(() => user.role === 'root');
-  const authorName = computed(() => {
-    if (!detail.value) return '';
-    if (detail.value.sourceType === 'official') return t('coBuild.teamName');
-    return detail.value.submitterAlias || t('coBuild.anonymous');
-  });
+  const isCurrentDetail = computed(() => detail.value?.id === String(route.params.id || ''));
+  const detailBusy = computed(() => loading.value || saving.value || voting.value || !isCurrentDetail.value);
+  const canAddUpdate = computed(
+    () =>
+      detail.value?.viewerIsOwner &&
+      !isRoot.value &&
+      ['pending_review', 'published'].includes(detail.value.moderationStatus),
+  );
+  const authorName = computed(() =>
+    !detail.value
+      ? ''
+      : detail.value.sourceType === 'official'
+        ? t('coBuild.teamName')
+        : detail.value.submitterAlias || t('coBuild.anonymous'),
+  );
   const adminTabOptions = computed(() => [
     { key: 'review', label: t('coBuild.review') },
     { key: 'reply', label: t('coBuild.reply') },
     { key: 'progress', label: t('coBuild.updateProgress') },
     { key: 'edit', label: t('common.edit') },
     { key: 'merge', label: t('coBuild.merge') },
+  ]);
+  const timelineActions = computed(() => [
+    { key: 'delete', label: t('coBuild.deleteTimeline'), icon: icon.table_delete, danger: true },
   ]);
   const categoryKeys: FeatureRequestCategory[] = ['bookmark', 'note', 'cloud', 'tag', 'ai', 'experience', 'other'];
   const categoryOptions = computed(() =>
@@ -308,255 +415,316 @@
   );
   const editValid = computed(() => editDraft.title.trim().length >= 4 && editDraft.content.trim().length >= 10);
 
-  async function loadDetail() {
+  function syncDrafts(value: FeatureRequestDetail) {
+    progressDraft.value = value.progressStatus;
+    releaseUrl.value = value.releaseUrl || '';
+    Object.assign(editDraft, {
+      title: value.title,
+      content: value.content,
+      category: value.category,
+      showIdentity: Boolean(value.showIdentity),
+    });
+    adminReply.value = value.developerReply || '';
+  }
+  async function loadDetail(newTarget = false) {
+    const generation = ++loadGeneration;
+    const id = String(route.params.id || '');
+    const account = user.id;
+    const role = user.role;
+    const isCurrent = () =>
+      generation === loadGeneration &&
+      id === String(route.params.id || '') &&
+      account === user.id &&
+      role === user.role;
     loading.value = true;
+    loadError.value = false;
     try {
-      const res = await getFeatureRequestDetail(String(route.params.id || ''));
+      const res = await getFeatureRequestDetail(id);
+      if (!isCurrent()) return;
       if (res?.status !== 200) {
-        detail.value = null;
+        if ([403, 404].includes(res?.status)) detail.value = null;
+        else loadError.value = true;
         return;
       }
+      const replacingTarget = detail.value?.id !== id;
       detail.value = res.data as FeatureRequestDetail;
-      progressDraft.value = detail.value.progressStatus;
-      releaseUrl.value = detail.value.releaseUrl || '';
-      editDraft.title = detail.value.title;
-      editDraft.content = detail.value.content;
-      editDraft.category = detail.value.category;
-      editDraft.showIdentity = Boolean(detail.value.showIdentity);
-      adminReply.value = detail.value.developerReply || '';
-    } catch {
-      detail.value = null;
+      syncDrafts(detail.value);
+      if (newTarget || replacingTarget)
+        adminTab.value = detail.value.moderationStatus === 'published' ? 'progress' : 'review';
+    } catch (error) {
+      if (!isCurrent()) return;
+      const status =
+        (error as { status?: number; response?: { status?: number } })?.status ||
+        (error as { response?: { status?: number } })?.response?.status;
+      if (status === 403 || status === 404) detail.value = null;
+      else loadError.value = true;
     } finally {
-      loading.value = false;
+      if (isCurrent()) loading.value = false;
     }
   }
-
   function requireLogin() {
     if (user.role !== 'visitor') return false;
     bookmark.openAuthModal('注册', 'co_build_vote');
     return true;
   }
   async function toggleVote() {
-    if (!detail.value || requireLogin()) return;
+    if (!detail.value || detailBusy.value || voting.value || requireLogin()) return;
+    const target = detail.value;
+    const account = user.id;
+    const generation = actionGeneration;
+    voting.value = true;
     try {
-      const res = await toggleFeatureRequestVote(detail.value.id);
-      if (res?.status !== 200) return;
+      const res = await toggleFeatureRequestVote(target.id);
+      if (
+        res?.status !== 200 ||
+        target.id !== detail.value?.id ||
+        account !== user.id ||
+        generation !== actionGeneration
+      )
+        return;
       detail.value.viewerVoted = Boolean(res.data?.voted);
       detail.value.voteCount = Number(res.data?.voteCount || 0);
       recordOperation({
         module: '共建轻笺',
-        operation: `${detail.value.viewerVoted ? '支持需求' : '取消支持需求'}【${detail.value.title.slice(0, 40)}】`,
+        operation: `${res.data?.voted ? '支持需求' : '取消支持需求'}【${target.title.slice(0, 40)}】`,
       });
-    } catch (error) {
-      console.error('更新建议投票失败:', error);
+    } catch {
+      /* The request layer presents write failures. */
+    } finally {
+      if (generation === actionGeneration && target.id === detail.value?.id && account === user.id)
+        voting.value = false;
     }
   }
-  async function runAdminAction(action: () => Promise<any>, operation: string) {
-    if (saving.value) return;
+  async function runAdminAction(id: string, action: () => Promise<unknown>, operation: string) {
+    if (!isRoot.value || saving.value || detailBusy.value || detail.value?.id !== id) return;
+    const generation = ++actionGeneration;
+    const account = user.id;
+    const title = detail.value.title;
     saving.value = true;
     try {
-      const res = await action();
-      if (res?.status !== 200) return;
+      const res = (await action()) as { status?: number };
+      if (res?.status !== 200 || generation !== actionGeneration || account !== user.id || detail.value?.id !== id)
+        return;
       message.success(t('coBuild.adminSaved'));
-      recordOperation({
-        module: '共建轻笺',
-        operation: `${operation}【${String(detail.value?.title || detail.value?.id || '').slice(0, 40)}】`,
-      });
+      recordOperation({ module: '共建轻笺', operation: `${operation}【${title.slice(0, 40)}】` });
       await loadDetail();
-    } catch (error) {
-      console.error('处理共建建议失败:', error);
+    } catch {
+      /* The request layer presents write failures. */
     } finally {
-      saving.value = false;
+      if (generation === actionGeneration) saving.value = false;
     }
   }
-  async function review(status: FeatureRequestModerationStatus) {
+  function review(status: FeatureRequestModerationStatus) {
     if (!detail.value) return;
-    await runAdminAction(
-      () => reviewFeatureRequest(detail.value!.id, status, adminReply.value.trim()),
-      `审核建议为${status}`,
-    );
+    const id = detail.value.id,
+      reply = adminReply.value.trim();
+    return runAdminAction(id, () => reviewFeatureRequest(id, status, reply), `审核建议为${status}`);
   }
-  async function saveReply() {
+  function saveReply() {
     if (!detail.value || !adminReply.value.trim()) return;
-    await runAdminAction(() => replyFeatureRequest(detail.value!.id, adminReply.value.trim()), '回复产品建议');
+    const id = detail.value.id,
+      content = adminReply.value.trim();
+    return runAdminAction(id, () => replyFeatureRequest(id, content), '回复产品建议');
   }
-  async function saveProgress() {
-    if (!detail.value) return;
-    await runAdminAction(
-      () => updateFeatureRequestProgress(detail.value!.id, progressDraft.value, releaseUrl.value.trim()),
-      `更新建议进度为${progressDraft.value}`,
-    );
+  function saveProgress() {
+    if (!detail.value || detail.value.moderationStatus !== 'published') return;
+    const id = detail.value.id,
+      progress = progressDraft.value,
+      url = releaseUrl.value.trim();
+    return runAdminAction(id, () => updateFeatureRequestProgress(id, progress, url), `更新建议进度为${progress}`);
   }
-  async function saveEdit() {
+  function saveEdit() {
     if (!detail.value || !editValid.value) return;
-    await runAdminAction(() => editFeatureRequest(detail.value!.id, { ...editDraft }), '编辑建议公开内容');
+    const id = detail.value.id,
+      draft = { ...editDraft };
+    return runAdminAction(id, () => editFeatureRequest(id, draft), '编辑建议公开内容');
   }
-  async function saveMerge() {
-    if (!detail.value || !mergeTargetId.value.trim()) return;
+  function saveMerge() {
+    if (
+      !detail.value ||
+      detailBusy.value ||
+      detail.value.moderationStatus !== 'published' ||
+      !mergeTargetId.value.trim()
+    )
+      return;
+    const id = detail.value.id,
+      target = mergeTargetId.value.trim(),
+      content = mergeContent.value.trim();
+    const context = actionGeneration;
     Alert.alert({
       title: t('coBuild.mergeConfirmTitle'),
       content: t('coBuild.mergeConfirmContent'),
       okText: t('coBuild.confirmMerge'),
       onOk: () =>
-        runAdminAction(
-          () => mergeFeatureRequest(detail.value!.id, mergeTargetId.value.trim(), mergeContent.value.trim()),
-          '合并产品建议',
-        ),
+        context === actionGeneration
+          ? runAdminAction(id, () => mergeFeatureRequest(id, target, content), '合并产品建议')
+          : undefined,
     });
   }
   async function saveAddition() {
-    if (!detail.value || addition.value.trim().length < 2 || saving.value) return;
+    if (!detail.value || !canAddUpdate.value || detailBusy.value || addition.value.trim().length < 2 || saving.value)
+      return;
+    const id = detail.value.id,
+      content = addition.value.trim(),
+      account = user.id;
+    const generation = ++actionGeneration;
     saving.value = true;
     try {
-      const res = await addFeatureRequestUpdate(detail.value.id, addition.value.trim());
-      if (res?.status !== 200) return;
+      const res = await addFeatureRequestUpdate(id, content);
+      if (res?.status !== 200 || generation !== actionGeneration || detail.value?.id !== id || account !== user.id)
+        return;
       addition.value = '';
       message.success(t('coBuild.updateAdded'));
       recordOperation({ module: '共建轻笺', operation: `补充产品建议【${detail.value.title.slice(0, 40)}】` });
       await loadDetail();
-    } catch (error) {
-      console.error('补充建议说明失败:', error);
+    } catch {
+      /* The request layer presents write failures. */
     } finally {
-      saving.value = false;
+      if (generation === actionGeneration) saving.value = false;
     }
   }
   function canDeleteTimelineUpdate(update: FeatureRequestUpdate) {
     return !['submitted', 'official_created'].includes(update.type);
   }
   function confirmDeleteTimelineUpdate(update: FeatureRequestUpdate) {
-    if (!detail.value || !isRoot.value || !canDeleteTimelineUpdate(update) || deletingUpdateId.value) return;
+    if (
+      !detail.value ||
+      !isRoot.value ||
+      detailBusy.value ||
+      !canDeleteTimelineUpdate(update) ||
+      deletingUpdateId.value ||
+      saving.value
+    )
+      return;
+    const id = detail.value.id;
+    const context = actionGeneration;
     Alert.alert({
       title: t('coBuild.deleteTimelineTitle'),
       content: t('coBuild.deleteTimelineConfirm'),
       okText: t('common.delete'),
-      onOk: () => removeTimelineUpdate(update),
+      onOk: async () => {
+        if (context !== actionGeneration || detail.value?.id !== id || detailBusy.value || !isRoot.value) return;
+        deletingUpdateId.value = update.id;
+        try {
+          await runAdminAction(id, () => deleteFeatureRequestUpdate(id, update.id), '删除共建进度记录');
+        } finally {
+          if (detail.value?.id === id) deletingUpdateId.value = '';
+        }
+      },
     });
   }
-  async function removeTimelineUpdate(update: FeatureRequestUpdate) {
-    if (!detail.value || deletingUpdateId.value) return;
-    deletingUpdateId.value = update.id;
-    try {
-      const res = await deleteFeatureRequestUpdate(detail.value.id, update.id);
-      if (res?.status !== 200) return;
-      message.success(t('coBuild.timelineDeleted'));
-      recordOperation({ module: '共建轻笺', operation: `删除进度记录【${timelineTitle(update)}】` });
-      await loadDetail();
-    } catch (error) {
-      console.error('删除共建进度记录失败:', error);
-    } finally {
-      deletingUpdateId.value = '';
-    }
-  }
   function openReleaseUrl() {
-    if (!detail.value?.releaseUrl) return;
-    if (detail.value.releaseUrl.startsWith('/')) {
-      router.push(detail.value.releaseUrl);
-    } else {
-      window.open(detail.value.releaseUrl, '_blank', 'noopener,noreferrer');
-    }
+    if (!detail.value?.releaseUrl || detailBusy.value) return;
+    const url = detail.value.releaseUrl;
+    if (url.startsWith('/')) void router.push(url);
+    else window.open(url, '_blank', 'noopener,noreferrer');
   }
   function formatDate(value: string) {
     if (!value) return '--';
     const date = new Date(value.replace(' ', 'T'));
-    if (Number.isNaN(date.getTime())) return value;
-    return new Intl.DateTimeFormat(locale.value, { year: 'numeric', month: 'short', day: 'numeric' }).format(date);
+    return Number.isNaN(date.getTime())
+      ? value
+      : new Intl.DateTimeFormat(locale.value, { year: 'numeric', month: 'short', day: 'numeric' }).format(date);
   }
   function timelineTitle(update: FeatureRequestUpdate) {
-    const key = `coBuild.timelineType.${update.type}`;
-    const translated = t(key);
+    const key = `coBuild.timelineType.${update.type}`,
+      translated = t(key);
     return translated === key ? t('coBuild.timelineType.status_change') : translated;
   }
   function statusLabel(status: string) {
-    if (['evaluating', 'planned', 'in_progress', 'released', 'declined'].includes(status)) {
-      return t(`coBuild.progress.${status}`);
-    }
-    return t(`coBuild.moderation.${status}`);
+    return t(
+      `${progressKeys.includes(status as FeatureRequestProgressStatus) ? 'coBuild.progress' : 'coBuild.moderation'}.${status}`,
+    );
   }
-
-  watch(() => route.params.id, loadDetail);
+  function resetTarget() {
+    ++actionGeneration;
+    saving.value = false;
+    voting.value = false;
+    deletingUpdateId.value = '';
+    addition.value = '';
+    mergeTargetId.value = '';
+    mergeContent.value = '';
+    adminReply.value = '';
+    adminExpanded.value = true;
+    void loadDetail(true);
+  }
+  watch(() => route.params.id, resetTarget);
+  watch(
+    () => [user.id, user.role],
+    () => {
+      detail.value = null;
+      resetTarget();
+    },
+  );
   onMounted(() => {
-    loadDetail();
+    void loadDetail(true);
     recordOperation({ module: '共建轻笺', operation: '查看建议详情' });
+  });
+  onBeforeUnmount(() => {
+    ++loadGeneration;
+    ++actionGeneration;
   });
 </script>
 
 <style scoped lang="less">
-  .detail-page {
+  @import (reference) '@/assets/css/workspace-surfaces.less';
+  @import (reference) './coBuildShared.less';
+  .co-build-detail {
+    .workspace-canvas-surface();
+    .co-build-semantics();
     height: 100%;
     overflow: auto;
-    color: var(--text-color);
-    background: var(--surface-page-bg);
+    color: var(--workspace-text);
   }
   .detail-shell {
-    min-height: 100%;
+    width: 100%;
+    max-width: calc(var(--ui-layout-1200, 1200px) + 2 * var(--ui-space-24, 24px));
+    padding: var(--ui-space-24, 24px) var(--ui-space-24, 24px) var(--ui-space-48, 48px);
+    margin: 0 auto;
     box-sizing: border-box;
-    padding: var(--ui-space-24, 24px) clamp(var(--ui-space-24, 24px), 3.2vw, var(--ui-space-76, 76px)) var(--ui-space-48, 48px);
   }
   .back-button {
-    gap: var(--ui-space-6, 6px);
-    margin-bottom: var(--ui-space-18, 18px);
+    gap: var(--ui-space-8, 8px);
+    margin-bottom: var(--ui-space-20, 20px);
+    color: var(--workspace-muted);
   }
-  .detail-grid {
+  .reading-surface,
+  .admin-panel,
+  .addition-panel {
+    .workspace-content-surface();
+    border: 1px solid var(--workspace-border);
+    border-radius: 14px;
+    box-shadow: none;
+  }
+  .reading-grid {
     display: grid;
-    grid-template-columns: minmax(0, 2.25fr) minmax(var(--ui-layout-300, 300px), 0.85fr);
-    gap: var(--ui-space-18, 18px);
-    align-items: start;
+    grid-template-columns: minmax(0, 1fr) var(--ui-layout-340, 340px);
   }
-  .detail-main {
-    display: grid;
-    gap: var(--ui-space-18, 18px);
+  .request-article {
+    min-width: 0;
+    padding: var(--ui-space-32, 32px);
   }
-  .request-detail-card h1 {
-    max-width: var(--ui-layout-1000, 1000px);
-    margin: var(--ui-space-22, 22px) 0 var(--ui-space-9, 9px);
-    font-size: clamp(var(--ui-font-28, 28px), 3vw, var(--ui-font-44, 44px));
-    line-height: 1.22;
-    letter-spacing: -0.035em;
-  }
-  .detail-meta,
-  .detail-actions,
-  .panel-actions {
+  .detail-meta {
     display: flex;
-    align-items: center;
-    gap: var(--ui-space-9, 9px);
     flex-wrap: wrap;
-  }
-  .source-pill,
-  .meta-pill,
-  .progress-pill,
-  .timeline-status {
-    display: inline-flex;
     align-items: center;
-    gap: var(--ui-space-5, 5px);
-    padding: var(--ui-space-5, 5px) var(--ui-space-9, 9px);
-    border-radius: 999px;
-    color: var(--desc-color);
-    background: var(--surface-panel-bg);
-    font-size: var(--ui-font-11, 11px);
+    gap: var(--ui-space-8, 8px) var(--ui-space-12, 12px);
   }
-  .source-pill.is-official {
-    color: #8a5a00;
-    background: color-mix(in srgb, #f5a623 15%, var(--card-background));
-  }
-  .source-pill.is-user,
-  .progress-pill {
-    color: var(--primary-color);
-    background: color-mix(in srgb, var(--primary-color) 10%, var(--card-background));
-  }
-  .progress-pill.is-released {
-    color: #07845d;
-    background: color-mix(in srgb, #10b981 12%, var(--card-background));
+  .request-article h1 {
+    margin: var(--ui-space-18, 18px) 0 var(--ui-space-12, 12px);
+    font-size: var(--ui-font-28, 28px);
+    line-height: 1.4;
+    overflow-wrap: anywhere;
   }
   .author-row {
     display: flex;
+    flex-wrap: wrap;
     gap: var(--ui-space-8, 8px);
-    color: var(--desc-color);
-    font-size: var(--ui-font-12, 12px);
+    font-size: var(--ui-font-13, 13px);
+    color: var(--workspace-muted);
   }
   .detail-content {
-    max-width: var(--ui-layout-1050, 1050px);
-    margin: var(--ui-space-30, 30px) 0 0;
-    color: var(--text-color);
+    margin: var(--ui-space-28, 28px) 0 0;
     font-size: var(--ui-font-15, 15px);
     line-height: 1.9;
     white-space: pre-wrap;
@@ -564,219 +732,334 @@
   }
   .developer-reply,
   .merged-banner {
-    margin-top: var(--ui-space-28, 28px);
+    margin-top: var(--ui-space-24, 24px);
     padding: var(--ui-space-16, 16px) var(--ui-space-18, 18px);
-    border: 1px solid color-mix(in srgb, var(--primary-color) 20%, var(--surface-border-color));
-    border-radius: 14px;
-    background: color-mix(in srgb, var(--primary-color) 6%, var(--surface-panel-bg));
+    border: 1px solid var(--workspace-border);
+    border-radius: 10px;
+    background: var(--workspace-purple-selected);
   }
-  .merged-banner {
+  .developer-reply h2 {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    gap: var(--ui-space-12, 12px);
+    gap: var(--ui-space-8, 8px);
+    margin: 0;
+    color: var(--workspace-purple-text);
+    font-size: var(--ui-font-14, 14px);
   }
-  .reply-heading {
-    display: flex;
-    align-items: center;
-    gap: var(--ui-space-9, 9px);
-    color: var(--primary-color);
-  }
-  .reply-icon {
-    display: inline-flex;
+  .developer-reply h2 > :first-child {
+    color: var(--warning-color);
   }
   .developer-reply p {
     margin: var(--ui-space-10, 10px) 0 0;
-    line-height: 1.75;
+    font-size: var(--ui-font-14, 14px);
+    line-height: 1.8;
     white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+  .merged-banner {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--ui-space-12, 12px);
+    font-size: var(--ui-font-14, 14px);
+    line-height: 1.6;
+    overflow-wrap: anywhere;
   }
   .detail-actions {
-    margin-top: var(--ui-space-28, 28px);
-  }
-  .detail-actions :deep(.b_btn) {
-    gap: var(--ui-space-7, 7px);
-  }
-  .detail-actions .is-voted {
-    color: var(--primary-color);
-    background: color-mix(in srgb, var(--primary-color) 12%, var(--card-background));
-  }
-  .addition-card,
-  .admin-panel,
-  .timeline-card {
-    --b-card-background: var(--card-background);
-  }
-  .addition-card :deep(.card-container-header),
-  .admin-panel :deep(.card-container-header),
-  .timeline-card :deep(.card-container-header) {
-    margin-bottom: var(--ui-space-16, 16px);
-  }
-  .panel-actions {
-    justify-content: flex-end;
-    margin-top: var(--ui-space-12, 12px);
-  }
-  .admin-form {
-    display: grid;
+    display: flex;
+    flex-wrap: wrap;
     gap: var(--ui-space-12, 12px);
-    margin-top: var(--ui-space-18, 18px);
+    margin-top: var(--ui-space-20, 20px);
   }
-  .admin-form > p {
-    margin: 0;
-    color: var(--desc-color);
-    font-size: var(--ui-font-12, 12px);
+  .detail-actions .b_btn {
+    gap: var(--ui-space-6, 6px);
   }
-  .admin-form :deep(.b-input),
-  .admin-form :deep(.select-trigger),
-  .addition-card :deep(.b-textarea) {
-    border: 1px solid var(--surface-border-color) !important;
-    background: var(--surface-panel-bg) !important;
+  .support-button {
+    border: 1px solid var(--workspace-border);
+    background: var(--workspace-content);
   }
-  :deep(.b-textarea) {
-    resize: vertical;
-    font-family: inherit;
-    line-height: 1.65;
+  .support-button.is-voted {
+    color: var(--workspace-purple-text);
+    border-color: var(--workspace-purple-text);
+    background: var(--workspace-purple-selected);
   }
   .timeline-column {
-    position: sticky;
-    top: var(--ui-space-18, 18px);
+    min-width: 0;
+    padding: var(--ui-space-28, 28px) var(--ui-space-24, 24px);
+    border-inline-start: 1px solid var(--workspace-divider);
+  }
+  .timeline-column > h2 {
+    margin: 0 0 var(--ui-space-24, 24px);
+    font-size: var(--ui-font-17, 17px);
   }
   .timeline-list {
-    display: grid;
+    list-style: none;
+    padding: 0;
+    margin: 0;
   }
   .timeline-item {
     position: relative;
-    display: grid;
-    grid-template-columns: var(--ui-layout-18, 18px) minmax(0, 1fr);
-    gap: var(--ui-space-10, 10px);
-    padding-bottom: var(--ui-space-24, 24px);
+    padding: 0 0 var(--ui-space-24, 24px) var(--ui-space-24, 24px);
   }
-  .timeline-item:not(:last-child)::before {
+  .timeline-item:last-child {
+    padding-bottom: 0;
+  }
+  .timeline-item::before {
     content: '';
     position: absolute;
-    left: 6px;
-    top: 13px;
+    top: var(--ui-space-6, 6px);
     bottom: 0;
-    width: 1px;
-    background: var(--surface-border-color);
+    inset-inline-start: var(--ui-space-4, 4px);
+    border-inline-start: 1px solid var(--workspace-border);
   }
-  .timeline-dot {
-    position: relative;
-    z-index: 1;
-    width: 11px;
-    height: 11px;
-    margin-top: var(--ui-space-3, 3px);
-    border: 3px solid var(--card-background);
+  .timeline-item:last-child::before {
+    display: none;
+  }
+  .timeline-item::after {
+    content: '';
+    position: absolute;
+    top: var(--ui-space-6, 6px);
+    inset-inline-start: 0;
+    width: var(--ui-layout-9, 9px);
+    height: var(--ui-layout-9, 9px);
     border-radius: 50%;
     background: var(--desc-color);
-    box-shadow: 0 0 0 1px var(--surface-border-color);
   }
-  .timeline-dot.is-developer {
-    background: var(--primary-color);
-  }
-  .timeline-body {
-    min-width: 0;
-  }
-  .timeline-head {
-    display: flex;
-    justify-content: space-between;
-    gap: var(--ui-space-10, 10px);
-  }
-  .timeline-head strong {
-    font-size: var(--ui-font-13, 13px);
-  }
-  .timeline-head time {
-    color: var(--desc-color);
-    font-size: var(--ui-font-10, 10px);
-    white-space: nowrap;
+  .timeline-item.is-developer::after {
+    background: var(--workspace-purple-text);
   }
   .timeline-meta {
     display: flex;
     align-items: center;
-    gap: var(--ui-space-5, 5px);
+    justify-content: space-between;
+    gap: var(--ui-space-8, 8px);
+    min-height: var(--ui-layout-24, 24px);
+    color: var(--workspace-muted);
+    font-size: var(--ui-font-12, 12px);
   }
-  .timeline-delete {
-    width: var(--ui-control-24, 24px);
-    min-width: var(--ui-control-24, 24px);
-    height: var(--ui-control-24, 24px);
-    padding: 0;
-    border-radius: 7px;
-    color: var(--desc-color);
-    background: transparent;
-  }
-  .timeline-delete:hover {
-    color: #fe2c55;
-    background: rgba(254, 44, 85, 0.1);
+  .timeline-body h3 {
+    margin: var(--ui-space-4, 4px) 0 var(--ui-space-6, 6px);
+    font-size: var(--ui-font-14, 14px);
+    line-height: 1.5;
   }
   .timeline-body p {
-    margin: var(--ui-space-7, 7px) 0 var(--ui-space-8, 8px);
-    color: var(--desc-color);
-    font-size: var(--ui-font-12, 12px);
-    line-height: 1.65;
-    white-space: pre-wrap;
+    margin: 0 0 var(--ui-space-8, 8px);
+    font-size: var(--ui-font-13, 13px);
+    color: var(--workspace-muted);
+    line-height: 1.7;
     overflow-wrap: anywhere;
+    white-space: pre-wrap;
   }
   .timeline-status {
-    padding: var(--ui-space-3, 3px) var(--ui-space-7, 7px);
+    display: inline-block;
+    padding: var(--ui-space-2, 2px) var(--ui-space-8, 8px);
+    border: 1px solid var(--workspace-border);
+    border-radius: 5px;
+    color: var(--workspace-purple-text);
+    font-size: var(--ui-font-12, 12px);
+  }
+  .timeline-more.b_btn {
+    width: var(--ui-control-28, 28px);
+    height: var(--ui-control-28, 28px);
+    padding: 0;
+    background: transparent;
   }
   .timeline-empty {
-    padding: var(--ui-space-40, 40px) 0;
-    text-align: center;
-    color: var(--desc-color);
+    color: var(--workspace-muted);
+    font-size: var(--ui-font-14, 14px);
+  }
+  .admin-panel,
+  .addition-panel {
+    margin-top: var(--ui-space-20, 20px);
+  }
+  .admin-heading {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--ui-space-12, 12px);
+  }
+  .admin-heading h2 {
+    display: flex;
+    align-items: center;
+    gap: var(--ui-space-8, 8px);
+    margin: 0;
+    font-size: var(--ui-font-18, 18px);
+  }
+  .admin-heading h2 > :first-child {
+    color: var(--workspace-purple-text);
+  }
+  .admin-heading-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--ui-space-12, 12px);
+    font-size: var(--ui-font-12, 12px);
+    color: var(--workspace-muted);
+  }
+  .admin-heading-actions .b_btn {
+    gap: var(--ui-space-6, 6px);
+  }
+  .collapse-icon.is-open {
+    transform: rotate(180deg);
+  }
+  .admin-body {
+    padding-top: var(--ui-space-16, 16px);
+  }
+  .admin-body :deep(.tab-container) {
+    max-width: 100%;
+    overflow-x: auto;
+    gap: var(--ui-space-8, 8px);
+  }
+  .admin-body :deep(.tab) {
+    flex: none;
+    padding: var(--ui-space-10, 10px) var(--ui-space-12, 12px);
+  }
+  .admin-form {
+    display: grid;
+    gap: var(--ui-space-14, 14px);
+    margin-top: var(--ui-space-20, 20px);
+  }
+  .admin-form > p {
+    margin: 0;
+    font-size: var(--ui-font-13, 13px);
+    color: var(--workspace-muted);
+    line-height: 1.7;
+  }
+  .progress-form {
+    grid-template-columns: var(--ui-layout-220, 220px) minmax(0, 1fr) auto;
+    align-items: end;
+  }
+  .form-field {
+    display: grid;
+    gap: var(--ui-space-8, 8px);
+    min-width: 0;
+    font-size: var(--ui-font-13, 13px);
+  }
+  .form-field :deep(.b-input),
+  .form-field :deep(.select-trigger) {
+    min-height: var(--ui-control-36, 36px);
+  }
+  .progress-form > .b_btn {
+    height: var(--ui-control-36, 36px);
+  }
+  .panel-actions {
+    display: flex;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: var(--ui-space-10, 10px);
+    margin-top: var(--ui-space-12, 12px);
+  }
+  .addition-panel :deep(.card-container-header) {
+    margin-bottom: var(--ui-space-16, 16px);
+  }
+  :deep(.b-textarea) {
+    resize: vertical;
+    font-family: inherit;
+    line-height: 1.7;
+  }
+  .detail-error {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--ui-space-12, 12px);
+    padding: var(--ui-space-20, 20px);
+    color: var(--danger-color);
+    font-size: var(--ui-font-14, 14px);
   }
   .detail-loading {
     display: grid;
-    grid-template-columns: 2.25fr 0.85fr;
-    gap: var(--ui-space-18, 18px);
+    grid-template-columns: minmax(0, 1fr) var(--ui-layout-340, 340px);
+    gap: var(--ui-space-24, 24px);
+    padding: var(--ui-space-32, 32px);
+    border: 1px solid var(--workspace-border);
+    border-radius: 14px;
+    background: var(--workspace-content);
   }
   .detail-loading span {
-    height: var(--ui-layout-500, 500px);
-    border-radius: 16px;
-    background: linear-gradient(
-      100deg,
-      var(--card-background) 20%,
-      var(--surface-panel-bg) 40%,
-      var(--card-background) 60%
-    );
-    background-size: 200% 100%;
-    animation: shimmer 1.3s infinite linear;
+    min-height: var(--ui-layout-400, 400px);
+    border-radius: 8px;
+    background: var(--workspace-hover);
   }
   .not-found {
-    min-height: 60vh;
     display: flex;
     flex-direction: column;
-    align-items: center;
     justify-content: center;
-    gap: var(--ui-space-16, 16px);
+    align-items: center;
+    gap: var(--ui-space-20, 20px);
+    min-height: var(--ui-layout-400, 400px);
+    text-align: center;
   }
-  @keyframes shimmer {
-    to {
-      background-position: -200% 0;
-    }
+  .not-found h1 {
+    font-size: var(--ui-font-18, 18px);
   }
-  @media (max-width: 980px) {
-    .detail-grid,
+  .is-stacked {
+    .reading-grid,
     .detail-loading {
-      grid-template-columns: 1fr;
+      grid-template-columns: minmax(0, 1fr);
     }
     .timeline-column {
-      position: static;
+      border-inline-start: 0;
+      border-top: 1px solid var(--workspace-divider);
     }
   }
-  @media (max-width: 767px) {
+  .is-mobile {
     .detail-shell {
-      padding: 14px 12px 34px;
+      padding: var(--ui-space-12, 12px) var(--ui-space-12, 12px) var(--ui-space-32, 32px);
     }
-    .request-detail-card h1 {
-      font-size: 28px;
+    .mobile-heading {
+      display: grid;
+      grid-template-columns: var(--ui-layout-44, 44px) 1fr var(--ui-layout-44, 44px);
+      align-items: center;
+      height: var(--ui-layout-56, 56px);
+      padding: 0 var(--ui-space-12, 12px);
+      background: var(--workspace-content);
+      border-bottom: 1px solid var(--workspace-divider);
+      font-size: var(--ui-font-18, 18px);
+      text-align: center;
+    }
+    .mobile-back.b_btn {
+      width: var(--ui-layout-44, 44px);
+      height: var(--ui-layout-44, 44px);
+      padding: 0;
+      background: transparent;
+    }
+    .request-article,
+    .timeline-column {
+      padding: var(--ui-space-20, 20px) var(--ui-space-16, 16px);
+    }
+    .request-article h1 {
+      margin-top: var(--ui-space-16, 16px);
+      font-size: var(--ui-font-22, 22px);
     }
     .detail-content {
-      margin-top: 22px;
+      margin-top: var(--ui-space-22, 22px);
+      font-size: var(--ui-font-14, 14px);
     }
+    .developer-reply,
     .merged-banner {
-      align-items: flex-start;
-      flex-direction: column;
+      padding: var(--ui-space-14, 14px);
     }
-    .admin-panel :deep(.tab-container) {
-      overflow-x: auto;
+    .admin-heading h2 {
+      font-size: var(--ui-font-16, 16px);
+    }
+    .admin-heading-actions {
+      gap: var(--ui-space-6, 6px);
+    }
+    .admin-body :deep(.tab) {
+      padding-inline: var(--ui-space-8, 8px);
+      font-size: var(--ui-font-13, 13px);
+    }
+    .progress-form {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .progress-form > .b_btn {
+      justify-self: end;
+    }
+    .timeline-more.b_btn {
+      width: var(--ui-layout-44, 44px);
+      height: var(--ui-layout-44, 44px);
     }
   }
 </style>

@@ -168,11 +168,7 @@
           )
         }}</div>
         <div class="toolbox-task-list">
-          <div
-            v-for="job in continueJobs"
-            :key="`task-${job.extraction ? 'extraction' : 'job'}:${job.id}`"
-            class="toolbox-task-row"
-          >
+          <div v-for="job in continueJobs" :key="`task-${job.id}`" class="toolbox-task-row">
             <BButton
               class="toolbox-activity-card is-task"
               :class="`is-${presentation(job.toolId).accent}`"
@@ -417,13 +413,15 @@
                       @open="openTool(tool)"
                     />
                     <BTooltip
-                      v-if="!isGuest"
+                      v-if="!user.adminContext"
                       class="toolbox-card__pin-wrap"
                       :class="{ 'is-pinned': isPinned(tool.id) }"
                       :title="t(isPinned(tool.id) ? 'toolbox.home.unpinTool' : 'toolbox.home.pinTool')"
                     >
                       <BButton
                         class="toolbox-card__pin"
+                        :disabled="pinsLoading || (!!savingToolId && savingToolId !== tool.id)"
+                        :loading="savingToolId === tool.id"
                         icon-only
                         type="text"
                         :class="{ 'is-pinned': isPinned(tool.id) }"
@@ -507,11 +505,8 @@
     type ToolboxRecentUse,
   } from '@/utils/toolboxRecentUse';
   import { restoreToolboxScrollSnapshot, saveToolboxScrollSnapshot } from '@/utils/toolboxNavigation';
-  import {
-    readToolboxPinnedTools,
-    toggleToolboxPinnedTool,
-    TOOLBOX_PINNED_TOOL_LIMIT,
-  } from '@/utils/toolboxPinnedTools';
+  import { useToolboxPinnedTools } from '@/composables/useToolboxPinnedTools';
+  import { TOOLBOX_PINNED_TOOL_LIMIT } from '@/utils/toolboxPinnedTools';
 
   import {
     toolboxTaskTitle,
@@ -553,7 +548,6 @@
   const tools = ref<ToolboxCatalogItem[]>([]);
   const overview = ref<ToolboxHomeOverview | null>(null);
   const localRecentUses = ref<ToolboxRecentUse[]>([]);
-  const pinnedToolIds = ref<string[]>([]);
   const viewScrollOffsets = new Map<string, number>();
   const homeView = computed({
     get: () => (route.query.view === 'catalog' ? 'catalog' : 'work'),
@@ -638,9 +632,8 @@
     return candidates
       .filter((job): job is ToolboxJob => {
         if (!job) return false;
-        const key = `${job.extraction ? 'extraction' : 'job'}:${job.id}`;
-        if (seen.has(key)) return false;
-        seen.add(key);
+        if (seen.has(job.id)) return false;
+        seen.add(job.id);
         return true;
       })
       .slice(0, 3);
@@ -752,7 +745,6 @@
     const ids = new Set([
       ...quickTools.value.slice(4).map((tool) => tool.id),
       'forms',
-      'image_optimizer',
       'ocr_to_text',
     ]);
     return tools.value.filter(
@@ -885,8 +877,6 @@
     return tool.price.kind === 'free' ? 'success' : 'pin';
   }
   function billingLabel(tool: ToolboxCatalogItem) {
-    if (import.meta.env.DEV && tool.id === 'extraction' && !tool.availability.enabled)
-      return t('extraction.localPreview');
     if (tool.billingMedia.length === 1 && tool.billingMedium === 'ai_quota') return t('translation.quota');
     if (tool.id === 'ocr_to_text') return t('toolbox.ocrBillingLabel');
     if (tool.price.kind !== 'free') {
@@ -901,8 +891,6 @@
     return toolboxTaskStateLabel(job, t);
   }
   function taskContinueDescription(job: ToolboxJob) {
-    if (job.extraction)
-      return t('extraction.progress', { done: job.extraction.processed, total: job.extraction.total });
     if (job.save.status === 'save_failed') return t('toolbox.task.saveFailed');
     if (isReadyTask(job)) return t('toolbox.home.resultReadyDescription');
     if (job.status === 'failed') return t('toolbox.task.processingFailed');
@@ -968,25 +956,25 @@
   function openTask(job: ToolboxJob) {
     recordToolboxRecentUse(user, job.toolId);
     rememberHomeScroll();
-    void router.push(
-      job.extraction ? { path: '/toolbox/extraction', query: { id: job.id } } : `/toolbox/task/${job.id}`,
-    );
+    void router.push(`/toolbox/task/${job.id}`);
   }
   function openRecentEntry(entry: RecentEntry) {
     recordToolboxRecentUse(user, entry.toolId);
     rememberHomeScroll();
     void router.push(toolboxToolPath(entry.toolId as ToolboxToolId));
   }
-  function refreshPinnedTools() {
-    pinnedToolIds.value = readToolboxPinnedTools(user, { allowedToolIds: enabledToolIds.value });
-  }
+  const {
+    toolIds: pinnedToolIds,
+    savingToolId,
+    loading: pinsLoading,
+    refresh: refreshPinnedTools,
+    toggle: togglePinnedTool,
+  } = useToolboxPinnedTools(user, enabledToolIds, (kind) => {
+    if (kind === 'limit') message.warning(t('toolbox.home.pinLimit', { count: TOOLBOX_PINNED_TOOL_LIMIT }));
+    else message.error(t(kind === 'load' ? 'toolbox.home.pinLoadFailed' : 'toolbox.home.pinSaveFailed'));
+  });
   function isPinned(toolId: string) {
     return pinnedToolIds.value.includes(toolId);
-  }
-  function togglePinnedTool(toolId: string) {
-    const result = toggleToolboxPinnedTool(user, toolId, { allowedToolIds: enabledToolIds.value });
-    pinnedToolIds.value = result.toolIds;
-    if (result.limitReached) message.warning(t('toolbox.home.pinLimit', { count: TOOLBOX_PINNED_TOOL_LIMIT }));
   }
   function refreshLocalRecentUses() {
     localRecentUses.value = readToolboxRecentUses(user, { allowedToolIds: enabledToolIds.value });
@@ -996,11 +984,9 @@
     catalogFailed.value = false;
     catalogDegraded.value = false;
     try {
-      tools.value = (await fetchToolboxCatalog()).tools.filter(
-        (tool) => tool.availability.enabled || (import.meta.env.DEV && tool.id === 'extraction'),
-      );
+      tools.value = (await fetchToolboxCatalog()).tools.filter((tool) => tool.availability.enabled);
       refreshLocalRecentUses();
-      refreshPinnedTools();
+      void refreshPinnedTools();
     } catch {
       tools.value = TOOLBOX_TOOL_CATALOG.filter(
         (tool) => tool.availability.enabled && tool.executionMode === 'browser' && tool.billingMedium === 'free',
@@ -1011,7 +997,7 @@
       catalogDegraded.value = true;
       catalogFailed.value = tools.value.length === 0;
       refreshLocalRecentUses();
-      refreshPinnedTools();
+      void refreshPinnedTools();
     } finally {
       catalogLoading.value = false;
     }
@@ -1044,7 +1030,7 @@
   watch(identityKey, () => {
     viewScrollOffsets.clear();
     refreshLocalRecentUses();
-    refreshPinnedTools();
+    void refreshPinnedTools();
     overview.value = null;
     void loadOverview();
     if (!isGuest.value) void Promise.all([loadGrowth(), loadAiQuota()]);

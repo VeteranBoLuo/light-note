@@ -5,11 +5,13 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { createReadOnlyPool } from '../util/readOnlyDatabase.js';
 import { assertDatabaseConnectionSafety } from '../util/databaseConnectionSafety.js';
+import { assertLocalTestEnvironment } from '../util/localTestEnvironment.js';
 
 // 优先加载 .env（无论谁先导入本模块，都保证 env 已就绪）
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const isTestRuntime = process.env.NODE_ENV === 'test';
-if (!isTestRuntime) dotenv.config({ path: path.resolve(__dirname, '../.env') });
+if (!isTestRuntime) dotenv.config({ path: process.env.DOTENV_CONFIG_PATH || path.resolve(__dirname, '../.env') });
+if (!isTestRuntime && process.env.LIGHTNOTE_LOCAL_TEST === '1') assertLocalTestEnvironment(process.env);
 const databaseSafety = assertDatabaseConnectionSafety(process.env);
 
 if (!isTestRuntime) {

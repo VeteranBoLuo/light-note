@@ -9,12 +9,12 @@ const iso = (x) => (x ? new Date(x).toISOString() : null);
 async function createLinkedTodo(connection, userId, item, now) {
   if (item.lane !== 'action' || item.todoId)
     throw toolboxError('BOARD_TODO_ALREADY_BOUND', '此行动已有待办或不是行动卡', 409);
-  const { createTodo } = await import('../services/todoService.js');
-  const result = await createTodo(connection, userId, {
+  const { createSingleTodoPlan } = await import('../services/todoSingleTaskService.js');
+  const result = await createSingleTodoPlan(connection, userId, {
     title: item.title.slice(0, 200),
     description: item.content,
     dueAt: item.dueOn ? `${item.dueOn} 23:59:59` : null,
-  });
+  }, { idempotencyKey: `toolbox-todo:${item.id}` });
   Object.assign(item, {
     todoId: result.id,
     details: { ...item.details, todoTitle: item.title.slice(0, 200) },
@@ -51,13 +51,14 @@ export async function readBoardItem({ userId, workspaceId, itemId, database = po
   if (!rows[0]) throw toolboxError('BOARD_ITEM_UNAVAILABLE', '来源已不可访问', 404);
   return (await hydrateItemDetails(database, userId, [boardItem(rows[0])]))[0];
 }
-export async function operateBoard({ userId, workspaceId, input, database = pool, legacy = false }) {
+export async function operateBoard({ userId, workspaceId, input, database = pool }) {
   if (!userId || !workspaceId) throw toolboxError('BOARD_OWNER_REQUIRED', '缺少项目身份', 401);
   if (
     !input ||
     typeof input.requestId !== 'string' ||
     !/^[a-zA-Z0-9_-]{8,64}$/.test(input.requestId) ||
-    (!legacy && (!Number.isSafeInteger(input.expectedVersion) || input.expectedVersion < 0))
+    !Number.isSafeInteger(input.expectedVersion) ||
+    input.expectedVersion < 0
   )
     throw toolboxError('BOARD_INVALID_REQUEST', '无效看板请求', 400);
   const command = input.command;
@@ -96,7 +97,7 @@ export async function operateBoard({ userId, workspaceId, input, database = pool
     } else {
       if (project.status === 'archived') throw toolboxError('BOARD_READ_ONLY', '项目已归档', 409);
       const version = Number(project.board_version || 0);
-      if (!legacy && version !== input.expectedVersion)
+      if (version !== input.expectedVersion)
         throw toolboxError('BOARD_VERSION_CONFLICT', '看板已在其他位置修改，请刷新后重试', 409);
       const [raw] = await connection.query(
         'SELECT * FROM toolbox_workspace_items WHERE workspace_id = ? AND user_id = ? FOR UPDATE',
@@ -150,7 +151,6 @@ export async function operateBoard({ userId, workspaceId, input, database = pool
           if (
             (command.type === 'status' && command.status !== 'archived') ||
             (command.type === 'edit' && command.dueOn !== undefined) ||
-            (legacy && (command.status !== undefined || command.lane !== undefined)) ||
             (command.type === 'convert' && command.lane !== 'knowledge')
           ) {
             throw toolboxError('BOARD_TODO_AUTHORITY', '已绑定待办，请在待办中修改状态和日期', 409);
@@ -163,32 +163,10 @@ export async function operateBoard({ userId, workspaceId, input, database = pool
           }
         }
         try {
-          if (legacy && command.type === 'edit') {
-            ({ items: after, focusItemId } = applyBoardOperation(operationItems, command, {
-              id: crypto.randomUUID(),
-              now,
-            }));
-            const item = after.find((x) => x.id === command.itemId);
-            if (command.lane !== undefined) {
-              if (!['inbox', 'knowledge', 'action'].includes(command.lane)) throw Error('lane');
-              item.lane = command.lane;
-            }
-            if (command.status !== undefined) {
-              if (!['open', 'in_progress', 'done', 'archived'].includes(command.status)) throw Error('status');
-              item.status = command.status;
-            }
-            if (command.position !== undefined) {
-              if (!Number.isInteger(command.position) || command.position < 0 || command.position > 100000)
-                throw Error('position');
-              item.position = command.position;
-            }
-            if (item.lane === 'knowledge' && item.status !== 'archived') item.status = 'done';
-            item.completedAt = item.status === 'done' ? item.completedAt || now : null;
-          } else
-            ({ items: after, focusItemId } = applyBoardOperation(operationItems, command, {
-              id: crypto.randomUUID(),
-              now,
-            }));
+          ({ items: after, focusItemId } = applyBoardOperation(operationItems, command, {
+            id: crypto.randomUUID(),
+            now,
+          }));
         } catch (error) {
           throw toolboxError(error.code || 'BOARD_INVALID_OPERATION', '看板操作无效，请检查内容与状态', 400);
         }

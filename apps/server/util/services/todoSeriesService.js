@@ -519,7 +519,7 @@ async function createFromPreview(
 }
 
 export async function createTodoPlan(connection, userId, input = {}, options = {}) {
-  const { suppressUserRewards = false, ...previewOptions } = options || {};
+  const { suppressUserRewards = false, invalidateSearch = true, ...previewOptions } = options || {};
   const preview = assertTodoPlanReady(previewTodoPlan(input, previewOptions));
   if (!input.previewHash || input.previewHash !== preview.previewHash) {
     throw serviceError('TODO_PREVIEW_STALE', '任务计划预览已变化，请重新确认', 409, {
@@ -532,7 +532,7 @@ export async function createTodoPlan(connection, userId, input = {}, options = {
   const response = await createFromPreview(connection, userId, input, preview, { requestId: request.requestId });
   // 一个计划可能预生成多条实例，但每日任务统计的是一次用户创建动作，只固化首条待办事实。
   if (!suppressUserRewards) await recordTodoCreation(connection, { userId, todoId: response.todoId });
-  await invalidatePersonalKnowledgeCache(userId, { database: connection });
+  if (invalidateSearch) await invalidatePersonalKnowledgeCache(userId, { database: connection });
   return response;
 }
 

@@ -16,14 +16,6 @@ export interface AiNoteDraft {
   type: 'markdown' | 'html';
 }
 
-export interface AiNoteDraftHandoff {
-  token: string;
-  route: {
-    path: '/noteLibrary/add';
-    query: { type: AiNoteDraft['type']; aiDraft: string };
-  };
-}
-
 export interface PersistedAiNoteHandoff {
   noteId: string;
   openAfterSave?: boolean;
@@ -78,19 +70,6 @@ export function stageAiNoteDraft(value: Partial<AiNoteDraft>, ttlMs = DEFAULT_TT
   };
   sessionStorage.setItem(`${STORAGE_PREFIX}${token}`, JSON.stringify(draft));
   return token;
-}
-
-export function createAiNoteDraftHandoff(
-  response: AiSkillResponse,
-  fallbackTitle = 'AI 生成笔记',
-): AiNoteDraftHandoff | null {
-  const draft = notePreviewFromResponse(response, fallbackTitle);
-  if (!draft) return null;
-  const token = stageAiNoteDraft(draft);
-  return {
-    token,
-    route: { path: '/noteLibrary/add', query: { type: draft.type, aiDraft: token } },
-  };
 }
 
 /**
@@ -172,12 +151,6 @@ export function readAiNoteDraft(token: unknown): AiNoteDraft | null {
 export function discardAiNoteDraft(token: unknown) {
   const normalizedToken = String(token || '').trim();
   if (normalizedToken) sessionStorage.removeItem(`${STORAGE_PREFIX}${normalizedToken}`);
-}
-
-export function consumeAiNoteDraft(token: unknown): AiNoteDraft | null {
-  const draft = readAiNoteDraft(token);
-  discardAiNoteDraft(token);
-  return draft;
 }
 
 export const aiNoteDraftInternals = { STORAGE_PREFIX, DEFAULT_TTL_MS };

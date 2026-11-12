@@ -9,6 +9,10 @@
     "test": "vitest run"
   },
   "exports": {
+    "./cloud-upload": {
+      "types": "./cloudUpload.d.ts",
+      "default": "./cloudUpload.js"
+    },
     ".": {
       "types": "./index.d.ts",
       "default": "./index.js"
@@ -104,10 +108,6 @@
     "./collection-forms": {
       "types": "./collectionForms.d.ts",
       "default": "./collectionForms.js"
-    },
-    "./extraction": {
-      "types": "./extraction.d.ts",
-      "default": "./extraction.js"
     },
     "./note-math": {
       "types": "./noteMath.d.ts",

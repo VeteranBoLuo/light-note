@@ -20,7 +20,6 @@ router.post('/queryTagSpaceResources', tagSpaceHandle.queryTagSpaceResourceList)
 
 router.post('/updateTagSort', bookmarkHandle.updateTagSort);
 
-router.post('/getTagDetail', bookmarkHandle.getTagDetail);
 
 router.post('/getTagEditorData', tagSpaceHandle.getTagEditorData);
 
@@ -28,7 +27,6 @@ router.post('/getRelatedTag', bookmarkHandle.getRelatedTag);
 
 router.post('/getTagGraph', tagGraphHandle.getTagGraph);
 
-router.post('/getGlobalGraph', tagGraphHandle.getGlobalGraph);
 
 router.post('/getBookmarkList', bookmarkHandle.getBookmarkList);
 
@@ -48,7 +46,6 @@ router.post('/delBookmark', bookmarkHandle.delBookmark);
 
 router.post('/updateBookmark', bookmarkHandle.updateBookmark);
 
-router.post('/getCommonBookmarks', bookmarkHandle.getCommonBookmarks);
 
 router.post('/updateBookmarkSort', bookmarkHandle.updateBookmarkSort);
 
@@ -60,15 +57,12 @@ router.post('/importBookmarksExcel', bookmarkHandle.importBookmarksExcel);
 
 router.post('/archive', expensiveFreeActionRateLimiter, bookmarkHandle.doArchiveBookmark);
 
-router.post('/archive/retry-failed', expensiveFreeActionRateLimiter, bookmarkHandle.retryFailedArchives);
 
 router.post('/snapshot', bookmarkHandle.getSnapshot);
 
 router.post('/summarize', aiActionRateLimiter, bookmarkHandle.doSummarizeBookmark);
 
-router.post('/archive-summary', aiActionRateLimiter, bookmarkHandle.doArchiveAndSummarizeBookmark);
 
-router.post('/health/check', bookmarkHandle.doCheckHealth);
 
 router.post('/health/checkAll', bookmarkHandle.doCheckAllHealth);
 
@@ -77,11 +71,6 @@ router.post('/health/reset', bookmarkHandle.doResetHealth);
 router.get('/health', bookmarkHandle.getHealth);
 
 router.post('/health/ignore', bookmarkHandle.doIgnoreHealth);
-
-// AI 自动整理(批量打标签)
-router.post('/ai/organize/quote', bookmarkHandle.doOrganizeQuote);
-router.post('/ai/organize/run', aiActionRateLimiter, bookmarkHandle.doOrganizeRun);
-router.post('/ai/organize/apply', bookmarkHandle.doOrganizeApply);
 
 // 书签图标批次进度与重试
 router.post('/getIconBatchStatus', bookmarkHandle.getIconBatchStatusHandler);

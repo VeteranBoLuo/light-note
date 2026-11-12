@@ -16,9 +16,6 @@ import {
 import { creditAiBonusTokens } from './aiBonusWallet.js';
 import { acquisitionMeta, ACQUISITION_VERSION } from './assetAcquisition.js';
 
-export const DRAW_COST = 170;
-export const TEN_DRAW_COST = 1600;
-
 export function freeDrawsFor(level, version) {
   return freeDrawsForCatalog(level, version);
 }

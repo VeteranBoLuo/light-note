@@ -41,12 +41,6 @@ export const SITE_COMPLIANCE = Object.freeze({
  * 使用绝对时刻，避免“新注册后再显示 15 天”把一次上新提醒变成永久打扰。
  */
 export const FEATURE_ANNOUNCEMENTS = Object.freeze({
-  KNOWLEDGE_WORKSHOP: Object.freeze({
-    id: 'knowledge-workshop',
-    version: 'knowledge-workshop-v1',
-    publishedAt: '2026-08-31T00:00:00.000+08:00',
-    expiresAt: '2026-09-15T00:00:00.000+08:00',
-  }),
   // 与 annual-report 契约中的开放、入口截止时刻一致：控制成长中心红点与「今日」入口行。
   ANNUAL_REPORT_2026: Object.freeze({
     id: 'annual-report-2026',
@@ -970,3 +964,14 @@ export const OFFICIAL_HOST = 'boluo66.top';
 export const ANDROID_LATEST_APK_PATH = '/api/app/android/latest.apk';
 
 export * from './imagePreviewProtocol.js';
+
+/** 可选的三段式产品版本；空值返回空串，格式无效返回 null。 */
+export function normalizeProductVersion(value) {
+  if (value == null) return '';
+  if (typeof value !== 'string') return null;
+  const version = value.trim();
+  if (!version) return '';
+  return version.length <= 32 && /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(version)
+    ? version
+    : null;
+}

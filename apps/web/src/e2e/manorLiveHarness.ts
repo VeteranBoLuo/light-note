@@ -24,6 +24,9 @@ if (params.get('prewarm') === 'true') performance.setResourceTimingBufferSize(30
 setActivePinia(pinia);
 const user = useUserStore(pinia), bookmark = bookmarkStore(pinia);
 user.$patch({ id: 'manor-fixture-a', role: params.get('role') === 'visitor' ? 'visitor' : params.get('role') === 'user' ? 'user' : params.get('role') === 'test' ? 'test' : 'root', adminContext: null });
+const preferencesKey = (id: string) => `manor-live-preferences:${params.get('case') || 'default'}:${id}`;
+const fixturePreferences = (id: string) => JSON.parse(localStorage.getItem(preferencesKey(id)) || '{}');
+user.$patch({ preferences: fixturePreferences(user.id) });
 bookmark.screenWidth = innerWidth;
 const mobile = params.get('renderProfile') === 'mobile' || bookmark.isMobile;
 // Prewarm proof requires a production build, which supplies the entry-bound manifest.
@@ -122,10 +125,12 @@ const snapshot = (result?: unknown) => {
     runtime: {mode:params.get('maintenance')==='1'?'maintenance':'open',message:'庄园维护中，已有进度与资源保留。',revision:1},
     quests: ['checkin','daily_note','daily_bookmark'].map((key,index)=>({key,done:ctx(balance.value).dailyDone![index]})) };
 };
+let preferenceWrites = 0;
 request.defaults.adapter = async config => {
   requests.value++;
+  const requestOwner = user.id;
   const path = new URL(config.url || '', 'http://fixture.invalid').pathname;
-  const delay = Number(params.get(path.endsWith('/manor') ? 'manorDelay' : path.endsWith('/me') || path.endsWith('/inventory') ? 'balanceDelay' : 'apiDelay') || 0);
+  const delay = Number(params.get(path.endsWith('/user/saveUserInfo') ? 'preferenceDelay' : path.endsWith('/manor') ? 'manorDelay' : path.endsWith('/me') || path.endsWith('/inventory') ? 'balanceDelay' : 'apiDelay') || 0);
   if (delay > 0) await new Promise<void>((resolve, reject) => {
     const abort = () => { clearTimeout(timer); reject({ code: 'ERR_CANCELED', config }); };
     const timer = setTimeout(() => { config.signal?.removeEventListener?.('abort', abort); resolve(); }, Math.min(30_000, delay));
@@ -133,7 +138,15 @@ request.defaults.adapter = async config => {
   });
   trace.value = path;
   let data: unknown;
-  if (path.endsWith('/manor/commands')) {
+  if (path.endsWith('/user/saveUserInfo')) {
+    const input = typeof config.data === 'string' ? JSON.parse(config.data) : config.data;
+    preferenceWrites++;
+    if (params.has('failPreferenceSave') && preferenceWrites === 1) data = { status: 500, msg: '夹具模拟保存失败' };
+    else {
+      localStorage.setItem(preferencesKey(requestOwner), input.preferences);
+      data = { status: 200, data: {} };
+    }
+  } else if (path.endsWith('/manor/commands')) {
     const body = typeof config.data === 'string' ? JSON.parse(config.data) : config.data;
     trace.value = `command:${body.action}`;
     const save = get(), prior = save.receipts.get(body.requestId), hash = JSON.stringify([body.action, body.args]);
@@ -158,12 +171,20 @@ request.defaults.adapter = async config => {
   else data = { status: 200, data: {} };
   return { data, status: 200, statusText: 'OK', headers: {}, config };
 };
+const originalFetch = window.fetch.bind(window);
+window.fetch = (input, init) => {
+  const url = input instanceof Request ? input.url : String(input);
+  if (new URL(url, location.href).pathname.startsWith('/api/'))
+    return Promise.resolve(new Response('', { status: 503 }));
+  return originalFetch(input, init);
+};
 const Entry = params.get('entry') === 'true' ? (mobile
   ? (await import('@/components/mobile/MobileTopBar.vue')).default
   : (await import('@/components/home/navigation/RightArea.vue')).default) : null;
 const fixtureRoutes = [
   { path: '/knowledge-manor', name: 'knowledgeManor', component: KnowledgeManor },
-  { path: '/app', component: { render: () => Entry ? h('div', { style: { position:'relative', minHeight:'var(--ui-control-56, 56px)' } }, [h(Entry)]) : h('section', [h('p', '已返回轻笺 · 隔离夹具'), h(BButton, {onClick:()=>router.push('/knowledge-manor')}, ()=> '进入庄园')]) } },
+  { path: '/app', component: { render: () => Entry ? h('div', { style: { position:'relative', minHeight:'var(--ui-control-56, 56px)' } }, [h(Entry)]) : h('section', [h('p', '已返回轻笺 · 隔离夹具'), h(BButton, {onClick:()=>router.push('/knowledge-manor')}, ()=> '进入庄园'), ...(params.has('reminders') ? [h(BButton, {onClick:()=>router.push({path:'/settings',query:{section:'notification'}})}, ()=>'通知设置（夹具）')] : [])]) } },
+  { path: '/settings', component: () => import('@/view/settings/Settings.vue') },
   { path: '/growth', component: { render: () => h('p', '成长中心 · 隔离夹具') } },
   { path: '/bookmarks', component: { render: () => h('p', '书签模块已就绪 · 隔离夹具') } },
   { path: '/home', component: { render: () => h('p', '书签模块已就绪 · 隔离夹具') } },
@@ -200,7 +221,7 @@ createApp({ render: () => h('div', { style: { height: '100%', display: 'flex', f
   params.get('controls') === 'hidden' ? null : h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: '8px', background: '#fff', color: '#222' } }, [
     h('strong', `隔离验收 ${account.value} · ${balance.value} 积分 · ${requests.value} 请求`),
     h('span', `${trace.value} · casting:${String(get().state.casting)} · first:${String(get().state.firstCompanionPending)} · guide:${String(get().state.discoveryGuide)}`),
-    h('button', { onClick: () => { user.$patch({ id: user.id.endsWith('a') ? 'manor-fixture-b' : 'manor-fixture-a' }); account.value = user.id; } }, '切换账号'),
+    h('button', { onClick: () => { const id = user.id.endsWith('a') ? 'manor-fixture-b' : 'manor-fixture-a'; user.$patch({ id, preferences: fixturePreferences(id) }); account.value = user.id; } }, '切换账号'),
     h('button', { onClick: () => { loseResponse = true; } }, '下次回包丢失'),
     params.get('sync') === 'true' ? h('button', { onClick: () => {concurrentNext=true;} }, '下一操作模拟并发') : null,
     params.get('sync') === 'true' ? h('button', { onClick: () => {

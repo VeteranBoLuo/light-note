@@ -1,20 +1,15 @@
 import pool from '../db/index.js';
 import { communityWeekPosts } from './communityFeed/growthMetrics.js';
-import { earnPoints } from './points.js';
 import { getMeaningfulActivityFacts } from './meaningfulActivity.js';
 import {
   POINTS_EARNING_POLICY_VERSION,
-  earningWritesEnabled,
   resolveWeeklyChallenges,
   usesC5EarningRules,
   usesCommunityWeeklyChallenges,
-  weeklyClaimRef,
   weeklyClaimRefCandidates,
 } from './pointsEarningPolicy.js';
 import { resolveWeeklyEarningPolicyVersion } from './pointsEarningPolicyState.js';
 import { dayKeyAtOffset, getGrowthCalendarContext, weekKeyAtOffset } from './growthPreferences.js';
-
-export const WEEKLY_CHALLENGES = resolveWeeklyChallenges();
 
 export async function currentWeekKey(db = pool, calendar = null) {
   if (calendar?.weekKey) return String(calendar.weekKey);
@@ -138,21 +133,4 @@ export async function getWeeklyChallenges(userId, { db = pool, calendar = null }
       .reduce((sum, challenge) => sum + challenge.reward, 0),
     totalPoints: catalog.reduce((sum, challenge) => sum + challenge.reward, 0),
   };
-}
-
-export async function claimWeeklyChallenge(userId, key) {
-  if (!userId || userId === 'visitor') return { ok: false, reason: 'visitor' };
-  const weekly = await getWeeklyChallenges(userId);
-  if (!earningWritesEnabled(weekly.policyVersion)) return { ok: false, reason: 'earning_paused' };
-  const challenge = weekly.challenges.find((item) => item.key === key);
-  if (!challenge) return { ok: false, reason: 'not_found', msg: '挑战不存在' };
-  if (!challenge.done) return { ok: false, reason: 'incomplete', msg: '挑战尚未完成' };
-  await pool.query('INSERT IGNORE INTO user_growth (user_id) VALUES (?)', [userId]);
-  const ref = weeklyClaimRef(weekly.weekKey, key, weekly.policyVersion);
-  const got = await earnPoints(userId, challenge.reward, 'weekly', ref, pool, {
-    policyVersion: weekly.policyVersion,
-    meta: { challengeKey: key },
-  });
-  if (!got) return { ok: false, reason: 'claimed', msg: '本周该挑战已领取' };
-  return { ok: true, key, reward: challenge.reward };
 }

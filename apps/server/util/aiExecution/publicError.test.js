@@ -23,12 +23,17 @@ describe('resolvePublicAiExecutionError', () => {
     ['AI_SKILL_OUTPUT_SOURCE_INVALID', 502, '生成结果的来源引用校验未通过，请重新生成'],
     ['AI_SKILL_OUTPUT_PROFILE_INVALID', 502, '生成结果未满足当前工具的固定结构，自动修复后仍未通过'],
     ['BOOKMARK_PAGE_ACCESS_PROTECTED', 422, '网页触发了访问验证或拒绝自动读取，请稍后重试或手动填写书签信息'],
+    ['BOOKMARK_PAGE_NOT_FOUND', 422, '该页面不存在或内容已被删除，请检查书签网址'],
+    ['BOOKMARK_PAGE_DNS_FAILED', 503, '暂时无法解析网站地址，请检查网址或稍后重试'],
+    ['BOOKMARK_PAGE_TLS_FAILED', 422, '网站证书验证失败，请检查原网站或手动填写书签信息'],
+    ['BOOKMARK_PAGE_TLS_HANDSHAKE_FAILED', 503, '与网站建立安全连接失败，请稍后重试或手动填写书签信息'],
     ['BOOKMARK_PAGE_RENDERER_UNAVAILABLE', 503, '当前服务暂时无法渲染这类动态网页，请稍后重试或手动填写书签信息'],
   ])('统一映射 %s', (code, status, message) => {
     expect(resolvePublicAiExecutionError(Object.assign(new Error('internal'), { code }))).toEqual({
       code,
       status,
       message,
+      ...(code.startsWith('AI_QUOTA_') ? { billingMode: 'daily_and_permanent' } : {}),
     });
   });
 
@@ -47,6 +52,7 @@ describe('resolvePublicAiExecutionError', () => {
       message: '本次任务预计最多需要约 26,903 tokens，当前可用约 21,700。请减少处理内容、分段执行或补充额度后重试。',
       requiredTokens: 26_903,
       availableTokens: 21_700,
+      billingMode: 'daily_and_permanent',
     });
   });
 

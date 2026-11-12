@@ -5,7 +5,6 @@ import { computed, ref } from 'vue';
 import { createPinia, setActivePinia } from 'pinia';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { todoCalendarOwnerKey } from '@/utils/todoCalendarAccess';
-import { buildTodoListNodes } from '@/utils/todoSeriesGrouping';
 
 const { listTodos, groupPage } = vi.hoisted(() => ({ listTodos: vi.fn(), groupPage: vi.fn() }));
 vi.mock('@/api/todoApi', async (importOriginal) => ({
@@ -118,7 +117,6 @@ describe('待办页签请求与列表分组一致', () => {
       expect(todo.items.map((item) => item.id)).toEqual(
         items.filter((item) => status === 'all' || item.status === status).map((item) => item.id),
       );
-      expect(buildTodoListNodes(todo.items).length).toBe(status === 'all' ? 2 : 1);
     }
   });
 
@@ -177,6 +175,7 @@ it.each([
     const todoSelectionMode = {}, selectedTodoIds = {}, todoBatchActionsOpen = {};
     const user = { preferences: { todoView: '${view}' } };
     let savedTodoRange = null;
+    let attentionViewChange = false;
     const updateScrollFade = () => {};
     ${ts.transpile(viewNode.getText(ast), { target: ts.ScriptTarget.ES2022 })}
     ${watcherCode}

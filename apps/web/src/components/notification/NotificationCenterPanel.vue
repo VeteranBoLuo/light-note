@@ -225,6 +225,7 @@
     if (item.type === 'level_up') return icon.growth.level;
     if (item.type === 'collection_form_reward') return icon.growth.coin;
     if (item.type === 'streak_risk') return icon.growth.checkin;
+    if (item.type === 'manor_digest' || item.type === 'manor_water_expiring') return icon.manor.entry;
     if (item.type === 'daily_brief' || item.type === 'ai_routine') return icon.ai.summary;
     if (item.type === 'opinion_reply' || item.type === 'feature_request') return icon.userCenter.menu.feedback;
     if (item.type === 'community_chat') return icon.ai.conversations;

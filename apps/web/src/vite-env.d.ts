@@ -5,6 +5,11 @@ declare module 'virtual:lightnote-public-art' {
   export default urls;
 }
 
+declare module 'virtual:lightnote-pdf-cmaps' {
+  const cMapUrl: string;
+  export default cMapUrl;
+}
+
 interface ImportMetaEnv {
   /** 可选的公开爱发电创作者主页覆盖；不得填写 API Token 或其他凭据。 */
 }

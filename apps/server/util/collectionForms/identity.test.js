@@ -15,6 +15,16 @@ it('签名 Cookie 续期保持身份，伪造/过期失败，摘要按表单隔�
   expect(readIdentity({ headers: { cookie: `${name}=${value.replace(/\.\d{13}\./, '.1000000000000.')}` } })).toBeNull();
   expect(respondentHash('form-a', id)).not.toBe(respondentHash('form-b', id));
 });
+it('Secure 与登录 Cookie 同规则，不依赖 NODE_ENV', () => {
+  vi.stubEnv('COLLECTION_FORMS_IDENTITY_SECRET', 'test-collection-secret-0000000000000000000');
+  vi.stubEnv('NODE_ENV', 'development');
+  const cookie = vi.fn();
+  vi.stubEnv('SECURE_COOKIE', '1');
+  renewIdentity({ cookie }, null);
+  vi.stubEnv('SECURE_COOKIE', '0');
+  renewIdentity({ cookie }, null);
+  expect(cookie.mock.calls.map((call) => call[2].secure)).toEqual([true, false]);
+});
 it('未配置时明确拒绝，生产限定同源协议与主机', () => {
   vi.stubEnv('COLLECTION_FORMS_IDENTITY_SECRET', '');
   expect(requireIdentityConfig).toThrow('暂不可用');

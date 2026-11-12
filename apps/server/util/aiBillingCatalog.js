@@ -1,3 +1,4 @@
+import { estimateTypedTextTokens, reservationCalibrationEnabled } from './aiTokenEstimate.js';
 /**
  * AI 计费目录是业务能力、额度门禁和用户用量页共同依赖的唯一事实源。
  *
@@ -10,6 +11,7 @@
  */
 import { AI_PROVIDER_STAGE_TYPES, createAiProviderPlan } from './aiExecution/providerPlan.js';
 import { AI_EXECUTION_BILLING_RULE_VERSION } from './aiExecution/policy.js';
+import { buildAiInputDiagnostics } from './aiExecution/diagnostics.js';
 import {
   AI_SKILL_IMPLICIT_EVIDENCE_RESERVATION_TOKENS,
   AI_SKILL_MAX_CHARS_PER_RESOURCE,
@@ -52,12 +54,56 @@ function tokenAction({
 }
 
 export const AI_BILLING_ACTIONS = Object.freeze([
-  tokenAction({ id: 'public_resource.review_screen', module: 'general', labelKey: 'publicResourceReviewScreen', taskTypes: ['skill_public_resource_review_screen'], allowedBillingPolicies: ['system'], publicCatalog: false }),
-  tokenAction({ id: 'community.review_screen', module: 'general', labelKey: 'communityReviewScreen', taskTypes: ['skill_community_review_screen'], allowedBillingPolicies: ['system'], publicCatalog: false }),
-  ...['suggest', 'extract'].map(mode => tokenAction({ id: `toolbox.extraction_${mode}`, module: 'toolbox', labelKey: 'toolboxExtraction', taskTypes: [`skill_toolbox_extraction_${mode}`], allowedBillingPolicies: ['user'] })),
-  tokenAction({ id: 'toolbox.translation', module: 'toolbox', labelKey: 'toolboxTranslation', taskTypes: ['skill_toolbox_translation'], allowedBillingPolicies: ['user'] }),
-  tokenAction({ id: 'toolbox.summarize_text', module: 'toolbox', labelKey: 'toolboxSummarizeText', taskTypes: ['skill_toolbox_summarize_text'], allowedBillingPolicies: ['user'] }),
-  tokenAction({ id: 'organize.metadata', module: 'organize', labelKey: 'organizeMetadata', taskTypes: ['organize_resource_metadata'], unit: 'item', maxUserProviderCalls: 1, maxPlatformProviderCalls: 1 }),
+  tokenAction({
+    id: 'public_resource.review_screen',
+    module: 'general',
+    labelKey: 'publicResourceReviewScreen',
+    taskTypes: ['skill_public_resource_review_screen'],
+    allowedBillingPolicies: ['system'],
+    publicCatalog: false,
+  }),
+  tokenAction({
+    id: 'community.review_screen',
+    module: 'general',
+    labelKey: 'communityReviewScreen',
+    taskTypes: ['skill_community_review_screen'],
+    allowedBillingPolicies: ['system'],
+    publicCatalog: false,
+  }),
+  // 资料转表格已下架，只保留计费动作用于历史用量展示。
+  ...['suggest', 'extract'].map((mode) =>
+    tokenAction({
+      id: `toolbox.extraction_${mode}`,
+      module: 'toolbox',
+      labelKey: 'toolboxExtraction',
+      taskTypes: [`skill_toolbox_extraction_${mode}`],
+      allowedBillingPolicies: ['user'],
+      publicCatalog: false,
+    }),
+  ),
+  tokenAction({
+    id: 'toolbox.translation',
+    module: 'toolbox',
+    labelKey: 'toolboxTranslation',
+    taskTypes: ['skill_toolbox_translation'],
+    allowedBillingPolicies: ['user'],
+  }),
+  tokenAction({
+    id: 'toolbox.summarize_text',
+    module: 'toolbox',
+    labelKey: 'toolboxSummarizeText',
+    taskTypes: ['skill_toolbox_summarize_text'],
+    allowedBillingPolicies: ['user'],
+  }),
+  tokenAction({
+    id: 'organize.metadata',
+    module: 'organize',
+    labelKey: 'organizeMetadata',
+    taskTypes: ['organize_resource_metadata'],
+    unit: 'item',
+    maxUserProviderCalls: 1,
+    maxPlatformProviderCalls: 1,
+  }),
   tokenAction({
     id: 'search.answer',
     module: 'search',
@@ -230,24 +276,24 @@ export const AI_BILLING_ACTIONS = Object.freeze([
     taskTypes: ['skill_routine_daily_brief'],
     reservationTokens: 8_000,
   }),
+  // 已下架的工坊 AI 工具只保留计费动作，用于历史用量展示，不再进入公开计费目录。
   ...[
-    ['idea_to_draft', 'toolboxIdeaToDraft'],
-    ['material_to_note', 'toolboxMaterialToNote'],
-    ['research_brief', 'toolboxResearchBrief'],
-    ['study_kit', 'toolboxStudyKit'],
-    ['concept_map', 'toolboxConceptMap'],
-    ['action_plan', 'toolboxActionPlan'],
-    ['source_comparison', 'toolboxSourceComparison'],
-    ['knowledge_audit', 'toolboxKnowledgeAudit'],
-    ['ocr_to_text', 'toolboxOcrToText'],
-  ].map(([profileId, labelKey]) =>
+    ['idea_to_draft', 'toolboxIdeaToDraft', false],
+    ['material_to_note', 'toolboxMaterialToNote', true],
+    ['research_brief', 'toolboxResearchBrief', false],
+    ['study_kit', 'toolboxStudyKit', true],
+    ['concept_map', 'toolboxConceptMap', false],
+    ['source_comparison', 'toolboxSourceComparison', false],
+    ['knowledge_audit', 'toolboxKnowledgeAudit', false],
+    ['ocr_to_text', 'toolboxOcrToText', true],
+  ].map(([profileId, labelKey, publicCatalog]) =>
     tokenAction({
       id: `toolbox.${profileId}`,
       module: 'toolbox',
       labelKey,
       taskTypes: [`skill_toolbox_${profileId}`],
       reservationTokens: 12_000,
-      publicCatalog: true,
+      publicCatalog,
       allowedBillingPolicies: ['user', 'system'],
     }),
   ),
@@ -342,7 +388,7 @@ function resolvePolicyValue(value, context, fallback) {
   return Number.isFinite(number) ? number : fallback;
 }
 
-function estimateInputReservationTokens(request) {
+function estimateInputReservationTokens(request, calibrated = false) {
   if (request?.input == null) return 0;
   let serialized;
   try {
@@ -353,7 +399,7 @@ function estimateInputReservationTokens(request) {
   if (!serialized) return 0;
   // UTF-8 字节数 / 3 同时对中文保持约 1 字 1 token 的保守上界，
   // 对英文也比常见的约 4 字符 1 token 更保守。真正额度仍只按 Provider 回报结算。
-  return Math.min(AI_SKILL_MAX_INPUT_RESERVATION_TOKENS, Math.ceil(Buffer.byteLength(serialized, 'utf8') / 3));
+  return Math.min(AI_SKILL_MAX_INPUT_RESERVATION_TOKENS, calibrated ? estimateTypedTextTokens(serialized) : Math.ceil(Buffer.byteLength(serialized, 'utf8') / 3));
 }
 
 export function compileAiSkillProviderPlan(skill, request, context) {
@@ -384,7 +430,8 @@ export function compileAiSkillProviderPlan(skill, request, context) {
   });
 }
 
-export function estimateAiSkillReservationTokens(skill, request, action = getAiBillingAction(skill?.id), context) {
+export function estimateAiSkillReservationBudget(skill, request, action = getAiBillingAction(skill?.id), context, { calibrated = reservationCalibrationEnabled() } = {}) {
+  const calibratedNote = calibrated && skill?.id === 'note.transform_text';
   const refs = normalizedResourceRefs(request, context);
   const policy = skill?.providerPlanPolicy || {};
   const policyContext = Object.freeze({ resourceCount: refs.length, resourceRefs: refs, request, context });
@@ -398,24 +445,36 @@ export function estimateAiSkillReservationTokens(skill, request, action = getAiB
   );
   const explicitEvidenceTokens = refs.length
     ? Math.min(maxTotalEvidenceChars, refs.length * maxCharsPerResource)
-    : AI_SKILL_IMPLICIT_EVIDENCE_RESERVATION_TOKENS;
+    : calibratedNote ? 0 : AI_SKILL_IMPLICIT_EVIDENCE_RESERVATION_TOKENS;
   const imageFileCount = policy.imageRecognition ? refs.filter((ref) => ref?.type === 'file').length : 0;
   const generationCalls = Math.max(1, Math.floor(resolvePolicyValue(policy.modelGenerationCalls, policyContext, 1)));
   const resolvedModelPolicy =
     typeof skill?.resolveModelPolicy === 'function'
-      ? skill.resolveModelPolicy(request?.input || {}) || skill.modelPolicy
+      ? skill.resolveModelPolicy(request?.input || {}, { calibrated: calibratedNote }) || skill.modelPolicy
       : skill?.modelPolicy;
-  const requested =
-    explicitEvidenceTokens +
-    estimateInputReservationTokens(request) +
-    imageFileCount * AI_SKILL_VISION_RESERVATION_TOKENS_PER_FILE +
-    generationCalls *
-      (Math.max(1, Math.floor(Number(resolvedModelPolicy?.maxTokens || 1_024))) +
-        AI_SKILL_PROTOCOL_RESERVATION_TOKENS);
-  return Math.min(
+  const inputTokens = estimateInputReservationTokens(request, calibratedNote);
+  const visionTokens = imageFileCount * AI_SKILL_VISION_RESERVATION_TOKENS_PER_FILE;
+  const outputTokens = generationCalls * Math.max(1, Math.floor(Number(resolvedModelPolicy?.maxTokens || 1_024)));
+  const protocolTokens = generationCalls * (calibratedNote ? 1024 : AI_SKILL_PROTOCOL_RESERVATION_TOKENS);
+  const requested = explicitEvidenceTokens + inputTokens + visionTokens + outputTokens + protocolTokens;
+  const totalTokens = Math.min(
     AI_SKILL_MAX_RESERVATION_TOKENS,
     Math.max(action.reservationTokens, Math.max(1, Math.floor(requested))),
   );
+  return Object.freeze({
+    inputTokens,
+    evidenceTokens: explicitEvidenceTokens,
+    visionTokens,
+    outputTokens,
+    protocolTokens,
+    totalTokens,
+    unclampedTokens: requested,
+  });
+}
+
+// 保留原有数值返回协议；诊断读取同一计算结果，不改变预留金额。
+export function estimateAiSkillReservationTokens(skill, request, action = getAiBillingAction(skill?.id), context) {
+  return estimateAiSkillReservationBudget(skill, request, action, context).totalTokens;
 }
 
 /**
@@ -425,6 +484,7 @@ export function estimateAiSkillReservationTokens(skill, request, action = getAiB
 export function createAiSkillExecutionConfig(skill, request, overrides = {}, context) {
   const action = getAiBillingAction(skill?.id);
   const providerPlan = compileAiSkillProviderPlan(skill, request, context);
+  const reservationBudget = estimateAiSkillReservationBudget(skill, request, action, context);
   const billingPolicy = String(overrides.billingPolicy || 'user');
   if (!['user', 'system'].includes(billingPolicy)) {
     const error = new Error('AI Skill 额度策略无效');
@@ -446,7 +506,8 @@ export function createAiSkillExecutionConfig(skill, request, overrides = {}, con
     billingPolicy,
     skillId: action.id,
     providerPlan,
-    reservationTokens: estimateAiSkillReservationTokens(skill, request, action, context),
+    reservationTokens: reservationBudget.totalTokens,
+    inputDiagnostics: buildAiInputDiagnostics(request, { reservationBudget }),
     maxUserProviderCalls: providerPlan.maxUserProviderCalls,
     maxPlatformProviderCalls: providerPlan.maxPlatformProviderCalls,
     billingRuleVersion: AI_BILLING_RULE_VERSION,

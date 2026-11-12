@@ -22,6 +22,7 @@ const candidate = {
   confidence: 0.96,
   evidence: '开源字体项目',
 };
+const response = (fields) => ({ content: '', toolCalls: [{ function: { name: 'suggest_bookmark_metadata', arguments: JSON.stringify(fields) } }] });
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.fetch.mockResolvedValue({
@@ -31,9 +32,7 @@ beforeEach(() => {
     bodyText: '免费字体',
     source: 'static_html',
   });
-  mocks.request.mockResolvedValue({
-    content: JSON.stringify({ name: '字体页面', description: '开源字体项目', tagSuggestions: [candidate] }),
-  });
+  mocks.request.mockResolvedValue(response({ name: '字体页面', description: '开源字体项目', tagSuggestions: [candidate] }));
 });
 it('旧入口与整理中心共享材料、提示词、参数及原文候选校验；预备和估算不调用模型', async () => {
   const old = await suggestBookmarkMeta({ ...row, userTags: tags, includeSuggestionDetails: true });
@@ -46,7 +45,9 @@ it('旧入口与整理中心共享材料、提示词、参数及原文候选校�
   const result = await suggestResourceMetadata(snapshot, ['tags'], tags, prepared);
   expect(result.tags).toEqual(old.suggestions);
   expect(mocks.request.mock.calls[0]).toEqual(oldRequest);
-  expect(mocks.estimate).toHaveBeenCalledWith(oldRequest[0], oldRequest[1]);
+  expect(mocks.estimate).toHaveBeenCalledWith(oldRequest[0], {
+    maxTokens: oldRequest[1].maxTokens, tools: oldRequest[1].tools,
+  });
   expect(result.title).toBeNull();
 });
 it('有名称和原描述不抓取网页，拼接存档不能伪装原描述完整', async () => {
@@ -67,7 +68,7 @@ it.each([
   ['filtered', [{ ...candidate, evidence: '不存在的证据' }]],
   ['filtered', [{ ...candidate, confidence: 0.5 }]],
 ])('区分空结果 %s', async (tagOutcome, tagSuggestions) => {
-  mocks.request.mockResolvedValue({ content: JSON.stringify({ name: '', description: '', tagSuggestions }) });
+  mocks.request.mockResolvedValue(response({ name: '', description: '', tagSuggestions }));
   const snapshot = buildSnapshot('bookmark', row);
   expect(
     await suggestResourceMetadata(snapshot, ['tags'], tags, await prepareResourceMetadata(snapshot)),
@@ -84,7 +85,7 @@ it('网页读取失败有已有标题可回退；完全没有材料则不调用�
   expect(mocks.request).not.toHaveBeenCalled();
 });
 it('协议失败不能当作没有建议', async () => {
-  mocks.request.mockResolvedValue({ content: '{}' });
+  mocks.request.mockResolvedValue(response({}));
   const snapshot = buildSnapshot('bookmark', row);
   await expect(
     suggestResourceMetadata(snapshot, ['tags'], tags, await prepareResourceMetadata(snapshot)),
@@ -120,9 +121,10 @@ it.each([
   { name: {}, description: [] },
   { name: 'a'.repeat(256), description: 'b'.repeat(256) },
 ])('非法字段不能成为可写入建议：%j', async (fields) => {
-  mocks.request.mockResolvedValue({ content: JSON.stringify({ ...fields, tagSuggestions: [] }) });
+  mocks.request.mockResolvedValue(response({ ...fields, tagSuggestions: [] }));
   const snapshot = buildSnapshot('bookmark', row);
-  expect(
-    await suggestResourceMetadata(snapshot, ['title', 'description'], tags, await prepareResourceMetadata(snapshot)),
-  ).toMatchObject({ title: null, description: null });
+  await expect(
+    suggestResourceMetadata(snapshot, ['title', 'description'], tags, await prepareResourceMetadata(snapshot)),
+  ).rejects.toMatchObject({ code: 'AI_SKILL_STRUCTURED_OUTPUT_INVALID' });
+  expect(mocks.request).toHaveBeenCalledTimes(2);
 });

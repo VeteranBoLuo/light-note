@@ -6,12 +6,9 @@ import { readItemDetails, hydrateItemDetails, boardTodoJoin, boardOpenSql, board
 
 export const TOOLBOX_WORKSPACE_KINDS = Object.freeze(['research', 'learning', 'writing']);
 export const TOOLBOX_WORKSPACE_STATUSES = Object.freeze(['active', 'paused', 'completed', 'archived']);
-export const TOOLBOX_WORKSPACE_LANES = Object.freeze(['inbox', 'knowledge', 'action']);
-export const TOOLBOX_WORKSPACE_ITEM_STATUSES = Object.freeze(['open', 'in_progress', 'done', 'archived']);
 
 const MAX_WORKSPACES = 50;
 const MAX_RESOURCES = 100;
-const MAX_ITEMS = 500;
 const HOME_CONTINUE_WORKSPACE_LIMIT = 6;
 const HOME_RECENT_WORKSPACE_LIMIT = 6;
 const HOME_WORKSPACE_SCAN_LIMIT = 50;
@@ -548,31 +545,6 @@ export async function removeToolboxWorkspaceResource({ userId, workspaceId, reso
     ownerId,
   ]);
   return getToolboxWorkspace({ userId: ownerId, workspaceId, database });
-}
-
-export async function createToolboxWorkspaceItem({ userId, workspaceId, input = {}, database = pool } = {}) {
-  const { operateBoard } = await import('./board.js');
-  return (
-    await operateBoard({
-      userId,
-      workspaceId,
-      database,
-      legacy: true,
-      input: { requestId: crypto.randomUUID(), command: { ...input, type: 'create' } },
-    })
-  ).workspace;
-}
-export async function updateToolboxWorkspaceItem({ userId, workspaceId, itemId, input = {}, database = pool } = {}) {
-  const { operateBoard } = await import('./board.js');
-  return (
-    await operateBoard({
-      userId,
-      workspaceId,
-      database,
-      legacy: true,
-      input: { requestId: crypto.randomUUID(), command: { ...input, itemId, type: 'edit' } },
-    })
-  ).workspace;
 }
 
 export async function createToolboxWorkspaceSession({ userId, workspaceId, input = {}, database = pool } = {}) {

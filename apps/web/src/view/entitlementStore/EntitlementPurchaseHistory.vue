@@ -9,16 +9,8 @@
     </div>
     <div v-else-if="!authenticated || !orders.length" class="purchase-history__state">
       <SvgIcon :src="icon.noteDetail.history" size="23" aria-hidden="true" />
-      <strong>{{
-        t(
-          !authenticated
-            ? 'entitlementStore.layout.historyGuest'
-            : scope === 'history'
-              ? 'entitlementStore.layout.pastSupportEmpty'
-              : 'entitlementStore.historyEmpty',
-        )
-      }}</strong>
-      <span v-if="authenticated && scope === 'purchase'">{{ t('entitlementStore.layout.historyEmptyHint') }}</span>
+      <strong>{{ t(authenticated ? 'entitlementStore.historyEmpty' : 'entitlementStore.layout.historyGuest') }}</strong>
+      <span v-if="authenticated">{{ t('entitlementStore.layout.historyEmptyHint') }}</span>
     </div>
     <ul v-else class="purchase-history__orders">
       <li v-for="order in orders" :key="order.id" class="purchase-order">
@@ -27,18 +19,14 @@
           <strong>{{ orderTitle(order) }}</strong>
           <div class="purchase-order__detail">
             <time>{{ formatDate(order.confirmedAt) }}</time>
-            <span v-if="scope === 'purchase' && formatBenefit(order)"> · {{ formatBenefit(order) }}</span>
+            <span v-if="formatBenefit(order)"> · {{ formatBenefit(order) }}</span>
           </div>
         </div>
         <div class="purchase-order__end">
           <strong>¥{{ order.amount }}</strong>
           <BChip
             :tone="
-              scope === 'history' || order.rewardStatus === 'credited'
-                ? 'success'
-                : order.rewardStatus === 'ineligible'
-                  ? 'danger'
-                  : 'pending'
+              order.rewardStatus === 'credited' ? 'success' : order.rewardStatus === 'ineligible' ? 'danger' : 'pending'
             "
             >{{ orderStatus(order) }}</BChip
           >
@@ -51,7 +39,7 @@
 <script setup lang="ts">
   import { useI18n } from 'vue-i18n';
   import { SUPPORT_PACKAGE_CATALOG } from '@lightnote/shared';
-  import type { AfdianSupportOrder, EntitlementOrderScope } from '@/api/supportApi';
+  import type { AfdianSupportOrder } from '@/api/supportApi';
   import { formatAiQuotaTokens } from '@/composables/useAiQuotaStatus';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BChip from '@/components/base/BasicComponents/BChip.vue';
@@ -59,16 +47,12 @@
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon';
 
-  const props = withDefaults(
-    defineProps<{
-      orders: AfdianSupportOrder[];
-      authenticated: boolean;
-      ready: boolean;
-      error: boolean;
-      scope?: EntitlementOrderScope;
-    }>(),
-    { scope: 'purchase' },
-  );
+  defineProps<{
+    orders: AfdianSupportOrder[];
+    authenticated: boolean;
+    ready: boolean;
+    error: boolean;
+  }>();
   const emit = defineEmits<{ retry: [] }>();
   const { t, locale } = useI18n();
 
@@ -87,7 +71,6 @@
   }
 
   function orderTitle(order: AfdianSupportOrder) {
-    if (props.scope === 'history') return t('entitlementStore.layout.pastSupport');
     const item = order.intentType === 'permanent' && SUPPORT_PACKAGE_CATALOG.find((sku) => sku.skuId === order.skuId);
     if (!item) return t('entitlementStore.layout.resourcePurchase');
     const index = SUPPORT_PACKAGE_CATALOG.filter((sku) => sku.category === item.category).indexOf(item);
@@ -106,14 +89,12 @@
   }
 
   function orderIcon(order: AfdianSupportOrder) {
-    if (props.scope === 'history') return icon.support.heart;
     if (order.rewardStorageMb && order.rewardTokens) return icon.growth.reward;
     if (order.rewardStorageMb) return icon.growth.storage;
     return icon.growth.ai;
   }
 
   function orderStatus(order: AfdianSupportOrder) {
-    if (props.scope === 'history') return t('entitlementStore.layout.supportReceived');
     if (order.rewardStatus === 'credited') return t('entitlementStore.credited');
     if (['manual_review', 'reversal_review'].includes(order.rewardStatus || '')) return t('entitlementJourney.review');
     if (order.rewardStatus === 'ineligible') return t('entitlementJourney.failed');

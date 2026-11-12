@@ -10,18 +10,25 @@ import NoteAiReplyHarness from './NoteAiReplyHarness.vue';
 import { applyUiDensity } from '@/composables/useUiDensity';
 import request from '@/http/request';
 
-type VisualState = 'success' | 'loading' | 'error' | 'empty' | 'quota-exhausted' | 'quota-insufficient';
+type VisualState = 'success' | 'loading' | 'streaming' | 'error' | 'empty' | 'quota-exhausted' | 'quota-insufficient';
 
 const params = new URLSearchParams(window.location.search);
 const requestedState = params.get('state');
-const state: VisualState = ['success', 'loading', 'error', 'empty', 'quota-exhausted', 'quota-insufficient'].includes(
-  String(requestedState),
-)
+const state: VisualState = [
+  'success',
+  'loading',
+  'streaming',
+  'error',
+  'empty',
+  'quota-exhausted',
+  'quota-insufficient',
+].includes(String(requestedState))
   ? (requestedState as VisualState)
   : 'success';
 const theme = params.get('theme') === 'night' ? 'night' : 'day';
 const locale = params.get('locale') === 'en-US' ? 'en-US' : 'zh-CN';
 const noteType = params.get('noteType') === 'markdown' ? 'markdown' : 'html';
+const sample = params.get('sample');
 const mobile = params.get('renderProfile') === 'mobile' || window.innerWidth <= 720;
 applyUiDensity(params.get('density'), mobile);
 
@@ -74,7 +81,7 @@ function completedResponse(content: string) {
   };
 }
 
-function sseResponse(frames: Array<{ event: string; data: unknown }>, keepOpen = false) {
+function sseResponse(frames: Array<{ event: string; data: unknown }>, keepOpen = false, signal?: AbortSignal | null) {
   const encoder = new TextEncoder();
   return new Response(
     new ReadableStream<Uint8Array>({
@@ -82,15 +89,29 @@ function sseResponse(frames: Array<{ event: string; data: unknown }>, keepOpen =
         for (const frame of frames) {
           controller.enqueue(encoder.encode(`event: ${frame.event}\ndata: ${JSON.stringify(frame.data)}\n\n`));
         }
-        if (!keepOpen) controller.close();
+        if (keepOpen) {
+          signal?.addEventListener('abort', () => controller.error(new DOMException('Aborted', 'AbortError')), {
+            once: true,
+          });
+        } else controller.close();
       },
     }),
     { status: 200, headers: { 'Content-Type': 'text/event-stream' } },
   );
 }
 
-window.fetch = async () => {
-  if (state === 'loading') return sseResponse([{ event: 'start', data: {} }], true);
+window.fetch = async (_url, options) => {
+  const signal = options?.signal ?? (_url instanceof Request ? _url.signal : null);
+  if (state === 'loading') return sseResponse([{ event: 'start', data: {} }], true, signal);
+  if (state === 'streaming')
+    return sseResponse(
+      [
+        { event: 'start', data: {} },
+        { event: 'delta', data: { content: noteType === 'markdown' ? markdownResult : htmlResult } },
+      ],
+      true,
+      signal,
+    );
   if (state === 'quota-exhausted') {
     return sseResponse([
       { event: 'start', data: {} },
@@ -117,7 +138,17 @@ window.fetch = async () => {
       { event: 'error', data: { code: 'VISUAL_FIXTURE_ERROR', message: 'AI 服务暂时繁忙，请稍后重试。' } },
     ]);
   }
-  const content = noteType === 'markdown' ? markdownResult : htmlResult;
+  const body = options?.body ?? (_url instanceof Request ? await _url.clone().text() : '{}');
+  const operation = JSON.parse(String(body)).input?.operation;
+  const baseContent = noteType === 'markdown' ? markdownResult : htmlResult;
+  const content =
+    operation === 'title'
+      ? '功能优化清单'
+      : sample === 'short'
+        ? 'Hello'
+        : sample === 'long'
+          ? Array(16).fill(baseContent).join('\n\n')
+          : baseContent;
   return sseResponse([
     { event: 'start', data: {} },
     { event: 'delta', data: { content } },
@@ -127,9 +158,18 @@ window.fetch = async () => {
 
 // 此验收页所有业务请求只返回本地夹具，AI 请求由上方 fetch 夹具承接。
 request.defaults.adapter = async (config) => ({
-  config, status: 200, statusText: 'OK', headers: {}, data: { status: 200, data: {} },
+  config,
+  status: 200,
+  statusText: 'OK',
+  headers: {},
+  data: { status: 200, data: {} },
 });
-const app = createApp(NoteAiReplyHarness, { noteType, source: params.get('source') || undefined });
+const app = createApp(NoteAiReplyHarness, {
+  noteType,
+  source: params.get('source') || undefined,
+  sample: sample || undefined,
+  narrow: params.get('panel') === 'narrow',
+});
 app.use(createPinia());
 app.use(
   createI18n({
@@ -144,6 +184,6 @@ app.mount('#app');
 
 if (state !== 'empty') {
   requestAnimationFrame(() => {
-    document.querySelectorAll<HTMLButtonElement>('.action-btn')[2]?.click();
+    document.querySelectorAll<HTMLButtonElement>('.action-btn')[sample === 'short' ? 5 : 2]?.click();
   });
 }

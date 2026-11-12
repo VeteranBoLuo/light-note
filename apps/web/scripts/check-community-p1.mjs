@@ -45,14 +45,8 @@ try {
         return { id: item.dataset.messagePublicId, offset: item.getBoundingClientRect().top - top };
       });
       await screenshot(page, `${name}-chat`);
-      await go(page, '/preferences');
-      await page.waitForSelector('.community-preferences');
+      await go(page, '/settings');
       assert.equal(await page.evaluate(() => window.communityFixture.active.value), false);
-      await page.getByRole('button', { name: '聊天室', exact: true }).click();
-      await page.waitForFunction(() =>
-        window.communityFixture.calls.some((c) => c.method === 'put' && c.url.includes('/community/preferences')),
-      );
-      assert.ok(await page.getByRole('button', { name: '广场（暂未开放）', exact: true }).isDisabled());
       await page.evaluate(() =>
         window.communityFixture.unread.syncDirectory({
           messagingEnabled: true,
@@ -60,7 +54,7 @@ try {
         }),
       );
       if (!mobile) assert.equal(await page.locator('.navigation-community-entry__badge').innerText(), '99+');
-      await screenshot(page, `${name}-preferences`);
+      await screenshot(page, `${name}-settings`);
       await go(page, '/community/chat');
       await page.waitForSelector('.community-message');
       assert.equal(await page.locator('.community-composer textarea').inputValue(), '切换页面保留的草稿');
@@ -82,15 +76,9 @@ try {
       await page.waitForSelector('.chat-profile-content__identity');
       await screenshot(page, `${name}-profile`);
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
-      await page.goto(`${base}&path=/preferences&error`);
-      await page.waitForSelector('.community-preferences__error');
-      await screenshot(page, `${name}-preferences-error`);
-      await page.evaluate(() => (window.communityFixture.control.failPreferences = false));
-      await page.locator('.community-preferences__error button').click();
-      await page.waitForFunction(() => !document.querySelector('.community-preferences__error'));
       assert.deepEqual(errors, []);
       console.log(
-        `PASS ${name}: navigation, preference retry, badge, draft/anchor, deep link, profile`,
+        `PASS ${name}: navigation, badge, draft/anchor, deep link, profile`,
       );
       await page.close();
     }

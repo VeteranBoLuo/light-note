@@ -2,18 +2,21 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   query: vi.fn(),
-  isSelfTraffic: vi.fn(),
 }));
 
 vi.mock('../db/index.js', () => ({ default: { query: mocks.query } }));
-vi.mock('./logExclude.js', () => ({ isSelfTraffic: mocks.isSelfTraffic }));
 
+// 使用真实的内部设备过滤，覆盖调用点上的完整判定。
+const { refreshLogExclude } = await import('./logExclude.js');
 const { recordServerOperation } = await import('./operationLog.js');
 
+const INTERNAL_DEVICE = '7f0c2a4e-5b1d-4c2e-9a3f-1d2e3f4a5b6c';
+
 describe('recordServerOperation', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
+    mocks.query.mockReset().mockResolvedValueOnce([[{ device_id: INTERNAL_DEVICE }]]);
+    await refreshLogExclude();
     mocks.query.mockReset().mockResolvedValue([{}]);
-    mocks.isSelfTraffic.mockReset().mockReturnValue(false);
   });
 
   it('在业务成功后写入当前用户操作日志并剥离四字节字符', async () => {
@@ -34,16 +37,43 @@ describe('recordServerOperation', () => {
     });
   });
 
-  it('日志白名单流量不落库', async () => {
-    mocks.isSelfTraffic.mockReturnValue(true);
-
+  it('本地回环流量不落库', async () => {
     const written = await recordServerOperation(
-      { user: { id: 'user-1' }, ip: '203.0.113.8', headers: {} },
+      { user: { id: 'user-1' }, ip: '127.0.0.1', headers: {} },
       { module: '账号安全', operation: '下线设备成功' },
     );
 
     expect(written).toBe(false);
     expect(mocks.query).not.toHaveBeenCalled();
+  });
+
+  it('内部设备上的未登录流量不落库', async () => {
+    const written = await recordServerOperation(
+      {
+        user: { id: 'visitor-1', role: 'visitor', isAuthenticated: false },
+        ip: '203.0.113.8',
+        headers: { 'x-log-device-id': INTERNAL_DEVICE },
+      },
+      { module: '账号安全', operation: '邮箱验证码重置密码成功', userId: 'root-1' },
+    );
+
+    expect(written).toBe(false);
+    expect(mocks.query).not.toHaveBeenCalled();
+  });
+
+  it('内部账号登录态即使在内部设备上也照常落库，由查询时隐藏', async () => {
+    const written = await recordServerOperation(
+      {
+        user: { id: 'root-1', role: 'root', isAuthenticated: true },
+        ip: '203.0.113.8',
+        headers: { 'x-log-device-id': INTERNAL_DEVICE },
+      },
+      { module: '账号安全', operation: '下线设备成功' },
+    );
+
+    expect(written).toBe(true);
+    const [, [payload]] = mocks.query.mock.calls[0];
+    expect(payload.create_by).toBe('root-1');
   });
 
   it('普通管理员只读预览不写入被预览用户日志', async () => {

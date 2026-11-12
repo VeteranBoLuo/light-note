@@ -296,6 +296,9 @@ export function configureActiveAiExecution(config = {}, execution = getActiveAiE
   execution.maxUserProviderCalls = providerPlan.maxUserProviderCalls;
   execution.maxPlatformProviderCalls = providerPlan.maxPlatformProviderCalls;
   execution.reservationTokens = Math.max(1, Math.floor(Number(config.reservationTokens || 1)));
+  if (config.inputDiagnostics) {
+    execution.inputDiagnostics = readAiInputDiagnostics(config.inputDiagnostics, execution.skillId);
+  }
   return execution;
 }
 
@@ -479,15 +482,6 @@ export async function authorizeAiProviderCall({
   execution.userProviderCallCount += 1;
   execution.providerCallCount += 1;
   return { estimatedTokens: estimate, billingScope };
-}
-
-/**
- * 成熟业务 Service 可同时被 HTTP、批处理和 Skill Adapter 复用。外层已有根执行时必须复用，
- * 独立调用时才创建根执行，确保批量动作只占位/结算一次且不会形成嵌套账本。
- */
-export async function runOrReuseAiExecution(config, operation, dependencies = {}) {
-  if (getActiveAiExecution()) return operation();
-  return runAiExecution(config, operation, dependencies);
 }
 
 export function beginAiProviderSpan({

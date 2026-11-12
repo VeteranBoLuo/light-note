@@ -15,6 +15,8 @@ import pool from '../db/index.js';
 import { levelForExp, rankOf, RANKS } from './growth.js';
 import { getClientIp } from './security/requestContext.js';
 import { creditAiBonusTokens, debitAiBonusTokens, lockAiBonusWallet } from './aiBonusWallet.js';
+import { ensureLevelGifts } from './aiLevelGifts.js';
+import { aiQuotaMode, dailyBriefQuota } from './aiQuotaPolicy.js';
 
 // 请求前占位（约等于真实 p90 用量）；结束后按真实用量校正。
 const RESERVE_TOKENS = 5000;
@@ -154,28 +156,37 @@ function hashVisitorBinding(kind, value) {
 
 function resolveSubjects(req, { userId, userRole } = {}) {
   if (userRole === 'system' || String(userId || '').startsWith('system:')) {
-    return [{ type: 'system', key: String(userId || 'system:unknown').slice(0, 128), quota: DAILY_QUOTA.system }];
+    return [{ type: 'system', key: String(userId || 'system:unknown').slice(0, 128), quota: systemDailyQuota(userId) }];
   }
   if (userRole === 'visitor' || !userId || userId === 'visitor') {
     return [
       {
         type: 'visitor_device',
         key: hashVisitorBinding('device', resolveFingerprint(req)),
-        quota: DAILY_QUOTA.visitor,
+        quota: visitorDailyQuota(),
       },
       {
         type: 'visitor_network',
         key: hashVisitorBinding('network', resolveNetworkBinding(req)),
-        quota: DAILY_QUOTA.visitor * GUEST_NETWORK_QUOTA_MULTIPLIER,
+        quota: visitorDailyQuota() * GUEST_NETWORK_QUOTA_MULTIPLIER,
       },
     ];
   }
   return [{ type: 'user', key: String(userId).trim().slice(0, 128), quota: DAILY_QUOTA.user }];
 }
 
+function visitorDailyQuota() {
+  return aiQuotaMode() === 'permanent_only' ? 0 : DAILY_QUOTA.visitor;
+}
+
+function systemDailyQuota(userId) {
+  return userId === 'system:daily_brief' ? dailyBriefQuota() : DAILY_QUOTA.system;
+}
+
 // 注册用户按成长等级下发每日额度；永久加油余额单独核算，不能混进每日上限。
 async function userDailyQuota(userId, userRole) {
-  if (userRole === 'system') return DAILY_QUOTA.system;
+  if (userRole === 'system' || String(userId || '').startsWith('system:')) return systemDailyQuota(userId);
+  if (aiQuotaMode() === 'permanent_only') return 0;
   try {
     const [rows] = await pool.query('SELECT exp FROM user_growth WHERE user_id = ?', [userId]);
     return rankOf(levelForExp(Number(rows[0]?.exp || 0))).aiTokenDaily;
@@ -218,7 +229,7 @@ function normalizeStoredSubjects(value) {
       walletBalance: Math.max(0, Number(item.walletBalance || 0)),
       walletEnforced: item.walletEnforced === true,
     }))
-    .filter((item) => item.type && item.key && item.quota > 0);
+    .filter((item) => item.type && item.key && (item.quota > 0 || item.type === 'user'));
 }
 
 function reservationKey(ctx, subjects, pk) {
@@ -251,13 +262,13 @@ function effectiveStatus(subjects, visitor) {
   }
   const device = subjects.find((item) => item.type === 'visitor_device') || {
     used: 0,
-    quota: DAILY_QUOTA.visitor,
+    quota: visitorDailyQuota(),
   };
   const network = subjects.find((item) => item.type === 'visitor_network') || {
     used: 0,
-    quota: DAILY_QUOTA.visitor * GUEST_NETWORK_QUOTA_MULTIPLIER,
+    quota: visitorDailyQuota() * GUEST_NETWORK_QUOTA_MULTIPLIER,
   };
-  const quota = Number(device.quota || DAILY_QUOTA.visitor);
+  const quota = Number(device.quota ?? visitorDailyQuota());
   const remaining = Math.max(
     0,
     Math.min(
@@ -332,6 +343,8 @@ async function reserveSubjectsAtomic(subjects, pk, quotaReservationKey, requeste
     for (const subject of lockedSubjects) {
       if (subject.type !== 'user') continue;
       subject.walletBalance = await lockAiBonusWallet(connection, subject.key);
+      const giftResult = await ensureLevelGifts(connection, subject.key, { trigger: 'ai_fallback' });
+      if (giftResult.creditedTokens > 0) subject.walletBalance = await lockAiBonusWallet(connection, subject.key);
     }
 
     // 每日额度优先；当日额度为 0 后才允许永久余额兜底。真实 Provider 请求还会在
@@ -637,6 +650,7 @@ export async function reserve(req, ctx = {}) {
     }
     return {
       exempt: false,
+      billingMode: aiQuotaMode(),
       blocked: false,
       type: quotaType,
       pk,
@@ -683,18 +697,22 @@ function quotaSubjectKey(subject) {
   return `${String(subject?.type || '')}\0${String(subject?.key || '')}`;
 }
 
-function pendingReservationTotals(rows, subjects) {
+function pendingReservationTotals(rows, subjects, periodKey) {
   const requestedKeys = new Set(subjects.map(quotaSubjectKey));
   const totals = new Map(
-    subjects.map((subject) => [quotaSubjectKey(subject), { reservedTokens: 0, walletReserved: 0 }]),
+    subjects.map((subject) => [quotaSubjectKey(subject), { reservedTokens: 0, dayReservedTokens: 0, walletReserved: 0 }]),
   );
   for (const row of rows) {
     for (const subject of normalizeStoredSubjects(row?.subjects_json)) {
       const key = quotaSubjectKey(subject);
       if (!requestedKeys.has(key)) continue;
       const total = totals.get(key);
-      total.reservedTokens += Math.max(0, Number(subject.reservedTokens || 0));
-      total.walletReserved += Math.max(0, Number(subject.walletReserved || 0));
+      const sameDay = row.period_key === periodKey;
+      const walletReserved = subject.type === 'user' ? Math.max(0, Number(subject.walletReserved || 0)) : 0;
+      const dayReserved = sameDay ? Math.max(0, Number(subject.reservedTokens || 0)) : 0;
+      total.reservedTokens += sameDay ? dayReserved : walletReserved;
+      total.dayReservedTokens += dayReserved;
+      total.walletReserved += walletReserved;
     }
   }
   return totals;
@@ -716,27 +734,27 @@ async function readStatusSnapshot(subjects, pk, userId) {
       });
     }
     const [reservationRows] = await connection.query(
-      `SELECT subjects_json
+      `SELECT period_key, subjects_json
          FROM ai_token_reservations
-        WHERE period_key = ? AND status = 'reserved'`,
-      [pk],
+        WHERE status = 'reserved'`,
     );
     const walletBalance = userId ? await getUserBonusTokens(userId, connection) : 0;
     await connection.commit();
 
-    const pendingBySubject = pendingReservationTotals(reservationRows, rawSubjects);
+    const pendingBySubject = pendingReservationTotals(reservationRows, rawSubjects, pk);
     const resolved = rawSubjects.map((subject) => {
       const pending = pendingBySubject.get(quotaSubjectKey(subject)) || { reservedTokens: 0, walletReserved: 0 };
       return {
         ...subject,
         pendingReservedTokens: pending.reservedTokens,
+        pendingDayReservedTokens: pending.dayReservedTokens || 0,
         pendingWalletReservedTokens: pending.walletReserved,
         ...(subject.type === 'user' ? { walletBalance } : {}),
       };
     });
     const settled = resolved.map((subject) => ({
       ...subject,
-      used: Math.max(0, Number(subject.used || 0) - Number(subject.pendingReservedTokens || 0)),
+      used: Math.max(0, Number(subject.used || 0) - Number(subject.pendingDayReservedTokens || 0)),
       ...(subject.type === 'user'
         ? {
             walletBalance:
@@ -750,6 +768,7 @@ async function readStatusSnapshot(subjects, pk, userId) {
       raw: resolved,
       settled,
       pendingReservedTokens: pendingValues.length ? Math.min(...pendingValues) : 0,
+      pendingWalletReservedTokens: resolved.find(subject => subject.type === 'user')?.pendingWalletReservedTokens || 0,
     };
   } catch (error) {
     try {
@@ -785,7 +804,8 @@ export async function getStatus(req, ctx = {}) {
       type: quotaType,
       ...status,
       availableRemaining: availableStatus.remaining,
-      pendingReservedTokens: snapshot.pendingReservedTokens,
+      pendingReservedTokens: aiQuotaMode() === 'permanent_only' ? snapshot.pendingWalletReservedTokens : snapshot.pendingReservedTokens,
+      billingMode: aiQuotaMode(),
       enforcing: ENFORCE,
     };
   } catch {
@@ -794,6 +814,7 @@ export async function getStatus(req, ctx = {}) {
       exempt: false,
       unavailable: true,
       error: 'AI_QUOTA_UNAVAILABLE',
+      billingMode: aiQuotaMode(),
       role: ctx?.userRole,
       enforcing: ENFORCE,
     };
@@ -804,7 +825,7 @@ export async function getStatus(req, ctx = {}) {
 export async function getStatusForUser(userId, userRole) {
   try {
     if (!userId || userId === 'visitor' || userRole === 'visitor') {
-      return { guest: true, quota: DAILY_QUOTA.visitor, enforcing: ENFORCE };
+      return { guest: true, quota: visitorDailyQuota(), billingMode: aiQuotaMode(), enforcing: ENFORCE };
     }
     const quota = await userDailyQuota(userId, userRole);
     const subject = { type: 'user', key: String(userId).slice(0, 128), quota };
@@ -815,12 +836,13 @@ export async function getStatusForUser(userId, userRole) {
       type: 'user',
       ...status,
       availableRemaining: availableStatus.remaining,
-      pendingReservedTokens: snapshot.pendingReservedTokens,
+      pendingReservedTokens: aiQuotaMode() === 'permanent_only' ? snapshot.pendingWalletReservedTokens : snapshot.pendingReservedTokens,
+      billingMode: aiQuotaMode(),
       enforcing: ENFORCE,
     };
   } catch {
     logQuotaFailure('user_status_failed');
-    return { unavailable: true, error: 'AI_QUOTA_UNAVAILABLE', enforcing: ENFORCE };
+    return { unavailable: true, error: 'AI_QUOTA_UNAVAILABLE', billingMode: aiQuotaMode(), enforcing: ENFORCE };
   }
 }
 

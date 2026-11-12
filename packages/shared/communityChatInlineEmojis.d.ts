@@ -10,11 +10,6 @@ export type CommunityChatInlineEmojiContentSegment =
   | { type: "emoji"; emoji: CommunityChatInlineEmoji };
 
 export declare const COMMUNITY_CHAT_INLINE_EMOJIS: readonly CommunityChatInlineEmoji[];
-export declare const COMMUNITY_CHAT_INLINE_EMOJI_PACK: Readonly<{
-  id: string;
-  version: number;
-  emojis: readonly CommunityChatInlineEmoji[];
-}>;
 export declare const COMMUNITY_CHAT_INLINE_EMOJI_MAX_PER_MESSAGE: number;
 export declare const COMMUNITY_CHAT_INLINE_EMOJI_MAX_RAW_LENGTH: number;
 

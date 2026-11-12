@@ -56,46 +56,58 @@
       <div v-else-if="!logs.length" class="logs-state">{{ t('changelog.empty') }}</div>
 
       <div v-else-if="bookmark.isMobile" class="mobile-changelog">
-        <section class="mobile-changelog__latest">
+        <section v-if="latestPublishedLog" class="mobile-changelog__latest">
           <h2>{{ t('changelog.latestVersion') }}</h2>
-          <article v-if="logs[0]" class="mobile-latest-card">
+          <article v-if="latestPublishedLog" class="mobile-latest-card">
             <div class="mobile-latest-card__meta">
-              <time :datetime="logs[0].publishDate">{{ logs[0].publishDate }}</time>
-              <span class="latest-badge">{{ t('changelog.latest') }}</span>
-              <span v-if="logs[0].status === 'draft'" class="draft-badge">{{ t('changelog.status.draft') }}</span>
+              <BChip v-if="latestPublishedLog.productVersion" tone="neutral" class="log-version" max-width="100%">
+                v{{ latestPublishedLog.productVersion }}
+              </BChip>
+              <time :datetime="latestPublishedLog.publishDate">{{ latestPublishedLog.publishDate }}</time>
+              <BChip tone="pin" class="latest-badge">{{ t('changelog.latest') }}</BChip>
             </div>
-            <h3>{{ logs[0].title }}</h3>
-            <div v-if="logs[0].tags.length" class="log-tags">
-              <span v-for="tag in logs[0].tags" :key="tag">{{ tag }}</span>
+            <h3>{{ latestPublishedLog.title }}</h3>
+            <div v-if="latestPublishedLog.tags.length" class="log-tags">
+              <span v-for="tag in latestPublishedLog.tags" :key="tag">{{ tag }}</span>
             </div>
-            <p v-if="logs[0].summary" class="log-summary">{{ logs[0].summary }}</p>
+            <p v-if="latestPublishedLog.summary" class="log-summary">{{ latestPublishedLog.summary }}</p>
             <div
-              v-if="isExpanded(logs[0].id) && renderedContent[logs[0].id]"
+              v-if="isExpanded(latestPublishedLog.id) && renderedContent[latestPublishedLog.id]"
               class="log-markdown markdown-body"
-              v-html="renderedContent[logs[0].id]"
+              v-html="renderedContent[latestPublishedLog.id]"
               v-mermaid
             ></div>
-            <ol v-else-if="isExpanded(logs[0].id) && logs[0].highlights.length" class="log-highlights">
-              <li v-for="(highlight, index) in logs[0].highlights" :key="index">{{ highlight }}</li>
+            <ol v-else-if="isExpanded(latestPublishedLog.id) && latestPublishedLog.highlights.length" class="log-highlights">
+              <li v-for="(highlight, index) in latestPublishedLog.highlights" :key="index">{{ highlight }}</li>
             </ol>
             <div class="mobile-latest-card__actions">
-              <BButton v-if="canToggle(logs[0])" class="expand-button" @click="toggleExpanded(logs[0].id)">
-                {{ isExpanded(logs[0].id) ? t('changelog.collapse') : t('changelog.expand') }}
+              <BButton v-if="canToggle(latestPublishedLog)" class="expand-button" @click="toggleExpanded(latestPublishedLog.id)">
+                {{ isExpanded(latestPublishedLog.id) ? t('changelog.collapse') : t('changelog.expand') }}
               </BButton>
-              <BButton v-if="user.role === 'root'" @click="editLog(logs[0].id)">{{ t('common.edit') }}</BButton>
+              <BButton v-if="user.role === 'root'" @click="editLog(latestPublishedLog.id)">{{ t('common.edit') }}</BButton>
             </div>
           </article>
         </section>
 
-        <section v-if="logs.length > 1" class="mobile-changelog__history">
-          <h2>{{ t('changelog.history') }}</h2>
+        <section v-if="historyLogs.length" class="mobile-changelog__history">
+          <h2>{{ t(hasDraftEntries ? 'changelog.otherUpdates' : 'changelog.history') }}</h2>
           <MobileListSurface>
-            <template v-for="item in logs.slice(1)" :key="item.id">
+            <template v-for="item in historyLogs" :key="item.id">
               <MobileListRow interactive @click="toggleExpanded(item.id)">
-                <template #leading
-                  ><time class="mobile-history-date">{{ item.publishDate.slice(5) }}</time></template
-                >
-                <template #title>{{ item.title }}</template>
+                <template #title>
+                  <span class="mobile-history-title">
+                    <span class="log-meta-row">
+                      <BChip v-if="item.productVersion" tone="neutral" class="log-version" max-width="100%">
+                        v{{ item.productVersion }}
+                      </BChip>
+                      <time class="mobile-history-date" :datetime="item.publishDate">{{ item.publishDate }}</time>
+                      <BChip v-if="item.status === 'draft'" tone="neutral" class="draft-badge">
+                        {{ t('changelog.status.draft') }}
+                      </BChip>
+                    </span>
+                    <span class="mobile-history-name">{{ item.title }}</span>
+                  </span>
+                </template>
                 <template #subtitle>{{ item.summary || item.tags.join(' · ') }}</template>
                 <template #trailing><SvgIcon :src="icon.arrow_right" size="16" aria-hidden="true" /></template>
               </MobileListRow>
@@ -127,12 +139,19 @@
           <section class="log-card" :class="{ 'is-latest': item.id === latestPublishedId }">
             <div class="log-card-head">
               <div class="log-heading">
-                <div class="log-title-row">
-                  <h2>{{ item.title }}</h2>
-                  <span v-if="item.id === latestPublishedId" class="latest-badge">{{ t('changelog.latest') }}</span>
-                  <span v-if="item.status === 'draft'" class="draft-badge">{{ t('changelog.status.draft') }}</span>
+                <div class="log-meta-row">
+                  <BChip v-if="item.productVersion" tone="neutral" class="log-version" max-width="100%">
+                    v{{ item.productVersion }}
+                  </BChip>
+                  <time :datetime="item.publishDate">{{ item.publishDate }}</time>
+                  <BChip v-if="item.id === latestPublishedId" tone="pin" class="latest-badge">
+                    {{ t('changelog.latest') }}
+                  </BChip>
+                  <BChip v-if="item.status === 'draft'" tone="neutral" class="draft-badge">
+                    {{ t('changelog.status.draft') }}
+                  </BChip>
                 </div>
-                <time :datetime="item.publishDate">{{ item.publishDate }}</time>
+                <div class="log-title-row"><h2>{{ item.title }}</h2></div>
               </div>
 
               <BButton
@@ -192,6 +211,7 @@
   import { useRouter } from 'vue-router';
   import CommonContainer from '@/components/base/BasicComponents/CommonContainer.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import BChip from '@/components/base/BasicComponents/BChip.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import UpdateLogEditor from '@/components/personCenter/UpdateLogEditor.vue';
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
@@ -215,7 +235,10 @@
   const editorVisible = ref(false);
   const editingId = ref('');
   const discardNewDraft = ref(false);
-  const latestPublishedId = computed(() => logs.value.find((item) => item.status === 'published')?.id || '');
+  const latestPublishedLog = computed(() => logs.value.find((item) => item.status === 'published'));
+  const latestPublishedId = computed(() => latestPublishedLog.value?.id || '');
+  const historyLogs = computed(() => logs.value.filter((item) => item.id !== latestPublishedId.value));
+  const hasDraftEntries = computed(() => logs.value.some((item) => item.status === 'draft'));
   let loadSequence = 0;
 
   async function getLogs() {
@@ -237,7 +260,7 @@
       if (sequence !== loadSequence) return;
       logs.value = items;
       renderedContent.value = Object.fromEntries(renderedPairs);
-      const firstId = items[0]?.id;
+      const firstId = items.find((item) => item.status === 'published')?.id || items[0]?.id;
       expandedIds.value = firstId && !bookmark.isMobile ? new Set([firstId]) : new Set();
     } catch (error) {
       console.error(error);
@@ -376,7 +399,7 @@
   .logs-intro :deep(.logs-intro__store.b_btn) {
     min-height: 32px;
     padding-inline: 10px;
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
   }
 
   .logs-state {
@@ -454,7 +477,7 @@
     min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
   }
 
   .log-title-row {
@@ -468,31 +491,25 @@
   .log-title-row h2 {
     margin: 0;
     color: var(--text-color);
-    font-size: 18px;
+    font-size: var(--ui-font-18, 18px);
     line-height: 1.45;
   }
 
-  .latest-badge {
-    padding: 2px 8px;
-    border-radius: 999px;
-    background: color-mix(in srgb, var(--primary-color) 12%, transparent);
-    color: var(--primary-color);
-    font-size: 11px;
-    font-weight: 650;
+  .log-meta-row {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    min-width: 0;
+    gap: var(--ui-space-8, 8px);
   }
 
-  .draft-badge {
-    padding: 2px 8px;
-    border-radius: 999px;
-    background: color-mix(in srgb, var(--desc-color) 12%, transparent);
-    color: var(--desc-color);
-    font-size: 11px;
-    font-weight: 650;
+  .log-version {
+    font-variant-numeric: tabular-nums;
   }
 
   .log-heading time {
     color: var(--desc-color);
-    font-size: 12px;
+    font-size: var(--ui-font-12, 12px);
     font-variant-numeric: tabular-nums;
   }
 
@@ -675,7 +692,7 @@
   }
 
   .mobile-changelog-nav__title {
-    font-size: 18px;
+    font-size: var(--ui-font-18, 18px);
     font-weight: 720;
   }
 
@@ -713,7 +730,7 @@
     display: flex;
     align-items: center;
     flex-wrap: wrap;
-    gap: 7px;
+    gap: var(--ui-space-7, 7px);
   }
 
   .mobile-latest-card__meta time,
@@ -738,9 +755,17 @@
     min-height: 44px;
   }
 
-  .mobile-history-date {
-    width: 38px;
-    text-align: center;
+  .mobile-history-title {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    gap: var(--ui-space-6, 6px);
+  }
+
+  .mobile-history-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .mobile-history-detail {

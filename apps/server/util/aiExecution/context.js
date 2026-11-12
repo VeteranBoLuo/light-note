@@ -20,15 +20,6 @@ export function getActiveAiExecution() {
   return executionStorage.getStore() || null;
 }
 
-export function requireActiveAiExecution() {
-  const execution = getActiveAiExecution();
-  if (execution) return execution;
-  const error = new Error('模型调用缺少 AI Execution 上下文');
-  error.code = 'AI_EXECUTION_REQUIRED';
-  error.status = 500;
-  throw error;
-}
-
 export function isAiExecutionRuntimeRequired(env = process.env) {
   const raw = String(env.AI_GATEWAY_REQUIRE_EXECUTION || '')
     .trim()

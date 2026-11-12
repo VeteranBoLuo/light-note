@@ -38,7 +38,7 @@ it('任务进度独立刷新，不把稀有种子来源误当每日任务', () =
 it.each(['facility-build-dialog', 'purifier-upgrade-dialog', 'plot-dialog', 'purchase-dialog'])('%s 中的旧选择和确认关闭，不能静默沿用旧库存', family => {
   const s = setup(family);
   expect(s.close).toHaveBeenCalledOnce(); expect(s.render).not.toHaveBeenCalled();
-  expect(s.toast).toHaveBeenCalledWith('已更新', { topCenter: true });
+  expect(s.toast).toHaveBeenCalledWith('已更新');
 });
 it('纯玩法帮助保持打开', () => {
   const s = setup('help-dialog');
@@ -47,5 +47,5 @@ it('纯玩法帮助保持打开', () => {
 it('选种目标已被另一端种植时关闭旧面板并说明原因', () => {
   const s=setup('inventory-dialog','',true);
   expect(document.querySelector<HTMLElement>('#modal')!.hidden).toBe(true);
-  expect(s.toast).toHaveBeenCalledWith('已更新',{topCenter:true});
+  expect(s.toast).toHaveBeenCalledWith('已更新');
 });

@@ -21,7 +21,7 @@ import {
   setAdminCampaignVisibility,
 } from './adminSupportApi';
 
-describe('赞助赠送后台 API', () => {
+describe('资源商店订单后台 API', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });

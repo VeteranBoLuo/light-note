@@ -121,7 +121,7 @@
         <div class="growth-asset growth-asset--daily">
           <span class="growth-asset__label">
             <span class="growth-asset__dot" aria-hidden="true"></span>
-            {{ t('growth.assetTodayRemaining') }}
+            {{ t(permanentOnly ? 'aiQuotaOneTime.balance' : 'growth.assetTodayRemaining') }}
           </span>
           <strong
             class="growth-asset__value"
@@ -147,7 +147,7 @@
         <div class="growth-asset growth-asset--permanent">
           <span class="growth-asset__label">
             <span class="growth-asset__dot" aria-hidden="true"></span>
-            {{ t('growth.assetPermanentBalance') }}
+            {{ t(permanentOnly ? 'aiQuotaOneTime.available' : 'growth.assetPermanentBalance') }}
           </span>
           <strong
             class="growth-asset__value"
@@ -172,6 +172,8 @@
       </div>
     </template>
 
+    <!-- 领取回执独占底栏上方一行，与「连续签到」左对齐，不挤占签到与领取按钮。 -->
+    <GrowthClaimReceipt v-if="receipt" class="growth-receipt" :receipt="receipt" block @dismiss="clearReceipt" />
     <div class="growth-footer">
       <div class="growth-footer__summary">
         <span class="streak">{{ t('growth.streak') }} · {{ t('growth.daysVal', { n: g.streak }) }}</span>
@@ -222,7 +224,8 @@
   import { recordOperation } from '@/api/commonApi.ts';
   import { bookmarkStore, useUserStore } from '@/store';
   import icon from '@/config/icon.ts';
-  import { useGrowthClaimFeedback } from '@/composables/useGrowthClaimFeedback';
+  import { useGrowthClaimFeedback, useTransientClaimReceipt } from '@/composables/useGrowthClaimFeedback';
+  import GrowthClaimReceipt from '@/components/growth/GrowthClaimReceipt.vue';
   import { formatAiQuotaTokens, useAiQuotaStatus } from '@/composables/useAiQuotaStatus';
   import { growthNextActionCommand, resolveGrowthActionRoute } from '@/utils/growthNavigation';
 
@@ -263,7 +266,9 @@
     load: loadAiQuota,
   } = useAiQuotaStatus({ autoLoad: false });
   const claimable = computed(() => Number(claimableData.value?.count || 0));
-  const { claimAllTooltip, snapshotClaimableBreakdown, claimSuccessMessage } = useGrowthClaimFeedback(claimableData);
+  const { claimAllTooltip, snapshotClaimableBreakdown, claimReceipt } = useGrowthClaimFeedback(claimableData);
+  // 领取结果在本卡片原位展示，不再弹出多行全局提示；与成长页「今天」卡共用同一回执。
+  const { receipt, show: showReceipt, clear: clearReceipt } = useTransientClaimReceipt();
   const dailyProgress = computed(() => ({
     completed: Number(claimableData.value?.today?.completed || 0),
     total: Number(claimableData.value?.today?.total ?? 3),
@@ -300,10 +305,11 @@
     return Number.isFinite(amount) ? Math.max(0, amount) : null;
   }
 
+  const permanentOnly = computed(() => aiQuotaStatus.value?.billingMode === 'permanent_only');
   const quotaReading = computed(() => aiQuotaLoading.value || (!aiQuotaStatus.value && !aiQuotaUnavailable.value));
   const quotaExempt = computed(() => Boolean(aiQuotaStatus.value?.exempt));
   const dailyQuotaRemaining = computed(
-    () => finiteMetric(aiQuotaStatus.value?.dailyRemaining) ?? finiteMetric(aiQuotaStatus.value?.remaining),
+    () => permanentOnly.value ? finiteMetric(aiQuotaStatus.value?.bonusTokens) : finiteMetric(aiQuotaStatus.value?.dailyRemaining) ?? finiteMetric(aiQuotaStatus.value?.remaining),
   );
   const dailyQuotaTotal = computed(
     () => finiteMetric(aiQuotaStatus.value?.dailyQuota) ?? finiteMetric(aiQuotaStatus.value?.quota),
@@ -311,11 +317,12 @@
   const dailyQuotaUsed = computed(
     () => finiteMetric(aiQuotaStatus.value?.dailyUsed) ?? finiteMetric(aiQuotaStatus.value?.used),
   );
-  const permanentBalance = computed(() => finiteMetric(aiQuotaStatus.value?.bonusTokens));
+  const permanentBalance = computed(() => finiteMetric(permanentOnly.value ? aiQuotaStatus.value?.availableRemaining ?? aiQuotaStatus.value?.remaining : aiQuotaStatus.value?.bonusTokens));
   const reservedQuota = computed(() => finiteMetric(aiQuotaStatus.value?.pendingReservedTokens) || 0);
   const points = computed(() => finiteMetric(g.value?.points));
   const dailyQuotaMeterAvailable = computed(
     () =>
+      !permanentOnly.value &&
       !quotaReading.value &&
       !quotaExempt.value &&
       !aiQuotaUnavailable.value &&
@@ -333,6 +340,7 @@
     if (quotaReading.value) return t('growth.assetLoadingHint');
     if (quotaExempt.value) return t('growth.assetUnlimitedHint');
     if (aiQuotaUnavailable.value || dailyQuotaRemaining.value === null) return t('growth.assetUnavailableHint');
+    if (permanentOnly.value) return t('aiQuotaOneTime.retained');
     if (reservedQuota.value > 0) return t('growth.assetSettling');
     if (dailyQuotaUsed.value !== null) {
       return t('growth.assetDailyUsed', { n: formatAiQuotaTokens(dailyQuotaUsed.value, locale.value) });
@@ -352,7 +360,9 @@
     if (quotaReading.value) return t('growth.assetLoadingHint');
     if (quotaExempt.value) return t('growth.assetUnlimitedHint');
     if (aiQuotaUnavailable.value || permanentBalance.value === null) return t('growth.assetUnavailableHint');
-    return t('growth.assetPermanentHint');
+    return permanentOnly.value
+      ? t('aiQuotaOneTime.availableWithPending', { amount: formatAiQuotaTokens(reservedQuota.value, locale.value) })
+      : t('growth.assetPermanentHint');
   });
   const pointsDisplay = computed(() => {
     if (points.value === null) return t('growth.assetUnavailable');
@@ -366,7 +376,7 @@
       const res = await claimAllRewards();
       if (res?.status === 200 && res.data?.ok) {
         if (res.data.claimed > 0) {
-          message.success(claimSuccessMessage(res.data, pendingBreakdown));
+          showReceipt(claimReceipt(res.data, pendingBreakdown));
           recordOperation({
             module: '工作台',
             operation: '一键领取成长奖励成功',
@@ -835,6 +845,15 @@
 
   .growth-footer {
     margin-top: auto;
+  }
+
+  .growth-receipt {
+    margin-top: auto;
+    margin-bottom: var(--ui-space-8, 8px);
+  }
+
+  .growth-receipt + .growth-footer {
+    margin-top: 0;
   }
 
   .growth-footer__summary {

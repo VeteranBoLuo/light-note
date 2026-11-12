@@ -24,6 +24,16 @@ describe('grounded skill model', () => {
     requestAiStream.mockReset();
   });
 
+  it.each([false, true])('输出被 Provider 截断时失败关闭，不把半篇正文交付或再次调用模型（stream=%s）', async (stream) => {
+    const client = stream ? requestAiStream : requestAi;
+    client.mockResolvedValueOnce({ content: '这是一段仍然没有完成的正文', finishReason: 'length' });
+    await expect((stream ? callGroundedSkillModelStream : callGroundedSkillModel)({
+      messages: [{ role: 'user', content: '摘要' }], modelPolicy: { maxTokens: 2048, temperature: 0.1 },
+      sources: [], coverage: { complete: true }, trace: { stage: 'test', taskType: 'test' },
+    })).rejects.toMatchObject({ code: 'AI_SKILL_OUTPUT_TOO_LONG' });
+    expect(client).toHaveBeenCalledTimes(1);
+  });
+
   it('把模型来源索引渲染成服务端权威引用，不再信任模型正文编号', async () => {
     requestAi.mockResolvedValueOnce(groundedToolResponse([{ markdown: '这是由材料支持的回答。', sourceIndexes: [1] }]));
     const result = await callGroundedSkillModel({

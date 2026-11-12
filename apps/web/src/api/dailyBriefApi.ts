@@ -60,6 +60,7 @@ export interface DailyBrief {
 }
 
 export interface DailyBriefState {
+  adviceBillingPolicy?: 'user' | 'system';
   featureEnabled: boolean;
   enabled: boolean;
   date: string;
@@ -78,12 +79,6 @@ export interface DailyBriefState {
   shouldGenerate?: boolean;
   nextRefreshAt?: string | null;
   pauseReason?: 'manual' | 'quota' | 'budget' | null;
-}
-
-export interface DailyBriefPreference {
-  featureEnabled: boolean;
-  enabled: boolean;
-  autoUpdate?: boolean;
 }
 
 export const getDailyBrief = (options: { check?: boolean } = {}) =>

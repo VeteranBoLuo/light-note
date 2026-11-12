@@ -1,3 +1,4 @@
+import { estimateTypedTextTokens, reservationCalibrationEnabled } from '../aiTokenEstimate.js';
 import { MAX_DEEPSEEK_IMAGE_TOKENS } from './deepseekModelPolicy.js';
 import crypto from 'node:crypto';
 import { getActiveProviderInfo, requestDeepSeek, requestDeepSeekStream } from './deepseekClient.js';
@@ -63,17 +64,18 @@ function serializedByteLength(value) {
   }
 }
 
-function estimateTextTokens(value) {
+function estimateTextTokens(value, calibrated = false) {
+  if (calibrated) return estimateTypedTextTokens(value);
   return Math.ceil(Buffer.byteLength(String(value || ''), 'utf8') / 3);
 }
 
-function estimateMessageTokens(messages) {
+function estimateMessageTokens(messages, calibrated = false) {
   let estimate = 0;
   for (const message of Array.isArray(messages) ? messages : []) {
-    estimate += 12 + estimateTextTokens(message?.role) + estimateTextTokens(message?.name);
+    estimate += 12 + estimateTextTokens(message?.role, calibrated) + estimateTextTokens(message?.name, calibrated);
     const content = message?.content;
     if (!Array.isArray(content)) {
-      estimate += estimateTextTokens(content);
+      estimate += estimateTextTokens(content, calibrated);
       continue;
     }
     for (const block of content) {
@@ -82,7 +84,7 @@ function estimateMessageTokens(messages) {
         // 图片的 base64/URL 是传输载荷，不是文本 prompt。DeepSeek 当前每张图片最高折算 1024 tokens。
         estimate += MAX_DEEPSEEK_IMAGE_TOKENS;
       } else if (['text', 'input_text'].includes(type)) {
-        estimate += estimateTextTokens(block?.text);
+        estimate += estimateTextTokens(block?.text, calibrated);
       } else {
         estimate += Math.ceil(serializedByteLength(block) / 3);
       }
@@ -95,9 +97,9 @@ function estimateMessageTokens(messages) {
  * 请求前只需要一个保守上界而非 Provider 专属 tokenizer：中文 UTF-8 通常 3 bytes/字，
  * 英文约 4 chars/token，按 3 bytes/token 再加固定协议余量可以覆盖两者的大多数情况。
  */
-export function estimateAiProviderTokens(messages, options = {}) {
+export function estimateAiProviderTokens(messages, options = {}, { calibrated = reservationCalibrationEnabled() && getActiveAiExecution()?.skillId === 'note.transform_text' } = {}) {
   const promptEstimate =
-    estimateMessageTokens(messages) + Math.ceil(serializedByteLength(options.tools || []) / 3) + 256;
+    estimateMessageTokens(messages, calibrated) + Math.ceil(serializedByteLength(options.tools || []) / 3) + 256;
   const outputEstimate = Number.isFinite(Number(options.maxTokens))
     ? Math.max(1, Math.floor(Number(options.maxTokens)))
     : 1_024;

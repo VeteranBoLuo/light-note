@@ -1,4 +1,5 @@
 import { createApp, h } from 'vue';
+import GlobalCloudUploadQueue from '@/components/cloudSpace/GlobalCloudUploadQueue.vue';
 import { createPinia, setActivePinia } from 'pinia';
 import { createRouter, createMemoryHistory, RouterView } from 'vue-router';
 import { createI18n } from 'vue-i18n';
@@ -229,7 +230,7 @@ await router.push(scopeFixture ? '/cloudSpace?folderId=1' : '/cloudSpace');
 const app = createApp({
   setup() {
     useResourceSelectionRuntime();
-    return () => [h(RouterView), h(ResourceBatchTagsHost), h(ResourceSelectionDrawer)];
+    return () => [h(GlobalCloudUploadQueue), h(RouterView), h(ResourceBatchTagsHost), h(ResourceSelectionDrawer)];
   },
 });
 app

@@ -56,12 +56,11 @@ const pool = vi.hoisted(() => ({
           });
           return [{ affectedRows: 1 }, []];
         }
-        if (/SELECT subjects_json[\s\S]+WHERE period_key = \? AND status = 'reserved'/i.test(sql)) {
-          const periodKey = params[0];
+        if (/SELECT period_key, subjects_json[\s\S]+WHERE status = 'reserved'/i.test(sql)) {
           return [
             [...state.reservations.values()]
-              .filter((row) => row.period_key === periodKey && row.status === 'reserved')
-              .map((row) => ({ subjects_json: row.subjects_json })),
+              .filter((row) => row.status === 'reserved')
+              .map((row) => ({ period_key: row.period_key, subjects_json: row.subjects_json })),
             [],
           ];
         }
@@ -277,6 +276,7 @@ beforeEach(async () => {
   pool.getConnection.mockClear();
   pool.query.mockClear();
   vi.restoreAllMocks();
+  vi.unstubAllEnvs();
   await reloadQuota();
 });
 
@@ -450,6 +450,63 @@ describe('AI quota abuse hardening', () => {
     expect(state.wallets.get('user-wallet')).toBe(28_200);
     await aiQuota.correctReconciledReservation(handle, 1000);
     expect(state.wallets.get('user-wallet')).toBe(29_000);
+  });
+
+  it.each(['user', 'root', 'test'])('新模式的 %s 只使用余额，零日额度预留可退款和修正', async (role) => {
+    vi.stubEnv('AI_DAILY_QUOTA_MODE', 'off');
+    state.wallets.set('one-time', 120_000);
+    const context = { userId: 'one-time', userRole: role, requestId: 'one-time-reserve', reserveTokens: 20_000 };
+    const handle = await aiQuota.reserve(visitorRequest(), context);
+    expect(handle).toMatchObject({ blocked: false, subjects: [{ quota: 0, dailyReserved: 0, walletReserved: 20_000 }] });
+    expect(state.wallets.get('one-time')).toBe(100_000);
+    expect(await aiQuota.reconcile(handle, 12_000)).toBe(true);
+    expect(state.wallets.get('one-time')).toBe(108_000);
+    await aiQuota.correctReconciledReservation(handle, 0);
+    expect(state.wallets.get('one-time')).toBe(120_000);
+    await expect(aiQuota.getStatus(visitorRequest(), context)).resolves.toMatchObject({
+      billingMode: 'permanent_only', dailyQuota: 0, bonusTokens: 120_000, remaining: 120_000,
+    });
+  });
+
+  it('余额预留跨日仍显示在处理中，午夜不补发额度且按原账期结算', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      vi.setSystemTime(new Date(2026, 10, 5, 23, 59));
+      vi.stubEnv('AI_DAILY_QUOTA_MODE', 'off');
+      state.wallets.set('cross-day', 120000);
+      const context = { userId: 'cross-day', userRole: 'user', requestId: 'cross-day', reserveTokens: 20000 };
+      const handle = await aiQuota.reserve(visitorRequest(), context);
+      vi.setSystemTime(new Date(2026, 10, 6, 0, 1));
+      expect(await aiQuota.getStatus(visitorRequest(), context)).toMatchObject({ bonusTokens: 120000, availableRemaining: 100000, pendingReservedTokens: 20000, dailyQuota: 0 });
+      await aiQuota.reconcile(handle, 5000);
+      expect(await aiQuota.getStatus(visitorRequest(), context)).toMatchObject({ bonusTokens: 115000, availableRemaining: 115000, pendingReservedTokens: 0, dailyUsed: 0 });
+    } finally { vi.useRealTimers(); }
+  });
+
+  it('取消刷新后游客没有试用桶，简报保留独立平台预算', async () => {
+    vi.stubEnv('AI_DAILY_QUOTA_MODE', 'off');
+    const visitor = await aiQuota.reserve(visitorRequest(), visitorContext('guest-off'));
+    expect(visitor).toMatchObject({ blocked: true, quota: 0, remaining: 0 });
+    const brief = await aiQuota.reserve(visitorRequest(), { userId: 'system:daily_brief', userRole: 'system', requestId: 'brief' });
+    expect(brief).toMatchObject({ blocked: false, subjects: [{ quota: 66_000 }] });
+    vi.stubEnv('AI_DAILY_BRIEF_DAILY_QUOTA', '0');
+    expect(await aiQuota.reserve(visitorRequest(), { userId: 'system:daily_brief', userRole: 'system', requestId: 'brief-empty' })).toMatchObject({ blocked: true });
+  });
+
+  it('切换前的预留使用原快照结算；切换后的预留在回退后仍正确退款', async () => {
+    state.wallets.set('mode-switch', 120_000);
+    const context = { userId: 'mode-switch', userRole: 'user', reserveTokens: 20_000 };
+    const old = await aiQuota.reserve(visitorRequest(), { ...context, requestId: 'legacy' });
+    vi.stubEnv('AI_DAILY_QUOTA_MODE', 'off');
+    expect(await aiQuota.getStatus(visitorRequest(), context)).toMatchObject({ bonusTokens: 120000, availableRemaining: 120000, pendingReservedTokens: 0 });
+    await aiQuota.reconcile(old, 8_000);
+    expect(state.wallets.get('mode-switch')).toBe(120_000);
+    const current = await aiQuota.reserve(visitorRequest(), { ...context, requestId: 'current' });
+    vi.stubEnv('AI_DAILY_QUOTA_MODE', 'level');
+    await aiQuota.reconcile(current, 8_000);
+    expect(state.wallets.get('mode-switch')).toBe(112_000);
+    await aiQuota.releaseReservation(current);
+    expect(state.wallets.get('mode-switch')).toBe(120_000);
   });
 
   it('下调每日上限不追扣旧任务，旧预占按快照结算，新请求才使用永久余额', async () => {

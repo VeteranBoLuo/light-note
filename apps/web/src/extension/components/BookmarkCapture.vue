@@ -175,6 +175,7 @@
   } from '../types';
   import { buildBookmarkCapturePayload } from '@/utils/bookmarkCapture.ts';
   import { getAiQuotaErrorPresentation } from '@/utils/aiQuotaErrorPresentation';
+  import { validateAiSkillResponse } from '@lightnote/shared/ai-skill-protocol';
 
   const props = defineProps<{
     authenticated: boolean;
@@ -381,8 +382,12 @@
         },
       });
       if (!attribution.current()) return;
+      const result = validateAiSkillResponse(data);
+      if (!['completed', 'preview_ready'].includes(result.status)) {
+        throw new Error(t('browserExtension.bookmark.aiFailed'));
+      }
       const before = adoptionFields();
-      const fields = data?.result?.fields || {};
+      const fields = (result.result?.fields || {}) as Record<string, unknown>;
       if (fields.name) draft.name = String(fields.name);
       if (fields.description) draft.description = String(fields.description);
       const validIds = new Set(tagOptions.value.map((option) => option.value));
@@ -401,13 +406,16 @@
         ),
       ].slice(0, 4);
       draft.selectedNewTags = draft.selectedNewTags.filter((tag) => suggestedNewTags.value.includes(tag));
-      attribution.filled(data?.requestId || '', before, adoptionFields(), suggestedNewTags.value);
+      attribution.filled(result.requestId, before, adoptionFields(), suggestedNewTags.value);
       aiGenerated.value = true;
     } catch (error: any) {
       if (isExtensionAuthError(error)) emit('auth-required');
       else {
         const quotaFailure = getAiQuotaErrorPresentation(error, (key, params) => t(key, params));
-        errorMessage.value = quotaFailure?.message || error?.message || t('browserExtension.bookmark.aiFailed');
+        errorMessage.value =
+          quotaFailure?.message ||
+          (error?.code === 'AI_SKILL_OUTPUT_EMPTY' ? t('browserExtension.bookmark.aiFailed') : error?.message) ||
+          t('browserExtension.bookmark.aiFailed');
       }
     } finally {
       aiLoading.value = false;

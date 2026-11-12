@@ -42,7 +42,10 @@ const GardenTooltips = (() => {
     }
     const over=e=>{if(e.pointerType==='touch'||!win.matchMedia('(hover:hover)').matches)return;const el=target(e.target);if(el)show(el);};
     const out=e=>{if(owner?.contains(e.target)&&!owner.contains(e.relatedTarget))hide();};
-    const focus=e=>{const el=target(e.target);if(el&&el.matches(':focus-visible'))show(el,true);else hide();};
+    // 只跟随 Tab 导航的焦点显示。Esc、快捷键关弹框后把焦点还给入口按钮时，浏览器也会判为 :focus-visible，
+    // 但庄园此时已退出键盘导航（html.kbd-nav），提示不应挂在按钮上。
+    const keyboardNav=()=>doc.documentElement.classList.contains('kbd-nav');
+    const focus=e=>{const el=target(e.target);if(el&&keyboardNav()&&el.matches(':focus-visible'))show(el,true);else hide();};
     const blur=e=>{if(owner?.contains(e.target))hide();};
     const key=e=>{if(e.key==='Escape'&&owner){hide();e.stopPropagation();}};
     const listeners=[['pointerover',over],['pointerout',out],['focusin',focus],['focusout',blur],['pointerdown',hide],['keydown',key],['scroll',hide]];

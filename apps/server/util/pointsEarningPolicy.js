@@ -260,9 +260,6 @@ export async function assertPointsEarningActivationReady({
   return true;
 }
 
-// 保留旧导出，避免部署窗口内尚未更新的启动脚本或测试夹具中断。
-export const assertPointsEarningC5ActivationReady = assertPointsEarningActivationReady;
-
 export function earningPolicyVersionForDay(dayKey, runtime = getPointsEarningRuntime()) {
   const day = normalizeDay(dayKey);
   // enabled 是发放总闸，不参与已经到达生效日后的版本回退。否则事故暂停时会在
@@ -371,10 +368,6 @@ export function applyAchievementEarningPolicy(achievement, version = POINTS_EARN
   return version === POINTS_EARNING_C8_POLICY_VERSION
     ? { ...resolved, reward: Math.floor(Number(resolved.reward || 0) / 2) }
     : resolved;
-}
-
-export function getAchievementPolicy(key) {
-  return ACHIEVEMENT_OVERRIDES[key] ? { ...ACHIEVEMENT_OVERRIDES[key] } : null;
 }
 
 export function getEarningPolicySnapshot(version = POINTS_EARNING_POLICY_VERSION, { weeklyVersion = version } = {}) {

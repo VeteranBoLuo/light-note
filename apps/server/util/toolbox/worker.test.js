@@ -32,19 +32,16 @@ describe('toolbox worker contracts', () => {
 
   it('maps every fixed artifact to its own toolbox-internal Skill profile', () => {
     expect(toolboxWorkerInternals.TOOL_SKILLS).toEqual({
-      idea_to_draft: 'toolbox.idea_to_draft',
       material_to_note: 'toolbox.material_to_note',
-      research_brief: 'toolbox.research_brief',
       study_kit: 'toolbox.study_kit',
-      concept_map: 'toolbox.concept_map',
-      action_plan: 'toolbox.action_plan',
-      source_comparison: 'toolbox.source_comparison',
-      knowledge_audit: 'toolbox.knowledge_audit',
     });
   });
 
   it('keeps shared AI tools, registered Skills and Worker strategies bidirectionally identical', () => {
-    const protocolTools = TOOLBOX_TOOL_CATALOG.filter((tool) => tool.executionMode === 'ai_skill' && tool.id !== 'translation');
+    // 已下架的 AI 工具只保留协议身份展示历史成果，不再注册 Skill 与执行策略。
+    const protocolTools = TOOLBOX_TOOL_CATALOG.filter(
+      (tool) => tool.executionMode === 'ai_skill' && tool.id !== 'translation' && tool.availability.enabled,
+    );
     const protocolIds = protocolTools.map((tool) => tool.id).sort();
     const skillIds = toolboxSkills.map((skill) => skill.id.replace(/^toolbox\./u, '')).sort();
     const strategyIds = Object.keys(toolboxWorkerInternals.AI_TOOL_STRATEGIES).sort();
@@ -96,9 +93,10 @@ describe('toolbox worker contracts', () => {
   });
 
   it('derives scenario guidance from a server-controlled intent instead of a second user prompt', () => {
-    expect(toolboxWorkerInternals.toolboxIntentInstruction('research_brief', 'decision')).toContain('待决策问题');
-    expect(toolboxWorkerInternals.toolboxIntentInstruction('research_brief', 'synthesize')).toBe('');
-    expect(toolboxWorkerInternals.toolboxIntentInstruction('unknown', 'decision')).toBe('');
+    expect(toolboxWorkerInternals.toolboxIntentInstruction('study_kit', 'memorize')).toContain('记忆巩固');
+    expect(toolboxWorkerInternals.toolboxIntentInstruction('study_kit', 'synthesize')).toBe('');
+    expect(toolboxWorkerInternals.toolboxIntentInstruction('research_brief', 'decision')).toBe('');
+    expect(toolboxWorkerInternals.toolboxIntentInstruction('unknown', 'memorize')).toBe('');
     for (const [toolId, intents] of Object.entries(TOOLBOX_TOOL_INTENTS)) {
       expect(Object.keys(toolboxWorkerInternals.AI_TOOL_INTENT_INSTRUCTIONS[toolId] || {}).sort()).toEqual(
         [...intents].sort(),

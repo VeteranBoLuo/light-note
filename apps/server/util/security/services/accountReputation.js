@@ -1,8 +1,5 @@
 import pool from '../../../db/index.js';
 
-const cache = new Map();
-const CACHE_TTL = 60 * 1000;
-
 const defaultReputation = (userId) => ({
   userId,
   total_events: 0,
@@ -19,23 +16,6 @@ const parseAttackTypeBreakdown = (value) => {
     return JSON.parse(value || '{}');
   } catch (e) {
     return {};
-  }
-};
-
-export const getAccountReputation = async (userId) => {
-  if (!userId) return defaultReputation('');
-  const cached = cache.get(userId);
-  if (cached && cached.expiresAt > Date.now()) {
-    return cached.value;
-  }
-  try {
-    const [rows] = await pool.query('SELECT * FROM security_account_reputation WHERE user_id = ? LIMIT 1', [userId]);
-    const value = rows[0] || defaultReputation(userId);
-    value.attack_type_breakdown = parseAttackTypeBreakdown(value.attack_type_breakdown);
-    cache.set(userId, { value, expiresAt: Date.now() + CACHE_TTL });
-    return value;
-  } catch (e) {
-    return defaultReputation(userId);
   }
 };
 
@@ -82,7 +62,6 @@ export const updateAccountReputation = async ({ userId, attackType, severity, th
       JSON.stringify(breakdown),
     ],
   );
-  cache.delete(userId);
 
   // 接近上限时，读取实际增量以保证 riskDelta 准确（revert 依赖此值）
   let actualRiskDelta = theoreticalRiskDelta;
@@ -112,7 +91,6 @@ export const revertAccountReputationImpact = async ({
   const [rows] = await executor.query('SELECT * FROM security_account_reputation WHERE user_id = ? LIMIT 1', [userId]);
   const current = rows[0];
   if (!current) {
-    cache.delete(userId);
     return false;
   }
 
@@ -139,7 +117,6 @@ export const revertAccountReputationImpact = async ({
      WHERE user_id = ?`,
     [highRisk, critical, Math.max(0, Number(riskDelta || 0)), JSON.stringify(breakdown), userId],
   );
-  cache.delete(userId);
   return true;
 };
 
@@ -204,6 +181,5 @@ export const rebuildAccountReputationFromEvents = async ({ userId, connection = 
       lastAttackTime,
     ],
   );
-  cache.delete(userId);
   return true;
 };

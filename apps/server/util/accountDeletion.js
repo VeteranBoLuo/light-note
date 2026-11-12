@@ -6,10 +6,10 @@ import { queueNotificationChange, queueNotificationSourceChange } from './notifi
 import { deriveScrypt } from './asyncScrypt.js';
 import { acquireAccountAiLifecycleConnection } from './accountAiLifecycleLock.js';
 import pool from '../db/index.js';
+import { preserveAiGiftRiskOnDeletion } from './aiLevelGiftRiskFacts.js';
 import redisClient from './redisClient.js';
 import { sendTrackedEmail } from './emailDelivery.js';
 import { stableAgentErrorCode } from './agent/logSafety.js';
-import { invalidateAfdianLeaderboardCache } from './afdianSupportReadService.js';
 import {
   ACCOUNT_DELETION_STALE_PROCESSING_MINUTES,
   classifyAccountResourceCleanup,
@@ -450,6 +450,7 @@ export async function requestAccountDeletion({ userId, code, confirmation }) {
       );
     }
 
+    await preserveAiGiftRiskOnDeletion(connection, tables, userId);
     const [updateResult] = await connection.query(
       `UPDATE user
           SET alias = '已注销用户',
@@ -475,7 +476,6 @@ export async function requestAccountDeletion({ userId, code, confirmation }) {
     queueNotificationChange(connection, [userId]);
     queueNotificationSourceChange(connection, { kind: 'actor', ids: [userId] });
     await connection.commit();
-    invalidateAfdianLeaderboardCache();
   } catch (error) {
     await connection.rollback().catch(() => {});
     if (error?.code === 'ER_DUP_ENTRY') {
@@ -572,6 +572,7 @@ export async function purgeToolboxWorkspace(connection, tables, userId) {
   await deleteIfPresent(connection, tables, 'toolbox_ocr_usage', 'DELETE FROM toolbox_ocr_usage WHERE user_id = ?', [
     userId,
   ]);
+  // 资料转表格已下架但表仍保留，注销时继续清理历史数据。
   for (const table of ['toolbox_extraction_records', 'toolbox_extraction_sources', 'toolbox_extraction_receipts', 'toolbox_extractions']) {
     await deleteIfPresent(connection, tables, table, `DELETE FROM ${table} WHERE user_id = ?`, [userId]);
   }
@@ -863,6 +864,10 @@ export async function purgeOwnedResources(connection, tables, userId) {
   await deleteIfPresent(connection, tables, 'note_tags', 'DELETE FROM note_tags WHERE user_id = ?', [userId]);
   await deleteIfPresent(connection, tables, 'bookmark', 'DELETE FROM bookmark WHERE user_id = ?', [userId]);
   await deleteIfPresent(connection, tables, 'files', 'DELETE FROM files WHERE create_by = ?', [userId]);
+  if (tables.has('cloud_multipart_uploads')) {
+    // Keep cleanup credentials until AbortMultipartUpload has finished.
+    await connection.query("UPDATE cloud_multipart_uploads SET state='aborting',cancel_requested=1,available_at=NOW(),expires_at=NULL WHERE user_id=?", [userId]);
+  }
   await deleteIfPresent(
     connection, tables, 'cloud_legacy_object_lifecycle',
     'DELETE FROM cloud_legacy_object_lifecycle WHERE user_id = ?', [userId],
@@ -1065,7 +1070,6 @@ async function purgeDatabaseForUser(userId) {
       await connection.query("DELETE FROM user WHERE id = ? AND role = 'deleted' AND del_flag = 1", [userId]);
     }
     await connection.commit();
-    invalidateAfdianLeaderboardCache();
   } catch (error) {
     await connection.rollback();
     throw error;

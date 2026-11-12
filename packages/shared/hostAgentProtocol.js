@@ -41,18 +41,6 @@ export const HOST_AGENT_ACTIONS = Object.freeze({
   SERVICE_RESTART: "service.restart",
 });
 
-export const HOST_AGENT_SERVICE_STATES = Object.freeze([
-  "running",
-  "stopped",
-  "degraded",
-  "unknown",
-]);
-export const HOST_AGENT_JOB_STATES = Object.freeze([
-  "succeeded",
-  "failed",
-  "unknown",
-]);
-
 const SERVICE_ID_SET = new Set(HOST_AGENT_SERVICE_IDS);
 const RESTARTABLE_SERVICE_ID_SET = new Set(HOST_AGENT_RESTARTABLE_SERVICE_IDS);
 const ACTION_SET = new Set(Object.values(HOST_AGENT_ACTIONS));

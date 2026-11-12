@@ -24,6 +24,16 @@ vi.mock('@/composables/useGrowth', () => ({
 }));
 vi.mock('@/composables/useMobileTopBar', () => ({ useMobileTopBar: () => {} }));
 vi.mock('@/composables/useManorAttention', () => ({ refreshManorAttention: mocks.attention }));
+vi.mock('@/components/manor/ManorReminderDialog.vue', () => ({
+  default: {
+    props: ['open'],
+    emits: ['close'],
+    setup: (props: {open:boolean}, context: {emit:(event:string)=>void}) =>
+      () => props.open ? h('div', { role: 'dialog' }, [
+        h('section', 'shared-manor-reminder-preferences'), h('button', { 'data-close-reminders': '', onClick: () => context.emit('close') }, 'close-reminders'),
+      ]) : null,
+  },
+}));
 vi.mock('@/components/home/navigation/Navigation.vue', () => ({ default: { render: () => h('nav', { 'aria-label': '轻笺导航' }, '轻笺导航') } }));
 vi.mock('vue-i18n', () => ({ useI18n: () => ({ t: (key: string) => key }) }));
 vi.mock('@/utils/manorPending', async importOriginal => ({
@@ -86,6 +96,39 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 describe('庄园加载与主站导航', () => {
+  it.each([false, true])('庄园菜单打开共享提醒设置；返回先关闭设置并保留场景（移动端：%s）', async (mobile) => {
+    mocks.bookmark.isMobile = mobile;
+    const router = await mount();
+    const frame = document.querySelector('iframe')!, nonce = new URL(frame.src).searchParams.get('bridge');
+    const send = async (action: string, payload = {}, token = nonce) => {
+      window.dispatchEvent(new MessageEvent('message', { source: frame.contentWindow, origin: location.origin,
+        data: { type: 'lightnote-manor', nonce: token, id: 7, action, payload } }));
+      await flush();
+    };
+    await send('ready');
+    const focus = vi.spyOn(frame, 'focus');
+    await send('reminders', {}, 'forged-nonce');
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    await send('dialog', { open: true });
+    await send('reminders');
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain('shared-manor-reminder-preferences');
+    expect(mocks.command).not.toHaveBeenCalled();
+    document.querySelector<HTMLButtonElement>('[data-close-reminders]')!.click();
+    await flush();
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    expect(focus).toHaveBeenCalled();
+    await send('reminders');
+    await router.push('/bookmarks');
+    await flush();
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    expect(router.currentRoute.value.path).toBe('/knowledge-manor');
+    expect(document.querySelector('iframe')).toBe(frame);
+    await send('reminders');
+    mocks.user.id = '';
+    await router.push('/bookmarks');
+    await flush();
+    expect(router.currentRoute.value.path).toBe('/bookmarks');
+  });
   it('维护说明以纯文本展示，场景就绪前不覆盖加载层',async()=>{
     mocks.read.mockResolvedValueOnce({quests:[],state:{},revision:0,version:'fixture',runtime:{mode:'maintenance',message:'<b>测试维护</b>',revision:1}} as never);
     await mount();
@@ -273,6 +316,30 @@ describe('庄园加载与主站导航', () => {
     await arrived;
     expect(router.currentRoute.value.fullPath).toBe(destination);
     expect(mocks.command).not.toHaveBeenCalled();
+  });
+
+  it('去完成每日任务后回到庄园，场景就绪即打开任务列表，且只打开一次', async () => {
+    mocks.read.mockResolvedValue({ quests: [{ key: 'checkin', done: false }], state: {}, revision: 0, version: 'fixture' } as never);
+    const router = await mount();
+    const ready = async () => {
+      const frame = document.querySelector('iframe')!, reply = vi.spyOn(frame.contentWindow!, 'postMessage');
+      window.dispatchEvent(new MessageEvent('message', { source: frame.contentWindow, origin: location.origin, data: { type: 'lightnote-manor', nonce: new URL(frame.src).searchParams.get('bridge'), id: 1, action: 'ready' } }));
+      await flush();
+      return { frame, opened: reply.mock.calls.some(([data]) => (data as { action?: string })?.action === 'open-daily') };
+    };
+    const first = await ready();
+    expect(first.opened).toBe(false);
+    const arrived = new Promise<void>(resolve => { const stop = router.afterEach(to => { if (to.path === '/growth') { stop(); resolve(); } }); });
+    window.dispatchEvent(new MessageEvent('message', { source: first.frame.contentWindow, origin: location.origin,
+      data: { type: 'lightnote-manor', nonce: new URL(first.frame.src).searchParams.get('bridge'), id: 11, action: 'tasks', payload: { index: 0 } } }));
+    await arrived;
+    await router.push('/knowledge-manor');
+    await flush();
+    expect((await ready()).opened).toBe(true);
+    // 再进一次庄园（不经过任务）不再重复打开。
+    app?.unmount(); app = undefined;
+    await mount();
+    expect((await ready()).opened).toBe(false);
   });
 
   it.each([-1, 1, '0', 0.5])('拒绝无效任务序号 %s，不允许场景任意导航', async index => {

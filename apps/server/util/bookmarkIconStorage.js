@@ -25,6 +25,7 @@ export function resolveBookmarkIconUploadDir(env = process.env) {
  * 先找图标 Worker 的自定义目录，再回退到既有上传目录。
  */
 export function getUploadStaticDirectories(env = process.env) {
+  if (env.LIGHTNOTE_LOCAL_TEST === '1') return [resolveBookmarkIconUploadDir(env)];
   return [...new Set([resolveBookmarkIconUploadDir(env), path.resolve(DEFAULT_UPLOAD_DIR)])];
 }
 

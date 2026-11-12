@@ -6,24 +6,20 @@ import zhCN from '@/i18n/locales/zh-CN';
 const communityUnreadTotal = ref(0);
 const openQuickCapture = vi.fn();
 const routerPush = vi.fn();
+const routerReplace = vi.fn();
+const inbox = { todoAttentionTotal: 0, todoOverdueTotal: 0, todoDueTodayTotal: 0, refreshCount: vi.fn(), openQuickCapture };
 const formalCreate = vi.fn();
 
 vi.mock('vue-router', () => ({
   useRoute: () => ({ name: 'workbenches', query: {}, meta: { mobileShell: 'today' }, fullPath: '/workbenches' }),
   useRouter: () => ({
-    replace: vi.fn(),
+    replace: routerReplace,
     push: routerPush,
     resolve: (target: unknown) => ({ fullPath: String(target) }),
   }),
 }));
 vi.mock('@/store', () => ({
-  inboxStore: () => ({
-    todoAttentionTotal: 0,
-    todoOverdueTotal: 0,
-    todoDueTodayTotal: 0,
-    refreshCount: vi.fn(),
-    openQuickCapture,
-  }),
+  inboxStore: () => inbox,
   useUserStore: () => ({ id: 'user-1', role: 'user' }),
 }));
 vi.mock('@/composables/useMobileNavigationState', () => ({
@@ -74,6 +70,9 @@ beforeEach(() => {
   communityUnreadTotal.value = 0;
   openQuickCapture.mockClear();
   routerPush.mockClear();
+  routerReplace.mockClear();
+  inbox.todoAttentionTotal = 0;
+  inbox.todoDueTodayTotal = 0;
   formalCreate.mockClear();
 });
 
@@ -83,6 +82,16 @@ afterEach(() => {
 });
 
 describe('移动底栏 · 聊天室未读角标', () => {
+  it.each([0, 1])('待办角标为 %s 时与桌面进入同一范围', async (count) => {
+    inbox.todoAttentionTotal = count;
+    inbox.todoDueTodayTotal = count;
+    const host = mount();
+    host.querySelector<HTMLButtonElement>('.mobile-bottom-nav__item:nth-child(4)')?.click();
+    await nextTick();
+    expect(routerReplace).toHaveBeenCalledWith({
+      path: '/inbox', query: { tab: 'todo', ...(count ? { attention: '1' } : {}) },
+    });
+  });
   it('中间新建入口把笔记交给笔记库的正式创建流程，不再打开快速收集', async () => {
     const host = mount();
     const captureEntry = host.querySelector<HTMLButtonElement>(

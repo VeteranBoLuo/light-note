@@ -5,7 +5,6 @@ const MAX_RETURN_PATH_DEPTH = 8;
 const WORKBENCH_PATH = '/workbenches';
 const ORGANIZE_PATH = '/organize';
 const TODO_PATH = '/inbox';
-const KNOWLEDGE_AUDIT_PATH = '/toolbox/knowledge_structure_audit';
 const TOOLBOX_TASK_PATH_PATTERN = /^\/toolbox\/task\/[^/]+$/u;
 const TAG_DETAIL_PATH_PATTERN = /^\/tag\/[^/]+$/u;
 
@@ -58,7 +57,6 @@ function resolveNoteDetailSourcePath(value: unknown, includeFeatureSources: bool
         parsed.pathname === '/growth' ||
         parsed.pathname === ORGANIZE_PATH ||
         parsed.pathname === TODO_PATH ||
-        parsed.pathname === KNOWLEDGE_AUDIT_PATH ||
         parsed.pathname === '/toolbox/translation' ||
         TAG_DETAIL_PATH_PATTERN.test(parsed.pathname) ||
         TOOLBOX_TASK_PATH_PATTERN.test(parsed.pathname))

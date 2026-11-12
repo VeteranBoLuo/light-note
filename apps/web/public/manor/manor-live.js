@@ -73,8 +73,12 @@ function createManorRefreshInput(doc) {
     syncOverlay(true);
   };
   const apply = (target, next) => {
+    // 服务端在抛竿时就结算完了；动画期间收菜或后台校准带回的「不在钓鱼」不能打断水面动画，
+    // 由动画结束时按原流程清除。
+    const animating = target.casting && typeof fishingPhase !== 'undefined' && fishingPhase !== 'idle';
     for (const name of Object.keys(target)) if (!(name in next)) delete target[name];
     Object.assign(target, next);
+    if (animating) target.casting = true;
   };
   const send = (target, action, args) => {
     if (busy) return Promise.reject(new Error('庄园操作正在处理中'));
@@ -137,7 +141,7 @@ function createManorRefreshInput(doc) {
     script.onload = async () => {
       if(typeof GardenStartup!=='undefined'&&!await GardenStartup.ready())return;
       ready = true;
-      if(snapshot.notice)toast(snapshot.notice,{topCenter:true});
+      if(snapshot.notice)toast(snapshot.notice);
       if(FarmStage.profile()==='mobile') {
         const prefetch=()=>GardenArea.prepare(FarmStage.cal().area==='bay'?FARM_CAL.mobileGarden:FARM_CAL.mobileBay,true);
         if(window.requestIdleCallback)requestIdleCallback(prefetch);else setTimeout(prefetch,0);
@@ -161,6 +165,7 @@ function createManorRefreshInput(doc) {
     exit: () => request('exit'),
     tasks: index => request('tasks', { index }),
     ledger: () => request('ledger'),
+    reminders: () => request('reminders'),
     dismissGuide: target => send(target, 'dismissGuide', []),
     claimSupply: (target, id) => send(target, 'claimSupply', [id]),
   };
@@ -183,6 +188,8 @@ function createManorRefreshInput(doc) {
     if (data?.type === 'lightnote-manor-control' && ready) {
       if (data.action === 'close-dialog') backOverlay();
       else if (data.action === 'open-ledger') ledgerDialog();
+      // 从每日任务跳去完成后回到庄园：直接打开任务列表，进度已按最新任务刷新。
+      else if (data.action === 'open-daily') { if (!overlayOpen && !state.guide) dailyDialog(); }
       else if (data.action === 'navigation-back') {
         const allow = !overlayOpen && confirmManorExit();
         if (overlayOpen) backOverlay();
@@ -208,8 +215,8 @@ function createManorRefreshInput(doc) {
       event.preventDefault(); event.stopImmediatePropagation();
     } else if(ready && action && state.casting && !presentingCatch() && !readOnlyActions.has(action.dataset.action)) {
       event.preventDefault();event.stopImmediatePropagation();
-      toast(copy('castSync'),{topCenter:true});
-      refresh()?.then(()=>resumeCatch()).catch(error=>toast(error.manor?error.message:copy('actionFailed'),{topCenter:true}));
+      toast(copy('castSync'));
+      refresh()?.then(()=>resumeCatch()).catch(error=>toast(error.manor?error.message:copy('actionFailed')));
     }
   }, true);
   window.addEventListener('unhandledrejection', event => {
@@ -217,7 +224,7 @@ function createManorRefreshInput(doc) {
     event.preventDefault();
     if (ready) {
       const error=event.reason;
-      toast(error.message||copy('actionFailed'),{topCenter:true});
+      toast(error.message||copy('actionFailed'));
       if(!error.synced&&error.code!=='MANOR_VERSION_UNSUPPORTED'&&error.code!=='MANOR_OFFLINE')
         refresh()?.then(() => resumeCatch()).catch(() => {});
     }
@@ -233,7 +240,7 @@ function createManorRefreshInput(doc) {
       const changed = contentKey(snapshot) !== contentKey(next);
       snapshot = next; syncedAt = performance.now(); apply(state, next.state);
       if (changed) paintSync();else refreshClocks();
-      if(next.notice)toast(next.notice,{topCenter:true});
+      if(next.notice)toast(next.notice);
     }).finally(() => { refreshing = null; });
     return refreshing;
   };

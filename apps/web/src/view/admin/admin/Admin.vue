@@ -120,7 +120,6 @@
       adminAudit: icon.infrastructure.security,
       apiLog: icon.infrastructure.logs,
       logCleanup: icon.userCenter.menu.trash,
-      logExclude: icon.infrastructure.logs,
       agentLog: icon.ai.ask,
       knowledgeBase: icon.userCenter.menu.help,
       productInsights: icon.growth.rank,

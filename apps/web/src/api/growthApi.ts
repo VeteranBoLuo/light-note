@@ -42,6 +42,7 @@ export const adminAdjustGrowth = (payload: {
   expDelta?: number;
   setLevel?: number | null;
   cardDelta?: number;
+  aiCreditTokens?: number;
   reason: string;
   confirmed: true;
   confirmText: string;
@@ -95,11 +96,6 @@ export const drawLottery = (payload: {
 
 // 领取成就奖励
 export const claimAchievement = (key: string) => apiBasePost('/api/growth/achievement/claim', { key });
-
-// 那年今日 · 智能回顾
-export const getRecap = () => apiBaseGet('/api/growth/recap');
-export const updateRecapState = (payload: { type: 'bookmark' | 'note'; id: string; action: 'snooze_7d' | 'dismiss' }) =>
-  apiBasePost('/api/growth/recap/state', payload);
 
 export const getClaimable = () => apiBaseGet('/api/growth/claimable');
 
@@ -344,8 +340,6 @@ export default {
   getLotteryHistory,
   drawLottery,
   claimAchievement,
-  getRecap,
-  updateRecapState,
   getClaimable,
   claimAll,
   getGrowthPreferences,

@@ -17,7 +17,7 @@ vi.mock('./personalKnowledgeSearch.js', () => ({
   invalidatePersonalKnowledgeCache: mocks.invalidatePersonalKnowledgeCache,
 }));
 
-const { archiveAndSummarizeBookmark, archiveBookmark, summarizeBookmark } = await import('./snapshot.js');
+const { archiveBookmark, summarizeBookmark } = await import('./snapshot.js');
 
 describe('archiveBookmark 网页读取预算', () => {
   beforeEach(() => {
@@ -75,68 +75,6 @@ describe('archive result persistence boundaries', () => {
     mocks.fetchWebMeta.mockResolvedValueOnce({ ok: true, bodyText: 'content '.repeat(30) });
     expect(await archiveBookmark('u', 'b')).toMatchObject({ ok: false, reason: 'RESOURCE_CHANGED' });
     expect(mocks.invalidatePersonalKnowledgeCache).not.toHaveBeenCalled();
-  });
-});
-
-describe('archiveAndSummarizeBookmark 网页存档', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
-  it('显式生成时先刷新正文，再基于同一版正文生成摘要', async () => {
-    const content = '本次重新抓取的网页正文。'.repeat(20);
-    mocks.poolQuery
-      .mockResolvedValueOnce([[{ id: 'bookmark-1', url: 'https://example.com/article', name: '示例文章' }]])
-      .mockResolvedValueOnce([{ affectedRows: 1 }])
-      .mockResolvedValueOnce([
-        [
-          {
-            bookmark_id: 'bookmark-1',
-            title: '新网页标题',
-            content,
-            summary: null,
-          },
-        ],
-      ])
-      .mockResolvedValueOnce([{ affectedRows: 1 }]);
-    mocks.fetchWebMeta.mockResolvedValueOnce({ ok: true, title: '新网页标题', bodyText: content });
-    mocks.requestAi.mockResolvedValueOnce({ content: '新摘要\n- 关键点' });
-
-    await expect(
-      archiveAndSummarizeBookmark('user-1', 'bookmark-1', {
-        trace: { traceId: 'trace-archive-summary' },
-      }),
-    ).resolves.toEqual({
-      ok: true,
-      archiveOk: true,
-      summary: '新摘要\n- 关键点',
-      cached: false,
-      charCount: content.length,
-      title: '新网页标题',
-    });
-    expect(mocks.requestAi).toHaveBeenCalledWith(
-      expect.arrayContaining([expect.objectContaining({ role: 'user', content: expect.stringContaining(content) })]),
-      expect.objectContaining({ trace: expect.objectContaining({ traceId: 'trace-archive-summary' }) }),
-    );
-  });
-
-  it('正文已生成但摘要失败时返回可识别的部分成功状态', async () => {
-    const content = '可用正文。'.repeat(30);
-    mocks.poolQuery
-      .mockResolvedValueOnce([[{ id: 'bookmark-1', url: 'https://example.com/article', name: '示例文章' }]])
-      .mockResolvedValueOnce([{ affectedRows: 1 }])
-      .mockResolvedValueOnce([[{ bookmark_id: 'bookmark-1', title: '示例文章', content, summary: null }]]);
-    mocks.fetchWebMeta.mockResolvedValueOnce({ ok: true, title: '示例文章', bodyText: content });
-    mocks.requestAi.mockRejectedValueOnce(new Error('provider secret'));
-    const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
-
-    await expect(archiveAndSummarizeBookmark('user-1', 'bookmark-1')).resolves.toMatchObject({
-      ok: false,
-      archiveOk: true,
-      reason: 'ai_error',
-      charCount: content.length,
-    });
-    warning.mockRestore();
   });
 });
 
@@ -213,6 +151,7 @@ describe('summarizeBookmark AI Gateway', () => {
     await expect(summarizeBookmark('user-1', 'bookmark-1')).resolves.toEqual({
       ok: false,
       code: 'AI_QUOTA_EXCEEDED',
+      billingMode: 'daily_and_permanent',
       reason: 'quota_exceeded',
       msg: '当前 AI 额度已用完，请等待每日额度重置或补充永久额度',
     });
@@ -232,6 +171,7 @@ describe('summarizeBookmark AI Gateway', () => {
     await expect(summarizeBookmark('user-1', 'bookmark-1')).resolves.toEqual({
       ok: false,
       code: 'AI_QUOTA_INSUFFICIENT_FOR_REQUEST',
+      billingMode: 'daily_and_permanent',
       reason: 'quota_insufficient_for_request',
       requiredTokens: 12_345,
       availableTokens: 8_765,

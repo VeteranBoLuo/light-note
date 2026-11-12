@@ -326,6 +326,9 @@
     return te(k) ? t(k) : it.name;
   }
   function itemDesc(it: ShopItem) {
+    if (shop.value?.economyVersion === 'points-economy-c11' && ['ai_pack', 'ai_pack_small'].includes(it.id)) {
+      return t('aiQuotaOneTime.packDescription', { amount: Number(it.bonusTokens || 0).toLocaleString() });
+    }
     const k = 'growth.shopItems.' + it.id + '.desc';
     return te(k) ? t(k) : it.desc;
   }

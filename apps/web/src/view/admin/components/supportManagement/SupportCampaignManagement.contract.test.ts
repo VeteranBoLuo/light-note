@@ -39,7 +39,7 @@ describe('Root 限时套餐管理契约', () => {
     expect(campaignSource).toContain("t('adminSupport.campaigns.immutable')");
   });
 
-  it('赞助管理总览展示永久 AI、永久空间并提供独立活动标签页', () => {
+  it('资源商店订单总览展示永久 AI、永久空间并提供独立活动标签页', () => {
     expect(managementSource).toContain("t('adminSupport.metrics.grantedTokens')");
     expect(managementSource).toContain("t('adminSupport.metrics.grantedStorage')");
     expect(managementSource).toContain("t('adminSupport.rewardGrantedStorage'");

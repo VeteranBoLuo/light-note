@@ -44,12 +44,6 @@ export interface FeatureAnnouncementDefinition {
 
 /** 功能上新提示的版本与绝对展示窗口唯一事实源。 */
 export declare const FEATURE_ANNOUNCEMENTS: {
-  readonly KNOWLEDGE_WORKSHOP: {
-    readonly id: 'knowledge-workshop';
-    readonly version: 'knowledge-workshop-v1';
-    readonly publishedAt: '2026-08-31T00:00:00.000+08:00';
-    readonly expiresAt: '2026-09-15T00:00:00.000+08:00';
-  };
   readonly ANNUAL_REPORT_2026: {
     readonly id: 'annual-report-2026';
     readonly version: 'annual-report-2026-v1';
@@ -288,3 +282,6 @@ export interface TodoListSummary {
 }
 export interface TodoTagSummary { id: string; name: string }
 export type TodoOrganizationScope = 'current' | 'future' | 'series';
+
+/** 可选的三段式产品版本；空值返回空串，格式无效返回 null。 */
+export declare function normalizeProductVersion(value: unknown): string | null;

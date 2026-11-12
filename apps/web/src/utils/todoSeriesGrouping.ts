@@ -1,26 +1,12 @@
-import type { TodoItem, TodoSort } from '@/api/todoApi';
+import type { TodoItem } from '@/api/todoApi';
 import {
   compareTodoOccurrences,
   isTodoOverdue,
   normalizeTodoDateOnly,
   parseTodoDate,
-  todoActionAt,
-  todoGroupKey,
   todoScheduleAt,
   type TodoGroupKey,
 } from '@/utils/todoPlanning';
-
-export type TodoListNode =
-  | { kind: 'item'; key: string; item: TodoItem; bucket: TodoGroupKey }
-  | {
-      kind: 'series';
-      key: string;
-      seriesId: string;
-      representative: TodoItem;
-      items: TodoItem[];
-      seriesItems: TodoItem[];
-      bucket: TodoGroupKey;
-    };
 
 export interface TodoMatrixEntry {
   item: TodoItem;
@@ -79,92 +65,6 @@ function todoTime(value: string | null | undefined, fallback: number) {
   if (!value) return fallback;
   const time = parseTodoDate(value).getTime();
   return Number.isFinite(time) ? time : fallback;
-}
-
-function seriesCreatedTime(item: TodoItem) {
-  return todoTime(item.series?.createdAt || item.createdAt, 0);
-}
-
-function compareForSort(left: TodoItem, right: TodoItem, sort: TodoSort) {
-  if (left.status === 'completed' || right.status === 'completed') {
-    const completedDiff = completedTime(right) - completedTime(left);
-    if (completedDiff) return completedDiff;
-  }
-  if (sort === 'priority' || sort === 'smart') {
-    const priorityDiff = Number(right.priority || 0) - Number(left.priority || 0);
-    if (priorityDiff) return priorityDiff;
-  }
-  if (sort === 'newest' || sort === 'oldest') {
-    const direction = sort === 'newest' ? -1 : 1;
-    const createdDiff = (seriesCreatedTime(left) - seriesCreatedTime(right)) * direction;
-    if (createdDiff) return createdDiff;
-  }
-  if (sort === 'due') {
-    const dueDiff = todoTime(left.dueAt, Number.POSITIVE_INFINITY) - todoTime(right.dueAt, Number.POSITIVE_INFINITY);
-    if (dueDiff) return dueDiff;
-  }
-  const actionDiff =
-    todoTime(todoActionAt(left), Number.POSITIVE_INFINITY) - todoTime(todoActionAt(right), Number.POSITIVE_INFINITY);
-  if (actionDiff) return actionDiff;
-  return stableTodoOrder(left, right);
-}
-
-/**
- * 列表先按时间状态切桶，再在桶内折叠固定日程系列。
- * 同一系列可以同时出现在“已逾期 / 今天 / 即将到来”中，避免最早实例遮住今天实例。
- */
-export function buildTodoListNodes(
-  items: readonly TodoItem[],
-  options: { now?: Date; sort?: TodoSort } = {},
-): TodoListNode[] {
-  const now = options.now || new Date();
-  const sort = options.sort || 'smart';
-  const allSeriesItems = new Map<string, TodoItem[]>();
-  const bucketSeriesItems = new Map<string, TodoItem[]>();
-  const standalone: TodoListNode[] = [];
-
-  for (const item of items) {
-    const bucket = todoGroupKey(item, now);
-    if (!isScheduledSeries(item)) {
-      standalone.push({ kind: 'item', key: `todo:${item.id}`, item, bucket });
-      continue;
-    }
-    const seriesId = String(item.seriesId);
-    const all = allSeriesItems.get(seriesId) || [];
-    all.push(item);
-    allSeriesItems.set(seriesId, all);
-    const bucketKey = `${seriesId}:${item.status}:${bucket}`;
-    const current = bucketSeriesItems.get(bucketKey) || [];
-    current.push(item);
-    bucketSeriesItems.set(bucketKey, current);
-  }
-
-  const nodes = [...standalone];
-  for (const [bucketKey, bucketItems] of bucketSeriesItems) {
-    const ordered = [...bucketItems].sort((left, right) => compareForSort(left, right, sort));
-    const representative = ordered[0];
-    const seriesId = String(representative.seriesId);
-    const bucket = todoGroupKey(representative, now);
-    if ((allSeriesItems.get(seriesId) || []).length === 1) {
-      nodes.push({ kind: 'item', key: `todo:${representative.id}`, item: representative, bucket });
-      continue;
-    }
-    nodes.push({
-      kind: 'series',
-      key: `series:${bucketKey}`,
-      seriesId,
-      representative,
-      items: ordered,
-      seriesItems: [...(allSeriesItems.get(seriesId) || ordered)].sort(compareTodoOccurrences),
-      bucket,
-    });
-  }
-
-  return nodes.sort((left, right) => {
-    const leftItem = left.kind === 'series' ? left.representative : left.item;
-    const rightItem = right.kind === 'series' ? right.representative : right.item;
-    return compareForSort(leftItem, rightItem, sort);
-  });
 }
 
 function occurrenceDay(item: TodoItem) {
@@ -269,9 +169,4 @@ export function buildTodoAgendaGroups(items: readonly TodoItem[], now = new Date
       stableTodoOrder(left.item, right.item),
   );
   return groups.filter((group) => group.entries.length);
-}
-
-/** @deprecated 新代码应使用 buildTodoMatrixEntries()，避免丢失系列标识。 */
-export function collapseTodoSeriesForMatrix(items: readonly TodoItem[], now = new Date()) {
-  return buildTodoMatrixEntries(items, now).map((entry) => entry.item);
 }

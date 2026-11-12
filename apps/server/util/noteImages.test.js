@@ -6,8 +6,7 @@ const unlink = vi.fn();
 vi.mock('../db/index.js', () => ({ default: { query: poolQuery } }));
 vi.mock('node:fs', () => ({ promises: { unlink } }));
 
-const { extractNoteImageUrls, filterOwnedImageUrls, cleanupOrphanNoteImages, collectUsedImageNames } =
-  await import('./noteImages.js');
+const { extractNoteImageUrls, filterOwnedImageUrls, cleanupOrphanNoteImages } = await import('./noteImages.js');
 
 describe('extractNoteImageUrls', () => {
   it('从 html 与 markdown 正文提取本站上传图片并去重', () => {
@@ -64,26 +63,6 @@ describe('filterOwnedImageUrls', () => {
     const [tplSql, tplParams] = poolQuery.mock.calls[1];
     expect(tplSql).toMatch(/note_template/);
     expect(tplParams[0]).toBe('u1'); // 只认当前用户自己的模板
-  });
-});
-
-describe('collectUsedImageNames', () => {
-  beforeEach(() => vi.clearAllMocks());
-
-  it('引用集合覆盖书签图标、笔记图片与模板正文(仅模板引用的图片不会被判失效)', async () => {
-    poolQuery
-      .mockResolvedValueOnce([[{ icon_url: 'https://boluo66.top/uploads/bookmark-1.png?v=2' }]])
-      .mockResolvedValueOnce([[{ url: 'https://boluo66.top/uploads/note-2-b.jpg' }]])
-      .mockResolvedValueOnce([[{ content: '<img src="https://boluo66.top/uploads/note-3-only-tpl.png">' }]])
-      .mockResolvedValueOnce([[{content:'<img src="https://boluo66.top/uploads/history.png">'}]])
-      .mockResolvedValueOnce([[{source_locator:'managed.png'}]]);
-    const names = await collectUsedImageNames();
-    expect(names.has('bookmark-1')).toBe(true); // 查询串裁剪
-    expect(names.has('note-2-b')).toBe(true);
-    expect(names.has('note-3-only-tpl')).toBe(true); // 仅被模板引用也算已使用
-    expect(names.has('unrelated')).toBe(false);
-    expect(names.has('history')).toBe(true);
-    expect(names.has('managed')).toBe(true);
   });
 });
 

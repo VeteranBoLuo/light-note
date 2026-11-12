@@ -35,14 +35,6 @@ export async function verifyPassword(plainPassword, storedPassword) {
 }
 
 /**
- * 检查存储的密码是否已经是哈希格式
- */
-export function isHashed(storedPassword) {
-  if (!storedPassword) return false;
-  return storedPassword.split(SEPARATOR).length === 2;
-}
-
-/**
  * 后端密码规则校验(前端规则可被绕过,后端为准)。各页 UI 均要求 6-16 位,
  * 这里取更宽松的安全下限(非空、6-64 位),绝不拒绝任何 UI 能提交的密码,只挡直连接口的空/超短/超长。
  * @param {string} plainPassword 待校验的明文密码

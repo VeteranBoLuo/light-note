@@ -1,35 +1,41 @@
 <template>
-  <main class="note-ai-reply-harness">
+  <main class="note-ai-reply-harness" :class="{ 'note-ai-reply-harness--narrow': narrow }">
     <section class="note-ai-reply-harness__editor" aria-hidden="true">
       <span class="note-ai-reply-harness__eyebrow">笔记正文</span>
-      <h1>功能优化与缺陷修复</h1>
+      <h1>{{ note.title }}</h1>
       <p>用于对照 AI 建议侧栏与放大弹窗的阅读密度。</p>
     </section>
     <aside class="note-ai-reply-harness__panel">
-      <AiReply />
+      <NoteDetailSidePanel>
+        <template #ai><AiReply /></template>
+      </NoteDetailSidePanel>
     </aside>
   </main>
 </template>
 
 <script setup lang="ts">
-  import { provide } from 'vue';
+  import { provide, reactive } from 'vue';
   import AiReply from '@/components/noteLibrary/detail/AiReply.vue';
+  import NoteDetailSidePanel from '@/components/noteLibrary/reference/NoteDetailSidePanel.vue';
 
-  const props = defineProps<{ noteType: 'html' | 'markdown'; source?: string }>();
+  const props = defineProps<{ noteType: 'html' | 'markdown'; source?: string; sample?: string; narrow?: boolean }>();
 
-  provide('note', {
+  const note = reactive({
     id: 'note-ai-density-fixture',
-    title: '功能优化与缺陷修复',
+    title: props.sample === 'short' ? '你好' : '功能优化与缺陷修复',
     type: props.noteType,
     content:
       props.source === 'blank'
         ? ''
         : props.source === 'empty-html'
           ? '<p><br></p><p>&nbsp;</p>'
-          : props.noteType === 'markdown'
-            ? '# 功能优化与缺陷修复\n\n进入网站查询用户反馈，如果有新的则弹出确认。\n\n增加笔记模块多选删除功能。'
-            : '<h1>功能优化与缺陷修复</h1><p>进入网站查询用户反馈，如果有新的则弹出确认。</p><p>增加笔记模块多选删除功能。</p>',
+          : props.sample === 'short'
+            ? '你好'
+            : props.noteType === 'markdown'
+              ? '# 功能优化与缺陷修复\n\n进入网站查询用户反馈，如果有新的则弹出确认。\n\n增加笔记模块多选删除功能。'
+              : '<h1>功能优化与缺陷修复</h1><p>进入网站查询用户反馈，如果有新的则弹出确认。</p><p>增加笔记模块多选删除功能。</p>',
   });
+  provide('note', note);
 </script>
 
 <style lang="less">
@@ -56,7 +62,7 @@
 
   .note-ai-reply-harness {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 420px;
+    grid-template-columns: minmax(0, 1fr) var(--ui-layout-420, 420px);
     gap: 16px;
     min-height: 100vh;
     padding: 16px;
@@ -89,6 +95,10 @@
 
   .note-ai-reply-harness__panel {
     height: calc(100vh - 32px);
+  }
+
+  .note-ai-reply-harness--narrow {
+    grid-template-columns: minmax(0, 1fr) var(--ui-layout-360, 360px);
   }
 
   @media (max-width: 720px) {

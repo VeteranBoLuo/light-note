@@ -1,8 +1,5 @@
 import { DEFAULT_DEEPSEEK_MODEL } from './agent/deepseekModelPolicy.js';
 import { resolveAgentStageModelOptions } from './agent/stageModelPolicy.js';
-// 人民币/百万 Tokens；仅用于成本估算，不改变用户 Token 账本。
-export const AI_COST_POLICY_VERSION = 'ai-cost-20260911';
-export const AI_PRICE_SOURCE = 'https://api-docs.deepseek.com/zh-cn/quick_start/pricing/';
 export const AI_PRICE_EFFECTIVE_AT = '2026-08-16T16:00:00Z';
 const legacyPrices = {
   'deepseek-v4-flash': { input: 3, cached: 0.1, output: 9 },

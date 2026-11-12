@@ -1,4 +1,4 @@
-import { apiBaseDelete, apiBaseGet, apiBasePost, apiBasePut, type ApiResponse } from '@/http/request';
+import { apiBaseGet, apiBasePost, type ApiResponse } from '@/http/request';
 
 export type OrganizeIssueType = 'untagged' | 'duplicate_bookmark' | 'bookmark_health';
 export type OrganizeResourceType = 'bookmark' | 'note' | 'file';
@@ -180,36 +180,6 @@ export interface BookmarkHealthSummary {
   suspect: BookmarkHealthItem[];
 }
 
-export interface OrganizeIssueListResponse<T> {
-  items: T[];
-  nextCursor: string | null;
-  hasMore: boolean;
-}
-
-export type OrganizeAiSuggestionResourceType = 'bookmark' | 'note';
-export type OrganizeAiSuggestionScopeMode = 'selected' | 'untagged';
-export type OrganizeAiSuggestionBatchStatus =
-  'queued' | 'running' | 'ready' | 'partial' | 'failed' | 'completed' | 'cancelled';
-export type OrganizeAiSuggestionStatus =
-  'queued' | 'running' | 'pending' | 'no_suggestion' | 'failed' | 'accepted' | 'ignored' | 'conflict';
-
-export interface OrganizeAiSuggestionEstimate {
-  featureEnabled: boolean;
-  maxItemsPerBatch: number;
-  scope: {
-    mode: OrganizeAiSuggestionScopeMode;
-    resourceType: OrganizeAiSuggestionResourceType;
-    requestedCount: number;
-    eligibleCount: number;
-    skippedCount: number;
-  };
-  estimate: {
-    estimatedTokensLower: number;
-    estimatedTokensUpper: number;
-  };
-  canCreate: boolean;
-}
-
 export interface OrganizeAiSuggestionTag {
   evidence?: string;
   evidenceRef?: string;
@@ -219,52 +189,6 @@ export interface OrganizeAiSuggestionTag {
   name: string;
   source?: 'existing' | 'new';
   confidence?: number;
-}
-
-export interface OrganizeAiSuggestion {
-  id: string;
-  resource: {
-    type: OrganizeAiSuggestionResourceType;
-    id: string;
-    title: string;
-    version: string;
-  };
-  currentTags: Array<{ id: string; name: string }>;
-  recommendedTags: OrganizeAiSuggestionTag[];
-  reason: string;
-  status: OrganizeAiSuggestionStatus;
-  acceptedTags?: Array<{ id: string; name: string }>;
-  updatedAt?: string | null;
-  lastErrorCode?: string | null;
-}
-
-export interface OrganizeAiSuggestionBatch {
-  id: string;
-  groupId?: string | null;
-  resourceType: OrganizeAiSuggestionResourceType;
-  scopeMode: OrganizeAiSuggestionScopeMode;
-  status: OrganizeAiSuggestionBatchStatus;
-  progress: {
-    total: number;
-    processed: number;
-    ready: number;
-    failed: number;
-    accepted: number;
-    ignored: number;
-    conflicted: number;
-    percent: number;
-  };
-  createdAt: string;
-  startedAt?: string | null;
-  finishedAt?: string | null;
-  lastErrorCode?: string | null;
-  suggestions?: OrganizeAiSuggestion[];
-  nextCursor?: string | null;
-}
-
-export interface OrganizeAiSuggestionBatchList {
-  items: OrganizeAiSuggestionBatch[];
-  nextCursor: string | null;
 }
 
 export const getOrganizeSummary = (): Promise<ApiResponse> =>
@@ -277,9 +201,6 @@ export const getOrganizeIssueList = (
 
 export const ignoreUntaggedResources = (items: Array<{ resourceType: OrganizeResourceType; resourceId: string }>) =>
   apiBasePost('/api/organize/untagged/ignore', { items }, { silent: true });
-
-export const unignoreUntaggedResources = (items: Array<{ resourceType: OrganizeResourceType; resourceId: string }>) =>
-  apiBaseDelete('/api/organize/untagged/ignore', { items }, { silent: true });
 
 export const getDuplicateBookmarkPreview = (groupKey: string) =>
   apiBaseGet(`/api/organize/duplicate-bookmarks/${groupKey}/preview`, undefined, { silent: true });
@@ -298,9 +219,6 @@ export const resolveDuplicateBookmarks = (
 export const ignoreDuplicateBookmarks = (groupKey: string) =>
   apiBasePost(`/api/organize/duplicate-bookmarks/${groupKey}/ignore`, {}, { silent: true });
 
-export const unignoreDuplicateBookmarks = (groupKey: string) =>
-  apiBaseDelete(`/api/organize/duplicate-bookmarks/${groupKey}/ignore`, undefined, { silent: true });
-
 export const getBookmarkHealth = ({ includeSuspect = true }: { includeSuspect?: boolean } = {}) =>
   apiBaseGet('/api/organize/bookmark-health', { includeSuspect: includeSuspect ? 1 : 0 }, { silent: true });
 export const startBookmarkHealthScan = () => apiBasePost('/api/organize/bookmark-health/scan', {}, { silent: true });
@@ -308,58 +226,3 @@ export const recheckBookmarkHealth = (bookmarkId: string) =>
   apiBasePost(`/api/organize/bookmark-health/${bookmarkId}/recheck`, {}, { silent: true });
 export const markBookmarkHealthNormal = (bookmarkId: string) =>
   apiBasePost(`/api/organize/bookmark-health/${bookmarkId}/mark-normal`, {}, { silent: true });
-export const unmarkBookmarkHealthNormal = (bookmarkId: string) =>
-  apiBaseDelete(`/api/organize/bookmark-health/${bookmarkId}/mark-normal`, undefined, { silent: true });
-
-export const estimateOrganizeAiSuggestions = (payload: {
-  resourceType: OrganizeAiSuggestionResourceType;
-  resourceIds?: string[];
-  scope: OrganizeAiSuggestionScopeMode;
-}) => apiBasePost('/api/organize/ai-suggestions/estimate', payload, { silent: true });
-
-export const createOrganizeAiSuggestionBatch = (payload: {
-  requestId: string;
-  groupId?: string;
-  resourceType: OrganizeAiSuggestionResourceType;
-  resourceIds?: string[];
-  scope: OrganizeAiSuggestionScopeMode;
-}) => apiBasePost('/api/organize/ai-suggestions/batches', payload, { silent: true });
-
-export const getOrganizeAiSuggestionBatches = (
-  params: {
-    cursor?: string | null;
-    limit?: number;
-    status?: OrganizeAiSuggestionBatchStatus;
-    groupId?: string;
-  } = {},
-) => apiBaseGet('/api/organize/ai-suggestions/batches', params, { silent: true });
-
-export const getOrganizeAiSuggestionBatch = (
-  batchId: string,
-  params: { cursor?: string | null; limit?: number } = {},
-) => apiBaseGet(`/api/organize/ai-suggestions/batches/${encodeURIComponent(batchId)}`, params, { silent: true });
-
-export const updateOrganizeAiSuggestion = (batchId: string, suggestionId: string, tagNames: string[]) =>
-  apiBasePut(
-    `/api/organize/ai-suggestions/batches/${encodeURIComponent(batchId)}/suggestions/${encodeURIComponent(suggestionId)}`,
-    { tagNames },
-    { silent: true },
-  );
-
-export const acceptOrganizeAiSuggestion = (
-  batchId: string,
-  suggestionId: string,
-  selection?: string[] | { tags: OrganizeAiSuggestionTag[] },
-) =>
-  apiBasePost(
-    `/api/organize/ai-suggestions/batches/${encodeURIComponent(batchId)}/suggestions/${encodeURIComponent(suggestionId)}/accept`,
-    Array.isArray(selection) ? { tagNames: selection } : selection || {},
-    { silent: true },
-  );
-
-export const ignoreOrganizeAiSuggestion = (batchId: string, suggestionId: string) =>
-  apiBasePost(
-    `/api/organize/ai-suggestions/batches/${encodeURIComponent(batchId)}/suggestions/${encodeURIComponent(suggestionId)}/ignore`,
-    {},
-    { silent: true },
-  );

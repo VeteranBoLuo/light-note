@@ -5,7 +5,7 @@ import zhCN from '@/i18n/locales/zh-CN';
 import enUS from '@/i18n/locales/en-US';
 
 const mocks = vi.hoisted(() => ({ getManorAttention: vi.fn() }));
-const user = reactive({ id: 'u1', adminContext: null as unknown });
+const user = reactive({ id: 'u1', adminContext: null as unknown, preferences: {} as Record<string, unknown> });
 vi.mock('@/api/growthApi.ts', () => ({ getManorAttention: mocks.getManorAttention }));
 vi.mock('@/store', () => ({ useUserStore: () => user }));
 vi.mock('@/composables/useGrowth.ts', () => ({ useGrowth: () => ({ growth: ref({ features: { manor: true } }) }) }));
@@ -28,6 +28,7 @@ describe('庄园入口提醒', () => {
     vi.useFakeTimers();
     user.id = 'u1';
     user.adminContext = null;
+    user.preferences = {};
     mocks.getManorAttention.mockReset();
   });
   afterEach(() => {
@@ -64,6 +65,24 @@ describe('庄园入口提醒', () => {
     expect(mocks.getManorAttention).toHaveBeenCalledTimes(3);
   });
 
+  it('红点默认开启，与通知开关独立；关闭后仍保留每日任务卡的可领水滴', async () => {
+    const mounted = mountComposable();
+    unmount = mounted.unmount;
+    user.preferences = { notifyManor: false, notificationsInApp: false };
+    mocks.getManorAttention.mockResolvedValue({ status: 200, data: value({ water: 5, crafted: true }) });
+    await refreshManorAttention(true);
+    expect(mounted.result.reasons.value).toEqual(['5 滴水可领', '工坊鱼饵做好了']);
+    user.preferences.manorEntryDot = false;
+    expect(mounted.result.reasons.value).toEqual([]);
+    expect(mounted.result.entryLabel.value).toBe('知识庄园');
+    expect(mounted.result.visibleAttention.value?.water).toBe(5);
+    user.preferences.notifyManor = true;
+    expect(mounted.result.reasons.value).toEqual([]);
+    user.preferences.manorEntryDot = true;
+    expect(mounted.result.reasons.value).toHaveLength(2);
+    expect(mocks.getManorAttention).toHaveBeenCalledOnce();
+  });
+
   it('切换账号后旧账号的提醒立即失效，迟到的旧响应不会覆盖新账号', async () => {
     const mounted = mountComposable();
     unmount = mounted.unmount;
@@ -93,4 +112,27 @@ describe('庄园入口提醒', () => {
     await refreshManorAttention(true);
     expect(mounted.result.attention.value).toBeNull();
   });
+});
+
+it('存满和工坊成品原因位于收获之后、等级礼物之前；新 API 字段缺失时兼容旧响应', async () => {
+  const mounted = mountComposable();
+  try {
+    mocks.getManorAttention.mockResolvedValue({
+      status: 200,
+      data: value({ ripe: 1, tankFull: 2, compostFull: true, crafted: true, rewards: 1 }),
+    });
+    await refreshManorAttention(true);
+    expect(mounted.result.reasons.value).toEqual([
+      '1 块地可收获',
+      '养鱼舱有产肥位存满了',
+      '堆肥箱存满了',
+      '工坊鱼饵做好了',
+      '有等级奖励可领',
+    ]);
+    mocks.getManorAttention.mockResolvedValue({ status: 200, data: value() });
+    await refreshManorAttention(true);
+    expect(mounted.result.reasons.value).toEqual([]);
+  } finally {
+    mounted.unmount();
+  }
 });

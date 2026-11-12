@@ -316,6 +316,17 @@ export function validateAiSkillRequest(input) {
   });
 }
 
+export function hasUsableBookmarkFields(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const text = (item) => typeof item === "string" && item.trim().length > 0;
+  return (
+    text(value.name) ||
+    text(value.description) ||
+    (Array.isArray(value.matchedTagIds) && value.matchedTagIds.some(text)) ||
+    (Array.isArray(value.newTags) && value.newTags.some(text))
+  );
+}
+
 export function validateAiSkillResponse(input) {
   const value = assertPlainObject(
     input,
@@ -378,6 +389,14 @@ export function validateAiSkillResponse(input) {
   }
   if (status === "failed" && !value.error)
     protocolError("AI_SKILL_ERROR_REQUIRED", "失败终态必须包含 error");
+  if (
+    skillId === "bookmark.parse_url" &&
+    ["completed", "preview_ready", "needs_confirmation"].includes(status) &&
+    (result?.kind !== "field_suggestions" ||
+      !hasUsableBookmarkFields(result.fields))
+  ) {
+    protocolError("AI_SKILL_OUTPUT_EMPTY", "书签识别没有返回可用字段");
+  }
   if (
     !Array.isArray(value.sources ?? []) ||
     !Array.isArray(value.availableActions ?? [])

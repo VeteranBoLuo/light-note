@@ -10,12 +10,13 @@
     </div>
     <ManorLoadingState v-else-if="loading || !interactive" :progress="progress" class="knowledge-manor__loading" />
     <iframe v-if="!loading && !failed" ref="frame" :key="nonce" :src="frameUrl" :title="t('manor.title')" referrerpolicy="same-origin" @error="failed = true" />
+    <ManorReminderDialog :open="remindersOpen" @close="remindersOpen = false" />
   </main>
 </template>
 
 <script setup lang="ts">
   import { useForegroundLoading } from '@/composables/useForegroundLoading';
-  import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+  import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
   import { onBeforeRouteLeave, useRouter } from 'vue-router';
   import { useI18n } from 'vue-i18n';
   import type { ManorCommand, ManorSnapshot } from '@lightnote/shared/manor';
@@ -27,6 +28,7 @@
   import { getManor, runManorCommand } from '@/api/manorApi';
   import { resolveDailyQuestRoute } from '@/utils/growthNavigation';
   import ManorLoadingState from './ManorLoadingState.vue';
+  import ManorReminderDialog from '@/components/manor/ManorReminderDialog.vue';
   import { isUncertainManorResult, readPendingManorCommand, savePendingManorCommand } from '@/utils/manorPending';
   import { closeCurrentMobileOverlayThen, registerMobileOverlayHistory, releaseMobileOverlayHistory, type MobileOverlayHistoryHandle } from '@/utils/mobileOverlayHistory';
   import { randomRequestId } from '@/utils/randomRequestId';
@@ -38,6 +40,7 @@
   const emit = defineEmits<{ 'manor-immersive-change': [ready: boolean] }>();
   const frame = ref<HTMLIFrameElement | null>(null), nonce = ref(randomRequestId());
   const loading = ref(true), failed = ref(false), frameShown = ref(false), interactive = ref(false);
+  const remindersOpen = ref(false);
   type ManorFailure = 'load' | 'version' | 'unavailable' | 'account' | 'login' | 'admin' | 'unsupported';
   const failure = ref<ManorFailure>('load');
   const failureCopy: Record<ManorFailure, string> = {
@@ -78,6 +81,24 @@
     knowledge_action_1: 'growth.quest_knowledge_action_1', knowledge_action_2: 'growth.quest_knowledge_action_2',
   };
   const current = (g: number) => !disposed && g === generation && owner === user.id && accountEligible();
+  watch(remindersOpen, open => {
+    if (!open) void nextTick(() => {
+      if (current(generation) && interactive.value && !failed.value) frame.value?.focus({ preventScroll: true });
+    });
+  });
+  // Leaving for a daily task brings the player back to the task list instead of the bare scene.
+  const DAILY_RESUME_MS = 30 * 60 * 1000;
+  const dailyResumeKey = () => `light-note-manor-daily-resume:${user.id}`;
+  function markDailyResume() {
+    try { sessionStorage.setItem(dailyResumeKey(), String(Date.now())); } catch { /* storage may be blocked */ }
+  }
+  function takeDailyResume() {
+    try {
+      const at = Number(sessionStorage.getItem(dailyResumeKey()));
+      sessionStorage.removeItem(dailyResumeKey());
+      return Number.isFinite(at) && at > 0 && Date.now() - at < DAILY_RESUME_MS;
+    } catch { return false; }
+  }
   const control = (action: string, requestId?: number) => frame.value?.contentWindow?.postMessage({ type: 'lightnote-manor-control', nonce: nonce.value, action, requestId }, location.origin);
   let deliberateLeave = false, navigationSequence = 0;
   let navigationCheck: { id: number; resolve: (allow: boolean) => void } | null = null;
@@ -164,6 +185,7 @@
   }
   async function initialise() {
     const g = ++generation;
+    remindersOpen.value = false;
     navigationCheck?.resolve(false);
     readController.abort(); readController = new AbortController();
     clearTimeout(bootTimer); frameShown.value = false; interactive.value = false; progress.value = 0;
@@ -208,7 +230,11 @@
       }
       else if (data.action === 'loading') { clearTimeout(bootTimer); frameShown.value = true; interactive.value = false; return; }
       // Hand keyboard focus to the scene so manor shortcuts work without a first click.
-      else if (data.action === 'ready') { clearTimeout(bootTimer); frameShown.value = true; interactive.value = true; frame.value?.focus({ preventScroll: true }); return; }
+      else if (data.action === 'ready') {
+        clearTimeout(bootTimer); frameShown.value = true; interactive.value = true; frame.value?.focus({ preventScroll: true });
+        if (takeDailyResume()) control('open-daily');
+        return;
+      }
       else if (data.action === 'get') {
         if (initialRead) await initialRead;
         if (!current(g)) return;
@@ -246,11 +272,21 @@
           value = decorated(snapshot);
           }
         } finally { commanding = false; }
+      } else if (data.action === 'reminders') {
+        if (!interactive.value || failed.value) throw new Error('unavailable');
+        // The scene closes its menu first. Retire its mobile history entry
+        // before the reminder dialog creates one of its own.
+        await closeCurrentMobileOverlayThen(() => {
+          releaseMobileOverlayHistory(overlay); overlay = null;
+        }, () => {
+          if (current(g) && interactive.value && !failed.value) remindersOpen.value = true;
+        });
       } else if (data.action === 'exit') { await exit(); return; }
       else if (data.action === 'tasks') {
         const index = data.payload?.index;
         if (index !== undefined && (!Number.isInteger(index) || index < 0 || !snapshot?.quests[index])) throw new Error('quest');
         const key = snapshot?.quests[index]?.key;
+        markDailyResume();
         deliberateLeave = true;
         try { await router.push(key ? resolveDailyQuestRoute(key, bookmark.isMobile) || { path: '/growth', query: { section: key === 'checkin' ? 'overview' : 'tasks' } } : '/growth#growth-daily'); }
         finally { deliberateLeave = false; }
@@ -292,8 +328,13 @@
       if (current(g)) target.postMessage({ type: 'lightnote-manor-reply', nonce: token, id: data.id, error: text, errorCode: code, ...(value ? {value} : {}) }, location.origin);
     }
   }
-  useMobileTopBar(['knowledgeManor'], { title: () => t('manor.title'), ownTopBar: true, onBack: () => interactive.value ? control('back') : exit() });
+  useMobileTopBar(['knowledgeManor'], { title: () => t('manor.title'), ownTopBar: true, onBack: () => {
+    if (remindersOpen.value) remindersOpen.value = false;
+    else if (interactive.value) control('back');
+    else void exit();
+  } });
   onBeforeRouteLeave(async () => {
+    if (remindersOpen.value && current(generation) && !deliberateLeave) { remindersOpen.value = false; return false; }
     if (interactive.value && !failed.value && current(generation) && !deliberateLeave && !await checkNavigationBack()) return false;
     // All exits, including browser back and links to tasks/ledger, refresh the shared balance.
     // These reads must never hold navigation behind a slow or disconnected API.

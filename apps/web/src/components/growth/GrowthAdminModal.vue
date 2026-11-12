@@ -27,6 +27,10 @@
         <BInput v-model:value="cardDelta" type="number" class="ga-control" placeholder="正数赠送，负数扣除" />
       </div>
 
+      <div class="ga-field">
+        <label>赠送 AI 额度（tokens）</label>
+        <BInput v-model:value="aiCreditTokens" type="number" class="ga-control" placeholder="填写正整数，记入资产账本与操作审计" />
+      </div>
       <div class="ga-actions">
         <BButton type="primary" :loading="saving" @click="submit">确认调整</BButton>
       </div>
@@ -60,6 +64,7 @@
   const expDelta = ref('');
   const setLevel = ref<string | number>('');
   const cardDelta = ref('');
+  const aiCreditTokens = ref('');
   const saving = ref(false);
   const confirmVisible = ref(false);
   const levelOptions = [{ value: '', label: '不改' }, ...Array.from({ length: 15 }, (_, index) => ({
@@ -67,12 +72,13 @@
     label: `Lv.${index + 1}`,
   }))];
   const pendingPayload = computed(() => {
-    const payload: { userId: string; expDelta?: number; setLevel?: number; cardDelta?: number } = {
+    const payload: { userId: string; expDelta?: number; setLevel?: number; cardDelta?: number; aiCreditTokens?: number } = {
       userId: props.userId,
     };
     if (setLevel.value !== '') payload.setLevel = Number(setLevel.value);
     else if (expDelta.value) payload.expDelta = Number(expDelta.value);
     if (cardDelta.value) payload.cardDelta = Number(cardDelta.value);
+    if (aiCreditTokens.value) payload.aiCreditTokens = Number(aiCreditTokens.value);
     return payload;
   });
   const confirmImpact = computed(() => {
@@ -82,6 +88,7 @@
       pendingPayload.value.cardDelta
         ? `补签卡 ${pendingPayload.value.cardDelta > 0 ? '+' : ''}${pendingPayload.value.cardDelta}`
         : '',
+      pendingPayload.value.aiCreditTokens ? `赠送 AI 额度 ${pendingPayload.value.aiCreditTokens.toLocaleString()} tokens` : '',
     ].filter(Boolean);
     return `目标：${props.userName || props.userId}（${props.userId}）。将执行：${pieces.join(' · ')}。升级通知仍遵循用户通知偏好。`;
   });
@@ -99,10 +106,11 @@
   function submit() {
     if (saving.value) return;
     const payload = pendingPayload.value;
-    if (payload.setLevel === undefined && !payload.expDelta && !payload.cardDelta) {
+    if (payload.setLevel === undefined && !payload.expDelta && !payload.cardDelta && !payload.aiCreditTokens) {
       message.info('请填写要调整的项');
       return;
     }
+    if (payload.aiCreditTokens != null && (!Number.isSafeInteger(payload.aiCreditTokens) || payload.aiCreditTokens <= 0 || payload.aiCreditTokens > 1_000_000_000)) { message.warning('AI 额度须为 1 至 10 亿的整数'); return; }
     confirmVisible.value = true;
   }
 
@@ -122,6 +130,7 @@
         expDelta.value = '';
         setLevel.value = '';
         cardDelta.value = '';
+        aiCreditTokens.value = '';
       } else {
         message.warning(res?.msg || '调整失败');
       }
@@ -139,6 +148,7 @@
         expDelta.value = '';
         setLevel.value = '';
         cardDelta.value = '';
+        aiCreditTokens.value = '';
         loadCur();
       }
     },

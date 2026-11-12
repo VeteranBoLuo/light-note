@@ -17,7 +17,7 @@
         {{ a('manage') }}<SvgIcon :src="icon.arrow_right" size="14" aria-hidden="true" />
       </RouterLink>
     </header>
-    <BLoading class="ov-manor-loading" :loading="loading" :title="a('loading')">
+    <BLoading class="ov-manor-loading" :loading="loading && !data" :title="a('loading')">
       <ul class="ov-manor-metrics">
         <li v-for="item in metrics" :key="item.key" class="ov-manor-metric">
           <span class="ov-manor-label">{{ item.label }}</span>

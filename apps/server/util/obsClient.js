@@ -1,3 +1,4 @@
+import { localTestPorts } from './localTestPorts.js';
 import { Readable } from 'node:stream';
 import { createHash } from 'node:crypto';
 import ObsClientSdk from 'esdk-obs-nodejs';
@@ -12,14 +13,19 @@ if (!OBS_AK || !OBS_SK || !OBS_ENDPOINT || !OBS_BUCKET_NAME) {
   console.warn('[OBS] Missing OBS env config, signed URL generation will fail until configured.');
 }
 
-const obsClient = new ObsClient({
+export const obsClient = new ObsClient({
   access_key_id: OBS_AK,
   secret_access_key: OBS_SK,
   server: OBS_ENDPOINT,
 });
 
-const bucketName = OBS_BUCKET_NAME;
+export const bucketName = OBS_BUCKET_NAME;
 const normalizeBaseUrl = () => {
+  if (process.env.LIGHTNOTE_LOCAL_TEST === '1') {
+    const endpoint = new URL(OBS_ENDPOINT);
+    if (endpoint.origin !== `http://127.0.0.1:${localTestPorts().storage}`) throw new Error('LOCAL_TEST_STORAGE_ENDPOINT_INVALID');
+    return `${endpoint.origin}/${bucketName}`;
+  }
   const endpointHost = (OBS_ENDPOINT || '').replace(/^https?:\/\//, '').replace(/\/$/, '');
   return `https://${bucketName}.${endpointHost}`;
 };

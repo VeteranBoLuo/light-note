@@ -1,4 +1,3 @@
-import extractionsRouter from './extractions.js';
 import collectionFormsRouter from './collectionForms.js';
 import express from 'express';
 import * as toolboxHandle from '../router_handle/toolboxHandle.js';
@@ -6,13 +5,13 @@ import { aiActionRateLimiter, localProcessingRateLimiter } from '../util/request
 
 const router = express.Router();
 router.use('/forms', collectionFormsRouter);
-router.use('/extractions', extractionsRouter);
 
+router.get('/pinned-tools', toolboxHandle.getPinnedTools);
+router.post('/pinned-tools', localProcessingRateLimiter, toolboxHandle.savePinnedTools);
 router.get('/catalog', toolboxHandle.getCatalog);
 router.get('/project-entry', toolboxHandle.getProjectEntry);
 router.post('/project-entry/dismiss', localProcessingRateLimiter, toolboxHandle.dismissProjectEntry);
 router.get('/home', localProcessingRateLimiter, toolboxHandle.getHome);
-router.get('/knowledge-overview', localProcessingRateLimiter, toolboxHandle.getKnowledgeOverview);
 router.get('/workspaces', localProcessingRateLimiter, toolboxHandle.listWorkspaces);
 router.post('/workspaces', localProcessingRateLimiter, toolboxHandle.createWorkspace);
 router.get('/workspaces/:workspaceId', localProcessingRateLimiter, toolboxHandle.getWorkspace);
@@ -27,13 +26,10 @@ router.post(
 );
 router.post('/workspaces/:workspaceId/board', localProcessingRateLimiter, toolboxHandle.operateWorkspaceBoard);
 router.get('/workspaces/:workspaceId/items/:itemId', localProcessingRateLimiter, toolboxHandle.getWorkspaceBoardItem);
-router.post('/workspaces/:workspaceId/items', localProcessingRateLimiter, toolboxHandle.createWorkspaceItem);
-router.patch('/workspaces/:workspaceId/items/:itemId', localProcessingRateLimiter, toolboxHandle.updateWorkspaceItem);
 router.post('/workspaces/:workspaceId/sessions', localProcessingRateLimiter, toolboxHandle.createWorkspaceSession);
 router.post('/quotes', aiActionRateLimiter, toolboxHandle.createQuote);
 router.post('/uploads', localProcessingRateLimiter, toolboxHandle.prepareUpload);
 router.get('/tasks', toolboxHandle.listJobs);
-router.get('/jobs', toolboxHandle.listJobs);
 router.post('/translation/history/delete', localProcessingRateLimiter, toolboxHandle.removeTranslationHistory);
 router.get('/translation/history', toolboxHandle.translationHistory);
 router.get('/translation/history/:jobId', toolboxHandle.translationRecord);

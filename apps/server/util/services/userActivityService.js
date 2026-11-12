@@ -34,7 +34,6 @@ export function activityFailure(error) {
     );
   }
 }
-export const getActivityCounters = () => ({ ...telemetry });
 
 export async function recordActivity(userId, { now = new Date(), db = pool, redis = redisClient } = {}) {
   if (!redis.isReady) throw Object.assign(new Error('Activity unavailable'), { code: 'ACTIVITY_REDIS_UNAVAILABLE' });

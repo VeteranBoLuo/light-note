@@ -8,10 +8,6 @@ import icon from '@/config/icon';
 
 const source = readFileSync(resolve(process.cwd(), 'src/view/noteLibrary/NoteLibrary.vue'), 'utf8');
 const detailSource = readFileSync(resolve(process.cwd(), 'src/view/noteLibrary/NoteDetail.vue'), 'utf8');
-const subpageSource = readFileSync(
-  resolve(process.cwd(), 'src/components/noteLibrary/detail/NoteSubpageSection.vue'),
-  'utf8',
-);
 const cardSource = readFileSync(resolve(process.cwd(), 'src/components/noteLibrary/library/NoteCard.vue'), 'utf8');
 const listItemSource = readFileSync(
   resolve(process.cwd(), 'src/components/noteLibrary/library/NoteListItem.vue'),
@@ -53,7 +49,6 @@ const noteHeaderSource = readFileSync(
   resolve(process.cwd(), 'src/components/noteLibrary/detail/NoteHeader.vue'),
   'utf8',
 );
-const aiReplySource = readFileSync(resolve(process.cwd(), 'src/components/noteLibrary/detail/AiReply.vue'), 'utf8');
 const zhLocaleSource = readFileSync(resolve(process.cwd(), 'src/i18n/locales/zh-CN-core.ts'), 'utf8');
 const enLocaleSource = readFileSync(resolve(process.cwd(), 'src/i18n/locales/en-US-core.ts'), 'utf8');
 
@@ -261,10 +256,8 @@ describe('笔记库页面树交互接线', () => {
 
   it('笔记根节点在中英文界面统一命名为“笔记库”', () => {
     expect(zhLocaleSource).toContain("knowledgeRoot: '笔记库'");
-    expect(zhLocaleSource).toContain("useRoot: '改存到笔记库'");
     expect(zhLocaleSource).not.toContain("knowledgeRoot: '我的知识库'");
     expect(enLocaleSource).toContain("knowledgeRoot: 'Note Library'");
-    expect(enLocaleSource).toContain("useRoot: 'Move to Note Library'");
   });
 
   it('宽屏 AI 侧栏以稳定零宽轨道平滑收展，不再用 display none 瞬切', () => {
@@ -280,14 +273,11 @@ describe('笔记库页面树交互接线', () => {
     );
   });
 
-  it('AI 内容铺满侧栏，并以实色分区描边强化浅色主题层次', () => {
+  it('AI 内容容器铺满侧栏，不额外叠加内边距', () => {
     const aiSlotRule = detailSource.match(/\.note-detail-ai-slot\s*\{([^}]*)\}/)?.[1] || '';
     expect(aiSlotRule).toContain('height: 100%');
     expect(aiSlotRule).toContain('box-sizing: border-box');
     expect(aiSlotRule).not.toContain('padding: 16px');
-    expect(aiReplySource).toMatch(/\.ai-container\s*\{[\s\S]*?border-radius: 0;[\s\S]*?border: 0;/);
-    expect(aiReplySource).toMatch(/\.ai-note-meta\s*\{[\s\S]*?border: 1px solid var\(--ai-section-border\);/);
-    expect(aiReplySource).toMatch(/\.action-btn\s*\{[\s\S]*?border: 1px solid var\(--ai-section-border\);/);
   });
 
   it('暗色目录覆盖层和 AI 外壳使用主题表面背景与边框', () => {
@@ -497,8 +487,6 @@ describe('笔记库页面树交互接线', () => {
     expect(detailSource).toContain('@move-page="openMoveSelf"');
     expect(detailSource).toContain('<NoteMoveModal');
     expect(detailSource).toContain(':note="moveTargetNote"');
-    expect(subpageSource).toContain("t('note.moveExistingUnderThisPage')");
-    expect(subpageSource).toContain("t('note.moveThisPageUnderAnother')");
   });
 
   it('详情页父级面包屑直接打开父正文，根节点才返回笔记库列表', () => {

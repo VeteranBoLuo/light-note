@@ -124,6 +124,11 @@
     resetNativeInput();
     if (files.length === 0) return;
 
+    // 不设总量上限的原件队列自行分段校验，不能在这里同步读取几千个 File.size。
+    if (props.rawFile && props.maxTotalSize === null) {
+      emit('change', files);
+      return;
+    }
     const totalSize = files.reduce((sum, file) => sum + file.size, 0);
     // 检查总文件大小是否超过指定限制
     if (props.maxTotalSize !== null && totalSize > props.maxTotalSize) {

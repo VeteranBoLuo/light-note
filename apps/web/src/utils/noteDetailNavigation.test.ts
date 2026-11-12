@@ -70,10 +70,8 @@ describe('resolveNoteDetailReturnPath', () => {
     expect(resolveNoteDetailReturnPath('/inbox?tab=todo&todoId=todo-1')).toBe('/inbox?tab=todo&todoId=todo-1');
   });
 
-  it('允许知识结构完整整理页作为明确来源', () => {
-    expect(resolveNoteDetailReturnPath('/toolbox/knowledge_structure_audit')).toBe(
-      '/toolbox/knowledge_structure_audit',
-    );
+  it('已下架的笔记结构检查页不再作为返回来源', () => {
+    expect(resolveNoteDetailReturnPath('/toolbox/knowledge_structure_audit')).toBe('');
   });
 
   it('允许具体工具任务作为明确来源，但拒绝模糊的工具入口', () => {

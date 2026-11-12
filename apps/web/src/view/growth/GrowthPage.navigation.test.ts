@@ -16,6 +16,8 @@ vi.mock('@/composables/useGrowth.ts', async () => {
   const { ref } = await import('vue');
   for (const key of ['growth', 'dashboard', 'growthTasks', 'lottery', 'weekly', 'claimable', 'preferences'])
     mocks.state[key] = ref(null);
+  mocks.state.ranks = ref([]);
+  mocks.state.inventory = ref(null);
   for (const key of [
     'loading',
     'growthError',
@@ -43,6 +45,10 @@ vi.mock('@/composables/useGrowth.ts', async () => {
     'claimDailyBonus',
     'claimAchievement',
     'useProtectCard',
+    'loadRanks',
+    'loadInventory',
+    'doCheckin',
+    'markRead',
   ])
     mocks.state[key] = vi.fn(async () => null);
   return { useGrowth: () => mocks.state };
@@ -51,12 +57,15 @@ vi.mock('@/composables/useForegroundRefresh', () => ({ useForegroundRefresh: vi.
 vi.mock('@/composables/useMobileTopBar', () => ({ useMobileTopBar: vi.fn() }));
 vi.mock('@/api/commonApi.ts', () => ({ recordOperation: vi.fn() }));
 vi.mock('@/components/base/SvgIcon/src/SvgIcon.vue', () => ({ default: { render: () => null } }));
-vi.mock('@/components/growth/GrowthCard.vue', () => ({ default: { render: () => null } }));
+vi.mock('@/components/growth/overview/GrowthTodayPanel.vue', () => ({ default: { render: () => null } }));
+vi.mock('@/components/growth/overview/GrowthRankPanel.vue', () => ({ default: { render: () => null } }));
+vi.mock('@/components/growth/overview/GrowthAchievementPanel.vue', () => ({ default: { render: () => null } }));
+vi.mock('@/components/growth/overview/GrowthFootprintPanel.vue', () => ({ default: { render: () => null } }));
+vi.mock('@/components/growth/RankLadder.vue', () => ({ default: { render: () => null } }));
+vi.mock('@/components/growth/LevelUpOverlay.vue', () => ({ default: { render: () => null } }));
 vi.mock('@/components/growth/GrowthTasks.vue', () => ({ default: { render: () => null } }));
-vi.mock('@/components/growth/ActivityHeatmap.vue', () => ({ default: { render: () => null } }));
 vi.mock('@/components/growth/SigninCalendar.vue', () => ({ default: { render: () => null } }));
 vi.mock('@/components/growth/DailyQuests.vue', () => ({ default: { render: () => null } }));
-vi.mock('@/components/growth/GrowthStats.vue', () => ({ default: { render: () => null } }));
 vi.mock('@/components/growth/AchievementWall.vue', () => ({ default: { render: () => null } }));
 vi.mock('@/components/growth/GrowthTimeline.vue', () => ({ default: { render: () => null } }));
 vi.mock('@/components/growth/MilestoneLadder.vue', () => ({ default: { render: () => null } }));
@@ -69,9 +78,7 @@ vi.mock('@/components/growth/PointsShop.vue', () => ({
 vi.mock('@/components/growth/LotteryDraw.vue', () => ({ default: { render: () => h('h2', '抽奖测试页') } }));
 vi.mock('@/components/growth/MyInventory.vue', () => ({ default: { render: () => h('h2', '背包测试页') } }));
 vi.mock('@/components/growth/WeeklyChallenge.vue', () => ({ default: { render: () => null } }));
-vi.mock('@/components/growth/TodayGrowthCard.vue', () => ({ default: { render: () => null } }));
 vi.mock('@/components/growth/GrowthPreferencesCard.vue', () => ({ default: { render: () => null } }));
-vi.mock('@/components/growth/GrowthNextActionCard.vue', () => ({ default: { render: () => null } }));
 vi.mock('@/components/growth/AchievementHighlights.vue', () => ({ default: { render: () => null } }));
 vi.mock('@/components/growth/WeeklyReportModal.vue', () => ({ default: { render: () => null } }));
 import GrowthPage from './GrowthPage.vue';

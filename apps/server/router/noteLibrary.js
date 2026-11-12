@@ -10,6 +10,7 @@ import * as noteShareHandle from '../router_handle/noteShareHandle.js';
 import { ensureNotVisitor } from '../util/auth.js';
 import { L, resultData } from '../util/common.js';
 import { NOTE_IMAGE_MAX_BYTES, noteImageExtensionForMimeType } from '../util/noteImageUpload.js';
+import { NOTE_IMAGE_DIR } from '../util/noteImages.js';
 
 const noteShareAccessLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -48,7 +49,7 @@ const blockVisitorUpload = (req, res, next) => {
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    cb(null, '/www/wwwroot/images');
+    cb(null, NOTE_IMAGE_DIR);
   },
   filename: (req, file, cb) => {
     const extension = noteImageExtensionForMimeType(file.mimetype);
@@ -104,7 +105,6 @@ router.post('/resolveResourceRefs', noteLibraryHandle.resolveResourceRefs);
 router.post('/resourceBacklinks', noteLibraryHandle.resourceBacklinks);
 router.post('/delNote', noteLibraryHandle.delNote);
 router.post('/deleteNoteSubtree', noteLibraryHandle.deleteNoteSubtree);
-router.post('/updateNoteSort', noteLibraryHandle.updateNoteSort);
 router.post('/toggleNoteTop', noteLibraryHandle.toggleNoteTop);
 
 router.post('/share/create', (req, res) => {
@@ -127,11 +127,8 @@ router.post('/share/resolve', noteShareAccessLimiter, noteShareHandle.resolveNot
 router.post('/share/page', noteShareReadLimiter, noteShareHandle.getNoteSharePage);
 router.post('/share/tree', noteShareReadLimiter, noteShareHandle.getNoteShareTree);
 
-router.post('/addNoteTag', noteLibraryHandle.addNoteTag);
-router.post('/editNoteTag', noteLibraryHandle.editNoteTag);
 router.post('/queryNoteTagList', noteLibraryHandle.queryNoteTagList);
 router.post('/getNoteTags', noteLibraryHandle.getNoteTags);
-router.post('/delNoteTag', noteLibraryHandle.delNoteTag);
 router.post('/updateNoteTags', noteLibraryHandle.updateNoteTags);
 
 router.post('/getNoteVersions', noteLibraryHandle.getNoteVersions);

@@ -1,10 +1,11 @@
 import { classifyWebPageSnapshot, EXPLICIT_WEB_READ_MAX_BYTES, fetchWebMeta } from './fetchWebMeta.js';
-import { estimateAiProviderTokens, requestAi } from './agent/aiGateway.js';
+import { requestAi } from './agent/aiGateway.js';
+import { callStructuredSkillModel, estimateStructuredSkillModelTokens } from './aiSkill/structuredModel.js';
+import { aiSkillError } from './aiSkill/errors.js';
+import { hasUsableBookmarkFields } from '@lightnote/shared/ai-skill-protocol';
 
-// AI 自动整理:批量给书签生成名称/描述 + 从「已有标签」匹配 + 建议新标签。
-// 单次条数上限只控制响应时长；真实模型调用统一进入 AI Execution，按 Provider 用量结算。
-
-export const ORGANIZE_MAX_BATCH = 20; // 单次最多处理条数(控制单次时长;整完可继续下一批)
+// 书签智能补全：生成名称/描述 + 从「已有标签」匹配 + 建议新标签。
+// 真实模型调用统一进入 AI Execution，按 Provider 用量结算。
 export const AI_TAG_SUGGESTION_CAP = 3;
 export const AI_TAG_STRONG_CONFIDENCE_MIN = 0.86;
 
@@ -219,6 +220,36 @@ export async function suggestBookmarkMeta(options) {
   return suggestPreparedBookmarkMeta(prepared, options);
 }
 
+const BOOKMARK_METADATA_TOOL = Object.freeze({
+  name: 'suggest_bookmark_metadata',
+  description: '根据已读取的真实网页材料，提供书签名称、描述和有原文依据的标签候选',
+  parameters: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['name', 'description', 'tagSuggestions'],
+    properties: {
+      name: { type: 'string', maxLength: 255 },
+      description: { type: 'string', maxLength: 255 },
+      tagSuggestions: {
+        type: 'array',
+        maxItems: AI_TAG_SUGGESTION_CAP,
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['name', 'source', 'relevance', 'confidence', 'evidence'],
+          properties: {
+            name: { type: 'string', maxLength: 32 },
+            source: { type: 'string', enum: ['existing', 'new'] },
+            relevance: { type: 'string', enum: ['strong'] },
+            confidence: { type: 'number', minimum: 0, maximum: 1 },
+            evidence: { type: 'string', maxLength: 160 },
+          },
+        },
+      },
+    },
+  },
+});
+
 function bookmarkMetaRequest({ url, pageInfo }, { userTags = [], signal, trace } = {}) {
   // URL 仅作为书签标识展示给模型，标签证据白名单只包含真实抓取或用户已有内容。
   const userPrompt = [
@@ -235,7 +266,7 @@ function bookmarkMetaRequest({ url, pageInfo }, { userTags = [], signal, trace }
     '- description:用一句简短自然的中文概括网站内容或用途,不超过 50 个字。',
     '- 网址只用于标识来源，不得把域名、路径或参数本身当作网页内容依据。',
     buildStrongTagInstruction(userTags),
-    '- 只输出 JSON 对象,格式必须是 {"name":"...","description":"...","tagSuggestions":[{"name":"标签名","source":"existing或new","relevance":"strong","confidence":0.95,"evidence":"网页信息中的原文依据"}]},不要输出 markdown、代码块或多余解释。',
+    '- 必须且只能调用 suggest_bookmark_metadata 工具一次。name、description 和 tagSuggestions 必须完整提供，不输出解释文本。',
   ].join('\n');
 
   return {
@@ -247,53 +278,104 @@ function bookmarkMetaRequest({ url, pageInfo }, { userTags = [], signal, trace }
       },
       { role: 'user', content: userPrompt },
     ],
-    options: {
-      signal,
-      toolChoice: 'none',
+    structuredTool: BOOKMARK_METADATA_TOOL,
+    modelPolicy: {
       maxTokens: 600,
       temperature: 0.1,
-      trace: { ...trace, taskType: 'organize', stage: 'organize_bookmark_meta' },
     },
+    signal,
+    trace: { ...trace, taskType: 'organize', stage: 'organize_bookmark_meta' },
   };
 }
 
 export function estimateBookmarkMetaTokens(prepared, userTags) {
-  const request = bookmarkMetaRequest(prepared, { userTags });
-  return estimateAiProviderTokens(request.messages, request.options);
+  return estimateStructuredSkillModelTokens(bookmarkMetaRequest(prepared, { userTags }));
 }
 
 export async function suggestPreparedBookmarkMeta(
   prepared,
-  { userTags = [], signal, trace, includeSuggestionDetails = false } = {},
+  { userTags = [], signal, trace, includeSuggestionDetails = false, allowEmptyResult = false, beforeRequest } = {},
 ) {
   throwIfAborted(signal);
   const request = bookmarkMetaRequest(prepared, { userTags, signal, trace });
-  const { content } = await requestAi(request.messages, request.options);
   const { pageInfo: tagSourceText, metadataSource, fetchReason, resolvedUrl } = prepared;
-  const parsed = parseAiJson(content);
-  if (!parsed || (!parsed.name && !parsed.description && !Array.isArray(parsed.tagSuggestions))) return null;
-  if (includeSuggestionDetails && !Array.isArray(parsed.tagSuggestions)) return null;
-  const { matchedTagIds, newTags, suggestions } = mapTagSuggestion(parsed, userTags, tagSourceText);
-  return {
-    name: typeof parsed.name === 'string' ? parsed.name.trim() : '',
-    description: typeof parsed.description === 'string' ? parsed.description.trim() : '',
-    matchedTagIds,
-    newTags,
-    ...(includeSuggestionDetails
-      ? {
-          suggestions,
-          tagOutcome: suggestions.length ? 'suggested' : parsed.tagSuggestions.length ? 'filtered' : 'no_suggestion',
-        }
-      : {}),
-    metadataSource,
-    fetchReason,
-    resolvedUrl,
-  };
+  return callStructuredSkillModel({
+    ...request,
+    beforeRequest: async () => {
+      throwIfAborted(signal);
+      await beforeRequest?.();
+    },
+    repairableErrorCodes: [
+      'AI_SKILL_STRUCTURED_OUTPUT_MISSING',
+      'AI_SKILL_STRUCTURED_OUTPUT_INVALID',
+      'AI_SKILL_OUTPUT_EMPTY',
+    ],
+    buildRepairInstruction: () =>
+      '上一版书签信息未通过校验。必须且只能调用 suggest_bookmark_metadata 一次，完整提供字符串 name、description 和数组 tagSuggestions。只使用本轮网页材料，不编造内容。' +
+      (allowEmptyResult
+        ? '没有合适的整理建议时，明确返回空字段和空数组。'
+        : '至少返回一项可用的名称、描述或有依据的标签，不能全部为空。'),
+    validateArguments(parsed) {
+      if (
+        typeof parsed.name !== 'string' ||
+        typeof parsed.description !== 'string' ||
+        parsed.name.trim().length > 255 ||
+        parsed.description.trim().length > 255 ||
+        /[\r\n\x00]/u.test(parsed.name) ||
+        !Array.isArray(parsed.tagSuggestions)
+      )
+        throw aiSkillError('AI_SKILL_STRUCTURED_OUTPUT_INVALID', 'AI 返回的书签字段格式无效', 502);
+      const { matchedTagIds, newTags, suggestions } = mapTagSuggestion(parsed, userTags, tagSourceText);
+      const result = {
+        name: parsed.name.trim(),
+        description: parsed.description.trim(),
+        matchedTagIds,
+        newTags,
+        ...(includeSuggestionDetails
+          ? {
+              suggestions,
+              tagOutcome: suggestions.length
+                ? 'suggested'
+                : parsed.tagSuggestions.length
+                  ? 'filtered'
+                  : 'no_suggestion',
+            }
+          : {}),
+        metadataSource,
+        fetchReason,
+        resolvedUrl,
+      };
+      if (!allowEmptyResult && !hasUsableBookmarkFields(result)) {
+        throw aiSkillError('AI_SKILL_OUTPUT_EMPTY', 'AI 没有返回可用的书签字段', 502);
+      }
+      return result;
+    },
+  });
 }
 
 function bookmarkPageReadError(reason) {
   const normalized = String(reason || 'FETCH_FAILED').toUpperCase();
   const categories = {
+    NOT_FOUND: {
+      code: 'BOOKMARK_PAGE_NOT_FOUND',
+      message: '该页面不存在或内容已被删除，请检查书签网址',
+      status: 422,
+    },
+    DNS_FAILED: {
+      code: 'BOOKMARK_PAGE_DNS_FAILED',
+      message: '暂时无法解析网站地址，请检查网址或稍后重试',
+      status: 503,
+    },
+    TLS_FAILED: {
+      code: 'BOOKMARK_PAGE_TLS_FAILED',
+      message: '网站证书验证失败，请检查原网站或手动填写书签信息',
+      status: 422,
+    },
+    TLS_HANDSHAKE_FAILED: {
+      code: 'BOOKMARK_PAGE_TLS_HANDSHAKE_FAILED',
+      message: '与网站建立安全连接失败，请稍后重试或手动填写书签信息',
+      status: 503,
+    },
     AUTH_REQUIRED: {
       code: 'BOOKMARK_PAGE_AUTH_REQUIRED',
       message: '该网页需要登录后才能查看，轻笺不会使用你的站点账号或 Cookie，请手动填写书签信息',

@@ -1,12 +1,5 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import {
-  getActiveProviderPricing,
-  getActiveProviderInfo,
-  getNoteAssistMaxTokens,
-  requestDeepSeek,
-  requestDeepSeekStream,
-  looksLikeLeakedToolCall,
-} from './deepseekClient.js';
+import { getActiveProviderInfo, getNoteAssistMaxTokens, requestDeepSeek, requestDeepSeekStream } from './deepseekClient.js';
 
 const ORIGINAL_ENV = { ...process.env };
 const ORIGINAL_FETCH = globalThis.fetch;
@@ -22,12 +15,12 @@ describe('Agent LLM 供应商切换(AGENT_LLM_PROVIDER)', () => {
     delete process.env.AGENT_LLM_PROVIDER;
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-09-11T02:00:00Z'));
-    expect(getActiveProviderPricing()).toEqual({ provider: 'deepseek', price: { input: 2, output: 8, cached: 0.04 } });
+    expect(getActiveProviderInfo()).toMatchObject({ provider: 'deepseek', price: { input: 2, output: 8, cached: 0.04 } });
   });
 
   it('未登记价格的备用模型明确返回未知', () => {
     process.env.AGENT_LLM_PROVIDER = 'qwen';
-    expect(getActiveProviderPricing()).toEqual({ provider: 'qwen', price: null });
+    expect(getActiveProviderInfo()).toMatchObject({ provider: 'qwen', price: null });
   });
 
   it('显式 providerOverride 只作用于当前调用，不改写全局供应商', () => {
@@ -38,7 +31,7 @@ describe('Agent LLM 供应商切换(AGENT_LLM_PROVIDER)', () => {
 
   it('未知的 AGENT_LLM_PROVIDER 取值应报错,而不是静默回退', () => {
     process.env.AGENT_LLM_PROVIDER = 'unknown-vendor';
-    expect(() => getActiveProviderPricing()).toThrow(/未知的 AGENT_LLM_PROVIDER/);
+    expect(() => getActiveProviderInfo()).toThrow(/未知的 AGENT_LLM_PROVIDER/);
   });
 
   it('笔记助手默认给 8K 输出预算，且环境变量只能在供应商安全上限内调整', () => {
@@ -389,31 +382,5 @@ describe('Agent LLM 供应商切换(AGENT_LLM_PROVIDER)', () => {
       finishReason: 'consumer_stop',
       usageStatus: 'missing',
     });
-  });
-});
-
-describe('looksLikeLeakedToolCall(工具调用协议泄漏检测)', () => {
-  it('命中真实泄漏样例(用户线上遇到的原始文本)', () => {
-    const leaked =
-      '你是管理员，我来查询用户列表。\n\n<｜｜DSML｜｜tool_calls>\n<｜｜invoke name="query_users">\n</｜｜invoke>\n</｜｜DSML｜｜tool_calls>';
-    expect(looksLikeLeakedToolCall(leaked)).toBe(true);
-  });
-
-  it('正常中文回答不误判', () => {
-    expect(looksLikeLeakedToolCall('当前平台共有 46 个用户，其中 root 1 个、admin 44 个、visitor 1 个。')).toBe(false);
-  });
-
-  it('正常回答提到"调用"/"invoke"等词但不构成泄漏特征,不误判', () => {
-    expect(looksLikeLeakedToolCall('我需要调用 invoke 一下这个函数来查询数据')).toBe(false);
-  });
-
-  it('只有特殊竖线但不含工具调用关键词,不误判(避免误伤正常内容里偶尔出现的全角符号)', () => {
-    expect(looksLikeLeakedToolCall('这是一段包含｜符号的普通文本')).toBe(false);
-  });
-
-  it('非字符串/空值安全返回 false', () => {
-    expect(looksLikeLeakedToolCall(null)).toBe(false);
-    expect(looksLikeLeakedToolCall(undefined)).toBe(false);
-    expect(looksLikeLeakedToolCall('')).toBe(false);
   });
 });

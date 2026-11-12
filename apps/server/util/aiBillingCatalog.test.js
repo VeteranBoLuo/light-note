@@ -121,29 +121,40 @@ describe('aiBillingCatalog', () => {
     expect(polish.reservationTokens - summary.reservationTokens).toBeGreaterThanOrEqual(6_140);
   });
 
-  it('知识工坊纯 AI Profile 支持积分或 AI 额度二选一，并进入公开 AI 用量目录', () => {
+  it('知识工坊纯 AI Profile 支持积分或 AI 额度二选一，在售工具进入公开 AI 用量目录', () => {
     const toolboxActions = AI_BILLING_ACTIONS.filter((action) => action.module === 'toolbox' && !['toolbox.summarize_text','toolbox.translation','toolbox.extraction_suggest','toolbox.extraction_extract'].includes(action.id));
-    expect(toolboxActions.map((action) => action.id)).toContain('toolbox.idea_to_draft');
-    expect(toolboxActions.every((action) => action.publicCatalog === true)).toBe(true);
+    const retiredActionIds = ['idea_to_draft', 'research_brief', 'concept_map', 'source_comparison', 'knowledge_audit'].map(
+      (toolId) => `toolbox.${toolId}`,
+    );
+    // 已下架工具只保留计费动作用于历史用量展示，不再进入公开目录。
+    expect(toolboxActions.filter((action) => action.publicCatalog).map((action) => action.id)).toEqual([
+      'toolbox.material_to_note',
+      'toolbox.study_kit',
+      'toolbox.ocr_to_text',
+    ]);
+    expect(toolboxActions.map((action) => action.id)).toEqual(expect.arrayContaining(retiredActionIds));
+    const publicIds = listPublicAiBillingCatalog().tokenActions.map((action) => action.id);
+    for (const actionId of [...retiredActionIds, 'toolbox.extraction_suggest', 'toolbox.extraction_extract'])
+      expect(publicIds).not.toContain(actionId);
     expect(toolboxActions.every((action) => action.allowedBillingPolicies.join(',') === 'user,system')).toBe(true);
 
-    const skill = resolveAiSkill('toolbox.research_brief', 1);
+    const skill = resolveAiSkill('toolbox.study_kit', 1);
     const request = { input: {}, scope: { resourceRefs: [{ type: 'note', id: 'n-1' }] } };
     expect(createAiSkillExecutionConfig(skill, request)).toMatchObject({
       billingPolicy: 'user',
-      skillId: 'toolbox.research_brief',
-      taskType: 'skill_toolbox_research_brief',
+      skillId: 'toolbox.study_kit',
+      taskType: 'skill_toolbox_study_kit',
     });
     expect(createUserAiExecutionConfig(skill.id)).toMatchObject({
       billingPolicy: 'user',
-      skillId: 'toolbox.research_brief',
+      skillId: 'toolbox.study_kit',
     });
     expect(
       createAiSkillExecutionConfig(skill, request, { billingPolicy: 'system', systemId: 'toolbox_points' }),
     ).toMatchObject({
       billingPolicy: 'system',
-      skillId: 'toolbox.research_brief',
-      taskType: 'skill_toolbox_research_brief',
+      skillId: 'toolbox.study_kit',
+      taskType: 'skill_toolbox_study_kit',
     });
   });
 

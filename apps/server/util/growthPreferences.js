@@ -124,16 +124,22 @@ export function weekKeyAtOffset(value = new Date(), utcOffsetMinutes = DEFAULT_G
 export async function getGrowthCalendarContext(userId, { db = pool, now = new Date() } = {}) {
   const preferences = await getGrowthPreferences(userId, { db });
   const [[offsetRow]] = await db.query('SELECT TIMESTAMPDIFF(MINUTE, UTC_TIMESTAMP(), NOW()) AS serverOffset');
+  return growthCalendarAt(preferences, now, Number(offsetRow?.serverOffset || 0));
+}
+
+/** The same account calendar for database reads and lightweight scheduled candidates. */
+export function growthCalendarAt(preferences = {}, now = new Date(), serverOffsetMinutes = 0) {
+  const timezone = normalizeTimezone(preferences.timezone);
   // IANA 时区在夏令时切换时动态计算偏移；持久化 offset 只作为旧运行时的兼容兜底。
   const utcOffsetMinutes = normalizeOffset(
-    offsetForTimezone(preferences.timezone, now) ?? preferences.utcOffsetMinutes,
+    offsetForTimezone(timezone, now) ?? preferences.utcOffsetMinutes,
   );
   return {
     weeklyActiveTarget: preferences.weeklyActiveTarget,
-    timezone: preferences.timezone,
+    timezone,
     utcOffsetMinutes,
-    serverOffsetMinutes: Number(offsetRow?.serverOffset || 0),
-    shiftMinutes: utcOffsetMinutes - Number(offsetRow?.serverOffset || 0),
+    serverOffsetMinutes,
+    shiftMinutes: utcOffsetMinutes - serverOffsetMinutes,
     dayKey: dayKeyAtOffset(now, utcOffsetMinutes),
     weekKey: weekKeyAtOffset(now, utcOffsetMinutes),
     previousDayKey: dayKeyAtOffset(now, utcOffsetMinutes, -1),

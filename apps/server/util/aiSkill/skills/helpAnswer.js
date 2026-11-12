@@ -1,5 +1,6 @@
+import { aiQuotaMode, levelGiftsEnabled, platformDailyBriefEnabled } from '../../aiQuotaPolicy.js';
 import { retrieveHelpEvidence } from '../../knowledgeService.js';
-import { RANKS } from '../../growth.js';
+import { levelGiftEntitlement, RANKS } from '../../growth.js';
 import { freeDrawsFor } from '../../pointsEconomyCatalog.js';
 import { AI_SKILL_PUBLIC_ROLES } from '../accessPolicy.js';
 import { validateHelpAnswerInput } from '../inputValidators.js';
@@ -39,19 +40,25 @@ function currentGrowthEntitlementsHit(question) {
   const rows = requestedGrowthLevels(question).map((rank) => {
     const aiQuota = Number(rank.aiTokenDaily || 0) / 10_000;
     const trashRetention = Number(rank.trashDays || 0) >= 3650 ? '近似永久' : `${rank.trashDays} 天`;
-    return `Lv.${rank.level} ${rank.name}：云空间 ${formatStorage(rank.spaceMb)}；每日 AI 额度 ${aiQuota} 万 tokens；回收站 ${trashRetention}；每日免费抽奖 ${freeDrawsFor(rank.level)} 次。`;
+    const gift = levelGiftEntitlement(rank.level);
+    const quota = aiQuotaMode() === 'permanent_only'
+      ? `本级一次性赠礼 ${gift.tokens / 10000} 万 tokens，累计赠礼 ${gift.cumulativeTokens / 10000} 万 tokens（含注册礼）`
+      : `每日 AI 额度 ${aiQuota} 万 tokens`;
+    return `Lv.${rank.level} ${rank.name}：云空间 ${formatStorage(rank.spaceMb)}；${quota}；回收站 ${trashRetention}；每日免费抽奖 ${freeDrawsFor(rank.level)} 次。`;
   });
   return {
     id: CURRENT_GROWTH_ENTITLEMENTS_SOURCE_ID,
     title: '当前成长等级权益',
     runtimeGenerated: true,
-    content: `以下权益由现行运行时规则生成；若旧帮助文章中的数值与此处冲突，以此处为准。\n${rows.join('\n')}`,
+    content: `以下权益由现行运行时规则生成；若旧帮助文章中的数值与此处冲突，以此处为准。${aiQuotaMode() === 'permanent_only' ? 'AI 额度不按日、周或月刷新，余额永久保留；普通用户注册和升级各领一次，跨级补齐、降级再升级不重复，老用户保留余额并额外补齐缺失档位。赠送表按注册时版本固定，安全受限或批次暂扣待复核；Root、test、游客、系统账号不自动领赠礼。游客模型调用需登录。' : ''}${!levelGiftsEnabled() && aiQuotaMode() === 'permanent_only' ? '当前赠礼发放暂未开放，已有余额仍可使用。' : ''}${platformDailyBriefEnabled() ? '每日简报的自动和手动 AI 建议由平台承担，用户扣量为 0；平台预算不足时保留原建议，不扣个人余额。' : ''}\n${rows.join('\n')}`,
   };
 }
 
 function conflictsWithCurrentGrowthEntitlements(hit) {
   if (String(hit?.id || '') === CURRENT_GROWTH_ENTITLEMENTS_SOURCE_ID) return true;
   const text = `${hit?.title || ''}\n${hit?.content || ''}`;
+  if (aiQuotaMode() === 'permanent_only' && /(?:每日.{0,8}(?:AI|额度|tokens)|每天.{0,12}(?:刷新|额度)|等待每日)/iu.test(text)) return true;
+  if (aiQuotaMode() === 'daily_and_permanent' && /(?:不再.{0,10}刷新|一次性赠礼|累计赠礼)/u.test(text)) return true;
   return STALE_GROWTH_ENTITLEMENT_PATTERNS.some((pattern) => pattern.test(text));
 }
 

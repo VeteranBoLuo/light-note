@@ -23,7 +23,6 @@ export const COMMUNITY_POST_KINDS = Object.freeze([
   "question",
   "thought",
 ]);
-export const COMMUNITY_PROFILE_CONSENT_VERSION = 1;
 export const communityTextLength = (value) =>
   Array.from(String(value || "")).length;
 export function normalizeCommunityPost(input) {

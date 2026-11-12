@@ -61,12 +61,6 @@ export const COMMUNITY_CHAT_INLINE_EMOJIS = Object.freeze(
   ].map(jianTuanInlineEmoji),
 );
 
-export const COMMUNITY_CHAT_INLINE_EMOJI_PACK = Object.freeze({
-  id: JIAN_TUAN_PACK_ID,
-  version: 1,
-  emojis: COMMUNITY_CHAT_INLINE_EMOJIS,
-});
-
 export const COMMUNITY_CHAT_INLINE_EMOJI_MAX_PER_MESSAGE = 100;
 export const COMMUNITY_CHAT_INLINE_EMOJI_MAX_RAW_LENGTH = 12_000;
 

@@ -1,26 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import {
-  convertMarkup,
-  convertTable,
-  detectTableFormat,
-  parseDelimitedTable,
-  parseTable,
-  serializeTable,
-  ToolboxTextError,
-} from './toolboxTextTools';
+import { parseDelimitedTable, serializeTable } from './toolboxTextTools';
 
 describe('工具箱文本与表格本地内核', () => {
-  it('拒绝超过列数上限的 JSON 数组与稀疏对象表格', () => {
-    for (const value of [
-      [Array.from({ length: 201 }, (_, index) => index)],
-      Array.from({ length: 201 }, (_, index) => ({ [`field_${index}`]: index })),
-    ]) {
-      expect(() => parseTable(JSON.stringify(value), 'json')).toThrowError(
-        expect.objectContaining<ToolboxTextError>({ code: 'INVALID_TABLE' }),
-      );
-    }
-  });
-
   it('正确解析包含逗号、换行和双引号的 CSV', () => {
     expect(parseDelimitedTable('名称,说明\n"轻笺,工具箱","第一行\n第二行"\n"双""引号",完成', ',')).toEqual([
       ['名称', '说明'],
@@ -29,23 +10,7 @@ describe('工具箱文本与表格本地内核', () => {
     ]);
   });
 
-  it('在 CSV、JSON 与 Markdown 表格间转换并保留结构', () => {
-    const markdown = convertTable('名称,状态\n研究简报,完成\n需求清单,待核验', 'csv', 'markdown');
-    expect(markdown).toMatchObject({ rows: 2, columns: 2 });
-    expect(markdown.output).toContain('| 研究简报 | 完成 |');
-
-    const json = convertTable(markdown.output, 'markdown', 'json');
-    expect(JSON.parse(json.output)).toEqual([
-      { 名称: '研究简报', 状态: '完成' },
-      { 名称: '需求清单', 状态: '待核验' },
-    ]);
-    expect(parseTable('[{"名称":"轻笺","标签":["知识","工具"]}]', 'json')).toEqual([
-      ['名称', '标签'],
-      ['轻笺', '["知识","工具"]'],
-    ]);
-  });
-
-  it('序列化时转义分隔符，并拒绝无效输入或相同格式', () => {
+  it('序列化时转义分隔符，并为重复或空表头生成稳定字段名', () => {
     expect(
       serializeTable(
         [
@@ -66,33 +31,5 @@ describe('工具箱文本与表格本地内核', () => {
         ),
       ),
     ).toEqual([{ 状态: '完成', 状态_2: '待核验', column_3: '备注' }]);
-    expect(() => parseTable('{"not":"array"}', 'json')).toThrowError(
-      expect.objectContaining<ToolboxTextError>({ code: 'INVALID_JSON' }),
-    );
-    expect(() => convertTable('a,b', 'csv', 'csv')).toThrowError(
-      expect.objectContaining<ToolboxTextError>({ code: 'SAME_FORMAT' }),
-    );
   });
-
-  it('Markdown 转 HTML 复用统一清洗管线，HTML 也可转回 Markdown', async () => {
-    const html = await convertMarkup('# 标题\n\n<script>alert(1)</script>\n\n- 条目', 'markdown_to_html');
-    expect(html).toContain('<h1');
-    expect(html).toContain('条目');
-    expect(html).not.toContain('<script');
-
-    const markdown = await convertMarkup('<h2>结论</h2><p><strong>保留</strong>结构</p>', 'html_to_markdown');
-    expect(markdown).toContain('## 结论');
-    expect(markdown).toContain('**保留**');
-  });
-});
-
-it('自动识别粘贴格式，不把引号内的分隔符误认为 TSV；无表头保留第一行', () => {
-  expect(detectTableFormat('a,b\n"x\ty",z')).toBe('csv');
-  expect(detectTableFormat('a\tb\nx\ty')).toBe('tsv');
-  expect(detectTableFormat(' | a | b |\n| --- | --- |\n| 1 | 2 |')).toBe('markdown');
-  expect(detectTableFormat('\ufeff [{"a":1}]')).toBe('json');
-  expect(JSON.parse(convertTable('Alice,10\nBob,20', 'csv', 'json', false).output)).toEqual([
-    { column_1: 'Alice', column_2: '10' },
-    { column_1: 'Bob', column_2: '20' },
-  ]);
 });

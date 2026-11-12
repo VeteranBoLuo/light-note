@@ -27,10 +27,6 @@ const accessControlSource = readFileSync(
   resolve(process.cwd(), 'src/view/admin/components/securityCenter/SecurityAccessControl.vue'),
   'utf8',
 );
-const whitelistSource = readFileSync(
-  resolve(process.cwd(), 'src/view/admin/components/securityCenter/Whitelist.vue'),
-  'utf8',
-);
 
 let cleanup: (() => void) | undefined;
 
@@ -71,7 +67,7 @@ describe('安全中心访问控制', () => {
   });
 
   it('自定义弹框 footer 在 PC 和移动端保留统一安全间距', () => {
-    for (const rawSource of [accessControlSource, whitelistSource]) {
+    for (const rawSource of [accessControlSource]) {
       const source = rawSource.replace(/var\(--ui-[\w-]+, ([\d.]+px)\)/g, '$1');
       expect(source).toMatch(/modal-footer\s*\{[\s\S]*?padding:\s*0 20px 16px;/);
       expect(source).toMatch(

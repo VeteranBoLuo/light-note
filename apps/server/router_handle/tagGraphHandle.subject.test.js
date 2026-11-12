@@ -13,7 +13,7 @@ vi.mock('../util/common.js', () => ({
 }));
 vi.mock('../util/services/tagRelationService.js', () => ({ getDerivedRelatedTags: mocks.getDerivedRelatedTags }));
 
-const { getGlobalGraph, getTagGraph } = await import('./tagGraphHandle.js');
+const { getTagGraph } = await import('./tagGraphHandle.js');
 
 function response() {
   return { send: vi.fn(), status: vi.fn().mockReturnThis(), json: vi.fn() };
@@ -42,36 +42,6 @@ describe('标签图谱的管理员代看归属', () => {
       expect.anything(),
       expect.objectContaining({ userId: 'subject-1', tagId: 'tag-1' }),
     );
-  });
-
-  it('全局图谱统计也使用 subject 用户', async () => {
-    mocks.query.mockResolvedValue([[]]);
-    await getGlobalGraph(
-      {
-        user: { id: 'root-1' },
-        resourceUser: { id: 'subject-1' },
-        adminContext: { mode: 'readonly' },
-        adminCapability: { policy: 'read' },
-        body: {},
-      },
-      response(),
-    );
-    expect(mocks.query.mock.calls.length).toBeGreaterThan(5);
-    expect(
-      mocks.query.mock.calls.every(([, params]) => !params || !params.length || params.includes('subject-1')),
-    ).toBe(true);
-    const tagCountSql = mocks.query.mock.calls
-      .map(([sql]) => String(sql))
-      .find((sql) => sql.includes('AS resource_count'));
-    const coOccurrenceSql = mocks.query.mock.calls
-      .map(([sql]) => String(sql))
-      .find((sql) => sql.includes('a.tag_id AS t1'));
-    expect(tagCountSql).toContain('global_tag_bookmark.del_flag = 0');
-    expect(tagCountSql).toContain('global_tag_note.del_flag = 0');
-    expect(tagCountSql).toContain('global_tag_file.del_flag = 0');
-    expect(coOccurrenceSql).toContain('global_pair_bookmark.id IS NOT NULL');
-    expect(coOccurrenceSql).toContain('global_pair_note.id IS NOT NULL');
-    expect(coOccurrenceSql).toContain('global_pair_file.id IS NOT NULL');
   });
 
   it('图谱查询失败时不把数据库原始错误返回客户端', async () => {

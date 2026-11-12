@@ -100,7 +100,6 @@
         v-show="!bookmark.isMobile"
         ref="handleBtnGroup"
         class="header-handle-group"
-        @storage-quota="openMobileStorageDetails"
       />
     </template>
 

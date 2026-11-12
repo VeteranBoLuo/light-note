@@ -38,6 +38,12 @@
     pointer-events: none;
     background: linear-gradient(90deg, rgba(249, 248, 240, 0.85), rgba(249, 248, 240, 0.38) 56%, transparent 94%);
   }
+  // 等级胶囊跟随插画表面；实色背景避免移动混色回退继承弹窗外层的深色底。
+  .profile-background-surface.is-decorated :deep(.growth-level-chip) {
+    --b-chip-fg: var(--tier-light);
+    --b-chip-border: var(--tier-light);
+    --b-chip-bg: var(--card-background);
+  }
   .is-decorated > :slotted(*) {
     position: relative;
     z-index: 1;
@@ -79,6 +85,16 @@
       rgba(17, 21, 44, 0.78) 56%,
       rgba(17, 21, 44, 0.4) 82%,
       transparent
+    );
+  }
+  html.light-note-mobile-rendering
+    .profile-background-surface.is-decorated:not(.is-night-art)
+    .profile-background-surface__veil {
+    background: linear-gradient(
+      90deg,
+      rgba(249, 248, 240, 0.9),
+      rgba(249, 248, 240, 0.82) 64%,
+      rgba(249, 248, 240, 0.64)
     );
   }
 </style>

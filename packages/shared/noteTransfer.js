@@ -13,23 +13,3 @@ export const NOTE_IMPORT_EXTENSIONS = Object.freeze([
   ".docx",
   ".zip",
 ]);
-export const NOTE_IMPORT_STATES = Object.freeze([
-  "uploading",
-  "parsing",
-  "review",
-  "queued",
-  "running",
-  "paused",
-  "completed",
-  "failed",
-  "expired",
-]);
-export const NOTE_IMPORT_WARNINGS = Object.freeze([
-  "format_simplified",
-  "missing_image",
-  "image_source_missing",
-  "external_image",
-  "unsupported_image",
-  "local_link",
-  "empty_document",
-]);

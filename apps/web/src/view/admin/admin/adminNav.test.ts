@@ -28,7 +28,6 @@ const MOBILE_ROUTES = new Set([
   '/conversion',
   '/supportManagement',
   '/logCleanup',
-  '/logExclude',
   '/securityCenterMobile',
   '/notificationCenter',
   '/adminGovernance',
@@ -57,7 +56,7 @@ function nav(pendingOpinion = 0, pendingSecurity = 0, pendingModeration = 0) {
     productInsightsTitle: '产品运营分析',
     adminGovernanceTitle: '运行策略与权限',
     communityModerationTitle: '消息审核',
-    supportManagementTitle: '赞助管理',
+    supportManagementTitle: '资源商店订单',
   });
 }
 
@@ -86,7 +85,6 @@ describe('后台导航菜单', () => {
         'adminAudit',
         'apiLog',
         'logCleanup',
-        'logExclude',
         'resourceGovernance',
         'adminGovernance',
       ]),
@@ -96,8 +94,8 @@ describe('后台导航菜单', () => {
       expect.arrayContaining(['knowledgeBase', 'notificationCenter', 'securityCenter', 'serverManagement']),
     );
     expect(ids).toContain('manorManagement');
-    expect(ids).toHaveLength(22);
-    expect(new Set(ids).size).toBe(22);
+    expect(ids).toHaveLength(21);
+    expect(new Set(ids).size).toBe(21);
     expect(ids.at(-1)).toBe('serverManagement');
   });
 
@@ -167,7 +165,7 @@ describe('后台导航菜单', () => {
       productInsightsTitle: '产品运营分析',
       adminGovernanceTitle: '运行策略与权限',
       communityModerationTitle: '消息审核',
-      supportManagementTitle: '赞助管理',
+      supportManagementTitle: '资源商店订单',
     });
 
     expect(groups.map((group) => group.items[0].id)).toEqual([
@@ -205,7 +203,7 @@ describe('后台导航菜单', () => {
 describe('resolveActiveNavId', () => {
   it('后台子路由取末段', () => {
     expect(resolveActiveNavId('/admin/userMg')).toBe('userMg');
-    expect(resolveActiveNavId('/admin/logExclude')).toBe('logExclude');
+    expect(resolveActiveNavId('/admin/logCleanup')).toBe('logCleanup');
   });
 
   it('/admin 本身高亮总览（重定向完成前不该没有高亮）', () => {
@@ -242,6 +240,14 @@ describe('resolveActiveNavId', () => {
     }
   });
 
+  it('日志白名单入口已移除，旧地址在两端都转到 API 日志', () => {
+    const ids = allItems(nav()).map((item) => item.id);
+    expect(ids).not.toContain('logExclude');
+    const desktopShell = adminRouter.find((route) => route.path === '/admin');
+    expect(desktopShell?.children?.find((route) => route.path === 'logExclude')?.redirect).toBe('/admin/apiLog');
+    expect(adminRouter.find((route) => route.path === 'logExclude')?.redirect).toBe('/apiLog');
+  });
+
   it('独立任务系列诊断保留深链路由，但不再伪装成所有待办的常驻模块', () => {
     const ids = new Set(allItems(nav()).map((item) => item.id));
     const desktopShell = adminRouter.find((route) => route.path === '/admin');
@@ -263,7 +269,7 @@ describe('手机后台菜单', () => {
       productInsightsTitle: '产品运营分析',
       adminGovernanceTitle: '运行策略与权限',
       communityModerationTitle: '消息审核',
-      supportManagementTitle: '赞助管理',
+      supportManagementTitle: '资源商店订单',
     });
 
   it('每一项都指向真实存在的手机路由（点出 404 是最糟的菜单 bug）', () => {

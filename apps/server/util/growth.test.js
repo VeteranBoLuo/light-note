@@ -20,30 +20,7 @@ import pool from '../db/index.js';
 import { grantItem } from './items.js';
 import { earnPoints, getAchievementFrameByKey } from './points.js';
 import { createNotification } from './notification.js';
-import {
-  adminAdjustGrowth,
-  getMakeupCandidateDays,
-  isMakeupCandidateDay,
-  levelForExp,
-  rankOf,
-  RANKS,
-  MAX_LEVEL,
-  MAKEUP_WINDOW_DAYS,
-  STREAK_MILESTONES,
-  ACHIEVEMENTS,
-  meetsAchievementRequirement,
-  useProtectCard,
-  claimDailyQuestBonus,
-  claimAchievement,
-  getGrowthDashboard,
-  getActivityHeatmap,
-  hashRef,
-  grantExp,
-  getGrowth,
-  getDailyQuestState,
-  checkin,
-  generateGrowthNudges,
-} from './growth.js';
+import { adminAdjustGrowth, getMakeupCandidateDays, levelForExp, rankOf, RANKS, MAX_LEVEL, MAKEUP_WINDOW_DAYS, STREAK_MILESTONES, ACHIEVEMENTS, meetsAchievementRequirement, useProtectCard, claimAchievement, getGrowthDashboard, getActivityHeatmap, hashRef, grantExp, getGrowth, getDailyQuestState, checkin, generateGrowthNudges } from './growth.js';
 import { POINTS_EARNING_C6_POLICY_VERSION, POINTS_EARNING_C8_POLICY_VERSION } from './pointsEarningPolicy.js';
 
 function accountCalendar(dayKey, makeupDays = []) {
@@ -170,20 +147,6 @@ describe('C6 每日任务状态', () => {
 });
 
 describe('C8 成就展示与旧承诺', () => {
-  it.each(['points-earning-c5', 'points-earning-c8'])('兼容日任务入口对 %s 仍遵守发放暂停', async (version) => {
-    vi.stubEnv('POINTS_EARNING_C5_EFFECTIVE_DAY', '20260818');
-    vi.stubEnv('POINTS_EARNING_C5_ENABLED', 'false');
-    vi.stubEnv('POINTS_EARNING_C8_ENABLED', 'false');
-    pool.query.mockImplementation(async (sql) => {
-      if (sql.includes('points_earning_period_policy')) return [[{ policyVersion: version }]];
-      if (sql.includes('SELECT exp, streak, last_checkin_date')) return [[{ exp: 0, streak: 0, points: 0 }]];
-      if (sql.includes('SUM(amount)')) return [[{ used: 0 }]];
-      return [[]];
-    });
-    expect(
-      await claimDailyQuestBonus('user-1', { userRole: 'user', calendar: accountCalendar('20261026') }),
-    ).toMatchObject({ ok: false, reason: 'earning_paused' });
-  });
 
   it('已解锁快照和缺快照的旧策略金额优先，未解锁才按新奖励展示，GET 保持只读', async () => {
     vi.stubEnv('COMMUNITY_FEED_ENABLED', 'false');
@@ -732,16 +695,6 @@ describe('补签窗口', () => {
     expect(days.at(-1)).toBe('20251202');
   });
 
-  it('拒绝今天、未来、超窗和非法日期', () => {
-    const now = new Date(2026, 6, 17, 12, 0, 0);
-    expect(isMakeupCandidateDay('20260716', now)).toBe(true);
-    expect(isMakeupCandidateDay('20260617', now)).toBe(true);
-    expect(isMakeupCandidateDay('20260616', now)).toBe(false);
-    expect(isMakeupCandidateDay('20260717', now)).toBe(false);
-    expect(isMakeupCandidateDay('20260718', now)).toBe(false);
-    expect(isMakeupCandidateDay('20260230', now)).toBe(false);
-  });
-
   it('覆盖闰年的跨月窗口', () => {
     const days = getMakeupCandidateDays(new Date(2028, 2, 1, 12));
     expect(days).toHaveLength(30);
@@ -918,16 +871,6 @@ describe('成长提醒', () => {
   });
 });
 
-describe('claimDailyQuestBonus 角色边界', () => {
-  it('游客不发经验或积分', async () => {
-    vi.clearAllMocks();
-    const result = await claimDailyQuestBonus('visitor', { userRole: 'visitor' });
-    expect(result).toEqual({ ok: false, reason: 'visitor' });
-    expect(earnPoints).not.toHaveBeenCalled();
-    expect(pool.getConnection).not.toHaveBeenCalled();
-  });
-});
-
 describe('成长看板独立统计完成边界', () => {
   const setup = () => ({
     query: vi.fn(async (sql) => {
@@ -967,6 +910,27 @@ describe('成长看板独立统计完成边界', () => {
       checkinDays: ['20260909', '20260910'],
     });
     expect(db.query.mock.calls.every(([sql]) => /^\s*SELECT/i.test(sql))).toBe(true);
+  });
+  it('连签里程碑标出已发放档位，当前连签回落后仍不把已领档位当作下一个目标', async () => {
+    const db = setup();
+    const normal = db.query.getMockImplementation();
+    db.query.mockImplementation((sql, params) => {
+      if (sql.includes("reason = 'streak_milestone'")) return [[{ ref: '7' }, { ref: '30' }, { ref: 'legacy' }]];
+      if (sql.includes('SELECT exp, streak, last_checkin_date')) return [[{ exp: 900, streak: 3, points: 0 }]];
+      return normal(sql, params);
+    });
+    const result = await getGrowthDashboard('owner', { userRole: 'user', db, calendar: accountCalendar('20260911') });
+    expect(result.streakMilestones.map(({ days, reached, granted }) => [days, reached, granted])).toEqual([
+      [7, false, true],
+      [30, false, true],
+      [100, false, false],
+      [365, false, false],
+    ]);
+    const milestoneQuery = db.query.mock.calls.find(([sql]) => sql.includes("reason = 'streak_milestone'"));
+    expect(milestoneQuery?.[1]).toEqual(['owner']);
+
+    const guest = await getGrowthDashboard('visitor-shared-id', { userRole: 'visitor', db });
+    expect(guest.streakMilestones.every((milestone) => milestone.granted === false)).toBe(true);
   });
   it('多个统计失败时返回原顺序首个错误，不继续读取时间线', async () => {
     const db = setup();

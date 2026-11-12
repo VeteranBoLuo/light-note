@@ -7,7 +7,7 @@ vi.mock('../toolbox/knowledgeStructure.js', () => ({
   getToolboxKnowledgeOverview: mocks.getToolboxKnowledgeOverview,
 }));
 
-const { getOrganizeKnowledgeStructureSummary, listOrganizeKnowledgeStructureIssues } =
+const { listOrganizeKnowledgeStructureIssues } =
   await import('./knowledgeStructureOrganizeService.js');
 
 function overview(items = []) {
@@ -24,30 +24,6 @@ function overview(items = []) {
 
 describe('knowledgeStructureOrganizeService', () => {
   beforeEach(() => vi.clearAllMocks());
-
-  it('摘要只返回整理中心需要的结构问题，不携带整棵知识树', async () => {
-    mocks.getToolboxKnowledgeOverview.mockResolvedValue(
-      overview([{ kind: 'empty', severity: 'high', noteId: 'n1', title: '空笔记', path: '空笔记', reason: '空' }]),
-    );
-
-    const result = await getOrganizeKnowledgeStructureSummary({ userId: 'u1' });
-
-    expect(result).toMatchObject({ healthScore: 99, totalNotes: 86, affectedNoteCount: 2, priorityIssueCount: 2 });
-    expect(result.issueCounts).toEqual([
-      { kind: 'invalid_parent', count: 1 },
-      { kind: 'empty', count: 1 },
-      { kind: 'duplicate_title', count: 0 },
-      { kind: 'untitled', count: 0 },
-      { kind: 'deep', count: 0 },
-    ]);
-    expect(result).not.toHaveProperty('nodes');
-    expect(mocks.getToolboxKnowledgeOverview).toHaveBeenCalledWith(
-      expect.objectContaining({
-        userId: 'u1',
-        analysisOptions: expect.objectContaining({ includeNodes: false, issueLimit: 3 }),
-      }),
-    );
-  });
 
   it('问题列表使用不透明游标分页并允许按结构问题筛选', async () => {
     mocks.getToolboxKnowledgeOverview

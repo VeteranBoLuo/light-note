@@ -20,11 +20,6 @@ export const ANNUAL_REPORT_CHAPTERS = Object.freeze([
 /** 少数据账号只展示封面、实际记录与海报。 */
 export const ANNUAL_REPORT_LIGHT_CHAPTERS = Object.freeze(['cover', 'overview', 'poster']);
 
-export const ANNUAL_REPORT_RECORD_TYPES = Object.freeze(['bookmark', 'note', 'file', 'todo', 'organize']);
-
-/** 称号 = 时间修饰（可空）+ 占比最高记录类型对应的名词。 */
-export const ANNUAL_REPORT_TITLE_MODIFIERS = Object.freeze(['night', 'morning', 'weekend', 'steady']);
-
 export const ANNUAL_REPORTS = Object.freeze({
   2026: Object.freeze({
     year: 2026,

@@ -43,12 +43,6 @@ export interface CommunityChatOfficialStickerDefinition {
 
 export declare const COMMUNITY_CHAT_OFFICIAL_STICKERS: readonly CommunityChatOfficialStickerDefinition[];
 
-export declare const COMMUNITY_CHAT_OFFICIAL_STICKER_PACK: {
-  readonly id: "paper-spirit-v3";
-  readonly version: 3;
-  readonly stickers: readonly CommunityChatOfficialStickerDefinition[];
-};
-
 export declare function resolveCommunityChatOfficialSticker(
   value: unknown,
 ): CommunityChatOfficialStickerDefinition | null;

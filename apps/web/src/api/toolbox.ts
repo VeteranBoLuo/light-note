@@ -1,5 +1,4 @@
 import { withForegroundActivity } from '@/http/requestActivity';
-import type { ComparisonColumn } from '@lightnote/shared/comparison-table';
 import { invalidateToolboxProjects } from '@/utils/toolboxProjectState';
 import { recordAiProductEvent, type AiProductEventDimensions } from '@/api/aiTelemetry';
 import type { ToolboxToolDefinition } from '@lightnote/shared/toolbox-protocol';
@@ -21,8 +20,6 @@ export type ToolboxInput = {
     intent?: string;
     detailLevel?: 'concise' | 'balanced' | 'detailed';
     targetLength?: number;
-    resultMode?: 'report' | 'table';
-    columns?: ComparisonColumn[];
   };
 };
 
@@ -147,41 +144,6 @@ export type ToolboxHomeWorkspaceSummary = Pick<
   | 'updatedAt'
 >;
 
-export type ToolboxKnowledgeIssue = {
-  kind: string;
-  severity: 'high' | 'medium' | 'low';
-  noteId: string;
-  title: string;
-  path: string;
-  reason: string;
-};
-
-export type ToolboxKnowledgeOverview = {
-  scannedAt: string;
-  snapshotVersion?: string;
-  policy: { staleAfterDays: number; deepNoteDepth: number };
-  summary: {
-    total: number;
-    roots: number;
-    maxDepth: number;
-    tagged: number;
-    linked: number;
-    empty: number;
-    stale: number;
-    invalidParents: number;
-    duplicateGroups: number;
-    duplicateNotes: number;
-    healthScore: number;
-  };
-  issueCounts: Record<string, number>;
-  issues: ToolboxKnowledgeIssue[];
-  issueTotal: number;
-  selectedIssueTotal?: number;
-  selectedSeverityCounts?: { high: number; medium: number; low: number };
-  scopeOptions?: Array<{ id: string; path: string }>;
-  recommendations: Array<{ code: string; count: number; priority: 'high' | 'medium' | 'low' }>;
-};
-
 export type ToolboxQuote = {
   id: string;
   toolId: string;
@@ -209,14 +171,13 @@ export type ToolboxJobInput = {
   }[];
   options: NonNullable<ToolboxInput['options']>;
 };
-export type ToolboxTaskFilter = 'all' | 'failed' | 'active' | 'paused' | 'ready' | 'finished';
+export type ToolboxTaskFilter = 'all' | 'failed' | 'active' | 'ready' | 'finished';
 export type ToolboxJob = {
   title?: string;
   materialCount?: number;
   materialTitles?: string[];
   dismissed?: boolean;
   input?: ToolboxJobInput;
-  extraction?: { title: string; status: string; processed: number; total: number };
   sourceWorkspaceId?: string | null;
   id: string;
   toolId: string;
@@ -324,19 +285,6 @@ export async function fetchToolboxHome(): Promise<ToolboxHomeOverview> {
   const response = await apiBaseGet('/api/toolbox/home', undefined, { silent: true });
   if (response.status !== 200) throw apiFailure(response, 'TOOLBOX_HOME_FAILED');
   return parseToolboxHomeOverview(response.data);
-}
-
-export async function fetchToolboxKnowledgeOverview(params?: {
-  snapshot?: string;
-  rootId?: string;
-  issueKind?: string;
-  includeOptional?: boolean;
-  offset?: number;
-  limit?: number;
-}): Promise<ToolboxKnowledgeOverview> {
-  const response = await apiBaseGet('/api/toolbox/knowledge-overview', params, { silent: true });
-  if (response.status !== 200) throw apiFailure(response, 'TOOLBOX_KNOWLEDGE_OVERVIEW_FAILED');
-  return response.data as ToolboxKnowledgeOverview;
 }
 
 export type ProjectEntrySource = NonNullable<AiProductEventDimensions['entrySource']>;
@@ -459,33 +407,6 @@ export async function removeToolboxWorkspaceResource(
   return response.data as ToolboxWorkspace;
 }
 
-export async function createToolboxWorkspaceItem(
-  workspaceId: string,
-  input: { lane: ToolboxWorkspaceLane; title: string; content?: string; dueOn?: string | null },
-): Promise<ToolboxWorkspace> {
-  const response = await apiBasePost(`/api/toolbox/workspaces/${encodeURIComponent(workspaceId)}/items`, input, {
-    silent: true,
-  });
-  if (![200, 201].includes(Number(response.status))) throw apiFailure(response, 'TOOLBOX_WORKSPACE_ITEM_CREATE_FAILED');
-  invalidateToolboxProjects();
-  return response.data as ToolboxWorkspace;
-}
-
-export async function updateToolboxWorkspaceItem(
-  workspaceId: string,
-  itemId: string,
-  input: Partial<Pick<ToolboxWorkspaceItem, 'title' | 'content' | 'lane' | 'status' | 'position' | 'dueOn'>>,
-): Promise<ToolboxWorkspace> {
-  const response = await apiBasePatch(
-    `/api/toolbox/workspaces/${encodeURIComponent(workspaceId)}/items/${encodeURIComponent(itemId)}`,
-    input,
-    { silent: true },
-  );
-  if (response.status !== 200) throw apiFailure(response, 'TOOLBOX_WORKSPACE_ITEM_UPDATE_FAILED');
-  invalidateToolboxProjects();
-  return response.data as ToolboxWorkspace;
-}
-
 export async function createToolboxWorkspaceSession(
   workspaceId: string,
   input: { summary?: string; nextStep?: string; durationMinutes?: number },
@@ -527,12 +448,6 @@ export async function createToolboxJob(input: {
   const response = await apiBasePost('/api/toolbox/jobs', input, { silent: true });
   if (response.status !== 200) throw apiFailure(response, 'TOOLBOX_JOB_CREATE_FAILED');
   return response.data as ToolboxJob;
-}
-
-export async function fetchToolboxJobs(limit = 20): Promise<ToolboxJob[]> {
-  const response = await apiBaseGet('/api/toolbox/tasks', { limit }, { silent: true });
-  if (response.status !== 200) throw apiFailure(response, 'TOOLBOX_TASKS_FAILED');
-  return Array.isArray(response.data?.items) ? response.data.items : [];
 }
 
 export async function fetchToolboxTaskPage(
@@ -714,4 +629,18 @@ export async function reviewToolboxComparison(
   });
   if (response.status !== 200) throw apiFailure(response, 'TOOLBOX_COMPARISON_FAILED');
   return response.data;
+}
+
+export type ToolboxPinnedTools = { initialized: boolean; toolIds: string[] };
+export async function fetchToolboxPinnedTools(): Promise<ToolboxPinnedTools> {
+  const response = await apiBaseGet('/api/toolbox/pinned-tools', undefined, { silent: true });
+  if (response.status !== 200) throw apiFailure(response, 'TOOLBOX_PINS_LOAD_FAILED');
+  return response.data as ToolboxPinnedTools;
+}
+export async function saveToolboxPinnedTools(
+  input: { action: 'migrate'; toolIds: string[] } | { toolId: string; pinned: boolean },
+): Promise<ToolboxPinnedTools> {
+  const response = await apiBasePost('/api/toolbox/pinned-tools', input, { silent: true });
+  if (response.status !== 200) throw apiFailure(response, 'TOOLBOX_PINS_SAVE_FAILED');
+  return response.data as ToolboxPinnedTools;
 }

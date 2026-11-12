@@ -114,7 +114,7 @@ export const recordConversionEvent = (req, event, context = '', overrides = {}) 
     const visitorType = overrides.visitorType ?? (req?.user?.role || 'visitor');
     const fingerprint = String(req?.headers?.['fingerprint'] || '').slice(0, 128);
     const ip = String(clientIp(req) || '').slice(0, 64);
-    if (isSelfTraffic(req)) return; // 本地/回环 或 自己人设备(指纹白名单)不计入转化漏斗
+    if (isSelfTraffic(req)) return; // 本地/回环 或 内部设备上的非内部账号流量不计入转化漏斗
     pool
       .query(
         'INSERT INTO conversion_events (fingerprint, user_id, visitor_type, event, context, ip) VALUES (?,?,?,?,?,?)',

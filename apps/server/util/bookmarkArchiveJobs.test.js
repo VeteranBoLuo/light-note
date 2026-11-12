@@ -53,7 +53,9 @@ describe('persistent bookmark archives', () => {
     expect(archiveRetryDelay('TIMEOUT', 1)).toBe(30);
     expect(archiveRetryDelay('DNS_FAILED', 2)).toBe(120);
     expect(archiveRetryDelay('TIMEOUT', 3)).toBeNull();
-    for (const reason of ['ACCESS_DENIED', 'AUTH_REQUIRED', 'NOT_FOUND', 'EMPTY_CONTENT'])
+    for (const reason of [
+      'ACCESS_DENIED', 'AUTH_REQUIRED', 'NOT_FOUND', 'EMPTY_CONTENT', 'TLS_FAILED', 'TLS_HANDSHAKE_FAILED',
+    ])
       expect(archiveRetryDelay(reason, 1)).toBeNull();
   });
   it('reuses an active job without resetting attempts or enqueueing twice', async () => {

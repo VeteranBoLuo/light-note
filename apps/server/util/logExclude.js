@@ -1,35 +1,35 @@
 import pool from '../db/index.js';
+import { INTERNAL_ROLES } from './internalRoles.js';
 import { isLocalIp } from './ipFilter.js';
 
-// 「自己人」流量过滤:开发者本人在自己设备上测试(登录/登出/游客浏览等)不该污染
-// api 日志 / 操作日志 / 转化漏斗。稳定设备 ID 优先，浏览器指纹负责兼容旧记录并自动登记稳定 ID。
+// 「自己人」流量过滤:开发者在自己设备上以游客身份测试(登出后浏览、走注册流程等)不该污染
+// api 日志 / 操作日志 / 转化漏斗 / 权益事件。
+// root/test 登录态的请求会把所带的浏览器稳定设备 ID 自动登记为内部设备;之后同设备的未登录或
+// 非内部账号流量直接跳过记录。内部账号登录态本身照常记录,由后台「隐藏内部账号」在查询时过滤。
 //
-// 白名单主体存 log_exclude，多个稳定设备标识存 log_exclude_devices(root 在后台增删)，进程内缓存 Set。
+// 内部设备存 log_exclude_devices,进程内缓存 Set。旧的 log_exclude 指纹表已停用,保留表与数据但不再读写。
 // 注意:缓存在单进程内维护(pm2 fork 单实例)。若将来改 cluster 多实例,需加定时刷新或广播。
-// 指纹是浏览器特征哈希、非绝对唯一:极小概率误伤同型号浏览器的其他用户(小站可接受,列表可随时删)。
+// 设备 ID 是浏览器 localStorage 里的随机标识,只用于日志过滤,不参与认证、权限或设备信任判断。
 
-let excludedFingerprints = new Set();
-let excludedDeviceIds = new Set();
-const pendingDeviceEnrollments = new Set();
+// 与会话设备标识同一格式;不合规的值既不登记也不匹配。
+const DEVICE_ID_PATTERN = /^[A-Za-z0-9._:-]{16,128}$/;
 
-const normalizeIdentifier = (value) => String(value || '').trim().slice(0, 128);
+let internalDeviceIds = new Set();
+const pendingEnrollments = new Set();
 
-async function ensureDeviceIdColumn() {
-  const [rows] = await pool.query(
-    `SELECT 1 FROM information_schema.COLUMNS
-     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'log_exclude' AND COLUMN_NAME = 'device_id' LIMIT 1`,
-  );
-  if (!rows.length) {
-    await pool.query('ALTER TABLE log_exclude ADD COLUMN device_id VARCHAR(128) DEFAULT NULL AFTER fingerprint');
+function readDeviceId(req) {
+  const headers = req?.headers || {};
+  for (const name of ['x-log-device-id', 'x-device-id']) {
+    const raw = headers[name];
+    const value = String(Array.isArray(raw) ? raw[0] || '' : raw || '').trim();
+    if (DEVICE_ID_PATTERN.test(value)) return value;
   }
-  const [indexes] = await pool.query(
-    `SELECT 1 FROM information_schema.STATISTICS
-     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'log_exclude' AND INDEX_NAME = 'uniq_log_exclude_device_id' LIMIT 1`,
-  );
-  if (!indexes.length) await pool.query('ALTER TABLE log_exclude ADD UNIQUE KEY uniq_log_exclude_device_id (device_id)');
+  return '';
 }
 
-async function ensureStableDeviceTable() {
+const isInternalSession = (req) => Boolean(req?.user?.isAuthenticated && INTERNAL_ROLES.includes(req.user.role));
+
+async function ensureInternalDeviceTable() {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS log_exclude_devices (
       device_id VARCHAR(128) NOT NULL,
@@ -39,132 +39,41 @@ async function ensureStableDeviceTable() {
       KEY idx_log_exclude_devices_fingerprint (fingerprint)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='日志白名单稳定设备标识'
   `);
-  // 兼容已经通过旧版“升级”按钮写入 log_exclude.device_id 的记录。
-  await pool.query(`
-    INSERT IGNORE INTO log_exclude_devices (device_id, fingerprint)
-    SELECT device_id, fingerprint FROM log_exclude
-    WHERE device_id IS NOT NULL AND device_id <> ''
-  `);
-  // 新表接管稳定标识后清空旧单值列，避免删除/重绑后在下次启动时被旧值重新回填。
-  await pool.query("UPDATE log_exclude SET device_id = NULL WHERE device_id IS NOT NULL AND device_id <> ''");
-}
-
-export async function ensureLogExcludeTable() {
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS log_exclude (
-      fingerprint VARCHAR(128) NOT NULL,
-      note VARCHAR(255) DEFAULT NULL,
-      create_time TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
-      PRIMARY KEY (fingerprint)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='日志白名单:自己人设备指纹,免记 api/操作/转化'
-  `);
-  await ensureDeviceIdColumn();
-  await ensureStableDeviceTable();
 }
 
 export async function refreshLogExclude() {
   try {
-    const [[rows], [stableDevices]] = await Promise.all([
-      pool.query('SELECT fingerprint FROM log_exclude'),
-      pool.query('SELECT device_id FROM log_exclude_devices'),
-    ]);
-    excludedFingerprints = new Set(rows.map((r) => r.fingerprint).filter(Boolean));
-    excludedDeviceIds = new Set(stableDevices.map((r) => r.device_id).filter(Boolean));
+    const [rows] = await pool.query('SELECT device_id FROM log_exclude_devices');
+    internalDeviceIds = new Set(rows.map((r) => r.device_id).filter(Boolean));
   } catch (e) {
-    console.error('刷新日志白名单缓存失败:', e.message); // 保留旧缓存,不影响记录主流程
+    console.error('刷新内部设备缓存失败:', e.message); // 保留旧缓存,不影响记录主流程
   }
-}
-
-// 已在旧指纹白名单中的浏览器一旦携带稳定设备 ID，就自动完成稳定化。
-// 首次请求仍由指纹命中过滤；写入成功后即使指纹因升级/屏幕变化漂移，也继续通过设备 ID 过滤。
-function enrollStableDevice(fingerprint, deviceId) {
-  if (!fingerprint || !deviceId || excludedDeviceIds.has(deviceId) || pendingDeviceEnrollments.has(deviceId)) return;
-  pendingDeviceEnrollments.add(deviceId);
-  pool
-    .query(
-      `INSERT INTO log_exclude_devices (device_id, fingerprint) VALUES (?, ?)
-       ON DUPLICATE KEY UPDATE fingerprint = VALUES(fingerprint)`,
-      [deviceId, fingerprint],
-    )
-    .then(() => excludedDeviceIds.add(deviceId))
-    .catch((error) => console.error('自动稳定日志白名单失败:', error.message))
-    .finally(() => pendingDeviceEnrollments.delete(deviceId));
 }
 
 export async function initLogExclude() {
-  await ensureLogExcludeTable();
+  await ensureInternalDeviceTable();
   await refreshLogExclude();
 }
 
-// 是否「自己人」流量:本地/回环 IP,或指纹命中白名单 → api/操作/转化三条链路都跳过记录
+// 内部账号登录态请求:把所带设备 ID 登记为内部设备。先查进程内缓存,已登记或正在写入时不碰数据库。
+// 本地/回环请求来自开发环境,其设备 ID 属于 localhost 源,登记了也匹配不到线上流量,直接跳过。
+export function rememberInternalDevice(req) {
+  if (isLocalIp(req?.ip) || !isInternalSession(req)) return;
+  const deviceId = readDeviceId(req);
+  if (!deviceId || internalDeviceIds.has(deviceId) || pendingEnrollments.has(deviceId)) return;
+  pendingEnrollments.add(deviceId);
+  pool
+    .query('INSERT IGNORE INTO log_exclude_devices (device_id, fingerprint) VALUES (?, ?)', [deviceId, ''])
+    .then(() => internalDeviceIds.add(deviceId))
+    .catch((error) => console.error('登记内部设备失败:', error.message))
+    .finally(() => pendingEnrollments.delete(deviceId));
+}
+
+// 是否「自己人」流量:本地/回环 IP,或内部设备上的非内部账号流量 → api/操作/转化/权益链路都跳过记录。
+// 内部账号登录态照常记录,root 仍能在 API 日志里查到自己的请求。
 export function isSelfTraffic(req) {
   if (isLocalIp(req?.ip)) return true;
-  const fingerprint = normalizeIdentifier(req?.headers?.['fingerprint']);
-  const deviceId = normalizeIdentifier(req?.headers?.['x-log-device-id']);
-  if (deviceId && excludedDeviceIds.has(deviceId)) return true;
-  if (!fingerprint || !excludedFingerprints.has(fingerprint)) return false;
-  enrollStableDevice(fingerprint, deviceId);
-  return true;
-}
-
-export async function listLogExclude() {
-  const [[rows], [devices]] = await Promise.all([
-    pool.query('SELECT fingerprint, note, create_time FROM log_exclude ORDER BY create_time DESC'),
-    pool.query('SELECT fingerprint, device_id FROM log_exclude_devices ORDER BY create_time ASC'),
-  ]);
-  const devicesByFingerprint = new Map();
-  for (const device of devices) {
-    const ids = devicesByFingerprint.get(device.fingerprint) || [];
-    ids.push(device.device_id);
-    devicesByFingerprint.set(device.fingerprint, ids);
-  }
-  return rows.map((row) => ({
-    ...row,
-    device_ids: Array.from(new Set(devicesByFingerprint.get(row.fingerprint) || [])),
-  }));
-}
-
-export async function addLogExclude(fingerprint, deviceId = '', note = '') {
-  const normalizedFingerprint = normalizeIdentifier(fingerprint);
-  const normalizedDeviceId = normalizeIdentifier(deviceId);
-  const connection = await pool.getConnection();
-  try {
-    await connection.beginTransaction();
-    await connection.query(
-      `INSERT INTO log_exclude (fingerprint, note) VALUES (?, ?)
-       ON DUPLICATE KEY UPDATE note = COALESCE(VALUES(note), note)`,
-      [normalizedFingerprint, note || null],
-    );
-    if (normalizedDeviceId) {
-      await connection.query(
-        `INSERT INTO log_exclude_devices (device_id, fingerprint) VALUES (?, ?)
-         ON DUPLICATE KEY UPDATE fingerprint = VALUES(fingerprint)`,
-        [normalizedDeviceId, normalizedFingerprint],
-      );
-    }
-    await connection.commit();
-  } catch (error) {
-    await connection.rollback();
-    throw error;
-  } finally {
-    connection.release();
-  }
-  await refreshLogExclude();
-}
-
-export async function removeLogExclude(fingerprint) {
-  const normalizedFingerprint = normalizeIdentifier(fingerprint);
-  const connection = await pool.getConnection();
-  try {
-    await connection.beginTransaction();
-    await connection.query('DELETE FROM log_exclude_devices WHERE fingerprint = ?', [normalizedFingerprint]);
-    await connection.query('DELETE FROM log_exclude WHERE fingerprint = ?', [normalizedFingerprint]);
-    await connection.commit();
-  } catch (error) {
-    await connection.rollback();
-    throw error;
-  } finally {
-    connection.release();
-  }
-  await refreshLogExclude();
+  if (isInternalSession(req)) return false;
+  const deviceId = readDeviceId(req);
+  return Boolean(deviceId && internalDeviceIds.has(deviceId));
 }

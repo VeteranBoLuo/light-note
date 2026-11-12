@@ -1,3 +1,5 @@
+import { normalizeProductVersion } from '@lightnote/shared';
+
 const UPDATE_LOG_IMAGE_ROUTE_PREFIX = '/api/updateLog/image/';
 
 export const UPDATE_LOG_IMAGE_MAX_BYTES = 5 * 1024 * 1024;
@@ -76,6 +78,7 @@ export function normalizeUpdateLogRecord(row = {}) {
     id: String(row.id || ''),
     title,
     publishDate,
+    productVersion: normalizeProductVersion(row.product_version ?? row.productVersion) || '',
     summary,
     highlights,
     tags,
@@ -124,6 +127,7 @@ export function normalizeLegacyUpdateLogs(rawContent) {
 export function normalizeUpdateLogInput(body = {}) {
   const title = stripLegacyHtml(body.title || '').replace(/\s+/g, ' ');
   const publishDate = formatDateOnly(body.publishDate);
+  const productVersion = normalizeProductVersion(body.productVersion);
   const summary = stripLegacyHtml(body.summary || '').replace(/\s+/g, ' ');
   const contentMarkdown = String(body.contentMarkdown || '');
   const status = body.status === 'published' ? 'published' : 'draft';
@@ -140,6 +144,7 @@ export function normalizeUpdateLogInput(body = {}) {
   if (!publishDate) {
     return { error: 'INVALID_PUBLISH_DATE' };
   }
+  if (productVersion === null) return { error: 'INVALID_PRODUCT_VERSION' };
   if (summary.length > 500) {
     return { error: 'SUMMARY_TOO_LONG' };
   }
@@ -160,6 +165,7 @@ export function normalizeUpdateLogInput(body = {}) {
     value: {
       title,
       publishDate,
+      ...(Object.hasOwn(body, 'productVersion') ? { productVersion } : {}),
       summary,
       highlights,
       tags: [...new Set(tags)],

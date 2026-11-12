@@ -10,22 +10,15 @@ import pool from '../db/index.js';
 import { stableAgentErrorCode } from '../util/agent/logSafety.js';
 import { recordAdminOperationAudit } from '../util/adminOperationAudit.js';
 import {
-  buildAfdianAuthorizationUrl,
-  exchangeAfdianAuthorizationCode,
-  queryAfdianPublicProfile,
   isAfdianDashboardWebhookTestPayload,
   verifyAfdianWebhookSignature,
 } from '../util/afdianClient.js';
-import { createAfdianOAuthState, consumeAfdianOAuthState } from '../util/afdianOAuthState.js';
 import {
   createAfdianPackageCheckoutIntent,
   getAfdianEntitlementStoreState,
-  getAfdianSupportState,
   ingestAfdianWebhookOrder,
-  linkAfdianAccount,
   reconcileAfdianOrder,
   syncAfdianOrderHistory,
-  unlinkAfdianAccount,
 } from '../util/afdianSupportService.js';
 import { getSupportCatalog } from '../util/afdianSupportPackageCatalog.js';
 import {
@@ -38,13 +31,8 @@ import {
 } from '../util/afdianSupportCampaignService.js';
 import {
   getAfdianAdminOverview,
-  getAfdianLeaderboard,
-  getAfdianPublicAvatar,
   getAfdianUserOrders,
   queryAfdianAdminOrders,
-  queryAfdianAdminSupporters,
-  setAfdianAdminIdentityHidden,
-  updateAfdianPublicPreference,
 } from '../util/afdianSupportReadService.js';
 import { approveAfdianSupportReward } from '../util/afdianSupportRewardService.js';
 
@@ -65,14 +53,9 @@ function sendError(req, res, error) {
     );
 }
 
-function redirectOAuthResult(res, code) {
-  const query = new URLSearchParams({ records: 'history', afdian: code });
-  return res.redirect(302, `/store?${query.toString()}`);
-}
-
 function ensurePrivateSupportAccess(req, res) {
   if (req.adminContext) {
-    res.status(403).send(resultData({ code: 'ADMIN_MAINTENANCE_FORBIDDEN' }, 403, '代管上下文不能读取赞助隐私'));
+    res.status(403).send(resultData({ code: 'ADMIN_MAINTENANCE_FORBIDDEN' }, 403, '代管上下文不能读取购买记录'));
     return false;
   }
   return ensureNotVisitor(req, res);
@@ -103,19 +86,6 @@ async function ensureRoot(req, res) {
   }
 }
 
-export async function state(req, res) {
-  if (req.adminContext) {
-    return res.status(403).send(resultData({ code: 'ADMIN_MAINTENANCE_FORBIDDEN' }, 403, '代管上下文不能读取赞助关联'));
-  }
-  try {
-    const authenticated = Boolean(req.user?.isAuthenticated && req.user?.id && req.user.role !== 'visitor');
-    const data = await getAfdianSupportState({ userId: req.user?.id, authenticated });
-    return res.send(resultData(data));
-  } catch (error) {
-    return sendError(req, res, error);
-  }
-}
-
 export async function storeState(req, res) {
   if (req.adminContext) {
     return res.status(403).send(resultData({ code: 'ADMIN_MAINTENANCE_FORBIDDEN' }, 403, '代管上下文不能读取购买记录'));
@@ -132,9 +102,8 @@ export async function storeState(req, res) {
 export async function storeOrders(req, res) {
   if (!ensurePrivateSupportAccess(req, res)) return;
   if (!req.user.isAuthenticated) return res.status(401).send(resultData(null, 401, '请先登录'));
-  const scope = req.query.scope === 'history' ? 'support' : 'purchase';
   try {
-    const data = await getAfdianUserOrders({ userId: req.user.id, page: req.query.page, scope });
+    const data = await getAfdianUserOrders({ userId: req.user.id, page: req.query.page });
     return res.send(resultData(data));
   } catch (error) {
     return sendError(req, res, error);
@@ -156,18 +125,9 @@ export async function catalog(req, res) {
   }
 }
 
-export function donationCheckout(req, res) {
-  return res.status(410).send(resultData(
-    { code: 'SUPPORT_DONATION_CHECKOUT_RETIRED' },
-    410,
-    L(req, '自愿支持入口已停用，请前往资源商店', 'Voluntary support has retired. Visit the Resource Store.'),
-  ));
-}
-
 export async function checkout(req, res) {
   if (!ensurePrivateSupportAccess(req, res)) return;
-  // 旧版前端曾用 /checkout?option= 发起“赞助赠 AI”。拆分发布后必须失败关闭，
-  // 旧版赞助链接不能改成资源购买。
+  // 只接受资源商店的 skuId；旧版 /checkout?option= 等链接失败关闭，不能改成资源购买。
   if (!req.query.skuId) {
     return res
       .status(410)
@@ -177,8 +137,8 @@ export async function checkout(req, res) {
           410,
           L(
             req,
-            '旧版赞助入口已停用，请刷新页面后重试',
-            'This legacy support checkout has retired. Refresh and try again.',
+            '这个购买链接已失效，请回到资源商店重新选择套餐',
+            'This checkout link has expired. Choose a package in the Resource Store again.',
           ),
         ),
       );
@@ -207,107 +167,6 @@ export async function events(req, res) {
   return res.send(resultData(null));
 }
 
-export async function oauthStart(req, res) {
-  if (!ensurePrivateSupportAccess(req, res)) return;
-  try {
-    const { state: oauthState } = await createAfdianOAuthState({
-      userId: req.user.id,
-      sessionId: req.user.sessionId,
-    });
-    return res.redirect(302, buildAfdianAuthorizationUrl(oauthState));
-  } catch (error) {
-    return sendError(req, res, error);
-  }
-}
-
-export async function oauthCallback(req, res) {
-  if (!req.user?.isAuthenticated || !req.user?.id || req.user.role === 'visitor') {
-    return redirectOAuthResult(res, 'session_required');
-  }
-  try {
-    await consumeAfdianOAuthState({
-      state: req.query.state,
-      userId: req.user.id,
-      sessionId: req.user.sessionId,
-    });
-    const identity = await exchangeAfdianAuthorizationCode(req.query.code);
-    const profile = await queryAfdianPublicProfile(identity.providerUserId).catch((error) => {
-      console.warn('[afdian] OAuth 用户资料补全失败 code=%s', stableAgentErrorCode(error));
-      return {};
-    });
-    await linkAfdianAccount({ userId: req.user.id, ...identity, ...profile });
-    void syncAfdianOrderHistory().catch((error) => {
-      console.warn('[afdian] OAuth 后历史订单同步失败 code=%s', stableAgentErrorCode(error));
-    });
-    return redirectOAuthResult(res, 'bound');
-  } catch (error) {
-    console.warn('[afdian] OAuth 回调失败 code=%s', stableAgentErrorCode(error));
-    return redirectOAuthResult(res, 'failed');
-  }
-}
-
-export async function oauthUnlink(req, res) {
-  if (!ensurePrivateSupportAccess(req, res)) return;
-  try {
-    const data = await unlinkAfdianAccount({ userId: req.user.id });
-    return res.send(resultData(data));
-  } catch (error) {
-    return sendError(req, res, error);
-  }
-}
-
-export async function leaderboard(req, res) {
-  try {
-    const userId = req.adminContext ? '' : req.user?.isAuthenticated && req.user?.role !== 'visitor' ? req.user.id : '';
-    return res.send(resultData(await getAfdianLeaderboard({ userId })));
-  } catch (error) {
-    return sendError(req, res, error);
-  }
-}
-
-export async function orders(req, res) {
-  if (!ensurePrivateSupportAccess(req, res)) return;
-  try {
-    const data = await getAfdianUserOrders({
-      userId: req.user.id,
-      page: req.query.page,
-      pageSize: req.query.pageSize,
-      scope: req.query.scope,
-    });
-    return res.send(resultData(data));
-  } catch (error) {
-    return sendError(req, res, error);
-  }
-}
-
-export async function publicPreference(req, res) {
-  if (!ensurePrivateSupportAccess(req, res)) return;
-  try {
-    const data = await updateAfdianPublicPreference({
-      userId: req.user.id,
-      participateInRanking: req.body?.participateInRanking,
-      showIdentity: req.body?.showIdentity,
-    });
-    return res.send(resultData(data));
-  } catch (error) {
-    return sendError(req, res, error);
-  }
-}
-
-export async function publicAvatar(req, res) {
-  try {
-    const avatar = await getAfdianPublicAvatar({ publicId: req.params.publicId });
-    if (!avatar) return res.status(404).end();
-    res.set('Cache-Control', 'private, max-age=30');
-    if (avatar.redirectUrl) return res.redirect(302, avatar.redirectUrl);
-    res.type(avatar.contentType);
-    return res.send(avatar.data);
-  } catch (error) {
-    console.warn('[afdian] 公开头像读取失败 code=%s', stableAgentErrorCode(error));
-    return res.status(404).end();
-  }
-}
-
 export async function adminOverview(req, res) {
   if (!(await ensureRoot(req, res))) return;
   try {
@@ -324,20 +183,6 @@ export async function adminOrders(req, res) {
       page: req.query.page,
       pageSize: req.query.pageSize,
       state: req.query.state,
-      search: req.query.search,
-    });
-    return res.send(resultData(data));
-  } catch (error) {
-    return sendError(req, res, error);
-  }
-}
-
-export async function adminSupporters(req, res) {
-  if (!(await ensureRoot(req, res))) return;
-  try {
-    const data = await queryAfdianAdminSupporters({
-      page: req.query.page,
-      pageSize: req.query.pageSize,
       search: req.query.search,
     });
     return res.send(resultData(data));
@@ -512,23 +357,6 @@ export async function adminRewardApprove(req, res) {
     return res.send(resultData(data));
   } catch (error) {
     await auditAdminSupportAction(req, 'support_reward_approve', providerOrderNo, 'failed').catch(() => {});
-    return sendError(req, res, error);
-  }
-}
-
-export async function adminIdentityVisibility(req, res) {
-  if (!(await ensureRoot(req, res))) return;
-  try {
-    await setAfdianAdminIdentityHidden({
-      userId: String(req.params.userId || ''),
-      hidden: req.body?.hidden,
-      reason: req.body?.reason,
-      actorUserId: req.user.id,
-      requestId: req.headers['x-request-id'],
-      ip: req.ip,
-    });
-    return res.send(resultData({ updated: true }));
-  } catch (error) {
     return sendError(req, res, error);
   }
 }

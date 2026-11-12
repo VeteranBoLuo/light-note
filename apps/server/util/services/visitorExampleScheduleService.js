@@ -55,7 +55,7 @@ export const ROLLING_TYPES = Object.freeze({
   todo: {
     table: 'todo_items',
     owner: 'user_id',
-    dates: ['start_at', 'due_at', 'completed_at'],
+    dates: ['start_at', 'due_at', 'completed_at', 'occurrence_date'],
     version: 'update_time',
   },
   project: { table: 'toolbox_workspaces', owner: 'user_id', dates: ['target_date'], version: 'board_version' },
@@ -66,10 +66,10 @@ export async function assertVisitorOwner(db, userId, lock = false) {
   if (!user || user.role !== 'visitor' || Number(user.del_flag) !== 0) throw exampleError('VISITOR_OWNER_INVALID');
   return user;
 }
-export async function readRollingObject(db, owner, entry) {
+export async function readRollingObject(db, owner, entry, { lock = true } = {}) {
   const config = ROLLING_TYPES[entry.type];
   if (!config || typeof entry.id !== 'string' || !entry.id) throw exampleError('VISITOR_ENTRY_INVALID');
-  const [[row]] = await db.query(`SELECT * FROM ${config.table} WHERE id=? AND ${config.owner}=? FOR UPDATE`, [
+  const [[row]] = await db.query(`SELECT * FROM ${config.table} WHERE id=? AND ${config.owner}=?${lock ? ' FOR UPDATE' : ''}`, [
     entry.id,
     owner,
   ]);

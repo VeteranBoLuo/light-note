@@ -1,3 +1,4 @@
+import { calibratedNoteOutputTokens, reservationCalibrationEnabled } from '../../aiTokenEstimate.js';
 import { AI_SKILL_AUTHENTICATED_ROLES } from '../accessPolicy.js';
 import { validateNoteTransformInput } from '../inputValidators.js';
 
@@ -19,11 +20,11 @@ const NOTE_TRANSFORM_OUTPUT_BUDGETS = Object.freeze({
   outline: 2048,
 });
 
-function resolveNoteTransformModelPolicy(input = {}) {
+function resolveNoteTransformModelPolicy(input = {}, { calibrated = reservationCalibrationEnabled() } = {}) {
   const operation = String(input?.operation || '').trim();
   return Object.freeze({
     ...NOTE_TRANSFORM_MODEL_POLICY,
-    maxTokens: NOTE_TRANSFORM_OUTPUT_BUDGETS[operation] || NOTE_TRANSFORM_MODEL_POLICY.maxTokens,
+    maxTokens: calibrated ? calibratedNoteOutputTokens(input) : NOTE_TRANSFORM_OUTPUT_BUDGETS[operation] || NOTE_TRANSFORM_MODEL_POLICY.maxTokens,
   });
 }
 

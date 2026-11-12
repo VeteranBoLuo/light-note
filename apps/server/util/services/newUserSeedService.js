@@ -10,7 +10,7 @@ import { insertResourceTagRelations, RESOURCE_TYPE } from '../resourceTags.js';
 import { sanitizePersistedNoteContent } from '../noteHtmlSanitizer.js';
 import { NEW_USER_DRAWING_NOTE_EXAMPLE_SCENE } from './newUserDrawingNoteExample.js';
 import { createBookmarkExactUrlHash } from './bookmarkExactUrlService.js';
-import { createTodo } from './todoService.js';
+import { createSingleTodoPlan } from './todoSingleTaskService.js';
 import { saveTodoList } from './todoOrganizationService.js';
 
 export const NEW_USER_SEED_VERSION = ONBOARDING_SEED_VERSION;
@@ -89,6 +89,8 @@ function deterministicSeedId(userId, key) {
     .digest('hex');
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
 }
+
+export { deterministicSeedId as newUserSeedResourceId };
 
 function buildChineseSeed(siteUrl) {
   return {
@@ -626,7 +628,7 @@ export async function seedNewUserWorkspaceData({ userId, lang = 'zh-CN', siteUrl
     }
 
     for (const [index, todo] of content.todos.entries()) {
-      const created = await createTodo(
+      const created = await createSingleTodoPlan(
         connection,
         userId,
         {
@@ -639,7 +641,7 @@ export async function seedNewUserWorkspaceData({ userId, lang = 'zh-CN', siteUrl
           reminder: null,
           sortOrder: (index + 1) * 1000,
         },
-        { invalidateSearch: false, suppressUserRewards: true },
+        { idempotencyKey: `onboarding-todo:${todo.key}`, invalidateSearch: false, suppressUserRewards: true },
       );
       await markOnboardingSeedResource(connection, {
         userId,

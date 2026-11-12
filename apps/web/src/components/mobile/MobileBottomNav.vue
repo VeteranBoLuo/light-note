@@ -10,7 +10,7 @@
       }"
       :aria-current="isItemActive(item.key) ? 'page' : undefined"
       :aria-busy="pendingKey === item.key ? 'true' : undefined"
-      :aria-label="item.key === 'create' ? t(item.labelKey) : undefined"
+      :aria-label="item.key === 'todo' && inbox.todoAttentionTotal > 0 ? todoAttentionLabel : t(item.labelKey)"
       :aria-haspopup="item.key === 'create' ? 'dialog' : undefined"
       :aria-expanded="item.key === 'create' ? createHubOpen : undefined"
       @pointerdown="prefetchItem(item)"
@@ -77,6 +77,7 @@
   import { useCommunityChatUnread } from '@/composables/useCommunityChatUnread';
   import { inboxStore, useUserStore } from '@/store';
   import { prefetchResolvedRoute } from '@/utils/routePrefetch';
+  import { todoNavigationTarget } from '@/utils/todoNavigation';
 
   const emit = defineEmits<{
     prepareFormalCreate: [];
@@ -158,7 +159,7 @@
     return item.key === 'resources'
       ? getMobileResourceEntryPath()
       : item.key === 'todo'
-        ? { path: '/inbox', query: { tab: 'todo' } }
+        ? todoNavigationTarget(inbox.todoAttentionTotal)
         : item.path;
   }
 

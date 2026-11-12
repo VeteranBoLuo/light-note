@@ -1,4 +1,3 @@
-export const COMPARISON_MAX_COLUMNS: number;
 export const COMPARISON_CELL_MAX_CHARS: number;
 export type ComparisonColumn = {
   label: string;
@@ -17,6 +16,5 @@ export type ComparisonTable = {
   columns: ComparisonColumn[];
   rows: Array<{ sourceId: string; title: string; cells: ComparisonCell[] }>;
 };
-export function normalizeComparisonColumns(value: unknown): ComparisonColumn[];
 export function comparisonCellNeedsReview(cell: ComparisonCell): boolean;
 export function comparisonTableMarkdown(table: ComparisonTable): string;

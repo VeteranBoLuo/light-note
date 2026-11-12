@@ -359,7 +359,13 @@ describe('adminAiOperationsService', () => {
     expect(JSON.stringify(result)).not.toMatch(/question|answer|content|resourceTitle|url/iu);
   });
 
-  it('仅详情返回经过二次过滤的入参和模型前失败说明，旧记录没有伪造入参', async () => {
+  it.each([
+    ['BOOKMARK_PAGE_UNREADABLE', '可靠内容'],
+    ['BOOKMARK_PAGE_NOT_FOUND', '不存在'],
+    ['BOOKMARK_PAGE_DNS_FAILED', '解析网站地址'],
+    ['BOOKMARK_PAGE_TLS_FAILED', '证书验证失败'],
+    ['BOOKMARK_PAGE_TLS_HANDSHAKE_FAILED', '安全连接失败'],
+  ])('详情保留模型前失败 %s 的准确原因，只返回脱敏入参', async (code, message) => {
     const database = {
       query: vi
         .fn()
@@ -369,7 +375,7 @@ describe('adminAiOperationsService', () => {
               skill_id: 'bookmark.parse_url',
               status: 'failed',
               provider_call_count: 0,
-              error_code: 'BOOKMARK_PAGE_UNREADABLE',
+              error_code: code,
               input_diagnostics_json: JSON.stringify({
                 version: 1,
                 url: 'https://example.com/?id=42&token=secret',
@@ -382,8 +388,8 @@ describe('adminAiOperationsService', () => {
     };
     const result = await getAdminAiExecutionDetail(EXECUTION_ONE, database);
     expect(result.inputDiagnostics.url).toBe('https://example.com/?id=42');
-    expect(result.failure).toMatchObject({ code: 'BOOKMARK_PAGE_UNREADABLE', beforeModelCall: true });
-    expect(result.failure.message).toContain('可靠内容');
+    expect(result.failure).toMatchObject({ code, beforeModelCall: true });
+    expect(result.failure.message).toContain(message);
     expect(JSON.stringify(result)).not.toMatch(/secret|private/);
     expect(result.calls).toEqual([]);
   });

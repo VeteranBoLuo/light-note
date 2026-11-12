@@ -7,6 +7,7 @@ import {
   isTodoOverdue,
   normalizeTodoDateOnly,
   todoActionAt,
+  todoAttentionState,
   todoCalendarAt,
   todoConfiguredReminderAt,
   todoGroupKey,
@@ -19,6 +20,20 @@ import {
 
 describe('todoPlanning', () => {
   const now = new Date(2026, 6, 30, 16, 30);
+
+  it.each([
+    [{ dueAt: '2026-07-30 09:00:00' }, 'overdue'],
+    [{ dueAt: '2026-07-30 16:30:00' }, 'dueToday'],
+    [{ dueAt: '2026-07-30 23:59:59' }, 'dueToday'],
+    [{ dueAt: '2026-07-31 00:00:00', occurrenceDate: '2026-07-30' }, null],
+    [{ occurrenceDate: '2026-07-29' }, 'overdue'],
+    [{ occurrenceDate: '2026-07-30' }, 'scheduledToday'],
+    [{ occurrenceDate: '2026-07-31' }, null],
+    [{}, null],
+    [{ dueAt: '2026-07-29 09:00:00', status: 'completed' }, null],
+  ])('任务关注标识遵循截止优先、实例日期兜底：%j', (patch, expected) => {
+    expect(todoAttentionState({ status: 'pending', dueAt: null, ...patch } as any, now)).toBe(expected);
+  });
 
   it('同一天已经过期的时间归入逾期，而不是今天', () => {
     expect(todoGroupKey({ status: 'pending', dueAt: '2026-07-30 09:00:00' } as any, now)).toBe('overdue');
@@ -125,6 +140,13 @@ describe('todoPlanning', () => {
 
   it('英文格式与邮件使用同样的常见写法', () => {
     expect(formatTodoDateTime('2026-08-02 09:00:00', 'en-US', { now })).toBe('Sun, Aug 2, 2026, 9:00 AM');
+  });
+
+  it('紧凑时间省略星期，保留中英文日期、时刻和跨年信息', () => {
+    const options = { includeWeekday: false, includeYear: false, now };
+    expect(formatTodoDateTime('2026-08-02 09:00:00', 'zh-CN', options)).toBe('8月2日 09:00');
+    expect(formatTodoDateTime('2026-08-02 09:00:00', 'en-US', options)).toBe('Aug 2, 9:00 AM');
+    expect(formatTodoDateTime('2027-08-02 00:00:00', 'zh-CN', { ...options, includeTime: false })).toBe('2027年8月2日');
   });
 
   it('DATE、ISO 与 Date 实例统一成没有时区语义的计划日期', () => {

@@ -36,12 +36,6 @@ router.post('/getConversionFunnel', commonHandle.getConversionFunnel);
 
 router.post('/getOperationLogs', commonHandle.getOperationLogs);
 
-router.post('/getLogExclude', commonHandle.getLogExclude);
-
-router.post('/addLogExclude', commonHandle.addLogExcludeFp);
-
-router.post('/removeLogExclude', commonHandle.removeLogExcludeFp);
-
 router.post('/clearOperationLogs', commonHandle.clearOperationLogs);
 
 router.post('/getIpLogStats', commonHandle.getIpLogStats);
@@ -50,7 +44,6 @@ router.post('/clearLogsByIp', commonHandle.clearLogsByIp);
 
 router.post('/analyzeImgUrl', commonHandle.analyzeImgUrl);
 
-router.post('/getImages', commonHandle.getImages);
 
 router.post('/getHelpConfig', commonHandle.getHelpConfig);
 
@@ -58,14 +51,8 @@ router.post('/resolveHelpSources', commonHandle.resolveHelpSources);
 
 router.get('/noticeSummary', commonHandle.getNoticeSummary);
 
-// router.post('/updateFolder', commonHandle.updateFolder);
-// router.post('/deleteFolder', commonHandle.deleteFolder);
-router.post('/getAgentLogs', commonHandle.getAgentLogs);
-router.post('/getAgentLogChain', commonHandle.getAgentLogChain);
-router.post('/getAgentLogsSummary', commonHandle.getAgentLogsSummary);
 router.post('/getDeepSeekBalance', commonHandle.getDeepSeekBalance);
 router.post('/getAdminOverviewSnapshot', commonHandle.getAdminOverviewSnapshot);
-router.post('/getAdminOverview', commonHandle.getAdminOverview);
 router.post('/getAdminOverviewTrend', commonHandle.getAdminOverviewTrend);
 router.post('/getAdminOverviewRecent', commonHandle.getAdminOverviewRecent);
 router.post('/getAdminActionCenter', getAdminActionCenter);

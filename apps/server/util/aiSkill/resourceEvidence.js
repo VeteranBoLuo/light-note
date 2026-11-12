@@ -257,34 +257,6 @@ async function loadFileChunks({ database, rows, excerptsOnly = false }) {
   return bySource;
 }
 
-/** 有界读取已保存的正文；不创建解析任务、不抓取 URL、不调用模型。 */
-export async function loadPreparedResourceExcerpts({ database = pool, userId, refs }) {
-  if (!Array.isArray(refs) || refs.length > 20 || refs.some((ref) => !['note', 'bookmark', 'file'].includes(ref.type)))
-    throw aiSkillError('AI_SKILL_RESOURCE_LIMIT', '简报候选资料范围无效');
-  if (!refs.length) return [];
-  const rows = await loadRowsByType({ database, userId, refs, preparedOnly: true });
-  const chunks = await loadFileChunks({ database, rows, excerptsOnly: true });
-  return refs.flatMap((ref) => {
-    const row = rows.get(`${ref.type}:${ref.id}`);
-    if (!row) return [];
-    // 网址、文件名及解析状态不能充当正文证据。
-    const content =
-      ref.type === 'note'
-        ? noteText(row)
-        : ref.type === 'bookmark'
-          ? plainText([row.description, row.snapshot_summary, row.snapshot_content].filter(Boolean).join('\n\n'))
-          : (chunks.get(String(row.source_id || '')) || []).map((chunk) => plainText(chunk.content)).join('\n');
-    return [
-      {
-        resourceType: ref.type,
-        resourceId: ref.id,
-        title: row.title || row.name || row.file_name || '',
-        preparedText: content.replace(/\s+/gu, ' ').trim().slice(0, 600),
-      },
-    ];
-  });
-}
-
 function rawResource(ref, row, fileChunks) {
   if (ref.type === 'note') {
     const content = noteText(row);

@@ -2,14 +2,10 @@ import { apiBaseGet, apiBasePost } from '@/http/request';
 
 export interface AdminSupportOverview {
   verifiedOrders: number;
-  assignedSupporters: number;
   totalAmount: string;
-  supportOrders: number;
-  supportAmount: string;
   purchaseOrders: number;
   purchaseAmount: string;
   monthAmount: string;
-  linkedAccounts: number;
   pendingOrders: number;
   conflictOrders: number;
   unlinkedOrders: number;
@@ -44,22 +40,6 @@ export interface AdminSupportOrder {
   skuId: string | null;
   reviewedAt: string | null;
   creditedAt: string | null;
-}
-
-export interface AdminSupporter {
-  userId: string;
-  alias: string;
-  providerName: string | null;
-  linkedAt: string | null;
-  orderCount: number;
-  totalAmount: string;
-  lastSupportAt: string | null;
-  participateInRanking: number;
-  showIdentity: number;
-  adminHidden: number;
-  adminHiddenReason: string | null;
-  grantedTokens: number;
-  grantedStorageMb: number;
 }
 
 export interface PageResult<T> {
@@ -161,14 +141,6 @@ export async function getAdminSupportOrders(params: {
   return requireData(await apiBaseGet('/api/support/admin/orders', params), 'ADMIN_SUPPORT_ORDERS_FAILED');
 }
 
-export async function getAdminSupporters(params: {
-  page: number;
-  pageSize: number;
-  search?: string;
-}): Promise<PageResult<AdminSupporter>> {
-  return requireData(await apiBaseGet('/api/support/admin/supporters', params), 'ADMIN_SUPPORTERS_FAILED');
-}
-
 export async function forceAdminSupportSync(): Promise<{ synced: number; truncated: boolean; skipped?: boolean }> {
   return requireData(await apiBasePost('/api/support/admin/sync'), 'ADMIN_SUPPORT_SYNC_FAILED');
 }
@@ -188,18 +160,6 @@ export async function approveAdminSupportReward(input: {
     { expectedTokens: input.expectedTokens, expectedUserId: input.expectedUserId },
   );
   if (response.status !== 200) throw new Error('ADMIN_SUPPORT_REWARD_APPROVE_FAILED');
-}
-
-export async function setAdminSupportIdentityHidden(input: {
-  userId: string;
-  hidden: boolean;
-  reason?: string;
-}): Promise<void> {
-  const response = await apiBasePost(
-    `/api/support/admin/supporters/${encodeURIComponent(input.userId)}/identity-visibility`,
-    { hidden: input.hidden, reason: input.reason || '' },
-  );
-  if (response.status !== 200) throw new Error('ADMIN_SUPPORT_VISIBILITY_FAILED');
 }
 
 export async function getAdminSupportCampaigns(): Promise<AdminSupportCampaign[]> {

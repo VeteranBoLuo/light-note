@@ -786,7 +786,7 @@
       .map((item) => ({ type: item.type, id: item.resourceId, title: item.title })),
   );
   const defaultOutcomeTool = computed(
-    () => ({ research: 'research_brief', learning: 'study_kit', writing: 'material_to_note' })[kind.value],
+    () => ({ research: 'material_to_note', learning: 'study_kit', writing: 'material_to_note' })[kind.value],
   );
   function toggleResource(item: ToolboxWorkspaceResource, checked: boolean) {
     const key = `${item.type}:${item.resourceId}`;

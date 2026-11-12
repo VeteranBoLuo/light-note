@@ -449,41 +449,6 @@ export async function moveOwnedCloudFolder({
   });
 }
 
-export async function reorderOwnedCloudFolders({ userId, parentId = null, items, database = pool } = {}) {
-  const normalizedParentId = normalizeCloudFolderId(parentId, { nullable: true });
-  if (!Array.isArray(items) || !items.length) throw serviceError('FOLDER_SORT_INVALID', '文件夹排序参数无效');
-  const ids = items.map((item) => String(normalizeCloudFolderId(item?.id)));
-  if (new Set(ids).size !== ids.length) throw serviceError('FOLDER_SORT_INVALID', '文件夹排序包含重复项');
-
-  return runLockedMutation({
-    userId,
-    database,
-    async mutate({ connection, rows, userId: ownerId }) {
-      const siblings = siblingRows(rows, normalizedParentId);
-      const siblingIds = new Set(siblings.map((row) => String(row.id)));
-      if (siblingIds.size !== ids.length || ids.some((id) => !siblingIds.has(id))) {
-        throw serviceError('FOLDER_SORT_INVALID', '只能对同一层级的全部文件夹进行排序');
-      }
-      for (const batch of chunkItems(ids.map((id, sort) => ({ id, sort })))) {
-        if (batch.length === 1) {
-          await connection.query(
-            'UPDATE folders SET sort = ? WHERE id = ? AND create_by = ? AND parent_id <=> ? AND del_flag = 0',
-            [batch[0].sort, batch[0].id, ownerId, normalizedParentId],
-          );
-        } else {
-          await connection.query(
-            `UPDATE folders SET sort = CASE id ${batch.map(() => 'WHEN ? THEN ?').join(' ')} ELSE sort END
-              WHERE id IN (${batch.map(() => '?').join(',')})
-                AND create_by = ? AND parent_id <=> ? AND del_flag = 0`,
-            [...batch.flatMap(({ id, sort }) => [id, sort]), ...batch.map(({ id }) => id), ownerId, normalizedParentId],
-          );
-        }
-      }
-      return { parentId: normalizedParentId == null ? null : String(normalizedParentId), items: ids };
-    },
-  });
-}
-
 export async function deleteEmptyOwnedCloudFolder({ userId, id, database = pool } = {}) {
   const normalizedId = normalizeCloudFolderId(id);
   return runLockedMutation({

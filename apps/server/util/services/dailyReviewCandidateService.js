@@ -394,10 +394,3 @@ export async function loadDailyReviewCandidates({ db, userId, calendar, date }) 
   });
   return selectDailyReviewCandidates({ userId, date, onThisDay, activeTag, buried });
 }
-
-export const DAILY_REVIEW_CANDIDATE_LIMITS = Object.freeze({
-  activeTags: ACTIVE_TAG_LIMIT,
-  candidatePool: CANDIDATE_POOL_LIMIT,
-  dailyItems: DAILY_ITEM_LIMIT,
-  perResourceType: MAX_ITEMS_PER_RESOURCE_TYPE,
-});

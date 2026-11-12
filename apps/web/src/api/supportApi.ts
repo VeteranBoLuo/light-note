@@ -1,28 +1,6 @@
 import { SUPPORT_PACKAGE_CATALOG, SUPPORT_PACKAGE_CATALOG_VERSION } from '@lightnote/shared';
 import { apiBaseGet, apiBasePost } from '@/http/request';
 
-export interface AfdianSupportState {
-  authenticated: boolean;
-  oauthAvailable: boolean;
-  orderSyncAvailable: boolean;
-  linked: boolean;
-  linkedAt?: string | null;
-  providerAccount?: { name: string | null; avatarUrl: string | null } | null;
-  orderCount: number;
-  totalAmount: string;
-  lastSupportAt?: string | null;
-  publicPreference: AfdianPublicPreference;
-  recentOrders: AfdianSupportOrder[];
-}
-
-export interface AfdianPublicPreference {
-  participateInRanking: boolean;
-  showIdentity: boolean;
-  adminHidden: boolean;
-  identityConsentedAt?: string | null;
-  adminHiddenReason?: string | null;
-}
-
 export interface AfdianSupportOrder {
   id: string;
   amount: string;
@@ -109,45 +87,10 @@ export interface EntitlementStoreState {
   recentOrders: AfdianSupportOrder[];
 }
 
-export type EntitlementOrderScope = 'purchase' | 'history';
-
-export async function getEntitlementOrders(scope: EntitlementOrderScope, page: number) {
-  const response = await apiBaseGet('/api/support/store/orders', { scope, page }, { silent: true });
+export async function getEntitlementOrders(page: number) {
+  const response = await apiBaseGet('/api/support/store/orders', { page }, { silent: true });
   if (response.status !== 200 || !response.data) throw new Error('SUPPORT_ORDERS_UNAVAILABLE');
   return response.data as { items: AfdianSupportOrder[]; total: number; page: number; pageSize: number };
-}
-
-export interface AfdianLeaderboardItem {
-  rank: number;
-  anonymous: boolean;
-  displayName: string | null;
-  publicId: string | null;
-  totalAmount: string;
-  orderCount: number;
-}
-
-export interface AfdianLeaderboard {
-  scope: 'all_time';
-  items: AfdianLeaderboardItem[];
-  mine: AfdianLeaderboardItem | null;
-  totalParticipants: number;
-}
-
-const EMPTY_STATE: AfdianSupportState = {
-  authenticated: false,
-  oauthAvailable: false,
-  orderSyncAvailable: false,
-  linked: false,
-  orderCount: 0,
-  totalAmount: '0.00',
-  publicPreference: { participateInRanking: true, showIdentity: true, adminHidden: false },
-  recentOrders: [],
-};
-
-export async function getAfdianSupportState(): Promise<AfdianSupportState> {
-  const response = await apiBaseGet('/api/support/state', undefined, { silent: true });
-  if (response.status !== 200 || !response.data) throw new Error('AFDIAN_SUPPORT_STATE_UNAVAILABLE');
-  return { ...EMPTY_STATE, ...(response.data as Partial<AfdianSupportState>) };
 }
 
 const EMPTY_STORE_STATE: EntitlementStoreState = {
@@ -208,30 +151,6 @@ export async function getSupportCatalog({
 
 /** 新页面语义名称；后端继续复用同一套爱发电目录接口。 */
 export const getEntitlementStoreCatalog = getSupportCatalog;
-
-export async function unlinkAfdianAccount(): Promise<void> {
-  const response = await apiBasePost('/api/support/afdian/oauth/unlink');
-  if (response.status !== 200) throw new Error('AFDIAN_UNLINK_FAILED');
-}
-
-export async function getAfdianLeaderboard(): Promise<AfdianLeaderboard> {
-  const response = await apiBaseGet('/api/support/leaderboard', undefined, { silent: true });
-  if (response.status !== 200 || !response.data) throw new Error('AFDIAN_LEADERBOARD_UNAVAILABLE');
-  return response.data as AfdianLeaderboard;
-}
-
-export async function updateAfdianPublicPreference(preference: {
-  participateInRanking: boolean;
-  showIdentity: boolean;
-}): Promise<AfdianPublicPreference> {
-  const response = await apiBasePost('/api/support/public-preference', preference);
-  if (response.status !== 200 || !response.data) throw new Error('AFDIAN_PREFERENCE_UPDATE_FAILED');
-  return response.data as AfdianPublicPreference;
-}
-
-export function afdianLeaderboardAvatarUrl(publicId: string): string {
-  return `/api/support/leaderboard/avatar/${encodeURIComponent(publicId)}`;
-}
 
 export interface CampaignPresentation {
   campaignKey: string;

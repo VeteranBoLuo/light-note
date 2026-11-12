@@ -18,10 +18,7 @@ const mocks = vi.hoisted(() => ({
   updateToolboxWorkspace: vi.fn(),
   addToolboxWorkspaceResources: vi.fn(),
   removeToolboxWorkspaceResource: vi.fn(),
-  createToolboxWorkspaceItem: vi.fn(),
-  updateToolboxWorkspaceItem: vi.fn(),
   createToolboxWorkspaceSession: vi.fn(),
-  getToolboxKnowledgeOverview: vi.fn(),
   getToolboxWorkspace: vi.fn(),
   listToolboxWorkspaces: vi.fn(),
   readProjectEntry: vi.fn(),
@@ -53,9 +50,6 @@ vi.mock('../util/operationLog.js', () => ({
 vi.mock('../util/toolbox/errors.js', () => ({
   parseToolboxError: (error) => ({ status: 500, data: { code: error?.code || 'ERROR' }, message: 'failed' }),
 }));
-vi.mock('../util/toolbox/knowledgeStructure.js', () => ({
-  getToolboxKnowledgeOverview: mocks.getToolboxKnowledgeOverview,
-}));
 vi.mock('../util/toolbox/translationStream.js', () => ({ streamTranslation: mocks.streamTranslation }));
 vi.mock('../util/toolbox/service.js', () => ({
   cancelToolboxJob: mocks.cancelToolboxJob,
@@ -66,14 +60,12 @@ vi.mock('../util/toolbox/service.js', () => ({
   getToolboxCatalog: vi.fn(),
   getToolboxJob: vi.fn(),
   listToolboxHomeTasks: mocks.listToolboxHomeTasks,
-  listToolboxJobs: vi.fn(),
   prepareToolboxUpload: vi.fn(),
   saveToolboxArtifactToNote: mocks.saveToolboxArtifactToNote,
 }));
 vi.mock('../util/toolbox/workspace.js', () => ({
   addToolboxWorkspaceResources: mocks.addToolboxWorkspaceResources,
   createToolboxWorkspace: mocks.createToolboxWorkspace,
-  createToolboxWorkspaceItem: mocks.createToolboxWorkspaceItem,
   createToolboxWorkspaceSession: mocks.createToolboxWorkspaceSession,
   getToolboxWorkspace: mocks.getToolboxWorkspace,
   listToolboxHomeWorkspaces: mocks.listToolboxHomeWorkspaces,
@@ -82,7 +74,6 @@ vi.mock('../util/toolbox/workspace.js', () => ({
   removeToolboxWorkspaceResource: mocks.removeToolboxWorkspaceResource,
   deleteToolboxWorkspace: mocks.deleteToolboxWorkspace,
   updateToolboxWorkspace: mocks.updateToolboxWorkspace,
-  updateToolboxWorkspaceItem: mocks.updateToolboxWorkspaceItem,
 }));
 const {
   addWorkspaceResources,
@@ -92,7 +83,6 @@ const {
   createJob,
   createQuote,
   createWorkspace,
-  createWorkspaceItem,
   createWorkspaceSession,
   getHome,
   getProjectEntry,
@@ -100,13 +90,11 @@ const {
   operateWorkspaceBoard,
   getWorkspace,
   listWorkspaces,
-  getKnowledgeOverview,
   openWorkspace,
   removeWorkspaceResource,
   saveArtifact,
   deleteWorkspace,
   updateWorkspace,
-  updateWorkspaceItem,
 } = await import('./toolboxHandle.js');
 
 function createResponse() {
@@ -167,20 +155,6 @@ describe('toolbox home handlers', () => {
     mocks.ensureNotVisitor.mockReturnValue(false);
     await deleteWorkspace(req, createResponse());
     expect(mocks.deleteToolboxWorkspace).not.toHaveBeenCalled();
-  });
-  it('知识库整理接口不再返回目录导出所需的完整节点树', async () => {
-    const overview = { summary: { total: 3 }, issues: [] };
-    mocks.getToolboxKnowledgeOverview.mockResolvedValueOnce(overview);
-    const response = createResponse();
-
-    await getKnowledgeOverview({ user: { id: 'user-1' } }, response);
-
-    expect(mocks.getToolboxKnowledgeOverview).toHaveBeenCalledWith({
-      userId: 'user-1',
-      analysisOptions: { includeNodes: false },
-      query: undefined,
-    });
-    expect(response.send).toHaveBeenCalledWith({ data: overview, status: 200, msg: 'success' });
   });
 
   it('首页只读取当前资源所有者，并返回固定版本的聚合读模型', async () => {
@@ -317,16 +291,12 @@ describe('toolbox home handlers', () => {
     mocks.updateToolboxWorkspace.mockResolvedValue(workspace);
     mocks.addToolboxWorkspaceResources.mockResolvedValue(workspace);
     mocks.removeToolboxWorkspaceResource.mockResolvedValue(workspace);
-    mocks.createToolboxWorkspaceItem.mockResolvedValue(workspace);
-    mocks.updateToolboxWorkspaceItem.mockResolvedValue(workspace);
     mocks.createToolboxWorkspaceSession.mockResolvedValue(workspace);
 
     await createWorkspace(request, response);
     await updateWorkspace(request, response);
     await addWorkspaceResources(request, response);
     await removeWorkspaceResource(request, response);
-    await createWorkspaceItem(request, response);
-    await updateWorkspaceItem(request, response);
     await createWorkspaceSession(request, response);
 
     expect(mocks.recordServerOperation.mock.calls.map(([, payload]) => payload)).toEqual([
@@ -334,8 +304,6 @@ describe('toolbox home handlers', () => {
       { module: '知识工坊', operation: '更新持续工作区' },
       { module: '知识工坊', operation: '添加工作区资料' },
       { module: '知识工坊', operation: '移除工作区资料' },
-      { module: '知识工坊', operation: '新建工作区事项' },
-      { module: '知识工坊', operation: '更新工作区事项' },
       { module: '知识工坊', operation: '记录工作区推进' },
     ]);
     const loggedPayloads = mocks.recordServerOperation.mock.calls.map(([, payload]) => payload);
@@ -429,8 +397,6 @@ describe('visitor project previews', () => {
     });
     expect(mocks.getToolboxWorkspace).toHaveBeenCalledWith({ userId: 'visitor-owner', workspaceId: 'example' });
     expect(mocks.ensureUserOrAdminPolicy).not.toHaveBeenCalled();
-    await getKnowledgeOverview(req, res);
-    expect(mocks.getToolboxKnowledgeOverview).not.toHaveBeenCalled();
   });
   it('returns projects with an empty task collection and does not mark a project opened', async () => {
     const req = { user: { id: 'visitor-owner', role: 'visitor' }, params: { workspaceId: 'example' } };

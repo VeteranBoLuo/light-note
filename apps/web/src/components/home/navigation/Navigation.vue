@@ -63,13 +63,15 @@
             就能归零，点进去即可处理。角标绝对定位，出现或消失都不改变导航项宽度，
             其他一级导航不会左右跳动。
           -->
-          <div
+          <BButton
             id="nav-todo-entry"
             :style="{ color: isTodoRoute ? '#615ced' : '' }"
             class="navigation-todo-entry"
-            style="font-size: 14px; cursor: pointer"
+            type="text"
+            :title="inbox.todoAttentionTotal > 0 ? todoAttentionLabel : undefined"
+            :aria-label="inbox.todoAttentionTotal > 0 ? todoAttentionLabel : $t('navigation.todo')"
             v-click-log="OPERATION_LOG_MAP.navigation.todo"
-            @click="router.push({ path: '/inbox', query: { tab: 'todo' } })"
+            @click="router.push(todoNavigationTarget(inbox.todoAttentionTotal))"
             >{{ $t('navigation.todo')
             }}<span
               v-if="inbox.todoAttentionTotal > 0"
@@ -78,7 +80,7 @@
               role="status"
               :aria-label="todoAttentionLabel"
               >{{ displayTodoAttention }}</span
-            ></div
+            ></BButton
           >
 
           <div
@@ -156,6 +158,7 @@
   import icon from '@/config/icon';
   import { createRoutePrefetchDirective } from '@/directives/routePrefetch';
   import { useRoutePending } from '@/utils/routePending';
+  import { todoNavigationTarget } from '@/utils/todoNavigation';
 
   const vRoutePrefetch = createRoutePrefetchDirective(router);
   const route = useRoute();
@@ -270,6 +273,15 @@
   /* 角标绝对定位在文字右上角：数字出现或消失都不占导航流宽度，后续导航项不会跳动 */
   .navigation-todo-entry {
     position: relative;
+    height: auto;
+    min-height: 0;
+    padding: 0;
+    color: var(--text-color);
+    font-size: var(--ui-font-14, 14px);
+    line-height: normal;
+  }
+  .navigation-tab .navigation-todo-entry:hover {
+    text-decoration: none;
   }
   .navigation-pill-entry {
     position: relative;

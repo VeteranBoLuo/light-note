@@ -1,7 +1,7 @@
 <template>
   <div class="cal" :class="{ 'cal-wide': wide }">
-    <div class="cal-head">
-      <span class="cal-title">{{ t('growth.calTitle') }}</span>
+    <div class="cal-head" :class="{ 'cal-head--untitled': !showTitle }">
+      <span v-if="showTitle" class="cal-title">{{ t('growth.calTitle') }}</span>
       <div class="cal-nav">
         <BButton class="cal-arrow" :aria-label="t('common.previous')" @click="prevMonth">‹</BButton>
         <span class="cal-month">{{ monthLabel }}</span>
@@ -55,8 +55,10 @@
       wide?: boolean;
       makeupDays?: string[];
       readOnly?: boolean;
+      /** 放进带标题的弹框时隐藏自身标题。 */
+      showTitle?: boolean;
     }>(),
-    { readOnly: false },
+    { readOnly: false, showTitle: true },
   );
   const emit = defineEmits<{ makeup: [date: string] }>();
   const { t, locale } = useI18n();
@@ -165,6 +167,9 @@
     justify-content: space-between;
     gap: var(--ui-space-10, 10px);
     flex-wrap: wrap;
+  }
+  .cal-head--untitled {
+    justify-content: center;
   }
   .cal-title {
     font-size: var(--ui-font-14, 14px);

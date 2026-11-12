@@ -2,19 +2,16 @@
   <div
     v-if="userPublicId && !user.adminContext && (loading || profile || loadError)"
     class="community-profile-actions"
+    :class="{ 'community-profile-actions--card': cardLayout, 'is-own': profile?.isOwn }"
     :aria-busy="loading"
   >
     <BLoading v-if="loading" inline loading :title="t('community.feed.loading')" />
     <template v-else-if="profile">
       <BButton
-        type="text"
-        class="community-profile-actions__home"
-        @click="$emit('navigate', '/community/people/' + userPublicId)"
+        v-if="profile.isOwn"
+        class="community-profile-actions__manage"
+        @click="$emit('navigate', '/community/manage')"
       >
-        {{ t('community.feed.profile') }}
-        <SvgIcon :src="icon.arrow_right" size="14" aria-hidden="true" />
-      </BButton>
-      <BButton v-if="profile.isOwn" @click="$emit('navigate', '/community/manage')">
         {{ t('community.feed.manage') }}
       </BButton>
       <BButton
@@ -25,6 +22,14 @@
         @click="follow"
       >
         {{ t('community.feed.' + (profile.following ? 'unfollow' : 'follow')) }}
+      </BButton>
+      <BButton
+        type="text"
+        class="community-profile-actions__home"
+        @click="$emit('navigate', '/community/people/' + userPublicId)"
+      >
+        {{ t('community.feed.profile') }}
+        <SvgIcon :src="icon.arrow_right" size="14" aria-hidden="true" />
       </BButton>
     </template>
     <template v-else-if="loadError">
@@ -44,7 +49,11 @@
   import icon from '@/config/icon';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
-  const props = defineProps<{ userPublicId: string; preparedProfile?: CommunityProfileActionsState | null }>();
+  const props = defineProps<{
+    userPublicId: string;
+    preparedProfile?: CommunityProfileActionsState | null;
+    cardLayout?: boolean;
+  }>();
   defineEmits<{ navigate: [path: string] }>();
   const { t } = useI18n(),
     user = useUserStore(),
@@ -125,5 +134,27 @@
 
   .community-profile-actions__follow {
     min-width: var(--ui-layout-108, 108px);
+  }
+
+  .community-profile-actions--card {
+    min-width: 0;
+    flex: 1 1 auto;
+    gap: var(--ui-space-10, 10px);
+  }
+
+  .community-profile-actions--card .community-profile-actions__follow {
+    min-width: var(--ui-layout-88, 88px);
+  }
+
+  .community-profile-actions--card .community-profile-actions__home {
+    padding: 0;
+  }
+
+  .community-profile-actions--card .community-profile-actions__manage {
+    padding: 0 var(--ui-space-10, 10px);
+  }
+
+  .community-profile-actions--card.is-own .community-profile-actions__home {
+    margin-left: auto;
   }
 </style>

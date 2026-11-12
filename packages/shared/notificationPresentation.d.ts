@@ -2,6 +2,16 @@ export const notificationMessages: Record<
   string,
   {
     ranks: Record<string, string>;
+    manor: {
+      digestTitle: string;
+      waterTitle: string;
+      waterContent: string;
+      ripe: string;
+      tankFull: string;
+      compostFull: string;
+      crafted: string;
+      rewards: string;
+    };
     levelUpTitle: string;
     opinionReplyTitle: string;
     collectionRewardTitle: string;

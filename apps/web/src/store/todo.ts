@@ -91,6 +91,31 @@ export default defineStore('todo', {
     requestId: 0,
   }),
   actions: {
+    focusAttention() {
+      const filters = { scope: 'attention', tagIds: [] };
+      const queryKey = JSON.stringify({ ...filters, status: 'pending', keyword: '', sort: 'smart', presentation: 'series' });
+      const retainItems = this.workspaceEnabled && this.seriesPresentation && this.groupQueryKey === queryKey;
+      // Retain only results from this exact scope. A failed entry must not relabel an old list as attention tasks.
+      if (!retainItems) {
+        this.items = [];
+        this.groups = [];
+        this.groupQueryKey = '';
+        this.statusTotals = { pending: 0, completed: 0, all: 0 };
+        this.total = 0;
+        this.nextCursor = null;
+      }
+      this.requestId++;
+      this.loading = !retainItems;
+      this.refreshing = true;
+      this.loadingMore = false;
+      this.loadFailed = false;
+      this.filters = filters;
+      this.status = 'pending';
+      this.effectiveStatus = 'pending';
+      this.sort = 'smart';
+      this.keyword = '';
+      this.selectedSeriesItems = {};
+    },
     resetForOwner(ownerId: string) {
       if (this.ownerId === ownerId) return;
       this.ownerId = ownerId;

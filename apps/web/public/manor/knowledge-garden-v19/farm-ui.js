@@ -501,13 +501,32 @@ const FarmUI = (() => {
   // 肥料共用麻布袋，标签区分档位；弹框、工具指针与动作使用同一素材。
   const fertIcon = (k) => `<span class="fert-icon fert-${k}" aria-hidden="true">${FarmArt.fertilizer(k)}</span>`;
 
+  // 缺水时按今天的任务给出下一步：先领已完成的水，再去轻笺做没完成的任务；都做完了就告诉用户明天再来。
+  // 数字不变，只把「没水」变成回到轻笺做任务的入口。
+  function waterSupply() {
+    const pending = M.pendingDailyWater(state).reduce((n, r) => n + r.water, 0);
+    const todo = (GardenLive.quests || []).map((q, i) => ({ name: esc(q.label || q.key), i })).filter(({ i }) => !state.dailyDone[i]);
+    return { pending, todo, bonus: Math.max(0, R.dailyWaterBonus - (state.dailyWaterBonusClaimed || 0)) };
+  }
+  function waterShortLink() {
+    const { pending, todo } = waterSupply();
+    const text = pending > 0 ? `有 ${pending} 滴水待领 · 去领取` : todo.length ? `还差 ${todo.length} 项任务 · 去补水` : "今天的水滴已领完";
+    return pending > 0 || todo.length ? `<button class="text-button seed-water-link" data-action="water-short">${text}</button>` : `<small>${text}，种子会留在地里等你</small>`;
+  }
   function waterShortDialog() {
-    showDialog(
-      "水滴不够了",
-      `每日任务每项可领取 ${R.dailyWater} 滴水，全部完成再领 ${R.dailyWaterBonus} 滴。`,
-      `<div class="care-preview">${toolSprite("water")}<div><strong>${state.water} <small>/ ${R.waterCap} 滴</small></strong><p>播种后浇一次水，每块地 ${R.plantWater} 滴</p></div></div><div class="info-box">没浇水的种子会一直留在地里等你，不会损失。</div>`,
-      `<button class="button primary" data-action="daily">每日任务</button>`
-    );
+    const { pending, todo, bonus } = waterSupply();
+    const care = `<div class="care-preview">${toolSprite("water")}<div><strong>${state.water} <small>/ ${R.waterCap} 滴</small></strong><p>播种后浇一次水，每块地 ${R.plantWater} 滴</p></div></div>`;
+    const keep = '<div class="info-box">没浇水的种子会一直留在地里等你，不会损失。</div>';
+    if (pending > 0) return showDialog(`有 ${pending} 滴水还没领`, "完成每日任务换来的水还在任务里，领取后自动浇灌待浇水的地。", care + keep,
+    `<button class="button" data-action="daily">每日任务</button><button class="button primary" data-action="claim-water-pour">领取 ${pending} 滴</button>`);
+    if (todo.length) {
+      const rows = todo.map(({ name, i }) => `<article class="manor-quest todo"><div class="quest-art">${toolSprite("daily")}</div><div><h3>${name}</h3><small>在轻笺完成</small></div><span class="quest-water">${toolSprite("water")}<b>+${R.dailyWater}</b><small>滴</small></span><button class="tile-btn quest-go" data-action="complete-daily" data-index="${i}">去完成</button></article>`).join("");
+      return showDialog(`还差 ${todo.length} 项每日任务`, `完成可得 ${todo.length * R.dailyWater} 滴${bonus ? `，全部完成再 +${bonus} 滴` : ""}。`, `<div class="manor-quests">${rows}</div>${keep}`,
+      `<button class="button" data-action="close">稍后</button><button class="button primary" data-action="complete-daily" data-index="${todo[0].i}">去完成：${todo[0].name}</button>`);
+    }
+    const purifier = !state.purifier && M.level(state) >= R.purifierLevels[0].gardenLevel ? `<div class="info-box">在商店建造海水过滤器，每天还能多收 ${R.purifierWater} 滴水。</div>` : "";
+    showDialog("今天的水滴都领过了", `明天完成每日任务还能再领 ${R.dailyWater * 3 + R.dailyWaterBonus} 滴。`, care + keep + purifier,
+    '<button class="button primary" data-action="close">知道了</button>');
   }
   // 生长中 / 盛开的地：看剩余时间、施肥、铲除
   function plotCard(i) {
@@ -687,10 +706,18 @@ const FarmUI = (() => {
     const c = C(k),
       n = state.seeds[k] || 0;
     const guide = state.guide === "plant" && target === 0 && k === "radish";
-    const use = c.bait ? "可作鱼饵" :
-    c.fertilizer ? `每轮另得 1 份${M.FERT[c.fertilizer].name}，花束可售 ${c.sell} 积分` :
-    c.sell === null ? "盛开后可长久观赏" : c.type === "flower" ? "采过后仍留在田里观赏" : c.harvests > 1 ? "一株多轮，无需重复浇水" : "收获后空出这块地";
-    return `<div class="seed-tile seed-choice ${c.tier}" data-seed-kind="${k}"><div class="seed-pack">${FarmArt.packet(k)}${c.bait ? `<span class="seed-bait-badge" title="收获后可在工坊手作鱼饵"><img src="${R2_ART}icon-bait${k === "rainbowcorn" ? "-rainbow" : ""}.webp" alt="">鱼饵</span>` : ""}</div><div class="seed-copy"><strong>${c.name}</strong><small>浇水后 ${cycleText(c.first)}${c.sell === null ? "盛开" : "首收"}${c.harvests > 1 ? ` · 共 ${c.harvests} 轮` : ""}</small>${!c.bait ? `<small class="seed-use">${use}</small>` : ""}<span class="seed-discovery ${state.cropDex[k] ? "known" : ""}">${state.cropDex[k] ? "已收录图鉴" : c.sell === null ? "首次盛开可点亮图鉴" : "首次收获可点亮图鉴"}</span><span class="seed-count">× ${n}</span>${guide ? '<span class="plant-seed-cue">点击“种下”播种</span>' : ""}</div>${target !== null ? `<button class="tile-btn primary${guide ? " guide-plant-seed" : ""}" data-action="plant-seed" data-plot="${target}" data-seed="${k}">种下</button>` : `<button class="tile-btn primary" data-action="seed-select" data-seed="${k}">去播种</button>`}${c.fertilizer ? `<small class="seed-output-note">${use}</small>` : ""}</div>`;
+    // 与商店种子卡同一版式：成熟节奏、轮数和收益一眼可比，背包里直接决定种哪颗。
+    const metric = (label, value) => `<div><small>${label}</small><b>${value}</b></div>`;
+    const type = c.type === "once" ? "单收" : c.type === "multi" ? "复收" : "剪花";
+    const bait = c.bait ? `<span class="seed-bait-badge" title="收获后可在工坊手作鱼饵"><img src="${R2_ART}icon-bait${k === "rainbowcorn" ? "-rainbow" : ""}.webp" alt="">鱼饵</span>` : "";
+    const harvest = c.sell === null ?
+    `<div class="market-stock"><span>观赏作物</span><span>库存 <b>${n}</b></span></div><div class="market-estimate">${FarmArt.ui("house")}<span>盛开后长久观赏</span></div>` :
+    `<div class="market-stock"><span>收获 <b>${c.sell}</b> 积分 / ${c.fertilizer ? "束" : "份"}</span><span>库存 <b>${n}</b></span></div><div class="market-estimate">${FarmArt.ui("crate")}<span>完整采收预计回收 <b>${c.harvests * c.sell}</b> 积分</span></div>`;
+    const note = c.fertilizer ? `<small class="seed-output-note">每轮另得 1 份${M.FERT[c.fertilizer].name}</small>` : "";
+    const action = target !== null ?
+    `<button class="tile-btn primary${guide ? " guide-plant-seed" : ""}" data-action="plant-seed" data-plot="${target}" data-seed="${k}">种下</button>` :
+    `<button class="tile-btn primary" data-action="seed-select" data-seed="${k}">去播种</button>`;
+    return `<article class="market-card seed-card ${c.tier}" data-seed-kind="${k}"><header><h3>${c.name}</h3><span class="market-type ${c.type}">${type}</span></header><div class="market-display"><div class="market-art">${FarmArt.packet(k)}${bait}</div><div class="market-stats">${metric(c.sell === null ? "盛开" : "首收", cycleText(c.first))}${metric("可收", `${c.harvests} 轮`)}${c.harvests > 1 ? `<small>每隔 ${cycleText(c.every)} 再收</small>` : ""}</div></div>${harvest}${note}${guide ? '<span class="plant-seed-cue">点击“种下”播种</span>' : ""}<div class="market-actions">${action}</div></article>`;
   }
   const waitingFish = () => state.fish.filter((f) => !M.placed(state, f.id));
   const panelPositions = new Map();
@@ -724,9 +751,9 @@ const FarmUI = (() => {
       const previous = target !== null ? M.replantSeed(state, target) : null;
       if (previous) body += `<div class="replant-row"><span class="replant-art">${FarmArt.packet(previous)}</span><div><strong>上次种了${C(previous).name}</strong><small>背包还有 ${state.seeds[previous]} 颗 · 种后照常浇水</small></div><button class="tile-btn" data-action="plant-seed" data-plot="${target}" data-seed="${previous}">再种一颗</button></div>`;
       body += keys.length ?
-      `<div class="seed-grid seed-choice-grid">${keys.map((k) => seedTile(k, target)).join("")}</div>` :
+      `<div class="market-grid seed-market-grid">${keys.map((k) => seedTile(k, target)).join("")}</div>` :
       `<section class="inventory-empty"><div class="empty-art">${FarmArt.giftPack()}</div><h3>给这片土地挑一颗种子吧</h3><p>背包暂时空了。去商店挑选，或从成长奖励和庄园成就获取种子。</p><div><button class="tile-btn primary" data-action="shop-tab" data-tab="seeds">去商店</button><button class="tile-btn" data-action="daily">查看每日任务</button></div></section>`;
-      if (target !== null) body += `<div class="seed-care-strip"><span>${toolSprite("water")}<span>每块地 <b>${R.plantWater}</b> 滴 · 现有 <b>${state.water}</b> 滴</span></span><small>${state.water < R.plantWater ? "完成每日任务补水后再浇灌" : "成熟后随时收获，不会枯萎"}</small></div>`;
+      if (target !== null) body += `<div class="seed-care-strip"><span>${toolSprite("water")}<span>每块地 <b>${R.plantWater}</b> 滴 · 现有 <b>${state.water}</b> 滴</span></span>${state.water < R.plantWater ? waterShortLink() : "<small>成熟后随时收获，不会枯萎</small>"}</div>`;
     } else if (tab === "crops") {
       const keys = Object.keys(M.CROPS).filter((k) => state.crops[k] > 0);
       body += keys.length ?
@@ -774,7 +801,7 @@ const FarmUI = (() => {
     const metric = (label, value) => `<div><small>${label}</small><b>${value}</b></div>`;
     const cropCards = Object.entries(M.CROPS).filter(([, c]) => c.price !== null).sort((a, b) => a[1].unlock - b[1].unlock || a[1].first - b[1].first).map(([k, c]) => {
       const locked = lv < c.unlock;
-      return `<article class="market-card ${locked ? "locked" : ""}"><header><h3>${c.name}</h3><span class="market-type ${c.type}">${c.type === "once" ? "单收" : c.type === "multi" ? "复收" : "剪花"}</span></header><div class="market-display"><div class="market-art">${FarmArt.packet(k)}</div><div class="market-stats">${metric("首收", cycleText(c.first))}${metric("可收", c.harvests + " 轮")}${c.harvests > 1 ? `<small>每隔 ${cycleText(c.every)} 再收</small>` : ""}</div></div><div class="market-stock"><span>收获 <b>${c.sell}</b> 积分 / 份</span><span>库存 <b>${state.seeds[k] || 0}</b></span></div><div class="market-estimate">${FarmArt.ui("crate")}完整采收预计回收 <b>${c.harvests * c.sell}</b> 积分</div><div class="market-price">${FarmArt.ui("coin")}<small>种子价</small><strong>${c.price}</strong><span>积分 / 颗</span>${c.bait ? '<span class="market-use">工坊制饵</span>' : ""}</div><div class="market-actions">${locked ? `<span class="market-lock">Lv.${c.unlock} 解锁</span>` : buy("buy-seed", 1, c.price, `data-seed="${k}"`) + buy("buy-seed", 5, c.price * 5, `data-seed="${k}"`)}</div></article>`;
+      return `<article class="market-card ${locked ? "locked" : ""}"><header><h3>${c.name}</h3><span class="market-type ${c.type}">${c.type === "once" ? "单收" : c.type === "multi" ? "复收" : "剪花"}</span></header><div class="market-display"><div class="market-art">${FarmArt.packet(k)}</div><div class="market-stats">${metric("首收", cycleText(c.first))}${metric("可收", c.harvests + " 轮")}${c.harvests > 1 ? `<small>每隔 ${cycleText(c.every)} 再收</small>` : ""}</div></div><div class="market-stock"><span>收获 <b>${c.sell}</b> 积分 / 份</span><span>库存 <b>${state.seeds[k] || 0}</b></span></div><div class="market-estimate">${FarmArt.ui("crate")}<span>完整采收预计回收 <b>${c.harvests * c.sell}</b> 积分</span></div><div class="market-price">${FarmArt.ui("coin")}<small>种子价</small><strong>${c.price}</strong><span>积分 / 颗</span>${c.bait ? '<span class="market-use">工坊制饵</span>' : ""}</div><div class="market-actions">${locked ? `<span class="market-lock">Lv.${c.unlock} 解锁</span>` : buy("buy-seed", 1, c.price, `data-seed="${k}"`) + buy("buy-seed", 5, c.price * 5, `data-seed="${k}"`)}</div></article>`;
     }).join("");
     const aquatic = `<article class="supply-card"><header><h3>普通鱼饵</h3><span>已有 ${state.bait} 份</span></header><div class="supply-art"><img src="${R2_ART}icon-bait.webp" alt=""></div><div class="supply-copy"><p>海边垂钓 · 每竿使用 1 份</p><div class="supply-offers"><div><small>单份</small><strong>${R.baitCost} <small>积分</small></strong>${buy("shop-buy-bait", 1, R.baitCost)}</div><div class="bundle-offer"><span class="market-discount">9.5 折</span><small>10 份装</small><strong>${M.baitPrice(10)} <small>积分</small><del>${R.baitCost * 10}</del></strong>${buy("shop-buy-bait", 10, M.baitPrice(10), "", "买 10")}</div></div></div></article><article class="supply-card"><header><h3>淡水鱼苗袋</h3><span>今日可购 ${M.fryLeft(state)} / ${R.fryDaily}</span></header><div class="supply-art">${FarmArt.fryBag()}</div><div class="supply-copy"><p>打开必得 1 位淡水伙伴，也可通过垂钓遇见</p><div class="fry-offer"><small>每袋 1 位 · 收进待养区</small><div class="market-price">${FarmArt.ui("coin")}<strong>${R.fryPrice}</strong><span>积分 / 袋</span></div><div class="market-actions">${M.fryLeft(state) ? buy("buy-fry", 1, R.fryPrice, "", "买 1 袋") : '<span class="market-lock">明天补货</span>'}</div></div></div></article>`;
     const facility = FarmFacilities.cards();
@@ -1008,6 +1035,22 @@ const FarmUI = (() => {
         return true;
       case "bag-tab":
         bagDialog(b.dataset.tab, bagTarget);
+        return true;
+      case "water-short":
+        waterShortDialog();
+        return true;
+      case "claim-water-pour": {
+        const reward = await M.claimAllDailyWater(state);
+        if (!reward) {waterShortDialog();return true;}
+        closeDialog(false);
+        update();
+        toast(`水滴 +${reward.water} · 已装入水桶`);
+        const dry = plotsIn("dry");
+        if (dry.length && state.water >= R.plantWater) await waterPlots(dry);
+        return true;
+      }
+      case "pour-dry":
+        await waterPlots(plotsIn("dry"));
         return true;
       case "seed-select":
         selectSeed(b.dataset.seed);

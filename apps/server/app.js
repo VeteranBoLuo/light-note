@@ -1,3 +1,4 @@
+import { localTestPorts } from './util/localTestPorts.js';
 import { startSignupSourceSurveyScheduler } from './util/services/signupSourceSurveyService.js';
 import { startPublicResourceReviewScheduler } from './util/publicResources/reviewWorker.js';
 import { startPublicResourceEventScheduler } from './util/publicResources/notifications.js';
@@ -29,6 +30,7 @@ import { ensureDailyReviewSchema } from './util/dailyReviewSchema.js';
 import { assertPointsEarningActivationReady, getPointsEarningRuntime } from './util/pointsEarningPolicy.js';
 import { getPointsCampaignRuntime } from './util/pointsCampaignService.js';
 import { generateGrowthNudges } from './util/growth.js';
+import { startManorNudgeScheduler } from './util/services/knowledgeManorNudges.js';
 import { ensureOrganizeSchema } from './util/organizeSchema.js';
 import { startTodoReminderScheduler } from './util/todoReminder.js';
 import { startTodoReminderV2Scheduler } from './util/todoReminderV2.js';
@@ -51,6 +53,7 @@ import { getUploadStaticDirectories } from './util/bookmarkIconStorage.js';
 import { startAccountDeletionCleanupScheduler } from './util/accountDeletion.js';
 import { startOperationalLogRetentionScheduler } from './util/operationalLogRetention.js';
 import { requestTraceMiddleware } from './util/requestTrace.js';
+import { httpErrorHandler } from './util/httpErrorHandler.js';
 import { ensureResourceGovernanceSchema } from './util/resourceGovernanceSchema.js';
 import { ensureCommunityChatSchema } from './util/communityChatSchema.js';
 import { registerCommunityChatRealtimeHub } from './util/communityChat/realtimeHub.js';
@@ -63,6 +66,7 @@ import { ensureAfdianSupportPackageSchema } from './util/afdianSupportPackageSch
 import { startAfdianReconciliationScheduler } from './util/afdianSupportService.js';
 import { startSeoPushScheduler } from './util/services/seoPushService.js';
 import { ensureAiBonusWalletSchema } from './util/aiBonusWalletSchema.js';
+import { ensureAiLevelGiftSchema } from './util/aiLevelGiftSchema.js';
 import { ensureToolboxSchema } from './util/toolboxSchema.js';
 import { ensureDailyBriefSchema } from './util/dailyBriefSchema.js';
 import { knowledgeManorSchemaReady } from './util/services/knowledgeManorSchema.js';
@@ -78,8 +82,7 @@ import pool from './db/index.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-dotenv.config({ path: path.resolve(__dirname, '.env') });
-console.log('Loaded env from: 【.env】');
+dotenv.config({ path: process.env.DOTENV_CONFIG_PATH || path.resolve(__dirname, '.env') });
 
 // 建立一个Express服务器
 const app = express();
@@ -111,7 +114,11 @@ const allRouter = [
   ...baseRouter,
   {
     path: '/files',
-    router: express.static('/www/wwwroot/files'), // 设置静态文件目录,
+    router: express.static(
+      process.env.LIGHTNOTE_LOCAL_TEST === '1'
+        ? path.join(process.env.LIGHTNOTE_LOCAL_TEST_DIR, 'files')
+        : '/www/wwwroot/files',
+    ),
   },
 ];
 allRouter.forEach((item) => {
@@ -122,6 +129,8 @@ allRouter.forEach((item) => {
 for (const directory of getUploadStaticDirectories(process.env)) {
   app.use('/uploads', express.static(directory));
 }
+// 必须挂在全部路由之后：兜住未捕获异常，避免默认错误页向客户端回显堆栈。
+app.use(httpErrorHandler);
 
 startSessionMaintenance();
 // 安全策略与复核接口依赖新增列和策略表，启动监听前先完成幂等迁移，避免首批请求撞上半初始化 Schema。
@@ -132,16 +141,20 @@ try {
   process.exit(1);
 }
 ensureNotificationTable().catch((err) => console.error('通知表初始化失败 code=%s', stableAgentErrorCode(err)));
-// 白名单缓存必须在开始接请求前加载完:否则重启后的空窗期(异步加载未完成)会漏过滤、记下本该跳过的自己人日志(如部署后立刻用白名单设备操作)
-await initLogExclude().catch((err) => console.error('日志白名单初始化失败 code=%s', stableAgentErrorCode(err)));
+// 内部设备缓存必须在开始接请求前加载完:否则重启后的空窗期(异步加载未完成)会漏过滤、记下本该跳过的自己人日志(如部署后立刻在内部设备上以游客身份操作)
+await initLogExclude().catch((err) => console.error('内部设备过滤初始化失败 code=%s', stableAgentErrorCode(err)));
 // 成长中心读取接口必须保持纯只读，因此相关 Schema 在监听 HTTP 前完成，而不是在 GET 内兜底建表。
 try {
   await ensurePointsSchema();
   await ensureAiBonusWalletSchema();
+  await ensureAiLevelGiftSchema();
   await assertPointsEconomyActivationReady();
   await ensureGrowthTaskSchema();
   await ensureGrowthCenterSchema();
-  if (process.env.KNOWLEDGE_MANOR_ENABLED === 'true' && (!(await knowledgeManorSchemaReady(pool)) || !(await knowledgeManorAdminSchemaReady(pool)))) {
+  if (
+    process.env.KNOWLEDGE_MANOR_ENABLED === 'true' &&
+    (!(await knowledgeManorSchemaReady(pool)) || !(await knowledgeManorAdminSchemaReady(pool)))
+  ) {
     throw new Error('KNOWLEDGE_MANOR_SCHEMA_MISSING');
   }
   await ensureDailyReviewSchema();
@@ -311,6 +324,7 @@ function scheduleGrowthNudges() {
   console.log(`[成长提醒] 定时已注册,首次执行: ${next.toLocaleString('zh-CN')}`);
 }
 scheduleGrowthNudges();
+startManorNudgeScheduler();
 // 年度报告开放通知（开放后第一周每天 10:00 检查，同一账号最多一条）
 scheduleAnnualReportNotices();
 // 资料较多且从未备份的账号收到一次备份提醒（每天 10:30 检查，同一账号只发一次）
@@ -341,8 +355,9 @@ process.on('uncaughtException', (err) => {
   process.exit(1);
 });
 
+const httpPort = process.env.LIGHTNOTE_LOCAL_TEST === '1' ? localTestPorts().api : 9001;
 let listeningReported = false;
-const server = app.listen(9001, () => {
+const server = app.listen(httpPort, process.env.LIGHTNOTE_LOCAL_TEST === '1' ? '127.0.0.1' : undefined, () => {
   listeningReported = true;
   console.log('服务器已启动：' + new Date().toLocaleString('zh-CN'));
 });
@@ -355,9 +370,8 @@ registerCommunityChatRealtimeHub(server);
 server.on('error', (error) => {
   if (error?.code === 'EADDRINUSE') {
     if (listeningReported) console.error('[启动失败] 上一行「服务器已启动」是误报，进程即将退出。');
-    console.error('[启动失败] 端口 9001 已被占用，多半是上一个 dev server 还在跑。');
-    console.error('           查看占用：lsof -nP -iTCP:9001 -sTCP:LISTEN');
-    console.error('           结束占用：pnpm free:server-port');
+    console.error(`[启动失败] 端口 ${httpPort} 已被占用，请先结束原服务后重试。`);
+    console.error(`           查看占用：lsof -nP -iTCP:${httpPort} -sTCP:LISTEN`);
     process.exit(1);
   }
   console.error('[启动失败] code=%s', stableAgentErrorCode(error));

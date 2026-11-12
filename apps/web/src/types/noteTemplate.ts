@@ -23,10 +23,4 @@ export interface NoteTemplateWritePayload {
   content: string;
 }
 
-export interface NoteTemplateConflict {
-  code: 'NOTE_TEMPLATE_VERSION_CONFLICT';
-  revision?: number;
-  updateTime?: string | null;
-}
-
 export const NOTE_TEMPLATE_LIMIT = 20;

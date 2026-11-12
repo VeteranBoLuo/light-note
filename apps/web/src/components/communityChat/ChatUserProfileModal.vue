@@ -5,7 +5,9 @@
     modal-class="chat-user-profile-modal"
     mask-class="chat-user-profile-mask"
     :title="t('communityChat.profile.title')"
-    :width="contentView === 'edit' ? 'min(var(--ui-layout-1000, 1000px), 94vw)' : 'min(var(--ui-layout-560, 560px), 92vw)'"
+    :width="
+      contentView === 'edit' ? 'min(var(--ui-layout-1000, 1000px), 94vw)' : 'min(var(--ui-layout-560, 560px), 92vw)'
+    "
     :height="contentView === 'edit' ? 'min(82dvh, var(--ui-layout-840, 840px))' : 'auto'"
     :show-footer="false"
     :content-class="
@@ -100,6 +102,7 @@
   const contentView = ref<'summary' | 'achievements' | 'preview' | 'edit'>('summary');
 
   const contentProps = computed(() => ({
+    cardLayout: true,
     actionsProfile: props.actionsProfile,
     profile: props.profile,
     loading: props.loading,

@@ -26,7 +26,6 @@ export interface OrganizeOverview {
     outcomes?: OrganizeOutcomeCounts;
   };
 }
-export const ORGANIZE_TERMINAL_STATES: readonly string[];
 export function summarizeOrganizeLane(
   rows: Array<{ itemId: string | null; status: string }>,
   settled?: boolean,

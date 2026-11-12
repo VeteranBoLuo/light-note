@@ -17,14 +17,11 @@ function limiter({ prefix, windowMs, limit }) {
 }
 
 const checkoutLimiter = limiter({ prefix: 'afdian-checkout', windowMs: 60 * 60 * 1000, limit: 30 });
-const oauthLimiter = limiter({ prefix: 'afdian-oauth', windowMs: 10 * 60 * 1000, limit: 10 });
 const webhookLimiter = limiter({ prefix: 'afdian-webhook', windowMs: 60 * 1000, limit: 120 });
 const readLimiter = limiter({ prefix: 'afdian-read', windowMs: 60 * 1000, limit: 120 });
-const preferenceLimiter = limiter({ prefix: 'afdian-preference', windowMs: 10 * 60 * 1000, limit: 20 });
 const adminActionLimiter = limiter({ prefix: 'afdian-admin-action', windowMs: 10 * 60 * 1000, limit: 20 });
 
 router.post('/events', readLimiter, handle.events);
-router.get('/state', handle.state);
 router.get('/store/state', readLimiter, handle.storeState);
 router.get('/store/orders', readLimiter, handle.storeOrders);
 router.get('/campaign-entry', readLimiter, handle.campaignEntry);
@@ -33,19 +30,10 @@ router.post('/checkout-intents', checkoutLimiter, handle.checkoutCreate);
 router.get('/checkout-intents/:intentId', readLimiter, handle.checkoutStatus);
 router.post('/admin/campaigns/:campaignId/visibility', adminActionLimiter, handle.adminCampaignVisibility);
 router.get('/catalog', readLimiter, handle.catalog);
-router.get('/leaderboard', readLimiter, handle.leaderboard);
-router.get('/leaderboard/avatar/:publicId', readLimiter, handle.publicAvatar);
-router.get('/orders', readLimiter, handle.orders);
-router.post('/public-preference', preferenceLimiter, handle.publicPreference);
-router.get('/donation/checkout', checkoutLimiter, handle.donationCheckout);
 router.get('/checkout', checkoutLimiter, handle.checkout);
-router.get('/afdian/oauth/start', oauthLimiter, handle.oauthStart);
-router.get('/afdian/oauth/callback', oauthLimiter, handle.oauthCallback);
-router.post('/afdian/oauth/unlink', oauthLimiter, handle.oauthUnlink);
 router.post('/afdian/webhook', webhookLimiter, handle.webhook);
 router.get('/admin/overview', readLimiter, handle.adminOverview);
 router.get('/admin/orders', readLimiter, handle.adminOrders);
-router.get('/admin/supporters', readLimiter, handle.adminSupporters);
 router.get('/admin/campaigns', readLimiter, handle.adminCampaigns);
 router.get('/admin/campaigns/:campaignId/grants', readLimiter, handle.adminCampaignGrants);
 router.post('/admin/campaigns/cost-preview', adminActionLimiter, handle.adminCampaignCostPreview);
@@ -55,6 +43,5 @@ router.post('/admin/campaigns/:campaignId/suspend', adminActionLimiter, handle.a
 router.post('/admin/sync', adminActionLimiter, handle.adminSync);
 router.post('/admin/orders/:providerOrderNo/reconcile', adminActionLimiter, handle.adminReconcile);
 router.post('/admin/orders/:providerOrderNo/reward-approve', adminActionLimiter, handle.adminRewardApprove);
-router.post('/admin/supporters/:userId/identity-visibility', adminActionLimiter, handle.adminIdentityVisibility);
 
 export default router;

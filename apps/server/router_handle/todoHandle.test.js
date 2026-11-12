@@ -52,11 +52,15 @@ const {
   completeTodo,
   countTodo,
   createTodo,
+  createTodoV2,
+  deleteTodoV2,
   listTodo,
   previewTodoV2,
   reorderTodo,
   restoreTodo,
   snoozeTodo,
+  updatePreviewTodoV2,
+  updateTodoV2,
 } = await import('./todoHandle.js');
 
 const mockRes = () => ({ send: vi.fn() });
@@ -71,6 +75,36 @@ describe('todoHandle', () => {
     queryTodoPendingCount.mockResolvedValue(0);
     setTodoStatus.mockResolvedValue(1);
     connection.query.mockReset();
+  });
+
+  it('游客可只读预览自己的新版示例，不开启事务或写入', async () => {
+    ensureNotVisitor.mockReturnValue(false);
+    poolQuery.mockResolvedValueOnce([[{ id: 'sample', seriesId: null }]]);
+    const res = mockRes();
+    await updatePreviewTodoV2({ user: { id: 'visitor', role: 'visitor' }, body: { todoId: 'sample', userId: 'other', title: '示例' } }, res);
+    expect(ensureNotVisitor).not.toHaveBeenCalled();
+    expect(poolQuery).toHaveBeenCalledWith(expect.stringContaining('user_id = ?'), ['sample', 'visitor']);
+    expect(poolQuery.mock.calls.every(([sql]) => sql.trim().startsWith('SELECT'))).toBe(true);
+    expect(getConnection).not.toHaveBeenCalled();
+    expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ status: 200, data: expect.objectContaining({ todoId: 'sample', scope: 'current' }) }));
+  });
+
+  it('游客不能借预览读取不属于自己的任务', async () => {
+    ensureNotVisitor.mockReturnValue(false);
+    poolQuery.mockResolvedValueOnce([[]]);
+    const res = mockRes();
+    await updatePreviewTodoV2({ user: { id: 'visitor', role: 'visitor' }, body: { todoId: 'foreign', title: '示例' } }, res);
+    expect(poolQuery).toHaveBeenCalledWith(expect.stringContaining('user_id = ?'), ['foreign', 'visitor']);
+    expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ status: 404 }));
+    expect(getConnection).not.toHaveBeenCalled();
+  });
+
+  it.each([createTodoV2, updateTodoV2, deleteTodoV2])('游客浏览新版计划仍不允许实际写入：%s', async handler => {
+    ensureNotVisitor.mockReturnValue(false);
+    await handler({ user: { id: 'visitor', role: 'visitor' }, body: { todoId: 'sample', title: '示例' } }, mockRes());
+    expect(ensureNotVisitor).toHaveBeenCalledTimes(1);
+    expect(getConnection).not.toHaveBeenCalled();
+    expect(poolQuery).not.toHaveBeenCalled();
   });
 
   it('创建待办使用当前用户和事务', async () => {

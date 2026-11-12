@@ -44,7 +44,13 @@ function resolvedContext(scopeDigest) {
 }
 
 describe('executeAiSkill', () => {
-  it('书签前置读取失败也原子保存脱敏入参，且不产生模型调用', async () => {
+  it.each([
+    'BOOKMARK_PAGE_UNREADABLE',
+    'BOOKMARK_PAGE_NOT_FOUND',
+    'BOOKMARK_PAGE_DNS_FAILED',
+    'BOOKMARK_PAGE_TLS_FAILED',
+    'BOOKMARK_PAGE_TLS_HANDSHAKE_FAILED',
+  ])('书签前置读取失败 %s 保存脱敏入参，不产生模型调用或扣费', async (code) => {
     const persistence = createExecutionPersistence();
     const callModel = vi.fn();
     await expect(
@@ -56,7 +62,7 @@ describe('executeAiSkill', () => {
           resolveSkill: () => ({
             ...bookmarkParse,
             prepare: async () => {
-              throw Object.assign(new Error('private error'), { code: 'BOOKMARK_PAGE_UNREADABLE' });
+              throw Object.assign(new Error('private error'), { code });
             },
           }),
           assertDomainEnabled: vi.fn(),
@@ -65,14 +71,24 @@ describe('executeAiSkill', () => {
           callModel,
         },
       ),
-    ).rejects.toMatchObject({ code: 'BOOKMARK_PAGE_UNREADABLE' });
+    ).rejects.toMatchObject({ code });
     expect(persistence.insertAiExecution.mock.calls[0][0].inputDiagnostics).toEqual({
       version: 1,
       url: 'https://example.com/watch?id=42',
       urlRedacted: true,
       pageContextProvided: false,
+      reservationBudget: expect.objectContaining({
+        inputTokens: expect.any(Number),
+        totalTokens: expect.any(Number),
+      }),
     });
-    expect(persistence.settleAiExecution.mock.calls[0][0]).toMatchObject({ status: 'failed', providerCallCount: 0 });
+    expect(JSON.stringify(persistence.insertAiExecution.mock.calls[0][0].inputDiagnostics)).not.toContain('private');
+    expect(persistence.settleAiExecution.mock.calls[0][0]).toMatchObject({
+      status: 'failed',
+      errorCode: code,
+      providerCallCount: 0,
+      chargedTokens: 0,
+    });
     expect(callModel).not.toHaveBeenCalled();
   });
 

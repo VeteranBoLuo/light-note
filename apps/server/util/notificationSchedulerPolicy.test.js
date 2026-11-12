@@ -11,6 +11,7 @@ import { processDueTodoReminders, recoverTodoReminders, startTodoReminderSchedul
 import { processDueTodoReminderJobs, recoverTodoReminderJobs, startTodoReminderV2Scheduler } from './todoReminderV2.js';
 import { generateWeeklyReports } from './weeklyReport.js';
 import { generateGrowthNudges } from './growth.js';
+import { generateManorNudges, startManorNudgeScheduler } from './services/knowledgeManorNudges.js';
 import { runOrganizeCompletionNotifications } from './services/organizeCompletionNotification.js';
 import { expandPushOutbox, processNextPush } from './browserPushService.js';
 import { browserPushEnabled } from './browserPushPolicy.js';
@@ -42,6 +43,7 @@ describe('notification production isolation', () => {
       vi.stubEnv('NODE_ENV', undefined);
       vi.stubEnv('ALLOW_REMOTE_DATABASE_WRITES', 'true');
 
+      startManorNudgeScheduler();
       startTodoReminderScheduler();
       startTodoReminderV2Scheduler();
       startSignupSourceSurveyScheduler();
@@ -52,6 +54,7 @@ describe('notification production isolation', () => {
       await recoverTodoReminderJobs();
       await generateWeeklyReports();
       await generateGrowthNudges();
+      await generateManorNudges();
       await runOrganizeCompletionNotifications('worker');
       await runSignupSourceSurveyBatch();
       expect(await expandPushOutbox()).toBe(0);

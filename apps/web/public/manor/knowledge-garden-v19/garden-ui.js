@@ -104,18 +104,17 @@ function tankStyle() {
   return `--tank-k:${k};--tank-aspect:${aspect.toFixed(4)}`;
 }
 const tankHash = () => activeFishIds().join("-") + "|" + tankShape(M.tankSize(state, FISH)).aspect.toFixed(3);
-function toast(text, { topCenter = false, duration } = {}) {
+function toast(text, { duration } = {}) {
   clearTimeout(toastTimer);
   $("#toast").textContent = text;
   $("#toast").hidden = false;
-  $("#toast").dataset.topCenter = String(topCenter);
   positionFeedback();
   toastTimer = setTimeout(() => $("#toast").hidden = true, duration || (text.length > 28 ? 3400 : 2200));
 }
 function confirmManorExit() {
   if (Date.now() > exitArmedUntil) {
     exitArmedUntil = Date.now() + 3000;
-    toast("再次返回退出庄园", { topCenter: true, duration: 3000 });
+    toast("再次返回退出庄园", { duration: 3000 });
     return false;
   }
   exitArmedUntil = 0;
@@ -124,28 +123,17 @@ function confirmManorExit() {
 function requestManorExit(button) {
   if (!confirmManorExit()) return;
   if (button) button.disabled = true;
-  toast("正在返回轻笺…", { topCenter: true });
-  GardenLive.exit().catch(() => { if (button?.isConnected) button.disabled = false; toast("暂时未能返回，请再试一次", { topCenter: true }); });
+  toast("正在返回轻笺…");
+  GardenLive.exit().catch(() => { if (button?.isConnected) button.disabled = false; toast("暂时未能返回，请再试一次"); });
 }
 function positionFeedback() {
   const hud = $("#gameHud"),garden = $(".garden-scene"),mode = $("#farmToolMode");
   const top = Math.max(12, (hud?.getBoundingClientRect().bottom || $(".prototype-lab")?.getBoundingClientRect().bottom || 0) + 8);
   if (mode && garden) mode.style.top = `${top - garden.getBoundingClientRect().top}px`;
-  const dialog = !$("#modal").hidden && $("#dialog");
-  const feedback = $("#toast"),mobile = document.documentElement.classList.contains("light-note-mobile-rendering");
+  // 所有提示统一放在 HUD 下方居中，不随弹框或场景换位；工具模式条出现时排在它下面
+  const feedback = $("#toast");
   const density = typeof getComputedStyle === "function" ? parseFloat(getComputedStyle(feedback).getPropertyValue("--d")) || 1 : 1;
-  const skyTop = garden ? garden.getBoundingClientRect().top + 16 * density : top;
-  if (feedback.dataset.topCenter === "true") {
-    feedback.style.top = `${Math.max(12, (hud?.getBoundingClientRect().bottom || 0) + 8 * density)}px`;
-    feedback.style.left = "50%";
-    feedback.style.maxWidth = "";
-    return;
-  }
-  feedback.style.top = `${dialog ? Math.max(dialog.getBoundingClientRect().top + 80, dialog.getBoundingClientRect().bottom - 120) : mobile ? top + (mode && !mode.hidden ? mode.getBoundingClientRect().height + 6 : 0) : skyTop}px`;
-  const left = $('.hud-identity')?.getBoundingClientRect().right,right = $('.hud-right')?.getBoundingClientRect().left;
-  const gap = !mobile && !dialog && left && right ? right - left - 24 * density : 0;
-  feedback.style.maxWidth = gap > 140 * density ? `${Math.min(440 * density, gap)}px` : "";
-  feedback.style.left = gap > 140 * density ? `${(left + right) / 2}px` : "";
+  feedback.style.top = `${top + (mode && !mode.hidden ? mode.getBoundingClientRect().height + 6 * density : 0)}px`;
 }
 function announce(text) {
   $("#announce").textContent = text;
@@ -196,20 +184,20 @@ function hudHTML() {
   const rewardReady = M.pendingDailyWater(state).length;
   const pending = M.pendingLevelRewards(state).length;
   const pct = info.next ? (state.xp - info.at) / (info.next - info.at) * 100 : 100;
-  return `<button class="hud-back" data-action="exit" title="返回轻笺" aria-label="返回轻笺"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></button><div class="hud-identity"><button class="hud-stage" data-action="level" title="${pending ? pending + " 级奖励待领取" : "查看成长奖励"}" aria-label="庄园 Lv.${info.lv}，查看等级"><span class="hud-stage-name"><span class="hud-garden-badge" aria-hidden="true">${FarmArt.ui("crest")}</span><span id="phaseLabel"><span class="hud-manor-name">庄园 </span>Lv.${info.lv}</span>${pending ? `<span class="level-hud-pending" aria-label="${pending} 级奖励待领取">${pending}</span>` : ""}</span><span class="hud-growth"><span class="hud-growth-bar"><i id="hudGrowthBar" style="width:${pct}%"></i></span><span class="hud-growth-num">${info.next ? `<b id="hudGrowthNum">${state.xp - info.at}</b> / ${info.next - info.at}` : "已满级"}</span></span></button></div>${!isMobileView() ? `<nav class="game-dock" aria-label="庄园操作" id="gameTools">${dockHTML()}</nav>` : ""}<div class="hud-right"><div class="hud-resources" role="group" aria-label="资源"><button class="res-pill water" data-action="daily" aria-label="水滴 ${state.water} / ${R.waterCap}，通过每日任务和海水过滤器补水">${toolSprite("water")}<b id="waterCount">${state.water}</b><small>/ ${R.waterCap}</small></button><button class="res-pill" data-action="ledger" data-res="points" aria-label="积分 ${state.wallet}">${FarmArt.ui("coin", "res-icon")}<b id="wallet">${state.wallet}</b><small>积分</small></button></div><div class="hud-utils"><button class="util-btn ${rewardReady ? "has-reward" : ""}" data-action="daily" title="每日任务（${hotkeyOf("daily")}）" aria-keyshortcuts="${hotkeyOf("daily")}" aria-label="每日任务 ${done}/3${rewardReady ? "，有奖励可领取" : ""}">${toolSprite("daily")}<span>任务</span><b>${done}/3</b></button><button class="util-btn plain" data-action="memories" aria-label="庄园日记，相伴 ${M.day(state)} 天"><span class="util-days"><b id="companionDays">${M.day(state)}</b> 天</span><span>相伴</span></button><button class="util-btn round" data-action="rules" aria-label="庄园玩法说明">?</button></div></div>${document.getElementById("manor-icon-assets") && GardenLive.canTest ? `<button class="hud-reset util-btn round${GardenLive.testing ? " is-testing" : ""}" data-action="reset-test" aria-label="重置测试庄园" title="${GardenLive.testing ? "测试存档：重置或返回正式庄园" : "从初始引导开始测试"}"><img src="${manorIcons.reset}" alt="" draggable="false">${GardenLive.testing ? "<small>测试中</small>" : ""}</button>` : ""}<button class="hud-more" data-action="manor-menu" aria-label="更多：任务、日记和帮助">${manorIcons?.more ? `<img src="${manorIcons.more}" alt="" draggable="false">` : "···"}${rewardReady ? '<i aria-hidden="true"></i>' : ""}</button>`;
+  return `<button class="hud-back" data-action="exit" title="返回轻笺" aria-label="返回轻笺"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></button><div class="hud-identity"><button class="hud-stage" data-action="level" title="${pending ? pending + " 级奖励待领取" : "查看成长奖励"}" aria-label="庄园 Lv.${info.lv}，查看等级"><span class="hud-stage-name"><span class="hud-garden-badge" aria-hidden="true">${FarmArt.ui("crest")}</span><span id="phaseLabel"><span class="hud-manor-name">庄园 </span>Lv.${info.lv}</span>${pending ? `<span class="level-hud-pending" aria-label="${pending} 级奖励待领取">${pending}</span>` : ""}</span><span class="hud-growth"><span class="hud-growth-bar"><i id="hudGrowthBar" style="width:${pct}%"></i></span><span class="hud-growth-num">${info.next ? `<b id="hudGrowthNum">${state.xp - info.at}</b> / ${info.next - info.at}` : "已满级"}</span></span></button></div>${!isMobileView() ? `<nav class="game-dock" aria-label="庄园操作" id="gameTools">${dockHTML()}</nav>` : ""}<div class="hud-right"><div class="hud-resources" role="group" aria-label="资源"><button class="res-pill water" data-action="daily" aria-label="水滴 ${state.water} / ${R.waterCap}，通过每日任务和海水过滤器补水">${toolSprite("water")}<b id="waterCount">${state.water}</b><small>/ ${R.waterCap}</small></button><button class="res-pill" data-action="ledger" data-res="points" aria-label="积分 ${state.wallet}">${FarmArt.ui("coin", "res-icon")}<b id="wallet">${state.wallet}</b><small>积分</small></button></div><div class="hud-utils"><button class="util-btn ${rewardReady ? "has-reward" : ""}" data-action="daily" title="每日任务（${hotkeyOf("daily")}）" aria-keyshortcuts="${hotkeyOf("daily")}" aria-label="每日任务 ${done}/3${rewardReady ? "，有奖励可领取" : ""}">${toolSprite("daily")}<span>任务</span><b>${done}/3</b></button><button class="util-btn plain" data-action="memories" aria-label="庄园日记，相伴 ${M.day(state)} 天"><span class="util-days"><b id="companionDays">${M.day(state)}</b> 天</span><span>相伴</span></button><button class="util-btn round" data-action="manor-menu" aria-label="更多：任务、日记、帮助和提醒设置" title="更多：帮助与提醒设置">···</button></div></div>${document.getElementById("manor-icon-assets") && GardenLive.canTest ? `<button class="hud-reset util-btn round${GardenLive.testing ? " is-testing" : ""}" data-action="reset-test" aria-label="重置测试庄园" title="${GardenLive.testing ? "测试存档：重置或返回正式庄园" : "从初始引导开始测试"}"><img src="${manorIcons.reset}" alt="" draggable="false">${GardenLive.testing ? "<small>测试中</small>" : ""}</button>` : ""}<button class="hud-more" data-action="manor-menu" aria-label="更多：任务、日记、帮助和提醒设置">${manorIcons?.more ? `<img src="${manorIcons.more}" alt="" draggable="false">` : "···"}${rewardReady ? '<i aria-hidden="true"></i>' : ""}</button>`;
 }
 // 底栏：图标 + 名称两层；养鱼舱入住数写在图标右下角的小牌子上（背包不写数字：种子和仓库两种数会被误读），
 // 完整说明在按钮的读屏标签里
 const dockArt = (kind) => `<img class="dock-art" src="knowledge-garden-v19/incoming/dock-r3/${kind}.webp" alt="" draggable="false">`;
 function dockHTML() {
-  const waiting = state.fish.filter((f) => !activeFishIds().includes(f.id)).length;
+  const waiting = state.fish.filter((f) => !activeFishIds().includes(f.id) && f.id !== revealPending?.id).length;
   const btn = (action, dock, icon, title, detail, chip = "", dot = false, key = hotkeyOf(action)) =>
   `<button class="dock-btn" data-action="${action}" data-dock="${dock}" title="${title}${key ? `（${key}）` : ""}"${key ? ` aria-keyshortcuts="${key}"` : ""} aria-label="${title}，${detail}${dot ? "，有待处理的内容" : ""}"${dock === "farm" ? ` aria-controls="tankProduction" aria-expanded="${!!$("#tankProduction") && !$("#tankProduction").hidden}" aria-haspopup="dialog"` : ""}><span class="dock-disc">${icon}${chip !== "" ? `<b class="dock-chip" aria-hidden="true">${chip}</b>` : ""}${dot ? '<i class="dock-dot" aria-hidden="true"></i>' : ""}</span><span class="dock-title">${title}</span></button>`;
   const seeds = Object.values(state.seeds).reduce((a, b) => a + b, 0),
     crops = Object.values(state.crops).reduce((a, b) => a + b, 0);
   const dex = Object.keys(state.discoveries).length + Object.keys(state.cropDex).length,
     dexAll = Object.keys(FISH).length + Object.keys(M.CROPS).length;
-  const living = activeFishIds().filter(Boolean).length,ready = farmReady(),unread = M.atlasUnreadEntries(state, FISH).length;
+  const living = activeFishIds().filter(Boolean).length,ready = farmReady(),unread = M.atlasUnreadEntries(state, FISH).filter((item) => !(revealPending && item.type === "fish" && item.key === revealPending.kind)).length;
   return (
     '<div class="farm-destinations">' + (
     isMobileView() && FarmStage.cal().area === "garden" ? btn("area-garden", "garden", FarmArt.packet("radish"), "菜园", "当前区域") : "") +
@@ -671,7 +659,14 @@ function rulesDialog() {
 }
 
 function manorMenu() {
-  showDialog("庄园小记", `相伴 ${M.day(state)} 天`, `<div class="manor-menu">${[["daily", "每日任务", M.pendingDailyWater(state).length ? "有奖励待领" : `${state.dailyDone.filter(Boolean).length} / 3`], ["level", "成长奖励", `Lv.${M.level(state)}`], ["memories", "庄园日记", "看看收获"], ["rules", "玩法帮助", "种植 · 钓鱼 · 养鱼"]].map(([action, title, detail]) => `<button data-action="${action}" class="${action === "daily" && M.pendingDailyWater(state).length ? "has-reward" : ""}"><strong>${title}</strong><small>${detail}</small><span aria-hidden="true">›</span></button>`).join("")}</div>`, "", false, "manor-menu-dialog");
+  const items = [
+    ["daily", "每日任务", M.pendingDailyWater(state).length ? "有奖励待领" : `${state.dailyDone.filter(Boolean).length} / 3`],
+    ["level", "成长奖励", `Lv.${M.level(state)}`],
+    ["memories", "庄园日记", "看看收获"],
+    ["rules", "玩法帮助", "种植 · 钓鱼 · 养鱼"],
+  ];
+  if (typeof GardenLive.reminders === "function") items.push(["reminder-settings", "提醒设置", "通知 · 入口小红点"]);
+  showDialog("庄园小记", `相伴 ${M.day(state)} 天`, `<div class="manor-menu">${items.map(([action, title, detail]) => `<button data-action="${action}" class="${action === "daily" && M.pendingDailyWater(state).length ? "has-reward" : ""}"><strong>${title}</strong><small>${detail}</small><span aria-hidden="true">›</span></button>`).join("")}</div>`, "", false, "manor-menu-dialog");
 }
 
 // Background calibration may replace inventory. Refresh display panels, but
@@ -680,7 +675,7 @@ function refreshSynchronizedView() {
   if($("#modal").hidden)return;
   const dialog=$("#dialog"),family=dialog.dataset.family;
   const top=dialog.querySelector('.dialog-body')?.scrollTop||0;
-  const changed=()=>toast(GardenLive.snapshot?.copy?.panelUpdated||'庄园数据已更新，请重新打开操作面板',{topCenter:true});
+  const changed=()=>toast(GardenLive.snapshot?.copy?.panelUpdated||'庄园数据已更新，请重新打开操作面板');
   if(family==='inventory-dialog')FarmUI.refreshInventory();
   else if(family==='farm-shop-dialog')FarmUI.shopDialog();
   else if(dialog.dataset.syncView==='daily')dailyDialog();
@@ -699,6 +694,11 @@ function refreshSynchronizedView() {
 
 const wait = (ms) => new Promise((r) => setTimeout(r, matchMedia("(prefers-reduced-motion: reduce)").matches ? Math.min(ms, 60) : ms));
 
+// 领完水后，地里还有待浇水的作物时，把领取按钮换成一键浇灌，从任务回来到作物长起来只差这一下。
+function pourButton(pending) {
+  const dry = FarmUI.plotsIn("dry").length;
+  return !pending && dry && state.water >= R.plantWater ? `<button class="tile-btn primary quest-claim-all" data-action="pour-dry">${toolSprite("water")}浇灌 ${dry} 块待浇水的地</button>` : "";
+}
 function dailyDialog() {
   const done = state.dailyDone.filter(Boolean).length;
   const claimed = (state.dailyWaterClaims || []).reduce((n, v) => n + v, 0) + (state.dailyWaterBonusClaimed || 0);
@@ -707,12 +707,14 @@ function dailyDialog() {
   const arts = [toolSprite("daily"), `<img src="knowledge-garden-v19/incoming/dock-r3/atlas.webp" alt="">`, `<img src="knowledge-garden-v19/incoming/dock-r3/backpack.webp" alt="">`];
   const tasks = names.map((name, i) => {
     const received = state.dailyWaterClaims?.[i] || 0,complete = state.dailyDone[i],remaining = R.dailyWater - received;
-    return `<article class="manor-quest ${complete ? "done" : ""}"><div class="quest-art">${arts[i]}</div><div><h3>${name}</h3><small>${complete ? remaining ? "已完成 · 待领取" : "✓ 水滴已领取" : "在轻笺完成"}</small></div><span class="quest-water">${toolSprite("water")}<b>${remaining || R.dailyWater}</b><small>滴</small></span><button class="tile-btn ${!complete || remaining && state.water < R.waterCap ? "primary" : ""}" data-action="${complete ? "claim-daily-water" : "complete-daily"}" data-index="${i}" ${complete && (!remaining || state.water >= R.waterCap) ? "disabled" : ""}>${!complete ? "去完成" : !remaining ? "已领取" : state.water >= R.waterCap ? "水桶已满" : "领取"}</button></article>`;
+    // 三种状态分开配色：未完成用次级按钮去轻笺做；已完成待领取用琥珀描边 + 绿色领取；已领取转为绿色并置灰按钮。
+    const status = !complete ? "todo" : remaining ? "ready" : "done";
+    return `<article class="manor-quest ${status}"><div class="quest-art">${arts[i]}</div><div><h3>${name}</h3><small>${complete ? remaining ? "● 已完成 · 待领取" : "✓ 水滴已领取" : "在轻笺完成"}</small></div><span class="quest-water">${toolSprite("water")}<b>${remaining || R.dailyWater}</b><small>滴</small></span><button class="tile-btn ${complete && remaining && state.water < R.waterCap ? "primary" : !complete ? "quest-go" : ""}" data-action="${complete ? "claim-daily-water" : "complete-daily"}" data-index="${i}" ${complete && (!remaining || state.water >= R.waterCap) ? "disabled" : ""}>${!complete ? "去完成" : !remaining ? "已领取" : state.water >= R.waterCap ? "水桶已满" : "领取"}</button></article>`;
   }).join("");
   const bonusRemaining=R.dailyWaterBonus-(state.dailyWaterBonusClaimed || 0),bonusReady=done===3&&bonusRemaining>0;
   const bonusHint=done<3 ? `再完成 ${3-done} 项解锁` : !bonusRemaining ? "✓ 今日奖励已领取" : state.dailyWaterBonusClaimed ? `余下 ${bonusRemaining} 滴可续领` : "额外奖励已解锁";
   const bonus=`<div class="quest-completion"><div><strong>全完成奖励</strong><small>${bonusHint}</small></div><span class="quest-water">${toolSprite("water")}<b>+${bonusRemaining || R.dailyWaterBonus}</b><small>滴</small></span><button class="tile-btn ${bonusReady&&state.water<R.waterCap ? "primary" : ""}" data-action="claim-daily-water-bonus" ${!bonusReady||state.water>=R.waterCap ? "disabled" : ""}>${done<3 ? "未解锁" : !bonusRemaining ? "已领取" : state.water>=R.waterCap ? "水桶已满" : "领取奖励"}</button></div>`;
-  showDialog("每日任务", "每天积累一点知识，为庄园添水。", `<div class="quest-summary"><div class="quest-summary-head"><div><strong>今日已完成 ${done} / 3 项</strong><span class="quest-progress"><i style="width:${done / 3 * 100}%"></i></span></div><span><b>每天可得 ${R.dailyWater * 3 + R.dailyWaterBonus} 滴</b><small>今日已领 ${claimed} 滴</small></span></div>${bonus}</div><div class="manor-quests">${tasks}</div><div class="quest-bucket">${toolSprite("water")}<span>储水桶现有 <b>${state.water} 滴</b><small>储水容量 ${R.waterCap} 滴 · 装不下的水滴可在今日稍后领取</small></span><button class="tile-btn primary quest-claim-all" data-action="claim-all-daily-water" ${!pending || state.water >= R.waterCap ? "disabled" : ""}>${!pending ? "暂无可领取" : state.water >= R.waterCap ? "水桶已满" : `一键领取 · ${Math.min(pending, R.waterCap - state.water)} 滴`}</button></div>`,
+  showDialog("每日任务", "每天积累一点知识，为庄园添水。", `<div class="quest-summary"><div class="quest-summary-head"><div><strong>今日已完成 ${done} / 3 项</strong><span class="quest-progress"><i style="width:${done / 3 * 100}%"></i></span></div><span><b>每天可得 ${R.dailyWater * 3 + R.dailyWaterBonus} 滴</b><small>今日已领 ${claimed} 滴</small></span></div>${bonus}</div><div class="manor-quests">${tasks}</div><div class="quest-bucket">${toolSprite("water")}<span>储水桶现有 <b>${state.water} 滴</b><small>储水容量 ${R.waterCap} 滴 · 装不下的水滴可在今日稍后领取</small></span>${pourButton(pending) || `<button class="tile-btn primary quest-claim-all" data-action="claim-all-daily-water" ${!pending || state.water >= R.waterCap ? "disabled" : ""}>${!pending ? "暂无可领取" : state.water >= R.waterCap ? "水桶已满" : `一键领取 · ${Math.min(pending, R.waterCap - state.water)} 滴`}</button>`}</div>`,
   '<button class="button" data-action="collections">庄园成就</button><button class="button primary" data-action="close">回到庄园</button>', false, "daily-dialog");
   $("#dialog").dataset.syncView='daily';
 }
@@ -756,8 +758,19 @@ function focusFishing() {
   $("#pondSpot")?.scrollIntoView({ behavior: "smooth", block: "center" });
   $(".pond-hit")?.focus({ preventScroll: true });
 }
+// 抛竿动画期间仍可在场景里点一下就完成的操作：收菜、浇水、捡礼物、领过滤器的水、领养鱼舱肥料。
+// 会弹框的操作等收竿后再做，避免挡住水面和钓获揭晓。
+const CAST_FREE_ACTIONS = new Set(["plot", "bird-seed", "poop", "purifier-collect", "tank-manage", "production-tab", "production-close", "collect"]);
+const fishingBusy = () => state.casting || fishingPhase !== "idle";
+// 动画结束前不让角标透露这一竿钓到了什么（服务端在抛竿时已结算并写进存档）。
+let revealPending = null;
+function castFreeAction(a, b) {
+  if (!CAST_FREE_ACTIONS.has(a)) return false;
+  // 点地块只放行直接收菜和浇水；空地选种、看生长详情都会弹框。
+  return a !== "plot" || ["ripe", "dry"].includes(M.plotState(state, +b.dataset.plot));
+}
 async function cast(event, choice = null) {
-  if (state.casting) {if (fishingPhase === "bite") finishReel?.();return;}
+  if (fishingBusy()) {if (fishingPhase === "bite") finishReel?.();return;}
   // 在 click 阶段再锁定一次落点，避免 focus 顺序、触控或悬停位置不同步。
   if (event?.detail > 0) GardenCourtyard.aimAtPointer(event);
   const selected = choice || state.preferredBait || "bait";
@@ -770,13 +783,16 @@ async function cast(event, choice = null) {
   const pondEl = $("#pondSpot");
   // 抛竿时就确定结果：只有真的上钩才播放咬钩，空竿只有轻轻一碰
   const result = await M.resolveCast(state, FISH, Math.random, forced === "random" ? null : forced);
+  revealPending = result.fish ? { id: result.fish.id, kind: result.fish.kind } : null;
   state.casting = true;
   catchResult = null;
   fishingPhase = "cast";
   const inputSession = FishingInput.start({
     target: $(".garden-scene"),
     canReel: () => state === session && fishingPhase === "bite",
-    onReel: () => finishReel?.()
+    onReel: () => finishReel?.(),
+    // 点到可操作的东西就交给它处理（放行或提示稍后），只有空地、水面和空格算收竿。
+    passThrough: (el) => {const b = el.closest?.("[data-action]");return !!b && b.dataset.action !== "cast";}
   });
   updatePond();
   lockToolbar(true);
@@ -819,6 +835,7 @@ async function cast(event, choice = null) {
     fishingPhase = "idle";
     fishingSpot = "sea";
     const caught = result.fish;
+    revealPending = null;
     update();
     if (!caught) {
       // 保底仍由服务端结算，水面只提示今天还剩几次免费
@@ -835,6 +852,7 @@ async function cast(event, choice = null) {
     // 重置演示场景后，旧动画不得清除新一轮垂钓的收竿回调或操作锁。
     if (state === session) {
       state.casting = false;
+      revealPending = null;
       fishingPhase = "idle";
       fishingSpot = "sea";
       updatePond();
@@ -1297,7 +1315,7 @@ function init() {
       catch { b.disabled = false; toast("暂时无法重置，请稍后重试"); }
       return;
     }
-    if (state.casting && a !== "close" && a !== "cast") return;
+    if (fishingBusy() && a !== "close" && a !== "cast" && !castFreeAction(a, b)) {toast("等这一竿收完再操作");return;}
     if (!["plot", "fert-select", "fert-cancel", "tool-select", "tools-toggle", "tool-cancel"].includes(a)) FarmUI.cancelTool();
     // 引导期间只响应引导里的操作和第 1 块地
     if (state.guide && !["guide-adopt", "plot", "close"].includes(a) && !(state.guide === "plant" && a === "plant-seed")) return;
@@ -1324,6 +1342,7 @@ function init() {
         if (state.discoveryGuide === "observe") {await GardenLive.dismissGuide(state);update();}
         break;
       case "manor-menu":manorMenu();break;
+      case "reminder-settings":closeDialog();await GardenLive.reminders();break;
       case "help-tab":
         if (!["plant", "fish", "tank", "facilities", "points", "collection", "keys"].includes(b.dataset.tab)) break;
         helpTab = b.dataset.tab;
@@ -1384,12 +1403,12 @@ function init() {
       case "claim-daily-water":
       case "claim-daily-water-bonus":{
           const from = b.getBoundingClientRect(),reward = a === "claim-daily-water-bonus" ? await M.claimDailyWaterBonus(state) : await M.claimDailyWater(state, +b.dataset.index);
-          if (reward) {update();dailyDialog();GardenFX.flyTo(from, $("#waterCount"), toolSprite("water"), { size: 36 });toast(`水滴 +${reward.water} · 已装入水桶`, {topCenter:true});}
+          if (reward) {update();dailyDialog();GardenFX.flyTo(from, $("#waterCount"), toolSprite("water"), { size: 36 });toast(`水滴 +${reward.water} · 已装入水桶`);}
           break;
         }
       case "claim-all-daily-water":{
           const from = b.getBoundingClientRect(),reward = await M.claimAllDailyWater(state);
-          if (reward) {update();dailyDialog();GardenFX.flyTo(from, $("#waterCount"), toolSprite("water"), { size: 36 });toast(`水滴 +${reward.water}${reward.pending ? ` · 余下 ${reward.pending} 滴今日可继续领取` : " · 已装入水桶"}`, {topCenter:true});}
+          if (reward) {update();dailyDialog();GardenFX.flyTo(from, $("#waterCount"), toolSprite("water"), { size: 36 });toast(`水滴 +${reward.water}${reward.pending ? ` · 余下 ${reward.pending} 滴今日可继续领取` : " · 已装入水桶"}`);}
           break;
         }
       case "bait":

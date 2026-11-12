@@ -212,26 +212,32 @@
         </BActionMenu>
       </template>
     </CloudVirtualGrid>
-    <div v-if="downloadProgress.visible" class="download-progress-floating">
-      <div class="download-progress-header">
-        <div class="download-progress-title">{{ downloadProgress.phaseText }}</div>
-        <div class="download-progress-ops">
-          <span>{{ downloadProgress.current }}/{{ downloadProgress.total }}</span>
-          <BButton size="small" class="download-cancel-btn" @click="cancelBatchDownload">
-            {{ $t('common.cancel') }}
-          </BButton>
+    <Teleport to="#cloud-transfer-downloads" :disabled="!transferDockAvailable">
+      <div
+        v-if="downloadProgress.visible"
+        class="download-progress-floating"
+        :class="{ 'download-progress-floating--docked': transferDockAvailable }"
+      >
+        <div class="download-progress-header">
+          <div class="download-progress-title">{{ downloadProgress.phaseText }}</div>
+          <div class="download-progress-ops">
+            <span>{{ downloadProgress.current }}/{{ downloadProgress.total }}</span>
+            <BButton size="small" class="download-cancel-btn" @click="cancelBatchDownload">
+              {{ $t('common.cancel') }}
+            </BButton>
+          </div>
+        </div>
+        <div
+          class="download-progress-track"
+          role="progressbar"
+          aria-valuemin="0"
+          aria-valuemax="100"
+          :aria-valuenow="downloadProgress.percent"
+        >
+          <span :style="{ width: `${downloadProgress.percent}%` }"></span>
         </div>
       </div>
-      <div
-        class="download-progress-track"
-        role="progressbar"
-        aria-valuemin="0"
-        aria-valuemax="100"
-        :aria-valuenow="downloadProgress.percent"
-      >
-        <span :style="{ width: `${downloadProgress.percent}%` }"></span>
-      </div>
-    </div>
+    </Teleport>
     <div v-if="viewMode === 'table' && !bookmark.isMobile" class="field-header">
       <div class="flex-align-center-gap" :style="{ width: fieldNameWidth }">
         <BTooltip :title="fileSortLabel('fileName')">
@@ -479,19 +485,12 @@
             </div>
             <div class="file-tags-cell">
               <span v-if="!item.tags?.length" class="file-tags-empty">-</span>
-              <div v-else class="file-tags-list">
-                <ResourceTagChip
-                  v-for="tag in item.tags"
-                  :data-range-select="batchMode ? '' : undefined"
-                  :key="tag.id"
-                  :tag="tag"
-                  size="medium"
-                  interactive
-                  max-width="var(--ui-layout-90, 90px)"
-                  @click.stop="onFileTagClick(item, tag.id, $event)"
-                  v-click-log="{ module: '云空间', operation: `点击文件关联标签【${tag.name}】` }"
-                />
-              </div>
+              <CloudFileTags
+                v-else
+                :tags="item.tags"
+                :batch-mode="batchMode"
+                @select="(tagId, event) => onFileTagClick(item, tagId, event)"
+              />
             </div>
             <div>{{
               item.fileSize >= 1024 * 1024
@@ -896,7 +895,7 @@
   const { canJoinProject, joinProject } = useProjectResourceAction();
   import { useResourceSelection } from '@/composables/useResourceSelection';
   import type { SelectionOperation } from '@/store/resourceSelection';
-  import { computed, defineAsyncComponent, nextTick, ref, watch } from 'vue';
+  import { computed, defineAsyncComponent, nextTick, onMounted, ref, watch } from 'vue';
   import { blockGuestWrite } from '@/composables/useGuestGuard';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import BDropdown from '@/components/base/BasicComponents/BDropdown.vue';
@@ -954,7 +953,7 @@
   import type { CloudFolderNode } from '@/types/cloudFolder';
   import { resolveFileAiSummaryPresentation } from '@/utils/fileAiSummary';
   import CloudTextCardPreview from '@/components/cloudSpace/CloudTextCardPreview.vue';
-  import ResourceTagChip from '@/components/tag/ResourceTagChip.vue';
+  import CloudFileTags from '@/components/cloudSpace/CloudFileTags.vue';
   import ResourceBatchActionsDrawer from '@/components/resourceActions/ResourceBatchActionsDrawer.vue';
   import MobilePageActionsDrawer, { type MobilePageActionItem } from '@/components/mobile/MobilePageActionsDrawer.vue';
   import ResourceBatchActionBar from '@/components/resourceActions/ResourceBatchActionBar.vue';
@@ -983,6 +982,10 @@
   }
   const cloud = cloudSpaceStore();
   const bookmark = bookmarkStore();
+  const transferDockAvailable = ref(false);
+  onMounted(() => {
+    transferDockAvailable.value = Boolean(document.getElementById('cloud-transfer-downloads'));
+  });
   const user = useUserStore();
   const router = useRouter();
 
@@ -2671,6 +2674,14 @@
       }
     }
   }
+  .download-progress-floating--docked {
+    position: relative;
+    top: auto;
+    right: auto;
+    width: 100%;
+    z-index: auto;
+    box-sizing: border-box;
+  }
   .batch-download-choice {
     display: grid;
     gap: var(--ui-space-16, 16px);
@@ -2846,7 +2857,7 @@
   .default-area {
     display: grid;
     grid-template-columns:
-      minmax(var(--ui-layout-86, 86px), 0.7fr) minmax(var(--ui-layout-130, 130px), 1.15fr) minmax(
+      minmax(var(--ui-layout-130, 130px), 1.15fr) minmax(var(--ui-layout-86, 86px), 0.7fr) minmax(
         var(--ui-layout-74, 74px),
         0.55fr
       )
@@ -3028,14 +3039,6 @@
   }
   .file-tags-cell {
     min-width: 0;
-  }
-
-  .file-tags-list {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--ui-space-6, 6px);
-    max-height: var(--ui-layout-40, 40px);
-    overflow: hidden;
   }
 
   .file-tags-empty {

@@ -14,9 +14,9 @@ describe('toolbox pinned tools', () => {
     const storage = memoryStorage();
     const owner = { id: 'owner', role: 'user' };
     const other = { id: 'other', role: 'user' };
-    expect(toggleToolboxPinnedTool(owner, 'text_diff', { storage }).toolIds).toEqual(['text_diff']);
+    expect(toggleToolboxPinnedTool(owner, 'pdf_organizer', { storage }).toolIds).toEqual(['pdf_organizer']);
     expect(readToolboxPinnedTools(other, { storage })).toEqual([]);
-    expect(toggleToolboxPinnedTool(owner, 'text_diff', { storage }).toolIds).toEqual([]);
+    expect(toggleToolboxPinnedTool(owner, 'pdf_organizer', { storage }).toolIds).toEqual([]);
   });
 
   it('同一账号的普通身份、访客工作区和代管身份分别存储', () => {
@@ -29,7 +29,7 @@ describe('toolbox pinned tools', () => {
       adminContext: { subjectUserId: 'owner', mode: 'readonly' },
     };
 
-    expect(toggleToolboxPinnedTool(owner, 'text_diff', { storage }).toolIds).toEqual(['text_diff']);
+    expect(toggleToolboxPinnedTool(owner, 'pdf_organizer', { storage }).toolIds).toEqual(['pdf_organizer']);
     expect(readToolboxPinnedTools(visitorWorkspace, { storage })).toEqual([]);
     expect(readToolboxPinnedTools(managedOwner, { storage })).toEqual([]);
   });

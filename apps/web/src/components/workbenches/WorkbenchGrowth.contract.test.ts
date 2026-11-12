@@ -35,16 +35,19 @@ describe('工作台成长卡交互契约', () => {
     expect(source).toContain('useGrowthClaimFeedback(claimableData)');
   });
 
-  it('一键领取成功后根据服务端 receipts 区分任务和成就来源', () => {
+  it('一键领取成功后根据服务端 receipts 区分来源，并在本卡片原位展示领取回执', () => {
     expect(source).toContain('const pendingBreakdown = snapshotClaimableBreakdown()');
-    expect(source).toContain('claimSuccessMessage(res.data, pendingBreakdown)');
+    expect(source).toContain('showReceipt(claimReceipt(res.data, pendingBreakdown))');
+    expect(source).not.toContain('claimSuccessMessage');
+    expect(source.match(/<GrowthClaimReceipt/g)).toHaveLength(1);
+    expect(source).toMatch(/<GrowthClaimReceipt v-if="receipt"[^>]*block[^>]*\/>\s*<div class="growth-footer">/);
   });
 
   it('桌面展开态复用统一额度状态展示今日额度、永久余额和积分，不为移动紧凑卡额外请求', () => {
     expect(source).toContain('useAiQuotaStatus({ autoLoad: false })');
     expect(source).toContain('if (props.expanded) void loadAiQuota()');
     expect(source).toContain("t('growth.assetTodayRemaining')");
-    expect(source).toContain("t('growth.assetPermanentBalance')");
+    expect(source).toContain("'growth.assetPermanentBalance'");
     expect(source).toContain("t('growth.assetPointsLabel')");
     expect(source).toContain('formatAiQuotaTokens(dailyQuotaRemaining.value, locale.value)');
     expect(source).toContain('aiQuotaUnavailable.value || dailyQuotaRemaining.value === null');

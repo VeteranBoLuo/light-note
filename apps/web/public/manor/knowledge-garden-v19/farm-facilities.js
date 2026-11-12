@@ -316,7 +316,7 @@ const FarmFacilities = (() => {
           const pending=pendingCompostUpgrade;pendingCompostUpgrade=null;
           if(!pending||pending.session!==state||$("#dialog").dataset.family!=="composter-upgrade-dialog")break;
           button.disabled=true;const ok=await M.upgradeComposter(state,pending.plan);update();composterDialog();
-          toast(ok?`堆肥箱升至 Lv.${M.composterStatus(state).level}`:"未升级，积分或设备状态已变化",{topCenter:true});break;
+          toast(ok?`堆肥箱升至 Lv.${M.composterStatus(state).level}`:"未升级，积分或设备状态已变化");break;
         }
       case "compost-collect":{
           if($("#dialog").dataset.facility!=="composter")break;

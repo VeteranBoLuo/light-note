@@ -27,9 +27,7 @@ describe('API 日志跳过策略', () => {
     '/api/notification/unreadCount',
     '/api/updateLog/list',
     '/api/updateLog/image/log-1/release.webp',
-    '/api/support/state',
     '/api/support/afdian/webhook',
-    '/api/support/afdian/oauth/callback?code=temporary&state=temporary',
     '/api/community-chat/access',
     '/api/community-chat/rooms',
     '/api/community-chat/rooms/general/read-receipt-counts?messagePublicIds=message-1',
@@ -51,7 +49,6 @@ describe('API 日志跳过策略', () => {
     '/api/inbox/enqueue',
     '/api/bookmark/getBookmarkList',
     '/api/updateLog/save',
-    '/api/support/donation/checkout?option=coffee',
     '/api/support/checkout?skuId=ai-6&catalogVersion=support-packages-v2',
     '/api/community-chat/rooms/general/messages',
   ])('保留真实读取与写入接口日志：%s', (url) => {

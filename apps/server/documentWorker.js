@@ -1,6 +1,6 @@
-import { runSingleExtractionJob, cleanupExtractionMaterials } from './util/extraction/worker.js';
 import { withWorkerDiagnostics, withWorkerStage } from './util/workerDiagnostics.js';
 import { cleanupLegacyCloudObject } from './util/services/cloudLegacyObjectLifecycle.js';
+import { cloudMultipartUploads } from './util/services/cloudMultipartUploadService.js';
 import { cleanupRenameStage } from './util/services/cloudFileRenameStaging.js';
 import {
   runOrganizeInspection,
@@ -27,7 +27,6 @@ import { inspectLocalOcrRuntime } from './util/aiDocument/localOcr.js';
 import { stableAgentErrorCode } from './util/agent/logSafety.js';
 import { ensureToolboxSchema } from './util/toolboxSchema.js';
 import { cleanupExpiredToolboxData, runSingleToolboxJob } from './util/toolbox/worker.js';
-import { runSingleOrganizeAiSuggestionBatch } from './util/services/organizeAiSuggestionService.js';
 import { ensureOrganizeSchema } from './util/organizeSchema.js';
 import { createWorkerResourceGate } from './util/workerResourceGate.js';
 
@@ -137,9 +136,7 @@ async function run() {
     pipelineLoop(
       'ai',
       rotatingQueue([
-        ['extraction', (worker) => runSingleExtractionJob(worker, pool, { phase: 'ai' })],
         ['toolbox', (worker) => runSingleToolboxJob(worker, pool, { runLocalProcessing: runMedia })],
-        ['organize.ai.batch', runSingleOrganizeAiSuggestionBatch],
         [
           'organize.ai.legacy',
           (worker) => runSingleSuggestionItem(worker, pool, { skipRules: true, pipeline: 'legacy' }),
@@ -152,6 +149,7 @@ async function run() {
       rotatingQueue([
         ['rename.cleanup', () => cleanupRenameStage()],
         ['legacy.cleanup', () => cleanupLegacyCloudObject()],
+        ['multipart.cleanup', () => cloudMultipartUploads.cleanup()],
       ]),
     ),
   );
@@ -171,7 +169,6 @@ async function run() {
         await withWorkerDiagnostics('periodic-cleanup', () =>
           withWorkerStage('toolbox.expire', () => cleanupExpiredToolboxData()),
         );
-        await withWorkerDiagnostics('periodic-cleanup', () => withWorkerStage('extraction.expire', () => cleanupExtractionMaterials()));
         lastCleanupAt = now;
       }
       if (!stopping) await wait(60 * 60 * 1000);
@@ -184,7 +181,6 @@ async function run() {
 }
 
 const rotatingDocumentQueue = rotatingQueue([
-  ['extraction.prepare', worker => runSingleExtractionJob(worker, pool, { phase: 'prepare' })],
   ['document', runSingleDocumentJob],
   ['file-preview', runSingleFilePreviewJob],
 ]);

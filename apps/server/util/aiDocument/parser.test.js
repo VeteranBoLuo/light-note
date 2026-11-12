@@ -249,7 +249,7 @@ it('无可靠文字的非空 PDF 保留待视觉补读页码', async () => {
 });
 
 
-describe('extraction full-range segments',()=>{
+describe('full-range segments',()=>{
   it('opts into all bounded CSV rows without the retrieval chunk ceiling, retaining accurate coverage',async()=>{
     const body=Buffer.from('name,value\n'+Array.from({length:240},(_,i)=>`product${i},${i}`).join('\n'));
     const descriptor={fileName:'products.csv',fileType:'text/csv',fileSize:body.length};

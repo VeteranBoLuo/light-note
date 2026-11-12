@@ -1,12 +1,4 @@
-// A resource may have work in both lanes; each lane counts it once.
-export const ORGANIZE_TERMINAL_STATES = [
-  "completed",
-  "partial",
-  "failed",
-  "conflict",
-  "cancelled",
-  "skipped",
-];
+
 export function summarizeOrganizeLane(rows, settled = false) {
   const groups = new Map();
   for (const row of rows) {
