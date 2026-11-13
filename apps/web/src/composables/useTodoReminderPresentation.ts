@@ -1,6 +1,6 @@
 import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
-import type { TodoItem } from '@/api/todoApi';
+import type { TodoItem, TodoReminderPauseAction } from '@/api/todoApi';
 import { useTodoClock } from '@/composables/useTodoClock';
 import { formatTodoDateTime, parseTodoDate, todoNextReminderAt, todoPastReminderAt } from '@/utils/todoPlanning';
 
@@ -10,7 +10,11 @@ export function useTodoReminderPresentation(getItem: () => TodoItem) {
   const reminderState = computed(() => {
     const item = getItem();
     const reminder = item.reminder;
-    if (item.status !== 'pending' || reminder?.mode === 'none' || (!reminder && !item.reminderAt)) {
+    if (item.status !== 'pending') return { kind: 'none', at: '' } as const;
+    if (item.reminderPausedUntil && Date.parse(item.reminderPausedUntil) > now.value) {
+      return { kind: 'pausedUntil', at: item.reminderPausedUntil } as const;
+    }
+    if (reminder?.mode === 'none' || (!reminder && !item.reminderAt)) {
       return { kind: 'none', at: '' } as const;
     }
     if (reminder && 'paused' in reminder && reminder.paused) return { kind: 'paused', at: '' } as const;
@@ -28,10 +32,21 @@ export function useTodoReminderPresentation(getItem: () => TodoItem) {
       ? formatTodoDateTime(reminderState.value.at, locale.value, {
           relative: true,
           includeYear: false,
+          includeWeekday: reminderState.value.kind !== 'pausedUntil',
           now: today.value,
           relativeLabels: { today: t('inbox.todoToday'), tomorrow: t('inbox.todoTomorrow') },
         })
       : '',
   );
-  return { reminderState, reminderTime };
+  const pausedUntilLabel = computed(() =>
+    reminderState.value.kind === 'pausedUntil'
+      ? t('todoWorkspace.reminderPausedUntil', { time: reminderTime.value })
+      : '',
+  );
+  const pauseAction = computed<TodoReminderPauseAction | null>(() => {
+    if (pausedUntilLabel.value) return 'resume';
+    const item = getItem();
+    return item.status === 'pending' && item.reminder && item.reminder.mode !== 'none' ? 'pause_week' : null;
+  });
+  return { reminderState, reminderTime, pausedUntilLabel, pauseAction };
 }

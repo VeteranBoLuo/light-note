@@ -6,6 +6,7 @@ import { sendTrackedEmail } from './emailDelivery.js';
 import { createNotification } from './notification.js';
 import { buildTodoReminderEmail } from './todoReminder.js';
 import { normalizeTodoLocale } from './todoDateFormat.js';
+import { todoReminderPauseJoinSql, v2ReminderAfterPauseSql } from './services/todoReminderSql.js';
 
 const POLL_INTERVAL_MS = 5_000;
 const RECOVERY_INTERVAL_MS = 60_000;
@@ -76,11 +77,14 @@ async function claimJob(id) {
               DATE_FORMAT(j.stop_at_utc, '%Y-%m-%d %H:%i:%s') AS stopAtUtc,
               i.title, i.description, i.due_at AS dueAt, i.status AS todoStatus,
               i.del_flag AS todoDeleted, i.instance_state AS instanceState,
-              s.status AS seriesStatus, u.preferences
+              s.status AS seriesStatus, u.preferences,
+              NOT ${v2ReminderAfterPauseSql('j')} AS skippedByReminderPause,
+              (UTC_TIMESTAMP() < reminder_pause.paused_until_utc AND j.scheduled_at_utc > UTC_TIMESTAMP()) AS deferredDuringPause
          FROM todo_reminder_jobs j
          JOIN todo_items i ON i.id = j.todo_id AND i.user_id = j.user_id
          LEFT JOIN todo_reminder_rules r ON r.id = j.rule_id
          LEFT JOIN todo_series s ON s.id = j.series_id
+         ${todoReminderPauseJoinSql('i')}
          JOIN user u ON u.id = j.user_id AND u.del_flag = 0
         WHERE j.id = ? AND j.status = 'pending' AND (j.scheduled_at_utc <= UTC_TIMESTAMP() OR j.cancel_reason = 'quiet_hours_deferred')
         LIMIT 1 FOR UPDATE`,
@@ -111,6 +115,17 @@ async function claimJob(id) {
       (job.series_id && job.seriesStatus !== 'active')
     ) {
       await markClaimSkipped(connection, id, job.seriesStatus === 'paused' ? 'series_paused' : 'todo_inactive');
+      await connection.commit();
+      return null;
+    }
+    if (job.deferredDuringPause) {
+      // The historical quiet-hours recovery path can look ahead of the normal due-time scanner.
+      await connection.query('UPDATE todo_reminder_jobs SET cancel_reason = NULL WHERE id = ?', [id]);
+      await connection.commit();
+      return null;
+    }
+    if (job.skippedByReminderPause) {
+      await markClaimSkipped(connection, id, 'reminder_paused');
       await connection.commit();
       return null;
     }

@@ -534,6 +534,7 @@
                 @delete="confirmDeleteTodo"
                 @add-to-calendar="openTodoCalendar"
                 @snooze="snoozeTodoItem"
+                @reminder-pause="handleReminderPause"
                 @update-priority="updateTodoPriority"
                 @series-action="handleTodoSeriesAction"
               />
@@ -651,6 +652,7 @@
                           @delete="confirmDeleteTodo"
                           @add-to-calendar="openTodoCalendar"
                           @snooze="snoozeTodoItem"
+                          @reminder-pause="handleReminderPause"
                           @update-priority="updateTodoPriority"
                           @series-action="handleTodoSeriesAction"
                         />
@@ -677,6 +679,7 @@
                           @delete="confirmDeleteTodo(node.item)"
                           @add-to-calendar="openTodoCalendar(node.item)"
                           @snooze="snoozeTodoItem(node.item, $event)"
+                          @reminder-pause="handleReminderPause(node.item, $event)"
                           @update-priority="updateTodoPriority(node.item, $event)"
                           @series-action="handleTodoSeriesAction(node.item, $event)"
                         />
@@ -759,6 +762,7 @@
                     @delete="confirmDeleteTodo(action.item)"
                     @add-to-calendar="openTodoCalendar(action.item)"
                     @snooze="snoozeTodoItem(action.item, $event)"
+                    @reminder-pause="handleReminderPause(action.item, $event)"
                     @update-priority="updateTodoPriority(action.item, $event)"
                     @series-action="handleTodoSeriesAction(action.item, $event)"
                   />
@@ -885,7 +889,7 @@
     <TodoSeriesDrawer
       v-if="activeSeries"
       v-model:open="seriesDrawerOpen"
-      :representative="activeSeries.representative"
+      :representative="todo.items.find((item) => item.id === activeSeries?.representative.id) || activeSeries.representative"
       :items="[]"
       :query="activeSeries.query"
       :disabled="hasPendingOperation || todoBatchMutating"
@@ -901,6 +905,7 @@
       @organize="openOrganization([$event])"
       @add-to-calendar="openTodoCalendar"
       @snooze="snoozeTodoItem"
+      @reminder-pause="handleReminderPause"
       @update-priority="updateTodoPriority"
       @series-action="handleTodoSeriesAction"
     />
@@ -916,6 +921,7 @@
       @edit="openTodoEditor"
       @delete="confirmDeleteTodo"
       @update-checklist="updateTodoChecklist"
+      @reminder-pause="handleReminderPause"
       @closed="clearTodoPreview"
     />
     <BModal
@@ -1063,6 +1069,7 @@
     TodoItem as TodoItemType,
     TodoPriority,
     TodoSeriesAction,
+    TodoReminderPauseAction,
     TodoSort,
   } from '@/api/todoApi';
   import {
@@ -2361,6 +2368,52 @@
     const result = await todo.snooze(item, todoSnoozeAt(preset));
     if (result === true) message.success(t('inbox.todoSnoozed'));
     else if (result !== 'preview') message.error(t('inbox.todoSnoozeFailed'));
+  }
+  function handleReminderPause(item: TodoItemType, action: TodoReminderPauseAction) {
+    const owner = todoCalendarOwnerKey(user);
+    if (hasPendingOperation.value || user.adminContext?.mode === 'readonly') return;
+    if (blockGuestWrite('todo-update', t('inbox.guestPrompt'))) return;
+    const apply = async () => {
+      if (owner !== todoCalendarOwnerKey(user) || hasPendingOperation.value) return;
+      updatingTodoId.value = item.id;
+      try {
+        const result = await todo.setReminderPause(item, action, generateUUID());
+        if (owner !== todoCalendarOwnerKey(user)) return;
+        if (result && result !== 'preview') {
+          const sameTarget = (other: TodoItemType) => (other.seriesId || other.id) === (item.seriesId || item.id);
+          if (previewTodoSeed.value && sameTarget(previewTodoSeed.value)) {
+            const seed = previewTodoSeed.value;
+            previewTodoSeed.value = { ...seed, ...result };
+            if (!todo.items.some((current) => current.id === seed.id)) {
+              const detail = await getTodoWorkspace({ ids: [seed.id], status: 'all' }).catch(() => null);
+              if (owner !== todoCalendarOwnerKey(user)) return;
+              if (previewTodoId.value === seed.id && detail?.status === 200 && detail.data.items[0]) {
+                previewTodoSeed.value = detail.data.items[0];
+              }
+            }
+          }
+          if (activeSeries.value && sameTarget(activeSeries.value.representative)) {
+            activeSeries.value.representative = { ...activeSeries.value.representative, ...result };
+          }
+          message.success(t(action === 'pause_week' ? 'inbox.todoReminderPaused' : 'inbox.todoReminderResumed'));
+        } else if (result !== 'preview') message.error(t('inbox.todoReminderPauseFailed'));
+      } catch {
+        if (owner === todoCalendarOwnerKey(user)) message.error(t('inbox.todoReminderPauseFailed'));
+      } finally {
+        if (updatingTodoId.value === item.id) updatingTodoId.value = '';
+      }
+    };
+    if (action === 'resume') {
+      void apply();
+      return;
+    }
+    Alert.alert({
+      title: t('inbox.todoReminderPause'),
+      content: t(item.seriesId ? 'inbox.todoSeriesReminderPauseConfirm' : 'inbox.todoReminderPauseConfirm'),
+      okText: t('inbox.todoReminderPauseWeek'),
+      cancelText: t('common.cancel'),
+      onOk: apply,
+    });
   }
   function updateScrollFade() {
     const element = scrollContainer.value;

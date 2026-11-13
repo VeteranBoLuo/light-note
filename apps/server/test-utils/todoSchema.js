@@ -18,6 +18,7 @@ export async function installTodoTestSchema(connection) {
     '20260908_todo_workspace.sql',
     '20260731_todo_resource_refs.sql',
     '20260807_todo_single_task_schedule.sql',
+    '20261113_todo_reminder_pauses.sql',
   ]) {
     const source = await readFile(new URL(`../migrations/${file}`, import.meta.url), 'utf8');
     for (const statement of localSqlStatements(source)) {

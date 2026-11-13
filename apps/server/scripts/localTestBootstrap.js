@@ -28,6 +28,7 @@ const migrations = [
   '20260814_points_earning_c5.sql', '20260825_ai_bonus_wallet_and_afdian_rewards.sql',
   '20261105_update_logs_product_version.sql',
   '20261107_afdian_fixed_products.sql',
+  '20261113_todo_reminder_pauses.sql',
 ];
 const ensureModules = [
   ['security/index.js', 'ensureSecurityTables'], ['notification.js', 'ensureNotificationTable'],

@@ -95,7 +95,18 @@
         <dl>
           <div v-for="row in scheduleRows" :key="row.key">
             <dt>{{ row.label }}</dt>
-            <dd>{{ row.value }}</dd>
+            <dd>
+              {{ row.value }}
+              <BButton
+                v-if="row.key === 'reminder' && pauseAction"
+                type="text"
+                size="small"
+                :disabled="disabled"
+                @click="emit('reminder-pause', item, pauseAction)"
+              >
+                {{ t(pauseAction === 'resume' ? 'inbox.todoReminderResume' : 'inbox.todoReminderPause') }}
+              </BButton>
+            </dd>
           </div>
         </dl>
       </section>
@@ -133,7 +144,8 @@
   import { computed, nextTick, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useRouter } from 'vue-router';
-  import type { TodoChecklistItem, TodoItem, TodoResourceRefView } from '@/api/todoApi';
+  import type { TodoChecklistItem, TodoItem, TodoReminderPauseAction, TodoResourceRefView } from '@/api/todoApi';
+  import { useTodoReminderPresentation } from '@/composables/useTodoReminderPresentation';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BDrawer from '@/components/base/BasicComponents/BDrawer.vue';
   import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
@@ -166,9 +178,11 @@
     delete: [item: TodoItem];
     reopen: [item: TodoItem];
     'update-checklist': [item: TodoItem, checklist: TodoChecklistItem[]];
+    'reminder-pause': [item: TodoItem, action: TodoReminderPauseAction];
     closed: [];
   }>();
   const { t, locale } = useI18n();
+  const { pausedUntilLabel, pauseAction } = useTodoReminderPresentation(() => props.item);
   const router = useRouter();
   const bookmark = bookmarkStore();
   const resourceSectionRef = ref<HTMLElement | null>(null);
@@ -221,10 +235,10 @@
     rows.push({
       key: 'reminder',
       label: t('inbox.todoPreviewReminder'),
-      value: reminderSummary() || t('inbox.todoReminderNone'),
+      value: pausedUntilLabel.value || reminderSummary() || t('inbox.todoReminderNone'),
     });
     const nextReminderAt = todoNextReminderAt(props.item);
-    if (nextReminderAt) {
+    if (!pausedUntilLabel.value && nextReminderAt) {
       rows.push({
         key: 'next-reminder',
         label: t(

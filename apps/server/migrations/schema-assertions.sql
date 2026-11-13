@@ -426,6 +426,7 @@ FROM (
   SELECT 'todo_series_resource_refs' UNION ALL
   SELECT 'todo_reminder_rules' UNION ALL
   SELECT 'todo_reminder_jobs' UNION ALL
+  SELECT 'todo_reminder_pauses' UNION ALL
   SELECT 'todo_plan_requests' UNION ALL
   SELECT 'todo_plan_mutations' UNION ALL
   SELECT 'todo_plan_runtime_metrics'
@@ -445,6 +446,8 @@ FROM (
   SELECT 'todo_items', 'is_exception', 'todo_items.is_exception' UNION ALL
   SELECT 'todo_items', 'instance_state', 'todo_items.instance_state' UNION ALL
   SELECT 'todo_items', 'generated_by_todo_id', 'todo_items.generated_by_todo_id' UNION ALL
+  SELECT 'todo_reminder_pauses', 'paused_until_utc', 'todo_reminder_pauses.paused_until_utc' UNION ALL
+  SELECT 'todo_reminder_pauses', 'paused_from_utc', 'todo_reminder_pauses.paused_from_utc' UNION ALL
   SELECT 'notification', 'source_type', 'notification.source_type' UNION ALL
   SELECT 'notification', 'source_id', 'notification.source_id'
 ) expected

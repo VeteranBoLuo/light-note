@@ -2,7 +2,7 @@ import { Temporal } from '@js-temporal/polyfill';
 import crypto from 'node:crypto';
 import { listTodoPage } from './todoService.js';
 import { organizationError, todoOrganizationFilters } from './todoOrganizationService.js';
-import { nextTodoReminderAtSql } from './todoReminderSql.js';
+import { nextTodoReminderAtSql, todoReminderPauseJoinSql } from './todoReminderSql.js';
 
 const stamp = (sql) => `COALESCE(DATE_FORMAT(${sql}, '%Y%m%d%H%i%s'), '99991231235959')`;
 const reverseStamp = (sql) => `LPAD(99999999999999 - CAST(${stamp(sql)} AS UNSIGNED), 14, '0')`;
@@ -254,7 +254,8 @@ export async function todoWorkspaceGroupPage(db, userId, raw) {
   const query = workspaceNodeQuery(userId, input, await workspaceClocks(db, userId));
   const ordered = `SELECT n.*, ${nodeOrder(input.sort)} AS orderKey FROM (${query.sql}) n
     INNER JOIN todo_items r ON r.id = n.representativeId AND r.user_id = ?
-    LEFT JOIN todo_series s ON s.id = r.series_id AND s.user_id = r.user_id WHERE n.groupKey = ?`;
+    LEFT JOIN todo_series s ON s.id = r.series_id AND s.user_id = r.user_id
+    ${todoReminderPauseJoinSql('r')} WHERE n.groupKey = ?`;
   const [rows] = await db.query(
     `SELECT * FROM (${ordered}) ordered ${cursor ? 'WHERE orderKey > ? OR (orderKey = ? AND nodeKey > ?)' : ''} ORDER BY orderKey, nodeKey LIMIT ?`,
     [

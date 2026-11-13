@@ -97,7 +97,8 @@
             class="todo-item__next-reminder"
             :class="{ 'is-empty': reminderState.kind === 'none', 'is-past': reminderState.kind === 'past' }"
           >
-            <template v-if="reminderState.kind !== 'none'">
+            <TodoTimeText v-if="pausedUntilLabel" class="todo-item__reminder-time" :text="pausedUntilLabel" />
+            <template v-else-if="reminderState.kind !== 'none'">
               <span class="todo-item__reminder-prefix">{{ t('todoWorkspace.reminderLabel') }}{{ ' ' }}</span>
               <TodoTimeText
                 v-if="workspaceReminderTime"
@@ -118,6 +119,7 @@
           }}</span>
           <span v-if="seriesProgressLabel" class="todo-series-progress">{{ seriesProgressLabel }}</span>
           <span v-if="!workspace && reminderLabel" class="todo-reminder-label">{{ reminderLabel }}</span>
+          <TodoTimeText v-if="!workspace && pausedUntilLabel" class="todo-plan-state-label" :text="pausedUntilLabel" />
           <span v-if="item.series?.status === 'paused'" class="todo-plan-state-label">{{
             t('inbox.todoSeriesPausedBadge')
           }}</span>
@@ -166,15 +168,15 @@
         <section
           v-if="!workspace && reminderLabel"
           class="todo-reminder-summary"
-          :class="{ 'is-past': pastReminderLabel }"
+          :class="{ 'is-past': !pausedUntilLabel && pastReminderLabel }"
         >
           <strong>{{ reminderLabel }}</strong>
-          <span v-if="nextReminderLabel">{{
+          <span v-if="!pausedUntilLabel && nextReminderLabel">{{
             t(isTodoSingleReminder(item) ? 'inbox.todoSingleReminderTime' : 'inbox.todoNextReminder', {
               time: nextReminderLabel,
             })
           }}</span>
-          <span v-else-if="pastReminderLabel" class="todo-reminder-summary__past">
+          <span v-else-if="!pausedUntilLabel && pastReminderLabel" class="todo-reminder-summary__past">
             {{ t('inbox.todoPastReminder', { time: pastReminderLabel }) }}
           </span>
         </section>
@@ -349,7 +351,14 @@
   import TodoResourceLinks from '@/components/todo/TodoResourceLinks.vue';
   import { OPERATION_LOG_MAP } from '@/config/logMap';
   import { useRouter } from 'vue-router';
-  import type { TodoChecklistItem, TodoItem, TodoPriority, TodoResourceRefView, TodoSeriesAction } from '@/api/todoApi';
+  import type {
+    TodoChecklistItem,
+    TodoItem,
+    TodoPriority,
+    TodoReminderPauseAction,
+    TodoResourceRefView,
+    TodoSeriesAction,
+  } from '@/api/todoApi';
   import { resolveResourceRoute, resolveTodoResourceReturnPath } from '@/utils/resourceNavigation';
   import {
     formatTodoDateTime,
@@ -385,6 +394,7 @@
     'add-to-calendar': [];
     select: [selected: boolean];
     snooze: [preset: TodoSnoozePreset];
+    'reminder-pause': [action: TodoReminderPauseAction];
     'update-priority': [priority: TodoPriority];
     'swipe-start': [];
     'update:swipe-open': [open: boolean];
@@ -541,7 +551,8 @@
   );
   const visibleTags = computed(() => (props.workspace ? props.item.tags?.slice(0, 1) : props.item.tags) || []);
   const hiddenTags = computed(() => (props.workspace ? props.item.tags?.slice(1) : []) || []);
-  const { reminderState, reminderTime: workspaceReminderTime } = useTodoReminderPresentation(() => props.item);
+  const { reminderState, reminderTime: workspaceReminderTime, pausedUntilLabel, pauseAction } =
+    useTodoReminderPresentation(() => props.item);
   const seriesLabel = computed(() => {
     const series = props.item.series;
     if (!series) return '';
@@ -589,6 +600,12 @@
       label: t(`inbox.todoSnooze${preset[0].toUpperCase()}${preset.slice(1)}`),
     })),
   );
+  const reminderPauseMenuItem = computed(() => {
+    if (pauseAction.value === 'resume') {
+      return { key: 'reminder-resume', label: t('inbox.todoReminderResume'), icon: icon.ai.play };
+    }
+    return pauseAction.value ? { key: 'reminder-pause', label: t('inbox.todoReminderPause'), icon: icon.ai.pause } : null;
+  });
   const desktopMoreMenuItems = computed<BActionMenuItem[]>(() => {
     const actions: BActionMenuItem[] =
       props.workspace && props.item.status !== 'completed'
@@ -605,6 +622,7 @@
       actions.unshift(
         { key: 'priority', label: t('inbox.todoPriority') },
         ...(props.workspace ? [{ key: 'snooze', label: t('inbox.todoSnooze') }] : []),
+        ...(reminderPauseMenuItem.value ? [reminderPauseMenuItem.value] : []),
         { key: 'settings-divider', divider: true },
       );
       actions.push(
@@ -673,6 +691,7 @@
     return [
       ...(props.item.status === 'pending'
         ? [
+            ...(reminderPauseMenuItem.value ? [reminderPauseMenuItem.value] : []),
             { key: 'edit', label: t('inbox.editTodo'), icon: icon.table_edit },
             { key: 'calendar', label: t('inbox.addToCalendar'), icon: icon.common.calendar },
           ]
@@ -719,6 +738,8 @@
   function handleMoreAction(key: string) {
     if (writeDisabled.value) return;
     if (key.startsWith('snooze-')) emit('snooze', key.slice(7) as TodoSnoozePreset);
+    else if (key === 'reminder-pause') emit('reminder-pause', 'pause_week');
+    else if (key === 'reminder-resume') emit('reminder-pause', 'resume');
     else if (key === 'reopen') emit('toggle-complete', false);
     else if (key === 'edit') emit('edit');
     else if (key === 'organize') emit('organize');

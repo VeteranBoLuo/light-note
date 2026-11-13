@@ -376,6 +376,7 @@ declare(ADMIN_POLICIES.ACCOUNT_WRITE, 'todo', [
   ['POST', '/todo/batch-restore'],
   ['POST', '/todo/reorder'],
   ['POST', '/todo/snooze'],
+  ['POST', '/todo/reminder/pause'],
   ['POST', '/todo/v2/create'],
   ['POST', '/todo/v2/update'],
   ['POST', '/todo/v2/convert'],

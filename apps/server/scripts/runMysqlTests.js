@@ -50,6 +50,7 @@ const suites = {
   'util/aiOutboundDispatchGuard.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
   'util/personalKnowledgeSearch.read.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
   'util/services/todoWorkspaceService.test.js': 'TODO_WORKSPACE_TEST_SOCKET',
+  'util/services/todoReminderPause.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
   'util/searchSeekPagination.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
   'util/searchRelevancePagination.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
   'util/loginPasswordState.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',

@@ -15,6 +15,7 @@ export type TodoReminderV2Mode = 'none' | 'once_per_instance' | 'nudge';
 export type TodoReminderTriggerType = 'at_start' | 'fixed_time' | 'before_due';
 export type TodoPlanScope = 'current' | 'future' | 'series';
 export type TodoSeriesAction = 'skip' | 'pause' | 'resume';
+export type TodoReminderPauseAction = 'pause_week' | 'resume';
 export type TodoTaskMode = 'single' | 'independent';
 export type TodoSingleReminderMode = 'none' | 'once' | 'repeat';
 export type TodoSingleRepeatKind = 'interval' | 'weekly' | 'monthly';
@@ -73,6 +74,7 @@ export interface TodoReminderConfig {
   mode: TodoReminderMode;
   channels: TodoReminderChannel[];
   startAt: string;
+  nextAt?: string | null;
   endAt?: string | null;
   intervalMinutes?: number | null;
   email?: string | null;
@@ -210,6 +212,8 @@ export interface TodoItem {
   /** 服务端按提醒、开始、截止和实例日期计算出的下一步处理时间。 */
   actionAt?: string | null;
   reminder?: TodoReminderConfig | TodoReminderV2Config | TodoSingleTaskReminderSchedule | null;
+  /** 恢复提醒的 UTC 时间；系列待办共用。 */
+  reminderPausedUntil?: string | null;
   /** 兼容旧接口；新代码使用 reminder。 */
   reminderAt?: string | null;
   completedAt?: string | null;
@@ -310,6 +314,8 @@ export const reorderTodos = (items: Array<{ id: string; dueAt?: string | null; p
   apiBasePost('/api/todo/reorder', { items });
 export const snoozeTodo = (id: string, targetAt: string, options?: { silent?: boolean }) =>
   apiBasePost('/api/todo/snooze', { id, targetAt }, options);
+export const setTodoReminderPause = (todoId: string, action: TodoReminderPauseAction, idempotencyKey: string) =>
+  apiBasePost('/api/todo/reminder/pause', { todoId, action, idempotencyKey }, { silent: true });
 
 export type TodoList = TodoListSummary;
 export interface TodoWorkspaceQuery {

@@ -3,6 +3,11 @@ import { notificationSchedulerEnabled } from './notificationSchedulerPolicy.js';
 import { createNotification } from './notification.js';
 import { sendTrackedEmail } from './emailDelivery.js';
 import { formatTodoDueAt, normalizeTodoLocale } from './todoDateFormat.js';
+import {
+  legacyReminderAfterPauseSql,
+  legacyReminderAfterPauseAtSql,
+  todoReminderPauseJoinSql,
+} from './services/todoReminderSql.js';
 
 const POLL_INTERVAL_MS = 5_000;
 const RECOVERY_INTERVAL_MS = 60_000;
@@ -41,16 +46,41 @@ export function calculateNextSchedule(scheduledAt, intervalMinutes, repeatEndAt,
   return next.getTime() <= end.getTime() ? next : null;
 }
 
+async function finishReminderWithoutDelivery(connection, reminder) {
+  const next = reminder.nextAfterPause;
+  if (next) {
+    // The old unique index retains historical rows at a given channel/time. A collision already owns that slot.
+    const [result] = await connection.query(
+      `UPDATE IGNORE todo_reminders SET scheduled_at = ?, retry_count = 0, last_error = NULL
+        WHERE id = ? AND status = 'pending'`,
+      [next, reminder.id],
+    );
+    if (result.affectedRows) return;
+  }
+  await connection.query(
+    "UPDATE todo_reminders SET status = 'cancelled', last_error = 'reminder_paused' WHERE id = ? AND status = 'pending'",
+    [reminder.id],
+  );
+}
+
 async function claimReminder(id) {
   const connection = await pool.getConnection();
   try {
     await connection.beginTransaction();
     const [reminderRows] = await connection.query(
-      `SELECT id, todo_id AS todoId, user_id AS userId, channel, scheduled_at AS scheduledAt,
-              schedule_start_at AS scheduleStartAt, repeat_interval_minutes AS intervalMinutes,
-              repeat_end_at AS repeatEndAt,
-              target_email AS targetEmail, retry_count AS retryCount
-       FROM todo_reminders WHERE id = ? AND status = 'pending' FOR UPDATE`,
+      `SELECT r.id, r.todo_id AS todoId, r.user_id AS userId, r.channel, r.scheduled_at AS scheduledAt,
+              r.schedule_start_at AS scheduleStartAt, r.repeat_interval_minutes AS intervalMinutes,
+              r.repeat_end_at AS repeatEndAt, r.target_email AS targetEmail, r.retry_count AS retryCount,
+              i.title, i.description, i.due_at AS dueAt, i.status AS todoStatus, i.del_flag AS todoDeleted,
+              NOT ${legacyReminderAfterPauseSql('r')} AS skippedByReminderPause,
+              (UTC_TIMESTAMP() < reminder_pause.paused_until_utc AND r.scheduled_at > NOW()) AS deferredDuringPause,
+              ${legacyReminderAfterPauseAtSql('r', { atClaim: true })} AS nextAfterPause
+         FROM todo_reminders r
+         JOIN todo_items i ON i.id = r.todo_id AND i.user_id = r.user_id
+         ${todoReminderPauseJoinSql('i')}
+        WHERE r.id = ? AND r.status = 'pending'
+          AND (r.scheduled_at <= NOW() OR r.last_error = 'quiet hours deferred')
+        LIMIT 1 FOR UPDATE`,
       [id],
     );
     const reminder = reminderRows[0];
@@ -58,13 +88,19 @@ async function claimReminder(id) {
       await connection.rollback();
       return null;
     }
-    const [todoRows] = await connection.query(
-      `SELECT title, description, due_at AS dueAt FROM todo_items
-       WHERE id = ? AND user_id = ? AND status = 'pending' AND del_flag = 0 LIMIT 1`,
-      [reminder.todoId, reminder.userId],
-    );
-    if (!todoRows.length) {
+    if (reminder.todoStatus !== 'pending' || reminder.todoDeleted) {
       await connection.query("UPDATE todo_reminders SET status = 'cancelled' WHERE id = ?", [id]);
+      await connection.commit();
+      return null;
+    }
+    if (reminder.deferredDuringPause) {
+      // The historical recovery path can look ahead of the normal due-time scanner.
+      await connection.query('UPDATE todo_reminders SET last_error = NULL WHERE id = ?', [id]);
+      await connection.commit();
+      return null;
+    }
+    if (reminder.skippedByReminderPause) {
+      await finishReminderWithoutDelivery(connection, reminder);
       await connection.commit();
       return null;
     }
@@ -82,7 +118,11 @@ async function claimReminder(id) {
     }
     await connection.query("UPDATE todo_reminders SET status = 'processing', update_time = NOW() WHERE id = ?", [id]);
     await connection.commit();
-    return { ...reminder, locale: normalizeTodoLocale(preferences.lang), todo: todoRows[0] };
+    return {
+      ...reminder,
+      locale: normalizeTodoLocale(preferences.lang),
+      todo: { title: reminder.title, description: reminder.description, dueAt: reminder.dueAt },
+    };
   } catch (error) {
     await connection.rollback().catch(() => {});
     throw error;

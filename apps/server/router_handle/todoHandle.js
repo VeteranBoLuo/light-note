@@ -39,6 +39,7 @@ import {
   updateTodoPlan,
 } from '../util/services/todoSeriesService.js';
 import { getTodoPlanDiagnostics } from '../util/services/todoPlanDiagnosticsService.js';
+import { setTodoReminderPause } from '../util/services/todoReminderPauseService.js';
 import { assertTodoPlanFeatureEnabled, getTodoPlanFeatureState } from '../util/todoPlanFeature.js';
 
 function assertTodoPlanPayloadFeatures(input = {}) {
@@ -433,6 +434,17 @@ export async function snoozeTodo(req, res) {
   const id = String(req.body?.id || '').trim();
   if (!id) return res.send(resultData(null, 400, '缺少待办 ID'));
   return withTransaction(res, (connection) => snoozeTodoItem(connection, req.user.id, id, req.body?.targetAt));
+}
+
+export async function setReminderPause(req, res) {
+  if (!ensureNotVisitor(req, res)) return;
+  const { todoId, action, idempotencyKey } = req.body || {};
+  const input = { todoId, action, idempotencyKey };
+  return withTransaction(res, (connection) =>
+    runIdempotentTodoMutation(connection, req.user.id, input, 'reminder_pause', () =>
+      setTodoReminderPause(connection, req.user.id, input),
+    ),
+  );
 }
 
 /*

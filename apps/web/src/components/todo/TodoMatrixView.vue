@@ -214,6 +214,7 @@
       @delete="(item) => emit('delete', item)"
       @add-to-calendar="(item) => emit('add-to-calendar', item)"
       @snooze="(item, preset) => emit('snooze', item, preset)"
+      @reminder-pause="(item, action) => emit('reminder-pause', item, action)"
       @update-priority="(item, priority) => emit('update-priority', item, priority)"
       @series-action="(item, action) => emit('series-action', item, action)"
     />
@@ -225,7 +226,7 @@
   import { computed, ref, watch } from 'vue';
   import { useTodoClock } from '@/composables/useTodoClock';
   import { useI18n } from 'vue-i18n';
-  import type { TodoChecklistItem, TodoItem, TodoPriority, TodoSeriesAction } from '@/api/todoApi';
+  import type { TodoChecklistItem, TodoItem, TodoPriority, TodoReminderPauseAction, TodoSeriesAction } from '@/api/todoApi';
   import BActionMenu from '@/components/base/BasicComponents/BActionMenu.vue';
   import type { BActionMenuItem } from '@/components/base/BasicComponents/actionMenu';
   import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
@@ -272,6 +273,7 @@
     'update-checklist': [item: TodoItem, checklist: TodoChecklistItem[]];
     'add-to-calendar': [item: TodoItem];
     snooze: [item: TodoItem, preset: TodoSnoozePreset];
+    'reminder-pause': [item: TodoItem, action: TodoReminderPauseAction];
     'update-priority': [item: TodoItem, priority: TodoPriority];
     'series-action': [item: TodoItem, action: TodoSeriesAction];
   }>();

@@ -57,19 +57,24 @@ describe.skipIf(!socket)('workspace SQL against isolated MySQL', () => {
     await db.query(
       `CREATE TABLE todo_series (id VARCHAR(64) PRIMARY KEY, user_id VARCHAR(64), repeat_mode VARCHAR(24) DEFAULT 'scheduled', timezone VARCHAR(64) DEFAULT '+00:00', create_time DATETIME DEFAULT CURRENT_TIMESTAMP)`,
     );
+    await db.query(`CREATE TABLE todo_reminder_pauses (
+      owner_id VARCHAR(64), target_id VARCHAR(64), paused_until_utc DATETIME, paused_from_utc DATETIME, PRIMARY KEY (owner_id, target_id)
+    )`);
     await db.query(
       'CREATE TABLE todo_tag_relations (user_id VARCHAR(64), target_type VARCHAR(16), target_id VARCHAR(64), tag_id VARCHAR(64))',
     );
     await db.query('CREATE TABLE tag (id VARCHAR(64), user_id VARCHAR(64), del_flag INT DEFAULT 0)');
     await db.query(`CREATE TABLE todo_reminder_jobs (
       id VARCHAR(64) PRIMARY KEY, todo_id VARCHAR(64), user_id VARCHAR(64), channel VARCHAR(16) DEFAULT 'in_app',
-      status VARCHAR(16) DEFAULT 'pending', scheduled_at_local DATETIME, scheduled_at_utc DATETIME,
-      sequence_no INT DEFAULT 1, cancel_reason VARCHAR(64), lease_token VARCHAR(64), lease_until DATETIME,
+      status VARCHAR(16) DEFAULT 'pending', scheduled_at_local DATETIME, scheduled_at_utc DATETIME, original_scheduled_at_utc DATETIME,
+      sequence_no INT DEFAULT 1, retry_count INT DEFAULT 0, cancel_reason VARCHAR(64), lease_token VARCHAR(64), lease_until DATETIME,
       KEY todo_status(todo_id, user_id, status, scheduled_at_local)
     )`);
     await db.query(`CREATE TABLE todo_reminders (
       id VARCHAR(64) PRIMARY KEY, todo_id VARCHAR(64), user_id VARCHAR(64),
-      status VARCHAR(16) DEFAULT 'pending', scheduled_at DATETIME, KEY todo_status(todo_id, user_id, status)
+      status VARCHAR(16) DEFAULT 'pending', scheduled_at DATETIME, schedule_start_at DATETIME,
+      repeat_interval_minutes INT, repeat_end_at DATETIME,
+      KEY todo_status(todo_id, user_id, status)
     )`);
     await db.query("SET time_zone = '+00:00'");
   });

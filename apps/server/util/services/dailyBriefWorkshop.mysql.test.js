@@ -52,8 +52,11 @@ describe.skipIf(!socketPath)('简报工坊待处理状态 SQL（隔离 MySQL）'
       );
     await db.query(`CREATE TABLE todo_items(id VARCHAR(64),user_id VARCHAR(64),del_flag INT DEFAULT 0,title VARCHAR(255),priority INT DEFAULT 1,
       due_at DATETIME,start_at DATETIME,occurrence_date DATE,status VARCHAR(16) DEFAULT 'pending',instance_state VARCHAR(16),series_id VARCHAR(64),recurrence_rule TEXT)`);
+    await db.query(`CREATE TABLE todo_reminder_pauses (
+      owner_id VARCHAR(64), target_id VARCHAR(64), paused_until_utc DATETIME, paused_from_utc DATETIME, PRIMARY KEY (owner_id, target_id)
+    )`);
     await db.query(
-      'CREATE TABLE todo_reminder_jobs(todo_id VARCHAR(64),user_id VARCHAR(64),scheduled_at_utc DATETIME,status VARCHAR(16))',
+      'CREATE TABLE todo_reminder_jobs(todo_id VARCHAR(64),user_id VARCHAR(64),scheduled_at_utc DATETIME,status VARCHAR(16),original_scheduled_at_utc DATETIME,retry_count INT DEFAULT 0)',
     );
     await db.query(
       'CREATE TABLE todo_reminders(todo_id VARCHAR(64),user_id VARCHAR(64),scheduled_at DATETIME,status VARCHAR(16))',

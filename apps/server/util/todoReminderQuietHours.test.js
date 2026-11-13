@@ -15,8 +15,9 @@ it.each(['in_app', 'email'])('legacy %s reminders are delivered despite browser 
   pool.query.mockImplementation(async sql => sql.includes('SELECT id FROM todo_reminders') ? [[{ id: 'r1' }]] : [{ affectedRows: 1 }]);
   const connection = {
     beginTransaction: vi.fn(), commit: vi.fn(), rollback: vi.fn(), release: vi.fn(),
-    query: vi.fn().mockResolvedValueOnce([[{ id: 'r1', todoId: 't1', userId: 'u1', channel, targetEmail: 'test@example.com' }]])
-      .mockResolvedValueOnce([[{ title: 'test' }]])
+    query: vi.fn().mockResolvedValueOnce([[{
+      id: 'r1', todoId: 't1', userId: 'u1', channel, targetEmail: 'test@example.com', title: 'test', todoStatus: 'pending',
+    }]])
       .mockResolvedValueOnce([[{ preferences: JSON.stringify(preferences) }]])
       .mockResolvedValue([{ affectedRows: 1 }]),
   };

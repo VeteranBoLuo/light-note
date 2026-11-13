@@ -45,7 +45,8 @@ function reminderOffsetAt(value, offsetMinutes) {
 export function resolveTodoNextReminderAt(item = {}) {
   const reminder = item?.reminder;
   if (reminder?.paused) return "";
-  return reminder?.nextAt || reminder?.startAt || item?.reminderAt || "";
+  if (reminder?.nextAt !== undefined) return reminder.nextAt || "";
+  return reminder?.startAt || item?.reminderAt || "";
 }
 
 /**

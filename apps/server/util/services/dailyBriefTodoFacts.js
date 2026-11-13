@@ -1,6 +1,11 @@
 import { createHash } from 'node:crypto';
 import { Temporal } from '@js-temporal/polyfill';
 import { DEFAULT_AGENT_STORAGE_TIME_ZONE } from '../agent/timeRange.js';
+import {
+  legacyReminderAfterPauseSql,
+  todoReminderPauseJoinSql,
+  v2ReminderAfterPauseSql,
+} from './todoReminderSql.js';
 
 const storageTime = (value) =>
   Temporal.PlainDateTime.from(value.replace(' ', 'T')).toZonedDateTime(DEFAULT_AGENT_STORAGE_TIME_ZONE);
@@ -11,14 +16,17 @@ export async function compileBriefTodoFacts(database, userId, calendar, definiti
     (SELECT CONVERT_TZ(COALESCE(MIN(IF(j.scheduled_at_utc>=?,j.scheduled_at_utc,NULL)),MAX(j.scheduled_at_utc)),'+00:00','+08:00') FROM todo_reminder_jobs j
       WHERE j.todo_id=i.id AND j.user_id=i.user_id
         AND j.status IN ('pending','processing','sent','failed','unknown')
+        AND (j.status NOT IN ('pending','processing') OR ${v2ReminderAfterPauseSql('j')})
         AND j.scheduled_at_utc>=? AND j.scheduled_at_utc<?),
     (SELECT COALESCE(MIN(IF(r.scheduled_at>=?,r.scheduled_at,NULL)),MAX(r.scheduled_at)) FROM todo_reminders r
       WHERE r.todo_id=i.id AND r.user_id=i.user_id
         AND r.status IN ('pending','processing','sent','failed')
+        AND (r.status NOT IN ('pending','processing') OR ${legacyReminderAfterPauseSql('r')})
         AND r.scheduled_at>=? AND r.scheduled_at<?))`;
   const base = `SELECT i.id,i.title,i.priority,DATE_FORMAT(i.due_at,'%Y-%m-%d %H:%i:%s') AS dueAt,DATE_FORMAT(i.start_at,'%Y-%m-%d %H:%i:%s') AS startAt,
       DATE_FORMAT(i.occurrence_date,'%Y-%m-%d') AS occurrenceDate,${reminder} AS reminderAt
-    FROM todo_items i WHERE i.user_id=? AND i.del_flag=0 AND i.status='pending'
+    FROM todo_items i ${todoReminderPauseJoinSql('i')}
+    WHERE i.user_id=? AND i.del_flag=0 AND i.status='pending'
       AND NOT EXISTS(SELECT 1 FROM onboarding_seed_resources seed
         WHERE seed.user_id=i.user_id AND seed.resource_type='todo' AND seed.resource_id=i.id)
       AND COALESCE(i.instance_state,'normal')='normal'

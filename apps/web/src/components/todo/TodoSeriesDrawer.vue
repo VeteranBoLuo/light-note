@@ -15,6 +15,15 @@
           ? t('todoWorkspace.seriesTotal', { count: page?.total || 0 })
           : t('inbox.todoSeriesDrawerSummary', { count: items.length })
       }}</span>
+      <TodoTimeText v-if="pausedUntilLabel" :text="pausedUntilLabel" />
+      <BButton
+        v-if="pauseAction"
+        size="small"
+        :disabled="disabled || selectable"
+        @click="emit('reminder-pause', representative, pauseAction)"
+      >
+        {{ t(pauseAction === 'resume' ? 'inbox.todoReminderResume' : 'inbox.todoReminderPause') }}
+      </BButton>
     </div>
     <template v-if="query">
       <div class="todo-series-drawer__filters">
@@ -125,7 +134,15 @@
 <script setup lang="ts">
   import { computed, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import type { TodoChecklistItem, TodoItem as TodoItemType, TodoPriority, TodoSeriesAction } from '@/api/todoApi';
+  import type {
+    TodoChecklistItem,
+    TodoItem as TodoItemType,
+    TodoPriority,
+    TodoReminderPauseAction,
+    TodoSeriesAction,
+  } from '@/api/todoApi';
+  import TodoTimeText from './TodoTimeText.vue';
+  import { useTodoReminderPresentation } from '@/composables/useTodoReminderPresentation';
   import BTabs from '@/components/base/BasicComponents/BTabs.vue';
   import BSelect from '@/components/base/BasicComponents/BSelect.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
@@ -168,10 +185,12 @@
     delete: [item: TodoItemType];
     'add-to-calendar': [item: TodoItemType];
     snooze: [item: TodoItemType, preset: TodoSnoozePreset];
+    'reminder-pause': [item: TodoItemType, action: TodoReminderPauseAction];
     'update-priority': [item: TodoItemType, priority: TodoPriority];
     'series-action': [item: TodoItemType, action: TodoSeriesAction];
   }>();
   const { t } = useI18n();
+  const { pausedUntilLabel, pauseAction } = useTodoReminderPresentation(() => props.representative);
   const todo = useTodoStore();
   const wholeSeries = ref(false);
   const status = ref<'pending' | 'completed'>('pending');
@@ -265,6 +284,7 @@
   .todo-series-drawer__summary {
     display: flex;
     align-items: center;
+    flex-wrap: wrap;
     gap: var(--ui-space-8, 8px);
     padding: var(--ui-space-12, 12px) var(--ui-space-18, 18px);
     border-bottom: 1px solid var(--surface-border-color, var(--card-border-color));

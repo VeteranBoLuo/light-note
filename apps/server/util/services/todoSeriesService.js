@@ -16,6 +16,7 @@ import { validateOwnedResourceRefs } from './noteReferenceService.js';
 import { normalizeTodoResourceRefs, replaceTodoResourceRefs } from './todoReferenceService.js';
 import { incrementTodoPlanMetric } from '../todoPlanMetrics.js';
 import { recordTodoCompletion, recordTodoCreation } from '../growthActivityHistory.js';
+import { todoReminderPauseJoinSql, v2ReminderAfterPauseSql } from './todoReminderSql.js';
 
 const WRITE_SCOPES = new Set(['current', 'future', 'series']);
 const DELETE_SCOPES = new Set(['current', 'future', 'series']);
@@ -1581,12 +1582,15 @@ export async function loadV2ReminderMap(db, userId, items) {
     ruleParams,
   );
   const [jobs] = await db.query(
-    `SELECT todo_id AS todoId, channel, sequence_no AS sequenceNo,
-            scheduled_at_local AS scheduledAtLocal, status, cancel_reason AS cancelReason
-       FROM todo_reminder_jobs
-      WHERE user_id = ? AND todo_id IN (${ids.map(() => '?').join(',')})
-        AND status IN ('pending','processing','paused')
-      ORDER BY todo_id, scheduled_at_utc, channel`,
+    `SELECT j.todo_id AS todoId, j.channel, j.sequence_no AS sequenceNo,
+            j.scheduled_at_local AS scheduledAtLocal, j.status, j.cancel_reason AS cancelReason,
+            ${v2ReminderAfterPauseSql('j')} AS eligibleAfterPause
+       FROM todo_reminder_jobs j
+       JOIN todo_items i ON i.id = j.todo_id AND i.user_id = j.user_id
+       ${todoReminderPauseJoinSql('i')}
+      WHERE j.user_id = ? AND j.todo_id IN (${ids.map(() => '?').join(',')})
+        AND j.status IN ('pending','processing','paused')
+      ORDER BY j.todo_id, j.scheduled_at_utc, j.channel`,
     [userId, ...ids],
   );
   const directRules = new Map();
@@ -1611,7 +1615,7 @@ export async function loadV2ReminderMap(db, userId, items) {
     const channels = parseJson(rule.channels, []);
     const versionedSchedule = parseJson(rule.scheduleJson, null);
     const persistedSchedule = versionedSchedule?.version === 2 ? versionedSchedule.schedule : null;
-    const nextJob = activeJobs[0] || null;
+    const nextJob = activeJobs.find((job) => job.eligibleAfterPause !== 0) || null;
     const nextAt = nextJob?.scheduledAtLocal || null;
     let schedule = persistedSchedule;
     if (
@@ -1634,7 +1638,7 @@ export async function loadV2ReminderMap(db, userId, items) {
     } else if (!item.seriesId && schedule?.mode === 'once' && activeJobs.some((job) => job.cancelReason === 'user_snoozed') && nextAt) {
       // 定时提醒被延期后，保留全部待投递 Job 的当前执行时间；规则中的原始
       // at_start/at_due/fixed_at 只用于历史解释。编辑与原样保存都必须沿用延期后的绝对时间。
-      const fixedAts = [...new Set(activeJobs.map((job) => job.scheduledAtLocal))].sort();
+      const fixedAts = [...new Set(activeJobs.filter((job) => job.eligibleAfterPause !== 0).map((job) => job.scheduledAtLocal))].sort();
       schedule = {
         ...schedule,
         once: { type: 'fixed_at', fixedAt: fixedAts[0], ...(fixedAts.length > 1 ? { fixedAts } : {}) },

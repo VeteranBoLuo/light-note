@@ -1,10 +1,13 @@
 <template>
   <span v-if="reminderState.kind !== 'none'" class="todo-reminder-text" :class="`is-${reminderState.kind}`">
-    <span>{{ t('todoWorkspace.reminderLabel') }}{{ ' ' }}</span>
-    <TodoTimeText v-if="reminderTime" :text="reminderTime" />
-    <span v-if="reminderState.kind !== 'next'" class="todo-reminder-text__state"
-      >{{ reminderTime ? ' ' : '' }}{{ t(`todoWorkspace.reminderState.${reminderState.kind}`) }}</span
-    >
+    <TodoTimeText v-if="pausedUntilLabel" :text="pausedUntilLabel" />
+    <template v-else>
+      <span>{{ t('todoWorkspace.reminderLabel') }}{{ ' ' }}</span>
+      <TodoTimeText v-if="reminderTime" :text="reminderTime" />
+      <span v-if="reminderState.kind !== 'next'" class="todo-reminder-text__state"
+        >{{ reminderTime ? ' ' : '' }}{{ t(`todoWorkspace.reminderState.${reminderState.kind}`) }}</span
+      >
+    </template>
   </span>
 </template>
 
@@ -16,7 +19,7 @@
 
   const props = defineProps<{ item: TodoItem }>();
   const { t } = useI18n();
-  const { reminderState, reminderTime } = useTodoReminderPresentation(() => props.item);
+  const { reminderState, reminderTime, pausedUntilLabel } = useTodoReminderPresentation(() => props.item);
 </script>
 
 <style scoped>

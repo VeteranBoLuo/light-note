@@ -22,6 +22,7 @@
       @delete="emit('delete', representative)"
       @add-to-calendar="emit('add-to-calendar', representative)"
       @snooze="emit('snooze', representative, $event)"
+      @reminder-pause="emit('reminder-pause', representative, $event)"
       @update-priority="emit('update-priority', representative, $event)"
       @series-action="emit('series-action', representative, $event)"
     />
@@ -70,6 +71,7 @@
         @delete="emit('delete', item)"
         @add-to-calendar="emit('add-to-calendar', item)"
         @snooze="emit('snooze', item, $event)"
+        @reminder-pause="emit('reminder-pause', item, $event)"
         @update-priority="emit('update-priority', item, $event)"
         @series-action="emit('series-action', item, $event)"
       />
@@ -89,6 +91,7 @@
       @delete="(item) => emit('delete', item)"
       @add-to-calendar="(item) => emit('add-to-calendar', item)"
       @snooze="(item, preset) => emit('snooze', item, preset)"
+      @reminder-pause="(item, action) => emit('reminder-pause', item, action)"
       @update-priority="(item, priority) => emit('update-priority', item, priority)"
       @series-action="(item, action) => emit('series-action', item, action)"
     />
@@ -99,7 +102,13 @@
   import type { RangeSelectionController } from '@/composables/useRangeSelection';
   import { computed, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import type { TodoChecklistItem, TodoItem as TodoItemType, TodoPriority, TodoSeriesAction } from '@/api/todoApi';
+  import type {
+    TodoChecklistItem,
+    TodoItem as TodoItemType,
+    TodoPriority,
+    TodoReminderPauseAction,
+    TodoSeriesAction,
+  } from '@/api/todoApi';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import TodoItem from '@/components/todo/TodoItem.vue';
@@ -149,6 +158,7 @@
     delete: [item: TodoItemType];
     'add-to-calendar': [item: TodoItemType];
     snooze: [item: TodoItemType, preset: TodoSnoozePreset];
+    'reminder-pause': [item: TodoItemType, action: TodoReminderPauseAction];
     'update-priority': [item: TodoItemType, priority: TodoPriority];
     'series-action': [item: TodoItemType, action: TodoSeriesAction];
   }>();

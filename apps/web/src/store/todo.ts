@@ -17,9 +17,11 @@ import {
   listTodos,
   reorderTodos,
   reopenTodo,
+  setTodoReminderPause,
   snoozeTodo,
   updateTodo,
   type TodoItem,
+  type TodoReminderPauseAction,
   type TodoFilterStatus,
   type TodoSort,
 } from '@/api/todoApi';
@@ -482,6 +484,16 @@ export default defineStore('todo', {
       this.organizationEpoch++;
       await this.refreshList();
       return true;
+    },
+    async setReminderPause(item: TodoItem, action: TodoReminderPauseAction, idempotencyKey: string) {
+      const owner = this.ownerId;
+      const res = await setTodoReminderPause(item.id, action, idempotencyKey);
+      if (owner !== this.ownerId) return false;
+      const result = resolveTodoMutationResult(res, res.status === 200);
+      if (result !== true) return result;
+      await this.refreshList({ silent: true });
+      const pausedUntil = res.data?.reminderPausedUntil;
+      return { reminderPausedUntil: typeof pausedUntil === 'string' ? pausedUntil : null };
     },
   },
 });

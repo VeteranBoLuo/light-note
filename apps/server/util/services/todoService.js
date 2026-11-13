@@ -23,7 +23,13 @@ import {
 } from './todoSeriesService.js';
 import { recordTodoCompletion, recordTodoCreation } from '../growthActivityHistory.js';
 import { resolveTodoConfiguredReminderAt, resolveTodoNextReminderAt } from '@lightnote/shared/todo-reminder';
-import { nextTodoReminderAtSql } from './todoReminderSql.js';
+import {
+  legacyReminderAfterPauseAtSql,
+  legacyReminderAfterPauseSql,
+  nextTodoReminderAtSql,
+  todoReminderPauseJoinSql,
+  v2ReminderAfterPauseSql,
+} from './todoReminderSql.js';
 import { todoDueSql } from './todoAttentionSql.js';
 
 const STATUS = new Set(['pending', 'completed']);
@@ -46,6 +52,8 @@ const REMINDER_AT_FILTER_SQL = `(
      WHERE reminder_job.todo_id = todo_items.id
        AND reminder_job.user_id = todo_items.user_id
        AND reminder_job.status <> 'cancelled'
+       AND COALESCE(reminder_job.cancel_reason, '') <> 'reminder_paused'
+       AND (reminder_job.status NOT IN ('pending','processing','paused') OR ${v2ReminderAfterPauseSql('reminder_job')})
        AND reminder_job.scheduled_at_local >= ?
        AND reminder_job.scheduled_at_local < ?
   )
@@ -54,6 +62,7 @@ const REMINDER_AT_FILTER_SQL = `(
      WHERE legacy_reminder.todo_id = todo_items.id
        AND legacy_reminder.user_id = todo_items.user_id
        AND legacy_reminder.status NOT IN ('cancelled', 'paused_delete')
+       AND (legacy_reminder.status NOT IN ('pending','processing') OR ${legacyReminderAfterPauseSql('legacy_reminder')})
        AND legacy_reminder.scheduled_at >= ?
        AND legacy_reminder.scheduled_at < ?
   )
@@ -788,24 +797,26 @@ async function loadTodoReminderMap(db, items, userId, view, matchedReminderAt = 
   const placeholders = items.map(() => '?').join(',');
   const fields =
     view === 'summary'
-      ? `todo_id AS todoId, channel, scheduled_at AS scheduledAt, schedule_start_at AS startAt,
-            repeat_interval_minutes AS intervalMinutes`
-      : `todo_id AS todoId, channel, scheduled_at AS scheduledAt, schedule_start_at AS startAt,
-            repeat_interval_minutes AS intervalMinutes, repeat_end_at AS endAt, target_email AS email`;
+      ? `r.todo_id AS todoId, r.channel, r.scheduled_at AS scheduledAt, r.schedule_start_at AS startAt,
+            r.repeat_interval_minutes AS intervalMinutes`
+      : `r.todo_id AS todoId, r.channel, r.scheduled_at AS scheduledAt, r.schedule_start_at AS startAt,
+            r.repeat_interval_minutes AS intervalMinutes, r.repeat_end_at AS endAt, r.target_email AS email`;
   const matchHistoricalReminder = view === 'summary' && matchedReminderAt;
   const reminderStatusSql = matchHistoricalReminder
-    ? `status NOT IN ('cancelled','paused_delete') AND scheduled_at >= ? AND scheduled_at < ?`
-    : `status IN ('pending','processing')`;
+    ? `r.status NOT IN ('cancelled','paused_delete') AND r.scheduled_at >= ? AND r.scheduled_at < ?`
+    : `r.status IN ('pending','processing')`;
   const reminderParams = [
     ...items.map((item) => item.id),
     userId,
     ...(matchHistoricalReminder ? [matchedReminderAt.start, matchedReminderAt.end] : []),
   ];
   const [reminderRows] = await db.query(
-    `SELECT ${fields}
-     FROM todo_reminders
-     WHERE todo_id IN (${placeholders}) AND user_id = ? AND ${reminderStatusSql}
-     ORDER BY create_time ASC`,
+    `SELECT ${fields}, ${legacyReminderAfterPauseAtSql('r')} AS nextAt
+     FROM todo_reminders r
+     JOIN todo_items i ON i.id = r.todo_id AND i.user_id = r.user_id
+     ${todoReminderPauseJoinSql('i')}
+     WHERE r.todo_id IN (${placeholders}) AND r.user_id = ? AND ${reminderStatusSql}
+     ORDER BY r.create_time ASC`,
     reminderParams,
   );
   const reminders = new Map();
@@ -821,6 +832,9 @@ async function loadTodoReminderMap(db, items, userId, view, matchedReminderAt = 
       current.channels.push(row.channel);
     }
     if (view === 'full' && row.channel === 'email') current.email = row.email || null;
+    if (current.nextAt === undefined || (row.nextAt && (!current.nextAt || row.nextAt < current.nextAt))) {
+      current.nextAt = row.nextAt;
+    }
     reminders.set(row.todoId, current);
   }
   return reminders;
@@ -872,12 +886,14 @@ export async function listTodoPage(db, userId, input = {}) {
     where.push(REMINDER_AT_FILTER_SQL);
     params.push(reminderAt.start, reminderAt.end, reminderAt.start, reminderAt.end);
   }
+  const reminderPauseProjection = `DATE_FORMAT(IF(status = 'pending' AND reminder_pause.paused_until_utc > UTC_TIMESTAMP(),
+    reminder_pause.paused_until_utc, NULL), '%Y-%m-%dT%H:%i:%sZ') AS reminderPausedUntil`;
   const fields =
     view === 'summary'
       ? `id, title, checklist, priority, status, start_at AS startAt, due_at AS dueAt,
            completed_at AS completedAt, plan_version AS planVersion, series_id AS seriesId,
            occurrence_no AS occurrenceNo, DATE_FORMAT(occurrence_date, '%Y-%m-%d') AS occurrenceDate,
-           instance_timezone AS instanceTimezone, ${ACTION_AT_SQL} AS actionAt`
+           instance_timezone AS instanceTimezone, ${ACTION_AT_SQL} AS actionAt, ${reminderPauseProjection}`
       : `id, title, description, checklist, priority, sort_order AS sortOrder, status, due_at AS dueAt,
             start_at AS startAt, completed_at AS completedAt, series_id AS seriesId,
             recurrence_rule AS recurrence, recurrence_instance_at AS recurrenceInstanceAt,
@@ -885,7 +901,7 @@ export async function listTodoPage(db, userId, input = {}) {
             occurrence_no AS occurrenceNo, DATE_FORMAT(occurrence_date, '%Y-%m-%d') AS occurrenceDate,
             instance_timezone AS instanceTimezone, is_exception AS isException,
             instance_state AS instanceState, generated_by_todo_id AS generatedByTodoId,
-            create_time AS createdAt, update_time AS updatedAt, ${ACTION_AT_SQL} AS actionAt`;
+            create_time AS createdAt, update_time AS updatedAt, ${ACTION_AT_SQL} AS actionAt, ${reminderPauseProjection}`;
   const groupedOrder =
     input.organization &&
     !agenda &&
@@ -896,12 +912,15 @@ export async function listTodoPage(db, userId, input = {}) {
       ? `CASE WHEN status = 'completed' THEN 2 WHEN priority = 2 OR due_at < NOW() THEN 0 ELSE 1 END, CASE WHEN status = 'pending' AND priority <> 2 AND (due_at IS NULL OR due_at >= NOW()) THEN COALESCE(list_id, '') ELSE '' END, `
       : '';
   const pageSql = `SELECT ${fields}
-     FROM todo_items WHERE ${where.join(' AND ')}
+     FROM todo_items ${todoReminderPauseJoinSql('todo_items')} WHERE ${where.join(' AND ')}
      ORDER BY ${agenda ? AGENDA_ORDER_SQL : groupedOrder + todoOrderSql(status, sort)}${paginated ? ' LIMIT ? OFFSET ?' : ''}`;
   const pageParams = paginated ? [...params, limit + 1, offset] : params;
   const [[rows], countResult] = await Promise.all([
     db.query(pageSql, pageParams),
-    includeTotal ? db.query(`SELECT COUNT(*) AS total FROM todo_items WHERE ${where.join(' AND ')}`, params) : null,
+    includeTotal
+      ? db.query(`SELECT COUNT(*) AS total FROM todo_items ${reminderAt ? todoReminderPauseJoinSql('todo_items') : ''}
+           WHERE ${where.join(' AND ')}`, params)
+      : null,
   ]);
   const hasMore = paginated && rows.length > limit;
   const items = hasMore ? rows.slice(0, limit) : rows;
@@ -925,7 +944,7 @@ export async function listTodoPage(db, userId, input = {}) {
       const reminder = v2Reminder || legacyReminder;
       const reminderProjectionInput = { ...item, reminder };
       const nextReminderAt = resolveTodoNextReminderAt(reminderProjectionInput) || null;
-      const configuredReminderAt = resolveTodoConfiguredReminderAt(reminderProjectionInput) || null;
+      const configuredReminderAt = item.reminderPausedUntil ? null : resolveTodoConfiguredReminderAt(reminderProjectionInput) || null;
       const matchedReminderAt = reminderAt ? `${reminderAt.value}:00` : null;
       const summary = {
         id: String(item.id),

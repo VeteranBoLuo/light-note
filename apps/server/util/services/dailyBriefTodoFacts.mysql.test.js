@@ -27,8 +27,11 @@ describe.skipIf(!socketPath)('日报待办与今日新增 SQL（隔离 MySQL）'
     await db.query(`CREATE TABLE todo_items(id VARCHAR(64) PRIMARY KEY,user_id VARCHAR(64),title VARCHAR(255),priority INT DEFAULT 1,
    due_at DATETIME,start_at DATETIME,occurrence_date DATE,del_flag INT DEFAULT 0,status VARCHAR(16) DEFAULT 'pending',
    instance_state VARCHAR(16) DEFAULT 'normal',series_id VARCHAR(64),recurrence_rule TEXT)`);
+    await db.query(`CREATE TABLE todo_reminder_pauses (
+      owner_id VARCHAR(64), target_id VARCHAR(64), paused_until_utc DATETIME, paused_from_utc DATETIME, PRIMARY KEY (owner_id, target_id)
+    )`);
     await db.query(
-      `CREATE TABLE todo_reminder_jobs(id VARCHAR(64) PRIMARY KEY,todo_id VARCHAR(64),user_id VARCHAR(64),scheduled_at_utc DATETIME,status VARCHAR(16))`,
+      `CREATE TABLE todo_reminder_jobs(id VARCHAR(64) PRIMARY KEY,todo_id VARCHAR(64),user_id VARCHAR(64),scheduled_at_utc DATETIME,status VARCHAR(16),original_scheduled_at_utc DATETIME,retry_count INT DEFAULT 0)`,
     );
     await db.query(
       `CREATE TABLE todo_reminders(id VARCHAR(64) PRIMARY KEY,todo_id VARCHAR(64),user_id VARCHAR(64),scheduled_at DATETIME,status VARCHAR(16))`,
@@ -140,15 +143,15 @@ describe.skipIf(!socketPath)('日报待办与今日新增 SQL（隔离 MySQL）'
       ['b', '2026-10-22 03:00:00', 'pending'],
       ['c', '2026-10-23 03:00:00', 'pending'],
     ])
-      await db.query('INSERT INTO todo_reminder_jobs VALUES (?,?,?,?,?)', [id, 'reminder', 'owner', at, status]);
-    await db.query('INSERT INTO todo_reminder_jobs VALUES (?,?,?,?,?)', [
+      await db.query('INSERT INTO todo_reminder_jobs (id,todo_id,user_id,scheduled_at_utc,status) VALUES (?,?,?,?,?)', [id, 'reminder', 'owner', at, status]);
+    await db.query('INSERT INTO todo_reminder_jobs (id,todo_id,user_id,scheduled_at_utc,status) VALUES (?,?,?,?,?)', [
       'cancel',
       'cancelled',
       'owner',
       '2026-10-22 03:00:00',
       'cancelled',
     ]);
-    await db.query('INSERT INTO todo_reminder_jobs VALUES (?,?,?,?,?)', [
+    await db.query('INSERT INTO todo_reminder_jobs (id,todo_id,user_id,scheduled_at_utc,status) VALUES (?,?,?,?,?)', [
       'foreign',
       'foreign-job',
       'other',
@@ -162,7 +165,7 @@ describe.skipIf(!socketPath)('日报待办与今日新增 SQL（隔离 MySQL）'
   it('稍后提醒使用当前 Job 时间，延期到明天立即退出今日范围；旧提醒兼容', async () => {
     await add('new');
     await add('legacy');
-    await db.query('INSERT INTO todo_reminder_jobs VALUES (?,?,?,?,?)', [
+    await db.query('INSERT INTO todo_reminder_jobs (id,todo_id,user_id,scheduled_at_utc,status) VALUES (?,?,?,?,?)', [
       'j',
       'new',
       'owner',
@@ -205,14 +208,14 @@ describe.skipIf(!socketPath)('日报待办与今日新增 SQL（隔离 MySQL）'
     );
     await add('late-evening');
     await add('tomorrow');
-    await db.query('INSERT INTO todo_reminder_jobs VALUES (?,?,?,?,?)', [
+    await db.query('INSERT INTO todo_reminder_jobs (id,todo_id,user_id,scheduled_at_utc,status) VALUES (?,?,?,?,?)', [
       'late',
       'late-evening',
       'owner',
       '2026-11-02 07:30:00',
       'pending',
     ]);
-    await db.query('INSERT INTO todo_reminder_jobs VALUES (?,?,?,?,?)', [
+    await db.query('INSERT INTO todo_reminder_jobs (id,todo_id,user_id,scheduled_at_utc,status) VALUES (?,?,?,?,?)', [
       'tomorrow',
       'tomorrow',
       'owner',
