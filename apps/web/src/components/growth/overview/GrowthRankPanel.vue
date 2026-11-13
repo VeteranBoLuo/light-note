@@ -38,12 +38,21 @@
             <template #content>
               <div class="rank-panel-earn">
                 <strong>{{ t('growth.earnTitle') }}</strong>
-                <div v-for="row in earnRows" :key="row.label" class="rank-panel-earn__row">
-                  <span>{{ row.label }}</span
-                  ><b>{{ row.value }}</b>
+                <dl class="rank-panel-earn__rules">
+                  <div
+                    v-for="row in earnRows"
+                    :key="row.label"
+                    class="rank-panel-earn__row"
+                    :class="{ 'is-stacked': row.stacked }"
+                  >
+                    <dt>{{ row.label }}</dt>
+                    <dd>{{ row.value }}</dd>
+                  </div>
+                </dl>
+                <div class="rank-panel-earn__notes">
+                  <p>{{ t('growth.questExperienceCreateHint') }}</p>
+                  <p v-if="growth.dailyCap">{{ t('growth.questExperienceDailyCapRule', { cap: growth.dailyCap }) }}</p>
                 </div>
-                <p>{{ t('growth.questExperienceCreateHint') }}</p>
-                <p v-if="growth.dailyCap">{{ t('growth.questExperienceDailyCapRule', { cap: growth.dailyCap }) }}</p>
               </div>
             </template>
           </BPopover>
@@ -206,7 +215,8 @@
 
   const earnRows = computed(() => [
     { label: t('growth.earnCheckin'), value: t('growth.earnCheckinValue') },
-    { label: t('growth.earnCreate'), value: t('growth.earnCreateValue') },
+    // 规则较长，单独一行展示，避免把左侧名称挤成逐字换行。
+    { label: t('growth.earnCreate'), value: t('growth.earnCreateValue'), stacked: true },
     { label: t('growth.earnDailyQuest'), value: t('growth.earnDailyQuestValue') },
     { label: t('growth.earnFirst'), value: t('growth.earnFirstValue') },
     { label: t('growth.earnProfile'), value: t('growth.earnProfileValue') },
@@ -584,24 +594,63 @@
   .rank-panel-earn {
     display: flex;
     flex-direction: column;
-    gap: .ui-space(6px) [];
-    width: .ui-layout(260px) [];
-    padding: .ui-space(4px) [];
+    gap: .ui-space(8px) [];
+    box-sizing: border-box;
+    width: .ui-layout(344px) [];
+    max-width: calc(100vw - 2 * var(--ui-space-16, 16px));
+    padding: .ui-space(14px) [] .ui-space(16px) [];
     color: var(--text-color);
     font-size: .ui-font(13px) [];
   }
-  .rank-panel-earn__row {
-    display: flex;
-    justify-content: space-between;
-    gap: .ui-space(12px) [];
+  .rank-panel-earn__rules {
+    margin: 0;
   }
-  .rank-panel-earn__row span,
-  .rank-panel-earn p {
+  .rank-panel-earn__row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: baseline;
+    column-gap: .ui-space(12px) [];
+    padding: .ui-space(6px) [] 0;
+    border-top: 1px solid var(--surface-divider-color);
+  }
+  .rank-panel-earn__row:first-child {
+    border-top: 0;
+    padding-top: 0;
+  }
+  .rank-panel-earn__row dt {
+    min-width: 0;
     color: var(--desc-color);
   }
-  .rank-panel-earn p {
+  .rank-panel-earn__row dd {
     margin: 0;
+    color: var(--text-color);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+    white-space: nowrap;
+  }
+  .rank-panel-earn__row.is-stacked {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: .ui-space(3px) [];
+  }
+  .rank-panel-earn__row.is-stacked dd {
+    font-weight: 400;
+    line-height: 1.55;
+    text-align: left;
+    white-space: normal;
+  }
+  .rank-panel-earn__notes {
+    display: flex;
+    flex-direction: column;
+    gap: .ui-space(4px) [];
+    padding-top: .ui-space(8px) [];
+    border-top: 1px solid var(--surface-divider-color);
+  }
+  .rank-panel-earn__notes p {
+    margin: 0;
+    color: var(--desc-color);
     font-size: .ui-font(12px) [];
+    line-height: 1.55;
   }
 
   @media (max-width: 1180px) {
