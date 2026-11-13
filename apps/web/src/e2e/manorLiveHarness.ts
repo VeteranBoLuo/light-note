@@ -48,7 +48,7 @@ const persist = () => {
 };
 const ctx = (points: number): ManorContext & { random: () => number } => ({
   now: clock, points, calendar: { dayKey: '20261024', weekKey: '202643', utcOffsetMinutes: 480 },
-  dailyDone: [true, true, params.get('scenario')?.startsWith('daily-bonus') || false], random: () => params.get('scenario') === 'fishing-pity' ? .999 : 0,
+  dailyDone: [true, true, params.get('scenario')?.startsWith('daily-') || false], random: () => params.get('scenario') === 'fishing-pity' ? .999 : 0,
 });
 const get = () => {
   if (!saves.has(user.id)) {
@@ -77,12 +77,12 @@ const get = () => {
       if (params.get('scenario') === 'fishing-pity') { state.firstCastDone=true;state.bait=2; }
       if (params.get('scenario') === 'pickups') { state.birdSeedDay=M.day(state);state.birdSeedPickedDay=null; }
       if (params.get('scenario') === 'sync') {state.birdSeedDay=M.day(state);state.birdSeedPickedDay=null;(state.fertilizers as Record<string,number>).rabbit=1;}
-      if (params.get('scenario')?.startsWith('daily-bonus-')) {
-        state.dailyWaterClaims=[5,5,5];
-        if (params.get('scenario') === 'daily-bonus-legacy') {state.water=35;state.version='knowledge-manor-v2';delete state.dailyWaterBonusClaimed;}
-        if (params.get('scenario') === 'daily-bonus-full') state.water=60;
-        if (params.get('scenario') === 'daily-bonus-partial') state.water=58;
-        if (params.get('scenario') === 'daily-bonus-claimed') {state.dailyDone=[true,true,true];M.claimDailyWaterBonus(state);}
+      // 三项都已完成：daily-all 未领；daily-legacy 是按旧规则领满 20 滴的 v3 存档；daily-partial 水桶差 2 滴满；daily-claimed 已领完
+      if (params.get('scenario')?.startsWith('daily-')) {
+        state.dailyDone=[true,true,true];
+        if (params.get('scenario') === 'daily-legacy') {state.water=35;state.version='knowledge-manor-v3';state.dailyWaterClaims=[5,5,5];state.dailyWaterBonusClaimed=5;}
+        if (params.get('scenario') === 'daily-partial') state.water=58;
+        if (params.get('scenario') === 'daily-claimed') {state.water=10;M.claimAllDailyWater(state);}
       }
       if (params.get('scenario') === 'atlas-empty') {
         state.discoveries={};state.cropDex={};state.fish=[];state.fishSlots=Array.from({length:M.RULES.farmSlots},()=>null);

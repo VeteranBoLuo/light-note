@@ -263,7 +263,7 @@
           <SvgIcon :src="icon.manor.entry" size="18" />
           <span
             >{{ t('growth.questManorTitle') }}：{{
-              stacked ? t('growth.overview.manorShort', { n: manor.perTask }) : manorRule
+              stacked ? t('growth.overview.manorShort', { n: manor.dailyWater }) : manorRule
             }}</span
           >
           <b v-if="manor.water > 0">{{ t('growth.questManorCollect', { n: manor.water }) }}</b>
@@ -499,7 +499,13 @@
     return step.points > 0 ? t('growth.nextActionPointsRewardShort', { n: step.points }) : '';
   });
   const manorRule = computed(() =>
-    props.manor ? t('growth.questManorRule', { n: props.manor.perTask, bonus: props.manor.bonus }) : '',
+    props.manor
+      ? t('growth.questManorRule', {
+          one: props.manor.waterTiers[0],
+          two: props.manor.waterTiers[1],
+          three: props.manor.waterTiers[2],
+        })
+      : '',
   );
 </script>
 

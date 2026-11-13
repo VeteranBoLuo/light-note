@@ -66,7 +66,13 @@
         <span class="dq-manor-icon" aria-hidden="true"><SvgIcon :src="icon.manor.entry" size="20" /></span>
         <span class="dq-stage-main">
           <b>{{ t('growth.questManorTitle') }}</b>
-          <small>{{ t('growth.questManorRule', { n: manor.perTask, bonus: manor.bonus }) }}</small>
+          <small>{{
+            t('growth.questManorRule', {
+              one: manor.waterTiers[0],
+              two: manor.waterTiers[1],
+              three: manor.waterTiers[2],
+            })
+          }}</small>
         </span>
         <BButton
           v-if="manorAction && !readOnly"

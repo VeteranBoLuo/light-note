@@ -14,9 +14,9 @@ export interface ManorAttention {
   tankFull?: number;
   compostFull?: boolean;
   crafted?: boolean;
-  /** 每完成一项每日任务得到的水滴与全部完成的额外水滴，供每日任务卡说明规则。 */
-  perTask: number;
-  bonus: number;
+  /** 完成 1 / 2 / 3 项每日任务累计可领的水滴与每天上限，供每日任务卡说明规则。 */
+  waterTiers: number[];
+  dailyWater: number;
 }
 
 /** 路由切换时的复读间隔：完成任务后换个页面就能看到提醒，又不会每次跳转都请求。 */

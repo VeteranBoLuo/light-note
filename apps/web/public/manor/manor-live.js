@@ -113,7 +113,7 @@ function createManorRefreshInput(doc) {
     'convertBait','buyBait','buyFry','beginCast','resolveCast','selectBait','sell','release','buyback',
     'place','placeShow','unplace','fillEmptySlots','collect','collectSlot','pickPoop','deliverBirdSeed','pickBirdSeed',
     'buyPurifier','claimPurifier','buyFacility','collectCompost','upgradeComposter','upgradePurifier','startCraft','collectCraft','refillPollen',
-    'pollinate','claimDailyWater','claimDailyWaterBonus','claimAllDailyWater','claimLevelReward','claimAllLevelRewards','claimCollection',
+    'pollinate','claimAllDailyWater','claimLevelReward','claimAllLevelRewards','claimCollection',
     'readAtlasEntry'];
   async function start(data) {
     snapshot = data; syncedAt = performance.now();

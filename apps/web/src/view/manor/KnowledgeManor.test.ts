@@ -262,7 +262,7 @@ describe('庄园加载与主站导航', () => {
     mocks.read.mockResolvedValue({quests:[],state:{water:35},revision:1,version:'fixture'} as never);
     const frame=document.querySelector('iframe')!,reply=vi.spyOn(frame.contentWindow!,'postMessage');
     const send=(id:number,action:string,payload={})=>window.dispatchEvent(new MessageEvent('message',{source:frame.contentWindow,origin:location.origin,data:{type:'lightnote-manor',nonce:new URL(frame.src).searchParams.get('bridge'),id,action,payload}}));
-    send(6,'command',{action:'claimDailyWaterBonus',args:[],revision:0});await flush();
+    send(6,'command',{action:'claimAllDailyWater',args:[],revision:0});await flush();
     send(7,'get');await flush();
     expect(mocks.command).toHaveBeenCalledTimes(2);
     expect(mocks.command.mock.calls[0][0]).toBe(mocks.command.mock.calls[1][0]);

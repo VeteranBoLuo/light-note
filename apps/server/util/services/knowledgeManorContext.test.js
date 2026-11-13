@@ -68,18 +68,18 @@ describe('庄园入口提醒只统计现在就能收的东西', () => {
     return createKnowledgeManorService({ db:{ getConnection:async()=>conn }, now:()=>NOW }).attention('owner');
   };
   it('还没领见面礼时只标记新开放，不读成长进度', async () => {
-    await expect(attention(null)).resolves.toEqual({ fresh:true, water:0, ripe:0, rewards:0, tankFull:0, compostFull:false, crafted:false, perTask:M.RULES.dailyWater, bonus:M.RULES.dailyWaterBonus });
+    await expect(attention(null)).resolves.toEqual({ fresh:true, water:0, ripe:0, rewards:0, tankFull:0, compostFull:false, crafted:false, waterTiers:[...M.RULES.dailyWaterTiers], dailyWater:M.RULES.dailyWater });
   });
   it('已完成任务的水滴按水桶余量计算，成熟地块与等级礼物分别计数', async () => {
     const s = adopted();
     s.seeds.radish = 1; M.plant(s, 0, 'radish'); M.water(s, [0]); s.plots[0].next = s.now - 1;
     s.water = M.RULES.waterCap - 2; s.xp = M.RULES.levels[1];
-    await expect(attention(s)).resolves.toEqual({ fresh:false, water:2, ripe:1, rewards:1, tankFull:0, compostFull:false, crafted:false, perTask:M.RULES.dailyWater, bonus:M.RULES.dailyWaterBonus });
+    await expect(attention(s)).resolves.toEqual({ fresh:false, water:2, ripe:1, rewards:1, tankFull:0, compostFull:false, crafted:false, waterTiers:[...M.RULES.dailyWaterTiers], dailyWater:M.RULES.dailyWater });
   });
   it('水桶已满或水滴已领完时不再提醒领水', async () => {
     const full = adopted(); full.water = M.RULES.waterCap;
     expect((await attention(full)).water).toBe(0);
-    const claimed = adopted(); claimed.dailyWaterClaims = [M.RULES.dailyWater, 0, 0];
+    const claimed = adopted(); claimed.dailyWaterClaims = [M.RULES.dailyWaterTiers[0], 0, 0];
     expect((await attention(claimed)).water).toBe(0);
   });
   it.each([M.RULES.storageLimit - 1, M.RULES.storageLimit, M.RULES.storageLimit + 2])('只有存满停止产出的产肥位进入提醒，经过 %s 份产出周期', async cycles => {

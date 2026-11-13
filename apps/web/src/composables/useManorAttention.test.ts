@@ -12,7 +12,7 @@ vi.mock('@/composables/useGrowth.ts', () => ({ useGrowth: () => ({ growth: ref({
 vi.mock('@/utils/manorAccess', () => ({ showManorEntry: () => !user.adminContext }));
 
 const { refreshManorAttention, useManorAttention } = await import('./useManorAttention');
-const value = (overrides = {}) => ({ fresh: false, water: 0, ripe: 0, rewards: 0, perTask: 5, bonus: 5, ...overrides });
+const value = (overrides = {}) => ({ fresh: false, water: 0, ripe: 0, rewards: 0, waterTiers: [10, 20, 25], dailyWater: 25, ...overrides });
 
 function mountComposable() {
   let result!: ReturnType<typeof useManorAttention>;

@@ -1,4 +1,4 @@
-export const MANOR_VERSION: 'knowledge-manor-v3';
+export const MANOR_VERSION: 'knowledge-manor-v4';
 export const MANOR_COMMANDS: readonly string[];
 export interface ManorState {
   version: string;
