@@ -199,7 +199,7 @@ describe('每日任务阶梯奖励', () => {
 
 describe('每日任务里的庄园水滴', () => {
   const bonus = { exp: 0, points: 0, claimed: false, claimable: false };
-  const manor = { fresh: false, water: 0, ripe: 0, rewards: 0, perTask: 5, bonus: 5 };
+  const manor = { fresh: false, water: 0, ripe: 0, rewards: 0, waterTiers: [10, 20, 25], dailyWater: 25 };
   const manorRow = () => document.querySelector('.dq-manor');
 
   it('没有庄园提醒数据时不显示水滴行', () => {
@@ -209,7 +209,7 @@ describe('每日任务里的庄园水滴', () => {
 
   it('说明每项任务换多少水滴，没有可领时不放按钮', () => {
     mountBonus(bonus, { manor });
-    expect(manorRow()?.textContent).toContain('每完成 1 项 +5 滴，全部完成再 +5 滴');
+    expect(manorRow()?.textContent).toContain('完成 1 项 +10 滴，2 项共 20 滴，3 项共 25 滴');
     expect(manorRow()?.querySelector('.dq-go')).toBeNull();
   });
 

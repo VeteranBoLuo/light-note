@@ -125,14 +125,14 @@ export function createKnowledgeManorService({ db = pool, context = accountContex
       const [[row]] = await conn.query('SELECT state_json FROM knowledge_manors WHERE user_id=?', [userId]);
       const saved = row ? parsed(row.state_json) : null;
       // The daily-task card explains the water rule with these numbers instead of copying it.
-      const rule = { perTask: manorModel.RULES.dailyWater, bonus: manorModel.RULES.dailyWaterBonus };
+      const rule = { waterTiers: [...manorModel.RULES.dailyWaterTiers], dailyWater: manorModel.RULES.dailyWater };
       if (!saved?.adopted) {
         await conn.commit();
         return { fresh: true, water: 0, ripe: 0, rewards: 0, tankFull: 0, compostFull: false, crafted: false, ...rule };
       }
       const s = projectManor(saved, await context(conn, userId, now()));
       await conn.commit();
-      const pending = manorModel.pendingDailyWater(s).reduce((sum, reward) => sum + reward.water, 0);
+      const pending = manorModel.pendingDailyWater(s);
       return {
         fresh: false,
         water: Math.min(pending, Math.max(0, manorModel.RULES.waterCap - s.water)),

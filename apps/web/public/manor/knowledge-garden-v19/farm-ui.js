@@ -502,11 +502,11 @@ const FarmUI = (() => {
   const fertIcon = (k) => `<span class="fert-icon fert-${k}" aria-hidden="true">${FarmArt.fertilizer(k)}</span>`;
 
   // 缺水时按今天的任务给出下一步：先领已完成的水，再去轻笺做没完成的任务；都做完了就告诉用户明天再来。
-  // 数字不变，只把「没水」变成回到轻笺做任务的入口。
+  // 把「没水」变成回到轻笺做任务的入口。
   function waterSupply() {
-    const pending = M.pendingDailyWater(state).reduce((n, r) => n + r.water, 0);
+    const pending = M.pendingDailyWater(state);
     const todo = (GardenLive.quests || []).map((q, i) => ({ name: esc(q.label || q.key), i })).filter(({ i }) => !state.dailyDone[i]);
-    return { pending, todo, bonus: Math.max(0, R.dailyWaterBonus - (state.dailyWaterBonusClaimed || 0)) };
+    return { pending, todo };
   }
   function waterShortLink() {
     const { pending, todo } = waterSupply();
@@ -514,18 +514,20 @@ const FarmUI = (() => {
     return pending > 0 || todo.length ? `<button class="text-button seed-water-link" data-action="water-short">${text}</button>` : `<small>${text}，种子会留在地里等你</small>`;
   }
   function waterShortDialog() {
-    const { pending, todo, bonus } = waterSupply();
+    const { pending, todo } = waterSupply();
     const care = `<div class="care-preview">${toolSprite("water")}<div><strong>${state.water} <small>/ ${R.waterCap} 滴</small></strong><p>播种后浇一次水，每块地 ${R.plantWater} 滴</p></div></div>`;
     const keep = '<div class="info-box">没浇水的种子会一直留在地里等你，不会损失。</div>';
     if (pending > 0) return showDialog(`有 ${pending} 滴水还没领`, "完成每日任务换来的水还在任务里，领取后自动浇灌待浇水的地。", care + keep,
     `<button class="button" data-action="daily">每日任务</button><button class="button primary" data-action="claim-water-pour">领取 ${pending} 滴</button>`);
     if (todo.length) {
-      const rows = todo.map(({ name, i }) => `<article class="manor-quest todo"><div class="quest-art">${toolSprite("daily")}</div><div><h3>${name}</h3><small>在轻笺完成</small></div><span class="quest-water">${toolSprite("water")}<b>+${R.dailyWater}</b><small>滴</small></span><button class="tile-btn quest-go" data-action="complete-daily" data-index="${i}">去完成</button></article>`).join("");
-      return showDialog(`还差 ${todo.length} 项每日任务`, `完成可得 ${todo.length * R.dailyWater} 滴${bonus ? `，全部完成再 +${bonus} 滴` : ""}。`, `<div class="manor-quests">${rows}</div>${keep}`,
+      // 不写每项多少滴，只说再完成几项能到哪一档，免得被读成某项任务更值钱
+      const rows = todo.map(({ name, i }) => `<article class="manor-quest todo"><div class="quest-art">${toolSprite("daily")}</div><div><h3>${name}</h3><small>在轻笺完成</small></div><button class="tile-btn quest-go" data-action="complete-daily" data-index="${i}">去完成</button></article>`).join("");
+      const done = 3 - todo.length;
+      return showDialog(`还差 ${todo.length} 项每日任务`, `再完成 1 项今天可领到 ${R.dailyWaterTiers[done]} 滴${todo.length > 1 ? `，全部完成共 ${R.dailyWater} 滴` : ""}。`, `<div class="manor-quests">${rows}</div>${keep}`,
       `<button class="button" data-action="close">稍后</button><button class="button primary" data-action="complete-daily" data-index="${todo[0].i}">去完成：${todo[0].name}</button>`);
     }
     const purifier = !state.purifier && M.level(state) >= R.purifierLevels[0].gardenLevel ? `<div class="info-box">在商店建造海水过滤器，每天还能多收 ${R.purifierWater} 滴水。</div>` : "";
-    showDialog("今天的水滴都领过了", `明天完成每日任务还能再领 ${R.dailyWater * 3 + R.dailyWaterBonus} 滴。`, care + keep + purifier,
+    showDialog("今天的水滴都领过了", `明天完成每日任务还能再领 ${R.dailyWater} 滴。`, care + keep + purifier,
     '<button class="button primary" data-action="close">知道了</button>');
   }
   // 生长中 / 盛开的地：看剩余时间、施肥、铲除

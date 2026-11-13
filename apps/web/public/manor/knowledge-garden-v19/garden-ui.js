@@ -181,7 +181,7 @@ function manorHotkey(e) {
 function hudHTML() {
   const info = M.levelInfo(state.xp);
   const done = state.dailyDone.filter(Boolean).length;
-  const rewardReady = M.pendingDailyWater(state).length;
+  const rewardReady = M.pendingDailyWater(state) > 0;
   const pending = M.pendingLevelRewards(state).length;
   const pct = info.next ? (state.xp - info.at) / (info.next - info.at) * 100 : 100;
   return `<button class="hud-back" data-action="exit" title="返回轻笺" aria-label="返回轻笺"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></button><div class="hud-identity"><button class="hud-stage" data-action="level" title="${pending ? pending + " 级奖励待领取" : "查看成长奖励"}" aria-label="庄园 Lv.${info.lv}，查看等级"><span class="hud-stage-name"><span class="hud-garden-badge" aria-hidden="true">${FarmArt.ui("crest")}</span><span id="phaseLabel"><span class="hud-manor-name">庄园 </span>Lv.${info.lv}</span>${pending ? `<span class="level-hud-pending" aria-label="${pending} 级奖励待领取">${pending}</span>` : ""}</span><span class="hud-growth"><span class="hud-growth-bar"><i id="hudGrowthBar" style="width:${pct}%"></i></span><span class="hud-growth-num">${info.next ? `<b id="hudGrowthNum">${state.xp - info.at}</b> / ${info.next - info.at}` : "已满级"}</span></span></button></div>${!isMobileView() ? `<nav class="game-dock" aria-label="庄园操作" id="gameTools">${dockHTML()}</nav>` : ""}<div class="hud-right"><div class="hud-resources" role="group" aria-label="资源"><button class="res-pill water" data-action="daily" aria-label="水滴 ${state.water} / ${R.waterCap}，通过每日任务和海水过滤器补水">${toolSprite("water")}<b id="waterCount">${state.water}</b><small>/ ${R.waterCap}</small></button><button class="res-pill" data-action="ledger" data-res="points" aria-label="积分 ${state.wallet}">${FarmArt.ui("coin", "res-icon")}<b id="wallet">${state.wallet}</b><small>积分</small></button></div><div class="hud-utils"><button class="util-btn ${rewardReady ? "has-reward" : ""}" data-action="daily" title="每日任务（${hotkeyOf("daily")}）" aria-keyshortcuts="${hotkeyOf("daily")}" aria-label="每日任务 ${done}/3${rewardReady ? "，有奖励可领取" : ""}">${toolSprite("daily")}<span>任务</span><b>${done}/3</b></button><button class="util-btn plain" data-action="memories" aria-label="庄园日记，相伴 ${M.day(state)} 天"><span class="util-days"><b id="companionDays">${M.day(state)}</b> 天</span><span>相伴</span></button><button class="util-btn round" data-action="manor-menu" aria-label="更多：任务、日记、帮助和提醒设置" title="更多：帮助与提醒设置">···</button></div></div>${document.getElementById("manor-icon-assets") && GardenLive.canTest ? `<button class="hud-reset util-btn round${GardenLive.testing ? " is-testing" : ""}" data-action="reset-test" aria-label="重置测试庄园" title="${GardenLive.testing ? "测试存档：重置或返回正式庄园" : "从初始引导开始测试"}"><img src="${manorIcons.reset}" alt="" draggable="false">${GardenLive.testing ? "<small>测试中</small>" : ""}</button>` : ""}<button class="hud-more" data-action="manor-menu" aria-label="更多：任务、日记、帮助和提醒设置">${manorIcons?.more ? `<img src="${manorIcons.more}" alt="" draggable="false">` : "···"}${rewardReady ? '<i aria-hidden="true"></i>' : ""}</button>`;
@@ -254,7 +254,7 @@ function rulesContent() {
     plant: card("1", "选种子", "点空地选种子；也可以从背包选好，再连续点空地。") + card("2", "浇一次水，安心等成长", `每块地用 ${R.plantWater} 滴水开始生长。此后可以钓鱼、养鱼或离开，作物不会枯萎。`) + card("3", "成熟后点一下收获", "收获放进背包，可留作工坊和蜂箱材料，也可前往商店出售。复收作物会继续生长；花朵采过后仍可观赏。") + `<p class="help-note">开局 4 块田 · Lv.${Object.keys(R.plotsAt).slice(1).join(" / ")} 各开垦 1 块。</p><details class="help-details"><summary>查看作物时长与价格</summary><div class="help-crops">${cropCards}</div></details>`,
     fish: card("1", "到钓鱼区抛竿", `每天 ${R.dailyFree} 次免费，之后每竿用 1 份鱼饵。普通鱼饵 ${R.baitCost} 积分，也能用玉米换。`) + card("2", "咬钩后收竿", `点钓点收竿，也可以等自动收竿；反应快慢不改变结果。新用户仅首次固定获得珊瑚小丑鱼，此后基础上钩率 ${R.success * 100}%。连续空 ${R.pityCasts - 1} 竿后，第 ${R.pityCasts} 竿必得；成功后重新累计，跨日保留。`) + card("3", "决定新伙伴的去向", "首钓伙伴先放进养鱼舱；之后可以入住、收进背包或卖出。淡水与海水伙伴都能通过垂钓遇见，鱼苗袋还可必得一位淡水伙伴。") + `<details class="help-details"><summary>鱼饵与鱼苗袋</summary><p>免费、普通和定向鱼饵共用连续空竿进度。彩虹鱼饵可保证上钩，成功也会清空进度；保底不保证稀有度或新品种。</p><p>淡水鱼苗袋 ${R.fryPrice} 积分，每天最多 ${R.fryDaily} 袋，必得一位淡水生物。</p></details>`,
     tank: card("1", "安排入住", `6 个产肥位住鱼，3 个观赏位住其他水族。产肥鱼每 ${R.productionHours} 小时产 1 份，最多储存 ${R.storageLimit} 份，存满暂停。`) + card("2", "打开养鱼管理", "点菜单或场景中的养鱼舱展开管理面板，查看产肥进度并领取；再点一次即可收起。") + card("3", "把肥料撒在正在长的作物上", "常见 / 稀有 / 珍稀 / 传说鱼分别产 1 / 2 / 3 / 4 小时催熟肥。每轮最多缩短一半生长时间；换鱼会重置该位进度。") + `<p class="help-note">兔子每天留一份有机肥，可催熟 30 分钟；麻雀每天带一颗小萝卜种子。点小路上的礼物拾取，未领取的天数不累积。</p>`,
-    points: card("1", "日常任务补水", `轻笺每日任务每完成 1 项可领取 ${R.dailyWater} 滴水，三项全部完成再领 ${R.dailyWaterBonus} 滴，每天共 ${R.dailyWater * 3 + R.dailyWaterBonus} 滴。水滴不单独出售，最多存 ${R.waterCap} 滴；装不下的部分可在当日稍后领取。商店可建造一台海水过滤器，随等级每天另收 ${R.purifierWater}–${R.purifierLevels[2].water} 滴水，未领的旧水不跨天累积。`) + card("2", "种子花积分，收获赚积分", "商店出售基础和进阶种子。稀有种子来自等级、连签、挑战、收藏等奖励；收获后的作物和多余水族可卖积分。") + card("3", "按自己的节奏经营", "没有每日、每周积分上限。收益受土地、水滴、生长与产肥时间约束；多照看可以多收一些。玉米也能留着换鱼饵。") + `<p class="help-note">当前 ${state.wallet} 积分 · 具体收支可点顶部积分查看。</p>`,
+    points: card("1", "日常任务补水", `轻笺每日任务完成任意 1 项可领 ${R.dailyWaterTiers[0]} 滴水，2 项共 ${R.dailyWaterTiers[1]} 滴，3 项共 ${R.dailyWaterTiers[2]} 滴。水滴不单独出售，最多存 ${R.waterCap} 滴；装不下的部分可在当日稍后领取。商店可建造一台海水过滤器，随等级每天另收 ${R.purifierWater}–${R.purifierLevels[2].water} 滴水，未领的旧水不跨天累积。`) + card("2", "种子花积分，收获赚积分", "商店出售基础和进阶种子。稀有种子来自等级、连签、挑战、收藏等奖励；收获后的作物和多余水族可卖积分。") + card("3", "按自己的节奏经营", "没有每日、每周积分上限。收益受土地、水滴、生长与产肥时间约束；多照看可以多收一些。玉米也能留着换鱼饵。") + `<p class="help-note">当前 ${state.wallet} 积分 · 具体收支可点顶部积分查看。</p>`,
     facilities: card("1", "诱饵工坊 · Lv.6", `180 积分建造。每份普通鱼饵加一份小番茄或生菜，分别制作果香引鱼饵或草木觅贝饵，偏向鱼类或底栖水族，基础上钩率仍为 ${R.success * 100}%，参与连续空竿保底。每批 1–3 份，用时 2 小时，完成后留在工坊等你收好。`) + card("2", "花园蜂箱 · Lv.6", `160 积分建造。薰衣草一束补 ${M.FACILITY_RULES.flowerPollen.lavender} 份花粉，向日葵 ${M.FACILITY_RULES.flowerPollen.sunflower} 份，迷迭香 ${M.FACILITY_RULES.flowerPollen.rosemary} 份，最多存 ${M.FACILITY_RULES.pollenCapacity} 份。每天可选一株浇过水、正在生长的普通复收作物，消耗 1 份花粉，让下一次收获多 1 份；每株仅一次，不额外增加经验。`) + card("3", "海水过滤器 · Lv.8", "240 积分建造，每天收 6 滴水。Lv.12 可花 180 积分并消耗 4 只常见海水底栖水族，升为每天 8 滴；Lv.18 再花 360 积分并消耗 2 只稀有海水底栖水族，升为每天 10 滴。材料从待养区手动选择，可混种，图鉴保留。") + '<p class="help-note">每种设施限建一台，未建时封存。制作鱼饵和补充花粉会消耗材料；每天先用免费垂钓次数，之后才消耗选定的鱼饵。</p>',
     collection: card("1", "认识作物和水族", "首次收获作物、发现水族会点亮图鉴，也会增加庄园经验。买种子、浇水和铲除不增加经验。") + card("2", "每升一级都有礼物", "每级一份成长补给，每 5 级一份丰盛礼包。点顶部等级看奖励用途，再去背包使用。") + card("3", "留意庄园的小伙伴", "轻触兔子会回应，点附近草地可以引它跳过去；码头的青蛙也能互动。图鉴的庄园成就还有种子与称号奖励。"),
     keys: `<div class="help-keys">${HOTKEYS.map((h) => `<div><kbd>${h.key}</kbd><span>打开${h.name}</span></div>`).join("")}<div class="wide"><kbd>Esc</kbd><span>关闭弹窗，或放下手里的工具</span></div></div><p class="help-note">面板开着时再按同一个键收起，按其他键直接切换。鼠标停在顶部的背包、商店、图鉴和任务按钮上，也会显示对应按键。</p>`
@@ -660,7 +660,7 @@ function rulesDialog() {
 
 function manorMenu() {
   const items = [
-    ["daily", "每日任务", M.pendingDailyWater(state).length ? "有奖励待领" : `${state.dailyDone.filter(Boolean).length} / 3`],
+    ["daily", "每日任务", M.pendingDailyWater(state) ? "有奖励待领" : `${state.dailyDone.filter(Boolean).length} / 3`],
     ["level", "成长奖励", `Lv.${M.level(state)}`],
     ["memories", "庄园日记", "看看收获"],
     ["rules", "玩法帮助", "种植 · 钓鱼 · 养鱼"],
@@ -699,22 +699,19 @@ function pourButton(pending) {
   const dry = FarmUI.plotsIn("dry").length;
   return !pending && dry && state.water >= R.plantWater ? `<button class="tile-btn primary quest-claim-all" data-action="pour-dry">${toolSprite("water")}浇灌 ${dry} 块待浇水的地</button>` : "";
 }
+// 按完成项数分档领水：进度条下标出 1 / 2 / 3 项各对应累计多少滴，任务行只管去完成。
+function dailyTiers(done) {
+  return `<ol class="quest-tiers">${R.dailyWaterTiers.map((water, i) => `<li class="${done > i ? "reached" : ""}"><span>${done > i ? "✓ " : ""}${i + 1} 项</span><b>${water} 滴</b></li>`).join("")}</ol>`;
+}
 function dailyDialog() {
-  const done = state.dailyDone.filter(Boolean).length;
-  const claimed = (state.dailyWaterClaims || []).reduce((n, v) => n + v, 0) + (state.dailyWaterBonusClaimed || 0);
-  const pending = M.pendingDailyWater(state).reduce((n, r) => n + r.water, 0);
+  const done = state.dailyDone.filter(Boolean).length,claimed = M.dailyWaterClaimed(state),pending = M.pendingDailyWater(state);
   const names = GardenLive.quests.map((q) => esc(q.label || q.key));
   const arts = [toolSprite("daily"), `<img src="knowledge-garden-v19/incoming/dock-r3/atlas.webp" alt="">`, `<img src="knowledge-garden-v19/incoming/dock-r3/backpack.webp" alt="">`];
-  const tasks = names.map((name, i) => {
-    const received = state.dailyWaterClaims?.[i] || 0,complete = state.dailyDone[i],remaining = R.dailyWater - received;
-    // 三种状态分开配色：未完成用次级按钮去轻笺做；已完成待领取用琥珀描边 + 绿色领取；已领取转为绿色并置灰按钮。
-    const status = !complete ? "todo" : remaining ? "ready" : "done";
-    return `<article class="manor-quest ${status}"><div class="quest-art">${arts[i]}</div><div><h3>${name}</h3><small>${complete ? remaining ? "● 已完成 · 待领取" : "✓ 水滴已领取" : "在轻笺完成"}</small></div><span class="quest-water">${toolSprite("water")}<b>${remaining || R.dailyWater}</b><small>滴</small></span><button class="tile-btn ${complete && remaining && state.water < R.waterCap ? "primary" : !complete ? "quest-go" : ""}" data-action="${complete ? "claim-daily-water" : "complete-daily"}" data-index="${i}" ${complete && (!remaining || state.water >= R.waterCap) ? "disabled" : ""}>${!complete ? "去完成" : !remaining ? "已领取" : state.water >= R.waterCap ? "水桶已满" : "领取"}</button></article>`;
-  }).join("");
-  const bonusRemaining=R.dailyWaterBonus-(state.dailyWaterBonusClaimed || 0),bonusReady=done===3&&bonusRemaining>0;
-  const bonusHint=done<3 ? `再完成 ${3-done} 项解锁` : !bonusRemaining ? "✓ 今日奖励已领取" : state.dailyWaterBonusClaimed ? `余下 ${bonusRemaining} 滴可续领` : "额外奖励已解锁";
-  const bonus=`<div class="quest-completion"><div><strong>全完成奖励</strong><small>${bonusHint}</small></div><span class="quest-water">${toolSprite("water")}<b>+${bonusRemaining || R.dailyWaterBonus}</b><small>滴</small></span><button class="tile-btn ${bonusReady&&state.water<R.waterCap ? "primary" : ""}" data-action="claim-daily-water-bonus" ${!bonusReady||state.water>=R.waterCap ? "disabled" : ""}>${done<3 ? "未解锁" : !bonusRemaining ? "已领取" : state.water>=R.waterCap ? "水桶已满" : "领取奖励"}</button></div>`;
-  showDialog("每日任务", "每天积累一点知识，为庄园添水。", `<div class="quest-summary"><div class="quest-summary-head"><div><strong>今日已完成 ${done} / 3 项</strong><span class="quest-progress"><i style="width:${done / 3 * 100}%"></i></span></div><span><b>每天可得 ${R.dailyWater * 3 + R.dailyWaterBonus} 滴</b><small>今日已领 ${claimed} 滴</small></span></div>${bonus}</div><div class="manor-quests">${tasks}</div><div class="quest-bucket">${toolSprite("water")}<span>储水桶现有 <b>${state.water} 滴</b><small>储水容量 ${R.waterCap} 滴 · 装不下的水滴可在今日稍后领取</small></span>${pourButton(pending) || `<button class="tile-btn primary quest-claim-all" data-action="claim-all-daily-water" ${!pending || state.water >= R.waterCap ? "disabled" : ""}>${!pending ? "暂无可领取" : state.water >= R.waterCap ? "水桶已满" : `一键领取 · ${Math.min(pending, R.waterCap - state.water)} 滴`}</button>`}</div>`,
+  const tasks = names.map((name, i) => state.dailyDone[i]
+    ? `<article class="manor-quest done"><div class="quest-art">${arts[i]}</div><div><h3>${name}</h3><small>✓ 已完成</small></div></article>`
+    : `<article class="manor-quest todo"><div class="quest-art">${arts[i]}</div><div><h3>${name}</h3><small>在轻笺完成</small></div><button class="tile-btn quest-go" data-action="complete-daily" data-index="${i}">去完成</button></article>`).join("");
+  const claim = `<button class="tile-btn primary quest-claim-all" data-action="claim-all-daily-water" ${!pending || state.water >= R.waterCap ? "disabled" : ""}>${!pending ? done ? "今日水滴已领取" : "完成任务后领取" : state.water >= R.waterCap ? "水桶已满" : `领取 ${Math.min(pending, R.waterCap - state.water)} 滴`}</button>`;
+  showDialog("每日任务", `完成任意 1 项得 ${R.dailyWaterTiers[0]} 滴，2 项共 ${R.dailyWaterTiers[1]} 滴，3 项共 ${R.dailyWaterTiers[2]} 滴。`, `<div class="quest-summary"><div class="quest-summary-head"><div><strong>今日已完成 ${done} / 3 项</strong><span class="quest-progress"><i style="width:${done / 3 * 100}%"></i></span></div><span><b>今日可得 ${M.dailyWaterEarned(state)} 滴</b><small>已领 ${claimed} 滴</small></span></div>${dailyTiers(done)}</div><div class="manor-quests">${tasks}</div><div class="quest-bucket">${toolSprite("water")}<span>储水桶现有 <b>${state.water} 滴</b><small>储水容量 ${R.waterCap} 滴 · 装不下的水滴可在今日稍后领取</small></span>${pourButton(pending) || claim}</div>`,
   '<button class="button" data-action="collections">庄园成就</button><button class="button primary" data-action="close">回到庄园</button>', false, "daily-dialog");
   $("#dialog").dataset.syncView='daily';
 }
@@ -1398,12 +1395,6 @@ function init() {
         break;
       case "complete-daily":{
           GardenLive.tasks(+b.dataset.index);
-          break;
-        }
-      case "claim-daily-water":
-      case "claim-daily-water-bonus":{
-          const from = b.getBoundingClientRect(),reward = a === "claim-daily-water-bonus" ? await M.claimDailyWaterBonus(state) : await M.claimDailyWater(state, +b.dataset.index);
-          if (reward) {update();dailyDialog();GardenFX.flyTo(from, $("#waterCount"), toolSprite("water"), { size: 36 });toast(`水滴 +${reward.water} · 已装入水桶`);}
           break;
         }
       case "claim-all-daily-water":{

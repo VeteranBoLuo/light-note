@@ -1482,12 +1482,16 @@ html.light-note-mobile-rendering #app .garden-play .seaside-courtyard .tank-capt
 .quest-summary-head { display: flex; align-items: center; gap: calc(14px * var(--d)); }
 .quest-summary-head > div { flex: 1; min-width: 0; }
 .quest-summary-head > span { font-size: calc(12px * var(--d)); white-space: nowrap; }
-.quest-completion { display: flex; align-items: center; gap: calc(10px * var(--d)); border-top: 1px solid #cfb87d; padding-top: calc(10px * var(--d)); font-size: calc(13px * var(--d)); }
-.quest-completion > div { flex: 1; min-width: 0; }
-.quest-completion > div > small { display: block; margin-top: calc(4px * var(--d)); color: #806437; font-size: calc(11px * var(--d)); }
-#modal .quest-completion > .tile-btn { flex: 0 0 auto; min-height: calc(36px * var(--d)); padding: calc(8px * var(--d)) calc(12px * var(--d)); font-size: calc(12px * var(--d)); white-space: nowrap; }
 .quest-progress { display: block; height: calc(7px * var(--d)); background: #d7c797; border-radius: 8px; margin-top: calc(6px * var(--d)); overflow: hidden; }
 .quest-progress i { display: block; height: 100%; background: #78a54c; }
+/* 领水档位：达到的档位用实色描边 + 勾，未达到的保持浅底，不只靠颜色区分 */
+.quest-tiers { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: calc(8px * var(--d)); margin: 0; padding: 0; list-style: none; }
+.quest-tiers li { display: flex; align-items: baseline; justify-content: space-between; gap: calc(6px * var(--d)); padding: calc(6px * var(--d)) calc(10px * var(--d)); border: 1px solid #d7c797; border-radius: calc(8px * var(--d)); background: #f6efd2; font-size: calc(12px * var(--d)); color: #94784c; }
+.quest-tiers li b { color: #357a89; font-size: calc(14px * var(--d)); white-space: nowrap; }
+.quest-tiers li.reached { border: 2px solid #78a54c; background: #edf3dc; color: #4d7230; font-weight: 700; }
+.light-note-mobile-rendering .quest-tiers { gap: 6px; }
+.light-note-mobile-rendering .quest-tiers li { flex-direction: column; align-items: flex-start; gap: 2px; padding: 6px 8px; font-size: 11px; }
+.light-note-mobile-rendering .quest-tiers li b { font-size: 13px; }
 .manor-quests { display: grid; gap: calc(9px * var(--d)); }
 .manor-quest { display: flex; align-items: center; gap: calc(12px * var(--d)); border: 1px solid #dfc998; border-radius: calc(10px * var(--d)); padding: calc(12px * var(--d)); background: #fffbec; box-shadow: 0 3px 0 #e5d2a9; }
 .manor-quest > div:nth-child(2) { flex: 1; min-width: 0; }
@@ -1495,8 +1499,6 @@ html.light-note-mobile-rendering #app .garden-play .seaside-courtyard .tank-capt
 .manor-quest small { font-size: calc(12px * var(--d)); color: #967b51; }
 .manor-quest.done { background: #f0f1dc; border-color: #c0cca0; }
 .manor-quest.done small { color: #67804b; }
-.manor-quest.ready { background: #fff3d2; border: 2px solid #e2a63c; }
-.manor-quest.ready small { color: #a8650f; font-weight: 700; }
 .quest-art { width: calc(40px * var(--d)); height: calc(42px * var(--d)); display: grid; place-items: center; }
 .quest-art > :is(img,.game-sprite) { width: 100%; height: 100%; object-fit: contain; }
 .util-btn.has-reward { position: relative; }
@@ -1544,7 +1546,6 @@ html.light-note-mobile-rendering #app .garden-play .seaside-courtyard .tank-capt
 .light-note-mobile-rendering .quest-summary { padding: 10px; gap: 8px; }
 .light-note-mobile-rendering .quest-summary-head > span { font-size: 10px; }
 /* ui-density-fixed: 庄园手机领取按钮保持共享触控下限，不受桌面密度影响。 */
-.light-note-mobile-rendering #modal .quest-completion > .tile-btn { min-height: 44px; }
 .light-note-mobile-rendering .manor-wallet { gap: 12px; padding: 16px; }
 .light-note-mobile-rendering .bait-choice { gap: 10px; padding: 12px; }
 .light-note-mobile-rendering .bait-choice > img { width: 40px; height: 40px; }
@@ -1571,9 +1572,6 @@ html.light-note-mobile-rendering #app .garden-play .seaside-courtyard .tank-capt
 #modal .inventory-dialog .seed-choice .seed-pack {margin-bottom:calc(8px * var(--d));}
 .quest-summary-head > span {text-align:right;}
 .quest-summary-head > span > small {display:block;margin-top:calc(4px * var(--d));color:#94784c;}
-.quest-water {display:flex;align-items:center;gap:calc(3px * var(--d));color:#357a89;white-space:nowrap;}
-.quest-water .game-sprite {width:calc(24px * var(--d));height:calc(24px * var(--d));}
-.quest-water small {color:inherit;}
 .quest-bucket {display:flex;align-items:center;gap:calc(12px * var(--d));margin-top:calc(24px * var(--d));padding:calc(14px * var(--d));border-top:1px dashed #ceb67f;color:#826539;font-size:calc(13px * var(--d));}
 .quest-bucket > .game-sprite {width:calc(32px * var(--d));height:calc(36px * var(--d));}
 .quest-bucket small {display:block;margin-top:calc(5px * var(--d));font-size:calc(11px * var(--d));color:#9a815b;}
@@ -1586,8 +1584,6 @@ html.light-note-mobile-rendering #app .garden-play .seaside-courtyard .tank-capt
 .light-note-mobile-rendering #modal .daily-dialog {height:auto;max-height:calc(100vh - 54px);max-height:calc(100dvh - 54px);}
 .light-note-mobile-rendering .manor-quest {flex-wrap:wrap;}
 .light-note-mobile-rendering .manor-quest > div:nth-child(2) {flex-basis:calc(100% - 50px);}
-.light-note-mobile-rendering .quest-water {margin-left:36px;flex:1;}
-.light-note-mobile-rendering .quest-completion > .quest-water {margin-left:0;flex:0 0 auto;}
 .light-note-mobile-rendering #modal .inventory-dialog .seed-bait-badge {font-size:10px;padding:1px 4px;bottom:-6px;gap:2px;}
 .light-note-mobile-rendering #modal .inventory-dialog .seed-bait-badge img {width:14px;height:14px;}
 html.light-note-mobile-rendering .seaside-courtyard .discovery-guide:not([hidden]) {display:block;max-width:210px;width:max-content;padding:8px 10px;background:#fff6df;border:1px solid #c5a269;border-radius:10px;box-shadow:0 2px 0 #a5814a;}

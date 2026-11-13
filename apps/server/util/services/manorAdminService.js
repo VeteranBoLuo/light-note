@@ -140,7 +140,7 @@ export function createManorAdminService({
       audience: manorAudience(),
       rules: {
         version: MANOR_VERSION,
-        dailyWater: M.RULES.dailyWater * 3 + M.RULES.dailyWaterBonus,
+        dailyWater: M.RULES.dailyWater,
         freeCasts: M.RULES.dailyFree,
         pityCasts: M.RULES.pityCasts,
         targetWeight: M.FACILITY_RULES.targetWeight,

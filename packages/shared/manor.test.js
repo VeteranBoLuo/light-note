@@ -60,21 +60,33 @@ describe('正式庄园沿用确认玩法与轻笺积分', () => {
   });
   it('任务水滴只能来自既有成长完成事实，满桶剩余额度保留', () => {
     let s = adopted(); s.water = 58;
-    expect(command(s, 'claimDailyWater', [0]).result).toBeNull();
-    const ctx = context({ dailyDone: [true, false, false] });
-    s = command(s, 'claimDailyWater', [0], ctx).state;
-    expect(s.water).toBe(60);
-    expect(s.dailyWaterClaims).toEqual([2, 0, 0]);
-    s.water = 55;
-    const rest = command(s, 'claimDailyWater', [0], ctx);
-    expect(rest.result.water).toBe(3);
-    expect(command(rest.state, 'claimDailyWater', [0], ctx).result).toBeNull();
+    expect(command(s, 'claimAllDailyWater').result).toBeNull();
+    const ctx = context({ dailyDone: [false, false, true] });
+    const first = command(s, 'claimAllDailyWater', [], ctx);
+    expect(first.result).toEqual({ water: 2, pending: 8 });
+    s = first.state; s.water = 50;
+    expect(command(s, 'claimAllDailyWater', [], ctx).result).toEqual({ water: 8, pending: 0 });
+    expect(()=>command(s,'claimDailyWater',[0],ctx)).toThrow();
+    expect(()=>command(s,'claimDailyWaterBonus',[],ctx)).toThrow();
+  });
+  it('按完成项数分档：1 项 10 滴、2 项共 20 滴、3 项共 25 滴，不分是哪一项', () => {
+    let s = adopted(); s.water = 0;
+    for (const [dailyDone, water] of [[[false, true, false], 10], [[false, true, true], 10], [[true, true, true], 5]]) {
+      const r = command(s, 'claimAllDailyWater', [], context({ dailyDone }));
+      expect(r.result).toEqual({ water, pending: 0 });
+      s = r.state;
+    }
+    expect(s.water).toBe(25);
+    expect(command(s, 'claimAllDailyWater', [], context({ dailyDone: [true, true, true] })).result).toBeNull();
+    for (const dailyDone of [[true, false, false], [false, true, false], [false, false, true]]) {
+      expect(M.dailyWaterEarned({ dailyDone })).toBe(10);
+    }
+    expect(M.dailyWaterEarned({ dailyDone: [true, false, true] })).toBe(20);
   });
   it('三项任务完成只领取水滴，不自动赠种，也不回收旧赠种或其他补给', () => {
     const ctx = context({ dailyDone: [true, true, true] });
     const s = command(adopted(), 'claimAllDailyWater', [], ctx).state;
-    expect(s.water).toBe(50);
-    expect(s.dailyWaterBonusClaimed).toBe(5);
+    expect(s.water).toBe(55);
     expect(s.seeds).toEqual({radish:3});
     expect(s.rewards).not.toHaveProperty('daily-pack:20261024');
     s.seeds.radish=5;s.rewards['daily-pack:20261024']=s.now;
@@ -83,48 +95,33 @@ describe('正式庄园沿用确认玩法与轻笺积分', () => {
     expect(old.rewards['daily-pack:20261024']).toBe(s.now);
     const local=M.create();M.adopt(local);
     for(let i=0;i<3;i++)expect(M.completeDaily(local,i)).toBe(true);
-    expect(M.claimAllDailyWater(local)).toEqual({water:20,pending:0});
+    expect(M.claimAllDailyWater(local)).toEqual({water:25,pending:0});
     expect(local.seeds).toEqual({radish:3});
   });
-  it('全完成奖励只认三项服务端事实，可单领且不能冒领或重复领取', () => {
-    let s=adopted();s.dailyDone=[true,true,true];
-    expect(command(s,'claimDailyWaterBonus').result).toBeNull();
-    const partial=context({dailyDone:[true,true,false]});
-    expect(command(s,'claimDailyWaterBonus',[],partial).result).toBeNull();
+  it('满桶时保留余额，部分装入后可继续领取', () => {
     const ctx=context({dailyDone:[true,true,true]});
-    const bonus=command(s,'claimDailyWaterBonus',[],ctx);s=bonus.state;
-    expect(bonus.result).toEqual({water:5});
-    expect(bonus.pointsDelta).toBe(0);
-    expect(s.dailyWaterClaims).toEqual([0,0,0]);
-    expect(command(s,'claimDailyWaterBonus',[],ctx).result).toBeNull();
-    const rest=command(s,'claimAllDailyWater',[],ctx);
-    expect(rest.result).toEqual({water:15,pending:0});
-    expect(rest.state.water).toBe(50);
-    expect(command(rest.state,'claimAllDailyWater',[],ctx).result).toBeNull();
-    expect(()=>command(s,'claimDailyWaterBonus',[true],ctx)).toThrow('MANOR_COMMAND_INVALID');
-    expect(()=>command(s,'claimDailyWater',['bonus'],ctx)).toThrow('MANOR_COMMAND_INVALID');
-  });
-  it('满桶不消耗全完成奖励，部分装入后可继续领取剩余水滴', () => {
-    const ctx=context({dailyDone:[true,true,true]});
-    let s=adopted();s.water=60;s.dailyWaterClaims=[5,5,5];
-    expect(command(s,'claimDailyWaterBonus',[],ctx).result).toBeNull();
-    s.water=58;
-    const first=command(s,'claimDailyWaterBonus',[],ctx);s=first.state;
-    expect(first.result).toEqual({water:2});
-    expect(s).toMatchObject({water:60,dailyWaterBonusClaimed:2});
-    expect(M.pendingDailyWater(s)).toEqual([{index:'bonus',water:3}]);
-    s.water=55;
-    const rest=command(s,'claimAllDailyWater',[],ctx);
-    expect(rest.result).toEqual({water:3,pending:0});
-    expect(rest.state).toMatchObject({water:58,dailyWaterBonusClaimed:5});
-    s=adopted();s.water=47;
+    let s=adopted();s.water=47;
     const bulk=command(s,'claimAllDailyWater',[],ctx);
-    expect(bulk.result).toEqual({water:13,pending:7});
-    expect(bulk.state).toMatchObject({water:60,dailyWaterClaims:[5,5,3],dailyWaterBonusClaimed:0});
-    bulk.state.water=50;
-    expect(command(bulk.state,'claimAllDailyWater',[],ctx).result).toEqual({water:7,pending:0});
+    expect(bulk.result).toEqual({water:13,pending:12});
+    expect(bulk.state).toMatchObject({water:60,dailyWaterClaims:[13,0,0]});
+    bulk.state.water=40;
+    expect(command(bulk.state,'claimAllDailyWater',[],ctx).result).toEqual({water:12,pending:0});
   });
-  it('v2 当天已领十五滴只补全完成五滴，投影保留资产和空竿进度', () => {
+  it('换规则当天按旧规则领过的水计入已领：旧全领 20 滴只补 5 滴，旧领 15 滴补 10 滴', () => {
+    const ctx=context({dailyDone:[true,true,true]});
+    const full=adopted();full.version='knowledge-manor-v3';full.water=0;full.dailyWaterClaims=[5,5,5];full.dailyWaterBonusClaimed=5;
+    const before=structuredClone(full);
+    expect(projectManor(full,ctx)).toMatchObject({version:MANOR_VERSION,dailyWaterClaims:[5,5,5],dailyWaterBonusClaimed:5});
+    expect(full).toEqual(before);
+    const topped=command(full,'claimAllDailyWater',[],ctx);
+    expect(topped.result).toEqual({water:5,pending:0});
+    expect(command(topped.state,'claimAllDailyWater',[],ctx).result).toBeNull();
+    const partial=adopted();partial.version='knowledge-manor-v3';partial.water=0;partial.dailyWaterClaims=[5,5,5];partial.dailyWaterBonusClaimed=0;
+    expect(command(partial,'claimAllDailyWater',[],ctx).result).toEqual({water:10,pending:0});
+    const two=adopted();two.version='knowledge-manor-v3';two.water=0;two.dailyWaterClaims=[5,5,0];
+    expect(command(two,'claimAllDailyWater',[],context({dailyDone:[true,true,false]})).result).toEqual({water:10,pending:0});
+  });
+  it('v2 存档投影保留资产和空竿进度，当天旧领取照常抵扣', () => {
     const old=adopted();old.version='knowledge-manor-v2';old.water=45;
     old.dailyWaterClaims=[5,5,5];old.emptyCastStreak=3;delete old.dailyWaterBonusClaimed;
     const before=structuredClone(old),ctx=context({dailyDone:[true,true,true]});
@@ -132,30 +129,28 @@ describe('正式庄园沿用确认玩法与轻笺积分', () => {
     expect(old).toEqual(before);
     expect(projected).toMatchObject({version:MANOR_VERSION,water:45,dailyWaterClaims:[5,5,5],dailyWaterBonusClaimed:0,emptyCastStreak:3});
     const result=command(old,'claimAllDailyWater',[],ctx);
-    expect(result.result).toEqual({water:5,pending:0});
-    expect(result.state).toMatchObject({water:50,seeds:old.seeds,emptyCastStreak:3});
+    expect(result.result).toEqual({water:10,pending:0});
+    expect(result.state).toMatchObject({water:55,seeds:old.seeds,emptyCastStreak:3});
     expect(command(result.state,'claimAllDailyWater',[],ctx).result).toBeNull();
     const cast={...old,casting:true,castPending:true,castPity:4,castSource:'free',castId:'v2-cast'};
     expect(projectManor(cast,ctx)).toMatchObject({castPity:4,castId:'v2-cast',emptyCastStreak:3});
   });
-  it('全完成奖励随账号日期重置，切换时区回旧日期也不能重复领取', () => {
+  it('任务水滴随账号日期重置，切换时区回旧日期也不能重复领取', () => {
     const a=context({now:new Date('2026-10-24T12:00:00Z'),dailyDone:[true,true,true],
       calendar:{dayKey:'20261025',weekKey:'202643',utcOffsetMinutes:840}});
     const b=context({...a,calendar:{dayKey:'20261024',weekKey:'202643',utcOffsetMinutes:-720}});
     let s=adopted();s.water=0;
     for(const ctx of [a,b]) {
-      expect(projectManor(s,ctx).dailyWaterBonusClaimed).toBe(0);
       const reward=command(s,'claimAllDailyWater',[],ctx);s=reward.state;
-      expect(reward.result).toEqual({water:20,pending:0});
+      expect(reward.result).toEqual({water:25,pending:0});
     }
-    expect(s.water).toBe(40);
-    expect(command(s,'claimDailyWaterBonus',[],a).result).toBeNull();
+    expect(s.water).toBe(50);
     expect(command(s,'claimAllDailyWater',[],a).result).toBeNull();
     const local=M.create();M.adopt(local);local.dailyDone=[true,true,true];
-    expect(M.claimAllDailyWater(local).water).toBe(20);
+    expect(M.claimAllDailyWater(local).water).toBe(25);
     M.advance(local,24);
     expect(local).toMatchObject({dailyDone:[false,false,false],dailyWaterClaims:[0,0,0],dailyWaterBonusClaimed:0});
-    expect(M.pendingDailyWater(local)).toEqual([]);
+    expect(M.pendingDailyWater(local)).toBe(0);
   });
   it('账号跨日清理日额度、跨周清理统计，不改变生长时间或积分', () => {
     const s = adopted(); s.freeUsed = 3; s.dailyWaterClaims = [5, 5, 5]; s.dailyWaterBonusClaimed = 5; s.weekEarned = 200;
@@ -208,7 +203,7 @@ describe('正式庄园沿用确认玩法与轻笺积分', () => {
     s = command(s, 'water', [[0]]).state;
     s.purifier={level:1,purchasedAt:0,claimDay:null,claimedWater:0};
     for (const ctx of [a,b]) {
-      s=command(s,'claimDailyWater',[0],ctx).state;
+      s=command(s,'claimAllDailyWater',[],ctx).state;
       s=command(s,'claimPurifier',[],ctx).state;
       s=command(s,'pickPoop',[],ctx).state;
       s=command(s,'pickBirdSeed',[],ctx).state;
@@ -223,7 +218,7 @@ describe('正式庄园沿用确认玩法与轻笺积分', () => {
     const returned=projectManor(s,a);
     expect(returned.freeUsed).toBe(3);
     expect(command(returned,'beginCast',['bait'],a).result).toBeNull();
-    expect(command(returned,'claimDailyWater',[0],a).result).toBeNull();
+    expect(command(returned,'claimAllDailyWater',[],a).result).toBeNull();
     expect(command(returned,'claimPurifier',[],a).result).toBeNull();
     expect(command(returned,'pickPoop',[],a).result).toBe(false);
     expect(command(returned,'pickBirdSeed',[],a).result).toBe(false);

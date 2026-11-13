@@ -210,10 +210,10 @@ describe.skipIf(!socketPath)('庄园真实积分与存档原子结算（隔离 M
     await expect(service.execute('owner',{...input(1,'claimAllDailyWater'),version:'knowledge-manor-v1'})).rejects.toMatchObject({code:'MANOR_VERSION_UNSUPPORTED'});
     const claimed=await service.execute('owner',input(1,'claimAllDailyWater'));
     expect(claimed.state.seeds).toEqual({radish:7});
-    expect(claimed.state.water).toBe(50);
+    expect(claimed.state.water).toBe(55);
     expect((await rows('knowledge_manor_operations'))).toHaveLength(2);
   });
-  it('v2 当天已领十五滴只补五滴，并发和重试不重复发放或变更主站积分', async () => {
+  it('v2 当天已领十五滴按新规则补十滴，并发和重试不重复发放或变更主站积分', async () => {
     const adopted=await adopt(),old={...adopted.state,version:'knowledge-manor-v2',water:35,dailyWaterClaims:[5,5,5],emptyCastStreak:3};
     delete old.dailyWaterBonusClaimed;delete old.wallet;
     await db.query("UPDATE knowledge_manors SET state_json=? WHERE user_id='owner'",[JSON.stringify(old)]);
@@ -221,26 +221,26 @@ describe.skipIf(!socketPath)('庄园真实积分与存档原子结算（隔离 M
     expect((await service.get('owner')).state).toMatchObject({version:MANOR_VERSION,dailyWaterBonusClaimed:0,emptyCastStreak:3});
     const [row]=await rows('knowledge_manors');
     expect(typeof row.state_json==='string'?JSON.parse(row.state_json):row.state_json).toEqual(old);
-    await expect(service.execute('owner',{...input(1,'claimDailyWaterBonus'),version:'knowledge-manor-v2'})).rejects.toMatchObject({code:'MANOR_VERSION_UNSUPPORTED'});
-    const requests=[input(1,'claimDailyWaterBonus'),input(1,'claimAllDailyWater')];
+    await expect(service.execute('owner',{...input(1,'claimAllDailyWater'),version:'knowledge-manor-v3'})).rejects.toMatchObject({code:'MANOR_VERSION_UNSUPPORTED'});
+    const requests=[input(1,'claimAllDailyWater'),input(1,'claimAllDailyWater')];
     const results=await Promise.allSettled(requests.map(r=>service.execute('owner',r)));
     expect(results.filter(r=>r.status==='fulfilled')).toHaveLength(1);
     expect(results.find(r=>r.status==='rejected').reason).toMatchObject({code:'MANOR_REVISION_CONFLICT'});
     const winner=results.findIndex(r=>r.status==='fulfilled');
-    expect(results[winner].value).toMatchObject({result:{water:5},state:{water:40,dailyWaterBonusClaimed:5,emptyCastStreak:3}});
-    expect(await service.execute('owner',requests[winner])).toMatchObject({replayed:true,result:{water:5},state:{water:40}});
-    expect((await service.execute('owner',input(2,'claimDailyWaterBonus'))).result).toBeNull();
+    expect(results[winner].value).toMatchObject({result:{water:10,pending:0},state:{water:45,dailyWaterBonusClaimed:0,emptyCastStreak:3}});
+    expect(await service.execute('owner',requests[winner])).toMatchObject({replayed:true,result:{water:10},state:{water:45}});
+    expect((await service.execute('owner',input(2,'claimAllDailyWater'))).result).toBeNull();
     expect((await rows('user_growth')).find(r=>r.user_id==='owner').points).toBe(60);
     expect(await rows('points_log')).toEqual([]);
   });
-  it('全完成水滴与收据同事务，提交失败后重试可正常领取一次', async () => {
+  it('任务水滴与收据同事务，提交失败后重试可正常领取一次', async () => {
     await adopt();facts=[true,true,true];
-    const request=input(1,'claimDailyWaterBonus');failReceipt=true;
+    const request=input(1,'claimAllDailyWater');failReceipt=true;
     await expect(service.execute('owner',request)).rejects.toThrow('fixture receipt failure');
     expect(await service.get('owner')).toMatchObject({revision:1,state:{water:30,dailyWaterBonusClaimed:0}});
     failReceipt=false;
-    expect(await service.execute('owner',request)).toMatchObject({revision:2,result:{water:5},state:{water:35,dailyWaterBonusClaimed:5}});
-    expect(await service.execute('owner',request)).toMatchObject({replayed:true,state:{water:35,dailyWaterBonusClaimed:5}});
+    expect(await service.execute('owner',request)).toMatchObject({revision:2,result:{water:25,pending:0},state:{water:55,dailyWaterClaims:[25,0,0]}});
+    expect(await service.execute('owner',request)).toMatchObject({replayed:true,state:{water:55,dailyWaterClaims:[25,0,0]}});
   });
   it('空竿收据提交失败会回滚进度，同一请求重试只累计一次', async () => {
     const adopted=await adopt();
@@ -287,16 +287,16 @@ describe.skipIf(!socketPath)('庄园真实积分与存档原子结算（隔离 M
       {dayKey:'20261024',weekKey:'202643',utcOffsetMinutes:-720},
     ]) {
       accountCalendar=calendar;
-      await run('claimDailyWater',[0]); await run('pickPoop');
+      await run('claimAllDailyWater'); await run('pickPoop');
       const started=await run('beginCast',['bait']);
       const caught=await run('resolveCast',[started.state.castId]);
       if(caught.result.firstCatch) await run('place',[caught.result.fish.id,0]);
     }
     accountCalendar={dayKey:'20261025',weekKey:'202643',utcOffsetMinutes:840};
-    expect((await service.get('owner')).state).toMatchObject({freeUsed:1,dailyWaterClaims:[5,0,0]});
-    expect((await run('claimDailyWater',[0])).result).toBeNull();
+    expect((await service.get('owner')).state).toMatchObject({freeUsed:1,dailyWaterClaims:[10,0,0]});
+    expect((await run('claimAllDailyWater')).result).toBeNull();
     const result=await run('pickPoop');
     expect(result.result).toBe(false);
-    expect(result.state).toMatchObject({wallet:60,water:35,fertilizers:{rabbit:2}});
+    expect(result.state).toMatchObject({wallet:60,water:45,fertilizers:{rabbit:2}});
   });
 });

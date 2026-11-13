@@ -45,7 +45,7 @@ window.fetch = (input, init) => {
 };
 request.defaults.adapter = async (config) => {
   const path = String(config.url || '');
-  const data = path.endsWith('/growth/manor/attention') ? { ...payload, perTask: 5, bonus: 5 }
+  const data = path.endsWith('/growth/manor/attention') ? { ...payload, waterTiers: [10, 20, 25], dailyWater: 25 }
     : path.endsWith('/growth/me') ? { level: 3, exp: 40, points: 120, features: { manor: true, growthCenterV2: true } }
       : {};
   return { data: { status: 200, data }, status: 200, statusText: 'OK', headers: {}, config };
