@@ -1,7 +1,7 @@
 <template>
   <Settings v-if="view === 'settings'" :data-state="visualState" />
   <main v-else-if="view === 'summary'" class="ai-quota-summary-harness">
-    <AiQuotaSummary layout="tile" entry-source="桌面个人中心" />
+    <AiQuotaSummary layout="tile" :density="density" entry-source="桌面个人中心" />
   </main>
   <AiUsagePage v-else :data-state="visualState" />
 </template>
@@ -11,7 +11,7 @@
   import AiUsagePage from '@/view/aiUsage/AiUsagePage.vue';
   import Settings from '@/view/settings/Settings.vue';
 
-  defineProps<{ visualState: string; view: 'usage' | 'settings' | 'summary' }>();
+  defineProps<{ visualState: string; view: 'usage' | 'settings' | 'summary'; density?: 'compact' | 'comfortable' }>();
 </script>
 
 <style lang="less">

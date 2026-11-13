@@ -23,13 +23,14 @@
       <span class="ai-quota-summary__copy">
         <span>{{ t('personCenter.aiQuotaLabel') }}</span>
         <span v-if="quotaBreakdown" class="ai-quota-summary__values" aria-hidden="true">
+          <!-- 永久额度模式只显示当前可用；余额与可用的差额由下方「结算中」单独说明，避免两行相同数字。 -->
           <span class="ai-quota-summary__primary-value">
-            <small>{{ t(permanentOnly ? 'aiQuotaOneTime.balance' : 'personCenter.aiQuotaTodayRemaining') }}</small>
-            <strong>{{ quotaBreakdown.daily }}</strong>
+            <small>{{ t(permanentOnly ? 'aiQuotaOneTime.available' : 'personCenter.aiQuotaTodayRemaining') }}</small>
+            <strong>{{ quotaBreakdown.primary }}</strong>
           </span>
-          <span class="ai-quota-summary__secondary-value">
-            <small>{{ t(permanentOnly ? 'aiQuotaOneTime.available' : 'personCenter.aiQuotaPermanentShort') }}</small>
-            <strong>{{ quotaBreakdown.permanent }}</strong>
+          <span v-if="quotaBreakdown.secondary" class="ai-quota-summary__secondary-value">
+            <small>{{ t('personCenter.aiQuotaPermanentShort') }}</small>
+            <strong>{{ quotaBreakdown.secondary }}</strong>
           </span>
           <span v-if="pendingReservationText" class="ai-quota-summary__pending">
             <span aria-hidden="true"></span>
@@ -90,18 +91,20 @@
 
   const quotaBreakdown = computed(() => {
     if (loginRequired.value || !status.value || status.value.exempt || unavailable.value) return null;
-    if (permanentOnly.value) return {
-      daily: formatAiQuotaTokens(status.value.bonusTokens, locale.value),
-      permanent: formatAiQuotaTokens(status.value.availableRemaining ?? status.value.remaining, locale.value),
-    };
+    if (permanentOnly.value) {
+      return {
+        primary: formatAiQuotaTokens(status.value.availableRemaining ?? status.value.remaining, locale.value),
+        secondary: '',
+      };
+    }
     if (
       Number.isFinite(status.value.dailyRemaining) &&
       Number.isFinite(status.value.dailyQuota) &&
       Number.isFinite(status.value.bonusTokens)
     ) {
       return {
-        daily: formatAiQuotaTokens(status.value.dailyRemaining, locale.value),
-        permanent: formatAiQuotaTokens(status.value.bonusTokens, locale.value),
+        primary: formatAiQuotaTokens(status.value.dailyRemaining, locale.value),
+        secondary: formatAiQuotaTokens(status.value.bonusTokens, locale.value),
       };
     }
     return null;
@@ -111,7 +114,15 @@
     if (loading.value && !status.value) return t('personCenter.aiQuotaLoading');
     if (unavailable.value || !status.value) return t('personCenter.aiQuotaUnavailable');
     if (status.value.exempt) return t('personCenter.aiQuotaUnlimited');
-    if (quotaBreakdown.value) return t(permanentOnly.value ? 'aiQuotaOneTime.balanceBreakdown' : 'personCenter.aiQuotaBreakdown', quotaBreakdown.value);
+    if (quotaBreakdown.value && permanentOnly.value) {
+      return `${t('aiQuotaOneTime.available')} ${quotaBreakdown.value.primary}`;
+    }
+    if (quotaBreakdown.value) {
+      return t('personCenter.aiQuotaBreakdown', {
+        daily: quotaBreakdown.value.primary,
+        permanent: quotaBreakdown.value.secondary,
+      });
+    }
     return t('personCenter.aiQuotaRemaining', {
       amount: formatAiQuotaTokens(status.value.remaining, locale.value),
     });

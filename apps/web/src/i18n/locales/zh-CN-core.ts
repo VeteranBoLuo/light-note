@@ -742,7 +742,6 @@ export default {
     pendingHint: '任务结束按实际用量结算，多余部分返还',
     availableHint: '余额减去处理中预留，可用于发起新任务',
     availableWithPending: '处理中预留 {amount} tokens',
-    balanceBreakdown: '余额 {daily}，当前可用 {permanent}',
     levelGift: '本级赠礼',
     cumulative: '累计赠礼 {amount} tokens',
     nextGift: '升到下一级可获 {amount} tokens',

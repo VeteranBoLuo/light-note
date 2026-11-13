@@ -532,8 +532,23 @@ request.defaults.adapter = async (config) => {
     if (state === 'error') {
       throw Object.assign(new Error('Visual quota fixture failed'), { code: 'AI_QUOTA_UNAVAILABLE' });
     }
-    const quotaFixture =
-      state === 'pending'
+    const permanentFixture = params.get('billing') === 'permanent';
+    const quotaFixture = permanentFixture
+      ? {
+          exempt: false,
+          billingMode: 'permanent_only',
+          used: 0,
+          quota: 0,
+          dailyQuota: 0,
+          dailyUsed: 0,
+          dailyRemaining: 0,
+          bonusTokens: 12_442_000,
+          pendingReservedTokens: state === 'pending' ? 16_550 : 0,
+          availableRemaining: state === 'pending' ? 12_425_450 : 12_442_000,
+          remaining: state === 'pending' ? 12_425_450 : 12_442_000,
+          enforcing: true,
+        }
+      : state === 'pending'
         ? {
             exempt: false,
             used: 795_641,
@@ -626,7 +641,11 @@ await router.push(
 );
 
 const pinia = createPinia();
-const app = createApp(AiUsageCenterHarness, { visualState: state, view });
+const app = createApp(AiUsageCenterHarness, {
+  visualState: state,
+  view,
+  density: params.get('density') === 'comfortable' ? 'comfortable' : 'compact',
+});
 app.use(pinia);
 app.use(router);
 await setLocale(locale);

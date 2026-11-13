@@ -14,6 +14,13 @@ describe('AI 额度快捷展示契约', () => {
   const usagePageSource = readSource('src/view/aiUsage/AiUsagePage.vue');
   const visualHarnessSource = readSource('src/e2e/AiUsageCenterHarness.vue');
 
+  it('永久额度模式只显示当前可用，不再并列与之相同的余额', () => {
+    expect(summarySource).toContain("t(permanentOnly ? 'aiQuotaOneTime.available' : 'personCenter.aiQuotaTodayRemaining')");
+    expect(summarySource).toContain('v-if="quotaBreakdown.secondary"');
+    expect(summarySource).not.toContain("'aiQuotaOneTime.balance'");
+    expect(summarySource).not.toContain('balanceBreakdown');
+  });
+
   it('桌面头像弹层和移动个人中心复用同一个额度摘要组件', () => {
     expect(desktopProfileSource).toContain('<AiQuotaSummary');
     expect(desktopProfileSource).toContain(':active="menuVisible"');
@@ -68,8 +75,8 @@ describe('AI 额度快捷展示契约', () => {
   });
 
   it('兼容旧模式今日剩余与余额，进度只用于日额度模式', () => {
-    expect(summarySource).toContain('daily: formatAiQuotaTokens(status.value.dailyRemaining');
-    expect(summarySource).toContain('permanent: formatAiQuotaTokens(status.value.bonusTokens');
+    expect(summarySource).toContain('primary: formatAiQuotaTokens(status.value.dailyRemaining');
+    expect(summarySource).toContain('secondary: formatAiQuotaTokens(status.value.bonusTokens');
     expect(summarySource).toContain(':percent="remainingPercent"');
     expect(summarySource).toContain('v-if="!permanentOnly && !loginRequired && status && !status.exempt && !unavailable"');
     expect(standardSummarySource).toMatch(/\.ai-quota-summary__primary-value strong\s*\{[\s\S]*?font-size:\s*13px;/);

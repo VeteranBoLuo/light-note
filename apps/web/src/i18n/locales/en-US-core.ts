@@ -775,7 +775,6 @@ export default {
     pendingHint: 'Settled at actual usage when the task ends; unused credits are returned',
     availableHint: 'Balance minus reserved credits, ready for new tasks',
     availableWithPending: '{amount} tokens reserved for running tasks',
-    balanceBreakdown: 'Balance {daily}, available {permanent}',
     levelGift: 'Gift at this level',
     cumulative: 'Cumulative gifts: {amount} tokens',
     nextGift: 'Reach the next level for {amount} tokens',
