@@ -58,6 +58,36 @@ describe('正式庄园沿用确认玩法与轻笺积分', () => {
     expect(r.result).toBe(2);
     expect(M.plotState(projectManor(r.state, tomorrow), 0)).toBe('ripe');
   });
+  it.each([
+    { name: '确认份数', remaining: 12, accel: 0, stock: 10, quantity: 3, used: 3, gain: 3 },
+    { name: '库存', remaining: 12, accel: 0, stock: 2, quantity: 10, used: 2, gain: 2 },
+    { name: '半轮上限', remaining: 7.5, accel: 4.5, stock: 10, quantity: 10, used: 2, gain: 1.5 },
+    { name: '成熟时间', remaining: 2.25, accel: 0, stock: 10, quantity: 10, used: 3, gain: 2.25 },
+    { name: '加速已满', remaining: 6, accel: 6, stock: 10, quantity: 10, used: 0, gain: 0 },
+    { name: '已经成熟', remaining: 0, accel: 0, stock: 10, quantity: 10, used: 0, gain: 0 },
+  ])('批量施肥按$name结算，库存与时间和连续单份施肥一致', ({ remaining, accel, stock, quantity, used, gain }) => {
+    let s = adopted();
+    s.seeds.carrot = 1;
+    s = command(s, 'plant', [0, 'carrot']).state;
+    s = command(s, 'water', [[0]]).state;
+    Object.assign(s.plots[0], { next: s.now + remaining, accel });
+    s.fertilizers.eco = stock;
+
+    const next = command(s, 'fertilize', [0, 'eco', quantity]);
+    expect(next.result).toBe(gain);
+    expect(next.pointsDelta).toBe(0);
+    expect(next.state.fertilizers.eco).toBe(stock - used);
+    expect(next.state.plots[0]).toMatchObject({ accel: accel + gain, next: s.now + remaining - gain });
+    let sequential = s;
+    for (let n = 0; n < quantity; n++) sequential = command(sequential, 'fertilize', [0, 'eco']).state;
+    expect(next.state).toEqual(sequential);
+  });
+  it('施肥份数必须是正安全整数', () => {
+    const s = adopted();
+    for (const quantity of [0, -1, 1.5, '2', null, Number.MAX_SAFE_INTEGER + 1]) {
+      expect(() => command(s, 'fertilize', [0, 'eco', quantity])).toThrow('MANOR_COMMAND_INVALID');
+    }
+  });
   it('任务水滴只能来自既有成长完成事实，满桶剩余额度保留', () => {
     let s = adopted(); s.water = 58;
     expect(command(s, 'claimAllDailyWater').result).toBeNull();

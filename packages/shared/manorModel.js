@@ -328,17 +328,32 @@ const GardenModel = (() => {
     }
     return out;
   }
-  // 施肥：缩短这一轮剩余的生长时间；每株累计加速不超过这一轮时长的一半，成熟的地不消耗肥料
-  function fertilize(s, i, kind) {
-    const fert = FERT[kind];
-    if (!fert || !(s.fertilizers[kind] > 0) || plotState(s, i) !== "growing") return 0;
+  const FERT_TIME_EPSILON = 1e-9;
+  function fertilizerRoom(s, i) {
+    if (plotState(s, i) !== "growing") return 0;
     const p = s.plots[i];
-    const room = cycle(s, p) * RULES.accelShare - p.accel;
-    const gain = Math.min(fert.hours, room, p.next - s.now);
-    if (gain <= 1e-9) return 0;
+    const room = Math.min(cycle(s, p) * RULES.accelShare - p.accel, p.next - s.now);
+    return room > FERT_TIME_EPSILON ? room : 0;
+  }
+  // 详情预览与实际扣除共用上限。达到上限或成熟时，最后一份可以只发挥部分肥效。
+  function quoteFertilizer(s, i, kind, quantity = 1) {
+    const fert = Object.hasOwn(FERT, kind) ? FERT[kind] : null;
+    const stock = s.fertilizers[kind];
+    const room = fertilizerRoom(s, i);
+    if (!fert || !Number.isSafeInteger(stock) || stock < 1 || !room || !Number.isSafeInteger(quantity) || quantity < 1) {
+      return { max: 0, used: 0, gain: 0 };
+    }
+    const max = Math.min(stock, Math.ceil((room - FERT_TIME_EPSILON) / fert.hours));
+    const used = Math.min(quantity, max);
+    return { max, used, gain: Math.min(used * fert.hours, room) };
+  }
+  function fertilize(s, i, kind, quantity = 1) {
+    const { used, gain } = quoteFertilizer(s, i, kind, quantity);
+    if (!used) return 0;
+    const p = s.plots[i];
     p.accel += gain;
-    p.next -= gain;
-    s.fertilizers[kind]--;
+    p.next = gain >= p.next - s.now ? s.now : p.next - gain;
+    s.fertilizers[kind] -= used;
     return gain;
   }
   function remove(s, i) {
@@ -976,6 +991,8 @@ const GardenModel = (() => {
     replantSeed,
     water,
     harvest,
+    fertilizerRoom,
+    quoteFertilizer,
     fertilize,
     remove,
     birdCanDeliver,

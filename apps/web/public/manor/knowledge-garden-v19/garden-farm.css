@@ -441,6 +441,20 @@ html #app .garden-play .farm-staged .game-dock {
 #modal .plot-section-head > span { color: #82704e; font-size: calc(11px * var(--d)); }
 #modal .plot-card .fert-row { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: calc(6px * var(--d)); }
 #modal .plot-card .fert-chip { min-width: 0; padding: calc(6px * var(--d)) calc(2px * var(--d)); }
+#modal .plot-card .fert-chip[aria-pressed="true"] { border-color: #659943; background: #e9f4dc; }
+#modal .plot-card .fert-chip[aria-pressed="true"] small { color: #3e5a2a; font-weight: 700; }
+#modal .plot-fert-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: calc(8px * var(--d));
+  margin-top: calc(10px * var(--d));
+}
+#modal .plot-fert-actions .quantity-picker { gap: calc(6px * var(--d)); margin-top: 0; white-space: nowrap; }
+#modal .plot-fert-actions .quantity-picker button { padding-inline: calc(8px * var(--d)); }
+#modal .plot-fert-actions .tile-btn { flex: 0 1 auto; min-inline-size: calc(108px * var(--d)); min-height: calc(36px * var(--d)); }
+#modal .plot-fert-actions .tile-btn[aria-disabled="true"] { opacity: .55; cursor: default; }
 #modal .plot-care-note { margin: calc(12px * var(--d)) 0 0; text-align: center; color: #82704e; font-size: calc(11px * var(--d)); line-height: 1.5; }
 #modal .plot-card-art.small {
   width: calc(150px * var(--d));
@@ -810,6 +824,7 @@ html.light-note-mobile-rendering .seaside-courtyard.farm-staged .game-dock .dock
 .light-note-mobile-rendering #modal .plot-card .fert-chip b { font-size: calc(11px * var(--d)); }
 .light-note-mobile-rendering #modal .plot-card .fert-chip > span:not(.fert-icon) { font-size: calc(10px * var(--d)); line-height: 1.25; }
 .light-note-mobile-rendering #modal .plot-card .fert-chip small { font-size: calc(10px * var(--d)); }
+.light-note-mobile-rendering #modal .plot-fert-actions .tile-btn { flex: 1 0 auto; min-height: calc(44px * var(--d)); }
 @media (prefers-reduced-motion: reduce) {
   .poop-spot::before,
   #modal .growth-steps::after,

@@ -286,7 +286,7 @@ const FarmUI = (() => {
     paintTool();
     syncToolMode();
     $("#poopSpot").hidden = cal().area === "bay" || !M.poopReady(state) || !!state.guide;
-    if (cal().area !== "bay" && matchMedia("(prefers-reduced-motion: reduce)").matches) M.deliverBirdSeed(state);
+    if (cal().area !== "bay" && matchMedia("(prefers-reduced-motion: reduce)").matches) void deliverBirdSeed();
     const gift = $("#birdSeedSpot"),[gx, gy] = birdGiftPoint();
     gift.hidden = cal().area === "bay" || !M.birdSeedReady(state) || !!state.guide;
     gift.style.left = gx + "px";gift.style.top = gy + "px";
@@ -311,6 +311,11 @@ const FarmUI = (() => {
       const i = +el.dataset.cardClock,
         st = M.plotState(state, i);
       el.textContent = st === "growing" ? clockTime(M.remaining(state, i)) + " 后成熟" : st === "ripe" ? "已成熟" : st === "bloom" ? "盛开中" : "";
+      const accel = el.parentElement.querySelector("[data-card-accel]");
+      if (accel) {
+        const text = state.plots[i].accel ? fertilizerTime(state.plots[i].accel) : "0";
+        if (accel.textContent !== text) accel.textContent = text;
+      }
     });
     // 成长进度：进到下一阶段（或剩余时间的文字变了）就重画，同时换掉弹框里的大图；否则只推进进度条
     document.querySelectorAll("[data-growth-steps]").forEach((el) => {
@@ -325,6 +330,8 @@ const FarmUI = (() => {
     document.querySelectorAll("[data-plot-progress]").forEach((el) => {
       el.style.width = (M.progress(state, +el.dataset.plotProgress) * 100).toFixed(1) + "%";
     });
+    const fertilizer = $("#modal:not([hidden]) [data-plot-fertilizer]");
+    if (fertilizer) syncPlotFertilizer(fertilizer);
   }
   // 时钟每秒调用：地块状态或阶段变了就整体刷新
   const stateKey = () => [...state.plots.keys()].map(plotKey).join(",") + "|" + M.poopReady(state) + "|" + M.birdSeedReady(state) + "|" + FarmFacilities.stateKey();
@@ -471,17 +478,19 @@ const FarmUI = (() => {
   function growthModel(i) {
     const p = state.plots[i],
       c = C(p.crop),
-      times = M.stageTimes(state, i);
-    if (!c || !times || !["growing", "ripe", "bloom"].includes(M.plotState(state, i))) return null;
-    // 连续结果作物摘过一轮以后：只剩“开花 → 结果”两段
+      times = M.stageTimes(state, i),
+      st = M.plotState(state, i);
+    if (!c || !times || !["growing", "ripe", "bloom"].includes(st)) return null;
+    // 采收过一轮后，时间轴只显示最后两个阶段。
     const ks = p.done ? [3, 4] : [0, 1, 2, 3, 4],
       t = p.done ? [times[0], times[4]] : times,
-      now = state.now;
+      now = state.now,
+      last = t.length - 1;
     let cur = 0;
     t.forEach((at, j) => {
       if (now >= at) cur = j;
     });
-    const seg = cur < t.length - 1 ? Math.min(1, (now - t[cur]) / (t[cur + 1] - t[cur])) : 1;
+    const seg = cur < last ? Math.max(0, Math.min(1, (now - t[cur]) / (t[cur + 1] - t[cur]))) : 0;
     const steps = ks.map((k, j) => ({
       k,
       name: STAGE_TEXT[c.type][k],
@@ -489,7 +498,8 @@ const FarmUI = (() => {
       cls: j < cur ? "done" : j === cur ? "now" : "next",
       text: j < cur ? "完成" : j === cur ? "现在" : untilText(t[j] - now)
     }));
-    return { steps, cur: ks[cur], pos: (cur + seg) / (t.length - 1), sig: cur + "|" + steps.map((x) => x.text).join(","), round: p.done ? `第 ${p.done + 1} 轮结果` : "" };
+    const round = p.done && st !== "bloom" ? `第 ${p.done + 1} 轮${c.type === "flower" ? "剪花" : "结果"}` : "";
+    return { steps, cur: ks[cur], pos: (cur + seg) / last, sig: cur + "|" + steps.map((x) => x.text).join(","), round };
   }
   function growthStepsHTML(i) {
     const m = growthModel(i);
@@ -530,6 +540,59 @@ const FarmUI = (() => {
     showDialog("今天的水滴都领过了", `明天完成每日任务还能再领 ${R.dailyWater} 滴。`, care + keep + purifier,
     '<button class="button primary" data-action="close">知道了</button>');
   }
+  const fertilizerTime = (hours) => hours < 1 / 60 ? plotTime(hours) : shortDuration(hours);
+
+  function plotFertilizerHTML(i) {
+    const kinds = Object.entries(M.FERT);
+    const selected = kinds.find(([key]) => state.fertilizers[key] > 0)?.[0] || "";
+    const options = kinds.map(([key, fertilizer]) => `
+      <button class="fert-chip" data-action="plot-fert-kind" data-fert="${key}" aria-pressed="${key === selected}">
+        ${fertIcon(key)}<b>−${shortDuration(fertilizer.hours)}</b><span>${fertilizer.name}</span><small data-fert-stock></small>
+      </button>`).join("");
+    return `<section data-plot-fertilizer="${i}" data-kind="${selected}" data-quantity="1" aria-labelledby="plot-fertilizer-title">
+      <div class="plot-section-head"><h3 id="plot-fertilizer-title">施肥加速</h3><span data-fert-hint></span></div>
+      <div class="fert-row" role="group" aria-label="选择肥料">${options}</div>
+      <div class="plot-fert-actions">
+        <div class="quantity-picker" role="group" aria-label="施肥份数">
+          <button data-action="plot-fert-count" data-step="-1" aria-label="减少施肥份数">−</button>
+          <b data-fert-quantity aria-live="polite">1 份</b>
+          <button data-action="plot-fert-count" data-step="1" aria-label="增加施肥份数">+</button>
+          <button data-action="plot-fert-count" data-step="max" aria-label="选择最多可用份数">最多</button>
+        </div>
+        <button class="tile-btn primary" data-action="plot-fert-apply">施肥</button>
+      </div>
+    </section>`;
+  }
+  function syncPlotFertilizer(panel) {
+    const i = +panel.dataset.plotFertilizer, kind = panel.dataset.kind;
+    const { max, used, gain } = M.quoteFertilizer(state, i, kind, +panel.dataset.quantity);
+    const busy = isFertilizing(i);
+    const st = M.plotState(state, i);
+    const room = M.fertilizerRoom(state, i);
+    const count = used || 1;
+    panel.dataset.quantity = String(count);
+    panel.setAttribute("aria-busy", String(!!busy));
+    const setText = (element, text) => { if (element.textContent !== text) element.textContent = text; };
+    let hasStock = false;
+    for (const button of panel.querySelectorAll("[data-fert]")) {
+      const key = button.dataset.fert, stock = state.fertilizers[key] || 0;
+      hasStock ||= stock > 0;
+      button.disabled = !room || !stock;
+      button.setAttribute("aria-pressed", String(key === kind));
+      setText(button.querySelector("[data-fert-stock]"), `${stock} 份`);
+    }
+    const hint = st !== "growing" ? "已成熟，回庄园收获" : !room ? "本轮加速已达上限"
+      : gain ? `预计缩短 ${fertilizerTime(gain)}` : hasStock ? "请另选一种肥料" : "暂无肥料";
+    setText(panel.querySelector("[data-fert-hint]"), hint);
+    setText(panel.querySelector("[data-fert-quantity]"), `${used} 份`);
+    panel.querySelector('[data-step="-1"]').disabled = count <= 1;
+    panel.querySelector('[data-step="1"]').disabled = count >= max;
+    panel.querySelector('[data-step="max"]').disabled = count >= max;
+    const apply = panel.querySelector('[data-action="plot-fert-apply"]');
+    apply.setAttribute("aria-disabled", String(!!busy || !used));
+    setText(apply, busy ? "施肥中…" : used ? `施肥 ${count} 份` : "施肥");
+  }
+
   // 生长中 / 盛开的地：看剩余时间、施肥、铲除
   function plotCard(i) {
     const p = state.plots[i],
@@ -538,20 +601,22 @@ const FarmUI = (() => {
     if (!c) return;
     const cycleH = p.done ? c.every : c.first,
       cap = cycleH * R.accelShare;
-    const ferts = Object.entries(M.FERT).
-    map(([k, f]) => `<button class="fert-chip" data-action="fert-select" data-fert="${k}" data-plot="${i}" ${state.fertilizers[k] > 0 && st === "growing" && p.accel < cap - 1e-9 ? "" : "disabled"}>${fertIcon(k)}<b>−${shortDuration(f.hours)}</b><span>${f.name}</span><small>${state.fertilizers[k]} 份</small></button>`).
-    join("");
+    const accelNote = st === "bloom" ? "" : `<p>本轮已加速 <b data-card-accel>${p.accel ? fertilizerTime(p.accel) : "0"}</b> / ${shortDuration(cap)}</p>`;
+    const careNote = st === "bloom"
+      ? "花束已剪完，植株会一直盛开供观赏。想换种时可以铲除。"
+      : "每轮最多加速一半时长 · 成熟后不会枯萎";
     showDialog(
       `${c.name} · 第 ${i + 1} 块地`,
       `${TIER_TEXT[c.tier]} · ${c.typeLabel || TYPE_TEXT[c.type]}${c.type === "multi" ? ` · 已收 ${p.done} / ${c.harvests} 次` : c.type === "flower" && c.harvests > 1 ? ` · 已剪 ${p.done} / ${c.harvests} 束` : ""}`,
-      `<div class="plot-card"><div class="plot-overview"><div class="plot-card-art">${FarmArt.cropPreview(p.crop, M.growthStage(state, i))}</div><div class="plot-status"><small>当前状态</small><strong data-card-clock="${i}">${st === "growing" ? clockTime(M.remaining(state, i)) + " 后成熟" : st === "bloom" ? "盛开中" : "已成熟"}</strong><p>本轮已加速 <b>${p.accel ? shortDuration(p.accel) : "0"}</b> / ${shortDuration(cap)}</p></div></div>${growthStepsHTML(i)}${p.pollinated ? `<p class="plot-pollination-note">${FarmFacilities.beeArt()}${p.pollinationPending ? "已授粉 · 下一轮多收 1 份" : "这株已授过粉"}</p>` : ""}${st === "growing" ? `<div class="plot-section-head"><h3>施肥加速</h3><span>点选肥料，立即用于这块地</span></div><div class="fert-row">${ferts}</div>` : ""}<p class="plot-care-note">${st === "bloom" ? c.sell === null ? "月光兰会一直开着，留作庄园里的稀有风景。" : "花会继续盛开，想换种时可以铲除。" : "每轮最多加速一半时长 · 成熟后不会枯萎"}</p></div>`,
+      `<div class="plot-card"><div class="plot-overview"><div class="plot-card-art">${FarmArt.cropPreview(p.crop, M.growthStage(state, i))}</div><div class="plot-status"><small>当前状态</small><strong data-card-clock="${i}">${st === "growing" ? clockTime(M.remaining(state, i)) + " 后成熟" : st === "bloom" ? "盛开中" : "已成熟"}</strong>${accelNote}</div></div>${growthStepsHTML(i)}${p.pollinated ? `<p class="plot-pollination-note">${FarmFacilities.beeArt()}${p.pollinationPending ? "已授粉 · 下一轮多收 1 份" : "这株已授过粉"}</p>` : ""}${st === "growing" ? plotFertilizerHTML(i) : ""}<p class="plot-care-note" role="status">${careNote}</p></div>`,
       `<button class="button" data-action="plot-remove" data-plot="${i}">铲除</button><button class="button primary" data-action="close">回到庄园</button>`
     );
     $("#dialog").classList.add("plot-dialog");
+    const fertilizer = $("#dialog [data-plot-fertilizer]");
+    if (fertilizer) syncPlotFertilizer(fertilizer);
   }
   function canFertilize(i) {
-    const p = state.plots[i],c = p && C(p.crop);
-    return !!c && M.plotState(state, i) === "growing" && p.accel < (p.done ? c.every : c.first) * R.accelShare - 1e-9;
+    return M.fertilizerRoom(state, i) > 0;
   }
   const TOOL_NAMES = { hand: "手形", fert: "施肥", shovel: "铲除" };
   const TOOL_ART = { hand: "hand-open", shovel: "tool-trowel" };
@@ -661,34 +726,50 @@ const FarmUI = (() => {
     focusToolTarget();
     announce(`已选择${C(key).name}，连续点空地播种，按 Escape 取消`);
   }
-  async function fertilizePlot(i, kind) {
+  async function fertilizePlot(i, kind, quantity = 1, panel = null) {
     if (isFertilizing(i) || isWatering(i)) return;
+    if (panel && !M.quoteFertilizer(state, i, kind, quantity).used) {
+      syncPlotFertilizer(panel);
+      return;
+    }
     const st = M.plotState(state, i);
     if (!canFertilize(i)) return toast(st === "dry" ? "先浇水，再施肥" : st === "growing" ? "本轮加速已达上限" : "请选择生长中的作物");
-    const gain = await M.fertilize(state, i, kind);
-    if (!gain) {cancelTool();return toast("这种肥料已用完");}
-    const cursor = $("#toolCursor");
-    const preview = toolPlot === i && cursor?.classList.contains("on") ? cursor.querySelector(".tool-art")?.getBoundingClientRect() : null;
-    const origin = preview?.width > 0 && preview.height > 0 ? preview : null;
-    const art = FarmArt.fertilizer(kind);
-    const session = state,plant = state.plots[i],exhausted = !state.fertilizers[kind];
+    const session = state;
     const pending = fertilizing.get(session) || new Set();
     fertilizing.set(session, pending);
     pending.add(i);
-    if (exhausted) activeTool = null;
-    update();
-    paintTool();
-    syncToolMode();
     try {
-      await GardenFX.sprinkle(plotEl(i), art, { origin });
+      if (panel) syncPlotFertilizer(panel);
+      // 旧的单份请求与收据继续使用两参数形态。
+      const gain = await M.fertilize(session, i, kind, ...(quantity > 1 ? [quantity] : []));
+      if (state !== session) return;
+      if (panel) {
+        if (panel.isConnected && !$("#modal").hidden) {
+          panel.dataset.quantity = "1";
+          panel.parentElement.querySelector(".plot-care-note").textContent = gain
+            ? `刚刚缩短了 ${fertilizerTime(gain)}` : "这次没有消耗肥料，状态已更新";
+        }
+        update();
+        return;
+      }
+      if (!gain) {cancelTool();return toast("这种肥料已用完");}
+      const cursor = $("#toolCursor");
+      const preview = toolPlot === i && cursor?.classList.contains("on") ? cursor.querySelector(".tool-art")?.getBoundingClientRect() : null;
+      const origin = preview?.width > 0 && preview.height > 0 ? preview : null;
+      const plant = session.plots[i];
+      update();
+      await GardenFX.sprinkle(plotEl(i), FarmArt.fertilizer(kind), { origin });
       if (state !== session || state.plots[i] !== plant) return;
       update();
-      GardenFX.floatText(plotEl(i), `−${shortDuration(gain)}`, "blue");
+      GardenFX.floatText(plotEl(i), `−${fertilizerTime(gain)}`, "blue");
       GardenFX.burst(plotEl(i), { count: 6, kind: "spark", spread: 28 });
-      announce(`施肥后缩短了 ${shortDuration(gain)}`);
+      announce(`施肥后缩短了 ${fertilizerTime(gain)}`);
     } finally {
       pending.delete(i);
-      if (state === session) {syncToolMode();paintTool();}
+      if (state === session) {
+        if (panel?.isConnected && !$("#modal").hidden) syncPlotFertilizer(panel);
+        syncToolMode();paintTool();
+      }
     }
   }
   function removeConfirm(i) {
@@ -946,7 +1027,7 @@ const FarmUI = (() => {
   }
   function birdGiftScenePoint() {const [x, y] = FarmStage.toScene(...birdGiftPoint());return { x, y };}
   async function deliverBirdSeed() {
-    if (GardenLive.busy || state.casting) return;
+    if (GardenLive.busy || state.casting || !M.birdCanDeliver(state)) return;
     try {
       if (!(await M.deliverBirdSeed(state))) return;
       sync();
@@ -1083,13 +1164,29 @@ const FarmUI = (() => {
       case "sell-crop":
         shopDialog("sell-crops");
         return true;
+      case "plot-fert-kind":
+      case "plot-fert-count":
+      case "plot-fert-apply": {
+        const panel = b.closest("[data-plot-fertilizer]");
+        if (!panel || $("#modal").hidden) return true;
+        const plot = +panel.dataset.plotFertilizer;
+        if (isFertilizing(plot)) return true;
+        if (a === "plot-fert-apply") {
+          if (b.getAttribute("aria-disabled") !== "true") await fertilizePlot(plot, panel.dataset.kind, +panel.dataset.quantity, panel);
+          return true;
+        }
+        if (a === "plot-fert-kind") {
+          panel.dataset.kind = b.dataset.fert;
+          panel.dataset.quantity = "1";
+        } else {
+          panel.dataset.quantity = String(b.dataset.step === "max"
+            ? M.quoteFertilizer(state, plot, panel.dataset.kind).max : +panel.dataset.quantity + +b.dataset.step);
+        }
+        syncPlotFertilizer(panel);
+        return true;
+      }
       case "fert-select":
-        if (b.dataset.plot !== undefined) {
-          const plot = Number(b.dataset.plot),kind = b.dataset.fert;
-          if (Number.isInteger(plot) && M.FERT[kind] && state.fertilizers[kind] > 0) {
-            cancelTool();closeDialog(false);await fertilizePlot(plot, kind);
-          }
-        } else selectFertilizer(b.dataset.fert);
+        selectFertilizer(b.dataset.fert);
         return true;
       case "tool-select":
         selectTool(b.dataset.tool);

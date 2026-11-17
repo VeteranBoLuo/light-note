@@ -134,7 +134,10 @@ const commandCatalog = Object.freeze({
   },
   water(s, a) { if (a.length !== 1) invalid(); return model.water(s, indices(a[0])); },
   harvest(s, a) { if (a.length !== 1) invalid(); return model.harvest(s, indices(a[0])); },
-  fertilize(s, a) { if (a.length !== 2) invalid(); return model.fertilize(s, integer(a[0], 0, 7), key(a[1], model.FERT)); },
+  fertilize(s, a) {
+    if (a.length < 2 || a.length > 3) invalid();
+    return model.fertilize(s, integer(a[0], 0, model.RULES.plotCount - 1), key(a[1], model.FERT), a.length === 2 ? 1 : integer(a[2], 1));
+  },
   remove(s, a) { if (a.length !== 1) invalid(); return model.remove(s, integer(a[0], 0, 7)); },
   buySeed(s, a) { if (a.length !== 2) invalid(); return model.buySeed(s, key(a[0], model.CROPS), integer(a[1], 1, 10)); },
   sellCrop(s, a) {

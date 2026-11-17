@@ -111,6 +111,7 @@ describe.skipIf(!socketPath)('庄园真实积分与存档原子结算（隔离 M
     {name:'播种',action:'plant',args:[0,'radish'],prepare:()=>{},check:s=>{expect(s.seeds.radish).toBe(2);expect(s.plots[0].crop).toBe('radish');}},
     {name:'采摘',action:'harvest',args:[[0]],prepare:s=>{M.plant(s,0,'radish');M.water(s,[0]);s.plots[0].next=s.now-1;},check:s=>expect(s.crops.radish).toBe(1)},
     {name:'施肥',action:'fertilize',args:[0,'rabbit'],prepare:s=>{s.seeds.carrot=1;expect(M.plant(s,0,'carrot')).toBe(true);M.water(s,[0]);s.fertilizers.rabbit=1;},check:s=>{expect(s.fertilizers.rabbit).toBe(0);expect(s.plots[0].accel).toBe(0.5);}},
+    {name:'批量施肥',action:'fertilize',args:[0,'eco',9],prepare:s=>{s.seeds.carrot=1;expect(M.plant(s,0,'carrot')).toBe(true);M.water(s,[0]);s.fertilizers.eco=9;},check:s=>{expect(s.fertilizers.eco).toBe(3);expect(s.plots[0].accel).toBe(6);}},
     {name:'养鱼收肥',action:'collect',args:[],prepare:s=>{M.addFish(s,'clown');M.place(s,1,0,F);s.fishSlots[0].started-=M.RULES.productionHours;},check:s=>expect(s.fertilizers[F.clown.fertilizer]).toBe(1)},
   ])('多端同时$name只结算一次；旧意图拒绝、原收据重放、重新点击均不重复发放',async({action,args,prepare,check})=>{
     const initial=await adopt(),state=structuredClone(initial.state);state.guide=null;state.xp=M.RULES.levels[7];
