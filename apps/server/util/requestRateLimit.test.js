@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { getGlobalRateLimit, getGlobalRateLimitKey, shouldSkipGeneralRateLimit } from './requestRateLimit.js';
+import {
+  getGlobalRateLimit, getGlobalRateLimitKey, shouldSkipEarlyRateLimit, shouldSkipGeneralRateLimit,
+} from './requestRateLimit.js';
 
 const limits = { visitor: 30, authenticated: 60, root: 120 };
 
@@ -53,5 +55,13 @@ describe('global request rate limit', () => {
 
   it('continues to skip preflight requests', () => {
     expect(shouldSkipGeneralRateLimit({ method: 'OPTIONS', path: '/api/bookmark/getBookmarkList' })).toBe(true);
+  });
+
+  it('protects authenticated image reads at the source without charging the business bucket', () => {
+    const icon = { method: 'GET', path: '/uploads/bookmark-icon.png' };
+    const original = { method: 'GET', path: '/uploads/note-cover.webp' };
+    expect(shouldSkipEarlyRateLimit(icon)).toBe(true);
+    expect(shouldSkipEarlyRateLimit(original)).toBe(false);
+    expect(shouldSkipGeneralRateLimit(original)).toBe(true);
   });
 });

@@ -105,6 +105,7 @@ const AUTH_EXPIRED_SILENT_PATHS = [
   '/note/share/resolve',
   '/note/share/page',
   '/note/share/tree',
+  '/note/share/image/',
 ];
 
 const shouldMarkAuthExpired = (req) => {

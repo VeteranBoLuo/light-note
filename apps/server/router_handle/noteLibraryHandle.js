@@ -287,6 +287,7 @@ export const addNote = async (req, res) => {
         parentId: result.parentId ?? null,
         revision: Math.max(1, Number(result.revision || 1)),
         addedToInbox: result.addedToInbox,
+        ...(result.replayed ? { replayed: true } : {}),
       }),
     );
   } catch (e) {

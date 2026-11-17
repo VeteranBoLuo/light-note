@@ -16,6 +16,10 @@ import {
 import { issueNoteShareTicket, readNoteShareTicket } from '../util/noteShareTicket.js';
 import { NoteShareScopeError, getSharedNotePage, listSharedNoteChildren } from '../util/services/noteShareService.js';
 import { normalizeCanonicalNoteRecord } from '../util/noteReadModel.js';
+import { extractManagedImages } from '../util/imagePreview/extract.js';
+import { canReadNoteImage, isNoteImageFileName, noteImageFileName, sendNoteImageFile } from '../util/noteImageAccess.js';
+
+const SHARE_IMAGE_COOKIE = 'ln-note-share-image';
 
 const NOTE_SHARE_SELECT = `
   SELECT
@@ -38,6 +42,23 @@ function setPublicShareHeaders(res) {
   res.set('Cache-Control', 'no-store');
   res.set('Referrer-Policy', 'no-referrer');
   res.set('X-Robots-Tag', 'noindex, nofollow, noarchive');
+}
+
+function setShareImageTicket(req, res, shareId, ticket) {
+  res.cookie(SHARE_IMAGE_COOKIE, ticket.token, {
+    httpOnly: true,
+    secure: Boolean(req.secure),
+    sameSite: 'lax',
+    path: '/api/note/share/image/' + encodeURIComponent(String(shareId)) + '/',
+    maxAge: ticket.expiresIn * 1000,
+  });
+}
+
+function shareImageTicket(req) {
+  const prefix = SHARE_IMAGE_COOKIE + '=';
+  const value = String(req.headers.cookie || '').split(';').map((part) => part.trim())
+    .find((part) => part.startsWith(prefix))?.slice(prefix.length);
+  return /^[A-Za-z0-9_-]{32,128}$/.test(value || '') ? value : '';
 }
 
 function getClientIp(req) {
@@ -91,6 +112,7 @@ function mapPublicPage(record) {
     title: String(row.title || ''),
     content: String(row.content || ''),
     type: String(row.type || 'html'),
+    protectedImages: true,
     revision: Math.max(1, Number(row.revision || 1)),
     updateTime: row.update_time ?? null,
   };
@@ -372,6 +394,7 @@ export async function resolveNoteShare(req, res) {
     await appendShareEvent(connection, req, row.id, 'viewed', resumesReadingSession ? 'session_resumed' : 'succeeded');
     await connection.commit();
     transactionStarted = false;
+    setShareImageTicket(req, res, row.id, ticket);
     void cleanupOldShareEvents();
     return res.send(
       resultData({
@@ -409,16 +432,16 @@ export async function resolveNoteShare(req, res) {
   }
 }
 
-async function authorizeNoteShareTicket(req, res, db = pool) {
+async function authorizeNoteShareTicket(req, res, db = pool, { image = false, token = req.body?.accessTicket } = {}) {
   setPublicShareHeaders(res);
+  const fail = (status, code, zh, en) =>
+    image ? res.status(404).end() : publicError(req, res, status, code, zh, en);
   let ticket;
   try {
-    ticket = await readNoteShareTicket(req.body?.accessTicket);
+    ticket = await readNoteShareTicket(token);
   } catch (error) {
     console.error('[note-share] session read failed code=%s', stableAgentErrorCode(error));
-    publicError(
-      req,
-      res,
+    fail(
       503,
       'NOTE_SHARE_SESSION_UNAVAILABLE',
       '阅读会话暂时不可用',
@@ -427,9 +450,7 @@ async function authorizeNoteShareTicket(req, res, db = pool) {
     return null;
   }
   if (!ticket) {
-    publicError(
-      req,
-      res,
+    fail(
       403,
       'NOTE_SHARE_SESSION_INVALID',
       '阅读会话已过期，请重新打开',
@@ -447,14 +468,54 @@ async function authorizeNoteShareTicket(req, res, db = pool) {
     const row = rows[0];
     const state = getNoteShareState(row, Date.now(), 'session');
     if (state !== 'active') {
-      shareStateError(req, res, state);
+      if (image) res.status(404).end();
+      else shareStateError(req, res, state);
       return null;
     }
     return { row, ticket };
   } catch (error) {
     console.error('[note-share] session authorization failed code=%s', stableAgentErrorCode(error));
-    publicError(req, res, 503, 'SHARE_SERVICE_UNAVAILABLE', '分享服务暂时不可用', 'The share service is unavailable');
+    fail(503, 'SHARE_SERVICE_UNAVAILABLE', '分享服务暂时不可用', 'The share service is unavailable');
     return null;
+  }
+}
+
+export async function getNoteShareImage(req, res) {
+  setPublicShareHeaders(res);
+  const token = shareImageTicket(req);
+  const { shareId, noteId, fileName } = req.params;
+  if (!token || !isNoteImageFileName(fileName)) return res.status(404).end();
+
+  let connection;
+  let reading = false;
+  try {
+    connection = await pool.getConnection();
+    await connection.beginTransaction();
+    reading = true;
+    const authorization = await authorizeNoteShareTicket(req, res, connection, { image: true, token });
+    if (!authorization || String(authorization.ticket.shareId) !== shareId) {
+      if (authorization) res.status(404).end();
+      return;
+    }
+    const { ticket } = authorization;
+    const { page } = await getSharedNotePage({ db: connection, ticket, noteId });
+    const contained = extractManagedImages(page.content, page.type).some((url) => noteImageFileName(url) === fileName);
+    const allowed = contained && await canReadNoteImage({ db: connection, userId: ticket.ownerUserId, fileName });
+    await connection.commit();
+    reading = false;
+    if (!allowed) return res.status(404).end();
+    return sendNoteImageFile(res, fileName, { shared: true });
+  } catch (error) {
+    if (!(error instanceof NoteShareScopeError)) {
+      console.error('[note-share] image unavailable code=%s', stableAgentErrorCode(error));
+    }
+    return res.status(404).end();
+  } finally {
+    try {
+      if (reading) await connection?.rollback();
+    } finally {
+      connection?.release();
+    }
   }
 }
 

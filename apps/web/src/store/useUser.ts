@@ -5,6 +5,8 @@ import bookmarkStore from './bookmark.ts';
 import cloudSpaceStore from './cloudSpace.ts';
 import useNoteLibraryCacheStore from './noteLibraryCache.ts';
 import { resolveSystemTheme } from '@/utils/systemTheme';
+import { buildResourceReadScope } from '@/utils/resourceReadScope';
+import { resetSearchIdentity } from '@/api/searchCache';
 
 // 接口定义
 interface UserLocation {
@@ -85,15 +87,6 @@ interface UserInfo {
 }
 
 interface UserState extends UserInfo {}
-
-const getResourceIdentityKey = (user: UserInfo) =>
-  [
-    user.id || '',
-    user.role || '',
-    user.visitorWorkspace ? 'visitor-workspace' : '',
-    user.adminContext?.subjectUserId || '',
-    user.adminContext?.mode || '',
-  ].join('|');
 
 // 默认用户状态
 const createDefaultUserState = (): UserState => ({
@@ -186,13 +179,14 @@ export default defineStore('user', {
      * 设置用户信息
      */
     setUserInfo(val: Partial<UserInfo>): void {
-      const previousResourceIdentity = getResourceIdentityKey(this);
       const nextUser = { ...createDefaultUserState(), ...val };
       nextUser.preferences = normalizePreferences(val.preferences);
+      const resourceIdentityChanged = buildResourceReadScope(this) !== buildResourceReadScope(nextUser);
+      if (resourceIdentityChanged) resetSearchIdentity();
       Object.assign(this, nextUser);
       // 账号发生切换时,作废上一账号的资源缓存,
       // 避免游客浏览后登录/注册，首帧仍显示游客的书签、文件夹或文件。
-      if (previousResourceIdentity !== getResourceIdentityKey(this)) {
+      if (resourceIdentityChanged) {
         readEntitlementJourney(this.id);
         bookmarkStore().reset();
         cloudSpaceStore().reset({ showLoading: true });
@@ -204,6 +198,7 @@ export default defineStore('user', {
      */
     resetUserInfo(): void {
       clearEntitlementJourney();
+      resetSearchIdentity();
       Object.assign(this, createDefaultUserState());
       // 登出时一并清空资源缓存,避免下一个账号看到上一个账号残留的数据。
       bookmarkStore().reset();

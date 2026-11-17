@@ -131,6 +131,8 @@ export function shouldSkipApiLog(originalUrl, method) {
   if (API_LOG_SKIP_SUBSTRINGS.some((key) => url.includes(key))) return true;
   const path = normalizeApiPath(url);
   if (method === 'GET' && path === '/user/admin/avatar') return true;
+  if ((method === 'GET' || method === 'HEAD') &&
+      /^\/(?:uploads\/[^/]+|note\/share\/image\/[^/]+\/[^/]+\/[^/]+)$/.test(path)) return true;
   return (
     PASSIVE_API_PATHS.has(path) ||
     PASSIVE_API_PATH_PATTERNS.some((pattern) => pattern.test(path)) ||

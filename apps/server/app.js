@@ -51,7 +51,8 @@ import { startAiExecutionRecoveryScheduler } from './util/aiExecution/recovery.j
 import { getAiArtifactRetentionConfig, startAiArtifactRetentionScheduler } from './util/aiArtifactRetention.js';
 import { startAiBalanceSnapshotScheduler } from './util/agent/providerBalanceSnapshot.js';
 import { stableAgentErrorCode } from './util/agent/logSafety.js';
-import { getUploadStaticDirectories } from './util/bookmarkIconStorage.js';
+import { getUploadStaticDirectories, isPublicBookmarkIconFileName } from './util/bookmarkIconStorage.js';
+import { canReadAdminNoteImage, canReadNoteImage, sendNoteImageFile } from './util/noteImageAccess.js';
 import { startAccountDeletionCleanupScheduler } from './util/accountDeletion.js';
 import { startOperationalLogRetentionScheduler } from './util/operationalLogRetention.js';
 import { requestTraceMiddleware } from './util/requestTrace.js';
@@ -96,6 +97,20 @@ app.use(HUAWEI_PUSH_RECEIPT_PATH, huaweiPushReceiptRouter);
 // 在 Body 解析、鉴权和安全正则之前提供高上限的匿名来源保护，先挡住明显资源耗尽流量。
 app.use(earlyAnonymousRateLimiter);
 app.use('/public/forms', publicFormsRouter);
+// Only generated bookmark icons are public in the shared uploads directory.
+for (const directory of getUploadStaticDirectories(process.env)) {
+  const sendIcon = express.static(directory, { index: false, redirect: false });
+  app.use('/uploads', (req, res, next) => {
+    if (req.method !== 'GET' && req.method !== 'HEAD') return next();
+    let fileName;
+    try {
+      fileName = decodeURIComponent(req.path).slice(1);
+    } catch {
+      return res.status(404).end();
+    }
+    return isPublicBookmarkIconFileName(fileName) ? sendIcon(req, res, next) : next();
+  });
+}
 app.use(bodyParser.json({ limit: '10mb', extended: true }));
 
 // 还原可信登录态
@@ -126,11 +141,17 @@ const allRouter = [
 allRouter.forEach((item) => {
   app.use(item.path, item.router);
 });
-// 本地预览时 Worker 可把 favicon 写入临时目录；线上仍回退到既有上传目录。
-// 多次挂载利用 express.static 的 fallthrough，找不到时继续尝试下一个目录。
-for (const directory of getUploadStaticDirectories(process.env)) {
-  app.use('/uploads', express.static(directory));
-}
+app.get('/uploads/:fileName', async (req, res) => {
+  const fileName = req.params.fileName;
+  const userId = (req.resourceUser || req.user)?.id;
+  if (await canReadNoteImage({ db: pool, userId, fileName })) {
+    return sendNoteImageFile(res, fileName, { preview: Boolean(req.adminContext) });
+  }
+  if (await canReadAdminNoteImage({ db: pool, req, fileName })) {
+    return sendNoteImageFile(res, fileName, { preview: true });
+  }
+  return res.set('Cache-Control', 'private, no-store').status(404).end();
+});
 // 必须挂在全部路由之后：兜住未捕获异常，避免默认错误页向客户端回显堆栈。
 app.use(httpErrorHandler);
 

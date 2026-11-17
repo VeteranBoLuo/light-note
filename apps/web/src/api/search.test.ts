@@ -17,6 +17,7 @@ vi.mock('@/i18n', () => ({
 }));
 
 import { clearGlobalSearchCache, fetchGlobalSearch, fetchGlobalSearchSuggestions } from './search.ts';
+import { resetSearchIdentity } from './searchCache';
 
 describe('fetchGlobalSearch cache policy', () => {
   beforeEach(() => {
@@ -49,6 +50,25 @@ describe('fetchGlobalSearch cache policy', () => {
     expect(first.items[0]?.id).toBe('bookmark-old');
     expect(cached.items[0]?.id).toBe('bookmark-old');
     expect(refreshed.items[0]?.id).toBe('bookmark-new');
+  });
+
+  it.each([fetchGlobalSearch, fetchGlobalSearchSuggestions])('切换搜索身份后读取新快照并作废旧身份的在途结果', async (fetchSearch) => {
+    const response = (id: string) => ({ status: 200, data: { items: [{ id, type: 'note' }] } });
+    let resolvePrevious!: (value: ReturnType<typeof response>) => void;
+    mocks.apiBasePost
+      .mockResolvedValueOnce(response('first'))
+      .mockImplementationOnce(() => new Promise((resolve) => { resolvePrevious = resolve; }))
+      .mockResolvedValueOnce(response('second'))
+      .mockResolvedValueOnce(response('second-fresh'));
+
+    await fetchSearch('same keyword');
+    const pending = fetchSearch('pending keyword');
+    const discarded = expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+    resetSearchIdentity();
+    expect((await fetchSearch('same keyword')).items[0]?.id).toBe('second');
+    resolvePrevious(response('obsolete'));
+    await discarded;
+    expect((await fetchSearch('pending keyword')).items[0]?.id).toBe('second-fresh');
   });
 
   it('分页和筛选条件会进入请求与缓存键，不会复用其他页结果', async () => {

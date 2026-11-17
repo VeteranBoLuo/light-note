@@ -316,8 +316,13 @@ export async function combinedSearch({ user, input = {}, db = pool, env = proces
         selected.indexOf(a.type) - selected.indexOf(b.type),
     );
     const picked = grouped ? rows : diversifySuggestItems(rows, 8, 3);
-    const items = await hydrate(db, user, picked, options, lang);
-    return { keyword, items, groups: groupItems(items, lang), hasMore: hasMore || rows.length > picked.length };
+    const items = await hydrate(db, user, picked, { ...options, suggestion: true }, lang);
+    return {
+      keyword,
+      items,
+      ...(input.includeMetadata !== false ? { groups: groupItems(items, lang) } : {}),
+      hasMore: hasMore || rows.length > picked.length,
+    };
   }
   if (input.cursor && (!input.cursor.seek || typeof input.cursor !== 'object')) fail('CURSOR_INVALID');
   const limit = Math.max(1, Math.min(40, Math.trunc(Number(input.pageSize) || 40))),

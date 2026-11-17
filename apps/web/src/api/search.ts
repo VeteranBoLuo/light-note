@@ -2,6 +2,14 @@ import type { PublicResourceItem } from '@lightnote/shared/public-resources';
 import { apiBasePost, type RequestOptions } from '@/http/request.ts';
 import i18n from '@/i18n';
 import {
+  assertSearchIdentity,
+  cacheSearchResponse,
+  fullSearchCache,
+  searchCacheRevision,
+  searchIdentityVersion,
+  searchSuggestionCache,
+} from './searchCache';
+import {
   GLOBAL_SEARCH_TYPES,
   RESOURCE_SEARCH_TYPES,
   type GlobalSearchType,
@@ -171,7 +179,7 @@ const emptySearchResult: GlobalSearchResponse = {
   tagMatches: [],
 };
 
-const cache = new Map<string, GlobalSearchResponse>();
+export { clearGlobalSearchCache } from './searchCache';
 
 function normalizeSearchCursor(value: unknown): SearchCursor | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
@@ -216,6 +224,9 @@ export async function fetchGlobalSearch(
   query: GlobalSearchQuery = {},
   options?: RequestOptions,
 ): Promise<GlobalSearchResponse> {
+  const identity = searchIdentityVersion();
+  const revision = searchCacheRevision();
+  assertSearchIdentity(identity, options?.signal);
   const normalizedKeyword = keyword.trim();
   const locale = i18n.global.locale.value;
   const paginationMode =
@@ -256,15 +267,15 @@ export async function fetchGlobalSearch(
   };
   const cacheKey = `${locale}::${normalizedKeyword}::${pageSize}::${JSON.stringify(normalizedQuery)}`;
 
-  if (paginationMode !== 'global' && !force && cache.has(cacheKey)) {
-    return cache.get(cacheKey) as GlobalSearchResponse;
-  }
+  const cached = paginationMode !== 'global' && !force ? fullSearchCache.get(cacheKey) : undefined;
+  if (cached) return cached;
 
   const res = await apiBasePost('/api/search/global', {
     keyword: normalizedKeyword,
     ...(paginationMode !== 'perType' ? { pageSize } : { limitPerType: pageSize }),
     ...normalizedQuery,
   }, options);
+  assertSearchIdentity(identity, options?.signal);
 
   if (res.status !== 200) {
     const error = new Error(String(res.msg || i18n.global.t('common.requestFailedDescription'))) as Error & {
@@ -339,7 +350,7 @@ export async function fetchGlobalSearch(
     ...(hasMoreByType ? { hasMoreByType } : {}),
   };
 
-  if (paginationMode !== 'global') cache.set(cacheKey, data);
+  if (paginationMode !== 'global') cacheSearchResponse(fullSearchCache, cacheKey, data, revision);
   return data;
 }
 
@@ -349,14 +360,8 @@ export interface GlobalSearchSuggestResponse {
   hasMore: boolean;
 }
 
-interface SuggestCacheEntry {
-  at: number;
-  data: GlobalSearchSuggestResponse;
-}
-
-// 快捷搜索按“账号 + 语言 + 关键词 + 类型”短缓存；资源写操作会调用 clearGlobalSearchCache 一并失效
+// 账号上下文切换会清空缓存；同一身份内按语言、关键词及展示范围短期复用。
 const SUGGEST_CACHE_TTL = 30_000;
-const suggestCache = new Map<string, SuggestCacheEntry>();
 
 /**
  * 快捷全局搜索：结果已在服务端做过相关度排序与类型均衡（默认精简模式；PC 分组模式独立保留各类型名额）。
@@ -375,6 +380,9 @@ export async function fetchGlobalSearchSuggestions(
   const normalizedKeyword = keyword.trim();
   if (!normalizedKeyword && !options.includeRecent) return { keyword: '', items: [], hasMore: false };
 
+  const identity = searchIdentityVersion();
+  const revision = searchCacheRevision();
+  assertSearchIdentity(identity, options.signal);
   const locale = i18n.global.locale.value;
   const types = [...new Set(options.types || GLOBAL_SEARCH_TYPES)]
     .filter((type) => GLOBAL_SEARCH_TYPES.includes(type))
@@ -385,7 +393,7 @@ export async function fetchGlobalSearchSuggestions(
     : '';
   const suggestLayout = options.suggestLayout === 'grouped' ? 'grouped' : 'compact';
   const cacheKey = `${locale}::${normalizedKeyword}::${types.join(',')}::${sourceType}::${suggestLayout}`;
-  const cached = suggestCache.get(cacheKey);
+  const cached = searchSuggestionCache.get(cacheKey);
   if (normalizedKeyword && cached && Date.now() - cached.at < SUGGEST_CACHE_TTL) return cached.data;
 
   const res = await apiBasePost(
@@ -401,6 +409,7 @@ export async function fetchGlobalSearchSuggestions(
     },
     { signal: options.signal, silent: true },
   );
+  assertSearchIdentity(identity, options.signal);
 
   if (res.status !== 200) {
     const error = new Error(String(res.msg || i18n.global.t('common.requestFailedDescription'))) as Error & {
@@ -415,13 +424,8 @@ export async function fetchGlobalSearchSuggestions(
     items: Array.isArray(res.data?.items) ? res.data.items : [],
     hasMore: Boolean(res.data?.hasMore),
   };
-  if (normalizedKeyword) suggestCache.set(cacheKey, { at: Date.now(), data });
+  if (normalizedKeyword) cacheSearchResponse(searchSuggestionCache, cacheKey, { at: Date.now(), data }, revision);
   return data;
-}
-
-export function clearGlobalSearchCache() {
-  cache.clear();
-  suggestCache.clear();
 }
 
 export function previewSearchBatchSelection(selection: BatchSelection, includeResolvedItems = false) {

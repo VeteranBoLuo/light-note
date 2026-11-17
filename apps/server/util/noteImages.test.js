@@ -38,7 +38,7 @@ describe('filterOwnedImageUrls', () => {
       query: vi
         .fn()
         .mockResolvedValueOnce([[{ url: 'https://boluo66.top/uploads/a.png' }]]) // note_images 命中 a
-        .mockResolvedValueOnce([[{ n: 0 }]]), // b 的模板归属也未命中
+        .mockResolvedValueOnce([[]]), // b 没有本人资产登记
     };
     const result = await filterOwnedImageUrls({
       urls: ['https://boluo66.top/uploads/a.png', 'https://boluo66.top/uploads/b.png'],
@@ -51,18 +51,18 @@ describe('filterOwnedImageUrls', () => {
     expect(params.at(-1)).toBe('u1');
   });
 
-  it('note_images 无行但自己模板正文引用时,归属仍成立(源笔记已彻底删除场景)', async () => {
+  it('源笔记清理后使用已登记的本人资产恢复模板图片归属', async () => {
     poolQuery
       .mockResolvedValueOnce([[]]) // note_images 无任何行(源笔记已彻底删除)
-      .mockResolvedValueOnce([[{ n: 1 }]]); // 自己模板正文包含该 URL
+      .mockResolvedValueOnce([[{ source_locator: 'note-1-a.png' }]]);
     const result = await filterOwnedImageUrls({
       urls: ['https://boluo66.top/uploads/note-1-a.png'],
       userId: 'u1',
     });
     expect(result).toEqual(['https://boluo66.top/uploads/note-1-a.png']);
-    const [tplSql, tplParams] = poolQuery.mock.calls[1];
-    expect(tplSql).toMatch(/note_template/);
-    expect(tplParams[0]).toBe('u1'); // 只认当前用户自己的模板
+    const [assetSql, assetParams] = poolQuery.mock.calls[1];
+    expect(assetSql).toMatch(/image_assets/);
+    expect(assetParams).toEqual(['u1', 'note-1-a.png']);
   });
 });
 

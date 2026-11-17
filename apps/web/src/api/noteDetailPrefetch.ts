@@ -1,21 +1,14 @@
 import { apiBasePost } from '@/http/request';
 import { DRAWING_SCENE_VERSION } from '@lightnote/shared/drawing-note';
+import { buildResourceReadScope as buildNoteDetailRequestScope, type ResourceReadIdentity } from '@/utils/resourceReadScope';
+
+export { buildNoteDetailRequestScope };
+export type NoteDetailRequestIdentity = ResourceReadIdentity;
 
 const NOTE_DETAIL_PREFETCH_TTL = 30_000;
 const NOTE_DETAIL_LOCAL_SNAPSHOT_TTL = 2 * 60_000;
 const NOTE_DETAIL_INTERACTIVE_TIMEOUT = 15_000;
 const MAX_PREFETCH_ENTRIES = 8;
-
-export interface NoteDetailRequestIdentity {
-  id?: string;
-  role?: string;
-  visitorWorkspace?: boolean;
-  adminContext?: {
-    id?: string;
-    subjectUserId?: string;
-    mode?: string;
-  } | null;
-}
 
 type NoteDetailResponse = Awaited<ReturnType<typeof apiBasePost>>;
 
@@ -25,17 +18,6 @@ interface PrefetchEntry {
 }
 
 const entries = new Map<string, PrefetchEntry>();
-
-export function buildNoteDetailRequestScope(identity: NoteDetailRequestIdentity) {
-  return [
-    identity.id || 'anonymous',
-    identity.role || '',
-    identity.visitorWorkspace ? 'visitor-workspace' : '',
-    identity.adminContext?.id || '',
-    identity.adminContext?.subjectUserId || '',
-    identity.adminContext?.mode || '',
-  ].join('|');
-}
 
 function cacheKey(identity: NoteDetailRequestIdentity, noteId: string) {
   return `${buildNoteDetailRequestScope(identity)}::${noteId}`;

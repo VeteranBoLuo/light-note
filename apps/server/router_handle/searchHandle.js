@@ -305,7 +305,7 @@ export const globalSearch = async (req, res) => {
         resultData({
           keyword,
           items: suggest.items,
-          groups: groupItems(suggest.items, lang),
+          ...(req.body?.includeMetadata !== false ? { groups: groupItems(suggest.items, lang) } : {}),
           hasMore: suggest.hasMore,
         }),
       );

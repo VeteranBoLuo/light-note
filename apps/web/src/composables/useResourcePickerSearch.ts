@@ -6,8 +6,9 @@
  * **选中之后写到哪里由各业务适配器决定**(AI 的云文件要走附件解析,笔记要插链接,
  * 待办要存结构化关系),因此本文件不感知任何业务写入逻辑。
  */
-import { ref } from 'vue';
+import { ref, watch } from 'vue';
 import { fetchGlobalSearch, type SearchCursor, type SearchResultItem } from '@/api/search';
+import { searchIdentityVersion } from '@/api/searchCache';
 import { isGlobalSearchType, type GlobalSearchType } from '@/utils/globalSearchTypes';
 
 /** 选择器支持五类对象；调用方显式决定允许范围，默认仍为三类资料。 */
@@ -322,6 +323,8 @@ export function useResourcePickerSearch(options: UseResourcePickerSearchOptions 
     browseKeyword = '';
     browseTypes = [];
   }
+
+  watch(searchIdentityVersion, reset, { flush: 'sync' });
 
   return {
     results,

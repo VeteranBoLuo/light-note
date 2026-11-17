@@ -2,6 +2,7 @@ import { fetchCombinedSearch } from '@/api/publicResources';
 import { usePublicResourceScope } from '@/store/publicResourceScope';
 import { onBeforeUnmount, ref, watch } from 'vue';
 import { fetchGlobalSearchSuggestions, type SearchResultItem } from '@/api/search';
+import { searchIdentityVersion } from '@/api/searchCache';
 import { GLOBAL_SEARCH_TYPES, type GlobalSearchType } from '@/utils/globalSearchTypes';
 import { dedupeSearchItems, diversifySearchItems } from '@/utils/globalSearchDiversify';
 import { useUserStore } from '@/store';
@@ -94,6 +95,7 @@ export function useGlobalSearchSuggestions(
               mode: 'suggest',
               suggestLayout: options.suggestLayout || 'compact',
               sourceType: getSourceType(),
+              includeMetadata: false,
             },
             signal,
           );
@@ -138,8 +140,9 @@ export function useGlobalSearchSuggestions(
 
   // 账号切换后旧结果不能残留
   watch(
-    () => [user.id, user.role, user.adminContext?.id],
+    () => [searchIdentityVersion(), user.id, user.role, user.adminContext?.id],
     () => reset(),
+    { flush: 'sync' },
   );
 
   if (publicScope) {

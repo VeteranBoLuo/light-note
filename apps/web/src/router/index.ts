@@ -32,7 +32,7 @@ import { isMobileViewport } from '@/config/responsive.ts';
 import { hasLoggedInBefore } from '@/utils/authStorage.ts';
 import { hasVisitedMobileLanding } from '@/utils/mobileLandingVisit.ts';
 import { syncRouteSeoMeta } from '@/utils/seoMeta.ts';
-import { prepareServerManagementLocale } from '@/i18n';
+import { prepareRouteLocale } from '@/i18n';
 import { installRoutePending } from '@/utils/routePending';
 
 function getStoredPreferences() {
@@ -207,9 +207,7 @@ const router = createRouter({
 });
 installRoutePending(router);
 router.beforeResolve(async (to) => {
-  if (to.matched.some((record) => record.path === '/serverManagement')) {
-    await prepareServerManagementLocale();
-  }
+  if (to.meta.localeSection) await prepareRouteLocale(to.meta.localeSection);
 });
 
 // 记录"用户正要去哪":异步组件解析(可能因 chunk 404 而失败)之前先落一份目标路径,

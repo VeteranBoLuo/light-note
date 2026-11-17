@@ -145,6 +145,7 @@ export interface NoteShareRecord {
 }
 
 export interface PublicNoteSharePage {
+  protectedImages?: boolean;
   id: string;
   parentId: string | null;
   title: string;

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   assertLocalViteBackend,
   createLocalBackendProxy,
+  PUBLIC_BOOKMARK_UPLOAD_ROUTE,
   isPublicUploadReadMethod,
   LOCAL_VITE_BACKEND_TARGET,
   PUBLIC_UPLOAD_ORIGIN,
@@ -25,9 +26,14 @@ describe('Vite 本地后端代理边界', () => {
     expect(proxy['^/api(?:/|$)'].target).toBe(LOCAL_VITE_BACKEND_TARGET);
     expect(proxy['/realtime/chat']).toMatchObject({ ws: true, changeOrigin: false });
     expect(proxy['/realtime/notifications']).toMatchObject({ ws: true, changeOrigin: false });
-    expect(proxy['^/uploads(?:/|$)']).toMatchObject({ target: PUBLIC_UPLOAD_ORIGIN, changeOrigin: true });
+    const publicRoute = new RegExp(PUBLIC_BOOKMARK_UPLOAD_ROUTE);
+    expect(publicRoute.test('/uploads/bookmark-demo.png')).toBe(true);
+    expect(publicRoute.test('/uploads/note-demo.png')).toBe(false);
+    expect(proxy[PUBLIC_BOOKMARK_UPLOAD_ROUTE]).toMatchObject({ target: PUBLIC_UPLOAD_ORIGIN, changeOrigin: true });
+    expect(proxy['^/uploads(?:/|$)']).toMatchObject({ target: LOCAL_VITE_BACKEND_TARGET, changeOrigin: true });
     expect(proxy['^/uploads(?:/|$)'].bypass?.({ method: 'GET' } as never, undefined, {} as never)).toBeUndefined();
     expect(proxy['^/uploads(?:/|$)'].bypass?.({ method: 'POST' } as never, undefined, {} as never)).toBe(false);
+    expect(proxy[PUBLIC_BOOKMARK_UPLOAD_ROUTE].bypass?.({ method: 'POST' } as never, undefined, {} as never)).toBe(false);
   });
 
   it.each(['GET', 'get', 'HEAD'])('allows public upload read method %s', (method) => {
