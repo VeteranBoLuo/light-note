@@ -239,8 +239,10 @@ async function serve(migrateOnly = false) {
   try {
     for (const port of [...Object.values(ports), ...storagePorts]) if (await canConnect(port)) throw new Error(`本地端口 ${port} 已占用；未结束原有进程。`);
     const env = childEnv(config);
-    for (const binary of ['docker', 'colima', 'redis-server', 'weed', 'mailpit', 'pnpm']) executable(binary);
+    for (const binary of ['docker', 'colima', 'redis-server', 'weed', 'mailpit']) executable(binary);
+    const pnpm = executable('pnpm');
     if (!existsSync(config.LIGHTNOTE_LOCAL_FAVICON_ENTRY || '')) throw new Error('缺少本机工具箱 favimg 源码；请在同级准备 toolkit，或在 .local-test/server.env 设置 LIGHTNOTE_LOCAL_FAVICON_ENTRY。');
+    await oneShot('dependencies', pnpm, ['install', '--frozen-lockfile', '--prefer-offline'], childEnv({}), root);
     let dockerReady = false;
     try { execFileSync(executable('docker'), ['info', '--format', '{{.ServerVersion}}'], { env: dockerEnv(), stdio: 'ignore', timeout: 3000 }); dockerReady = true; }
     catch { /* 冷启动才启动专属虚拟机；不重复执行已在线虚拟机的初始化。 */ }
@@ -265,7 +267,7 @@ async function serve(migrateOnly = false) {
     const api = run('api', process.execPath, [path.join(serverDir, 'app.js')], env, { cwd: serverDir });
     await waitPort(ports.api, api);
     for (const name of ['document', 'bookmarkIcon', 'resourceGovernance', 'browserPush', 'noteImport', 'dataExport']) run(`${name}-worker`, process.execPath, [path.join(serverDir, `${name}Worker.js`)], env, { cwd: serverDir });
-    const web = run('web', executable('pnpm'), ['--filter', 'web', 'exec', 'vite', '--host', '127.0.0.1', '--port', String(ports.web), '--strictPort'], env);
+    const web = run('web', pnpm, ['--filter', 'web', 'exec', 'vite', '--host', '127.0.0.1', '--port', String(ports.web), '--strictPort'], env);
     await waitPort(ports.web, web);
     await sleep(1500);
     if (stopping) return;
