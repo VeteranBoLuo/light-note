@@ -34,6 +34,8 @@
           </template>
         </BInput>
       </label>
+
+      <p v-if="loginError" class="auth-login-error" role="alert">{{ loginError }}</p>
     </div>
 
     <div class="auth-options">
@@ -66,7 +68,7 @@
 </template>
 
 <script lang="ts" setup>
-  import { computed, onMounted, ref } from 'vue';
+  import { computed, onMounted, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import icon from '@/config/icon.ts';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
@@ -98,13 +100,19 @@
   const isCheck = ref(true);
   const submitting = ref(false);
   const githubStarting = ref(false);
+  const loginError = ref('');
   const disable = computed(() => submitting.value || !formData.value.email || !formData.value.password);
   const { t } = useI18n();
   const bookmark = bookmarkStore();
   const user = useUserStore();
 
+  watch([() => formData.value.email, () => formData.value.password], () => {
+    loginError.value = '';
+  });
+
   async function handleLogin() {
     if (submitting.value) return;
+    loginError.value = '';
     formData.value.email = formData.value.email.trim();
     if (!formData.value.email) {
       message.warning(t('auth.emailRequired'));
@@ -119,10 +127,24 @@
       return;
     }
 
+    const credentials = { ...formData.value };
     submitting.value = true;
     try {
-      const res: any = await apiBasePost('/api/user/login', { ...formData.value, rememberMe: isCheck.value });
-      if (res.status !== 200) return;
+      const res = await apiBasePost(
+        '/api/user/login',
+        { ...credentials, rememberMe: isCheck.value },
+        { silent: true },
+      ).catch((error: { message?: string; response?: { data?: { msg?: string } } }) => ({
+        status: 0,
+        msg: error?.response?.data?.msg || (error instanceof Error ? '' : error?.message),
+        data: null,
+      }));
+      if (res.status !== 200) {
+        if (formData.value.email === credentials.email && formData.value.password === credentials.password) {
+          loginError.value = (typeof res.msg === 'string' && res.msg.trim()) || t('auth.loginFailed');
+        }
+        return;
+      }
 
       markLoggedIn();
       if (isCheck.value) {
@@ -195,3 +217,13 @@
 
   defineExpose({ handleLogin });
 </script>
+
+<style scoped lang="less">
+  .auth-login-error {
+    margin: 0;
+    color: var(--auth-error-color, var(--danger-color));
+    font-size: var(--ui-font-13, 13px);
+    line-height: 1.55;
+    overflow-wrap: anywhere;
+  }
+</style>
