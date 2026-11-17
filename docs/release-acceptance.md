@@ -79,6 +79,12 @@ pnpm local:stop    # 停止应用和依赖，保留本地数据
 
 切换前核对历史原图仍可由上传登记或资产账本确认归属。切换后用验收笔记覆盖本人原图与历史模板、书签图标、匿名分享阅读、撤销及过期后的新读取和原始地址的匿名拒绝。分享图像使用 `private, no-store`，个人原图保留鉴权后重新验证。代理映射纳入 Web 与 API 的同批发布和回滚复核。
 
+### 旧静态文件入口退役
+
+API 已移除旧静态目录挂载。发布时在主站配置中用 [retired-legacy-files.conf](../scripts/nginx/retired-legacy-files.conf) 替换既有的 `/files/` 静态映射，同时封闭经 API 代理的旧入口。检查其他站点别名和站点根目录是否仍能暴露同一目录。保留原目录与全部文件。若发现仍有效的业务引用，先核对归属，再迁到已有鉴权入口。
+
+替换配置后用 `nginx -t` 校验并平滑重载。复核 `/files`、`/api/files` 及其子路径均返回 404，并验收云空间正常的上传、预览、分享与下载。回滚 API 时保持旧静态入口关闭。
+
 ## 变更级验证
 
 按影响范围选择最小充分验证，不无差别运行所有命令。
@@ -321,7 +327,9 @@ pnpm deploy:all
 pnpm deploy:host-agent
 ```
 
-部署脚本以当前工作树构建，发布前必须位于已推送的 `main`（紧急修复为基于 `main` 的修复分支）；GitHub 手动部署工作流只允许从 `main` 运行。不把本地 preview 进程或旧构建产物直接上传。
+生产部署入口在构建和传输前运行 [发布检查](../scripts/check-deploy-release.sh)。必须使用干净的 `main` 工作树，且提交与轻笺 GitHub 仓库的远程 `main` 顶端一致。目标提交在 `main` 的最新推送 CI 必须成功。GitHub 手动部署工作流可使用该次 `main` 提交的 detached HEAD。本地发布需要登录具备仓库与 Actions 读取权限的 GitHub CLI。
+
+紧急修复按[发版节奏](#发版节奏)合入并推送 `main` 后使用相同门禁。前端、后端和 Host Agent 的总发布固定同一个提交，各入口在传输前再次核对。GitHub 手动部署沿用 `HOST`、`USERNAME` 和 `SSH_PRIVATE_KEY` 配置 SSH。
 
 Web 生产构建必须完成首页、浏览器扩展、Android 下载和更新日志的预渲染及 SEO 产物校验：正文、允许索引指令与自引用 canonical 缺失时停止发布。CI/debug 的 `SKIP_PRERENDER=1` 只完成基础检查，不能代替生产 SEO 验收；统一部署入口强制关闭该跳过选项。
 

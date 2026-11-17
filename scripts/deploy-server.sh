@@ -2,6 +2,7 @@
 # 后端部署:本地 pnpm deploy(--legacy)打平自包含 node_modules → 服务器备份 → rsync 增量(--delete) → pm2 restart
 set -euo pipefail
 DEPLOY_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+RELEASE_SHA="$(bash "$DEPLOY_SCRIPT_DIR/check-deploy-release.sh" "${1:-}")"
 # shellcheck source=scripts/lib/deploy-environment.sh
 source "$DEPLOY_SCRIPT_DIR/lib/deploy-environment.sh"
 
@@ -27,6 +28,7 @@ ssh -i "$KEY" "$HOST" "'$REMOTE_NODE' -e 'const [major,minor]=process.versions.n
 echo "📦  pnpm deploy(--legacy,含 @lightnote/shared)…"
 rm -rf "$OUT"
 pnpm --filter server deploy --prod --legacy "$OUT"
+bash "$DEPLOY_SCRIPT_DIR/check-deploy-release.sh" "$RELEASE_SHA" >/dev/null
 
 # rsync --delete 会把服务器目录完全对齐成本地打包结果,任何只存在于服务器、未提交到 git 的改动
 # 都会被无声覆盖且无法找回。这里先在服务器本地做一次硬链接快照(不占用额外磁盘,滚动只保留最新 1 份),

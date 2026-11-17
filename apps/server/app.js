@@ -127,18 +127,7 @@ app.use(globalRateLimiter);
 // 路由感知的安全检测放在限流之后，避免过量请求先消耗正则、画像和事件计算。
 app.use(attackMonitor);
 
-const allRouter = [
-  ...baseRouter,
-  {
-    path: '/files',
-    router: express.static(
-      process.env.LIGHTNOTE_LOCAL_TEST === '1'
-        ? path.join(process.env.LIGHTNOTE_LOCAL_TEST_DIR, 'files')
-        : '/www/wwwroot/files',
-    ),
-  },
-];
-allRouter.forEach((item) => {
+baseRouter.forEach((item) => {
   app.use(item.path, item.router);
 });
 app.get('/uploads/:fileName', async (req, res) => {

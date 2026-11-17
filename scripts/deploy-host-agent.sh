@@ -3,6 +3,7 @@
 set -euo pipefail
 
 DEPLOY_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+RELEASE_SHA="$(bash "$DEPLOY_SCRIPT_DIR/check-deploy-release.sh" "${1:-}")"
 # shellcheck source=scripts/lib/deploy-environment.sh
 source "$DEPLOY_SCRIPT_DIR/lib/deploy-environment.sh"
 
@@ -18,6 +19,7 @@ cd "$(dirname "$0")/.."
 echo "📦  打包 Host Agent（仅生产依赖）…"
 rm -rf "$OUT"
 pnpm --filter host-agent deploy --prod --legacy "$OUT"
+bash "$DEPLOY_SCRIPT_DIR/check-deploy-release.sh" "$RELEASE_SHA" >/dev/null
 
 echo "🔎  预检 Node、systemd、runuser 与 PM2 运行时…"
 ssh -i "$KEY" "$HOST" "set -eu; \

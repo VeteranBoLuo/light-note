@@ -1,4 +1,6 @@
 import { localTestPorts } from './localTestPorts.js';
+import { get as httpGet } from 'node:http';
+import { get as httpsGet } from 'node:https';
 import { Readable } from 'node:stream';
 import { createHash } from 'node:crypto';
 import ObsClientSdk from 'esdk-obs-nodejs';
@@ -203,6 +205,56 @@ export const getObjectBufferFromObs = async (objectKey, { maxBytes = Infinity } 
   }
   return buffer;
 };
+
+const BOUNDED_OBS_DOWNLOAD_TIMEOUT_MS = 60_000;
+
+function obsDownloadError(code, message, status) {
+  return Object.assign(new Error(code + ': ' + message), { code, ...(status ? { obsStatus: status } : {}) });
+}
+
+export async function getBoundedObjectBufferFromObs(objectKey, { maxBytes, signal } = {}) {
+  if (!Number.isSafeInteger(maxBytes) || maxBytes <= 0) {
+    throw obsDownloadError('OBS_DOWNLOAD_LIMIT_INVALID', '文件读取上限无效');
+  }
+  const timeout = AbortSignal.timeout(BOUNDED_OBS_DOWNLOAD_TIMEOUT_MS);
+  const downloadSignal = signal ? AbortSignal.any([signal, timeout]) : timeout;
+  let response;
+  try {
+    downloadSignal.throwIfAborted();
+    const { url } = createDownloadSignedUrl({ objectKey, expires: 90 });
+    const target = new URL(url);
+    if (target.protocol !== 'http:' && target.protocol !== 'https:') {
+      throw obsDownloadError('OBS_DOWNLOAD_FAILED', '文件读取地址无效');
+    }
+    const get = target.protocol === 'https:' ? httpsGet : httpGet;
+    // A signed GET gives the caller control over the request before headers and
+    // throughout the raw binary stream, without following redirects.
+    response = await new Promise((resolve, reject) => {
+      get(target, { signal: downloadSignal }, resolve).once('error', reject);
+    });
+    if (response.statusCode !== 200) {
+      throw obsDownloadError('OBS_DOWNLOAD_FAILED', '无法读取文件，请稍后重试', response.statusCode);
+    }
+    const declaredBytes = Number(response.headers['content-length']);
+    if (declaredBytes > maxBytes) {
+      throw obsDownloadError('OBS_DOWNLOAD_SIZE_LIMIT', '文件超过读取上限');
+    }
+    const buffer = await readObsBinaryContent(response, maxBytes);
+    if (Number.isSafeInteger(declaredBytes) && declaredBytes >= 0 && buffer.length !== declaredBytes) {
+      throw obsDownloadError('OBS_DOWNLOAD_SIZE_MISMATCH', '文件下载不完整，请稍后重试');
+    }
+    return buffer;
+  } catch (error) {
+    if (signal?.aborted) throw signal.reason;
+    if (timeout.aborted) throw obsDownloadError('OBS_DOWNLOAD_TIMEOUT', '文件读取超时，请稍后重试');
+    const code = String(error?.code || '');
+    if (code.startsWith('OBS_DOWNLOAD_')) throw error;
+    // Preserve socket error codes for existing retry policies, without the request URL or transport message.
+    throw obsDownloadError(/^[A-Z][A-Z0-9_]+$/u.test(code) ? code : 'OBS_DOWNLOAD_FAILED', '无法读取文件，请稍后重试');
+  } finally {
+    if (response && !response.complete) response.destroy();
+  }
+}
 
 /** Read only a bounded metadata range; reject servers that ignore Range. */
 export const getObjectRangeFromObs = async (objectKey, start, end, { signal } = {}) => {

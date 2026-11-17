@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
-vi.mock('../aiDocument/service.js', () => ({ attachCloudDocumentSource: vi.fn() }));
+vi.mock('../aiDocument/service.js', async (importOriginal) => ({
+  ...(await importOriginal()),
+  attachCloudDocumentSource: vi.fn(),
+}));
 import {
   hasMeaningfulFileName,
   prepareOrganizeFile,
@@ -118,11 +121,12 @@ it('视觉缓存保存按 owner、对象和租约围栏复核，租约总是释�
     visualPages: [1],
     reading: {},
   };
+  const download = vi.fn(async () => Buffer.alloc(source.file_size));
   const result = await understandOrganizeFile(db, 'u', snapshot('狗.jpg'), prepared, beforeCall, {
-    metadata: async () => ({ contentLength: 7500 }),
-    download: async () => Buffer.from('fixture'),
+    download,
     recognize: async () => ({ subject: '狗', text: '', scene: '', purpose: '表情包', blank: false }),
   });
+  expect(download).toHaveBeenCalledWith(source.object_key, { maxBytes: source.file_size, signal: undefined });
   expect(beforeCall).toHaveBeenCalledTimes(1);
   const saved = db.query.mock.calls.find(([sql]) => sql.includes('SET visual_evidence_json'));
   expect(saved[0]).toContain('ds.user_id=?');
@@ -131,6 +135,19 @@ it('视觉缓存保存按 owner、对象和租约围栏复核，租约总是释�
   expect(saved[1].slice(1, 4)).toEqual(['source', 'u', 'object']);
   expect(db.query.mock.calls.at(-1)[0]).toContain('visual_lease_token=NULL');
   expect(result.source.visualEvidence[0].content).toContain('狗');
+});
+
+it('原件大小变化时释放租约，停止视觉识别', async () => {
+  const db = database();
+  const beforeCall = vi.fn();
+  const prepared = { source: { ...source, file_name: '图纸.pdf' }, visualPages: [1] };
+  await expect(
+    understandOrganizeFile(db, 'u', snapshot(), prepared, beforeCall, {
+      download: async () => Buffer.from('short read'),
+    }),
+  ).rejects.toMatchObject({ code: 'FILE_SIZE_MISMATCH', status: 409 });
+  expect(beforeCall).not.toHaveBeenCalled();
+  expect(db.query.mock.calls.at(-1)[0]).toContain('visual_lease_token=NULL');
 });
 
 it('视觉页面部分失败保留其他页，不自动重试失败页面', async () => {
@@ -147,8 +164,7 @@ it('视觉页面部分失败保留其他页，不自动重试失败页面', asyn
     .mockRejectedValueOnce(Object.assign(new Error('timeout'), { code: 'AI_GATEWAY_TIMEOUT' }))
     .mockResolvedValueOnce({ subject: '门', blank: false });
   const result = await understandOrganizeFile(db, 'u', snapshot('图纸.pdf'), prepared, async () => {}, {
-    metadata: async () => ({ contentLength: 7500 }),
-    download: async () => Buffer.from('pdf'),
+    download: async () => Buffer.alloc(pdf.file_size),
     recognize,
     render: async (_buffer, pages, each) => {
       for (const page of pages) await each(Buffer.from('image'), page);
@@ -173,8 +189,7 @@ it('视觉额度或执行计划被拒绝后停止，不继续后续页面', asyn
     .mockRejectedValue(Object.assign(new Error('limit'), { code: 'AI_EXECUTION_PROVIDER_CALL_LIMIT' }));
   await expect(
     understandOrganizeFile(db, 'u', snapshot(), prepared, async () => {}, {
-      metadata: async () => ({ contentLength: 7500 }),
-      download: async () => Buffer.from('pdf'),
+      download: async () => Buffer.alloc(source.file_size),
       recognize,
       render: async (_buffer, pages, each) => {
         for (const page of pages) await each(Buffer.from('image'), page);

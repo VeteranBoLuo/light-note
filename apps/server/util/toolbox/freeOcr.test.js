@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { ocrUsageDate, reserveFreeOcr, settleFreeOcr, executeFreeOcr, FREE_OCR_POLICY } from './freeOcr.js';
 
 const mocks = vi.hoisted(() => ({ read: vi.fn(), image: vi.fn(), pdf: vi.fn(), parse: vi.fn() }));
-vi.mock('../obsClient.js', () => ({ getObjectBufferFromObs: mocks.read }));
+vi.mock('../obsClient.js', () => ({ getBoundedObjectBufferFromObs: mocks.read }));
 vi.mock('../aiDocument/localOcr.js', () => ({
   localOcrProvider: { recognizeImage: mocks.image, recognizePdf: mocks.pdf },
 }));
@@ -87,7 +87,7 @@ describe('free OCR execution', () => {
             [
               {
                 input_index: 0,
-                source_json: { kind: 'file', id: 'file', file_name: 'test.png' },
+                source_json: { kind: 'file', id: 'file', file_name: 'test.png', file_size: buffer.length },
                 content_hash: crypto.createHash('sha256').update(buffer).digest('hex'),
               },
             ],
@@ -113,7 +113,7 @@ describe('free OCR execution', () => {
               [
                 {
                   input_index: 0,
-                  source_json: { file_name: 'test.png' },
+                  source_json: { file_name: 'test.png', file_size: buffer.length },
                   content_hash: crypto.createHash('sha256').update(buffer).digest('hex'),
                 },
               ],
@@ -137,7 +137,7 @@ describe('free OCR execution', () => {
               [
                 {
                   input_index: 0,
-                  source_json: { kind: 'file', id: 'file', file_name: 'test.png' },
+                  source_json: { kind: 'file', id: 'file', file_name: 'test.png', file_size: buffer.length },
                   content_hash: crypto.createHash('sha256').update(buffer).digest('hex'),
                 },
               ],

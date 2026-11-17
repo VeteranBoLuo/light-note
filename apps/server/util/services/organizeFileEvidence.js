@@ -1,10 +1,9 @@
 import crypto from 'node:crypto';
 import { isAiQuotaErrorCode } from '@lightnote/shared/ai-quota-protocol';
 import path from 'node:path';
-import { attachCloudDocumentSource } from '../aiDocument/service.js';
-import { AI_DOCUMENT_MAX_BYTES, validateDocumentDescriptor } from '../aiDocument/parser.js';
+import { attachCloudDocumentSource, readDocumentSource } from '../aiDocument/service.js';
+import { validateDocumentDescriptor } from '../aiDocument/parser.js';
 import { AI_OCR_MAX_PAGES, withRenderedPdfPages } from '../aiDocument/localOcr.js';
-import { getObjectBufferFromObs, getObjectMetadataFromObs } from '../obsClient.js';
 import { imageRecognitionProvider, getImageRecognitionPolicy } from '../imageRecognition/service.js';
 import { suggestionError } from './organizeSuggestionRules.js';
 
@@ -174,14 +173,11 @@ export async function understandOrganizeFile(db, userId, snapshot, prepared, bef
   );
   if (!claimed.affectedRows) throw suggestionError('CONTENT_READING_BUSY', '图片内容正在读取', 503);
   try {
-    const metadata = await (dependencies.metadata || getObjectMetadataFromObs)(source.object_key);
-    if (
-      metadata.contentLength <= 0 ||
-      metadata.contentLength > AI_DOCUMENT_MAX_BYTES ||
-      metadata.contentLength !== Number(source.file_size)
-    )
-      throw suggestionError('FILE_SIZE_MISMATCH', '文件内容已变化', 409);
-    const buffer = await (dependencies.download || getObjectBufferFromObs)(source.object_key);
+    const buffer = await readDocumentSource(source, { download: dependencies.download }).catch((error) => {
+      if (error?.code === 'FILE_SIZE_INVALID' || error?.code === 'FILE_SIZE_MISMATCH')
+        throw suggestionError('FILE_SIZE_MISMATCH', '文件内容已变化', 409);
+      throw error;
+    });
     const failures = [];
     const recognize = async (image, page) => {
       await beforeCall();
