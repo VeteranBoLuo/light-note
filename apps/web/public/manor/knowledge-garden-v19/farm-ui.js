@@ -888,9 +888,15 @@ const FarmUI = (() => {
     }).join("");
     const aquatic = `<article class="supply-card"><header><h3>普通鱼饵</h3><span>已有 ${state.bait} 份</span></header><div class="supply-art"><img src="${R2_ART}icon-bait.webp" alt=""></div><div class="supply-copy"><p>海边垂钓 · 每竿使用 1 份</p><div class="supply-offers"><div><small>单份</small><strong>${R.baitCost} <small>积分</small></strong>${buy("shop-buy-bait", 1, R.baitCost)}</div><div class="bundle-offer"><span class="market-discount">9.5 折</span><small>10 份装</small><strong>${M.baitPrice(10)} <small>积分</small><del>${R.baitCost * 10}</del></strong>${buy("shop-buy-bait", 10, M.baitPrice(10), "", "买 10")}</div></div></div></article><article class="supply-card"><header><h3>淡水鱼苗袋</h3><span>今日可购 ${M.fryLeft(state)} / ${R.fryDaily}</span></header><div class="supply-art">${FarmArt.fryBag()}</div><div class="supply-copy"><p>打开必得 1 位淡水伙伴，也可通过垂钓遇见</p><div class="fry-offer"><small>每袋 1 位 · 收进待养区</small><div class="market-price">${FarmArt.ui("coin")}<strong>${R.fryPrice}</strong><span>积分 / 袋</span></div><div class="market-actions">${M.fryLeft(state) ? buy("buy-fry", 1, R.fryPrice, "", "买 1 袋") : '<span class="market-lock">明天补货</span>'}</div></div></div></article>`;
     const facility = FarmFacilities.cards();
+    const fishQuote = shopMode === "sell" && shopSellTab === "fish" ? M.quoteWaitingFishSale(state, FISH) : null;
+    let bulkSale = "";
+    if (fishQuote?.sold) bulkSale = '<button class="button primary" data-action="shop-sell-all-fish">出售全部待养水族</button>';
+    if (shopMode === "sell" && shopSellTab === "crops" && M.quoteAllCropSales(state).sold) {
+      bulkSale = '<button class="button primary" data-action="shop-sell-all-crops">出售全部收获物</button>';
+    }
     showDialog("商店", "种下喜欢的作物，把收获带回商店；建造设施，让庄园慢慢丰富起来。",
-    `<div class="shop-toolbar"><div class="fish-tabs shop-main-tabs" aria-label="商店交易"><button data-action="shop-mode" data-mode="buy" aria-pressed="${shopMode === "buy"}" class="${shopMode === "buy" ? "active" : ""}">${FarmArt.ui("pouch")}购买</button><button data-action="shop-mode" data-mode="sell" aria-pressed="${shopMode === "sell"}" class="${shopMode === "sell" ? "active" : ""}">${FarmArt.ui("basket")}出售</button><button data-action="shop-mode" data-mode="buyback" aria-pressed="${shopMode === "buyback"}" class="${shopMode === "buyback" ? "active" : ""}">${FarmArt.ui("receipt")}赎回</button></div></div>${shopMode !== "buy" ? tradeContent() : `<div class="fish-tabs shop-tabs" aria-label="商品分类"><button data-action="shop-tab" data-tab="seeds" aria-pressed="${shopTab === "seeds"}" class="${shopTab === "seeds" ? "active" : ""}">${FarmArt.ui("sprout")}种子</button><button data-action="shop-tab" data-tab="aquatic" aria-pressed="${shopTab === "aquatic"}" class="${shopTab === "aquatic" ? "active" : ""}">${FarmArt.ui("fish")}水族用品</button><button data-action="shop-tab" data-tab="facilities" aria-pressed="${shopTab === "facilities"}" class="${shopTab === "facilities" ? "active" : ""}">${FarmArt.ui("house")}设施</button></div><div class="${shopTab === "seeds" ? "market-grid" : shopTab === "facilities" ? "facility-grid" : "supply-grid"}">${shopTab === "seeds" ? cropCards : shopTab === "aquatic" ? aquatic : facility}</div>${shopTab === "seeds" ? '<p class="market-note">按基础产量估算完整采收的出售所得，不含额外增产。稀有种子来自成长奖励。</p>' : ""}`}`,
-    `<button class="button" data-action="close">回到庄园</button>${shopMode === "buy" && lastPurchasedSeed && state.seeds[lastPurchasedSeed] ? `<button class="button primary" data-action="seed-select" data-seed="${lastPurchasedSeed}">去播种${C(lastPurchasedSeed).name}</button>` : ""}`, false, "farm-shop-dialog");
+    `<div class="shop-toolbar"><div class="fish-tabs shop-main-tabs" aria-label="商店交易"><button data-action="shop-mode" data-mode="buy" aria-pressed="${shopMode === "buy"}" class="${shopMode === "buy" ? "active" : ""}">${FarmArt.ui("pouch")}购买</button><button data-action="shop-mode" data-mode="sell" aria-pressed="${shopMode === "sell"}" class="${shopMode === "sell" ? "active" : ""}">${FarmArt.ui("basket")}出售</button><button data-action="shop-mode" data-mode="buyback" aria-pressed="${shopMode === "buyback"}" class="${shopMode === "buyback" ? "active" : ""}">${FarmArt.ui("receipt")}赎回</button></div></div>${shopMode !== "buy" ? tradeContent(fishQuote) : `<div class="fish-tabs shop-tabs" aria-label="商品分类"><button data-action="shop-tab" data-tab="seeds" aria-pressed="${shopTab === "seeds"}" class="${shopTab === "seeds" ? "active" : ""}">${FarmArt.ui("sprout")}种子</button><button data-action="shop-tab" data-tab="aquatic" aria-pressed="${shopTab === "aquatic"}" class="${shopTab === "aquatic" ? "active" : ""}">${FarmArt.ui("fish")}水族用品</button><button data-action="shop-tab" data-tab="facilities" aria-pressed="${shopTab === "facilities"}" class="${shopTab === "facilities" ? "active" : ""}">${FarmArt.ui("house")}设施</button></div><div class="${shopTab === "seeds" ? "market-grid" : shopTab === "facilities" ? "facility-grid" : "supply-grid"}">${shopTab === "seeds" ? cropCards : shopTab === "aquatic" ? aquatic : facility}</div>${shopTab === "seeds" ? '<p class="market-note">按基础产量估算完整采收的出售所得，不含额外增产。稀有种子来自成长奖励。</p>' : ""}`}`,
+    `<button class="button" data-action="close">回到庄园</button>${bulkSale}${shopMode === "buy" && lastPurchasedSeed && state.seeds[lastPurchasedSeed] ? `<button class="button primary" data-action="seed-select" data-seed="${lastPurchasedSeed}">去播种${C(lastPurchasedSeed).name}</button>` : ""}`, false, "farm-shop-dialog");
     $("#dialog").classList.toggle("shop-facilities", shopMode === "buy" && shopTab === "facilities");
     const head = $("#dialog .dialog-head");
     if (head) {
@@ -900,7 +906,15 @@ const FarmUI = (() => {
     }
     panelNavigation(`shop:${shopMode}:${shopMode === "buy" ? shopTab : shopSellTab}`, [".shop-toolbar", ".shop-tabs"], "shop");
   }
-  function tradeContent() {
+  function groupFishSales({ items }) {
+    const groups = new Map();
+    for (const { fish, points } of items) {
+      if (!groups.has(fish.kind)) groups.set(fish.kind, { fish, price: points, count: 0 });
+      groups.get(fish.kind).count++;
+    }
+    return [...groups.values()];
+  }
+  function tradeContent(fishQuote) {
     const history = M.buybackEntries(state);
     const row = (r) => `<article class="buyback-row"><div class="buyback-art">${fishArt(r.fish.kind)}</div><div><strong>${FISH[r.fish.kind].name}</strong><small data-buyback-expiry="${r.soldAt + R.buybackHours}">剩余 ${clockTime(Math.max(0, r.soldAt + R.buybackHours - state.now))}</small></div><button class="tile-btn" data-action="shop-buyback" data-sale="${r.id}" data-quote="${M.buybackCost(r)}" ${state.wallet < M.buybackCost(r) ? "disabled" : ""}>赎回 · ${M.buybackCost(r)} 积分</button></article>`;
     if (shopMode === "buyback") return `<p class="trade-note">支持赎回的物品在出售后保留 ${R.buybackHours} 小时，过期离柜。新售出水族赎回加收 ${R.buybackFeePercent}%（向上取整，至少 1 积分），已有记录按原报价 · 最多保留最近 ${R.buybackLimit} 笔。</p><div class="buyback-list">${history.map(row).join("") || `<div class="farm-empty buyback-empty">${FarmArt.ui("receipt")}<strong>暂时没有可赎回的物品</strong><p>支持赎回的物品售出后，会在这里暂存。</p></div>`}</div>`;
@@ -908,8 +922,7 @@ const FarmUI = (() => {
     let cards = "";
     if (shopSellTab === "crops") cards = Object.entries(state.crops).filter(([key, n]) => n > 0 && C(key)?.sell != null).map(([key, n]) => `<article class="market-card trade-card"><div class="trade-art">${FarmArt.icon(key)}</div><header><h3>${C(key).name}</h3><span class="market-type">× ${n}</span></header><div class="market-price"><small>出售价格</small><strong>${C(key).sell}</strong><span>积分 / 份</span></div><button class="tile-btn primary" data-action="shop-sell-crop" data-crop="${key}" aria-label="出售${C(key).name}">出售</button></article>`).join("");else
     {
-      const groups = new Map();state.fish.filter((f) => !M.placed(state, f.id) && state.firstCompanionPending !== f.id).forEach((f) => {if (!groups.has(f.kind)) groups.set(f.kind, []);groups.get(f.kind).push(f);});
-      cards = [...groups].map(([key, fish]) => `<article class="market-card trade-card"><div class="trade-art">${fishArt(key)}</div><header><h3>${FISH[key].name}</h3><span class="market-type">× ${fish.length}</span></header><div class="market-price"><small>出售价格</small><strong>${M.sellPrice(key, FISH)}</strong><span>积分 / 位</span></div><button class="tile-btn primary" data-action="sell" data-fish="${fish[0].id}" data-from="shop" aria-label="出售${FISH[key].name}">出售 1 位</button></article>`).join("");
+      cards = groupFishSales(fishQuote).map(({ fish, price, count }) => `<article class="market-card trade-card"><div class="trade-art">${fishArt(fish.kind)}</div><header><h3>${FISH[fish.kind].name}</h3><span class="market-type">× ${count}</span></header><div class="market-price"><small>出售价格</small><strong>${price}</strong><span>积分 / 位</span></div><button class="tile-btn primary" data-action="sell" data-fish="${fish.id}" data-from="shop" aria-label="出售${FISH[fish.kind].name}">出售 1 位</button></article>`).join("");
     }
     return `${tabs}<div class="market-grid trade-grid">${cards || `<div class="farm-empty">${shopSellTab === "crops" ? "仓库里还没有可出售的收获物" : "待养区没有可出售的水族"}</div>`}</div>${shopSellTab === "fish" ? '<p class="trade-note">已入住的伙伴需先从养鱼舱收回。</p>' : ""}${history.length ? `<section class="recent-buyback"><h3>最近售出</h3>${row(history[0])}</section>` : ""}`;
   }
@@ -930,25 +943,99 @@ const FarmUI = (() => {
     $("#dialog").classList.add("purchase-dialog");
   }
   function dismissPurchase() {pendingPurchase = null;pendingSale = null;}
-  function saleDialog(key, count = 1, origin = "bag") {
+  const saleLabel = ({ sold, points }, unit = "份") => `卖 ${sold} ${unit} · +${points} 积分`;
+  const saleFooter = (quote, unit) =>
+    `<button class="button" data-action="sale-cancel">暂不卖</button><button class="button primary" data-action="sale-confirm" ${quote.sold ? "" : "disabled"}><span data-sale-confirm-label>${saleLabel(quote, unit)}</span></button>`;
+
+  function saleDialog(key, origin = "bag") {
     const c = C(key),stock = state.crops[key] || 0;
-    if (!c || !stock || c.sell === null || !Number.isInteger(count)) return;
-    count = Math.max(1, Math.min(stock, count));
-    const quote = M.quoteCropSale(state, key, count);
+    if (!c || !stock || c.sell === null) return;
+    const count = 1, quote = M.quoteCropSale(state, key);
     pendingSale = { key, count, origin, session: state };
     showDialog(`卖出${c.name}`, "选择数量，剩下的继续留在背包。",
-    `<div class="purchase-item"><div class="purchase-art">${FarmArt.icon(key)}</div><div><h3>${c.name} · 库存 ${stock}</h3><div class="quantity-picker" aria-label="卖出数量"><button data-action="sale-quantity" data-count="${count - 1}" aria-label="减少卖出数量" ${count <= 1 ? "disabled" : ""}>−</button><b>${count}</b><button data-action="sale-quantity" data-count="${count + 1}" aria-label="增加卖出数量" ${count >= stock ? "disabled" : ""}>＋</button></div></div></div><div class="purchase-total"><span>实际卖出 ${quote.sold} 份</span><strong>+${quote.points} 积分</strong></div><p class="purchase-balance">卖出后保留 ${quote.left} 份</p>${c.bait ? '<p class="bag-hint">每份也可换 1 份鱼饵，想去海钓可以留一些。</p>' : c.tier === "rare" ? '<p class="bag-hint">这是稀有收获，种子无法在商店购买。</p>' : ""}`,
-    `<button class="button" data-action="${origin === "shop" ? "shop-mode" : "bag-tab"}" data-mode="sell" data-tab="crops">暂不卖</button><button class="button primary" data-action="sale-confirm" ${quote.sold ? "" : "disabled"}>卖 ${quote.sold} 份 · +${quote.points} 积分</button>`);
+    `<div class="purchase-item">
+      <div class="purchase-art">${FarmArt.icon(key)}</div>
+      <div class="sale-item-copy">
+        <h3>${c.name} · 库存 ${stock}</h3>
+        <div class="quantity-picker" role="group" aria-label="卖出数量">
+          <button data-action="sale-quantity" data-step="-1" aria-label="减少卖出数量" ${count <= 1 ? "disabled" : ""}>−</button>
+          <b data-sale-count>${count}</b>
+          <button data-action="sale-quantity" data-step="1" aria-label="增加卖出数量" ${count >= stock ? "disabled" : ""}>＋</button>
+          <button data-action="sale-quantity" data-step="all" aria-label="选择全部${c.name}" ${count >= stock ? "disabled" : ""}>全部</button>
+        </div>
+      </div>
+    </div><div class="purchase-total" role="status"><span data-sale-sold>本次卖出 ${quote.sold} 份</span><strong data-sale-points>+${quote.points} 积分</strong></div>
+    <p class="purchase-balance" data-sale-left>卖出后保留 ${quote.left} 份</p>
+    ${c.bait ? '<p class="bag-hint">每份也可换 1 份鱼饵，想去海钓可以留一些。</p>' : c.tier === "rare" ? '<p class="bag-hint">这是稀有收获，种子无法在商店购买。</p>' : ""}`,
+    saleFooter(quote));
     $("#dialog").classList.add("sale-dialog", "purchase-dialog");
   }
+  function changeSaleQuantity(step) {
+    const sale = pendingSale;
+    if (!sale?.key || sale.session !== state) return;
+    const stock = state.crops[sale.key] || 0;
+    const requested = step === "all" ? stock : sale.count + Number(step);
+    if (!Number.isSafeInteger(requested)) return;
+    const quantity = Math.max(1, Math.min(stock, requested));
+    const quote = M.quoteCropSale(state, sale.key, quantity);
+    sale.count = quantity;
+    const dialog = $("#dialog");
+    dialog.querySelector("[data-sale-count]").textContent = quantity;
+    dialog.querySelector("[data-sale-sold]").textContent = `本次卖出 ${quote.sold} 份`;
+    dialog.querySelector("[data-sale-points]").textContent = `+${quote.points} 积分`;
+    dialog.querySelector("[data-sale-left]").textContent = `卖出后保留 ${quote.left} 份`;
+    dialog.querySelector('[data-step="-1"]').disabled = quantity <= 1;
+    dialog.querySelector('[data-step="1"]').disabled = quantity >= stock;
+    dialog.querySelector('[data-step="all"]').disabled = quantity >= stock;
+    const confirm = dialog.querySelector('[data-action="sale-confirm"]');
+    confirm.disabled = !quote.sold;
+    confirm.querySelector("[data-sale-confirm-label]").textContent = saleLabel(quote);
+  }
+  function bulkSaleDialog(tab) {
+    const fish = tab === "fish";
+    const quote = fish ? M.quoteWaitingFishSale(state, FISH) : M.quoteAllCropSales(state);
+    if (!quote.sold) return shopDialog(fish ? "sell-fish" : "sell-crops");
+    pendingSale = { tab, origin: "shop", session: state };
+    const label = fish ? "待养水族" : "收获物";
+    const unit = fish ? "位" : "份";
+    const groups = fish ? groupFishSales(quote).map(({ fish, count }) => ({ name: FISH[fish.kind].name, count }))
+      : quote.items.map(({ key, sold }) => ({ name: C(key).name, count: sold }));
+    const rows = groups.map(({ name, count }) => `<li><span>${name}</span><b>${count} ${unit}</b></li>`).join("");
+    let note = "";
+    if (fish) {
+      const redeemable = Math.min(quote.sold, R.buybackLimit);
+      const displaced = Math.max(0, M.buybackEntries(state).length + redeemable - R.buybackLimit);
+      note = `${redeemable} 位会进入赎回柜，${R.buybackHours} 小时内可赎回。${quote.sold > redeemable ? `其余 ${quote.sold - redeemable} 位无法赎回。` : ""}${displaced ? `本次将移出 ${displaced} 笔旧赎回记录。` : ""}`;
+    }
+    showDialog(`出售全部${label}`, note,
+      `<ul class="bulk-sale-list" aria-label="待出售${label}">${rows}</ul>
+      <div class="purchase-total"><span>共 ${groups.length} 种 · ${quote.sold} ${unit}</span><strong>+${quote.points} 积分</strong></div>`,
+      saleFooter(quote, unit));
+    $("#dialog").classList.add("sale-dialog", "purchase-dialog");
+  }
+  function returnFromSale(sale) {
+    pendingSale = null;
+    if (sale.origin === "shop") shopDialog(sale.tab === "fish" ? "sell-fish" : "sell-crops");else bagDialog("crops");
+  }
   async function confirmSale(button) {
-    const p = pendingSale;pendingSale = null;
-    if (!p || p.session !== state || !$("#dialog").classList.contains("sale-dialog")) return;
+    const sale = pendingSale;
+    if (!sale || sale.session !== state || !$("#dialog").classList.contains("sale-dialog")) return;
     button.disabled = true;
-    const result = await M.sellCrop(state, p.key, p.count);
-    update();
-    if (p.origin === "shop") shopDialog("sell-crops");else bagDialog("crops");
-    toast(result.sold ? `卖出${C(p.key).name} × ${result.sold} · +${result.points} 积分` : "库存已变化，请重新选择卖出数量");
+    try {
+      const result = sale.tab === "fish" ? await M.sellAllWaitingFish(sale.session, FISH)
+        : sale.key ? await M.sellCrop(sale.session, sale.key, sale.count) : await M.sellAllCrops(sale.session);
+      if (sale.session !== state) return;
+      update();
+      if (!$("#modal").hidden) {
+        if (pendingSale === sale && button.isConnected) returnFromSale(sale);
+        else if (sale.origin === "shop" && $("#dialog").dataset.family === "farm-shop-dialog") shopDialog();
+        else if (sale.origin === "bag") refreshInventory();
+      }
+      const name = sale.tab === "fish" ? "待养水族" : sale.key ? C(sale.key).name : "收获物";
+      toast(result?.sold ? `卖出${name} × ${result.sold} · +${result.points} 积分` : "库存已变化，请重新确认出售");
+    } finally {
+      if (pendingSale === sale && button.isConnected) button.disabled = false;
+    }
   }
   function cancelPurchase() {
     const p = pendingPurchase;pendingPurchase = null;
@@ -956,8 +1043,8 @@ const FarmUI = (() => {
   }
   function back() {
     if (pendingSale?.session === state && $("#dialog").classList.contains("sale-dialog")) {
-      const origin = pendingSale.origin;pendingSale = null;
-      if (origin === "shop") shopDialog("sell-crops");else bagDialog("crops");return true;
+      returnFromSale(pendingSale);
+      return true;
     }
     if (pendingPurchase?.session === state && $("#dialog").classList.contains("purchase-dialog")) {cancelPurchase();return true;}
     return false;
@@ -1099,7 +1186,13 @@ const FarmUI = (() => {
       case "shop-sell-tab":
         shopSellTab = b.dataset.tab === "crops" ? "crops" : "fish";shopMode = "sell";shopDialog();return true;
       case "shop-sell-crop":
-        saleDialog(b.dataset.crop, 1, "shop");return true;
+        saleDialog(b.dataset.crop, "shop");return true;
+      case "shop-sell-all-crops":
+        bulkSaleDialog("crops");
+        return true;
+      case "shop-sell-all-fish":
+        bulkSaleDialog("fish");
+        return true;
       case "shop-buyback":{
           const fish = await M.buyback(state, +b.dataset.sale, FISH, +b.dataset.quote);update();shopDialog();
           toast(fish ? `${FISH[fish.kind].name}已回到待养区` : "未赎回，余额或保留时间已变化");return true;
@@ -1150,7 +1243,10 @@ const FarmUI = (() => {
           return true;
         }
       case "sale-quantity":
-        if (pendingSale?.session === state) saleDialog(pendingSale.key, +b.dataset.count, pendingSale.origin);
+        changeSaleQuantity(b.dataset.step);
+        return true;
+      case "sale-cancel":
+        if (pendingSale?.session === state) returnFromSale(pendingSale);
         return true;
       case "sale-confirm":
         await confirmSale(b);

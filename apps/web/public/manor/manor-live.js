@@ -110,7 +110,7 @@ function createManorRefreshInput(doc) {
     return activeCommand;
   };
   const methods = ['adopt','plant','water','harvest','fertilize','remove','buySeed','sellCrop','sellAllCrops',
-    'convertBait','buyBait','buyFry','beginCast','resolveCast','selectBait','sell','release','buyback',
+    'convertBait','buyBait','buyFry','beginCast','resolveCast','selectBait','sell','sellAllWaitingFish','release','buyback',
     'place','placeShow','unplace','fillEmptySlots','collect','collectSlot','pickPoop','deliverBirdSeed','pickBirdSeed',
     'buyPurifier','claimPurifier','buyFacility','collectCompost','upgradeComposter','upgradePurifier','startCraft','collectCraft','refillPollen',
     'pollinate','claimAllDailyWater','claimLevelReward','claimAllLevelRewards','claimCollection',

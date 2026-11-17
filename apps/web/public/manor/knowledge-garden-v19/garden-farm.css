@@ -1005,6 +1005,18 @@ html #toast.toast {
 .purchase-item p, .purchase-balance { font-size: max(12px,calc(13px * var(--d))); color: #7b684b; }
 .purchase-total { display: flex; justify-content: space-between; border-top: 1px solid #dfc797; padding-top: calc(16px * var(--d)); margin-top: calc(18px * var(--d)); }
 .purchase-total strong { color: #875721; }
+#modal .sale-dialog .sale-item-copy { min-width: 0; }
+#modal .sale-dialog .quantity-picker { flex-wrap: wrap; gap: calc(6px * var(--d)); }
+#modal .sale-dialog .quantity-picker button { padding-inline: calc(8px * var(--d)); }
+.light-note-mobile-rendering #modal .sale-dialog .purchase-item { gap: calc(6px * var(--d)); }
+.bulk-sale-list { list-style: none; margin: 0; padding: 0; }
+.bulk-sale-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: calc(8px * var(--d));
+  padding-block: calc(7px * var(--d));
+}
+.bulk-sale-list li + li { border-top: 1px solid #e7d8b4; }
 .fert-rabbit svg { width: 100%; height: 100%; }
 .light-note-mobile-rendering #modal .inventory-dialog .dialog-body { padding: 12px; }
 .light-note-mobile-rendering #modal .inventory-dialog .seed-grid { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; }

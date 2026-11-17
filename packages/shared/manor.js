@@ -162,6 +162,7 @@ const commandCatalog = Object.freeze({
   },
   selectBait(s, a) { if (a.length !== 1 || typeof a[0] !== 'string') invalid(); return model.selectBait(s, a[0]); },
   sell(s, a) { if (a.length !== 1) invalid(); return model.sell(s, integer(a[0], 1), MANOR_SPECIES); },
+  sellAllWaitingFish(s, a) { emptyArgs(a); return model.sellAllWaitingFish(s, MANOR_SPECIES); },
   release(s, a) { if (a.length !== 1) invalid(); return model.release(s, integer(a[0], 1), MANOR_SPECIES); },
   buyback(s, a) { if (a.length < 1 || a.length > 2) invalid(); return model.buyback(s, integer(a[0], 1), MANOR_SPECIES, a.length === 2 ? integer(a[1], 1) : undefined); },
   place(s, a) { if (a.length !== 2) invalid(); return model.place(s, integer(a[0], 1), integer(a[1], 0, 5), MANOR_SPECIES); },

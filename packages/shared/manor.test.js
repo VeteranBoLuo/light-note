@@ -40,6 +40,24 @@ describe('正式庄园沿用确认玩法与轻笺积分', () => {
     expect(sold.result).toEqual({ sold: 100, points: 4000 });
     expect(sold.pointsDelta).toBe(4000);
   });
+  it('整批出售的报价列出可售存货，确认后按同一清单结算', () => {
+    const s = adopted();
+    s.crops = { strawberry: 35, lavender: 2, radish: 0, retiredCrop: 3 };
+    const before = structuredClone(s);
+    const quote = M.quoteAllCropSales(s);
+    expect(quote).toEqual({
+      items: [{ key: 'strawberry', sold: 35, points: 140 }, { key: 'lavender', sold: 2, points: 6 }],
+      sold: 37,
+      points: 146,
+    });
+    expect(s).toEqual(before);
+    const sale = command(s, 'sellAllCrops');
+    expect(sale.result).toEqual({ sold: quote.sold, points: quote.points });
+    expect(sale.pointsDelta).toBe(quote.points);
+    expect(sale.state.crops).toEqual({ strawberry: 0, lavender: 0, radish: 0, retiredCrop: 3 });
+    expect(sale.state.seeds).toEqual(s.seeds);
+    expect(M.quoteAllCropSales(sale.state)).toEqual({ items: [], sold: 0, points: 0 });
+  });
   it('投影实时读取主站余额，并不依赖存档内的过时钱包数值', () => {
     const s = adopted(); s.wallet = 99999;
     expect(projectManor(s, context({ points: 7 })).wallet).toBe(7);
@@ -574,5 +592,39 @@ describe('水族赎回按出售时的明确报价结算', () => {
     const {s,receipt}=sold();delete receipt.buybackPoints;
     expect(M.buybackCost(receipt)).toBe(receipt.points);
     expect(command(s,'buyback',[receipt.id]).pointsDelta).toBe(-receipt.points);
+  });
+
+  it('批量出售仅清空可售待养水族，按个体价格成交并保留最近的赎回报价', () => {
+    const s = adopted();
+    const farm = M.addFish(s, 'clown');
+    const show = M.addFish(s, 'moonjelly');
+    const first = M.addFish(s, 'clown');
+    const old = M.addFish(s, 'blue');
+    expect(M.place(s, farm.id, 0, F)).toBe(true);
+    expect(M.placeShow(s, show.id, 0, F)).toBe(true);
+    s.firstCompanionPending = first.id;
+    M.sell(s, old.id, F);
+    const waiting = Array.from({ length: M.RULES.buybackLimit + 2 }, (_, i) => M.addFish(s, i % 2 ? 'blue' : 'moonjelly'));
+    const points = waiting.reduce((total, fish) => total + M.sellPrice(fish.kind, F), 0);
+    const before = structuredClone(s);
+    expect(M.quoteWaitingFishSale(s, F)).toMatchObject({ sold: waiting.length, points });
+    expect(s).toEqual(before);
+
+    const { state, result, pointsDelta } = command(s, 'sellAllWaitingFish');
+    expect(result).toEqual({ sold: waiting.length, points });
+    expect(pointsDelta).toBe(points);
+    expect(state.fish).toEqual([farm, show, first]);
+    expect(state.fishSlots).toEqual(before.fishSlots);
+    expect(state.showSlots).toEqual(before.showSlots);
+    expect(state.firstCompanionPending).toBe(first.id);
+    expect(state.discoveries).toEqual(before.discoveries);
+    expect(state.buybacks.map(entry => entry.fish)).toEqual(waiting.slice(-M.RULES.buybackLimit).reverse());
+    for (const entry of state.buybacks) {
+      expect(entry.points).toBe(M.sellPrice(entry.fish.kind, F));
+      expect(entry.buybackPoints).toBe(M.buybackPrice(entry.points));
+    }
+    const latest = state.buybacks[0];
+    expect(command(state, 'buyback', [latest.id, latest.buybackPoints]).result).toEqual(latest.fish);
+    expect(command(state, 'sellAllWaitingFish')).toMatchObject({ result: null, pointsDelta: 0 });
   });
 });

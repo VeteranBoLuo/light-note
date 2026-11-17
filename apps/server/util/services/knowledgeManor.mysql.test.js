@@ -248,6 +248,42 @@ describe.skipIf(!socketPath)('庄园真实积分与存档原子结算（隔离 M
       .toEqual([undefined, undefined, undefined]);
   });
 
+  it('批量出售的整笔到账与首销榜分小计一起提交，榜分覆盖赎回柜之外的个体', async () => {
+    await adopt();
+    const started = await service.execute('owner', input(1, 'beginCast', ['bait']));
+    expect(started.result).toBe('free');
+    const caught = await service.execute('owner', input(2, 'resolveCast', [started.state.castId]));
+    const fish = caught.result.fish;
+    await service.execute('owner', input(3, 'place', [fish.id, 0]));
+    await service.execute('owner', input(4, 'unplace', [fish.id]));
+    const fry = await service.execute('owner', input(5, 'buyFry'));
+    const inventory = { ...fry.state };
+    for (let n = 0; n < M.RULES.buybackLimit; n++) M.addFish(inventory, 'blue');
+    delete inventory.wallet;
+    await db.query("UPDATE knowledge_manors SET state_json=? WHERE user_id='owner'", [JSON.stringify(inventory)]);
+    const total = inventory.fish.reduce((sum, f) => sum + M.sellPrice(f.kind, F), 0);
+    const sale = input(6, 'sellAllWaitingFish');
+
+    failReceipt = true;
+    await expect(service.execute('owner', sale)).rejects.toThrow('fixture receipt failure');
+    expect((await service.get('owner')).state).toMatchObject({ wallet: fry.state.wallet, fish: inventory.fish });
+    expect((await rows('points_log')).map(row => row.reason)).toEqual(['manor_cost']);
+    failReceipt = false;
+
+    const [settled, retry] = await Promise.all([service.execute('owner', sale), service.execute('owner', sale)]);
+    expect([settled.replayed, retry.replayed].sort()).toEqual([false, true]);
+    expect(settled.result).toEqual({ sold: inventory.fish.length, points: total });
+    expect(retry.result).toEqual(settled.result);
+    expect(settled.state).toMatchObject({ fish: [], wallet: fry.state.wallet + total });
+    expect(settled.state.buybacks).toHaveLength(M.RULES.buybackLimit);
+    expect(settled.state.buybacks.map(entry => entry.fish.id)).not.toContain(fish.id);
+    const [sales] = await db.query("SELECT delta, meta FROM points_log WHERE reason = 'manor_sale'");
+    expect(sales).toHaveLength(1);
+    expect(sales[0].delta).toBe(total);
+    const meta = typeof sales[0].meta === 'string' ? JSON.parse(sales[0].meta) : sales[0].meta;
+    expect(meta).toMatchObject({ manorAction: 'sellAllWaitingFish', manorFreeCastFirstSalePoints: M.sellPrice(fish.kind, F) });
+  });
+
   it('抛竿状态刷新可恢复，结果仅由服务端随机；重试不重抽或重复消耗次数', async () => {
     await adopt();
     const cast = input(1, 'beginCast', ['bait']);

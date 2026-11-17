@@ -111,6 +111,10 @@ describe.skipIf(!socketPath)('积分排行榜 · 隔离 MySQL', () => {
     await point('internal-1', 'manor_sale', 999, '2026-11-09 00:00:00', 'sell');
     await point('internal-1', 'manor_sale', 5, '2026-11-12 08:00:00', 'sell', { manorFreeCastFirstSale: true });
     await point('internal-1', 'manor_sale', 999, '2026-11-12 08:00:00', 'sell', { manorFreeCastFirstSale: 'true' });
+    await point('internal-1', 'manor_sale', 23, '2026-11-13 08:00:00', 'sellAllWaitingFish', { manorFreeCastFirstSalePoints: 6 });
+    await point('internal-1', 'manor_sale', 999, '2026-11-13 08:00:00', 'sellAllWaitingFish');
+    await point('internal-1', 'manor_sale', 999, '2026-11-13 08:00:00', 'sellAllWaitingFish', { manorFreeCastFirstSalePoints: '999' });
+    await point('internal-1', 'manor_sale', 2, '2026-11-13 08:00:00', 'sellAllWaitingFish', { manorFreeCastFirstSalePoints: 999 });
     await point('internal-1', 'manor_sale', 350);
     for (const reason of ['lottery_free_win', 'lottery_paid_win', 'lottery_paid_compensation', 'leaderboard_reward', 'campaign', 'admin', 'correction', 'toolbox_release']) {
       await point('internal-1', reason, 999);
@@ -128,11 +132,11 @@ describe.skipIf(!socketPath)('积分排行榜 · 隔离 MySQL', () => {
 
     const weekly = await read('internal-1');
     expect(weekly.rows.map((row) => [row.nickname, row.communityId, row.score])).toEqual([
-      ['同名', 'ln_7K2M8A', 124], ['同名', 'ln_9N4R6P', 100], ['138****5724', 'ln_6V4T2B', 21],
+      ['同名', 'ln_7K2M8A', 130], ['同名', 'ln_9N4R6P', 100], ['138****5724', 'ln_6V4T2B', 21],
     ]);
     expect(weekly.mine).toMatchObject({
       rank: 1, activeDays: 2, qualified: false,
-      sources: { checkin: 20, quest: 15, manor_sale: 84, manor_aquarium_sale: 5 },
+      sources: { checkin: 20, quest: 15, manor_sale: 84, manor_aquarium_sale: 11 },
     });
     expect(weekly.canParticipate).toBe(true);
     expect(await read(null)).toMatchObject({
@@ -142,8 +146,8 @@ describe.skipIf(!socketPath)('积分排行榜 · 隔离 MySQL', () => {
     expect((await read('harvest-only')).ownDays).toBe(1);
     expect(JSON.stringify(weekly)).not.toContain('internal-1');
     expect(await readLeaderboardAvatar('ln_7K2M8A', state.db)).toBe(source);
-    expect((await read('internal-1', 'total')).mine.score).toBe(1074);
-    expect((await read('internal-1', 'month')).mine.score).toBe(674);
+    expect((await read('internal-1', 'total')).mine.score).toBe(1080);
+    expect((await read('internal-1', 'month')).mine.score).toBe(680);
     await state.db.query("UPDATE user SET alias = '换名' WHERE id = 'internal-1'");
     expect((await read('internal-1')).mine.nickname).toBe('换名');
   });

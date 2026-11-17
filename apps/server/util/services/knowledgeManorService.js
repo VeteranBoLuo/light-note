@@ -1,6 +1,6 @@
 import { createHash, randomInt } from 'node:crypto';
 import pool from '../../db/index.js';
-import { createManor, executeManorCommand, projectManor, ManorError, MANOR_VERSION, manorModel } from '@lightnote/shared/manor';
+import { createManor, executeManorCommand, projectManor, ManorError, MANOR_VERSION, MANOR_SPECIES, manorModel } from '@lightnote/shared/manor';
 import { getGrowth, getDailyQuestState, lockGrowthAccount } from '../growth.js';
 import { earnPoints } from '../points.js';
 import { getGrowthCalendarContext } from '../growthPreferences.js';
@@ -43,32 +43,40 @@ function checkRequest(input) {
   }
 }
 
-async function isFreeCastFirstSale(conn, userId, fish) {
-  const id = String(fish.id);
-  const [[origin]] = await conn.query(
-    `SELECT action, revision FROM knowledge_manor_operations
-       WHERE user_id = ? AND (
-         (action = 'resolveCast'
-           AND JSON_UNQUOTE(JSON_EXTRACT(result_json, '$.result.fish.id')) = ?
-           AND JSON_UNQUOTE(JSON_EXTRACT(result_json, '$.result.fish.kind')) = ?)
-         OR ((action = 'buyback' OR action IS NULL)
-           AND JSON_UNQUOTE(JSON_EXTRACT(result_json, '$.result.id')) = ?
-           AND JSON_UNQUOTE(JSON_EXTRACT(result_json, '$.result.kind')) = ?)
-       )
-       ORDER BY revision DESC LIMIT 1`,
-    [userId, id, fish.kind, id, fish.kind],
+async function freeCastFirstSalePoints(conn, userId, before, after) {
+  const remaining = new Set(after.fish.map(fish => fish.id));
+  const sold = new Map(before.fish.filter(fish => !remaining.has(fish.id)).map(fish => [String(fish.id), fish.kind]));
+  if (!sold.size) return 0;
+  const ids = [...sold.keys()];
+  // Skip atlas reads between casting and resolving, and include legacy buyback receipts without an action.
+  const [origins] = await conn.query(
+    `SELECT o.action,
+            CASE WHEN o.action = 'resolveCast' THEN JSON_UNQUOTE(JSON_EXTRACT(o.result_json, '$.result.fish.id'))
+              ELSE JSON_UNQUOTE(JSON_EXTRACT(o.result_json, '$.result.id')) END AS fishId,
+            CASE WHEN o.action = 'resolveCast' THEN JSON_UNQUOTE(JSON_EXTRACT(o.result_json, '$.result.fish.kind'))
+              ELSE JSON_UNQUOTE(JSON_EXTRACT(o.result_json, '$.result.kind')) END AS fishKind,
+            CASE WHEN o.action = 'resolveCast' THEN (
+              SELECT CASE WHEN prior_op.action = 'beginCast' THEN JSON_UNQUOTE(JSON_EXTRACT(prior_op.result_json, '$.result')) END
+                FROM knowledge_manor_operations prior_op
+               WHERE prior_op.user_id = o.user_id AND prior_op.revision < o.revision
+                 AND (prior_op.action <> 'readAtlasEntry' OR prior_op.action IS NULL)
+               ORDER BY prior_op.revision DESC LIMIT 1
+            ) END AS baitSource
+       FROM knowledge_manor_operations o
+      WHERE o.user_id = ? AND (
+        (o.action = 'resolveCast' AND JSON_UNQUOTE(JSON_EXTRACT(o.result_json, '$.result.fish.id')) IN (?))
+        OR ((o.action = 'buyback' OR o.action IS NULL) AND JSON_UNQUOTE(JSON_EXTRACT(o.result_json, '$.result.id')) IN (?))
+      ) ORDER BY o.revision DESC`,
+    [userId, ids, ids],
   );
-  if (origin?.action !== 'resolveCast') return false;
-
-  // The only other command allowed between casting and resolving is an atlas read.
-  const [[cast]] = await conn.query(
-    `SELECT action, JSON_UNQUOTE(JSON_EXTRACT(result_json, '$.result')) AS baitSource
-       FROM knowledge_manor_operations
-       WHERE user_id = ? AND revision < ? AND (action <> 'readAtlasEntry' OR action IS NULL)
-       ORDER BY revision DESC LIMIT 1`,
-    [userId, origin.revision],
-  );
-  return cast?.action === 'beginCast' && cast.baitSource === 'free';
+  let points = 0;
+  for (const { action, fishId, fishKind, baitSource } of origins) {
+    if (sold.get(fishId) !== fishKind) continue;
+    sold.delete(fishId);
+    if (action === 'resolveCast' && baitSource === 'free') points += manorModel.sellPrice(fishKind, MANOR_SPECIES);
+    if (!sold.size) break;
+  }
+  return points;
 }
 
 /** The account growth lock serializes manor points with shop, lottery and growth rewards. */
@@ -119,8 +127,12 @@ export function createKnowledgeManorService({ db = pool, context = accountContex
       const meta = { manorVersion: MANOR_VERSION, manorAction: input.action };
       const ref = createHash('sha256').update(input.requestId).digest('hex');
       if (next.pointsDelta > 0) {
-        if (input.action === 'sell' && await isFreeCastFirstSale(conn, userId, next.state.buybacks[0].fish)) {
-          meta.manorFreeCastFirstSale = true;
+        if (input.action === 'sell' || input.action === 'sellAllWaitingFish') {
+          const rankedPoints = await freeCastFirstSalePoints(conn, userId, current.state, next.state);
+          if (rankedPoints > 0) {
+            if (input.action === 'sell') meta.manorFreeCastFirstSale = true;
+            else meta.manorFreeCastFirstSalePoints = rankedPoints;
+          }
         }
         const credited = await creditPoints(userId, next.pointsDelta, 'manor_sale', ref, conn, { policyVersion: MANOR_VERSION, meta });
         if (!credited) throw new ManorError('MANOR_LEDGER_CONFLICT');

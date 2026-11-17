@@ -17,6 +17,10 @@ import {
 
 const DAILY_SOURCES = `(${LEADERBOARD_ACTIVITY_REASONS.map((reason) => `'${reason}'`).join(', ')})`;
 const MANOR_ACTION = "JSON_UNQUOTE(JSON_EXTRACT(l.meta, '$.manorAction'))";
+const AQUARIUM_SALE = `${MANOR_ACTION} IN ('sell', 'sellAllWaitingFish')`;
+const AQUARIUM_BATCH_SALE = `${MANOR_ACTION} = 'sellAllWaitingFish'`;
+const AQUARIUM_FIRST_SALE_POINTS = "JSON_EXTRACT(l.meta, '$.manorFreeCastFirstSalePoints')";
+const AQUARIUM_BATCH_SCORE = `CAST(JSON_UNQUOTE(${AQUARIUM_FIRST_SALE_POINTS}) AS SIGNED)`;
 const CACHE_MS = 5 * 60_000;
 const liveCache = new Map();
 
@@ -27,6 +31,8 @@ function scoringCondition(board) {
     OR (l.reason = 'manor_sale' AND (
       ${MANOR_ACTION} IN ('sellCrop', 'sellAllCrops')
       OR (${MANOR_ACTION} = 'sell' AND JSON_EXTRACT(l.meta, '$.manorFreeCastFirstSale') = CAST('true' AS JSON))
+      OR (${AQUARIUM_BATCH_SALE} AND JSON_TYPE(${AQUARIUM_FIRST_SALE_POINTS}) = 'INTEGER'
+        AND ${AQUARIUM_BATCH_SCORE} BETWEEN 1 AND l.delta)
     ))
     ${oneTime}
   )`;
@@ -70,9 +76,10 @@ export async function readLeaderboardScores(board, range, db) {
   const dates = await timeBounds(db, range);
   const [points] = await db.query(
     `SELECT l.user_id AS userId,
-            CASE WHEN l.reason = 'manor_sale' AND ${MANOR_ACTION} = 'sell'
+            CASE WHEN l.reason = 'manor_sale' AND ${AQUARIUM_SALE}
               THEN 'manor_aquarium_sale' ELSE l.reason END AS scoreSource,
-            SUM(l.delta) AS points,
+            SUM(CASE WHEN l.reason = 'manor_sale' AND ${AQUARIUM_BATCH_SALE}
+              THEN ${AQUARIUM_BATCH_SCORE} ELSE l.delta END) AS points,
             DATE_FORMAT(MAX(l.create_time), '%Y-%m-%d %H:%i:%s') AS reachedAt
        FROM points_log l WHERE ${scoringCondition(board)} ${bounds('l.create_time', dates.times)}
       GROUP BY l.user_id, scoreSource`,
