@@ -64,12 +64,20 @@
           </template>
         </MobileListRow>
       </MobileListSurface>
-      <BTable v-else class="rank-desktop" :class="{ 'is-weekly': weekly }" :fill="bounded" :columns="columns" :data="data.rows" row-key="rank">
+      <BTable
+        v-else
+        class="rank-desktop"
+        :class="{ 'is-weekly': weekly }"
+        :fill="bounded"
+        :columns="columns"
+        :data="data.rows"
+        row-key="rank"
+        :row-class="(record) => record.isMe === true ? 'is-self' : undefined"
+      >
         <template #bodyCell="{ record, column }">
           <span
             v-if="column.key === 'rank'"
             class="place"
-            :class="{ 'is-self': record.isMe }"
             :data-place="record.rank"
           >
             <SvgIcon v-if="record.rank <= 3" :src="icon.growth.medal" size="13" aria-hidden="true" />{{ record.rank }}
@@ -258,7 +266,7 @@
       border-radius: 0;
     }
 
-    :deep(.table-row:has(.is-self)) {
+    :deep(.table-row.is-self) {
       background: var(--workspace-purple-selected);
       box-shadow: inset 3px 0 0 var(--primary-color);
     }

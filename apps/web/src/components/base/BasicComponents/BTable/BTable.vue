@@ -55,7 +55,7 @@
             <div
               v-range-select="{ controller: props.rangeSelection, key: String(entry.item[props.rowKey]) }"
               class="table-row"
-              :class="{ 'is-clickable': props.rowClickable }"
+              :class="[{ 'is-clickable': props.rowClickable }, props.rowClass?.(entry.item)]"
               :style="[bodyGridStyle, virtualRowStyle]"
               @click="handleRowClick(entry.item, entry.index)"
             >
@@ -179,6 +179,7 @@
       type: Boolean,
       default: false,
     },
+    rowClass: Function as PropType<(record: Record<string, unknown>) => string | undefined>,
     expandedRows: {
       type: Array as PropType<string[]>,
       default: () => [],
