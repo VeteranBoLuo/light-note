@@ -6,6 +6,13 @@ html[data-theme='night'] {
   color-scheme: dark;
 }
 
+/* 云空间封面操作叠在用户内容上，浅深主题共用同一对比度。 */
+:root {
+  --cloud-file-cover-action-color: #fff;
+  --cloud-file-cover-action-active-bg: rgba(255, 255, 255, 0.14);
+  --cloud-file-cover-action-scrim: rgba(0, 0, 0, 0.64);
+}
+
 [data-theme='day'] {
   --workspace-purple-stat: var(--resource-bookmark-color);
   --workspace-note-stat: var(--resource-note-color);

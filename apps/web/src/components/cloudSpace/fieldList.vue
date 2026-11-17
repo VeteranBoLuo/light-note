@@ -140,8 +140,45 @@
               @click.stop="openFilePreview(item)"
               >{{ $t('cloudSpace.batchPreview') }}</BButton
             >
-            <div v-if="!batchMode && !bookmark.isMobile" class="file-card-overlay">
-              <BTooltip :title="$t('cloudSpace.download')">
+            <BActionMenu
+              v-if="!batchMode && !bookmark.isMobile"
+              v-slot="{ open }"
+              class="file-card-more"
+              :items="desktopFileActions(item)"
+              :triggers="['click']"
+              placement="bottom-right"
+              :aria-label="$t('common.more')"
+              @click.stop="closeFileContext(item)"
+              @select="handleFileAction(item, $event)"
+            >
+              <BButton
+                class="file-more-button"
+                :class="{ 'file-more--on-cover': hasMediaCover(item) }"
+                :aria-label="$t('common.more')"
+                :aria-expanded="open"
+                aria-haspopup="menu"
+                icon-only
+              >
+                <SvgIcon :src="icon.common.more" size="20" aria-hidden="true" />
+              </BButton>
+            </BActionMenu>
+            <BButton
+              v-else-if="!batchMode"
+              class="file-card-more mobile-file-more"
+              :class="{ 'file-more--on-cover': hasMediaCover(item) }"
+              :aria-label="$t('common.more')"
+              :aria-expanded="mobileFileActionsOpen && mobileActionFile?.id === item.id"
+              aria-haspopup="dialog"
+              @click.stop="openMobileFileActions(item)"
+            >
+              <SvgIcon :src="icon.common.more" size="20" aria-hidden="true" />
+            </BButton>
+            <div
+              v-if="!batchMode && (!bookmark.isMobile || hasMediaCover(item))"
+              class="file-card-overlay"
+              :class="{ 'file-card-overlay--media': hasMediaCover(item) }"
+            >
+              <BTooltip v-if="!bookmark.isMobile" :title="$t('cloudSpace.download')">
                 <svg-icon
                   class="overlay-btn"
                   :src="icon.cloudSpace.download"
@@ -149,34 +186,6 @@
                   @click.stop="handleDownloadFile(item)"
                 />
               </BTooltip>
-            </div>
-            <div v-if="!batchMode" class="file-card-more" @click.stop="closeFileContext(item)">
-              <BActionMenu
-                v-if="!bookmark.isMobile"
-                :items="desktopFileActions(item)"
-                :triggers="['click']"
-                placement="bottom-right"
-                :aria-label="$t('common.more')"
-                @select="handleFileAction(item, $event)"
-              >
-                <BButton
-                  class="file-more-button"
-                  :class="{ 'file-more--on-cover': hasMediaCover(item) }"
-                  :aria-label="$t('common.more')"
-                  icon-only
-                >
-                  <SvgIcon :src="icon.common.more" size="20" />
-                </BButton>
-              </BActionMenu>
-              <BButton
-                v-else
-                class="mobile-file-more"
-                :class="{ 'file-more--on-cover': hasMediaCover(item) }"
-                :aria-label="$t('common.more')"
-                @click="openMobileFileActions(item)"
-              >
-                <SvgIcon :src="icon.common.more" size="20" aria-hidden="true" />
-              </BButton>
             </div>
           </div>
           <div class="file-card-body">
@@ -3258,10 +3267,14 @@
   }
 
   .file-card:hover .file-card-overlay,
-  .file-card:hover .file-card-more {
-    opacity: 1 !important;
+  .file-card:focus-within .file-card-overlay,
+  .file-card-more.is-menu-open + .file-card-overlay {
+    opacity: 1;
   }
-  .file-card:hover .file-card-more {
+  .file-card:hover .file-card-more,
+  .file-card:focus-within .file-card-more,
+  .file-card-more.is-menu-open {
+    opacity: 1;
     pointer-events: auto;
   }
 
@@ -3275,15 +3288,23 @@
     align-items: flex-start;
     justify-content: flex-end;
     gap: var(--ui-space-8, 8px);
-    padding: var(--ui-space-8, 8px) var(--ui-space-32, 32px) var(--ui-space-8, 8px) var(--ui-space-8, 8px);
+    padding: var(--ui-space-8, 8px);
+    padding-right: calc(var(--ui-space-4, 4px) + var(--ui-layout-28, 28px));
     opacity: 0;
     transition: opacity 0.2s ease;
     background: linear-gradient(to bottom, rgba(0, 0, 0, 0.3) 0%, transparent 40%);
     pointer-events: none;
   }
+  .file-card-overlay--media {
+    background: radial-gradient(
+      ellipse var(--ui-layout-100, 100px) var(--ui-layout-64, 64px) at top right,
+      var(--cloud-file-cover-action-scrim) 50%,
+      transparent
+    );
+  }
 
   .overlay-btn {
-    color: #fff;
+    color: var(--cloud-file-cover-action-color);
     filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.5));
     cursor: pointer;
     transition: transform 0.18s ease;
@@ -3295,8 +3316,8 @@
 
   .file-card-more {
     position: absolute;
-    top: 4px;
-    right: 4px;
+    top: var(--ui-space-4, 4px);
+    right: var(--ui-space-4, 4px);
     z-index: 2;
     opacity: 0;
     pointer-events: none;
@@ -3313,21 +3334,21 @@
     color: var(--text-color);
   }
   .file-more--on-cover.b_btn {
-    border-radius: 50%;
-    background: color-mix(in srgb, var(--card-background) 86%, transparent);
-    background-clip: content-box;
+    color: var(--cloud-file-cover-action-color);
+
+    &:focus-visible {
+      outline-color: currentColor;
+    }
+
+    &:active,
+    &[aria-expanded='true'] {
+      background: var(--cloud-file-cover-action-active-bg);
+    }
   }
-  .mobile-file-more.file-more--on-cover.b_btn {
-    padding: var(--ui-space-8, 8px);
-  }
-  .file-card-more .more-icon {
-    color: rgba(255, 255, 255, 0.7);
-    filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.5));
-    cursor: pointer;
-    transition: color 0.2s;
-  }
-  .file-card-more .more-icon:hover {
-    color: #fff;
+  @media (hover: hover) and (pointer: fine) {
+    .file-more--on-cover.b_btn:hover {
+      background: var(--cloud-file-cover-action-active-bg);
+    }
   }
 
   .rename-modal-input {
@@ -3458,10 +3479,10 @@
 
   @media (max-width: 1400px) {
     .file-card-overlay {
-      opacity: 1 !important;
+      opacity: 1;
     }
     .file-card-more {
-      opacity: 1 !important;
+      opacity: 1;
       pointer-events: auto;
     }
   }
