@@ -128,7 +128,14 @@
   function decorated(value: ManorSnapshot & {notice?: string}): ManorSnapshot & {testing: boolean; canTest: boolean; copy: Record<string, string>; notice?: string} {
     maintenanceNotice.value = !testSession && value.runtime?.mode === 'maintenance' ? value.runtime.message || t('manor.maintenance') : '';
     // Test saves are a Root tool; other accounts never see or reach the reset entry.
-    return { ...value, testing: Boolean(testSession), canTest: user.role === 'root', copy: Object.fromEntries(['actionFailed','offline','panelUpdated','castSync'].map(key => [key,t(`manor.${key}`)])), quests: value.quests.map(q => ({ ...q, label: t(questKeys[q.key] || 'growth.questUnknown') })) };
+    return {
+      ...value,
+      leaderboardAvailable: snapshot?.leaderboardAvailable,
+      testing: Boolean(testSession),
+      canTest: user.role === 'root',
+      copy: Object.fromEntries(['actionFailed','offline','panelUpdated','castSync'].map(key => [key,t(`manor.${key}`)])),
+      quests: value.quests.map(q => ({ ...q, label: t(questKeys[q.key] || 'growth.questUnknown') })),
+    };
   }
   const conflict = (error: unknown) => ['MANOR_REVISION_CONFLICT','MANOR_CAST_PENDING'].includes(String((error as {code?: string})?.code));
   function settlePending(g: number): Promise<void> {
@@ -281,6 +288,17 @@
         }, () => {
           if (current(g) && interactive.value && !failed.value) remindersOpen.value = true;
         });
+      } else if (data.action === 'leaderboard') {
+        if (!interactive.value || failed.value || !snapshot?.leaderboardAvailable) throw new Error('unavailable');
+        await closeCurrentMobileOverlayThen(() => {
+          releaseMobileOverlayHistory(overlay); overlay = null;
+        }, async () => {
+          if (!current(g)) return;
+          deliberateLeave = true;
+          try { await router.push({ path: '/growth', query: { section: 'leaderboard' } }); }
+          finally { deliberateLeave = false; }
+        });
+        return;
       } else if (data.action === 'exit') { await exit(); return; }
       else if (data.action === 'tasks') {
         const index = data.payload?.index;

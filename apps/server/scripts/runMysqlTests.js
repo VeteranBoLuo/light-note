@@ -15,6 +15,7 @@ const suites = {
   'util/securityRegressions.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
   'util/growth.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
   'util/services/knowledgeManor.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
+  'util/services/leaderboard.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
   'util/services/knowledgeManorNudges.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
   'util/services/manorAdmin.mysql.test.js':'LIGHTNOTE_TEST_MYSQL_SOCKET',
   'util/services/lotteryHistoryService.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',

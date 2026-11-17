@@ -6,6 +6,7 @@
       'growth-page--wide': useWideDesktopLayout,
       'growth-page--mobile': bookmark.isMobile,
       'growth-page--inventory': activeSection === 'rewards' && activeRewardSection === 'inventory',
+      'growth-page--leaderboard': activeSection === 'leaderboard',
     }"
   >
     <div class="growth-container" :class="{ 'growth-container--wide': useWideDesktopLayout }">
@@ -391,6 +392,8 @@
             </template>
           </template>
 
+          <PointsLeaderboard v-if="activeSection === 'leaderboard'" :mobile="bookmark.isMobile" />
+
           <template v-if="activeSection === 'rewards'">
             <BButton
               v-if="growthV2Enabled && preferences && freeLotteryRemaining > 0 && !lowPressureMode"
@@ -511,6 +514,7 @@
   import LotteryDraw from '@/components/growth/LotteryDraw.vue';
   import MyInventory from '@/components/growth/MyInventory.vue';
   import WeeklyChallenge from '@/components/growth/WeeklyChallenge.vue';
+  import PointsLeaderboard from '@/components/growth/leaderboard/PointsLeaderboard.vue';
   import GrowthPreferencesCard from '@/components/growth/GrowthPreferencesCard.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
@@ -553,7 +557,7 @@
     type RewardSection,
   } from '@/utils/inventoryNavigation';
 
-  type GrowthSection = 'overview' | 'tasks' | 'achievements' | 'rewards';
+  type GrowthSection = 'overview' | 'tasks' | 'achievements' | 'leaderboard' | 'rewards';
   type TaskView = 'daily' | 'weekly' | 'onboarding';
   type GrowthNavOption<T extends string> = { key: T; label: string; icon: string; badge?: number };
   type DesktopGrowthNavOption = {
@@ -579,6 +583,7 @@
   const activeSection = computed<GrowthSection>({
     get: () => {
       const section = String(route.query.section || '');
+      if (section === 'leaderboard' && leaderboardEnabled.value) return 'leaderboard';
       return ['overview', 'tasks', 'achievements', 'rewards'].includes(section)
         ? (section as GrowthSection)
         : 'overview';
@@ -617,7 +622,7 @@
   const useWideDesktopLayout = computed(() => bookmark.isDesktop && !bookmark.isCompactLayout);
   const sectionOptions = computed<GrowthNavOption<GrowthSection>[]>(() => {
     const achievementBadge = achievementClaimableCount.value;
-    return [
+    const entries: GrowthNavOption<GrowthSection>[] = [
       { key: 'overview', label: t('growth.mobileTabOverview'), icon: icon.growth.rank },
       { key: 'tasks', label: t('growth.mobileTabTasks'), icon: icon.growth.action },
       {
@@ -626,13 +631,20 @@
         icon: icon.growth.level,
         badge: achievementBadge > 0 ? achievementBadge : undefined,
       },
-      {
-        key: 'rewards',
-        label:
-          growthV2Enabled.value && !bookmark.isMobile ? t('growth.assetsRewardsTitle') : t('growth.mobileTabRewards'),
-        icon: icon.growth.reward,
-      },
     ];
+    if (leaderboardEnabled.value) {
+      entries.push({
+        key: 'leaderboard',
+        label: t(bookmark.isMobile ? 'growth.leaderboard.mobileTab' : 'growth.leaderboard.tab'),
+        icon: icon.growth.rank,
+      });
+    }
+    entries.push({
+      key: 'rewards',
+      label: growthV2Enabled.value && !bookmark.isMobile ? t('growth.assetsRewardsTitle') : t('growth.mobileTabRewards'),
+      icon: icon.growth.reward,
+    });
+    return entries;
   });
   const rewardSectionOptions = computed<GrowthNavOption<RewardSection>[]>(() => {
     const options: GrowthNavOption<RewardSection>[] = [
@@ -715,6 +727,7 @@
   // 成长中心 V2 已全量开放：只有服务端明确下发 false（应急回退）才显示旧版，加载期间不先闪旧版。
   const growthV2Enabled = computed(() => growth.value?.features?.growthCenterV2 !== false);
   const pointsCenterEnabled = computed(() => growth.value?.features?.pointsCenter ?? import.meta.env.DEV);
+  const leaderboardEnabled = computed(() => Boolean(growth.value?.features?.leaderboard) && !isAdminContext.value);
   const claimableCount = computed(() => Number(claimable.value?.count || 0));
   const { achievementClaimableCount, claimAllTooltip, snapshotClaimableBreakdown, claimSuccessMessage, claimReceipt } =
     useGrowthClaimFeedback(claimable);
@@ -1383,6 +1396,47 @@
     height: 100%;
     overflow-y: auto;
     scrollbar-width: thin;
+  }
+  .growth-page.growth-page--leaderboard {
+    overflow: hidden;
+    padding-bottom: var(--ui-space-16, 16px);
+
+    .growth-container {
+      height: 100%;
+      min-height: 0;
+    }
+    .growth-workspace {
+      flex: 1 1 0;
+      min-height: 0;
+    }
+    .growth-workspace:not(.growth-workspace--wide) {
+      display: flex;
+    }
+    .growth-main {
+      flex: 1 1 0;
+      height: 100%;
+      min-height: 0;
+      overflow: hidden;
+    }
+    .growth-section-tabs {
+      position: static;
+      flex: none;
+    }
+
+    &:not(.growth-page--wide):not(.growth-page--mobile) {
+      padding-top: var(--ui-space-16, 16px);
+
+      .growth-container, .growth-main { gap: var(--ui-space-12, 12px); }
+      .growth-hero {
+        flex-direction: row;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--ui-space-12, 12px);
+      }
+      .growth-back, .growth-report-actions { margin: 0; }
+      .growth-subtitle { display: none; }
+      .growth-report-actions { margin-inline-start: auto; }
+    }
   }
   .growth-sidebar-head {
     display: flex;

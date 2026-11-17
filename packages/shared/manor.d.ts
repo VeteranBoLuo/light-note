@@ -20,6 +20,7 @@ export interface ManorSnapshot {
   quests: Array<{ key: string; done: boolean; [key: string]: unknown }>;
   result?: unknown;
   replayed?: boolean;
+  leaderboardAvailable?: boolean;
   runtime?: { mode: 'open' | 'maintenance'; message: string; revision: number };
 }
 export interface ManorCommand {

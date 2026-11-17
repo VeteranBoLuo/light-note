@@ -59,7 +59,8 @@
     "migrate:account-email-health": "node scripts/ensureAccountEmailHealthSchema.js",
     "configure:signup-source-survey": "node scripts/configureSignupSourceSurvey.js",
     "migrate:knowledge-manor": "node scripts/ensureKnowledgeManorSchema.js",
-    "migrate:knowledge-manor-admin": "node scripts/ensureKnowledgeManorAdminSchema.js"
+    "migrate:knowledge-manor-admin": "node scripts/ensureKnowledgeManorAdminSchema.js",
+    "migrate:points-leaderboard": "node scripts/migratePointsLeaderboard.js"
   },
   "keywords": [],
   "author": "",

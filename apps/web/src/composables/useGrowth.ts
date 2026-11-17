@@ -41,7 +41,7 @@ export interface Growth {
   dailyExp?: number;
   dailyCap?: number;
   dailyCapReached?: boolean;
-  features?: { growthCenterV2?: boolean; pointsCenter?: boolean; manor?: boolean };
+  features?: { growthCenterV2?: boolean; pointsCenter?: boolean; manor?: boolean; leaderboard?: boolean };
 }
 
 export interface Rank {

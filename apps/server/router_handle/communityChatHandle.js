@@ -1,4 +1,5 @@
 import { L, reqLang, resultData } from '../util/common.js';
+import { sendProfileAvatar } from '../util/profileAvatarResponse.js';
 import { stableAgentErrorCode } from '../util/agent/logSafety.js';
 import { recordServerOperation } from '../util/operationLog.js';
 import {
@@ -679,27 +680,6 @@ export async function messageAuthorAchievements(req, res) {
   } catch (error) {
     return sendError(req, res, error);
   }
-}
-
-function sendProfileAvatar(req, res, source) {
-  res.set('Cache-Control', 'private, max-age=300');
-  res.set('X-Content-Type-Options', 'nosniff');
-  if (/^https?:\/\//i.test(source)) return res.redirect(302, source);
-
-  const match = /^data:(image\/(?:jpeg|png|webp|gif));base64,([A-Za-z0-9+/=]+)$/i.exec(source);
-  const body = match ? Buffer.from(match[2], 'base64') : null;
-  if (!match || !body?.length || body.length > 524288) {
-    return res
-      .status(404)
-      .send(
-        resultData(
-          { code: 'COMMUNITY_CHAT_AUTHOR_AVATAR_NOT_FOUND' },
-          404,
-          L(req, '头像当前不可用', 'Avatar is unavailable'),
-        ),
-      );
-  }
-  return res.type(match[1]).send(body);
 }
 
 export async function messageAuthorAvatar(req, res) {

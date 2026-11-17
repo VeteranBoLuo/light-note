@@ -164,6 +164,7 @@ function createManorRefreshInput(doc) {
     restoreFormal: () => request("restore-formal"),
     exit: () => request('exit'),
     tasks: index => request('tasks', { index }),
+    leaderboard: () => request('leaderboard'),
     ledger: () => request('ledger'),
     reminders: () => request('reminders'),
     dismissGuide: target => send(target, 'dismissGuide', []),

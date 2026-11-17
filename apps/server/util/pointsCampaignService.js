@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import pool from '../db/index.js';
 import { getPointsEarningRuntime, POINTS_EARNING_POLICY_VERSION } from './pointsEarningPolicy.js';
 import { grantPointsIdempotently, pointsGrantHash, PointsGrantError } from './pointsGrantOperations.js';
+import { POINTS_ACCOUNT_ELIGIBLE, POINTS_ACCOUNT_NOT_BANNED } from './pointsAudienceEligibility.js';
 
 const CAMPAIGN_STATUSES = Object.freeze([
   'draft',
@@ -173,7 +174,7 @@ const CAMPAIGN_SELECT = `SELECT id, public_id AS publicId, name, status, points_
   FROM points_campaigns`;
 
 function audienceQuery(audience, { limit = null } = {}) {
-  const clauses = ['u.del_flag = 0', "COALESCE(u.role, 'user') = 'user'", "u.id <> 'visitor'"];
+  const clauses = [POINTS_ACCOUNT_ELIGIBLE];
   const params = [];
   if (audience.explicitUserIds.length) {
     clauses.push(`u.id IN (${audience.explicitUserIds.map(() => '?').join(',')})`);
@@ -220,9 +221,7 @@ function audienceQuery(audience, { limit = null } = {}) {
     params.push(audience.excludeCampaignPublicId);
   }
   // del_flag 是账号禁用的权威旧口径；再排除安全模块仍标记为 active 的封禁记录。
-  clauses.push(`NOT EXISTS (
-    SELECT 1 FROM security_account_bans sab WHERE sab.user_id = u.id AND sab.is_active = 1
-  )`);
+  clauses.push(POINTS_ACCOUNT_NOT_BANNED);
   const sql = `SELECT u.id AS userId, u.alias, u.create_time AS createTime, u.last_active_time AS lastActiveTime,
                       COALESCE(ug.level, 1) AS level, COALESCE(ug.points, 0) AS points
                  FROM user u LEFT JOIN user_growth ug ON ug.user_id = u.id

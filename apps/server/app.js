@@ -31,6 +31,8 @@ import { assertPointsEarningActivationReady, getPointsEarningRuntime } from './u
 import { getPointsCampaignRuntime } from './util/pointsCampaignService.js';
 import { generateGrowthNudges } from './util/growth.js';
 import { startManorNudgeScheduler } from './util/services/knowledgeManorNudges.js';
+import { assertLeaderboardReady, startLeaderboardScheduler } from './util/services/leaderboardSettlement.js';
+import { getLeaderboardConfig } from './util/leaderboardPolicy.js';
 import { ensureOrganizeSchema } from './util/organizeSchema.js';
 import { startTodoReminderScheduler } from './util/todoReminder.js';
 import { startTodoReminderV2Scheduler } from './util/todoReminderV2.js';
@@ -152,11 +154,12 @@ try {
   await ensureGrowthTaskSchema();
   await ensureGrowthCenterSchema();
   if (
-    process.env.KNOWLEDGE_MANOR_ENABLED === 'true' &&
+    (process.env.KNOWLEDGE_MANOR_ENABLED === 'true' || getLeaderboardConfig().openWeek) &&
     (!(await knowledgeManorSchemaReady(pool)) || !(await knowledgeManorAdminSchemaReady(pool)))
   ) {
     throw new Error('KNOWLEDGE_MANOR_SCHEMA_MISSING');
   }
+  await assertLeaderboardReady(pool);
   await ensureDailyReviewSchema();
   await assertPointsEarningActivationReady({
     db: pool,
@@ -325,6 +328,7 @@ function scheduleGrowthNudges() {
 }
 scheduleGrowthNudges();
 startManorNudgeScheduler();
+startLeaderboardScheduler();
 // 年度报告开放通知（开放后第一周每天 10:00 检查，同一账号最多一条）
 scheduleAnnualReportNotices();
 // 资料较多且从未备份的账号收到一次备份提醒（每天 10:30 检查，同一账号只发一次）

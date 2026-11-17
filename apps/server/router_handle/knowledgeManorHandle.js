@@ -4,6 +4,7 @@ import { resultData, L } from '../util/common.js';
 import { stableAgentErrorCode } from '../util/agent/logSafety.js';
 import { knowledgeManorService } from '../util/services/knowledgeManorService.js';
 import { canEnterManor, knowledgeManorEnabled } from '../util/services/knowledgeManorAccess.js';
+import { canViewLeaderboard, getLeaderboardConfig, leaderboardOpen } from '../util/leaderboardPolicy.js';
 
 async function allowed(req, res) {
   if (!ensureNotVisitor(req, res)) return false;
@@ -36,6 +37,13 @@ async function respond(req, res, action) {
   }
 }
 
-export const getKnowledgeManor = (req, res) => respond(req, res, () => knowledgeManorService.get(req.user.id));
-export const runKnowledgeManorCommand = (req, res) => respond(req, res, () => knowledgeManorService.execute(req.user.id, req.body));
+const withLeaderboardEntry = (req, snapshot) => ({
+  ...snapshot,
+  leaderboardAvailable: canViewLeaderboard(req) && leaderboardOpen(getLeaderboardConfig()),
+});
+
+export const getKnowledgeManor = (req, res) => respond(req, res, async () =>
+  withLeaderboardEntry(req, await knowledgeManorService.get(req.user.id)));
+export const runKnowledgeManorCommand = (req, res) => respond(req, res, async () =>
+  withLeaderboardEntry(req, await knowledgeManorService.execute(req.user.id, req.body)));
 export const getKnowledgeManorAttention = (req, res) => respond(req, res, () => knowledgeManorService.attention(req.user.id));

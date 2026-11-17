@@ -16,6 +16,7 @@ const SOURCES = {
   achievement: 'achievement',
   quest: 'task',
   weekly: 'weekly',
+  leaderboard_reward: 'leaderboard_reward',
   admin: 'admin',
   campaign: 'campaign',
   support_campaign: 'campaign',

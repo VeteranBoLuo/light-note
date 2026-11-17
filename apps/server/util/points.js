@@ -15,6 +15,8 @@ import { INTERNAL_ROLES } from './internalRoles.js';
 import { pointsOperationHash } from './pointsOperationHash.js';
 import { creditAiBonusTokens } from './aiBonusWallet.js';
 import { acquisitionMeta, recordAssetAcquisition, ACQUISITION_VERSION } from './assetAcquisition.js';
+import { LEADERBOARD_ACTIVITY_REASONS } from './leaderboardPolicy.js';
+import { lockLeaderboardFacts } from './leaderboardSettlementLock.js';
 
 // 积分系统:经验(EXP)管段位、只增;积分(points)管消费、可赚可花。
 // 余额存 user_growth.points(权威),points_log 记流水(审计 + 按天幂等)。
@@ -478,6 +480,9 @@ export async function earnPoints(
     } finally {
       tx.release();
     }
+  }
+  if (reason === 'manor_sale' || LEADERBOARD_ACTIVITY_REASONS.includes(reason)) {
+    await lockLeaderboardFacts(conn);
   }
   if (ref) {
     // 原子幂等:INSERT ... WHERE NOT EXISTS —— 靠 idx_user_reason_ref 的间隙锁串行化并发同 (user,reason,ref) 请求,

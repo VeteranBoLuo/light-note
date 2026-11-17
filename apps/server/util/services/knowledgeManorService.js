@@ -8,6 +8,7 @@ import { getWeeklyChallenges } from '../weeklyChallenge.js';
 import { readManorRuntime, allowManorCommand } from './knowledgeManorRuntime.js';
 import { summarizeManorOperation } from './knowledgeManorOperation.js';
 import { canEnterManor } from './knowledgeManorAccess.js';
+import { lockLeaderboardFacts } from '../leaderboardSettlementLock.js';
 
 const random = () => randomInt(0, 0x1_0000_0000) / 0x1_0000_0000;
 const parsed = value => typeof value === 'string' ? JSON.parse(value) : value;
@@ -40,6 +41,34 @@ function checkRequest(input) {
     || !Array.isArray(input.args) || JSON.stringify(input.args).length > 2048) {
     throw new ManorError('MANOR_COMMAND_INVALID', 400);
   }
+}
+
+async function isFreeCastFirstSale(conn, userId, fish) {
+  const id = String(fish.id);
+  const [[origin]] = await conn.query(
+    `SELECT action, revision FROM knowledge_manor_operations
+       WHERE user_id = ? AND (
+         (action = 'resolveCast'
+           AND JSON_UNQUOTE(JSON_EXTRACT(result_json, '$.result.fish.id')) = ?
+           AND JSON_UNQUOTE(JSON_EXTRACT(result_json, '$.result.fish.kind')) = ?)
+         OR ((action = 'buyback' OR action IS NULL)
+           AND JSON_UNQUOTE(JSON_EXTRACT(result_json, '$.result.id')) = ?
+           AND JSON_UNQUOTE(JSON_EXTRACT(result_json, '$.result.kind')) = ?)
+       )
+       ORDER BY revision DESC LIMIT 1`,
+    [userId, id, fish.kind, id, fish.kind],
+  );
+  if (origin?.action !== 'resolveCast') return false;
+
+  // The only other command allowed between casting and resolving is an atlas read.
+  const [[cast]] = await conn.query(
+    `SELECT action, JSON_UNQUOTE(JSON_EXTRACT(result_json, '$.result')) AS baitSource
+       FROM knowledge_manor_operations
+       WHERE user_id = ? AND revision < ? AND (action <> 'readAtlasEntry' OR action IS NULL)
+       ORDER BY revision DESC LIMIT 1`,
+    [userId, origin.revision],
+  );
+  return cast?.action === 'beginCast' && cast.baitSource === 'free';
 }
 
 /** The account growth lock serializes manor points with shop, lottery and growth rewards. */
@@ -90,6 +119,9 @@ export function createKnowledgeManorService({ db = pool, context = accountContex
       const meta = { manorVersion: MANOR_VERSION, manorAction: input.action };
       const ref = createHash('sha256').update(input.requestId).digest('hex');
       if (next.pointsDelta > 0) {
+        if (input.action === 'sell' && await isFreeCastFirstSale(conn, userId, next.state.buybacks[0].fish)) {
+          meta.manorFreeCastFirstSale = true;
+        }
         const credited = await creditPoints(userId, next.pointsDelta, 'manor_sale', ref, conn, { policyVersion: MANOR_VERSION, meta });
         if (!credited) throw new ManorError('MANOR_LEDGER_CONFLICT');
       } else if (next.pointsDelta < 0) {
@@ -103,6 +135,7 @@ export function createKnowledgeManorService({ db = pool, context = accountContex
       await conn.query(`INSERT INTO knowledge_manors (user_id,revision,state_json) VALUES (?, ?, ?)
         ON DUPLICATE KEY UPDATE revision=VALUES(revision),state_json=VALUES(state_json)`, [userId, revision, JSON.stringify(stored)]);
       const summary = summarizeManorOperation(current.state,next.state,input.action,next.result);
+      if (input.action === 'harvest' && summary.effectful) await lockLeaderboardFacts(conn);
       await conn.query('INSERT INTO knowledge_manor_operations (user_id,request_id,command_hash,model_version,revision,result_json,points_delta,action,effectful,resource_delta_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', [userId, input.requestId, digest, MANOR_VERSION, revision, JSON.stringify({ result: next.result ?? null }), next.pointsDelta,input.action,summary.effectful ? 1 : 0,JSON.stringify(summary.deltas)]);
       await conn.commit();
       return { version: MANOR_VERSION, revision, state: next.state, result: next.result, replayed: false, quests: ctx.quests || [],runtime };

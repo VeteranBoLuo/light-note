@@ -130,6 +130,8 @@ export default {
       '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none"><path d="M20 12a8 8 0 0 1-8 8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M4 12a8 8 0 0 1 8-8" stroke="currentColor" stroke-width="2" stroke-linecap="round" opacity=".35"/></svg>',
   },
   growth: {
+    trophy: achievementGlyph('<path d="M8 3h8v6a4 4 0 0 1-8 0V3ZM8 5H4v2a4 4 0 0 0 4 4m8-6h4v2a4 4 0 0 1-4 4m-4 2v5m-4 3h8m-6-3h4v3"/>'),
+    medal: achievementGlyph('<path d="m6 3 3 6m9-6-3 6M6 3h4l2 4 2-4h4"/><circle cx="12" cy="14" r="5"/><path d="m10.5 14 1 1 2-2"/>'),
     skip: '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none"><path d="m4 5 11 7L4 19V5ZM19 5v14" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>',
     backpack: achievementGlyph('<path d="M8 8V6a4 4 0 0 1 8 0v2M5 8h14l2 13H3L5 8Z"/><path d="M8 8v3M16 8v3"/>'),
     lock: '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><path fill="currentColor" d="M12 1a5 5 0 0 0-5 5v3H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2h-1V6a5 5 0 0 0-5-5zm3 8H9V6a3 3 0 0 1 6 0v3z"/></svg>',

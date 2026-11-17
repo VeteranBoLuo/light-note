@@ -665,6 +665,7 @@ function manorMenu() {
     ["memories", "庄园日记", "看看收获"],
     ["rules", "玩法帮助", "种植 · 钓鱼 · 养鱼"],
   ];
+  if (GardenLive.snapshot?.leaderboardAvailable) items.splice(2, 0, ['leaderboard', '积分排行榜', '查看周榜']);
   if (typeof GardenLive.reminders === "function") items.push(["reminder-settings", "提醒设置", "通知 · 入口小红点"]);
   showDialog("庄园小记", `相伴 ${M.day(state)} 天`, `<div class="manor-menu">${items.map(([action, title, detail]) => `<button data-action="${action}" class="${action === "daily" && M.pendingDailyWater(state).length ? "has-reward" : ""}"><strong>${title}</strong><small>${detail}</small><span aria-hidden="true">›</span></button>`).join("")}</div>`, "", false, "manor-menu-dialog");
 }
@@ -1340,6 +1341,7 @@ function init() {
         break;
       case "manor-menu":manorMenu();break;
       case "reminder-settings":closeDialog();await GardenLive.reminders();break;
+      case "leaderboard":closeDialog();await GardenLive.leaderboard();break;
       case "help-tab":
         if (!["plant", "fish", "tank", "facilities", "points", "collection", "keys"].includes(b.dataset.tab)) break;
         helpTab = b.dataset.tab;

@@ -10,6 +10,7 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import { stopManagedChild } from './localProcessLifecycle.mjs';
 import { localTestPorts } from '../apps/server/util/localTestPorts.js';
 import { assertLocalTestEnvironment } from '../apps/server/util/localTestEnvironment.js';
+import { leaderboardRange } from '../apps/server/util/leaderboardPolicy.js';
 
 const script = fileURLToPath(import.meta.url);
 const root = path.resolve(path.dirname(script), '..');
@@ -127,6 +128,7 @@ function prepareConfig() {
     AI_DAILY_BRIEF_PLATFORM_BILLING: 'off', AI_RESERVATION_CALIBRATION_MODE: 'legacy', AI_DAILY_BRIEF_DAILY_QUOTA: '66000', POINTS_ECONOMY_C11_ENABLED: 'false',
     AI_GIFT_NETWORK_REGISTRATION_LIMIT: '3', AI_GIFT_GLOBAL_REGISTRATION_LIMIT: '20', AI_GIFT_NEW_ACCOUNT_TOKEN_LIMIT: '500000',
     SUPPORT_PACKAGES_AFDIAN_PRODUCTS: '{}',
+    POINTS_LEADERBOARD_OPEN_WEEK: leaderboardRange('week', new Date()).start,
     // 积分获取 C5–C8 与积分经济 C10 对齐线上开关和生效边界，本机看到的每日/每周奖励、商店和抽奖与线上一致。
     // C8 成就快照由 localTestBootstrap 在缺失时补齐；已有值（含用户自行改过的）一律保留。
     POINTS_EARNING_C5_ENABLED: 'true', POINTS_EARNING_C5_EFFECTIVE_DAY: '20260815', POINTS_EARNING_C5_EFFECTIVE_WEEK: '202634',

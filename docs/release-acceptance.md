@@ -117,6 +117,8 @@ pnpm local:stop    # 停止应用和依赖，保留本地数据
 
 ### 其他领域门禁
 
+积分排行榜开放前显式运行 `pnpm --filter server migrate:points-leaderboard` 安装榜单表和结算锁，并通过 `check:schema`。核对可上榜账号已有社区 ID，缺失时复用既有社区身份回填流程。所有 API 实例使用同一排行榜配置。使用北京时间周一日期 `POINTS_LEADERBOARD_OPEN_WEEK=YYYY-MM-DD` 开放首个完整周，该日期录入后固定。配置 `POINTS_LEADERBOARD_FIRST_REWARD_WEEK` 指定发奖周，未配置时只记录排名。`POINTS_LEADERBOARD_REWARDS_ENABLED=true` 才处理待发奖项，关闭开关仍冻结本期。开榜前随发布同步隐私政策，执行 `node scripts/seedPointsLeaderboardKnowledge.js --apply` 同步帮助与 AI 知识库。规则、奖额和回滚资产边界见[积分排行榜](./points-earning.md#积分排行榜)。
+
 一次性 AI 等级赠礼依赖 `20261106_ai_level_gifts.sql` 与 `20261106_ai_gift_risk_facts.sql` 的加法结构；先完成结构安装与 `check:schema`，再更新 API 和使用统一 Execution 的 Worker。结构安装不发赠礼、不清零余额；显式补发与关闭日额度仍按 [一次性等级赠礼与校准](./ai-skills.md#一次性等级赠礼与校准) 核对资格、逐档账本和差异，不能把进程启动视为补发完成。
 
 知识庄园开放前，显式运行 `pnpm --filter server migrate:knowledge-manor` 安装 `20261024_knowledge_manor.sql` 的存档与幂等操作表，不回填账号或调整资产。部署脚本仅在本轮已授权且显式设置 `LIGHTNOTE_APPLY_KNOWLEDGE_MANOR_MIGRATION=1` 时执行此迁移。`KNOWLEDGE_MANOR_ENABLED` 默认关闭，是部署总开关；开启后由 `KNOWLEDGE_MANOR_AUDIENCE` 决定开放范围，默认 `internal`（Root 与 test 账号），`all` 为全部登录账号，游客与管理员代管始终不开放；启动与 Schema 门禁均检查契约。公开开放分两段：先以 `internal` 部署 API 与 Web，用 test 账号在生产完成新手、种植、垂钓、出售与积分流水核对，确认普通账号仍不可见；再改为 `all` 并重启 API，用普通账号复核。开放获准上线时执行 `node scripts/seedKnowledgeManorKnowledge.js` 同步帮助与 AI 知识条目，随 API 重启刷新检索缓存。收回开放只需改回 `internal` 并重启，保留存档与积分。API 和 Web 必须携带同一庄园规则版本，发布前验证与主站积分并发、失败回滚、断网重试、钓鱼刷新恢复及账号隔离；MySQL 5.7 兼容门禁不能用本地 MySQL 8 的结果替代。回退先关闭开关，保留新增表、操作收据与已结算积分，不逆向回收用户资产。
