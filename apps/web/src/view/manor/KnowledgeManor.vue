@@ -10,7 +10,31 @@
     </div>
     <ManorLoadingState v-else-if="loading || !interactive" :progress="progress" class="knowledge-manor__loading" />
     <iframe v-if="!loading && !failed" ref="frame" :key="nonce" :src="frameUrl" :title="t('manor.title')" referrerpolicy="same-origin" @error="failed = true" />
-    <ManorReminderDialog :open="remindersOpen" @close="remindersOpen = false" />
+    <ManorReminderDialog :open="settingsDialog === 'reminders'" @close="settingsDialog = null" />
+    <ManorSettingsDialog
+      :open="settingsDialog === 'music'"
+      :title="t('manor.music.title')"
+      width="var(--ui-layout-360, 360px)"
+      initial-focus=".knowledge-manor__music-switch"
+      @close="settingsDialog = null"
+    >
+      <div class="knowledge-manor__music-setting">
+        <small class="knowledge-manor__music-track">{{ t('manor.music.track') }}</small>
+        <div class="knowledge-manor__music-controls">
+          <span class="knowledge-manor__music-status" :class="{ 'is-on': musicEnabled }" aria-hidden="true">{{
+            t(musicEnabled ? 'settings.switchOn' : 'settings.switchOff')
+          }}</span>
+          <BSwitch
+            class="knowledge-manor__music-switch"
+            :aria-label="t('manor.music.title')"
+            :checked="musicEnabled"
+            controlled
+            @update:checked="setMusicEnabled"
+          />
+        </div>
+      </div>
+      <p v-if="musicPlaybackFailed" class="knowledge-manor__music-error" role="status">{{ t('manor.music.playbackFailed') }}</p>
+    </ManorSettingsDialog>
   </main>
 </template>
 
@@ -27,8 +51,11 @@
   import { useMobileTopBar } from '@/composables/useMobileTopBar';
   import { getManor, runManorCommand } from '@/api/manorApi';
   import { resolveDailyQuestRoute } from '@/utils/growthNavigation';
+  import BSwitch from '@/components/base/BasicComponents/BSwitch.vue';
   import ManorLoadingState from './ManorLoadingState.vue';
   import ManorReminderDialog from '@/components/manor/ManorReminderDialog.vue';
+  import ManorSettingsDialog from '@/components/manor/ManorSettingsDialog.vue';
+  import { useManorMusic } from './useManorMusic';
   import { isUncertainManorResult, readPendingManorCommand, savePendingManorCommand } from '@/utils/manorPending';
   import { closeCurrentMobileOverlayThen, registerMobileOverlayHistory, releaseMobileOverlayHistory, type MobileOverlayHistoryHandle } from '@/utils/mobileOverlayHistory';
   import { randomRequestId } from '@/utils/randomRequestId';
@@ -40,7 +67,8 @@
   const emit = defineEmits<{ 'manor-immersive-change': [ready: boolean] }>();
   const frame = ref<HTMLIFrameElement | null>(null), nonce = ref(randomRequestId());
   const loading = ref(true), failed = ref(false), frameShown = ref(false), interactive = ref(false);
-  const remindersOpen = ref(false);
+  const settingsDialog = ref<'reminders' | 'music' | null>(null);
+  const { enabled: musicEnabled, playbackFailed: musicPlaybackFailed, setEnabled: setMusicEnabled, stop: stopMusic } = useManorMusic();
   type ManorFailure = 'load' | 'version' | 'unavailable' | 'account' | 'login' | 'admin' | 'unsupported';
   const failure = ref<ManorFailure>('load');
   const failureCopy: Record<ManorFailure, string> = {
@@ -58,7 +86,13 @@
   const reloadPage = () => window.location.reload();
   const progress = ref(0);
   // Keep the app navigation available until the scene has its own usable back button.
-  watch(() => interactive.value && !failed.value, ready => emit('manor-immersive-change', ready), { immediate: true });
+  watch(() => interactive.value && !failed.value, ready => {
+    if (!ready) {
+      settingsDialog.value = null;
+      stopMusic();
+    }
+    emit('manor-immersive-change', ready);
+  }, { immediate: true });
   let readController = new AbortController();
   let bootTimer: ReturnType<typeof setTimeout> | undefined;
   let snapshot: (ManorSnapshot & {notice?: string}) | null = null, pending: ManorCommand | null = null;
@@ -81,7 +115,7 @@
     knowledge_action_1: 'growth.quest_knowledge_action_1', knowledge_action_2: 'growth.quest_knowledge_action_2',
   };
   const current = (g: number) => !disposed && g === generation && owner === user.id && accountEligible();
-  watch(remindersOpen, open => {
+  watch(settingsDialog, open => {
     if (!open) void nextTick(() => {
       if (current(generation) && interactive.value && !failed.value) frame.value?.focus({ preventScroll: true });
     });
@@ -133,7 +167,10 @@
       leaderboardAvailable: snapshot?.leaderboardAvailable,
       testing: Boolean(testSession),
       canTest: user.role === 'root',
-      copy: Object.fromEntries(['actionFailed','offline','panelUpdated','castSync'].map(key => [key,t(`manor.${key}`)])),
+      copy: {
+        ...Object.fromEntries(['actionFailed','offline','panelUpdated','castSync'].map(key => [key,t(`manor.${key}`)])),
+        musicTitle: t('manor.music.title'),
+      },
       quests: value.quests.map(q => ({ ...q, label: t(questKeys[q.key] || 'growth.questUnknown') })),
     };
   }
@@ -192,7 +229,8 @@
   }
   async function initialise() {
     const g = ++generation;
-    remindersOpen.value = false;
+    settingsDialog.value = null;
+    stopMusic();
     navigationCheck?.resolve(false);
     readController.abort(); readController = new AbortController();
     clearTimeout(bootTimer); frameShown.value = false; interactive.value = false; progress.value = 0;
@@ -279,14 +317,15 @@
           value = decorated(snapshot);
           }
         } finally { commanding = false; }
-      } else if (data.action === 'reminders') {
+      } else if (data.action === 'reminders' || data.action === 'music') {
         if (!interactive.value || failed.value) throw new Error('unavailable');
+        const dialog = data.action;
         // The scene closes its menu first. Retire its mobile history entry
-        // before the reminder dialog creates one of its own.
+        // before the settings dialog creates one of its own.
         await closeCurrentMobileOverlayThen(() => {
           releaseMobileOverlayHistory(overlay); overlay = null;
         }, () => {
-          if (current(g) && interactive.value && !failed.value) remindersOpen.value = true;
+          if (current(g) && interactive.value && !failed.value) settingsDialog.value = dialog;
         });
       } else if (data.action === 'leaderboard') {
         if (!interactive.value || failed.value || !snapshot?.leaderboardAvailable) throw new Error('unavailable');
@@ -347,12 +386,12 @@
     }
   }
   useMobileTopBar(['knowledgeManor'], { title: () => t('manor.title'), ownTopBar: true, onBack: () => {
-    if (remindersOpen.value) remindersOpen.value = false;
+    if (settingsDialog.value) settingsDialog.value = null;
     else if (interactive.value) control('back');
     else void exit();
   } });
   onBeforeRouteLeave(async () => {
-    if (remindersOpen.value && current(generation) && !deliberateLeave) { remindersOpen.value = false; return false; }
+    if (settingsDialog.value && current(generation) && !deliberateLeave) { settingsDialog.value = null; return false; }
     if (interactive.value && !failed.value && current(generation) && !deliberateLeave && !await checkNavigationBack()) return false;
     // All exits, including browser back and links to tasks/ledger, refresh the shared balance.
     // These reads must never hold navigation behind a slow or disconnected API.
@@ -371,4 +410,39 @@
   .knowledge-manor iframe { display: block; width: 100%; height: 100%; border: 0; }
   .knowledge-manor__state { position: absolute; inset: 0; z-index: 1; display: grid; place-content: center; justify-items: center; gap: var(--ui-space-12, 12px); color: var(--text-color); background: var(--background-color); }
   .knowledge-manor__loading { position: absolute; inset: 0; z-index: 1; }
+  .knowledge-manor__music-setting {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--ui-space-12, 12px);
+    margin-bottom: var(--ui-space-8, 8px);
+    padding: var(--ui-space-8, 8px) var(--ui-space-12, 12px);
+    border: 1px solid #d9bf87;
+    border-radius: var(--ui-space-14, 14px);
+    background: #fff9e9;
+    color: var(--text-color);
+  }
+  .knowledge-manor__music-track { color: var(--desc-color); font-size: var(--ui-font-14, 14px); }
+  .knowledge-manor__music-controls {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    gap: var(--ui-space-6, 6px);
+  }
+  .knowledge-manor__music-status {
+    color: var(--desc-color);
+    font-size: var(--ui-font-14, 14px);
+    font-weight: 600;
+  }
+  .knowledge-manor__music-status.is-on { color: #496420; }
+  .knowledge-manor__music-switch {
+    justify-content: center;
+    min-width: var(--ui-control-44, 44px);
+    min-height: var(--ui-control-44, 44px);
+  }
+  .knowledge-manor__music-error {
+    margin: 0 0 var(--ui-space-8, 8px);
+    color: var(--error-color);
+    font-size: var(--ui-font-14, 14px);
+  }
 </style>

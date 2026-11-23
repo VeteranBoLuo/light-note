@@ -1367,6 +1367,7 @@ html.garden-immersive.kbd-nav :is(.scene-sign,.seed-stall):focus-visible > span 
 .manor-menu { display: grid; gap: calc(10px * var(--d)); }
 .manor-menu > button { display: grid; grid-template-columns: 1fr auto; text-align: left; align-items: center; gap: calc(3px * var(--d)); min-height: calc(64px * var(--d)); padding: calc(12px * var(--d)) calc(16px * var(--d)); color: #664925; border: 1px solid #dfc38e; border-radius: calc(12px * var(--d)); background: #fff9e9; cursor: pointer; }
 .manor-menu strong { font-size: calc(16px * var(--d)); }
+.manor-menu [data-action="music-settings"] strong { grid-row: 1 / 3; }
 .manor-menu small { grid-row: 2; color: #8b7655; font-size: calc(12px * var(--d)); }
 .manor-menu button > span { grid-column: 2; grid-row: 1 / 3; font-size: calc(24px * var(--d)); }
 html.light-note-mobile-rendering #app .garden-play .seaside-courtyard.farm-staged .game-hud { display: flex; align-items: center; flex-wrap: nowrap; gap: 5px; top: 8px; left: 8px; right: 8px; padding: 0; width: auto; }

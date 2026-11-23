@@ -167,6 +167,7 @@ function createManorRefreshInput(doc) {
     leaderboard: () => request('leaderboard'),
     ledger: () => request('ledger'),
     reminders: () => request('reminders'),
+    music: () => request('music'),
     dismissGuide: target => send(target, 'dismissGuide', []),
     claimSupply: (target, id) => send(target, 'claimSupply', [id]),
   };

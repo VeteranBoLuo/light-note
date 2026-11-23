@@ -40,6 +40,11 @@ export default {
     loginRequired: '登录后即可进入庄园',
     adminContext: '请退出管理员代管后进入庄园',
     unsupported: '当前浏览器版本较低，暂时无法打开庄园。请升级浏览器或系统 WebView 后再试',
+    music: {
+      title: '场景音乐',
+      track: '《海湾来信》',
+      playbackFailed: '音乐播放失败，请再试一次。',
+    },
     reminders: {
       title: '提醒设置',
       return: '回到庄园',

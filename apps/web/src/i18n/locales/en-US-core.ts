@@ -40,6 +40,11 @@ export default {
     loginRequired: 'Sign in to enter the manor.',
     adminContext: 'Leave admin preview before entering the manor.',
     unsupported: 'This browser version is too old to open the manor. Update the browser or system WebView and try again.',
+    music: {
+      title: 'Scene music',
+      track: 'A Letter from the Bay',
+      playbackFailed: 'Could not play the music. Try again.',
+    },
     reminders: {
       title: 'Reminder settings',
       return: 'Back to manor',
