@@ -69,6 +69,7 @@
 ## Execution 与计费
 
 - 所有真实 Provider 调用都必须经过 `aiGateway.js` 并归属唯一根 AI Execution；源码门禁禁止裸 Provider 和未登记调用方。
+- DeepSeek 只允许 Flash 模型，官方 Flash 兼容别名由 `agent/deepseekModelPolicy.js` 统一维护。全局配置、阶段配置和单次覆盖均须在额度占位前通过白名单，Provider 客户端在外发前再次校验；Pro 与未知模型直接拒绝，不静默替换。历史成本估算仍按实际模型价格计算，不能把 Pro 视为 Flash。
 - 用户动作在第一次真实 Provider 调用前懒占位一次。缓存命中、确定性解析和纯本地处理不占模型额度。
 - 额度闸门用包含在途预留的余额阻止并发超卖；用户界面展示已结算余额，并用 `pendingReservedTokens` 单独标出在途预留、用 `availableRemaining` 解释当前还能供新任务使用的额度。禁止把临时预留伪装成已消费或余额归零。
 - `AI_QUOTA_EXCEEDED` 只表示当前总可用额度为零；余额仍大于零但低于本次调用保守预算时返回 `AI_QUOTA_INSUFFICIENT_FOR_REQUEST`，并携带本次所需与当前可用预算。所有 AI 入口必须复用共享协议和统一前端提示，不得把两类情况合并成“今日额度已用完”。

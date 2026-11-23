@@ -176,8 +176,11 @@ export function createAiGateway({
       throw error;
     }
     const estimatedTokens = estimateAiProviderTokens(messages, clientOptions);
-    if (activeExecution) {
-      try {
+    let providerInfo = null;
+    try {
+      // 配置覆盖也必须通过模型白名单；拒绝时不占额度、不创建真实调用 Span。
+      providerInfo = getActiveProviderInfo(clientOptions.providerOverride, clientOptions.modelOverride);
+      if (activeExecution) {
         await authorizeAiProviderCall({
           execution: activeExecution,
           estimatedTokens,
@@ -185,20 +188,20 @@ export function createAiGateway({
           stage,
           signal: deadline.signal,
         });
-      } catch (error) {
-        traceEvent(onTrace, {
-          event: 'ai.span.failed',
-          traceId,
-          spanId,
-          stage,
-          taskType,
-          kind,
-          durationMs: Date.now() - startedAt,
-          error: stableAgentErrorCode(error),
-        });
-        deadline.dispose();
-        throw error;
       }
+    } catch (error) {
+      traceEvent(onTrace, {
+        event: 'ai.span.failed',
+        traceId,
+        spanId,
+        stage,
+        taskType,
+        kind,
+        durationMs: Date.now() - startedAt,
+        error: stableAgentErrorCode(error),
+      });
+      deadline.dispose();
+      throw error;
     }
     const executionSpan = beginAiProviderSpan({
       id: spanId,
@@ -213,9 +216,7 @@ export function createAiGateway({
     });
     let result = null;
     let caughtError = null;
-    let providerInfo = null;
     try {
-      providerInfo = getActiveProviderInfo(clientOptions.providerOverride, clientOptions.modelOverride);
       if (governance) {
         activeGovernanceAdapter ||= await loadGovernanceAdapter();
         governanceState = await activeGovernanceAdapter.beginAiGatewayGovernance({
