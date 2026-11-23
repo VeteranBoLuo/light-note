@@ -531,7 +531,7 @@ export const equipTitleHandle = async (req, res) => {
   }
 };
 
-// GET /growth/claimable —— 待领取总数(日常阶段 + 成长任务 + 成就 + 每周挑战),供首页/入口红点
+// GET /growth/claimable —— 日常阶段、成长任务、成就、周挑战、社区奖励与任务水滴的待领取总数
 export const getClaimable = async (req, res) => {
   try {
     const userId = req.user?.id;
@@ -543,7 +543,7 @@ export const getClaimable = async (req, res) => {
   }
 };
 
-// POST /growth/claimAll —— 按可选范围原子领取日常阶段、成长任务、成就与每周挑战奖励
+// POST /growth/claimAll —— 按可选范围原子领取成长奖励、社区奖励与庄园任务水滴
 export const doClaimAll = async (req, res) => {
   if (!ensureNotVisitor(req, res)) return;
   try {

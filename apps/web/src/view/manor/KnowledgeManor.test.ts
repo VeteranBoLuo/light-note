@@ -15,12 +15,13 @@ const mocks = vi.hoisted(() => ({
   save: vi.fn(),
   growth: vi.fn(async (_force?: boolean) => {}),
   inventory: vi.fn(async () => {}),
+  claimable: vi.fn(async () => {}),
   attention: vi.fn(async (_force?: boolean) => {}),
 }));
 vi.mock('@/store', () => ({ useUserStore: () => mocks.user, bookmarkStore: () => mocks.bookmark }));
 vi.mock('@/api/manorApi', () => ({ getManor: mocks.read, runManorCommand: mocks.command }));
 vi.mock('@/composables/useGrowth', () => ({
-  useGrowth: () => ({ load: mocks.growth, loadInventory: mocks.inventory }),
+  useGrowth: () => ({ load: mocks.growth, loadInventory: mocks.inventory, loadClaimable: mocks.claimable }),
 }));
 vi.mock('@/composables/useMobileTopBar', () => ({ useMobileTopBar: () => {} }));
 vi.mock('@/composables/useManorAttention', () => ({ refreshManorAttention: mocks.attention }));

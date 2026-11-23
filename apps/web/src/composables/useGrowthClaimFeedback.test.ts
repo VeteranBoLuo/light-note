@@ -5,8 +5,8 @@ import zhCN from '@/i18n/locales/zh-CN';
 import enUS from '@/i18n/locales/en-US';
 import { useGrowthClaimFeedback } from './useGrowthClaimFeedback';
 
-const fallback = { daily: 2, growthTasks: 0, achievements: 0, weekly: 0, community: 0 };
-const empty = { daily: 0, growthTasks: 0, achievements: 0, weekly: 0, community: 0 };
+const fallback = { daily: 2, growthTasks: 0, achievements: 0, weekly: 0, community: 0, manor: 0 };
+const empty = { daily: 0, growthTasks: 0, achievements: 0, weekly: 0, community: 0, manor: 0 };
 
 function withFeedback(locale: string, check: (feedback: ReturnType<typeof useGrowthClaimFeedback>) => void) {
   let feedback!: ReturnType<typeof useGrowthClaimFeedback>;
@@ -151,4 +151,12 @@ describe('useGrowthClaimFeedback', () => {
       });
     });
   });
+});
+
+it('中英文领取回执显示服务端实际到账的水滴数量', () => {
+  for (const [locale, expected] of [['zh-CN', '已领取庄园水滴 · 水滴 +4'], ['en-US', 'Manor water collected · +4 water drops']]) {
+    withFeedback(locale, ({ claimSuccessMessage }) => {
+      expect(claimSuccessMessage({ claimed: 1, water: 4, receipts: [{ type: 'manor', status: 'claimed' }] }, empty)).toBe(expected);
+    });
+  }
 });

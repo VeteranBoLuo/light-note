@@ -226,7 +226,7 @@ export function executeManorCommand(saved, command, context) {
   if (command.args.length > 3) invalid();
   const state = projectManor(saved, context);
   if (!state.adopted && command.action !== 'adopt') throw new ManorError('MANOR_NOT_ADOPTED');
-  if (state.casting && !['resolveCast', 'readAtlasEntry'].includes(command.action)) throw new ManorError('MANOR_CAST_PENDING');
+  if (state.casting && !['resolveCast', 'readAtlasEntry', 'claimAllDailyWater'].includes(command.action)) throw new ManorError('MANOR_CAST_PENDING');
   const result = commandCatalog[command.action](state, command.args, context);
   if (!Number.isSafeInteger(state.wallet) || state.wallet < 0 || state.wallet > 2_147_483_647) {
     throw new ManorError('MANOR_POINTS_INVALID');

@@ -1,4 +1,5 @@
 import { ref } from 'vue';
+import { refreshManorAttention } from './useManorAttention';
 import growthApi from '@/api/growthApi.ts';
 import { useUserStore } from '@/store';
 import {
@@ -302,6 +303,7 @@ export interface GrowthClaimable {
   achievements: ClaimableItemGroup<Achievement>;
   weekly: ClaimableItemGroup<WeeklyChallenge>;
   community?: ClaimableItemGroup;
+  manor?: ClaimableItemGroup & { water: number; pending: number; bucketFull: boolean };
   today?: { completed: number; total: number; claimableCount: number };
   nextAction?: GrowthNextAction | null;
   nextActions?: GrowthNextAction[];
@@ -411,6 +413,8 @@ let growthTasksRequest: Promise<GrowthTasksData | null> | null = null;
 let growthTasksRequestOwnerId: string | null = null;
 let growthRequestVersion = 0;
 let dashboardRequestVersion = 0;
+let claimableRequestVersion = 0;
+let weeklyRequestVersion = 0;
 let ownerGeneration = 0;
 let claimRequestVersion = 0;
 
@@ -443,6 +447,9 @@ export function resetGrowth() {
   growthTasksRequestOwnerId = null;
   growthRequestVersion += 1;
   dashboardRequestVersion += 1;
+  claimableRequestVersion += 1;
+  weeklyRequestVersion += 1;
+  weeklyRequest = null;
   loading.value = false;
   growthError.value = false;
   growthTasksLoading.value = false;
@@ -511,6 +518,9 @@ function ensureGrowthOwner(uid: string) {
   growthRequestOwnerId = null;
   growthRequestVersion += 1;
   dashboardRequestVersion += 1;
+  claimableRequestVersion += 1;
+  weeklyRequestVersion += 1;
+  weeklyRequest = null;
   growthTasksOwnerId = null;
   growthTasksRequest = null;
   growthTasksRequestOwnerId = null;
@@ -706,7 +716,10 @@ export function useGrowth() {
     if (isCurrentGrowthOwner(uid, generation) && res?.status === 200 && res.data?.growth) {
       applyGrowthMutationSnapshot(res.data.growth as Growth);
       syncPointsToViews();
-      loadInventory(); // 签到里程碑/满7天可能发补签卡 → 刷新背包
+      weeklyRequestVersion += 1;
+      weeklyRequest = null;
+      await Promise.all([loadInventory(), loadDashboard(), loadClaimable(), loadWeekly(),
+        ...(growth.value?.features?.manor ? [refreshManorAttention(true)] : [])]);
     }
     return res;
   }
@@ -999,14 +1012,15 @@ export function useGrowth() {
     ensureGrowthOwner(useUserStore().id || 'visitor');
     const generation = ownerGeneration;
     if (weeklyRequest?.generation === generation) return weeklyRequest.promise;
+    const requestVersion = ++weeklyRequestVersion;
     const promise = (async () => {
       try {
         const res = await growthApi.getWeekly();
-        if (generation === ownerGeneration && res?.status === 200 && res.data) weekly.value = res.data as WeeklyData;
+        if (requestVersion === weeklyRequestVersion && generation === ownerGeneration && res?.status === 200 && res.data) weekly.value = res.data as WeeklyData;
       } catch (err) {
         console.warn('加载每周挑战失败:', err);
       }
-      return generation === ownerGeneration ? weekly.value : null;
+      return requestVersion === weeklyRequestVersion && generation === ownerGeneration ? weekly.value : null;
     })();
     weeklyRequest = { generation, promise };
     void promise.finally(() => {
@@ -1036,24 +1050,25 @@ export function useGrowth() {
   async function loadClaimable() {
     ensureGrowthOwner(useUserStore().id || 'visitor');
     const generation = ownerGeneration;
+    const requestVersion = ++claimableRequestVersion;
     claimableLoading.value = true;
     claimableError.value = false;
     try {
       const res = await growthApi.getClaimable();
-      if (generation !== ownerGeneration) return null;
+      if (generation !== ownerGeneration || requestVersion !== claimableRequestVersion) return null;
       if (res?.status === 200 && res.data) claimable.value = res.data as GrowthClaimable;
       else claimableError.value = true;
     } catch (err) {
       console.warn('加载待领取奖励失败:', err);
-      if (generation === ownerGeneration) claimableError.value = true;
+      if (generation === ownerGeneration && requestVersion === claimableRequestVersion) claimableError.value = true;
     } finally {
-      if (generation === ownerGeneration) claimableLoading.value = false;
+      if (generation === ownerGeneration && requestVersion === claimableRequestVersion) claimableLoading.value = false;
     }
-    return generation === ownerGeneration ? claimable.value : null;
+    return generation === ownerGeneration && requestVersion === claimableRequestVersion ? claimable.value : null;
   }
 
   async function claimAllRewards(
-    scopes?: Array<'daily' | 'growthTasks' | 'achievements' | 'weekly' | 'community'>,
+    scopes?: Array<'daily' | 'growthTasks' | 'achievements' | 'weekly' | 'community' | 'manor'>,
     communityKeys?: string[],
   ) {
     const uid = useUserStore().id || 'visitor';
@@ -1070,7 +1085,10 @@ export function useGrowth() {
         if (res.data.growth) {
           applyGrowthMutationSnapshot(res.data.growth as Growth);
         }
-        await Promise.all([loadDashboard(), loadGrowthTasks(true), loadWeekly(), loadClaimable(), loadInventory()]);
+        weeklyRequestVersion += 1;
+        weeklyRequest = null;
+        await Promise.all([loadDashboard(), loadGrowthTasks(true), loadWeekly(), loadClaimable(), loadInventory(),
+          ...(growth.value?.features?.manor ? [refreshManorAttention(true)] : [])]);
         if (Array.isArray(res.data.frames) && res.data.frames.length) await loadShop();
         syncPointsToViews();
       }

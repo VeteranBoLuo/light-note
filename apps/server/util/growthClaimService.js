@@ -1,21 +1,20 @@
 import { taskRewardStates, claimTaskRewards } from './communityFeed/taskRewards.js';
 import pool from '../db/index.js';
-import { getGrowth, getGrowthDashboard, grantExp, lockGrowthAccount } from './growth.js';
+import { getGrowth, getGrowthDashboard, grantExp, lockGrowthAccount, claimDailyQuestStages } from './growth.js';
 import { earnPoints, getAchievementFrameByKey } from './points.js';
 import { getGrowthTasks } from './growthTaskService.js';
 import { getWeeklyChallenges } from './weeklyChallenge.js';
 import { getGrowthCalendarContext } from './growthPreferences.js';
 import {
-  dailyClaimRef,
   earningWritesEnabled,
   POINTS_EARNING_POLICY_VERSION,
   POINTS_EARNING_C8_POLICY_VERSION,
-  resolveDailyQuestStages,
   weeklyClaimRef,
 } from './pointsEarningPolicy.js';
+import { knowledgeManorService } from './services/knowledgeManorService.js';
 import { resolveDailyEarningPolicyVersion, resolveWeeklyEarningPolicyVersion } from './pointsEarningPolicyState.js';
 
-export const GROWTH_CLAIM_SCOPES = Object.freeze(['daily', 'growthTasks', 'achievements', 'weekly', 'community']);
+export const GROWTH_CLAIM_SCOPES = Object.freeze(['daily', 'growthTasks', 'achievements', 'weekly', 'community', 'manor']);
 
 const ACTION_BY_TASK = Object.freeze({
   profile_avatar: 'profile',
@@ -68,7 +67,7 @@ function shouldClaim(keys, key) {
 }
 
 function emptySummary() {
-  return { claimed: 0, points: 0, exp: 0, frames: [] };
+  return { claimed: 0, points: 0, exp: 0, water: 0, frames: [] };
 }
 
 function addReceipt(receipts, summary, receipt) {
@@ -77,6 +76,7 @@ function addReceipt(receipts, summary, receipt) {
   summary.claimed += 1;
   summary.points += Number(receipt.reward?.points || 0);
   summary.exp += Number(receipt.reward?.exp || 0);
+  summary.water += Number(receipt.reward?.water || 0);
   if (receipt.reward?.frameId) summary.frames.push(receipt.reward.frameId);
 }
 
@@ -163,6 +163,7 @@ export async function getGrowthClaimableSnapshot(userId, { userRole = null, db =
       achievements: { count: 0, items: [] },
       weekly: { count: 0, items: [] },
       community: { count: 0, items: [] },
+      manor: { count: 0, items: [], water: 0, pending: 0, bucketFull: false },
       nextAction: null,
       nextActions: [],
     };
@@ -178,21 +179,25 @@ export async function getGrowthClaimableSnapshot(userId, { userRole = null, db =
   const taskItems = tasks.allTasks.filter((item) => item.claimable);
   const achievementItems = dashboard.achievements.filter((item) => item.claimable);
   const weeklyItems = weekly.challenges.filter((item) => item.claimable);
+  const water = await knowledgeManorService.dailyWater(userId, { connection: db, calendar, quests: dashboard.quests });
+  const manor = { ...water, count: water.water > 0 ? 1 : 0,
+    items: water.water > 0 ? [{ key: 'dailyWater', water: water.water }] : [] };
+  const count = dailyItems.length + taskItems.length + achievementItems.length + weeklyItems.length + communityItems.length + manor.count;
   const nextActions = nextActionsFrom({ dashboard, weekly, tasks });
   return {
-    count: dailyItems.length + taskItems.length + achievementItems.length + weeklyItems.length + communityItems.length,
+    count,
     daily: { count: dailyItems.length, items: dailyItems },
     growthTasks: { count: taskItems.length, items: taskItems },
     achievements: { count: achievementItems.length, items: achievementItems },
     weekly: { count: weeklyItems.length, items: weeklyItems },
     community: { count: communityItems.length, items: communityItems },
+    manor,
     nextAction: nextActions[0] || null,
     nextActions,
     today: {
       completed: dashboard.questBonus.completedCount,
       total: dashboard.questBonus.total,
-      claimableCount:
-        dailyItems.length + taskItems.length + achievementItems.length + weeklyItems.length + communityItems.length,
+      claimableCount: count,
     },
   };
 }
@@ -230,37 +235,9 @@ export async function claimGrowthRewards(userId, input = {}, { userRole = null }
         await conn.rollback();
         return { ok: false, reason: 'earning_paused', receipts: [], ...emptySummary(), growth: null };
       }
-      const keys = selectedKeys(input, 'daily');
-      for (const stage of dashboard.questBonus.stages.filter((item) => shouldClaim(keys, item.key))) {
-        if (stage.claimed) {
-          addReceipt(receipts, summary, { type: 'daily', key: stage.key, status: 'already', reward: {} });
-          continue;
-        }
-        if (!stage.claimable) {
-          addReceipt(receipts, summary, { type: 'daily', key: stage.key, status: 'incomplete', reward: {} });
-          continue;
-        }
-        const ref = dailyClaimRef(calendar.dayKey, stage.required, dashboard.questBonus.policyVersion);
-        const dailyPolicyStages = resolveDailyQuestStages(dashboard.questBonus.policyVersion);
-        const grant = await grantExp(
-          userId,
-          dailyPolicyStages.find((item) => item.key === stage.key)?.source || `daily_quest_${stage.required}`,
-          { day: calendar.dayKey, amount: stage.exp, userRole, calendar },
-          conn,
-        );
-        const gotPoints = await earnPoints(userId, stage.points, 'quest', ref, conn, {
-          policyVersion: dashboard.questBonus.policyVersion,
-          meta: { stage: stage.key, required: stage.required },
-        });
-        const duplicated = !gotPoints && grant.duplicated;
-        addReceipt(receipts, summary, {
-          type: 'daily',
-          key: stage.key,
-          status: duplicated ? 'already' : 'claimed',
-          reward: duplicated ? {} : { exp: Number(grant.granted || 0), points: gotPoints ? stage.points : 0 },
-          leveledUp: Boolean(grant.leveledUp),
-        });
-      }
+      for (const receipt of await claimDailyQuestStages(userId, dashboard.questBonus, {
+        userRole, connection: conn, calendar, keys: selectedKeys(input, 'daily'),
+      })) addReceipt(receipts, summary, receipt);
     }
 
     if (scopes.has('growthTasks')) {
@@ -387,6 +364,12 @@ export async function claimGrowthRewards(userId, input = {}, { userRole = null }
         calendar,
       }))
         addReceipt(receipts, summary, receipt);
+    }
+    if (scopes.has('manor') && shouldClaim(selectedKeys(input, 'manor'), 'dailyWater')) {
+      const water = await knowledgeManorService.dailyWater(userId, { connection: conn, calendar, quests: dashboard.quests, claim: true });
+      if (water.available) addReceipt(receipts, summary, { type: 'manor', key: 'dailyWater',
+        status: water.water > 0 ? 'claimed' : water.bucketFull ? 'full' : 'already',
+        reward: water.water > 0 ? { water: water.water } : {}, pending: water.pending });
     }
     // 快照读取也属于本次原子操作：若读取失败则整笔回滚，不能出现“到账成功但接口报错”。
     growth = await getGrowth(userId, { userRole, db: conn, calendar });

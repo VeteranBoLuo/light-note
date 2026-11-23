@@ -121,7 +121,7 @@
   function refreshSharedBalance(afterPending = false) {
     const account = user.id, previous = afterPending ? balanceRefresh : null;
     balanceRefresh = Promise.resolve(previous).then(() => {
-      if (user.id === account && accountEligible()) return Promise.all([growth.load(true), growth.loadInventory()]);
+      if (user.id === account && accountEligible()) return Promise.all([growth.load(true), growth.loadInventory(), growth.loadClaimable()]);
     }).catch(() => {});
   }
 

@@ -3,6 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   getConnection: vi.fn(),
+  claimDailyQuestStages: vi.fn(),
+  dailyWater: vi.fn(),
   taskRewardStates: vi.fn(),
   claimTaskRewards: vi.fn(),
   getGrowth: vi.fn(),
@@ -17,6 +19,7 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('./communityFeed/taskRewards.js', () => ({ taskRewardStates: mocks.taskRewardStates, claimTaskRewards: mocks.claimTaskRewards }));
+vi.mock('./services/knowledgeManorService.js', () => ({ knowledgeManorService: { dailyWater: mocks.dailyWater } }));
 vi.mock('../db/index.js', () => ({ default: { getConnection: mocks.getConnection } }));
 vi.mock('./growth.js', () => ({
   DAILY_QUEST_STAGES: [
@@ -24,6 +27,7 @@ vi.mock('./growth.js', () => ({
     { key: 'silver', required: 2, exp: 15, points: 10, source: 'daily_quest_2' },
     { key: 'gold', required: 3, exp: 25, points: 15, source: 'daily_quest_3' },
   ],
+  claimDailyQuestStages: mocks.claimDailyQuestStages,
   getGrowth: mocks.getGrowth,
   getGrowthDashboard: mocks.getGrowthDashboard,
   grantExp: mocks.grantExp,
@@ -80,6 +84,8 @@ function connection() {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.claimDailyQuestStages.mockResolvedValue([]);
+  mocks.dailyWater.mockResolvedValue({ available: false, water: 0, pending: 0, bucketFull: false });
   mocks.taskRewardStates.mockResolvedValue([]);
   mocks.claimTaskRewards.mockResolvedValue([]);
   mocks.getGrowthCalendarContext.mockResolvedValue(calendar);
@@ -149,12 +155,17 @@ describe('growthClaimService', () => {
       }),
     );
     vi.stubEnv('POINTS_EARNING_C6_ENABLED', 'false');
+    mocks.claimDailyQuestStages.mockResolvedValueOnce([
+      { type: 'daily', key: 'basic', status: 'claimed', reward: { exp: 5, points: 5 } },
+      { type: 'daily', key: 'complete', status: 'claimed', reward: { exp: 10, points: 10 } },
+    ]);
     const result = await claimGrowthRewards('user-1', { scopes: ['daily', 'achievements'] }, { userRole: 'user' });
     expect(result).toMatchObject({ ok: true, points: 665, claimed: 4, frames: ['frame_bookmark_archive'] });
-    expect(mocks.earnPoints.mock.calls.map(([, points]) => points)).toEqual([5, 10, 400, 250]);
-    expect(mocks.earnPoints.mock.calls[2][5]).toMatchObject({ policyVersion: 'points-earning-c6' });
-    expect(mocks.earnPoints.mock.calls[3][5]).toMatchObject({ policyVersion: POINTS_EARNING_C8_POLICY_VERSION });
-    expect(mocks.grantExp.mock.calls.map(([, , options]) => options.amount)).toEqual([5, 10]);
+    expect(mocks.earnPoints.mock.calls.map(([, points]) => points)).toEqual([400, 250]);
+    expect(mocks.earnPoints.mock.calls[0][5]).toMatchObject({ policyVersion: 'points-earning-c6' });
+    expect(mocks.earnPoints.mock.calls[1][5]).toMatchObject({ policyVersion: POINTS_EARNING_C8_POLICY_VERSION });
+    expect(mocks.claimDailyQuestStages).toHaveBeenCalledWith('user-1', expect.objectContaining({ policyVersion: POINTS_EARNING_C8_POLICY_VERSION }),
+      expect.objectContaining({ connection: conn, calendar, userRole: 'user' }));
     expect(conn.commit).toHaveBeenCalledOnce();
   });
 
@@ -339,4 +350,18 @@ it('community awards join the shared count and default claim-all, with explicit 
   expect(mocks.claimTaskRewards.mock.calls[0][2]).toBeNull();
   await claimGrowthRewards('user-1',{scopes:['community'],keys:{community:['autumn']}},{userRole:'user'});
   expect([...mocks.claimTaskRewards.mock.calls[1][2]]).toEqual(['autumn']);
+});
+
+it('每日任务水滴加入统一待领数和原子领取；满桶时不虚报到账', async () => {
+  mocks.dailyWater.mockResolvedValue({ available: true, water: 4, pending: 15, bucketFull: false });
+  expect(await getGrowthClaimableSnapshot('user-1')).toMatchObject({ count: 1, manor: { count: 1, water: 4 }, today: { claimableCount: 1 } });
+  const conn = connection();
+  mocks.getConnection.mockResolvedValue(conn);
+  expect(await claimGrowthRewards('user-1')).toMatchObject({ claimed: 1, water: 4,
+    receipts: [{ type: 'manor', status: 'claimed', reward: { water: 4 } }] });
+  expect(mocks.dailyWater).toHaveBeenLastCalledWith('user-1', expect.objectContaining({ connection: conn, calendar, claim: true }));
+  mocks.dailyWater.mockResolvedValue({ available: true, water: 0, pending: 11, bucketFull: true });
+  expect(await getGrowthClaimableSnapshot('user-1')).toMatchObject({ count: 0, manor: { count: 0, bucketFull: true } });
+  expect(await claimGrowthRewards('user-1')).toMatchObject({ claimed: 0, water: 0,
+    receipts: [{ type: 'manor', status: 'full', pending: 11 }] });
 });

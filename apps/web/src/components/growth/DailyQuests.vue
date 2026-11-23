@@ -61,7 +61,7 @@
           }}
         </span>
       </div>
-      <!-- 完成每日任务的另一份奖励在庄园里领取；放进阶梯奖励，让人在做任务的地方就知道水滴从哪来。 -->
+      <!-- 任务水滴也计入统一领取；这里保留规则和庄园入口，方便用水及继续经营。 -->
       <div v-if="manor && quests.length" class="dq-stage dq-manor" :class="{ claimable: manor.water > 0 }">
         <span class="dq-manor-icon" aria-hidden="true"><SvgIcon :src="icon.manor.entry" size="20" /></span>
         <span class="dq-stage-main">

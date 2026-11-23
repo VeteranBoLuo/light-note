@@ -628,3 +628,14 @@ describe('水族赎回按出售时的明确报价结算', () => {
     expect(command(state, 'sellAllWaitingFish')).toMatchObject({ result: null, pointsDelta: 0 });
   });
 });
+
+it('垂钓期间可领取任务水滴，保持垂钓收据、消耗和结果不变', () => {
+  const started = command(adopted(), 'beginCast', ['bait']);
+  const ctx = context({ dailyDone: [true, false, false] });
+  const collected = command(started.state, 'claimAllDailyWater', [], ctx);
+  expect(collected.result.water).toBe(M.RULES.dailyWaterTiers[0]);
+  expect(collected.state).toMatchObject({ casting: true, castId: started.state.castId, freeUsed: started.state.freeUsed });
+  const caught = command(collected.state, 'resolveCast', [started.state.castId], ctx);
+  expect(caught.result.fish.kind).toBe('clown');
+  expect(command(caught.state, 'claimAllDailyWater', [], ctx).result).toBeNull();
+});

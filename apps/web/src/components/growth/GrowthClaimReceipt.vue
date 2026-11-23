@@ -57,6 +57,7 @@
   const REWARD_ICONS: Record<GrowthClaimReceipt['rewards'][number]['kind'], string> = {
     exp: icon.growth.level,
     points: icon.growth.coin,
+    water: icon.manor.water,
     frames: icon.growth.crown,
   };
 </script>
@@ -114,6 +115,7 @@
   .claim-receipt__reward.is-points > :first-child {
     color: var(--warning-color);
   }
+  .claim-receipt__reward.is-water > :first-child,
   .claim-receipt__reward.is-exp > :first-child,
   .claim-receipt__reward.is-frames > :first-child {
     color: var(--primary-color);

@@ -17,7 +17,7 @@ export interface LevelUpCelebration {
  */
 export function useGrowthCheckin(options: { readOnly: Ref<boolean>; onChanged?: () => void }) {
   const { t } = useI18n();
-  const { growth, preferences, doCheckin, markRead, loadDashboard } = useGrowth();
+  const { growth, preferences, doCheckin, markRead } = useGrowth();
   const checking = ref(false);
   const levelUp = ref<LevelUpCelebration | null>(null);
 
@@ -66,9 +66,8 @@ export function useGrowthCheckin(options: { readOnly: Ref<boolean>; onChanged?: 
           recordOperation({ module: '成长', operation: '连签里程碑达成' });
         }
       }
-      // 每日任务、签到条、日历和里程碑都读看板；签到后统一刷新（调用方可一并刷新其他读模型）。
-      if (options.onChanged) options.onChanged();
-      else void loadDashboard();
+      // 共享读模型由 doCheckin 统一同步；页面仅补充热力图等专属区域。
+      options.onChanged?.();
     } catch (error) {
       console.error('签到失败:', error);
     } finally {

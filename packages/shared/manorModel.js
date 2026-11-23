@@ -484,7 +484,7 @@ const GardenModel = (() => {
   // 今日已领合计。分档后不再按项记录，新领取记在第 0 格；旧版按项和全完成奖励的领取量一并计入，
   // 换规则当天不会多领。
   const dailyWaterClaimed = s => (s.dailyWaterClaims || []).reduce((n, v) => n + v, 0) + (s.dailyWaterBonusClaimed || 0);
-  // 庄园只领取水滴，与轻笺积分领取分开。水桶装不下的部分留待当日领取。
+  // 庄园内外共用当日水滴领取额度；水桶装不下的部分留待当日领取。
   const pendingDailyWater = s => Math.max(0, dailyWaterEarned(s) - dailyWaterClaimed(s));
   function claimAllDailyWater(s) {
     const water = Math.min(pendingDailyWater(s), Math.max(0, RULES.waterCap - s.water));

@@ -549,7 +549,7 @@
   const cloud = cloudSpaceStore();
   const inbox = inboxStore();
   const organizer = organizeStore();
-  const { growth, dashboard, dashboardLoading, growthTasks, growthTasksLoading, loadDashboard, loadGrowthTasks } =
+  const { growth, dashboard, dashboardLoading, growthTasks, growthTasksLoading, loadDashboard, loadGrowthTasks, loadClaimable, load } =
     useGrowth();
   const growthReadOnly = computed(() => Boolean(user.adminContext));
   const { loadDailyReview } = useDailyReview();
@@ -1157,6 +1157,8 @@
     refresh: async () => {
       await Promise.all([
         fetchWorkbenchSummary({ silent: true }),
+        load(true),
+        loadClaimable(),
         loadDashboard(),
         loadGrowthTasks(true),
         refreshDailyReview(),

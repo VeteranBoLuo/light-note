@@ -244,7 +244,7 @@
   const organizer = organizeStore();
   const user = useUserStore();
   const scrollRef = ref<HTMLElement | null>(null);
-  const { dashboard, growthTasks, loadDashboard, loadGrowthTasks, loadClaimable } = useGrowth();
+  const { dashboard, growthTasks, loadDashboard, loadGrowthTasks, loadClaimable, load } = useGrowth();
   const growthReadOnly = computed(() => Boolean(user.adminContext));
   const dailyBriefOwnerKey = computed(() =>
     [user.id || 'visitor', user.role || '', user.adminContext?.subjectUserId || '', user.adminContext?.mode || ''].join(
@@ -521,6 +521,7 @@
         loadDashboard(),
         loadGrowthTasks(true),
         loadClaimable(),
+        load(true),
         refreshDailyReview(),
       ]),
   });
@@ -539,6 +540,7 @@
         loadDashboard(),
         loadGrowthTasks(true),
         loadClaimable(),
+        load(true),
         refreshDailyReview(),
       ]);
     },
@@ -564,6 +566,7 @@
         loadDashboard(),
         loadGrowthTasks(true),
         loadClaimable(),
+        load(true),
         refreshDailyReview(),
       ]);
   });

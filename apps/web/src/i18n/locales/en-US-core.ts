@@ -7784,6 +7784,7 @@ export default {
     claimAllTooltipFallback: '{n} growth rewards are ready to claim',
     claimAllSuccessBySource: 'Claimed: {sources}',
     claimSources: {
+      manor: 'Manor water ×{n}',
       community: '{n} community rewards',
       daily: 'Daily tasks ×{n}',
       growthTasks: 'Growth tasks ×{n}',
@@ -7794,8 +7795,9 @@ export default {
     claimAllSuccess: 'Claimed {n} rewards',
     rewardClaimed: 'Reward claimed',
     claimRewardSeparator: ' · ',
-    claimRewards: { exp: '+{n} EXP', points: '+{n} points', frames: '+{n} avatar frame(s)' },
+    claimRewards: { exp: '+{n} EXP', points: '+{n} points', frames: '+{n} avatar frame(s)', water: '+{n} water drops' },
     claimSingleSources: {
+      manor: 'Manor water collected',
       community: 'Community reward claimed',
       daily: 'Daily task reward claimed',
       growthTasks: 'Growth task reward claimed',

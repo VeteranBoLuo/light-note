@@ -252,7 +252,6 @@
     claimableError,
     claimingRewards,
     load,
-    loadDashboard,
     loadClaimable,
     claimAllRewards,
     doCheckin,
@@ -424,7 +423,7 @@
         if (res.data.already) {
           message.info(t('growth.alreadyChecked'));
         } else {
-          message.success(t('growth.checkinSuccess', { n: res.data.expGained }));
+          message.success(t('growth.checkinSuccessPts', { n: res.data.expGained, p: res.data.pointsEarned || 0 }));
           recordOperation({
             module: '工作台',
             operation: `每日签到（连续 ${res.data.streak} 天,+${res.data.expGained}）`,
@@ -433,9 +432,6 @@
             message.success(t('growth.leveledUp', { lv: res.data.growth.level, name: res.data.growth.name }));
           }
         }
-        // 成长快照、每日任务看板和可领取项是三份独立读模型。签到成功后从服务端统一回读，
-        // 既避免旧的首屏 /growth/me 响应覆盖 checkedInToday，也让下方签到任务立即勾选。
-        await Promise.all([load(true), loadDashboard(), loadClaimable()]);
       } else if (String(res?.status || '') !== 'preview') {
         message.error(res?.msg || t('growth.checkinFailed'));
       }

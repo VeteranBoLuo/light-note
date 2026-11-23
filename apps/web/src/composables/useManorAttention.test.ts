@@ -136,3 +136,18 @@ it('存满和工坊成品原因位于收获之后、等级礼物之前；新 API
     mounted.unmount();
   }
 });
+
+it('领取后强制刷新不复用写前请求，迟到旧结果不能恢复水滴提醒', async () => {
+  const mounted = mountComposable();
+  try {
+    let resolveOld!: (value: unknown) => void;
+    mocks.getManorAttention.mockReturnValueOnce(new Promise((resolve) => { resolveOld = resolve; }));
+    const old = refreshManorAttention(true);
+    mocks.getManorAttention.mockResolvedValueOnce({ status: 200, data: value() });
+    await refreshManorAttention(true);
+    resolveOld({ status: 200, data: value({ water: 20 }) });
+    await old;
+    expect(mounted.result.attention.value?.water).toBe(0);
+    expect(mounted.result.reasons.value).toEqual([]);
+  } finally { mounted.unmount(); }
+});

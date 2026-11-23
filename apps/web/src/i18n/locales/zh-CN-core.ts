@@ -7477,6 +7477,7 @@ export default {
     claimAllTooltipFallback: '共有 {n} 项成长奖励可领取',
     claimAllSuccessBySource: '已领取：{sources}',
     claimSources: {
+      manor: '庄园水滴 ×{n}',
       community: '社区活动 {n} 项',
       daily: '日常任务 ×{n}',
       growthTasks: '成长任务 ×{n}',
@@ -7487,8 +7488,9 @@ export default {
     claimAllSuccess: '已领取 {n} 项',
     rewardClaimed: '奖励已领取',
     claimRewardSeparator: ' · ',
-    claimRewards: { exp: '经验 +{n}', points: '积分 +{n}', frames: '头像框 +{n}' },
+    claimRewards: { exp: '经验 +{n}', points: '积分 +{n}', frames: '头像框 +{n}', water: '水滴 +{n}' },
     claimSingleSources: {
+      manor: '已领取庄园水滴',
       community: '已领取社区活动奖励',
       daily: '已领取日常任务奖励',
       growthTasks: '已领取成长任务奖励',

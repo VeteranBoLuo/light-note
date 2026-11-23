@@ -43,7 +43,9 @@ export function refreshManorAttention(force = false): Promise<void> {
     loadedAt = 0;
   }
   if (!uid) return Promise.resolve();
-  if (inFlight) return inFlight;
+  if (inFlight && !force) return inFlight;
+  // 写后刷新不能复用写前请求，否则迟到快照会重新点亮已领取的提醒。
+  if (force) { generation += 1; inFlight = null; }
   if (!force && Date.now() - loadedAt < ROUTE_REFRESH_MS) return Promise.resolve();
   const sequence = generation;
   inFlight = getManorAttention()

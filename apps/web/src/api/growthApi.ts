@@ -103,8 +103,8 @@ export const getClaimable = () => apiBaseGet('/api/growth/claimable');
 export const getManorAttention = () =>
   apiBaseGet('/api/growth/manor/attention', undefined, { silent: true, activity: 'background' });
 export const claimAll = (payload?: {
-  scopes?: Array<'daily' | 'growthTasks' | 'achievements' | 'weekly' | 'community'>;
-  keys?: Partial<Record<'daily' | 'growthTasks' | 'achievements' | 'weekly' | 'community', string[]>>;
+  scopes?: Array<'daily' | 'growthTasks' | 'achievements' | 'weekly' | 'community' | 'manor'>;
+  keys?: Partial<Record<'daily' | 'growthTasks' | 'achievements' | 'weekly' | 'community' | 'manor', string[]>>;
 }) => apiBasePost('/api/growth/claimAll', payload || {});
 
 export const getGrowthPreferences = (options?: { silent?: boolean }) =>

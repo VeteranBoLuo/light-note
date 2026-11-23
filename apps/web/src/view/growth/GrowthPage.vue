@@ -744,7 +744,10 @@
   const preferencesVisible = ref(false);
   const { checking, levelUp, checkin, announceUnreadLevelUp } = useGrowthCheckin({
     readOnly: isAdminContext,
-    onChanged: refreshOverview,
+    onChanged: () => {
+      void heatmapRef.value?.reload();
+      if (useWideDesktopLayout.value) void loadLottery();
+    },
   });
   const preferencesSaving = ref(false);
   const usingProtectCard = ref(false);
@@ -1038,7 +1041,7 @@
             showOverviewReceipt(
               claimReceipt(
                 { exp: res.data.expGained, points: res.data.pointsEarned, claimed: 1 },
-                { daily: 1, growthTasks: 0, achievements: 0, weekly: 0, community: 0 },
+                { daily: 1, growthTasks: 0, achievements: 0, weekly: 0, community: 0, manor: 0 },
               ),
             );
           } else {

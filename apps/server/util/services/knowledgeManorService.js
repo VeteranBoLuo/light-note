@@ -1,4 +1,4 @@
-import { createHash, randomInt } from 'node:crypto';
+import { createHash, randomInt, randomUUID } from 'node:crypto';
 import pool from '../../db/index.js';
 import { createManor, executeManorCommand, projectManor, ManorError, MANOR_VERSION, MANOR_SPECIES, manorModel } from '@lightnote/shared/manor';
 import { getGrowth, getDailyQuestState, lockGrowthAccount } from '../growth.js';
@@ -7,11 +7,12 @@ import { getGrowthCalendarContext } from '../growthPreferences.js';
 import { getWeeklyChallenges } from '../weeklyChallenge.js';
 import { readManorRuntime, allowManorCommand } from './knowledgeManorRuntime.js';
 import { summarizeManorOperation } from './knowledgeManorOperation.js';
-import { canEnterManor } from './knowledgeManorAccess.js';
+import { canEnterManor, knowledgeManorEnabled } from './knowledgeManorAccess.js';
 import { lockLeaderboardFacts } from '../leaderboardSettlementLock.js';
 
 const random = () => randomInt(0, 0x1_0000_0000) / 0x1_0000_0000;
 const parsed = value => typeof value === 'string' ? JSON.parse(value) : value;
+const commandDigest = input => createHash('sha256').update(JSON.stringify({ version: input.version, action: input.action, args: input.args })).digest('hex');
 
 async function accountContext(db, userId, now) {
   const [[account]] = await db.query('SELECT role, del_flag FROM user WHERE id=? LIMIT 1', [userId]);
@@ -48,7 +49,7 @@ async function freeCastFirstSalePoints(conn, userId, before, after) {
   const sold = new Map(before.fish.filter(fish => !remaining.has(fish.id)).map(fish => [String(fish.id), fish.kind]));
   if (!sold.size) return 0;
   const ids = [...sold.keys()];
-  // Skip atlas reads between casting and resolving, and include legacy buyback receipts without an action.
+  // Atlas reads and daily water claims can occur during a cast. Legacy buybacks may lack an action.
   const [origins] = await conn.query(
     `SELECT o.action,
             CASE WHEN o.action = 'resolveCast' THEN JSON_UNQUOTE(JSON_EXTRACT(o.result_json, '$.result.fish.id'))
@@ -59,7 +60,7 @@ async function freeCastFirstSalePoints(conn, userId, before, after) {
               SELECT CASE WHEN prior_op.action = 'beginCast' THEN JSON_UNQUOTE(JSON_EXTRACT(prior_op.result_json, '$.result')) END
                 FROM knowledge_manor_operations prior_op
                WHERE prior_op.user_id = o.user_id AND prior_op.revision < o.revision
-                 AND (prior_op.action <> 'readAtlasEntry' OR prior_op.action IS NULL)
+                 AND (prior_op.action NOT IN ('readAtlasEntry', 'claimAllDailyWater') OR prior_op.action IS NULL)
                ORDER BY prior_op.revision DESC LIMIT 1
             ) END AS baitSource
        FROM knowledge_manor_operations o
@@ -100,9 +101,40 @@ export function createKnowledgeManorService({ db = pool, context = accountContex
       throw error;
     } finally { conn.release(); }
   }
+  async function writeCommand(conn, userId, ctx, input, current) {
+    const digest = commandDigest(input);
+    const next = executeManorCommand(current.state, input, { ...ctx, random: rng });
+    const revision = current.revision + 1;
+    if (!Number.isSafeInteger(revision)) throw new ManorError('MANOR_REVISION_INVALID');
+    const meta = { manorVersion: MANOR_VERSION, manorAction: input.action };
+    const ref = createHash('sha256').update(input.requestId).digest('hex');
+    if (next.pointsDelta > 0) {
+      if (input.action === 'sell' || input.action === 'sellAllWaitingFish') {
+        const rankedPoints = await freeCastFirstSalePoints(conn, userId, current.state, next.state);
+        if (rankedPoints > 0) {
+          if (input.action === 'sell') meta.manorFreeCastFirstSale = true;
+          else meta.manorFreeCastFirstSalePoints = rankedPoints;
+        }
+      }
+      const credited = await creditPoints(userId, next.pointsDelta, 'manor_sale', ref, conn, { policyVersion: MANOR_VERSION, meta });
+      if (!credited) throw new ManorError('MANOR_LEDGER_CONFLICT');
+    } else if (next.pointsDelta < 0) {
+      const cost = -next.pointsDelta;
+      const [spent] = await conn.query('UPDATE user_growth SET points=points-? WHERE user_id=? AND points>=?', [cost, userId, cost]);
+      if (spent.affectedRows !== 1) throw new ManorError('MANOR_POINTS_INSUFFICIENT');
+      await conn.query('INSERT INTO points_log (user_id,delta,reason,ref,policy_version,meta) VALUES (?, ?, ?, ?, ?, ?)', [userId, -cost, 'manor_cost', ref, MANOR_VERSION, JSON.stringify(meta)]);
+    }
+    const stored = { ...next.state };
+    delete stored.wallet; // user_growth.points remains the only balance.
+    await conn.query(`INSERT INTO knowledge_manors (user_id,revision,state_json) VALUES (?, ?, ?)
+      ON DUPLICATE KEY UPDATE revision=VALUES(revision),state_json=VALUES(state_json)`, [userId, revision, JSON.stringify(stored)]);
+    const summary = summarizeManorOperation(current.state,next.state,input.action,next.result);
+    if (input.action === 'harvest' && summary.effectful) await lockLeaderboardFacts(conn);
+    await conn.query('INSERT INTO knowledge_manor_operations (user_id,request_id,command_hash,model_version,revision,result_json,points_delta,action,effectful,resource_delta_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', [userId, input.requestId, digest, MANOR_VERSION, revision, JSON.stringify({ result: next.result ?? null }), next.pointsDelta,input.action,summary.effectful ? 1 : 0,JSON.stringify(summary.deltas)]);
+    return { version: MANOR_VERSION, revision, state: next.state, result: next.result, replayed: false, quests: ctx.quests || [] };
+  }
   async function execute(userId, input) {
     checkRequest(input);
-    const digest = createHash('sha256').update(JSON.stringify({ version: input.version, action: input.action, args: input.args })).digest('hex');
     const conn = await db.getConnection();
     try {
       await conn.beginTransaction();
@@ -110,7 +142,7 @@ export function createKnowledgeManorService({ db = pool, context = accountContex
       const ctx = await context(conn, userId, now());
       const [[receipt]] = await conn.query('SELECT command_hash,result_json FROM knowledge_manor_operations WHERE user_id=? AND request_id=? FOR UPDATE', [userId, input.requestId]);
       if (receipt) {
-        if (receipt.command_hash !== digest) throw new ManorError('MANOR_REQUEST_CONFLICT');
+        if (receipt.command_hash !== commandDigest(input)) throw new ManorError('MANOR_REQUEST_CONFLICT');
         const current = await readState(conn, userId, ctx);
         const runtime = await runtimeReader(conn);
         await conn.commit();
@@ -121,42 +153,44 @@ export function createKnowledgeManorService({ db = pool, context = accountContex
       const runtime = await allowManorCommand(conn,input.action);
       const current = await readState(conn, userId, ctx);
       if (current.revision !== input.revision) throw new ManorError('MANOR_REVISION_CONFLICT');
-      const next = executeManorCommand(current.state, input, { ...ctx, random: rng });
-      const revision = current.revision + 1;
-      if (!Number.isSafeInteger(revision)) throw new ManorError('MANOR_REVISION_INVALID');
-      const meta = { manorVersion: MANOR_VERSION, manorAction: input.action };
-      const ref = createHash('sha256').update(input.requestId).digest('hex');
-      if (next.pointsDelta > 0) {
-        if (input.action === 'sell' || input.action === 'sellAllWaitingFish') {
-          const rankedPoints = await freeCastFirstSalePoints(conn, userId, current.state, next.state);
-          if (rankedPoints > 0) {
-            if (input.action === 'sell') meta.manorFreeCastFirstSale = true;
-            else meta.manorFreeCastFirstSalePoints = rankedPoints;
-          }
-        }
-        const credited = await creditPoints(userId, next.pointsDelta, 'manor_sale', ref, conn, { policyVersion: MANOR_VERSION, meta });
-        if (!credited) throw new ManorError('MANOR_LEDGER_CONFLICT');
-      } else if (next.pointsDelta < 0) {
-        const cost = -next.pointsDelta;
-        const [spent] = await conn.query('UPDATE user_growth SET points=points-? WHERE user_id=? AND points>=?', [cost, userId, cost]);
-        if (spent.affectedRows !== 1) throw new ManorError('MANOR_POINTS_INSUFFICIENT');
-        await conn.query('INSERT INTO points_log (user_id,delta,reason,ref,policy_version,meta) VALUES (?, ?, ?, ?, ?, ?)', [userId, -cost, 'manor_cost', ref, MANOR_VERSION, JSON.stringify(meta)]);
-      }
-      const stored = { ...next.state };
-      delete stored.wallet; // user_growth.points remains the only balance.
-      await conn.query(`INSERT INTO knowledge_manors (user_id,revision,state_json) VALUES (?, ?, ?)
-        ON DUPLICATE KEY UPDATE revision=VALUES(revision),state_json=VALUES(state_json)`, [userId, revision, JSON.stringify(stored)]);
-      const summary = summarizeManorOperation(current.state,next.state,input.action,next.result);
-      if (input.action === 'harvest' && summary.effectful) await lockLeaderboardFacts(conn);
-      await conn.query('INSERT INTO knowledge_manor_operations (user_id,request_id,command_hash,model_version,revision,result_json,points_delta,action,effectful,resource_delta_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', [userId, input.requestId, digest, MANOR_VERSION, revision, JSON.stringify({ result: next.result ?? null }), next.pointsDelta,input.action,summary.effectful ? 1 : 0,JSON.stringify(summary.deltas)]);
+      const value = await writeCommand(conn, userId, ctx, input, current);
       await conn.commit();
-      return { version: MANOR_VERSION, revision, state: next.state, result: next.result, replayed: false, quests: ctx.quests || [],runtime };
+      return { ...value, runtime };
     } catch (error) {
       await conn.rollback();
       throw error;
     } finally {
       conn.release();
     }
+  }
+  /**
+   * 主站只领取已开通庄园的每日任务水滴。调用方传入服务端任务事实与账号日历；
+   * claim 时须已持有成长账号锁，存档、修订号及庄园审计收据随外部事务提交。
+   */
+  async function dailyWater(userId, { connection = db, calendar, quests, claim = false } = {}) {
+    const empty = { available: false, water: 0, pending: 0, bucketFull: false };
+    if (!knowledgeManorEnabled()) return empty;
+    // 分别按同一账号命中主键，避免历史 user.id 与庄园 user_id 的排序规则互相比较。
+    const [[row]] = await connection.query(`SELECT m.revision,m.state_json,u.role,u.del_flag
+      FROM knowledge_manors m JOIN user u ON u.id=? WHERE m.user_id=? LIMIT 1`, [userId, userId]);
+    if (!row?.state_json || Number(row.del_flag) !== 0 || !canEnterManor(row.role)) return empty;
+    const saved = parsed(row.state_json);
+    if (!saved.adopted) return empty;
+    const runtime = await runtimeReader(connection, claim);
+    if (runtime.mode !== 'open') return empty;
+    // 水滴命令不会消费或发放积分；余额不参与此次投影，也不写入存档。
+    const ctx = { now: now(), calendar, points: 0, dailyDone: quests.map((quest) => Boolean(quest.done)),
+      supplyEligibility: saved.supplyEligibility || {} };
+    const current = { revision: Number(row.revision), state: projectManor(saved, ctx) };
+    const pending = manorModel.pendingDailyWater(current.state);
+    const water = Math.min(pending, Math.max(0, manorModel.RULES.waterCap - current.state.water));
+    if (claim && water > 0) {
+      const value = await writeCommand(connection, userId, ctx,
+        { version: MANOR_VERSION, revision: current.revision, requestId: randomUUID(), action: 'claimAllDailyWater', args: [] }, current);
+      return { available: true, water: value.result.water, pending: value.result.pending,
+        bucketFull: value.result.pending > 0 && value.state.water >= manorModel.RULES.waterCap };
+    }
+    return { available: true, water, pending, bucketFull: pending > 0 && water === 0 };
   }
   /**
    * Entry badge summary. It only counts what a returning player can collect right now:
@@ -193,7 +227,7 @@ export function createKnowledgeManorService({ db = pool, context = accountContex
       throw error;
     } finally { conn.release(); }
   }
-  return { get, execute, attention };
+  return { get, execute, attention, dailyWater };
 }
 
 export const knowledgeManorService = createKnowledgeManorService();

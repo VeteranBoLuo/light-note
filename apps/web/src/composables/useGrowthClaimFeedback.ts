@@ -15,7 +15,7 @@ export interface GrowthClaimReceipt {
   summary: string;
   /** 完整来源说明，例如「成长任务 ×1、成就 ×1」。 */
   sources: string;
-  rewards: Array<{ kind: 'exp' | 'points' | 'frames'; value: number; label: string }>;
+  rewards: Array<{ kind: 'exp' | 'points' | 'frames' | 'water'; value: number; label: string }>;
 }
 
 export type ClaimReceiptState = GrowthClaimReceipt & { id: number };
@@ -65,7 +65,7 @@ export function useGrowthClaimFeedback(claimable: Readonly<Ref<GrowthClaimable |
     return { ...breakdown.value };
   }
 
-  type ClaimAllResult = { receipts?: unknown; claimed?: number; exp?: number; points?: number; frames?: unknown[] };
+  type ClaimAllResult = { receipts?: unknown; claimed?: number; exp?: number; points?: number; water?: number; frames?: unknown[] };
 
   /** 一键领取的结构化回执：来源统计以服务端回执为准，奖励只列实际入账的维度。 */
   function claimReceipt(result: ClaimAllResult, fallback: GrowthClaimBreakdown): GrowthClaimReceipt {
@@ -78,6 +78,7 @@ export function useGrowthClaimFeedback(claimable: Readonly<Ref<GrowthClaimable |
       [
         ['exp', Number(result.exp || 0)],
         ['points', Number(result.points || 0)],
+        ['water', Number(result.water || 0)],
         ['frames', Array.isArray(result.frames) ? result.frames.length : 0],
       ] as const
     )

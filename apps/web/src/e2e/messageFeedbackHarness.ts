@@ -22,7 +22,7 @@ createApp(
   defineComponent({
     setup() {
       const { claimSuccessMessage } = useGrowthClaimFeedback(ref(null));
-      const fallback = { daily: 0, growthTasks: 0, achievements: 0, weekly: 0, community: 0 };
+      const fallback = { daily: 0, growthTasks: 0, achievements: 0, weekly: 0, community: 0, manor: 0 };
       const samples = {
         success: () => message.success('保存成功', 0),
         info: () => message.info('内容已更新', 0),

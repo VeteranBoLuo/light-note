@@ -13,13 +13,6 @@ describe('工作台成长卡交互契约', () => {
     expect(source).toContain('@click="goGrowth"');
   });
 
-  it('签到完成后强制回读成长快照、每日任务看板和可领取项', () => {
-    expect(source).toContain('loadDashboard,');
-    expect(source).toContain('await Promise.all([load(true), loadDashboard(), loadClaimable()])');
-    expect(source).toContain("message.error(res?.msg || t('growth.checkinFailed'))");
-    expect(source).toContain("message.error(t('growth.checkinFailed'))");
-  });
-
   it('移动端紧凑模式展示今日进度、可领取摘要和明确实色描边', () => {
     expect(source).toContain('compactToday?: boolean');
     expect(source).toContain("'growth-card--compact-today': props.compactToday");
