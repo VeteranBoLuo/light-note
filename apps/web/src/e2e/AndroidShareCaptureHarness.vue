@@ -1,5 +1,5 @@
 <template>
-  <CloudSpace v-if="cloud" />
+  <CloudSpace v-if="route.path === '/cloudSpace'" />
   <main v-else class="share-harness">
     <header>
       <span>Android system share / visual QA</span>
@@ -19,17 +19,20 @@
 
 <script setup lang="ts">
   import { computed, defineAsyncComponent, ref } from 'vue';
+  import { useRoute } from 'vue-router';
   import QuickCaptureModal from '@/components/inbox/QuickCaptureModal.vue';
   import { useAndroidIncomingShare } from '@/composables/useAndroidIncomingShare';
   import { bookmarkStore, inboxStore } from '@/store';
 
   const CloudSpace = defineAsyncComponent(() => import('@/view/cloudSpace/cloudSpace.vue'));
-  const props = defineProps<{ scenario: string; log: string[]; cloud: boolean }>();
+  const props = defineProps<{ scenario: string; log: string[] }>();
+  const route = useRoute();
   const inbox = inboxStore();
   const bookmark = bookmarkStore();
   useAndroidIncomingShare({ authReady: ref(true), blocked: ref(false) });
 
   const descriptions: Record<string, string> = {
+    picker: '手动选择文件并检查大小超限提示和云空间入口。',
     link: '浏览器分享网页：标题 + 网址，应识别为书签并用标题命名。',
     bulk: '模拟相册分享 100 个文件，并区分数量、大小和读取失败；文件内容只在提交后读取。',
     oversized: '模拟分享一个 8GB 文件，原生直接跳过；抽屉持续显示大小上限与文件明细。',

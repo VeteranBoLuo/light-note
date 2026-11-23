@@ -27,6 +27,13 @@ async function selected(page) {
     (await import('/src/store/resourceSelection.ts')).useResourceSelectionStore().items.map((item) => item.id),
   );
 }
+async function waitForCloudSpace(page, width) {
+  if (width < 768) {
+    await page.locator('.mobile-folder-trigger').waitFor();
+  } else {
+    await page.getByRole('button', { name: /^(上传文件|Upload File)$/ }).waitFor();
+  }
+}
 try {
   for (const view of process.env.SHARE_ONLY || process.env.EDGE_ONLY ? [] : ['table', 'card'])
     for (const theme of ['day', 'night']) {
@@ -142,7 +149,9 @@ try {
           .count(),
         0,
       );
-      assert.match(await page.locator('.share-file-report').innerText(), /100.*500MB/);
+      assert.match(await page.locator('.share-file-report').innerText(), /100.*500 MB/s);
+      assert.match(await page.locator('.share-file-warning').innerText(), /已接收 100 个文件，3 个未加入/);
+      assert.equal(await page.getByRole('button', { name: '去云空间上传' }).count(), 0);
       await page.getByRole('button', { name: '查看未加入的文件', exact: true }).click();
       assert.match(await page.locator('#share-skipped-details').innerText(), /第101张.jpg/);
       assert.match(await page.locator('#share-skipped-details').innerText(), /大视频.mp4/);
@@ -187,29 +196,69 @@ try {
       await page.close();
     }
   if (!process.env.CLOUD_ONLY && !process.env.EDGE_ONLY) {
+    for (const width of [1440, 390]) {
+      for (const theme of ['day', 'night']) {
+        const { page, errors } = await open(
+          `/e2e/android-share-capture.html?scenario=picker&theme=${theme}&renderProfile=${width < 768 ? 'mobile' : 'desktop'}`,
+          width,
+        );
+        const limits = page.locator('.file-selection-guidance');
+        await limits.waitFor();
+        assert.match(await limits.innerText(), /100.*500 MB/);
+        await page.screenshot({ path: `${output}/picker-${width}-${theme}.png`, animations: 'disabled' });
+        await page.locator('input.b-upload-native-input').evaluate((input) => {
+          const file = new File(['fixture'], 'backup.zip');
+          Object.defineProperty(file, 'size', { value: 8 * 1024 ** 3 });
+          Object.defineProperty(input, 'files', { configurable: true, value: [file] });
+          input.dispatchEvent(new Event('change', { bubbles: true }));
+          delete input.files;
+        });
+        const warning = page.getByRole('alert').filter({ hasText: '超过快速添加的 500 MB 上限' });
+        await warning.waitFor();
+        assert.equal(await page.locator('.file-list__item').count(), 0);
+        await page.screenshot({ path: `${output}/picker-exceeded-${width}-${theme}.png`, animations: 'disabled' });
+        await page.getByRole('button', { name: '去云空间上传' }).click();
+        await waitForCloudSpace(page, width);
+        assert.deepEqual(errors, []);
+        results.push({ flow: 'picker size limit', width, theme, status: 'passed' });
+        console.log('PASS picker size limit', width, theme);
+        await page.close();
+      }
+    }
     for (const scenario of ['oversized', 'oversized-legacy']) {
       for (const [width, density, locale = 'zh-CN'] of [[1440, 'small'], [1440, 'medium'], [1440, 'large'], [390, 'medium'], [320, 'medium', 'en-US']]) {
         for (const theme of ['day', 'night']) {
           const { page, errors } = await open(
             `/e2e/android-share-capture.html?scenario=${scenario}&theme=${theme}&density=${density}&locale=${locale}&renderProfile=${width < 768 ? 'mobile' : 'desktop'}`,
             width,
+            width === 390 ? 796 : 900,
           );
           const warning = page.locator('.share-file-warning[role=alert]');
           await warning.waitFor();
           assert.match(await warning.innerText(), /分享文件未加入|Shared files were not added/);
-          assert.match(await warning.innerText(), /500MB/);
+          assert.match(await warning.innerText(), /500 MB/);
           assert.equal(await page.getByRole('button', { name: /^(加入待整理|Add to inbox)$/ }).isDisabled(), true);
           assert.equal(await page.locator('.file-list__item').count(), 0);
+          const cloudUpload = page.getByRole('button', { name: /去云空间上传|Go to Cloud Space/ });
           if (scenario === 'oversized') {
             assert.match(await warning.innerText(), /超出总大小上限|exceeded the total size limit/);
             await page.locator('#share-skipped-details').getByText('8GB-video.mp4', { exact: true }).waitFor();
-          } else assert.match(await warning.innerText(), /无法读取或超出单次上限|could not be read or exceeded/);
+            assert.equal(await cloudUpload.isVisible(), true);
+          } else {
+            assert.match(await warning.innerText(), /无法读取或超出单次上限|could not be read or exceeded/);
+            assert.equal(await cloudUpload.count(), 0);
+          }
           assert.equal(await page.locator('[data-testid=bridge-log]').getByText(/读取分享文件|上传文件/).count(), 0);
           await page.waitForTimeout(400);
           const bounds = await warning.boundingBox();
           assert(bounds && bounds.width > 0 && bounds.x >= 0 && bounds.x + bounds.width <= width);
           assert.equal(await warning.evaluate((el) => el.scrollWidth <= el.clientWidth), true);
           await page.screenshot({ path: `${output}/${scenario}-${width}-${theme}-${density}-${locale}.png` });
+          if (scenario === 'oversized') {
+            await cloudUpload.click();
+            await waitForCloudSpace(page, width);
+            assert.equal(await warning.count(), 0);
+          }
           assert.deepEqual(errors, []);
           results.push({ flow: scenario, width, theme, density, locale, status: 'passed' });
           console.log('PASS share warning', scenario, width, theme, density, locale);

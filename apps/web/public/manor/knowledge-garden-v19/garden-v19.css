@@ -1834,16 +1834,6 @@ html:not(.kbd-nav) .catch-reveal :focus-visible {
   }
 }
 
-/* ===== 第 11 版 ===== */
-/* 鱼池：游戏风鱼竿鼠标；抛竿等待时竿梢压弯、浮漂下沉，不再出现十字和系统转圈 */
-#app .garden-play .pond-hit {
-  cursor: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2232%22 height=%2232%22 viewBox=%220 0 32 32%22%3E%3Cpath d=%22M29 29 Q18 18 9 5%22 fill=%22none%22 stroke=%22%23fff%22 stroke-width=%225%22 stroke-linecap=%22round%22/%3E %3Cpath d=%22M9 5 L6 18%22 stroke=%22%23fff%22 stroke-width=%222.6%22/%3E %3Ccircle cx=%226%22 cy=%2221%22 r=%225%22 fill=%22%23fff%22/%3E %3Cpath d=%22M29 29 Q18 18 9 5%22 fill=%22none%22 stroke=%22%238a5a2c%22 stroke-width=%222.4%22 stroke-linecap=%22round%22/%3E %3Cpath d=%22M29 29 L24 24%22 stroke=%22%234a2c14%22 stroke-width=%223.6%22 stroke-linecap=%22round%22/%3E %3Ccircle cx=%2223.6%22 cy=%2225.6%22 r=%222.3%22 fill=%22%23d6ad55%22 stroke=%22%236a4818%22 stroke-width=%221%22/%3E %3Cpath d=%22M9 5 L6 18%22 stroke=%22%2333404a%22 stroke-width=%220.9%22/%3E %3Cpath d=%22M2.6 21 a3.4 3.4 0 0 1 6.8 0z%22 fill=%22%23e5533d%22 stroke=%22%233a2a22%22 stroke-width=%220.9%22/%3E %3Cpath d=%22M2.6 21 a3.4 3.4 0 0 0 6.8 0z%22 fill=%22%23fffdf6%22 stroke=%22%233a2a22%22 stroke-width=%220.9%22/%3E %3Cpath d=%22M6 17.6 v-2%22 stroke=%22%233a2a22%22 stroke-width=%221.1%22 stroke-linecap=%22round%22/%3E%3C/svg%3E") 6 24, pointer;
-}
-#app .garden-play .pond-hit:disabled,
-#app .garden-play .scene-pond.casting .pond-hit {
-  cursor: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2232%22 height=%2232%22 viewBox=%220 0 32 32%22%3E%3Cpath d=%22M29 29 Q15 15 9 8%22 fill=%22none%22 stroke=%22%23fff%22 stroke-width=%225%22 stroke-linecap=%22round%22/%3E %3Cpath d=%22M9 8 L6 22%22 stroke=%22%23fff%22 stroke-width=%222.6%22/%3E %3Ccircle cx=%226%22 cy=%2225%22 r=%225%22 fill=%22%23fff%22/%3E %3Cpath d=%22M29 29 Q15 15 9 8%22 fill=%22none%22 stroke=%22%238a5a2c%22 stroke-width=%222.4%22 stroke-linecap=%22round%22/%3E %3Cpath d=%22M29 29 L24 24%22 stroke=%22%234a2c14%22 stroke-width=%223.6%22 stroke-linecap=%22round%22/%3E %3Ccircle cx=%2223.6%22 cy=%2225.6%22 r=%222.3%22 fill=%22%23d6ad55%22 stroke=%22%236a4818%22 stroke-width=%221%22/%3E %3Cpath d=%22M9 8 L6 22%22 stroke=%22%2333404a%22 stroke-width=%220.9%22/%3E %3Cpath d=%22M2.6 25 a3.4 3.4 0 0 1 6.8 0z%22 fill=%22%23e5533d%22 stroke=%22%233a2a22%22 stroke-width=%220.9%22/%3E %3Cpath d=%22M2.6 25 a3.4 3.4 0 0 0 6.8 0z%22 fill=%22%23fffdf6%22 stroke=%22%233a2a22%22 stroke-width=%220.9%22/%3E %3Cpath d=%22M6 21.6 v-2%22 stroke=%22%233a2a22%22 stroke-width=%221.1%22 stroke-linecap=%22round%22/%3E%3Cellipse cx=%226%22 cy=%2227.6%22 rx=%225.4%22 ry=%221.6%22 fill=%22none%22 stroke=%22%23fff%22 stroke-width=%221.2%22 opacity=%22.9%22/%3E%3C/svg%3E") 6 27, default;
-}
-
 /* ---------- 游戏风格的弹框：奶油色面板 + 木框 + 绿色绸带标题 + 圆形关闭钮 + 立体按钮 ---------- */
 :root {
   --g-panel-1: #fffaf0;

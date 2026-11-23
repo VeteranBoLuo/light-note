@@ -10,12 +10,11 @@ import request from '@/http/request';
 import axios from 'axios';
 import enUS from '@/i18n/locales/en-US';
 import zhCN from '@/i18n/locales/zh-CN';
-import { bookmarkStore, useUserStore } from '@/store';
+import { bookmarkStore, inboxStore, useUserStore } from '@/store';
 import AndroidShareCaptureHarness from './AndroidShareCaptureHarness.vue';
 
 /**
- * Android 系统分享验收页：用假原生桥模拟 IncomingShareStore 的 share.peek / share.complete / share.finish，
- * 并拦截 /__native-share/ 文件读取，在普通浏览器里走通「原生暂存 → 预填快速添加 → 保存 → 完成」。
+ * Android 系统分享验收页：普通浏览器模拟原生桥与文件读取，Debug App 使用实际的原生桥。
  * 参数：scenario=link|files|text-files|text|visitor|admin，theme=night，locale=en-US，renderProfile=mobile。
  */
 const params = new URLSearchParams(window.location.search);
@@ -107,14 +106,15 @@ function manifestFor(name: string) {
   };
 }
 
+const simulatedBridge = !window.LightNoteAndroid;
 let shareSettled = false;
-window.LightNoteAndroid = {
+window.LightNoteAndroid ??= {
   postMessage(raw: string) {
     const message = JSON.parse(raw) as Record<string, string>;
     log.push(`原生桥 ← ${message.type}${message.shareId ? ` (${message.shareId.slice(0, 6)}…)` : ''}`);
     if (message.type === 'share.complete') shareSettled = true;
     if (message.type !== 'share.peek') return;
-    const payload = shareSettled
+    const payload = shareSettled || scenario === 'picker'
       ? { status: 'none' }
       : { status: 'ready', share: { ...manifestFor(scenario), limits: { files: 100, bytes: 500 * 1024 * 1024 } } };
     setTimeout(() => window.__lightNoteAndroidShareResult?.({ token: message.token, ...payload }), 30);
@@ -133,6 +133,7 @@ async function sampleImage(index: number) {
 
 const originalFetch = window.fetch.bind(window);
 window.fetch = async (input, init) => {
+  if (!simulatedBridge) return originalFetch(input, init);
   const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
   const match = /\/__native-share\/([a-f0-9]{32})\/(\d+)$/.exec(url);
   if (!match) return originalFetch(input, init);
@@ -219,7 +220,7 @@ await router.push(cloud ? '/cloudSpace' : '/');
 
 const pinia = createPinia();
 setActivePinia(pinia);
-const app = createApp(AndroidShareCaptureHarness, { scenario, log, cloud });
+const app = createApp(AndroidShareCaptureHarness, { scenario, log });
 app.use(pinia);
 app.use(router);
 app.use(
@@ -245,5 +246,6 @@ if (scenario === 'admin') {
 }
 bookmarkStore(pinia).screenWidth = window.innerWidth;
 
+if (scenario === 'picker') inboxStore(pinia).openQuickCapture('file');
 globalDirect(app);
 app.mount('#app');
