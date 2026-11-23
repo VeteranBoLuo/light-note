@@ -11,7 +11,7 @@ export function aiGiftRiskPolicy(env = process.env) {
   };
   return {
     networkRegistrations: value('AI_GIFT_NETWORK_REGISTRATION_LIMIT', 3),
-    globalRegistrations: value('AI_GIFT_GLOBAL_REGISTRATION_LIMIT', 20),
+    globalRegistrations: value('AI_GIFT_GLOBAL_REGISTRATION_LIMIT', 100),
     newAccountTokens: value('AI_GIFT_NEW_ACCOUNT_TOKEN_LIMIT', 500_000),
   };
 }
