@@ -30,7 +30,13 @@ import { markNotificationSnapshotRead } from '../notificationReadSnapshot.js';
 import { purgeCommunityFeedData } from './lifecycle.js';
 import { COMMUNITY_FEED_TABLES } from './schema.js';
 import { identity } from './core.js';
-import { consumeCommunityEvent, feedNotificationVisibleSql, feedNotificationContentSql } from './notifications.js';
+import {
+  consumeCommunityEvent,
+  feedNotificationVisibleSql,
+  feedNotificationContentSql,
+  feedNotificationPostReviewSql,
+  withFeedNotificationPostReview,
+} from './notifications.js';
 const socketPath = process.env.LIGHTNOTE_TEST_MYSQL_SOCKET;
 const env = {
   COMMUNITY_FEED_ENABLED: 'true',
@@ -54,6 +60,14 @@ const postInput = (values = {}) =>
     ...values,
   });
 const run = (fn, user, body) => fn({ user, input: body, env, db });
+async function reviewNotifications(user) {
+  const [rows] = await db.query(
+    `SELECT id, type, title, content, link, meta, ${feedNotificationPostReviewSql(true, env)} AS post_review
+     FROM notification WHERE user_id=? AND source_type='community_feed_result' AND ${feedNotificationVisibleSql(true)}`,
+    [user.id],
+  );
+  return rows.map(withFeedNotificationPostReview);
+}
 async function published(user = A) {
   const p = await run(submitPost, user, postInput());
   if (user.role !== 'root')
@@ -169,6 +183,19 @@ describe.skipIf(!socketPath)('P2 real database boundaries', () => {
     expect((await db.query('SELECT status FROM community_post_review_jobs'))[0][0].status).toBe('passed');
     expect((await db.query("SELECT * FROM community_moderation_actions WHERE reason='ai_pass'"))[0]).toHaveLength(1);
     expect((await db.query("SELECT * FROM community_outbox WHERE kind='result'"))[0]).toHaveLength(1);
+    while (await consumeCommunityEvent({ db, env })) {}
+    const [notice] = await reviewNotifications(A);
+    expect(notice).toMatchObject({
+      content: null,
+      link: `/community/posts/${submitted.publicId}`,
+      meta: { kind: 'result', action: 'approve' },
+    });
+    // Reproduce the old row, including its generic destination and audit reason.
+    await db.query("UPDATE notification SET content='ai_pass', link='/community/manage?tab=results' WHERE id=?", [
+      notice.id,
+    ]);
+    expect(await reviewNotifications(A)).toEqual([notice]);
+    expect(await reviewNotifications(B)).toEqual([]);
     expect(
       Number((await db.query('SELECT consumed_tokens FROM community_review_daily_budget'))[0][0].consumed_tokens),
     ).toBe(1000);
@@ -581,15 +608,18 @@ describe.skipIf(!socketPath)('P2 real database boundaries', () => {
         )
       )[0],
     ).toHaveLength(1);
-    await run(
+    const approved = await run(
       moderatePost,
       ROOT,
       input({ postId: post.publicId, expectedRevision: post.revision, action: 'approve', reason: '通过' }),
     );
     while (await consumeCommunityEvent({ db, env })) {}
-    expect(
-      (await db.query("SELECT * FROM notification WHERE user_id=? AND source_type='community_feed_result'", [A.id]))[0],
-    ).toHaveLength(1);
+    const [notice] = await reviewNotifications(A);
+    expect(notice).toMatchObject({
+      content: '通过',
+      link: `/community/posts/${post.publicId}`,
+      meta: { kind: 'result', action: 'approve' },
+    });
     expect(
       (
         await db.query(
@@ -597,6 +627,8 @@ describe.skipIf(!socketPath)('P2 real database boundaries', () => {
         )
       )[0],
     ).toHaveLength(0);
+    await run(withdrawPost, A, input({ postId: post.publicId, expectedRevision: approved.revision }));
+    expect(await reviewNotifications(A)).toEqual([{ ...notice, link: '/community/manage?tab=results' }]);
   });
   it('manages topics with root authorization, revisions and replay-safe receipts', async () => {
     const draft = input({
@@ -733,6 +765,16 @@ describe.skipIf(!socketPath)('P2 real database boundaries', () => {
       [A.id],
     );
     expect(actions.map((x) => x.reason)).toContain('审批通过');
+    const pending = await run(submitPost, B, postInput());
+    await run(
+      moderatePost,
+      ROOT,
+      input({ postId: pending.publicId, expectedRevision: pending.revision, action: 'reject', reason: '请补充说明' }),
+    );
+    while (await consumeCommunityEvent({ db, env })) {}
+    expect(await reviewNotifications(B)).toMatchObject([
+      { content: '请补充说明', link: '/community/manage?tab=results', meta: { kind: 'result', action: 'reject' } },
+    ]);
   });
   it('hides deleted post results and disables unavailable comment destinations', async () => {
     const p = await published();

@@ -278,7 +278,7 @@
         <div>{{ $t('cloudSpace.folder') }}</div>
         <div>{{ $t('cloudSpace.relateTags') }}</div>
         <div v-for="column in metadataSortColumns" :key="column.field">
-          <BTooltip :title="fileSortLabel(column.field)">
+          <BTooltip class="field-sort-tooltip" :title="fileSortLabel(column.field)">
             <BButton
               class="field-sort-trigger"
               type="text"
@@ -370,14 +370,16 @@
                 size="20"
                 style="min-width: var(--ui-layout-20, 20px)"
               />
-              <span class="file-name text-hidden">{{ item.fileName }}</span>
-              <span v-if="item.isTop || item.isPending || isRangeAnchor(item)" class="file-status-badges">
-                <PinBadge v-if="item.isTop" />
-                <InboxPendingBadge v-if="item.isPending" />
-                <span v-if="isRangeAnchor(item)" class="file-range-start">{{
-                  $t('resourceSelection.range.startMark')
-                }}</span>
-              </span>
+              <div class="file-label-text">
+                <CloudFileName class="file-name" :file-name="item.fileName" />
+                <span v-if="item.isTop || item.isPending || isRangeAnchor(item)" class="file-status-badges">
+                  <PinBadge v-if="item.isTop" />
+                  <InboxPendingBadge v-if="item.isPending" />
+                  <span v-if="isRangeAnchor(item)" class="file-range-start">{{
+                    $t('resourceSelection.range.startMark')
+                  }}</span>
+                </span>
+              </div>
             </div>
             <b-input
               v-else
@@ -958,6 +960,7 @@
   import BVirtualList from '@/components/base/BasicComponents/BVirtualList.vue';
   import CloudVirtualGrid from '@/components/cloudSpace/CloudVirtualGrid.vue';
   import CloudFileCardIdentity from '@/components/cloudSpace/CloudFileCardIdentity.vue';
+  import CloudFileName from '@/components/cloudSpace/CloudFileName.vue';
   import CloudFolderBreadcrumb from '@/components/cloudSpace/CloudFolderBreadcrumb.vue';
   import type { CloudFolderNode } from '@/types/cloudFolder';
   import { resolveFileAiSummaryPresentation } from '@/utils/fileAiSummary';
@@ -1622,7 +1625,7 @@
     if (bookmark.isMobile) {
       return '100%';
     }
-    return '42%';
+    return 'max(42%, var(--ui-layout-240, 240px))';
   });
 
   const shareDescVisible = ref(false);
@@ -2635,7 +2638,20 @@
   .field-sort-trigger.b_btn.is-active {
     color: var(--workspace-file-text);
   }
+  .field-sort-tooltip {
+    display: flex;
+  }
+  .field-sort-tooltip .field-sort-trigger.b_btn {
+    height: auto;
+    max-width: 100%;
+    line-height: 1.3;
+    padding-inline: 0;
+    text-align: start;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
   .field-sort-icons {
+    flex: none;
     width: var(--ui-layout-10, 10px);
     display: inline-flex;
     flex-direction: column;
@@ -2845,19 +2861,30 @@
   .file-label {
     // 桌面端固定为下载、重命名、标签和更多四个操作预留空间，待整理角标不能压到按钮上。
     width: calc(100% - var(--ui-layout-140, 140px));
+    min-width: 0;
+    align-items: flex-start;
     cursor: pointer;
     gap: var(--ui-space-8, 8px);
     color: var(--text-color);
     font-weight: 520;
   }
-  .file-name {
+  .file-label-text {
+    display: flex;
+    flex: 1;
+    flex-wrap: wrap;
+    align-items: center;
     min-width: 0;
-    flex: 0 1 auto;
+    gap: var(--ui-space-4, 4px) var(--ui-space-8, 8px);
+  }
+  .file-name {
+    max-width: 100%;
   }
   .file-status-badges {
     display: inline-flex;
     flex: 0 0 auto;
+    flex-wrap: wrap;
     align-items: center;
+    max-width: 100%;
     gap: var(--ui-space-8, 8px);
   }
   .row-checkbox {
@@ -2865,20 +2892,17 @@
   }
   .default-area {
     display: grid;
-    grid-template-columns:
-      minmax(var(--ui-layout-130, 130px), 1.15fr) minmax(var(--ui-layout-86, 86px), 0.7fr) minmax(
-        var(--ui-layout-74, 74px),
-        0.55fr
-      )
-      minmax(var(--ui-layout-130, 130px), 0.9fr);
+    grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.7fr) minmax(0, 0.55fr) minmax(0, 0.9fr);
     align-items: center;
     flex: 1;
+    min-width: 0;
     font-size: var(--ui-font-12, 12px);
     color: var(--desc-color);
     > div {
       flex: 1;
       min-width: 0;
-      padding-right: var(--ui-space-12, 12px);
+      padding-right: min(var(--ui-space-12, 12px), 10%);
+      overflow-wrap: anywhere;
     }
   }
   .share-desc-body {
@@ -2989,11 +3013,6 @@
     }
     .field-item {
       padding: 0 var(--ui-space-10, 10px);
-      .flex-align-center:first-child {
-        .file-label {
-          min-width: 0;
-        }
-      }
       .handle-btn {
         opacity: 1 !important;
       }
@@ -3021,7 +3040,6 @@
       display: grid;
       /* ui-density-fixed: 仅手机媒体规则使用的文件图标列，移动布局固定标准尺寸。 */
       grid-template-columns: 20px minmax(0, 1fr);
-      row-gap: var(--ui-space-4, 4px);
       padding: var(--ui-space-6, 6px) 0;
     }
     .field-item--batch .file-label {
@@ -3034,8 +3052,7 @@
       min-width: var(--ui-control-44, 44px);
     }
     .file-status-badges {
-      grid-column: 2;
-      flex-wrap: wrap;
+      flex-basis: 100%;
     }
     .field-item--selected {
       background: color-mix(in srgb, var(--resource-file-color, #ff8a00) 4%, var(--card-background));

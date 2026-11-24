@@ -46,7 +46,7 @@ export function notificationSourceQuery(input, connectedUserIds) {
       filter = `n.source_type='community_chat_message' AND n.source_id IN (${source()})`;
       break;
     case 'feed_post':
-      filter = `n.source_type IN ('community_feed_review','community_feed_post','community_feed_post_like','community_feed_comment','community_feed_comment_like') AND
+      filter = `n.source_type IN ('community_feed_review','community_feed_result','community_feed_post','community_feed_post_like','community_feed_comment','community_feed_comment_like') AND
         (n.source_id IN (${source()}) OR JSON_UNQUOTE(JSON_EXTRACT(n.meta,'$.postId')) IN (${source()}))`;
       break;
     case 'feed_comment':

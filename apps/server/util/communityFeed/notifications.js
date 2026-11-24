@@ -5,6 +5,7 @@ import { persistAchievementUnlocksForMetrics } from '../growthAchievementState.j
 import { createNotification } from '../notification.js';
 import { queueNotificationChange } from '../notificationRealtimeEvents.js';
 import { first, feature, parseJson, pairAllowed, authorVisibleSql } from './core.js';
+import { REVIEW_SYSTEM_ACTOR } from './reviewPolicy.js';
 
 // No body snippets: unavailable sources must not leak through historical notifications.
 export function feedNotificationVisibleSql(ready) {
@@ -23,6 +24,34 @@ export function feedNotificationContentSql(ready) {
     WHEN source_type='community_feed_comment_like' THEN (SELECT LEFT(c.body,160) FROM community_comments c WHERE CONVERT(c.public_id USING utf8mb4) COLLATE utf8mb4_bin=JSON_UNQUOTE(JSON_EXTRACT(notification.meta,'$.commentId')) LIMIT 1)
     ELSE content END`;
 }
+
+// Older notifications only stored the audit reason and a link to the results list.
+export function feedNotificationPostReviewSql(ready, env = process.env) {
+  if (!ready) return 'NULL';
+  const readablePostId = feature(env).enabled
+    ? `CASE WHEN a.action='approve' AND p.status='published' AND p.published_revision_id IS NOT NULL
+        AND ${authorVisibleSql('p')} THEN p.public_id END`
+    : 'NULL';
+  return `CASE WHEN type='community_feed' AND source_type='community_feed_result' THEN (
+    SELECT JSON_OBJECT('action', a.action, 'automatic', a.actor_id='${REVIEW_SYSTEM_ACTOR}', 'postId', ${readablePostId})
+    FROM community_moderation_actions a
+    JOIN community_posts p ON p.id=a.post_id AND p.author_id=a.subject_id
+    WHERE a.public_id=CONVERT(notification.source_id USING ascii) COLLATE ascii_bin
+      AND a.subject_id=notification.user_id AND a.comment_id IS NULL AND a.action IN ('approve','reject')
+  ) END`;
+}
+
+export function withFeedNotificationPostReview({ post_review, ...item }) {
+  const review = parseJson(post_review);
+  if (!review) return item;
+  return {
+    ...item,
+    content: review.automatic ? null : item.content,
+    link: review.postId ? `/community/posts/${review.postId}` : item.link,
+    meta: { ...parseJson(item.meta), kind: 'result', action: review.action },
+  };
+}
+
 async function deliver(db, event, userId) {
   const c = await db.getConnection();
   try {
@@ -185,14 +214,15 @@ async function deliver(db, event, userId) {
             c,
           );
         }
-      } else
+      } else {
+        const reason = action?.actor_id === REVIEW_SYSTEM_ACTOR ? null : action?.reason;
         await createNotification(
           userId,
           {
             id: notificationId,
             type: 'community_feed',
             title: review ? '有新帖子待审核' : action ? '社区处理结果' : '社区有新的回复或提及',
-            content: action ? action.reason : review ? revision?.title || null : null,
+            content: review ? revision?.title || null : reason ?? null,
             link: review
               ? '/community/moderation'
               : action
@@ -217,6 +247,7 @@ async function deliver(db, event, userId) {
           },
           c,
         );
+      }
     }
     await c.query(
       'INSERT INTO community_event_recipients (dedupe_key,user_id,outcome,notification_id) VALUES (?,?,?,?)',

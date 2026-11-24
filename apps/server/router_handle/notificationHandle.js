@@ -4,7 +4,12 @@ import { COMMUNITY_CHAT_TARGETED_NOTIFICATION_SQL } from '../util/notificationVi
 import { readNativeNotifications } from '../util/nativeNotificationSync.js';
 import { markNotificationSnapshotRead } from '../util/notificationReadSnapshot.js';
 import { communityFeedSchemaReady } from '../util/communityFeed/schema.js';
-import { feedNotificationVisibleSql, feedNotificationContentSql } from '../util/communityFeed/notifications.js';
+import {
+  feedNotificationVisibleSql,
+  feedNotificationContentSql,
+  feedNotificationPostReviewSql,
+  withFeedNotificationPostReview,
+} from '../util/communityFeed/notifications.js';
 import crypto from 'crypto';
 import pool from '../db/index.js';
 import { resultData } from '../util/common.js';
@@ -172,12 +177,14 @@ export const list = async (req, res) => {
     }
 
     const readItems = async () => {
-      const [items] = await db.query(
-        `SELECT id, type, title, ${feedNotificationContentSql(feedReady)} AS content, link, meta, is_read, create_time
+      const [rows] = await db.query(
+        `SELECT id, type, title, ${feedNotificationContentSql(feedReady)} AS content, link, meta, is_read, create_time,
+          ${feedNotificationPostReviewSql(feedReady)} AS post_review
          FROM notification WHERE ${whereSql}
          ORDER BY create_time DESC, id DESC LIMIT ? OFFSET ?`,
         [...params, pageSize, offset],
       );
+      const items = rows.map(withFeedNotificationPostReview);
       await attachTodoStates(items, userId, db);
       return items;
     };
