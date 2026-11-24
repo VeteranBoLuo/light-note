@@ -2,7 +2,7 @@ import model from './manorModel.js';
 import { MANOR_SPECIES } from './manorSpecies.js';
 
 export { model as manorModel, MANOR_SPECIES };
-export const MANOR_VERSION = 'knowledge-manor-v4';
+export const MANOR_VERSION = 'knowledge-manor-v5';
 
 export class ManorError extends Error {
   constructor(code, status = 409) {
@@ -48,7 +48,7 @@ function rememberDailyUsage(s) {
     birdDelivered: s.birdSeedDay === day,
     birdPicked: s.birdSeedPickedDay === day,
     fryUsed: s.fryDay === day ? s.fryUsed : 0,
-    pollinated: s.beehive?.lastPollinatedDay === day,
+    pollinationsUsed: model.beehiveStatus(s).pollinationsUsed,
     purifierWater: s.purifier?.claimDay === day ? s.purifier.claimedWater || 0 : 0,
   };
 }
@@ -62,7 +62,11 @@ function restoreDailyUsage(s, dayKey) {
   s.birdSeedPickedDay = usage?.birdPicked ? s.calendarDay : null;
   s.fryDay = s.calendarDay;
   s.fryUsed = usage?.fryUsed || 0;
-  if (s.beehive) s.beehive.lastPollinatedDay = usage?.pollinated ? s.calendarDay : null;
+  if (s.beehive) {
+    const pollinationsUsed = usage?.pollinationsUsed ?? Number(usage?.pollinated === true);
+    s.beehive.lastPollinatedDay = pollinationsUsed ? s.calendarDay : null;
+    s.beehive.pollinationsUsed = pollinationsUsed;
+  }
   if (s.purifier) {
     s.purifier.claimDay = s.calendarDay;
     s.purifier.claimedWater = usage?.purifierWater || 0;
@@ -88,7 +92,7 @@ export function createManor({ now, calendar, points }) {
 
 /** Read projection: real time and real task progress; it does not award or persist anything. */
 export function projectManor(saved, { now, calendar, points, dailyDone = [false, false, false], supplyEligibility = {} }) {
-  if (![MANOR_VERSION, 'knowledge-manor-v3', 'knowledge-manor-v2', 'knowledge-manor-v1'].includes(saved.version)) throw new ManorError('MANOR_VERSION_UNSUPPORTED', 409);
+  if (![MANOR_VERSION, 'knowledge-manor-v4', 'knowledge-manor-v3', 'knowledge-manor-v2', 'knowledge-manor-v1'].includes(saved.version)) throw new ManorError('MANOR_VERSION_UNSUPPORTED', 409);
   const s = structuredClone(saved);
   if (s.version === 'knowledge-manor-v1') {
     s.emptyCastStreak = 0;

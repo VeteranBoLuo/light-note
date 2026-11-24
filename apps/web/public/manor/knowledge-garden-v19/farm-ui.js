@@ -434,8 +434,9 @@ const FarmUI = (() => {
       if (r.item && rects[k]) GardenFX.flyTo({ getBoundingClientRect: () => rects[k] }, bag, FarmArt.icon(r.key), { size: 40, delay: k * 90 });
     });
     const firsts = res.filter((r) => r.first).map((r) => C(r.key).name);
+    const pollinationBonus = res.reduce((total, item) => total + item.bonus, 0);
     if (res.some((r) => r.fertilizer)) toast(`剪下月光兰，花束已收好 · ${M.FERT.legend.name} +${res.filter((r) => r.fertilizer).length}`);else
-    if (res.some((r) => r.bonus)) toast("授粉加成已收好 · 收获物多 1 份");else
+    if (pollinationBonus) toast(`授粉加成已收好 · 收获物多 ${pollinationBonus} 份`);else
     if (firsts.length) toast(`新图鉴 +${firsts.length} · ${firsts.join("、")}`);
     announce(`收获了 ${res.length} 块地`);
     const lv = M.level(state);

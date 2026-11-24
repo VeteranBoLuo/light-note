@@ -274,9 +274,9 @@ describe('正式庄园沿用确认玩法与轻笺积分', () => {
   it('鱼苗袋和蜂箱的每日使用记录也不会因切回日期而重置', () => {
     const a=context({now:new Date('2026-10-24T12:00:00Z'),calendar:{dayKey:'20261025',weekKey:'202643',utcOffsetMinutes:840}});
     const b=context({...a,calendar:{dayKey:'20261024',weekKey:'202643',utcOffsetMinutes:-720}});
-    let s=adopted();s.guide=null;s.xp=M.RULES.levels[5];s.seeds.tomato=3;
+    let s=adopted();s.guide=null;s.xp=M.RULES.levels[5];s.seeds.tomato=4;
     s.beehive={purchasedAt:0,pollen:6,lastPollinatedDay:null};
-    for(const [i,ctx] of [a,b].entries()) {
+    for(const [i,ctx] of [a,a,b].entries()) {
       s=command(s,'plant',[i,'tomato'],ctx).state;
       s=command(s,'water',[[i]],ctx).state;
       const result=command(s,'pollinate',[i],ctx);expect(result.result).toBe(true);s=result.state;
@@ -284,10 +284,30 @@ describe('正式庄园沿用确认玩法与轻笺积分', () => {
     }
     s=projectManor(s,a);
     expect(command(s,'buyFry',[],a).result).toBeNull();
-    s=command(s,'plant',[2,'tomato'],a).state;
-    s=command(s,'water',[[2]],a).state;
-    expect(command(s,'pollinate',[2],a).result).toBe(false);
-    expect(s.beehive.pollen).toBe(4);
+    s=command(s,'plant',[3,'tomato'],a).state;
+    s=command(s,'water',[[3]],a).state;
+    expect(command(s,'pollinate',[3],a).result).toBe(false);
+    expect(s.beehive.pollen).toBe(3);
+    expect(M.beehiveStatus(s)).toMatchObject({pollinationsUsed:2,pollinationsRemaining:0});
+    const second = command(s,'pollinate',[3],b);
+    expect(second.result).toBe(true);
+    expect(second.state.beehive.pollen).toBe(2);
+  });
+  it('旧存档当天与之前日期的授粉记录各折算为已用一次', () => {
+    const today = context();
+    const tomorrow = context({
+      now: new Date('2026-10-25T02:00:00Z'),
+      calendar: {dayKey:'20261025',weekKey:'202643',utcOffsetMinutes:480},
+    });
+    const old = adopted();
+    old.version = 'knowledge-manor-v4';
+    old.beehive = {purchasedAt:0,pollen:5,lastPollinatedDay:old.calendarDay};
+    old.dailyUsage = {
+      '20261025': {freeUsed:0,waterClaims:[0,0,0],pollinated:true},
+    };
+    expect(M.beehiveStatus(projectManor(old,today))).toMatchObject({pollinationsUsed:1,pollinationsRemaining:1});
+    expect(M.beehiveStatus(projectManor(old,tomorrow))).toMatchObject({pollinationsUsed:1,pollinationsRemaining:1});
+    expect(old.beehive).not.toHaveProperty('pollinationsUsed');
   });
   it('首钓、每日三次、25%命中及稀有度沿用原规则；强制物种入口不开放', () => {
     expect(M.RULES).toMatchObject({ dailyFree: 3, success: 0.25, firstFish: 'clown' });
@@ -368,6 +388,13 @@ describe('新增作物沿用服务端购买、生长、续收和积分结算', (
     }
     expect(M.pollinate(s,0)).toBeTruthy();expect(M.pollinationEligible(s,0)).toBe(false);
     expect(M.pollinate(s,0)).toBe(false);
+    expect(M.pollinate(s,1)).toBe(true);
+    s.now = Math.max(...s.plots.slice(0,2).map(plot=>plot.next));
+    expect(M.harvest(s,[0,1]).map(item=>item.quantity)).toEqual([2,2]);
+    expect(M.pollinationEligible(s,0)).toBe(false);
+    expect(M.pollinationEligible(s,1)).toBe(false);
+    s.now = Math.max(...s.plots.slice(0,2).map(plot=>plot.next));
+    expect(M.harvest(s,[0,1]).map(item=>item.quantity)).toEqual([1,1]);
   });
 });
 

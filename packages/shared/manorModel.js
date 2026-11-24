@@ -99,7 +99,7 @@ const GardenModel = (() => {
     fruit: Object.freeze({name:"果香引鱼饵", crop:"tomato", preference:"鱼类"}),
     herb: Object.freeze({name:"草木觅贝饵", crop:"lettuce", preference:"底栖水族"}),
   });
-  const FACILITY_RULES = Object.freeze({craftHours:2, craftMax:3, targetWeight:4, pollenCapacity:6,
+  const FACILITY_RULES = Object.freeze({craftHours:2, craftMax:3, targetWeight:4, pollenCapacity:6, pollinationDailyLimit:2,
     flowerPollen:Object.freeze({lavender:3, sunflower:6, rosemary:4}),
     pollinationCrops:Object.freeze(["tomato","strawberry","eggplant","pepper","blueberry","cucumber","grape"])});
   // 每级一次补给，每 5 级加赠里程碑礼包；Lv.1 就是见面礼，不重复发放。
@@ -539,7 +539,7 @@ const GardenModel = (() => {
     if(!facility||!s.adopted||s.casting||s[key]||level(s)<facility.gardenLevel||
       ![s.wallet,s.weekSpent+facility.cost].every(Number.isSafeInteger)||s.wallet<facility.cost)return false;
     spend(s,facility.cost,`建造${facility.name}`);
-    s[key]=key==="workshop"?{purchasedAt:s.now,job:null,nextJobId:1}:key==="composter"?{purchasedAt:s.now,level:1,residue:0,stock:0,nextReady:null}:{purchasedAt:s.now,pollen:0,lastPollinatedDay:null};
+    s[key]=key==="workshop"?{purchasedAt:s.now,job:null,nextJobId:1}:key==="composter"?{purchasedAt:s.now,level:1,residue:0,stock:0,nextReady:null}:{purchasedAt:s.now,pollen:0,lastPollinatedDay:null,pollinationsUsed:0};
     diary(s,`${facility.name}建好了`);
     return true;
   }
@@ -615,8 +615,18 @@ const GardenModel = (() => {
   }
   function beehiveStatus(s) {
     const hive=s.beehive;
-    return {owned:!!hive,pollen:hive?.pollen||0,capacity:FACILITY_RULES.pollenCapacity,
-      usedToday:!!hive&&hive.lastPollinatedDay===day(s)};
+    const { pollenCapacity, pollinationDailyLimit } = FACILITY_RULES;
+    // Old saves with today's date recorded have already used one of the daily slots.
+    const pollinationsUsed = hive?.lastPollinatedDay === day(s)
+      ? hive.pollinationsUsed ?? 1
+      : 0;
+    return {
+      owned: !!hive,
+      pollen: hive?.pollen || 0,
+      capacity: pollenCapacity,
+      pollinationsUsed,
+      pollinationsRemaining: Math.max(0, pollinationDailyLimit - pollinationsUsed),
+    };
   }
   function refillPollen(s, crop) {
     const amount=FACILITY_RULES.flowerPollen[crop],hive=s.beehive;
@@ -630,9 +640,12 @@ const GardenModel = (() => {
   const pollinationTargets = s => s.plots.flatMap((p,i)=>pollinationEligible(s,i)?[i]:[]);
   function pollinate(s,i) {
     const hive=s.beehive;
+    const { pollinationsUsed, pollinationsRemaining } = beehiveStatus(s);
     if(!s.adopted||s.casting||!pollinationEligible(s,i)||!Number.isSafeInteger(hive.pollen)||hive.pollen<1||
-      hive.lastPollinatedDay===day(s))return false;
-    hive.pollen--;hive.lastPollinatedDay=day(s);
+      !pollinationsRemaining)return false;
+    hive.pollen--;
+    hive.lastPollinatedDay = day(s);
+    hive.pollinationsUsed = pollinationsUsed + 1;
     s.plots[i].pollinated=true;s.plots[i].pollinationPending=true;
     return true;
   }
