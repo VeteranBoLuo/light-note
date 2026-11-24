@@ -2301,6 +2301,39 @@ describe('CommunityChatWorkspace', () => {
     expect(mobileHost.querySelector('.community-message-list__new')?.textContent).toContain('回到底部');
   });
 
+  it('定位窗口已包含最新消息时，回到底部会退出定位并直接贴底', async () => {
+    mocks.route.query = { message: 'message-1', filter: 'keep' };
+    mocks.getMessages.mockResolvedValue({
+      status: 200,
+      data: {
+        items: [chatMessage(), chatMessage({ publicId: 'message-2' })],
+        hasMore: false,
+        hasNewer: false,
+        focusPublicId: 'message-1',
+      },
+    });
+    const host = await mountWorkspace();
+    await vi.waitFor(() => expect(host.querySelector('.community-message-skeleton')).toBeNull());
+    const list = host.querySelector<HTMLElement>('.community-message-list')!;
+    Object.defineProperties(list, {
+      scrollHeight: { configurable: true, value: 1000 },
+      clientHeight: { configurable: true, value: 400 },
+      scrollTop: { configurable: true, writable: true, value: 200 },
+    });
+    list.dispatchEvent(new Event('scroll'));
+    await flushAnimationFrame();
+    const button = host.querySelector<HTMLButtonElement>('.community-message-list__new');
+    expect(button?.textContent).toContain('回到底部');
+    const requests = mocks.getMessages.mock.calls.length;
+
+    button!.click();
+    await flushAsync();
+
+    expect(list.scrollTop).toBe(1000);
+    expect(mocks.routerReplace).toHaveBeenCalledWith({ query: { filter: 'keep' } });
+    expect(mocks.getMessages).toHaveBeenCalledTimes(requests);
+  });
+
   it('PC 添加提及导致输入区增高时跟随最新，失焦再聚焦本身不产生第二次滚动', async () => {
     let resizeCallback: ResizeObserverCallback | null = null;
     class ComposerResizeObserver {
