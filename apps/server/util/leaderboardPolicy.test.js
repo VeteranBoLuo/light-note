@@ -29,10 +29,18 @@ describe('积分排行榜周期与门槛', () => {
     expect(leaderboardSqlDate('2027-01-04', leaderboardServerShift(0))).toBe('2027-01-03 16:00:00');
   });
 
-  it('始终保留首个完整周的观察模式', () => {
+  it('仅在首个发奖周明确设为开榜周时允许首周计奖', () => {
     const config = getLeaderboardConfig({ POINTS_LEADERBOARD_OPEN_WEEK: '2026-11-16', POINTS_LEADERBOARD_FIRST_REWARD_WEEK: '2026-11-09' });
     expect(leaderboardWeekMode('2026-11-16', config)).toBe('observation');
     expect(leaderboardWeekMode('2026-11-23', config)).toBe('reward');
+    const launch = getLeaderboardConfig({
+      POINTS_LEADERBOARD_OPEN_WEEK: '2026-11-23',
+      POINTS_LEADERBOARD_FIRST_REWARD_WEEK: '2026-11-23',
+      POINTS_LEADERBOARD_REWARDS_ENABLED: 'true',
+    });
+    expect(leaderboardWeekMode('2026-11-16', launch)).toBe('observation');
+    expect(leaderboardWeekMode('2026-11-23', launch)).toBe('reward');
+    expect(leaderboardWeekMode('2026-11-23', { ...launch, firstRewardWeek: null })).toBe('observation');
     expect(() => getLeaderboardConfig({ POINTS_LEADERBOARD_OPEN_WEEK: '2026-11-17' })).toThrow(/Beijing Monday/);
   });
 

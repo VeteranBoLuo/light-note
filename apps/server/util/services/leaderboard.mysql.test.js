@@ -152,9 +152,29 @@ describe.skipIf(!socketPath)('积分排行榜 · 隔离 MySQL', () => {
     expect((await read('internal-1')).mine.nickname).toBe('换名');
   });
 
-  it('观察周奖额为零，按冻结结果续发，安全复核跳过封禁玩家且重跑不重复发放', async () => {
+  it('首周明确计奖时仍等到周榜结算，且开榜无通知', async () => {
+    await seedWeek();
+    const launch = { openWeek: '2026-11-09', firstRewardWeek: '2026-11-09', rewardsEnabled: true };
+    await runLeaderboardSettlement({ db: state.db, config: launch, now: current });
+    const board = await readLeaderboard('player-1', 'week', false, { db: state.db, config: launch, now: current });
+    expect(board.weekly).toMatchObject({ mode: 'reward', slots: 3, paidSlots: 0 });
+    const [[before]] = await state.db.query('SELECT COUNT(*) AS n FROM notification');
+    expect(before.n).toBe(0);
+
+    await runLeaderboardSettlement({ db: state.db, config: launch, now: monday });
+    const [notices] = await state.db.query('SELECT source_type FROM notification');
+    expect(notices).toEqual(Array.from({ length: 3 }, () => ({ source_type: 'leaderboard_reward' })));
+    const [[period]] = await state.db.query("SELECT mode, state, slots FROM leaderboard_periods WHERE period_key = '2026-11-09'");
+    expect(period).toMatchObject({ mode: 'reward', state: 'complete', slots: 3 });
+  });
+
+  it('观察周无奖励和开榜通知，正式周按冻结结果幂等发奖并跳过封禁玩家', async () => {
     await seedWeek();
     await point('player-1', 'checkin', 999, '2026-11-03 08:00:00');
+    const openingDay = new Date('2026-11-03T12:00:00+08:00');
+    await runLeaderboardSettlement({ db: state.db, config, now: openingDay });
+    const [[openingNotices]] = await state.db.query("SELECT COUNT(*) AS n FROM notification WHERE source_type = 'leaderboard_open'");
+    expect(openingNotices.n).toBe(0);
     await runLeaderboardSettlement({ db: state.db, config, now: current });
     await Promise.all([1, 2].map(() => runLeaderboardSettlement({ db: state.db, config, now: monday })));
     const [frozen] = await state.db.query('SELECT position, reward_points, reward_state FROM leaderboard_results WHERE period_key = ? ORDER BY position', ['2026-11-09']);

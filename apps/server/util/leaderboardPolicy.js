@@ -67,7 +67,9 @@ export function leaderboardOpen(config, now = new Date()) {
 }
 
 export function leaderboardWeekMode(week, config) {
-  return week > config.openWeek && config.firstRewardWeek && week >= config.firstRewardWeek ? 'reward' : 'observation';
+  if (!config.firstRewardWeek || week < config.firstRewardWeek) return 'observation';
+  const openingWeekEarnsRewards = week === config.openWeek && week === config.firstRewardWeek;
+  return week > config.openWeek || openingWeekEarnsRewards ? 'reward' : 'observation';
 }
 
 export function leaderboardQualified({ score, activeDays }) {

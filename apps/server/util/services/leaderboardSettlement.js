@@ -2,7 +2,7 @@ import pool from '../../db/index.js';
 import { stableAgentErrorCode } from '../agent/logSafety.js';
 import { createNotification } from '../notification.js';
 import { notificationSchedulerEnabled } from '../notificationSchedulerPolicy.js';
-import { POINTS_ACCOUNT_ELIGIBLE, POINTS_ACCOUNT_NOT_BANNED } from '../pointsAudienceEligibility.js';
+import { POINTS_ACCOUNT_ELIGIBLE } from '../pointsAudienceEligibility.js';
 import { grantPointsIdempotently } from '../pointsGrantOperations.js';
 import { lockLeaderboardFacts } from '../leaderboardSettlementLock.js';
 import {
@@ -21,7 +21,6 @@ import { readLeaderboardAccounts, readLeaderboardScores } from './leaderboardRea
 const TICK_MS = 10 * 60_000;
 const BATCH_SIZE = 100;
 const WEEKS_PER_TICK = 4;
-const NOTIFY_OPEN_SOURCE = 'leaderboard_open';
 const IN_APP = "COALESCE(JSON_UNQUOTE(JSON_EXTRACT(u.preferences, '$.notificationsInApp')), 'true')";
 
 export async function assertLeaderboardReady(db, config = getLeaderboardConfig()) {
@@ -211,33 +210,6 @@ async function processOutbox(db, state, handler) {
   }
 }
 
-async function sendOpeningNotices(db, openWeek) {
-  const [accounts] = await db.query(
-    `SELECT u.id AS userId, JSON_UNQUOTE(JSON_EXTRACT(u.preferences, '$.lang')) AS lang
-       FROM user u WHERE ${POINTS_ACCOUNT_ELIGIBLE} AND ${POINTS_ACCOUNT_NOT_BANNED}
-        AND ${IN_APP} <> 'false'
-        AND NOT EXISTS (
-          SELECT 1 FROM notification n WHERE n.user_id = u.id AND n.source_type = ? AND n.source_id = ?
-        )
-      ORDER BY u.id LIMIT ?`,
-    [NOTIFY_OPEN_SOURCE, openWeek, BATCH_SIZE],
-  );
-  for (const { userId, lang } of accounts) {
-    const en = lang === 'en-US';
-    await createNotification(userId, {
-      type: 'system',
-      title: en ? 'Points leaderboards are open' : '积分排行榜已开放',
-      content: en
-        ? 'Scoring accounts appear with their nickname, avatar and community ID. You can update your nickname or avatar in your profile. The first full week is for rankings only.'
-        : '有榜分的用户会上榜，展示昵称、头像和社区 ID。你可以在个人资料修改昵称或头像。首个完整周只记录排名。',
-      link: '/community/profile',
-      sourceType: NOTIFY_OPEN_SOURCE,
-      sourceId: openWeek,
-      inAppOnly: true,
-    });
-  }
-}
-
 async function finishWeeks(db) {
   // Frozen result rows only move toward completion. Read the candidates without
   // locking the outbox, then update one primary-key row at a time.
@@ -288,7 +260,6 @@ export async function runLeaderboardSettlement({ db = pool, config = getLeaderbo
   if (config.rewardsEnabled) await processOutbox(db, 'pending', sendAward);
   await processOutbox(db, 'paid', notifyAward);
   await finishWeeks(db);
-  if (thisWeek === config.openWeek) await sendOpeningNotices(db, config.openWeek);
 }
 
 export function startLeaderboardScheduler() {

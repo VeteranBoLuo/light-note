@@ -8153,7 +8153,7 @@ export default {
       rulesManorSale: 'Crop sales and the first sale of a free catch count in full when credited. Sales of catches made with bait, creatures from fry bags, and bought-back creatures earn no leaderboard points.',
       rulesCycle: 'Weeks close Monday at 00:00 Beijing time. Months restart on the first day at 00:00.',
       rulesDays: 'A day counts once for a credited check-in, task, weekly challenge, or a successful crop harvest.',
-      rulesPrizes: 'Qualify for a weekly prize with {score} points and at least {days} active days. Half the qualifiers rounded down open a maximum of 3 slots. The first full week is the observation week.',
+      rulesPrizes: 'Qualify for a weekly prize with {score} points and at least {days} active days. Half the qualifiers rounded down open a maximum of 3 slots. Prizes are awarded after the weekly rankings are finalized in reward weeks.',
       rulesIdentity: 'Players with a score are ranked automatically. The top {limit} show their nicknames, avatars, and community IDs. Nicknames resembling phone numbers are masked.',
       personal: {
         current: 'Your week',
