@@ -256,9 +256,11 @@
   const sources = computed(() => {
     if (!weekly.value) return [];
     return Object.entries(data.value?.mine?.sources ?? {}).map(([key, points]) => {
-      const label = key === 'manor_sale' ? 'growth.leaderboard.cropSale'
-        : key === 'manor_aquarium_sale' ? 'growth.leaderboard.aquariumSale'
-        : 'growth.pointsReason.' + key;
+      // resultData camel-cases nested API keys, but the points dictionary uses reason codes.
+      const reason = key.replace(/[A-Z]/g, (letter) => '_' + letter.toLowerCase());
+      const label = reason === 'manor_sale' ? 'growth.leaderboard.cropSale'
+        : reason === 'manor_aquarium_sale' ? 'growth.leaderboard.aquariumSale'
+        : 'growth.pointsReason.' + reason;
       return t(label) + ' ' + number(points);
     });
   });
