@@ -2473,6 +2473,17 @@
   }
 
   async function jumpToLatest() {
+    if (hasNewerThanFocus.value) {
+      await returnToLatest();
+      return;
+    }
+    if (programmaticMessageNavigationActive) cancelProgrammaticMessageNavigation();
+    if (focusedMessagePublicId.value) {
+      // 定位窗口已包含最新消息，解除定位后可以直接贴底。
+      focusedMessagePublicId.value = '';
+      transientFocusedMessagePublicId.value = '';
+      void clearFocusMessageRoute();
+    }
     pendingNewMessageCount.value = 0;
     await scrollToBottom();
     await markLatestRead();
