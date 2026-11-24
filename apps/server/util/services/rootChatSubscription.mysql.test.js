@@ -9,8 +9,10 @@ import {
   deliverCommunityChatMessageNotifications,
   getCommunityChatNotificationSettings,
   updateCommunityChatNotificationSettings,
+  withCommunityChatNotificationPreview,
 } from './communityChatNotificationService.js';
 import {
+  COMMUNITY_CHAT_NOTIFICATION_PREVIEW_SQL,
   COMMUNITY_CHAT_TARGETED_NOTIFICATION_SQL,
   COMMUNITY_CHAT_DELIVERY_NOTIFICATION_SQL,
 } from '../notificationVisibility.js';
@@ -67,7 +69,8 @@ async function message({ sender = 'alice', mentions = [], reply, content = '测�
     ]);
   return { publicId: id, id: row.insertId };
 }
-const deliver = (msg) => deliverCommunityChatMessageNotifications({ messagePublicId: msg.publicId, db, env });
+const deliver = (msg, messagePreview) =>
+  deliverCommunityChatMessageNotifications({ messagePublicId: msg.publicId, messagePreview, db, env });
 const settings = (rootAllMessages, enabled = true) =>
   updateCommunityChatNotificationSettings({ user: root, rootAllMessages, enabled, level: 'official', db });
 const rows = async (where = COMMUNITY_CHAT_TARGETED_NOTIFICATION_SQL) =>
@@ -81,7 +84,7 @@ describe.skipIf(!socketPath)('root chat subscription real SQL', () => {
     await admin.query(`CREATE DATABASE ${schema} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`);
     db = mysql.createPool({ socketPath, user: 'root', database: schema });
     await db.query(
-      "CREATE TABLE user (id varchar(255) CHARACTER SET utf8 COLLATE utf8_general_ci PRIMARY KEY, alias varchar(80), role varchar(20) DEFAULT 'user', del_flag tinyint DEFAULT 0, preferences json)",
+      "CREATE TABLE user (id varchar(255) CHARACTER SET utf8 COLLATE utf8_general_ci PRIMARY KEY, alias varchar(80) CHARACTER SET utf8 COLLATE utf8_general_ci, role varchar(20) DEFAULT 'user', del_flag tinyint DEFAULT 0, preferences json)",
     );
     for (const sql of COMMUNITY_CHAT_TABLE_SQL) await db.query(sql);
     for (const sql of browserPushTableSql) await db.query(sql);
@@ -125,6 +128,43 @@ describe.skipIf(!socketPath)('root chat subscription real SQL', () => {
       await admin.query(`DROP DATABASE ${schema}`);
       await admin.end();
     }
+  });
+  it('preserves Unicode emoji when building a preview with a legacy sender name', async () => {
+    const text = '你好 😁，一起看 👩‍💻';
+    const sent = await message({ content: text });
+    expect((await deliver(sent, text)).delivered).toBe(1);
+    expect((await rows())[0].content).toBe(`发送者：${text}`);
+  });
+  it('restores matching legacy emoji previews and leaves literal or changed text intact', async () => {
+    const readPreview = async (sourceId) => {
+      const [[row]] = await db.query(
+        `SELECT content, meta, ${COMMUNITY_CHAT_NOTIFICATION_PREVIEW_SQL} AS chat_preview
+         FROM notification WHERE user_id = 'root' AND source_id = ? AND ${COMMUNITY_CHAT_TARGETED_NOTIFICATION_SQL}`,
+        [sourceId],
+      );
+      return row && withCommunityChatNotificationPreview(row);
+    };
+    const sent = await message({ content: '确认😁' });
+    await deliver(sent, '确认😁');
+    await db.query('UPDATE notification SET content = ? WHERE source_id = ?', ['发送者：确认?', sent.publicId]);
+    const repaired = await readPreview(sent.publicId);
+    expect(repaired.content).toBe('发送者：确认😁');
+    expect(repaired).not.toHaveProperty('chat_preview');
+    expect((await rows())[0].content).toBe('发送者：确认?');
+
+    const question = await message({ content: '?' });
+    await deliver(question, '?');
+    expect((await readPreview(question.publicId)).content).toBe('发送者：?');
+
+    await db.query('UPDATE community_chat_messages SET content = ? WHERE id = ?', ['新正文😄', sent.id]);
+    expect((await readPreview(sent.publicId)).content).toBe('发送者：确认?');
+    await db.query('UPDATE community_chat_messages SET content = ?, edited_at = CURRENT_TIMESTAMP WHERE id = ?', [
+      '确认😄',
+      sent.id,
+    ]);
+    expect((await readPreview(sent.publicId)).content).toBe('发送者：确认?');
+    await db.query("UPDATE community_chat_messages SET status = 'recalled' WHERE id = ?", [sent.id]);
+    expect(await readPreview(sent.publicId)).toBeUndefined();
   });
   it('migrates twice without resetting a saved opt-out; rejects non-root writes and preserves old-client saves', async () => {
     await db.query('ALTER TABLE community_chat_user_settings DROP COLUMN root_all_messages_enabled');

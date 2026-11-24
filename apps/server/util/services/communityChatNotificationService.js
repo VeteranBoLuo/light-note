@@ -1,5 +1,6 @@
 import { huaweiPushEnabled } from '../huaweiPushPolicy.js';
 import { browserPushEnabled } from '../browserPushPolicy.js';
+import { communityChatInlineEmojiToPlainText } from '@lightnote/shared/community-chat-inline-emojis';
 import pool from '../../db/index.js';
 import { queueNotificationChange } from '../notificationRealtimeEvents.js';
 import { COMMUNITY_CHAT_PRIMARY_ROOM_SLUG, getCommunityChatFeatureState } from '../communityChatFeature.js';
@@ -8,6 +9,25 @@ import { CommunityChatError } from './communityChatAccessService.js';
 export const COMMUNITY_CHAT_NOTIFICATION_LEVELS = Object.freeze(['official', 'mentions_only', 'mentions', 'all']);
 export const COMMUNITY_CHAT_DEFAULT_NOTIFICATION_LEVEL = 'mentions';
 export const COMMUNITY_CHAT_NOTIFICATIONS_DEFAULT_ENABLED = true;
+const CHAT_TEXT_PREVIEW_LIMIT = 160;
+const CHAT_POLL_PREVIEW_LIMIT = 154;
+
+function normalizeChatNotificationPreview(value) {
+  return String(value || '').replace(/\s+/g, ' ').trim();
+}
+
+export function withCommunityChatNotificationPreview({ chat_preview, ...item }) {
+  const sender = item.meta?.senderName;
+  if (!chat_preview?.content || !sender) return item;
+  const isPoll = chat_preview.kind === 'poll';
+  const text = normalizeChatNotificationPreview(communityChatInlineEmojiToPlainText(chat_preview.content));
+  const body = Array.from(text).slice(0, isPoll ? CHAT_POLL_PREVIEW_LIMIT : CHAT_TEXT_PREVIEW_LIMIT).join('');
+  // Old snapshots used the sender column's three-byte charset. Only restore a matching original snapshot.
+  const legacyBody = body.replace(/[\u{10000}-\u{10ffff}]/gu, '?');
+  const prefix = `${sender}：${isPoll ? '[投票] ' : ''}`;
+  if (legacyBody === body || item.content !== `${prefix}${legacyBody}`) return item;
+  return { ...item, content: `${prefix}${body}` };
+}
 
 const chatError = (code, status, zhMessage, enMessage) => new CommunityChatError(code, status, zhMessage, enMessage);
 
@@ -185,20 +205,15 @@ export async function deliverCommunityChatMessageNotifications({
          )`
       : `AND COALESCE(recipient_membership.status, '') <> 'banned'`;
   const accessParams = feature.accessMode === 'invite_only' ? [feature.rulesVersion] : [];
-  const normalizedMessagePreview =
-    messagePreview === undefined
-      ? null
-      : String(messagePreview || '')
-          .replace(/\s+/g, ' ')
-          .trim();
+  const normalizedMessagePreview = messagePreview === undefined ? null : normalizeChatNotificationPreview(messagePreview);
   const pollPreviewSql =
     normalizedMessagePreview === null
-      ? `LEFT(REPLACE(REPLACE(message.content, CHAR(13), ' '), CHAR(10), ' '), 154)`
-      : `LEFT(?, 154)`;
+      ? `LEFT(REPLACE(REPLACE(message.content, CHAR(13), ' '), CHAR(10), ' '), ${CHAT_POLL_PREVIEW_LIMIT})`
+      : `LEFT(?, ${CHAT_POLL_PREVIEW_LIMIT})`;
   const textPreviewSql =
     normalizedMessagePreview === null
-      ? `LEFT(REPLACE(REPLACE(message.content, CHAR(13), ' '), CHAR(10), ' '), 160)`
-      : `LEFT(?, 160)`;
+      ? `LEFT(REPLACE(REPLACE(message.content, CHAR(13), ' '), CHAR(10), ' '), ${CHAT_TEXT_PREVIEW_LIMIT})`
+      : `LEFT(?, ${CHAT_TEXT_PREVIEW_LIMIT})`;
   const previewParams = normalizedMessagePreview === null ? [] : [normalizedMessagePreview, normalizedMessagePreview];
 
   const recipientsSql = `FROM community_chat_messages message
@@ -262,7 +277,7 @@ export async function deliverCommunityChatMessageNotifications({
                  WHEN message.mention_everyone = 1 OR EXISTS (SELECT 1 FROM community_chat_message_mentions own_mention WHERE own_mention.message_id = message.id AND own_mention.mentioned_user_id = recipient.id) THEN '有人提及了你'
                  ELSE '聊天室有新消息' END,
             CONCAT(
-              COALESCE(NULLIF(sender.alias, ''), '轻笺用户'),
+              CONVERT(COALESCE(NULLIF(sender.alias, ''), '轻笺用户') USING utf8mb4) COLLATE utf8mb4_unicode_ci,
               '：',
               CASE
                 WHEN message.message_kind = 'poll'

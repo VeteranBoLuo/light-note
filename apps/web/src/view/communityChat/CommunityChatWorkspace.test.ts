@@ -139,7 +139,7 @@ vi.mock('vue-router', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   useRoute: () => mocks.route,
   onBeforeRouteLeave: vi.fn(),
-  useRouter: () => ({ replace: mocks.routerReplace }),
+  useRouter: () => ({ replace: mocks.routerReplace, afterEach: () => () => {} }),
 }));
 vi.mock('@/utils/scrolling', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),

@@ -10,6 +10,8 @@ import { communityChatWorkspaceActive } from '@/composables/useCommunityChatActi
 import zh from '@/i18n/locales/zh-CN';
 import en from '@/i18n/locales/en-US';
 import chatRoute, { communityRoutes } from '@/router/modules/communityChat';
+import notificationsRoute from '@/router/modules/notifications';
+import { applyUiDensity } from '@/composables/useUiDensity';
 import Settings from '@/view/settings/Settings.vue';
 import Navigation from '@/components/home/navigation/Navigation.vue';
 import MobileBottomNav from '@/components/mobile/MobileBottomNav.vue';
@@ -19,6 +21,30 @@ import '@/assets/css/index.less';
 const params = new URLSearchParams(location.search);
 const calls: { url: string; method: string; data: unknown; params: unknown }[] = [];
 const control = { failProfileSave: false };
+const notificationMessageId = 'message-34';
+const notificationMessageText = '😁';
+const notificationItems = params.has('chatNotification')
+  ? [
+      {
+        id: 'chat-emoji-notice',
+        type: 'community_chat',
+        title: '聊天室有新消息',
+        content: `薄荷：${notificationMessageText}`,
+        link: `/community-chat?message=${notificationMessageId}`,
+        createTime: new Date().toISOString(),
+        isRead: 0,
+      },
+      {
+        id: 'unrelated-todo-notice',
+        type: 'todo_reminder',
+        title: '待办提醒',
+        content: '整理资料',
+        link: null,
+        createTime: new Date(Date.now() - 60000).toISOString(),
+        isRead: 0,
+      },
+    ]
+  : [];
 const author = {
   name: '薄荷',
   communityId: 'LN-MINT',
@@ -80,7 +106,9 @@ const rooms = [
 const messages = Array.from({ length: 50 }, (_, index) => ({
   publicId: `message-${index}`,
   content:
-    params.has('links') && index >= 48
+    params.has('chatNotification') && `message-${index}` === notificationMessageId
+      ? notificationMessageText
+      : params.has('links') && index >= 48
       ? `去广场看看：https://boluo66.top/community/feed 。参考资料（https://developer.mozilla.org/zh-CN/docs/Web/HTML）`
       : `第 ${index + 1} 条交流：欢迎分享你的轻笺使用心得。`,
   status: 'active',
@@ -102,7 +130,24 @@ request.defaults.adapter = async (config) => {
   const body = typeof config.data === 'string' ? JSON.parse(config.data) : config.data;
   calls.push({ url, method, data: body, params: config.params });
   let data: unknown = {};
-  if (url.endsWith('/community-chat/rooms')) data = { access, messagingEnabled: true, items: rooms };
+  if (url.includes('/api/notification/')) {
+    const byType: Record<string, number> = {};
+    for (const item of notificationItems.filter((item) => !item.isRead)) {
+      byType[item.type] = (byType[item.type] || 0) + 1;
+    }
+    const unreadTotal = notificationItems.filter((item) => !item.isRead).length;
+    if (url.endsWith('/unreadCount')) data = { unreadTotal, byType };
+    else if (url.endsWith('/list')) {
+      const items = notificationItems.filter((item) => !body.type || body.type === 'all' || item.type === body.type);
+      data = { items, total: items.length, unreadTotal, currentPage: 1, pageSize: 20 };
+    } else if (url.endsWith('/markRead')) {
+      for (const item of notificationItems) if (body.ids.includes(item.id)) item.isRead = 1;
+    } else if (url.endsWith('/setReadState')) {
+      const item = notificationItems.find((item) => item.id === body.id);
+      if (item) item.isRead = Number(body.isRead);
+      data = { isRead: body.isRead };
+    }
+  } else if (url.endsWith('/community-chat/rooms')) data = { access, messagingEnabled: true, items: rooms };
   else if (url.endsWith('/messages'))
     data = {
       items: messages,
@@ -142,6 +187,7 @@ request.defaults.adapter = async (config) => {
 };
 document.documentElement.dataset.theme = params.get('theme') || 'day';
 document.documentElement.classList.toggle('light-note-mobile-rendering', params.get('renderProfile') === 'mobile');
+if (params.has('density')) applyUiDensity(params.get('density') || 'medium', params.get('renderProfile') === 'mobile');
 for (const el of [document.documentElement, document.body, document.getElementById('app')!]) {
   el.style.height = '100%';
   el.style.margin = '0';
@@ -150,7 +196,7 @@ document.body.style.display = 'block';
 document.getElementById('app')!.style.width = '100%';
 const router = createRouter({
   history: createMemoryHistory(),
-  routes: [chatRoute, ...communityRoutes, { path: '/settings', name: 'settings', component: Settings }],
+  routes: [chatRoute, ...communityRoutes, notificationsRoute, { path: '/settings', name: 'settings', component: Settings }],
 });
 const app = createApp({
   setup() {
