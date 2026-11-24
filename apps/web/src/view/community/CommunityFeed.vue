@@ -194,6 +194,7 @@
               :action-pending="busy"
               @delete="deletePost(detail)"
               :can-write="canWrite"
+              :comment-resources-enabled="caps.commentResourcesEnabled"
               :actions-target="detailActionsTarget"
               :scroll-container="surface"
               :overlay-open="Boolean(dialog || editor)"
@@ -685,6 +686,7 @@
       imagesEnabled: false,
       inlineImagesEnabled: false,
       resourcesEnabled: false,
+      commentResourcesEnabled: false,
     }),
     canWrite = computed(() => authenticated.value && caps.value.writesEnabled);
   const posts = ref<FeedPost[]>([]),

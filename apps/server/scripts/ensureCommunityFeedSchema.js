@@ -3,6 +3,7 @@ import {
   COMMUNITY_IMAGE_SCHEMA,
   COMMUNITY_IMAGE_PREVIEW_SCHEMA,
   COMMUNITY_RESOURCE_SCHEMA,
+  COMMUNITY_COMMENT_RESOURCE_SCHEMA,
 } from '../util/communityFeed/schemaContract.js';
 import pool from '../db/index.js';
 import { ensureCommunityFeedSchema, communityFeedSchemaReady } from '../util/communityFeed/schema.js';
@@ -13,6 +14,7 @@ try {
     !(await communityFeedSchemaReady(pool, COMMUNITY_IMAGE_SCHEMA)) ||
     !(await communityFeedSchemaReady(pool, COMMUNITY_IMAGE_PREVIEW_SCHEMA)) ||
     !(await communityFeedSchemaReady(pool, COMMUNITY_RESOURCE_SCHEMA)) ||
+    !(await communityFeedSchemaReady(pool, COMMUNITY_COMMENT_RESOURCE_SCHEMA)) ||
     !(await reviewSchemaReady(pool))
   )
     throw new Error('SCHEMA_CONTRACT_MISMATCH');

@@ -291,3 +291,13 @@ export const COMMUNITY_RESOURCE_SCHEMA = {
     ],
   },
 };
+
+export const COMMUNITY_COMMENT_RESOURCE_SCHEMA = {
+  community_comment_resources: {
+    columns: ['resource_id', 'comment_id', 'sort_order'],
+    indexes: [
+      ['PRIMARY', 'resource_id', 0],
+      ['uk_order', 'comment_id,sort_order', 0],
+    ],
+  },
+};

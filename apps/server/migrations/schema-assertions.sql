@@ -4548,3 +4548,12 @@ WHERE NOT EXISTS (
   SELECT 1 FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='ai_level_gift_registrations'
     AND column_name='id' AND data_type='bigint' AND LOCATE('auto_increment',extra)>0
 );
+
+-- Community comment resources.
+SELECT 'community_comment_resource_column' AS check_name, expected.col AS detail
+FROM (SELECT 'resource_id' AS col UNION ALL SELECT 'comment_id' UNION ALL SELECT 'sort_order') expected
+WHERE NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='community_comment_resources' AND column_name=expected.col);
+SELECT 'community_comment_resource_index' AS check_name,'PRIMARY' AS detail
+FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM information_schema.statistics WHERE table_schema=DATABASE() AND table_name='community_comment_resources' AND index_name='PRIMARY' GROUP BY index_name HAVING GROUP_CONCAT(column_name ORDER BY seq_in_index)='resource_id' AND MAX(non_unique)=0);
+SELECT 'community_comment_resource_index' AS check_name,'uk_order' AS detail
+FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM information_schema.statistics WHERE table_schema=DATABASE() AND table_name='community_comment_resources' AND index_name='uk_order' GROUP BY index_name HAVING GROUP_CONCAT(column_name ORDER BY seq_in_index)='comment_id,sort_order' AND MAX(non_unique)=0);

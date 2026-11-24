@@ -149,6 +149,8 @@ API 已移除旧静态目录挂载。发布时在主站配置中用 [retired-leg
 
 社区纯文本自动审核开放前，显式运行社区 Schema 迁移入口安装 `20261008_community_ai_review.sql`，再通过 `check:schema`。`COMMUNITY_AI_REVIEW_ENABLED` 默认关闭，平台日预算由 `COMMUNITY_AI_REVIEW_DAILY_BUDGET_TOKENS` 控制。独立审核调度随 API 启动，沿用 production-only 策略；关闭 AI 审核后保持新版本调度运行，将已排队或过期任务交人工。回滚旧版本前先关闭开关并确认无 pending/processing 审核任务，保留新增表及账本，避免无消费者任务滞留。
 
+广场评论资源发布前运行 `pnpm --filter server migrate:community-feed-schema` 安装 `20261124_community_comment_resources.sql`，通过 `check:schema` 后先更新全部 API，再更新 Web。迁移只新增关联表。回退 Web 时保留表和新版 API，已发布的纯资源评论仍需支持读取。
+
 广场图片按单文件协议读取与上传。`20261030_community_image_previews.sql` 的加法字段保留为历史派生对象的回收登记，清理器仍须同时回收已登记的原件和旧派生对象；停用派生功能时不删除字段或批量清空历史记录。发布验证正文与 Viewer 读取同一文件、旧 `variant=preview` 链接兼容、修订权限与历史双对象清理。
 
 普通/托管上传的对象发布与回收保护、历史文件两阶段改名启用前，显式应用 `apps/server/migrations/20260925_cloud_file_rename_staging.sql` 与 `apps/server/migrations/20260925_cloud_legacy_object_lifecycle.sql` 并通过 `check:schema`，再部署 API 与文档 Worker。迁移只新增生命周期与暂存清理账本，不回填文件、不在请求或启动路径建表；回滚 API 时保留表与能够消费剩余暂存记录的清理 Worker。普通名称上传不得重新允许路径式文件名，否则随机副本清理的独占命名空间前提不成立。 所有 API 实例切换到随机上传地址后才能启用旧对象清理 Worker；回滚须保留随机地址签发与确认兼容层，不能恢复向已退休的名称地址签发上传链接。生命周期表中的退休标记与旧客户端名称映射不得作为临时日志清空，随账号注销清理。

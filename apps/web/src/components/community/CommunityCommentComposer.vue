@@ -18,6 +18,15 @@
       :placeholder="placeholder"
       @update:value="updateBody"
     />
+    <CommunityPostResources
+      :resources="resources"
+      for-comment
+      editable
+      external-preview
+      :disabled="busy"
+      @preview="$emit('preview-resource', $event)"
+      @remove="$emit('remove-resource', $event)"
+    />
     <div class="comment-composer-tools">
       <BPopover
         v-model:open="emojiOpen"
@@ -39,11 +48,23 @@
           </div>
         </template>
       </BPopover>
+      <BButton
+        v-if="resourcesEnabled"
+        type="text"
+        size="small"
+        :disabled="busy || resourceCount >= maxResources"
+        :title="t('community.feed.commentResourceLimit', { count: resourceCount, max: maxResources })"
+        @click="
+          emojiOpen = false;
+          $emit('pick-resource');
+        "
+        >{{ t('community.feed.addCommentResource') }}</BButton
+      >
       <small>{{ Array.from(modelValue).length }} / 1200</small>
       <BButton
         type="primary"
         :loading="busy"
-        :disabled="!modelValue.trim() || Array.from(modelValue.trim()).length > 1200"
+        :disabled="(!modelValue.trim() && !resourceCount) || Array.from(modelValue.trim()).length > 1200"
         @click="$emit('submit')"
         >{{ t(replying ? 'community.feed.reply' : 'community.feed.comment') }}</BButton
       >
@@ -62,8 +83,27 @@
   import ChatEmojiPanel from '@/components/communityChat/ChatEmojiPanel.vue';
   import ChatInlineEmojiText from '@/components/communityChat/ChatInlineEmojiText.vue';
   import { useCommunityChatEmojiRecent } from '@/composables/useCommunityChatEmojiRecent';
-  const props = defineProps<{ modelValue: string; busy: boolean; replying?: string; quote?: string }>();
-  const emit = defineEmits<{ 'update:modelValue': [value: string]; submit: []; 'cancel-reply': [] }>();
+  import { COMMUNITY_FEED_LIMITS } from '@lightnote/shared/community-feed';
+  import type { FeedResource } from '@/api/communityFeedApi';
+  import CommunityPostResources from './CommunityPostResources.vue';
+  const props = defineProps<{
+    modelValue: string;
+    busy: boolean;
+    replying?: string;
+    quote?: string;
+    resources?: FeedResource[];
+    resourcesEnabled?: boolean;
+  }>();
+  const emit = defineEmits<{
+    'update:modelValue': [value: string];
+    submit: [];
+    'cancel-reply': [];
+    'pick-resource': [];
+    'remove-resource': [resource: FeedResource];
+    'preview-resource': [resource: FeedResource];
+  }>();
+  const maxResources = COMMUNITY_FEED_LIMITS.resources;
+  const resourceCount = computed(() => props.resources?.length || 0);
   const { t } = useI18n();
   const user = useUserStore();
   const { recent, remember } = useCommunityChatEmojiRecent(computed(() => String(user.id || '')));
@@ -128,7 +168,8 @@
   .comment-composer-tools {
     display: flex;
     align-items: center;
-    gap: var(--ui-space-12, 12px);
+    gap: var(--ui-space-8, 8px);
+    flex-wrap: wrap;
     margin-top: var(--ui-space-8, 8px);
   }
   .comment-composer-tools .comment-emoji-trigger {

@@ -15,6 +15,7 @@ import {
   transaction,
 } from './core.js';
 import { pageOptions } from './posts.js';
+import { commentResources } from './resources.js';
 export async function reportContent({ user, input, env = process.env, db = pool }) {
   strictFields(input, ['requestId', 'postId', 'commentId', 'reason', 'detail']);
   const reason = text(input.reason, 32),
@@ -133,7 +134,7 @@ export async function moderationQueue({ user, input = {}, env = process.env, db 
   const type = input.type || 'reports';
   let sql;
   if (type === 'reports')
-    sql = `SELECT x.id,x.public_id AS publicId,x.reason,x.detail,x.status,p.public_id AS postId,p.row_revision AS revision,c.public_id AS commentId,c.row_revision AS commentRevision FROM community_content_reports x JOIN community_posts p ON p.id=x.post_id LEFT JOIN community_comments c ON c.id=x.comment_id WHERE x.status='pending'`;
+    sql = `SELECT x.id,x.public_id AS publicId,x.reason,x.detail,x.status,p.public_id AS postId,p.row_revision AS revision,c.id AS commentRowId,c.public_id AS commentId,c.row_revision AS commentRevision FROM community_content_reports x JOIN community_posts p ON p.id=x.post_id LEFT JOIN community_comments c ON c.id=x.comment_id WHERE x.status='pending'`;
   else if (type === 'appeals')
     sql = `SELECT x.id,x.public_id AS publicId,x.body,x.status,x.row_revision AS revision,a.reason,a.action,p.public_id AS postId FROM community_appeals x JOIN community_moderation_actions a ON a.id=x.action_id JOIN community_posts p ON p.id=a.post_id WHERE x.status='pending'`;
   else if (type === 'comments')
@@ -143,8 +144,24 @@ export async function moderationQueue({ user, input = {}, env = process.env, db 
     ...(before ? [before] : []),
     limit + 1,
   ]);
+  const page = rows.slice(0, limit);
+  const resources = await commentResources(
+    db,
+    type === 'comments'
+      ? page
+      : page
+          .filter((row) => row.commentRowId)
+          .map((row) => ({
+            id: row.commentRowId,
+            publicId: row.commentId,
+            postId: row.postId,
+          })),
+  );
   return {
-    items: rows.slice(0, limit).map(({ id, ...row }) => row),
+    items: page.map(({ id, commentRowId, ...row }) => {
+      const attached = resources.get(String(type === 'comments' ? id : commentRowId));
+      return attached ? { ...row, resources: attached } : row;
+    }),
     nextCursor: rows.length > limit ? String(rows[limit - 1].id) : null,
   };
 }

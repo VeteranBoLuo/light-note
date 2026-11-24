@@ -1,5 +1,6 @@
 import { randomUUID, createHash } from 'node:crypto';
 import pool from '../../db/index.js';
+import { COMMUNITY_FEED_LIMITS } from '@lightnote/shared/community-feed';
 import { queueNotificationSourceChange } from '../notificationRealtimeEvents.js';
 import {
   access,
@@ -21,10 +22,15 @@ import {
   unblockedSql,
 } from './core.js';
 import { audit, pageOptions } from './posts.js';
+import { bindCommentResources, commentResources } from './resources.js';
 
 export async function createComment({ user, input, env = process.env, db = pool }) {
-  strictFields(input, ['requestId', 'postId', 'replyTo', 'body', 'mentions']);
-  const body = text(input.body, 1200),
+  strictFields(input, ['requestId', 'postId', 'replyTo', 'body', 'mentions', 'resources']);
+  const resources = input.resources === undefined ? [] : input.resources;
+  if (!Array.isArray(resources) || resources.length > COMMUNITY_FEED_LIMITS.resources) fail('COMMUNITY_INVALID_INPUT');
+  const ids = resources.map(publicId);
+  if (new Set(ids).size !== ids.length) fail('COMMUNITY_INVALID_INPUT');
+  const body = text(input.body === undefined && ids.length ? '' : input.body, 1200, !ids.length),
     targets = input.mentions || [];
   if (!Array.isArray(targets) || targets.length > 10) fail('COMMUNITY_INVALID_INPUT');
   targets.forEach(publicId);
@@ -60,6 +66,7 @@ export async function createComment({ user, input, env = process.env, db = pool 
         status,
       ],
     );
+    await bindCommentResources(c, { commentId: result.insertId, postId: post.id, ownerId: user.id, ids });
     if (status === 'published')
       await outbox(c, {
         key: `comment:${id}`,
@@ -300,8 +307,16 @@ export async function listComments({ user, input, env = process.env, db = pool }
     WHERE c.post_id=? AND c.root_comment_id=? AND EXISTS(SELECT 1 FROM community_posts current_post WHERE current_post.id=c.post_id AND current_post.status='published' AND ${authorVisibleSql('current_post')} AND ${unblockedSql('current_post')}) AND c.status IN ('published','withdrawn','removed') AND (c.root_comment_id=0 OR (${authorVisibleSql('c')} AND ${unblockedSql('c')}))${range} HAVING c.status='published' OR (c.root_comment_id=0 AND reply_count>0) ORDER BY c.id LIMIT ?`,
     [viewer, ...params, limit + 1],
   );
+  const page = rows.slice(0, limit);
+  const resources = await commentResources(
+    db,
+    page
+      .filter((c) => c.status === 'published' && Number(c.author_visible))
+      .map((c) => ({ id: c.id, publicId: c.public_id, postId: post.public_id })),
+  );
   return {
-    items: rows.slice(0, limit).map((c) => ({
+    items: page.map((c) => ({
+      ...(resources.has(String(c.id)) ? { resources: resources.get(String(c.id)) } : {}),
       publicId: c.public_id,
       body: c.status === 'published' && Number(c.author_visible) ? c.body : '',
       status: Number(c.author_visible) ? c.status : 'unavailable',
@@ -348,8 +363,13 @@ export async function ownComments({ user, input = {}, env = process.env, db = po
     `SELECT c.id,c.public_id AS publicId,p.public_id AS postId,c.body,c.status,c.row_revision AS revision,parent.public_id AS replyTo,(c.status='published' AND p.status='published' AND ${authorVisibleSql('p')} AND ${unblockedSql('p')}) AS canOpen FROM community_comments c JOIN community_posts p ON p.id=c.post_id LEFT JOIN community_comments parent ON parent.id=c.reply_to_comment_id WHERE c.author_id=? AND c.status<>'withdrawn' ${before ? 'AND c.id<?' : ''} ORDER BY c.id DESC LIMIT ?`,
     [user.id, user.id, user.id, ...(before ? [before] : []), limit + 1],
   );
+  const page = rows.slice(0, limit);
+  const resources = await commentResources(db, page);
   return {
-    items: rows.slice(0, limit).map(({ id, ...row }) => row),
+    items: page.map(({ id, ...row }) => ({
+      ...row,
+      ...(resources.has(String(id)) ? { resources: resources.get(String(id)) } : {}),
+    })),
     nextCursor: rows.length > limit ? String(rows[limit - 1].id) : null,
   };
 }

@@ -1,7 +1,11 @@
 <template>
-  <div v-if="resources?.length" class="community-resources">
+  <div v-if="resources?.length || selected" class="community-resources" :class="{ 'is-comment-resources': forComment }">
     <div v-for="item in resources" :key="item.publicId" class="resource-row" :class="{ 'is-compact': compact }">
-      <BButton class="resource-card" @click="open(item)">
+      <BButton
+        class="resource-card"
+        :disabled="forComment && disabled"
+        @click="externalPreview ? $emit('preview', item) : open(item)"
+      >
         <span class="resource-glyph" :class="item.kind"><SvgIcon :src="icon.resource[item.kind]" /></span>
         <span class="resource-copy"
           ><strong>{{ item.title }}</strong
@@ -28,7 +32,7 @@
       :title="selected.title"
       width="min(var(--ui-layout-800, 800px), 94vw)"
       :show-footer="false"
-      @close="close"
+      @close="closePreview"
     >
       <template #title>
         <span class="reader-heading"
@@ -98,8 +102,11 @@
     editable?: boolean;
     disabled?: boolean;
     compact?: boolean;
+    forComment?: boolean;
+    externalPreview?: boolean;
+    previewResource?: FeedResource;
   }>();
-  defineEmits<{ remove: [item: FeedResource] }>();
+  const emit = defineEmits<{ remove: [item: FeedResource]; preview: [item: FeedResource]; close: [] }>();
   const { t } = useI18n(),
     user = useUserStore();
   const selected = ref<FeedResource | null>(null),
@@ -120,6 +127,10 @@
     generation++;
     selected.value = content.value = null;
   }
+  function closePreview() {
+    close();
+    emit('close');
+  }
   async function open(item: FeedResource) {
     const current = ++generation;
     selected.value = item;
@@ -129,7 +140,11 @@
     try {
       const result = await feedGet<FeedResourceContent>(
         'resources/' + item.publicId,
-        item.postId ? { postId: item.postId, revision: item.revision } : {},
+        item.commentId
+          ? { postId: item.postId, commentId: item.commentId }
+          : item.postId
+            ? { postId: item.postId, revision: item.revision }
+            : {},
       );
       if (current === generation) content.value = result;
     } catch {
@@ -139,6 +154,14 @@
     }
   }
   watch(() => [user.id, user.role, user.adminContext?.id, props.resources], close);
+  watch(
+    () => props.previewResource,
+    (item) => {
+      if (item) void open(item);
+      else close();
+    },
+    { immediate: true },
+  );
   onBeforeUnmount(close);
 </script>
 <style scoped>
@@ -146,6 +169,21 @@
     display: grid;
     gap: var(--ui-space-10, 10px);
     margin: var(--ui-space-18, 18px) 0;
+  }
+  .is-comment-resources {
+    gap: var(--ui-space-4, 4px);
+    margin: var(--ui-space-8, 8px) 0;
+  }
+  .is-comment-resources .resource-card.b_btn {
+    gap: var(--ui-space-8, 8px);
+    padding: var(--ui-space-4, 4px) var(--ui-space-8, 8px);
+    min-height: var(--ui-control-44, 44px);
+  }
+  .is-comment-resources .resource-glyph {
+    padding: var(--ui-space-4, 4px);
+  }
+  .is-comment-resources .resource-read {
+    display: none;
   }
   .resource-row {
     display: flex;

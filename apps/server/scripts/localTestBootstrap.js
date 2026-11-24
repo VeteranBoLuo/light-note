@@ -31,6 +31,7 @@ const migrations = [
   '20261113_todo_reminder_pauses.sql',
   '20261116_points_leaderboard.sql',
   '20261116_points_leaderboard_freeze_lock.sql',
+  '20261124_community_comment_resources.sql',
 ];
 const ensureModules = [
   ['security/index.js', 'ensureSecurityTables'], ['notification.js', 'ensureNotificationTable'],

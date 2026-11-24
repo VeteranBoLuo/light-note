@@ -5,6 +5,7 @@ export interface FeedResource {
   title: string;
   createdAt: string;
   postId?: string;
+  commentId?: string;
   revision?: number;
 }
 export interface FeedResourceContent extends FeedResource {
@@ -55,6 +56,7 @@ export interface FeedPost {
   author: FeedAuthor;
 }
 export interface FeedComment {
+  resources?: FeedResource[];
   publicId: string;
   body: string;
   status: string;

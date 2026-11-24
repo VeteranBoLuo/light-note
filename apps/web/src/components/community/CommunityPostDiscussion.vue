@@ -188,6 +188,11 @@
         <CommunityCommentComposer
           v-if="canWrite && !post.locked"
           v-model="body"
+          :resources="draftResources"
+          :resources-enabled="commentResourcesEnabled"
+          @pick-resource="openResourceOverlay({ kind: 'picker' })"
+          @preview-resource="previewResource"
+          @remove-resource="removeResource"
           :replying="reply?.author?.name"
           :quote="reply?.body"
           @cancel-reply="reply = null"
@@ -200,6 +205,17 @@
         }}</p>
       </div></BDrawer
     >
+    <CommunityResourcePicker
+      v-if="resourceOverlay?.kind === 'picker'"
+      for-comment
+      @add="addResource"
+      @close="closeResourceOverlay"
+    />
+    <CommunityPostResources
+      v-if="resourceOverlay?.kind === 'preview'"
+      :preview-resource="resourceOverlay.resource"
+      @close="closeResourceOverlay"
+    />
     <CommunitySavePost
       v-if="saveKind"
       :key="post.publicId + saveKind"
@@ -218,13 +234,25 @@
   import { useUserStore } from '@/store';
   import { VIEWPORT_BREAKPOINTS } from '@/config/responsive';
   import CommunityPostOutline from './CommunityPostOutline.vue';
-  import { feedGet, feedOperation, type FeedPost, type FeedComment, type FeedPage } from '@/api/communityFeedApi';
+  import {
+    discardFeedResource,
+    feedGet,
+    feedOperation,
+    type FeedPost,
+    type FeedComment,
+    type FeedPage,
+    type FeedResource,
+  } from '@/api/communityFeedApi';
+  import { COMMUNITY_FEED_LIMITS } from '@lightnote/shared/community-feed';
+  import { useMobileLayout } from '@/composables/useMobileLayout';
   import { closeCurrentMobileOverlayThen } from '@/utils/mobileOverlayHistory';
   import BDrawer from '@/components/base/BasicComponents/BDrawer.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import BVirtualList from '@/components/base/BasicComponents/BVirtualList.vue';
   import CommunityCommentComposer from './CommunityCommentComposer.vue';
+  import CommunityPostResources from './CommunityPostResources.vue';
+  import CommunityResourcePicker from './CommunityResourcePicker.vue';
   import ChatInlineEmojiText from '@/components/communityChat/ChatInlineEmojiText.vue';
   import { chatMessageLinkNavigatorKey } from '@/components/communityChat/chatMessageLinks';
   import Alert from '@/components/base/BasicComponents/BModal/Alert';
@@ -238,6 +266,7 @@
   const props = defineProps<{
     post: FeedPost;
     canWrite: boolean;
+    commentResourcesEnabled?: boolean;
     actionsTarget?: HTMLElement | null;
     scrollContainer?: HTMLElement | null;
     overlayOpen?: boolean;
@@ -268,6 +297,7 @@
     cursor = ref<string | null>(null),
     reply = ref<FeedComment | null>(null),
     body = ref(''),
+    draftResources = ref<FeedResource[]>([]),
     busy = ref(false),
     error = ref(false),
     loading = ref(false),
@@ -279,6 +309,76 @@
     props.post.topics?.some((topic) => (typeof topic === 'string' ? topic : topic.slug) === 'help'),
   );
   const commentsOpen = ref(false);
+  const isMobile = useMobileLayout();
+  type ResourceOverlay = { kind: 'picker' } | { kind: 'preview'; resource: FeedResource };
+  const resourceOverlay = ref<ResourceOverlay | null>(null);
+  let resourceTransition = false;
+  let reopenCommentsAfterResource = false;
+
+  async function openResourceOverlay(overlay: ResourceOverlay) {
+    if (resourceOverlay.value || resourceTransition || !commentsOpen.value) return;
+    const current = generation;
+    reopenCommentsAfterResource = isMobile.value;
+    if (!reopenCommentsAfterResource) {
+      resourceOverlay.value = overlay;
+      return;
+    }
+    resourceTransition = true;
+    await closeCurrentMobileOverlayThen(
+      () => {
+        commentsOpen.value = false;
+      },
+      () => {
+        if (current !== generation) return;
+        resourceTransition = false;
+        resourceOverlay.value = overlay;
+      },
+    );
+  }
+
+  async function closeResourceOverlay() {
+    if (!reopenCommentsAfterResource) {
+      resourceOverlay.value = null;
+      return;
+    }
+    const current = generation;
+    reopenCommentsAfterResource = false;
+    resourceTransition = true;
+    await closeCurrentMobileOverlayThen(
+      () => {
+        resourceOverlay.value = null;
+      },
+      () => {
+        if (current !== generation) return;
+        resourceTransition = false;
+        commentsOpen.value = true;
+      },
+    );
+  }
+
+  function previewResource(resource: FeedResource) {
+    void openResourceOverlay({ kind: 'preview', resource: { ...resource } });
+  }
+
+  function addResource(resource: FeedResource) {
+    if (draftResources.value.length < COMMUNITY_FEED_LIMITS.resources)
+      draftResources.value = [...draftResources.value, resource];
+    else void discardFeedResource(resource.publicId).catch(() => {});
+  }
+
+  function removeResource(resource: FeedResource) {
+    draftResources.value = draftResources.value.filter((item) => item.publicId !== resource.publicId);
+    void discardFeedResource(resource.publicId).catch(() => {});
+  }
+
+  function resetResourceDraft() {
+    if (!busy.value) {
+      for (const item of draftResources.value) void discardFeedResource(item.publicId).catch(() => {});
+    }
+    draftResources.value = [];
+    resourceOverlay.value = null;
+    resourceTransition = reopenCommentsAfterResource = false;
+  }
   // 评论里的站内链接先关掉占 history 的评论抽屉，再进入目标页。
   provide(chatMessageLinkNavigatorKey, (path) =>
     closeCurrentMobileOverlayThen(
@@ -330,20 +430,30 @@
             c.replyTo ? ' → ' + c.replyTo.name : '',
             c.isSolution ? ' · ' + t('community.feed.solution') : '',
           ]),
-          h(
-            'p',
-            { class: 'feed-body' },
-            c.status === 'published'
-              ? h(ChatInlineEmojiText, { content: c.body, links: true })
-              : t(
-                  'community.feed.' +
-                    (c.status === 'unavailable'
-                      ? 'unavailableStatus'
-                      : c.status === 'withdrawn'
-                        ? 'commentDeleted'
-                        : c.status),
-                ),
-          ),
+          c.body || c.status !== 'published'
+            ? h(
+                'p',
+                { class: 'feed-body' },
+                c.status === 'published'
+                  ? h(ChatInlineEmojiText, { content: c.body, links: true })
+                  : t(
+                      'community.feed.' +
+                        (c.status === 'unavailable'
+                          ? 'unavailableStatus'
+                          : c.status === 'withdrawn'
+                            ? 'commentDeleted'
+                            : c.status),
+                    ),
+              )
+            : null,
+          c.status === 'published' && c.resources?.length
+            ? h(CommunityPostResources, {
+                resources: c.resources,
+                forComment: true,
+                externalPreview: true,
+                onPreview: previewResource,
+              })
+            : null,
           h(
             'div',
             { class: 'feed-actions' },
@@ -459,10 +569,12 @@
       postId: props.post.publicId,
       body: body.value,
       mentions: [],
+      ...(draftResources.value.length ? { resources: draftResources.value.map((item) => item.publicId) } : {}),
       ...(reply.value ? { replyTo: reply.value.publicId } : {}),
     });
     if (!result) return;
     body.value = '';
+    draftResources.value = [];
     submitted.value = result.status;
     const root = reply.value
       ? comments.value.find((c) => c.publicId === reply.value?.publicId)?.publicId ||
@@ -555,9 +667,17 @@
     });
   }
   watch(
-    [() => props.post.publicId, () => user.id, () => route.query.comment, () => route.query.comments],
+    [
+      () => props.post.publicId,
+      () => user.id,
+      () => user.role,
+      () => user.adminContext?.id,
+      () => route.query.comment,
+      () => route.query.comments,
+    ],
     async () => {
       const current = ++generation;
+      resetResourceDraft();
       saveKind.value = null;
       loading.value = loadingMore.value = false;
       comments.value = [];
@@ -648,7 +768,10 @@
     },
     { flush: 'post' },
   );
-  onBeforeUnmount(() => generation++);
+  onBeforeUnmount(() => {
+    generation++;
+    resetResourceDraft();
+  });
 </script>
 
 <style scoped lang="less">
