@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { unnumberedCloudUploadStem } from '@lightnote/shared/cloud-upload';
 
 // Validate a display name, never an OBS path. Normalization remains the caller's
 // responsibility so existing managed and legacy upload naming semantics stay explicit.
@@ -15,15 +16,22 @@ export function assertCloudFileDisplayName(fileName) {
 }
 
 // 调用方先持有账号锁；数据库判等，并使用 current read 避免事务旧快照漏掉刚提交的名称。
-export async function uniqueCloudFileName(connection, userId, requestedName, { includeDeleted = true } = {}) {
+export async function uniqueCloudFileName(
+  connection,
+  userId,
+  requestedName,
+  { includeDeleted = true, uploadBatchNames } = {},
+) {
   const deletionFilter = includeDeleted ? 'del_flag IN (0, 1)' : 'del_flag = 0';
   const extension = path.extname(requestedName);
-  const base = requestedName.slice(0, requestedName.length - extension.length) || '文件';
+  const stem = requestedName.slice(0, requestedName.length - extension.length) || '文件';
+  const base = uploadBatchNames ? unnumberedCloudUploadStem(stem) : stem;
   for (let start = 0; start < 1000;) {
     // 常见的无冲突名称仍只检查一次；冲突后分批检查，避免每个后缀一次数据库往返。
     const size = start === 0 ? 1 : Math.min(32, 1000 - start);
     const candidates = Array.from({ length: size }, (_, offset) => {
       const index = start + offset;
+      if (index === 0 && uploadBatchNames) return requestedName;
       const suffix = index === 0 ? '' : ` (${index})`;
       return `${base.slice(0, Math.max(1, 255 - extension.length - suffix.length))}${suffix}${extension}`;
     });
@@ -41,7 +49,9 @@ export async function uniqueCloudFileName(connection, userId, requestedName, { i
          AND file_name IN (${candidates.map(() => '?').join(', ')}) FOR UPDATE`,
         [...candidates, userId, ...candidates],
       );
-      const free = candidates.findIndex((_, index) => !Number(rows[0]?.[`occupied${index}`]));
+      const free = candidates.findIndex(
+        (candidate, index) => !uploadBatchNames?.has(candidate) && !Number(rows[0]?.[`occupied${index}`]),
+      );
       if (free !== -1) return candidates[free];
     }
     start += size;

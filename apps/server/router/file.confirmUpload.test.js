@@ -209,6 +209,51 @@ describe('云空间普通上传覆盖随机 OBS 对象', () => {
     expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ status: 200 }));
   });
 
+  it.each([
+    { requested: 'avatar.png', occupied: false, expected: 'avatar.png' },
+    { requested: 'avatar.png', occupied: true, expected: 'avatar (2).png' },
+    { requested: 'avatar (1).png', occupied: false, expected: 'avatar (1).png' },
+    { requested: 'avatar (1).png', occupied: true, expected: 'avatar (3).png', reserved: 'avatar (2).png' },
+  ])('保留两份时将 $requested 保存为 $expected（名称被占用：$occupied）', async ({ requested, occupied, expected, reserved }) => {
+    mocks.pool.query.mockResolvedValue([[]]);
+    let nextFileId = 6;
+    const connection = {
+      beginTransaction: vi.fn(),
+      commit: vi.fn(),
+      rollback: vi.fn(),
+      release: vi.fn(),
+      query: vi.fn(async (sql, args) => {
+        if (sql.startsWith('SELECT id, file_name, del_flag FROM files')) return [[]];
+        if (sql.includes('SUM(file_size)')) return [[{ used: 0 }]];
+        if (sql.startsWith('SELECT id FROM files WHERE create_by')) return [occupied && args[1] === requested ? [{ id: 5 }] : []];
+        if (sql.startsWith('SELECT MAX(file_name')) return [[{ occupied0: 1 }]];
+        if (sql === 'INSERT INTO files SET ?') return [{ insertId: nextFileId++ }];
+        return [{ affectedRows: 1 }];
+      }),
+    };
+    mocks.pool.getConnection.mockResolvedValue(connection);
+    const req = request();
+    req.body.files[0] = { ...req.body.files[0], fileName: requested, keepBoth: true };
+    if (reserved) req.body.files.push({ ...req.body.files[0], fileName: reserved });
+    const res = response();
+    await mocks.routes.get('/confirmUpload').at(-1)(req, res);
+
+    expect(res.send).toHaveBeenCalledWith({
+      status: 200,
+      msg: '',
+      data: [
+        { filename: expected, fileId: 6, status: '已上传' },
+        ...(reserved ? [{ filename: reserved, fileId: 7, status: '已上传' }] : []),
+      ],
+    });
+    expect(connection.query).toHaveBeenCalledWith('INSERT INTO files SET ?', [
+      expect.objectContaining({ file_name: expected }),
+    ]);
+    expect(connection.query.mock.calls.some(([sql]) => sql.startsWith('UPDATE files'))).toBe(false);
+    expect(connection.query.mock.calls.some(([sql]) => sql.includes('SUM(file_size)') && sql.includes('file_name IN'))).toBe(false);
+    expect(mocks.deleteObjectFromObs).not.toHaveBeenCalled();
+  });
+
   it('数据库事务失败时不删除仍被旧记录引用的随机对象', async () => {
     const connection = {
       beginTransaction: vi.fn(),

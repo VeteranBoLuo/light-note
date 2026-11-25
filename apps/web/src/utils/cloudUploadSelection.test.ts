@@ -49,8 +49,8 @@ describe('大批次文件选择', () => {
 });
 
 describe('批量自动改名', () => {
-  it('3100 个相同名称生成唯一序号，查找成本随文件数增长，不反复扫描旧序号', async () => {
-    const files = Array.from({ length: 3100 }, () => photo('same.jpg'));
+  it('3100 个原名与已编号文件共用同一序号，查找成本随文件数增长', async () => {
+    const files = Array.from({ length: 3100 }, (_, index) => photo(index % 2 === 0 ? 'same.jpg' : 'same (1).jpg'));
     const existing = new Set(['same.jpg', 'same (1).jpg']);
     const has = vi.spyOn(existing, 'has');
     const renamed = await renameCloudUploadSelection(
@@ -67,19 +67,38 @@ describe('批量自动改名', () => {
     expect(await renamed[0].text()).toBe('original bytes');
   });
 
-  it('不抢占本批后续原名，同时处理无扩展名和点文件', async () => {
-    const files = ['a.jpg', 'a (1).jpg', '.env', 'README'].map((name) => photo(name));
+  it('只改已占用的名称，保留本批其他原名和文件对象', async () => {
+    const files = ['a.jpg', 'a (1).jpg', '.env', 'README', 'README'].map((name) => photo(name));
     const result = await renameCloudUploadSelection(
       files,
       files.map((file) => file.name),
-      new Set(),
+      new Set(['a.jpg', '.env']),
     );
-    expect(result.map((file) => file.name)).toEqual(['a (2).jpg', 'a (1) (1).jpg', '.env (1)', 'README (1)']);
+    expect(result.map((file) => file.name)).toEqual(['a (2).jpg', 'a (1).jpg', '.env (1)', 'README', 'README (1)']);
+    expect(result[1]).toBe(files[1]);
+    expect(result[3]).toBe(files[3]);
+  });
+
+  it('撞名时填补同一基础名的缺号，保留标题括号和未撞名的原名', async () => {
+    const files = ['照片（公园） (4).jpg', '照片（公园） (2).jpg', '照片（公园）.jpg'].map(photo);
+    const result = await renameCloudUploadSelection(
+      files,
+      files.map((file) => file.name),
+      new Set(['照片（公园） (4).jpg']),
+    );
+    expect(result.map((file) => file.name)).toEqual([
+      '照片（公园） (1).jpg',
+      '照片（公园） (2).jpg',
+      '照片（公园）.jpg',
+    ]);
+    expect(result[1]).toBe(files[1]);
+    expect(result[2]).toBe(files[2]);
   });
 
   it('历史名称已占用大量序号时也可响应取消', async () => {
     vi.useFakeTimers();
     const existing = new Set(Array.from({ length: 10000 }, (_, index) => `same (${index + 1}).jpg`));
+    existing.add('same.jpg');
     const controller = new AbortController();
     const result = renameCloudUploadSelection([photo('same.jpg')], ['same.jpg'], existing, controller.signal).catch(
       (error) => error,

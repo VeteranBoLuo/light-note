@@ -9,3 +9,8 @@ export function cloudUploadMode(size) {
     return "invalid";
   return size > CLOUD_DIRECT_MAX_BYTES ? "multipart" : "direct";
 }
+
+/** 碰到同名时，只复用系统格式的末尾编号，保留标题中的其他括号。 */
+export function unnumberedCloudUploadStem(stem) {
+  return stem.replace(/(.) \([1-9]\d*\)$/u, "$1");
+}

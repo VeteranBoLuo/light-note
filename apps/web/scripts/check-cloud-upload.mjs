@@ -233,15 +233,17 @@ try {
   const duplicates = await open();
   await duplicates.evaluate(() => {
     window.__cloudUploadFixture.controls.fail = false;
-    void window.__cloudUploadFixture.start(2, ['same.jpg', 'same.jpg']);
+    void window.__cloudUploadFixture.start(4, ['same.jpg', 'same (1).jpg', 'same (1).jpg', 'unique.jpg']);
   });
   await duplicates.getByText('本次选择或待上传队列中存在同名文件。自动改名后可全部保留，避免照片相互覆盖。').waitFor();
   assert.equal(await duplicates.getByRole('button', { name: '全部覆盖', exact: true }).count(), 0);
-  await duplicates.getByRole('button', { name: '全部自动改名', exact: true }).click();
+  await duplicates.getByRole('button', { name: '仅重名文件自动改名', exact: true }).click();
   await duplicates.getByText('上传完成', { exact: true }).waitFor();
   assert.deepEqual(await duplicates.evaluate(() => window.__cloudUploadFixture.controls.puts), [
+    'same.jpg',
     'same (1).jpg',
     'same (2).jpg',
+    'unique.jpg',
   ]);
   await duplicates.close();
 
@@ -477,7 +479,7 @@ try {
   });
   await collision.getByText(/本次选择或待上传队列中存在同名文件/).waitFor();
   assert.equal(await collision.getByRole('button', { name: '全部覆盖', exact: true }).count(), 0);
-  await collision.getByRole('button', { name: '全部自动改名', exact: true }).click();
+  await collision.getByRole('button', { name: '仅重名文件自动改名', exact: true }).click();
   await collision.getByText('上传完成', { exact: true }).waitFor();
   assert.deepEqual(await collision.evaluate(() => window.__cloudUploadFixture.controls.puts), [
     'same.jpg',

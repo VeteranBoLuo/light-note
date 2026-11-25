@@ -6075,7 +6075,7 @@ export default {
       'Your selection or pending queue contains duplicate names. Rename automatically to keep every photo without overwriting another.',
     uploadQueueDuplicates: '{count} files already exist, including “{names}”. Choose how to proceed.',
     uploadQueueOverwrite: 'Overwrite all',
-    uploadQueueRename: 'Rename automatically',
+    uploadQueueRename: 'Auto-rename duplicates only',
     uploadQueueStates: {
       merging: 'Merging',
       queued: 'Waiting',
