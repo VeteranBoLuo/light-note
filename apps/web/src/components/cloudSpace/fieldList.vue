@@ -3314,7 +3314,7 @@
   }
   .file-card-overlay--media {
     background: radial-gradient(
-      ellipse var(--ui-layout-100, 100px) var(--ui-layout-64, 64px) at top right,
+      ellipse var(--ui-layout-92, 92px) var(--ui-layout-58, 58px) at top right,
       var(--cloud-file-cover-action-scrim) 50%,
       transparent
     );
