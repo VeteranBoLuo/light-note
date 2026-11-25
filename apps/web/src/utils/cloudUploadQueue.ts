@@ -29,6 +29,7 @@ type Task = {
   size: number;
   type: string;
   folderId: string | null;
+  keepBoth: boolean;
   status: CloudUploadStatus;
   progress: number;
   info?: UploadInfo;
@@ -93,6 +94,7 @@ export function createCloudUploadQueue(
   files: File[],
   folderId: string | null,
   changed: (state: CloudUploadSnapshot) => void,
+  keepBoth = false,
 ) {
   const tasks: Task[] = files.map((file, id) => ({
     id,
@@ -101,6 +103,7 @@ export function createCloudUploadQueue(
     size: file.size,
     type: file.type,
     folderId,
+    keepBoth,
     status: 'queued',
     progress: 0,
   }));
@@ -337,6 +340,7 @@ export function createCloudUploadQueue(
                 fileType: task.info!.fileType || task.type,
                 fileSize: task.size,
                 objectKey: task.info!.objectKey,
+                ...(task.keepBoth ? { keepBoth: true } : {}),
                 ...(task.info!.multipartSessionId ? { multipartSessionId: task.info!.multipartSessionId } : {}),
               })),
               folderId: group[0].folderId,
@@ -457,7 +461,7 @@ export function createCloudUploadQueue(
   }
   return {
     run,
-    append(additions: File[], targetFolderId: string | null) {
+    append(additions: File[], targetFolderId: string | null, keepBoth = false) {
       if (disposed) throw new Error('UPLOAD_QUEUE_DISPOSED');
       const start = tasks.length;
       const added: Task[] = additions.map((file, index) => ({
@@ -467,6 +471,7 @@ export function createCloudUploadQueue(
         size: file.size,
         type: file.type,
         folderId: targetFolderId,
+        keepBoth,
         status: 'queued',
         progress: 0,
       }));

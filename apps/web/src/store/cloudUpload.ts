@@ -123,6 +123,7 @@ export default defineStore('cloud-upload', () => {
       const localDuplicates = new Set(names).size !== names.length || names.some((name) => reserved.has(name));
       const duplicates = checks.filter((item: any) => item.exists).map((item: any) => item.fileName);
       let selected = files;
+      let keepBoth = false;
       if (localDuplicates || duplicates.length) {
         const choice = await new Promise<'overwrite' | 'rename' | 'cancel'>((resolve) => {
           const cancel = () => {
@@ -157,15 +158,21 @@ export default defineStore('cloud-upload', () => {
         if (choice === 'rename') {
           const existing = new Set<string>([...(response.data?.allNames || []), ...duplicates, ...reserved]);
           selected = await renameCloudUploadSelection(files, names, existing, controller.signal);
+          keepBoth = true;
         }
       }
       if (!active()) return;
       lastFolderId.value = folderId;
-      if (queue) queue.append(selected, folderId);
+      if (queue) queue.append(selected, folderId, keepBoth);
       else
-        queue = createCloudUploadQueue(selected, folderId, (state) => {
-          if (generation === currentGeneration && scope() === owner) progress.value = state;
-        });
+        queue = createCloudUploadQueue(
+          selected,
+          folderId,
+          (state) => {
+            if (generation === currentGeneration && scope() === owner) progress.value = state;
+          },
+          keepBoth,
+        );
       checking.value = false;
       if (!queue.snapshot().running) return run(queue, false);
     } catch (error) {

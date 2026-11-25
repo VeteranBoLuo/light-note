@@ -5830,7 +5830,7 @@ export default {
     uploadQueueLocalDuplicates: '本次选择或待上传队列中存在同名文件。自动改名后可全部保留，避免照片相互覆盖。',
     uploadQueueDuplicates: '「{names}」等 {count} 个文件已存在，请选择处理方式。',
     uploadQueueOverwrite: '全部覆盖',
-    uploadQueueRename: '全部自动改名',
+    uploadQueueRename: '仅重名文件自动改名',
     uploadQueueStates: {
       merging: '合并中',
       queued: '等待上传',

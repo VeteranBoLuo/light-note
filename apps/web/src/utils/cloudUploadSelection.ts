@@ -1,4 +1,4 @@
-import { CLOUD_UPLOAD_MAX_BYTES } from '@lightnote/shared/cloud-upload';
+import { CLOUD_UPLOAD_MAX_BYTES, unnumberedCloudUploadStem } from '@lightnote/shared/cloud-upload';
 /** 云空间单文件上限；>5GiB 由队列选择分片协议。 */
 export const CLOUD_UPLOAD_MAX_FILE_BYTES = CLOUD_UPLOAD_MAX_BYTES;
 
@@ -54,7 +54,7 @@ export async function prepareCloudUploadSelection(
   return names;
 }
 
-/** 保留本批原名，按名称缓存下一个可用序号，避免相同原名反复从 1 扫描。 */
+/** 优先保留本批原名，只为撞名项分配序号，并缓存下一个可用序号。 */
 export async function renameCloudUploadSelection(
   files: readonly File[],
   names: readonly string[],
@@ -62,6 +62,7 @@ export async function renameCloudUploadSelection(
   signal?: AbortSignal,
 ) {
   const nextSuffix = new Map<string, number>();
+  const originalNames = new Set<string>();
   const renamed: File[] = [];
   let operations = 0;
   let sliceStarted = performance.now();
@@ -73,23 +74,30 @@ export async function renameCloudUploadSelection(
     }
   };
   for (const name of names) {
-    existing.add(name);
+    originalNames.add(name);
     await checkpoint();
   }
   for (let index = 0; index < files.length; index++) {
     const name = names[index];
+    const file = files[index];
+    await checkpoint();
+    if (!existing.has(name)) {
+      existing.add(name);
+      renamed.push(file);
+      continue;
+    }
     const dot = name.lastIndexOf('.');
-    const stem = dot > 0 ? name.slice(0, dot) : name;
+    const stem = unnumberedCloudUploadStem(dot > 0 ? name.slice(0, dot) : name);
     const extension = dot > 0 ? name.slice(dot) : '';
-    let suffix = nextSuffix.get(name) || 1;
+    const baseName = stem + extension;
+    let suffix = nextSuffix.get(baseName) || 1;
     let candidate: string;
     do {
       candidate = `${stem} (${suffix++})${extension}`;
       await checkpoint();
-    } while (existing.has(candidate));
-    nextSuffix.set(name, suffix);
+    } while (existing.has(candidate) || originalNames.has(candidate));
+    nextSuffix.set(baseName, suffix);
     existing.add(candidate);
-    const file = files[index];
     renamed.push(new File([file], candidate, { type: file.type, lastModified: file.lastModified }));
   }
   return renamed;
