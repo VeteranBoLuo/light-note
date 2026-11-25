@@ -8,11 +8,10 @@ import { lockLeaderboardFacts } from '../leaderboardSettlementLock.js';
 import {
   addLeaderboardDays,
   getLeaderboardConfig,
-  LEADERBOARD_PRIZES,
   LEADERBOARD_REWARD_REASON,
   leaderboardOpen,
   leaderboardRange,
-  leaderboardSeats,
+  leaderboardAwards,
   leaderboardWeekMode,
   orderLeaderboard,
 } from '../leaderboardPolicy.js';
@@ -82,14 +81,13 @@ async function freezeWeek(db, week, config) {
     const { scores } = await readLeaderboardScores('week', range, conn);
     const accounts = await readLeaderboardAccounts(conn, scores.map((row) => row.userId));
     const ranked = orderLeaderboard(scores, accounts);
-    const { qualifiedCount, slots, winners } = leaderboardSeats(ranked, mode);
-    const slotsByUser = new Map(winners.map((row, index) => [row.userId, index + 1]));
+    const { qualifiedCount, awards } = leaderboardAwards(ranked, mode);
     // Freeze every place so players can also see their own rank below the public cutoff.
     for (let offset = 0; offset < ranked.length; offset += BATCH_SIZE) {
       const records = ranked.slice(offset, offset + BATCH_SIZE).map((row) => {
-        const slot = slotsByUser.get(row.userId) || null;
-        return ['week', week, row.userId, row.rank, row.score, row.activeDays, slot,
-          slot ? LEADERBOARD_PRIZES[slot - 1] : 0, slot ? 'pending' : 'none'];
+        const points = awards.get(row.rank) ?? 0;
+        return ['week', week, row.userId, row.rank, row.score, row.activeDays,
+          points ? row.rank : null, points, points ? 'pending' : 'none'];
       });
       await conn.query(
         `INSERT INTO leaderboard_results
@@ -101,7 +99,7 @@ async function freezeWeek(db, week, config) {
     await conn.query(
       `UPDATE leaderboard_periods SET mode = ?, state = ?, frozen_at = NOW(), qualified_count = ?, slots = ?
         WHERE board = 'week' AND period_key = ?`,
-      [mode, slots ? 'frozen' : 'complete', qualifiedCount, slots, week],
+      [mode, awards.size ? 'frozen' : 'complete', qualifiedCount, awards.size, week],
     );
     return true;
   });
@@ -178,8 +176,8 @@ async function notifyAward(db, { week, userId }) {
         type: 'system',
         title: en ? 'Weekly leaderboard reward' : '积分周榜奖励已到账',
         content: en
-          ? `${week} – ${end}: your rank was #${row.rank} and you earned ${row.points} points (prize slot ${row.slot}).`
-          : `${week} 至 ${end}，你在周榜排名第 ${row.rank}，获得第 ${row.slot} 席奖励，共 ${row.points} 积分。`,
+          ? `${week} – ${end}: your rank was #${row.rank} and you earned ${row.points} points.`
+          : `${week} 至 ${end}，你在周榜排名第 ${row.rank}，获得 ${row.points} 积分奖励。`,
         link: '/growth?section=leaderboard',
         sourceType: LEADERBOARD_REWARD_REASON,
         sourceId: `week:${week}`,

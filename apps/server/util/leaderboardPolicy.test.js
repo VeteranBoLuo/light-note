@@ -3,7 +3,7 @@ import {
   canViewLeaderboard,
   getLeaderboardConfig,
   leaderboardRange,
-  leaderboardSeats,
+  leaderboardAwards,
   leaderboardServerShift,
   leaderboardSqlDate,
   leaderboardWeekMode,
@@ -44,16 +44,29 @@ describe('积分排行榜周期与门槛', () => {
     expect(() => getLeaderboardConfig({ POINTS_LEADERBOARD_OPEN_WEEK: '2026-11-17' })).toThrow(/Beijing Monday/);
   });
 
-  it('按排序和达标人数确定 0 至 3 个席位', () => {
+  it('按榜分、有效日、达分时间和账号稳定排序', () => {
     const scores = ['b', 'c', 'a', 'd'].map((userId, index) => ({
       userId, score: 100, activeDays: index === 1 ? 2 : 3, reachedAt: index === 3 ? '2026-11-17' : '2026-11-16',
     }));
     const ordered = orderLeaderboard(scores, new Set(scores.map((row) => row.userId)));
     expect(ordered.map((row) => row.userId)).toEqual(['a', 'b', 'd', 'c']);
-    for (const [qualifiedCount, slots] of [[0, 0], [1, 0], [2, 1], [3, 1], [4, 2], [5, 2], [6, 3], [7, 3]]) {
-      const candidates = Array.from({ length: qualifiedCount }, () => ({ score: 100, activeDays: 3 }));
-      expect(leaderboardSeats(candidates, 'reward')).toMatchObject({ qualifiedCount, slots });
-      expect(leaderboardSeats(candidates, 'observation').slots).toBe(0);
-    }
+  });
+
+  it.each([
+    [[false, false, false], []],
+    [[true, false, false], [[1, 88]]],
+    [[true, true, false], [[1, 88], [2, 77]]],
+    [[true, true, true], [[1, 88], [2, 77], [3, 66]]],
+    [[false, true, true], [[2, 77], [3, 66]]],
+    [[true, false, true], [[1, 88], [3, 66]]],
+  ])('只给达标的前三名按实际名次定奖（%j）', (eligibility, entries) => {
+    const candidates = [...eligibility, true].map((qualified, index) => ({
+      rank: index + 1, score: 100, activeDays: qualified ? 3 : 2,
+    }));
+    expect(leaderboardAwards(candidates, 'reward')).toEqual({
+      qualifiedCount: eligibility.filter(Boolean).length + 1,
+      awards: new Map(entries),
+    });
+    expect(leaderboardAwards(candidates, 'observation').awards.size).toBe(0);
   });
 });

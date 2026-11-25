@@ -6,9 +6,9 @@ import {
   LEADERBOARD_MIN_DAYS,
   LEADERBOARD_MIN_SCORE,
   LEADERBOARD_PRIZES,
+  leaderboardAwards,
   leaderboardQualified,
   leaderboardRange,
-  leaderboardSeats,
   leaderboardServerShift,
   leaderboardSqlDate,
   leaderboardWeekMode,
@@ -223,18 +223,21 @@ export async function readLeaderboard(participantId, board, previous, { db = poo
   const ranked = orderLeaderboard(scores, profiles);
   let weekly = null;
   let championId = null;
+  let scoreAtLastSeat = null;
   if (board === 'week') {
     const [[period]] = await db.query(
       "SELECT mode, state FROM leaderboard_periods WHERE board = 'week' AND period_key = ?",
       [range.start],
     );
     const mode = period && period.state !== 'open' ? period.mode : leaderboardWeekMode(range.start, config);
-    const { qualifiedCount, slots, winners } = leaderboardSeats(ranked, mode);
-    weekly = { mode, qualifiedCount, slots, paidSlots: 0 };
-    winners.forEach((row, index) => {
-      row.rewardSlot = index + 1;
-      row.rewardPoints = LEADERBOARD_PRIZES[index];
-    });
+    const { qualifiedCount, awards } = leaderboardAwards(ranked, mode);
+    weekly = { mode, qualifiedCount, slots: awards.size, paidSlots: 0 };
+    for (const [rank, points] of awards) {
+      const row = ranked[rank - 1];
+      row.rewardSlot = rank;
+      row.rewardPoints = points;
+      scoreAtLastSeat = row.score;
+    }
     if (previousAvailable) {
       const [[champion]] = await db.query(
         `SELECT user_id AS userId FROM leaderboard_results
@@ -247,10 +250,9 @@ export async function readLeaderboard(participantId, board, previous, { db = poo
   const own = ranked.find((row) => row.userId === participantId);
   const mine = own ? { ...publicRow(own, profiles.get(participantId), participantId, championId), sources: own.sources } : null;
   const rows = ranked.slice(0, LEADERBOARD_LIMIT).map((row) => publicRow(row, profiles.get(row.userId), participantId, championId));
-  const lastSeat = weekly?.slots && ranked.find((row) => row.rewardSlot === weekly.slots);
   return {
     ...common, range, phase: 'live', rows, mine, ownDays: days.get(participantId)?.size ?? 0,
-    total: ranked.length, weekly, scoreAtLastSeat: lastSeat?.score ?? null,
+    total: ranked.length, weekly, scoreAtLastSeat,
   };
 }
 

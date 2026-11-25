@@ -95,16 +95,15 @@
           <li
             v-for="(points, index) in data.rules.prizes"
             :key="index"
-            :class="{ 'is-open': !observationWeek && index < data.weekly.slots }"
-            :data-seat="index + 1"
+            :data-rank="index + 1"
           >
-            <span class="prize-tier"><SvgIcon :src="icon.growth.medal" size="16" aria-hidden="true" />{{ t('growth.leaderboard.seatValue', { n: index + 1 }) }}</span>
+            <span class="prize-tier"><SvgIcon :src="icon.growth.medal" size="16" aria-hidden="true" />{{ t('growth.leaderboard.placeValue', { n: index + 1 }) }}</span>
             <strong>{{ points }}</strong>
           </li>
         </ol>
         <p v-if="!observationWeek" class="prize-summary">{{ rewardSummary }}</p>
         <p class="prize-note">{{ t('growth.leaderboard.threshold', { score: data.rules.minimumScore, days: data.rules.minimumDays }) }}</p>
-        <p class="prize-guide">{{ t('growth.leaderboard.seatRule') }}</p>
+        <p v-if="data.phase === 'live' && !observationWeek" class="prize-guide">{{ t('growth.leaderboard.prizeRule') }}</p>
       </BCard>
     </div>
     <LeaderboardRules v-if="rules" :mobile="mobile" :open="rulesOpen" :rules="rules" @close="rulesOpen = false" />
@@ -283,12 +282,10 @@
       if (days > 0) missing.push(t('growth.leaderboard.effectiveDaysValue', { n: days }));
       return t('growth.leaderboard.shortfall', { missing: new Intl.ListFormat(locale.value).format(missing) });
     }
-    if (mine.rewardSlot) return t('growth.leaderboard.ownProjected', { n: mine.rewardSlot });
-    if (!snapshot.weekly.slots) return t('growth.leaderboard.waitForSeats');
-    const difference = (snapshot.scoreAtLastSeat ?? mine.score) - mine.score;
-    return t(difference > 0 ? 'growth.leaderboard.gap' : 'growth.leaderboard.qualified', {
-      slot: snapshot.weekly.slots, n: number(difference),
-    });
+    if (mine.rewardPoints) return t('growth.leaderboard.ownProjected', { n: number(mine.rewardPoints) });
+    return t(mine.rank > snapshot.rules.prizes.length
+      ? 'growth.leaderboard.qualifiedOutsideTop'
+      : 'growth.leaderboard.qualified');
   });
 
   const observationWeek = computed(() => data.value?.weekly?.mode === 'observation');
@@ -298,8 +295,8 @@
     const snapshot = data.value;
     if (!snapshot?.weekly) return '';
     const { slots, paidSlots, qualifiedCount } = snapshot.weekly;
-    const key = snapshot.phase === 'settled' ? 'paidSeats' : slots ? 'liveSeats' : 'noSeats';
-    return t('growth.leaderboard.' + key, { qualified: qualifiedCount, seats: slots, paid: paidSlots });
+    const key = snapshot.phase === 'settled' && slots ? 'rewardProgress' : 'qualifiedCount';
+    return t('growth.leaderboard.' + key, { qualified: qualifiedCount, total: slots, paid: paidSlots });
   });
 </script>
 
@@ -464,27 +461,23 @@
       min-height: var(--ui-control-34, 34px);
       padding: var(--ui-space-5, 5px) var(--ui-space-3, 3px);
       border-radius: var(--ui-space-9, 9px);
-      border: 1px solid var(--workspace-border);
-      background: var(--workspace-canvas);
+      border: 1px solid var(--prize-border, var(--workspace-border));
+      background: var(--prize-background, var(--workspace-canvas));
 
-      &[data-seat='1'] {
-        --seat-foreground: var(--chip-pending-fg);
-        --seat-background: var(--chip-pending-bg);
-        --seat-border: var(--chip-pending-border);
+      &[data-rank='1'] {
+        --prize-foreground: var(--chip-pending-fg);
+        --prize-background: var(--chip-pending-bg);
+        --prize-border: var(--chip-pending-border);
       }
-      &[data-seat='2'] {
-        --seat-foreground: var(--chip-neutral-fg);
-        --seat-background: var(--chip-neutral-bg);
-        --seat-border: var(--chip-neutral-border);
+      &[data-rank='2'] {
+        --prize-foreground: var(--chip-neutral-fg);
+        --prize-background: var(--chip-neutral-bg);
+        --prize-border: var(--chip-neutral-border);
       }
-      &[data-seat='3'] {
-        --seat-foreground: var(--workspace-file-text);
-        --seat-background: var(--workspace-file-selected);
-        --seat-border: var(--chip-file-border);
-      }
-      &.is-open {
-        border-color: var(--seat-border);
-        background: var(--seat-background);
+      &[data-rank='3'] {
+        --prize-foreground: var(--workspace-file-text);
+        --prize-background: var(--workspace-file-selected);
+        --prize-border: var(--chip-file-border);
       }
       strong {
         color: var(--text-color);
@@ -495,7 +488,7 @@
     .prize-tier {
       gap: var(--ui-space-3, 3px);
       font-size: var(--ui-font-12, 12px);
-      color: var(--seat-foreground, var(--desc-color));
+      color: var(--prize-foreground, var(--desc-color));
     }
   }
 
@@ -539,7 +532,6 @@
       gap: var(--ui-space-8, 8px);
     }
     .leaderboard-prizes { grid-row: 1; }
-    .prize-guide { display: none; }
     .my-metrics {
       gap: var(--ui-space-6, 6px);
       > div + div { padding-inline-start: var(--ui-space-8, 8px); }

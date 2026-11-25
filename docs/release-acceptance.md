@@ -129,7 +129,7 @@ API 已移除旧静态目录挂载。发布时在主站配置中用 [retired-leg
 
 ### 其他领域门禁
 
-积分排行榜开放前显式运行 `pnpm --filter server migrate:points-leaderboard` 安装榜单表和结算锁，并通过 `check:schema`。核对可上榜账号已有社区 ID，缺失时复用既有社区身份回填流程。所有 API 实例使用同一排行榜配置。使用北京时间周一日期 `POINTS_LEADERBOARD_OPEN_WEEK=YYYY-MM-DD` 开放首个完整周，该日期录入后固定。配置 `POINTS_LEADERBOARD_FIRST_REWARD_WEEK` 指定首个发奖周，只有明确设为开榜周时，开榜周才计奖。未配置时只记录排名。`POINTS_LEADERBOARD_REWARDS_ENABLED=true` 才处理待发奖项，关闭开关仍冻结本期。开榜前随发布同步隐私政策，执行 `node scripts/seedPointsLeaderboardKnowledge.js --apply` 同步帮助与 AI 知识库。规则、奖额和回滚资产边界见[积分排行榜](./points-earning.md#积分排行榜)。
+积分排行榜开放前显式运行 `pnpm --filter server migrate:points-leaderboard` 安装榜单表和结算锁，并通过 `check:schema`。核对可上榜账号已有社区 ID，缺失时复用既有社区身份回填流程。所有 API 实例使用同一排行榜配置。使用北京时间周一日期 `POINTS_LEADERBOARD_OPEN_WEEK=YYYY-MM-DD` 开放首个完整周，该日期录入后固定。配置 `POINTS_LEADERBOARD_FIRST_REWARD_WEEK` 指定首个发奖周，只有明确设为开榜周时，开榜周才计奖。未配置时只记录排名。`POINTS_LEADERBOARD_REWARDS_ENABLED=true` 才处理待发奖项，关闭开关仍冻结本期。开榜前随发布同步隐私政策。首次开榜或奖励规则变更时，在同一批发布更新所有负责榜单读取和结算的 API 实例及 Web 前端，并在服务端执行 `node scripts/seedPointsLeaderboardKnowledge.js --apply` 同步帮助与 AI 知识库。规则、奖额和回滚资产边界见[积分排行榜](./points-earning.md#积分排行榜)。
 
 一次性 AI 等级赠礼依赖 `20261106_ai_level_gifts.sql` 与 `20261106_ai_gift_risk_facts.sql` 的加法结构；先完成结构安装与 `check:schema`，再更新 API 和使用统一 Execution 的 Worker。结构安装不发赠礼、不清零余额；显式补发与关闭日额度仍按 [一次性等级赠礼与校准](./ai-skills.md#一次性等级赠礼与校准) 核对资格、逐档账本和差异，不能把进程启动视为补发完成。
 

@@ -56,7 +56,7 @@
           <LeaderboardIdentity v-else :entry="row">
             <template v-if="weekly">
               <span>{{ t('growth.leaderboard.effectiveDaysValue', { n: row.activeDays }) }}</span>
-              <span v-if="seatCopy(row)" :class="seatTone(row)">{{ seatCopy(row) }}</span>
+              <span :class="{ qualified: row.qualified }">{{ qualificationLabel(row) }}</span>
             </template>
           </LeaderboardIdentity>
           <template #trailing>
@@ -92,8 +92,8 @@
           <strong v-else-if="column.key === 'score'" class="rank-score">
             {{ record.unavailable ? '—' : number(record.score) }}
           </strong>
-          <span v-else :class="seatTone(record)">
-            {{ record.unavailable ? '—' : seatCopy(record) || '—' }}
+          <span v-else :class="record.qualified ? 'qualified' : 'muted'">
+            {{ record.unavailable ? '—' : qualificationLabel(record) }}
           </span>
         </template>
       </BTable>
@@ -140,22 +140,12 @@
     ];
     if (props.weekly) result.push({ key: 'days', title: t('growth.leaderboard.days'), width: 92 });
     result.push({ key: 'score', title: t('growth.leaderboard.score'), width: 80 });
-    if (props.weekly) result.push({ key: 'seat', title: t('growth.leaderboard.prizeSeat'), width: 112 });
+    if (props.weekly) result.push({ key: 'qualification', title: t('growth.leaderboard.qualification'), width: 112 });
     return result;
   });
 
-  function seatCopy(row: LeaderboardEntry) {
-    if (props.data?.weekly?.mode === 'observation') return '';
-    if (row.rewardState === 'paid') return t('growth.leaderboard.rowPaid', { n: row.rewardPoints });
-    if (row.rewardState === 'pending') return t('growth.leaderboard.pending');
-    if (row.rewardState === 'skipped') return t('growth.leaderboard.skipped');
-    if (row.rewardSlot) return t('growth.leaderboard.projected', { n: row.rewardSlot });
+  function qualificationLabel(row: LeaderboardEntry) {
     return t(row.qualified ? 'growth.leaderboard.qualified' : 'growth.leaderboard.notQualified');
-  }
-
-  function seatTone(row: LeaderboardEntry) {
-    if (row.rewardState === 'paid') return 'paid';
-    return row.rewardSlot && row.rewardState === 'none' ? 'projected' : 'muted';
   }
 </script>
 
@@ -294,8 +284,7 @@
 
   .rank-score { font-size: var(--ui-font-16, 16px); font-weight: 700; }
   .muted { color: var(--desc-color); }
-  .paid { color: var(--chip-success-fg); font-weight: 650; }
-  .projected { color: var(--workspace-purple-text); font-weight: 650; }
+  .qualified { color: var(--chip-success-fg); font-weight: 650; }
 
   .place {
     display: flex;
