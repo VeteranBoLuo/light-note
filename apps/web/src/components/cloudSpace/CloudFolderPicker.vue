@@ -1,5 +1,5 @@
 <template>
-  <div v-auto-scrollbar class="cloud-folder-picker" role="listbox" :aria-label="ariaLabel">
+  <div ref="list" v-auto-scrollbar class="cloud-folder-picker" role="listbox" :aria-label="ariaLabel">
     <BButton
       v-if="showTopLevel"
       class="cloud-folder-picker__row is-top-level"
@@ -13,14 +13,14 @@
     </BButton>
 
     <BButton
-      v-for="folder in flatFolders"
+      v-for="folder in visibleFolders"
       :key="folder.id"
       class="cloud-folder-picker__row"
       :class="{
         'is-selected': selectedId === folder.id,
         'is-disabled-target': disabledSet.has(folder.id),
       }"
-      :style="{ '--cloud-folder-picker-depth': String(Math.min(folder.depth, 5)) }"
+      :style="{ '--cloud-folder-picker-depth': String(matchingIds ? 1 : Math.min(folder.depth, 5)) }"
       :disabled="disabledSet.has(folder.id)"
       role="option"
       :aria-selected="selectedId === folder.id"
@@ -28,16 +28,23 @@
       @click="select(folder.id)"
     >
       <SvgIcon :src="icon.common.folder" size="17" aria-hidden="true" />
-      <span class="cloud-folder-picker__name">{{ folder.name }}</span>
+      <span v-if="matchingIds && folder.path.length > 1" class="cloud-folder-picker__name">
+        <span class="cloud-folder-picker__match-name">{{ folder.name }}</span>
+        <span class="cloud-folder-picker__parent-path">{{ folder.path.slice(0, -1).join(' / ') }}</span>
+      </span>
+      <span v-else class="cloud-folder-picker__name">{{ folder.name }}</span>
       <span v-if="disabledSet.has(folder.id)" class="cloud-folder-picker__disabled">{{ disabledLabel }}</span>
     </BButton>
 
-    <p v-if="!flatFolders.length" class="cloud-folder-picker__empty">{{ emptyLabel }}</p>
+    <p v-if="!visibleFolders.length" class="cloud-folder-picker__empty" role="status">
+      {{ matchingIds ? t('cloudSpace.noMatchingMoveFolders') : emptyLabel }}
+    </p>
   </div>
 </template>
 
 <script lang="ts" setup>
-  import { computed } from 'vue';
+  import { computed, ref, watch } from 'vue';
+  import { useI18n } from 'vue-i18n';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon';
@@ -47,6 +54,7 @@
   const props = withDefaults(
     defineProps<{
       folders: CloudFolderNode[];
+      matchingIds?: ReadonlySet<string>;
       selectedId?: string | null;
       disabledIds?: string[];
       showTopLevel?: boolean;
@@ -62,8 +70,18 @@
     },
   );
   const emit = defineEmits<{ 'update:selectedId': [id: string | null] }>();
+  const { t } = useI18n();
+  const list = ref<HTMLElement | null>(null);
   const flatFolders = computed(() => flattenCloudFolderTree(props.folders));
+  const visibleFolders = computed(() => {
+    const ids = props.matchingIds;
+    return ids ? flatFolders.value.filter((folder) => ids.has(folder.id)) : flatFolders.value;
+  });
   const disabledSet = computed(() => new Set(props.disabledIds.map(String)));
+
+  watch(() => props.matchingIds, () => {
+    if (list.value) list.value.scrollTop = 0;
+  });
 
   function select(id: string | null) {
     if (id && disabledSet.value.has(id)) return;
@@ -73,6 +91,7 @@
 
 <style lang="less" scoped>
   .cloud-folder-picker {
+    min-height: 0;
     max-height: min(56vh, var(--ui-layout-440, 440px));
     overflow-y: auto;
     display: grid;
@@ -118,6 +137,18 @@
     flex: 1 1 auto;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  .cloud-folder-picker__match-name,
+  .cloud-folder-picker__parent-path {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .cloud-folder-picker__parent-path {
+    color: var(--desc-color);
+    font-size: var(--ui-font-12, 12px);
   }
 
   .cloud-folder-picker__disabled {

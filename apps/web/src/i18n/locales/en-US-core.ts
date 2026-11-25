@@ -6350,6 +6350,8 @@ export default {
     moveFile: 'Move File',
     moveFileTitle: 'Move to Folder',
     moveFileTarget: 'Choose a destination folder for the file',
+    searchMoveFolders: 'Search folders',
+    noMatchingMoveFolders: 'No matching folders',
     unfiledFiles: 'Not in a folder',
     moveFolder: 'Move Folder',
     moveFolderHint: 'Choose a new location for “{name}”. No extra root node is shown in the tree.',

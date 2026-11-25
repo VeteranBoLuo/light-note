@@ -6100,6 +6100,8 @@ export default {
     moveFile: '移动文件',
     moveFileTitle: '移动到文件夹',
     moveFileTarget: '选择文件要移入的文件夹',
+    searchMoveFolders: '搜索文件夹',
+    noMatchingMoveFolders: '没有找到匹配的文件夹',
     unfiledFiles: '不放入文件夹',
     moveFolder: '移动文件夹',
     moveFolderHint: '选择“{name}”的新位置。目录中不会显示额外的根节点。',
