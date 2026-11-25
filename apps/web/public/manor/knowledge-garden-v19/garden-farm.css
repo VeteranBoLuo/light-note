@@ -2003,8 +2003,8 @@ html.light-note-mobile-rendering [data-manor-area="garden"] [data-dock="garden"]
   #app .garden-scene.tool-active,#app .garden-scene.tool-active .farm-plot { cursor:none; }
 }
 @media (any-hover:hover) and (any-pointer:fine) {
-  /* 延续浮漂中心的点击热点，也支持触屏设备上连接的鼠标。 */
-  #app .garden-play .pond-hit { cursor:url("cursors/fishing-rod-r1.svg") 31 28,crosshair; }
+  /* 鱼竿绘在点击点左上方，为场景里的浮漂和咬钩动画留出空间。 */
+  #app .garden-play .pond-hit { cursor:url("cursors/fishing-rod-r2.svg") 25 23,crosshair; }
 }
 /* #shell 的通用按钮规则优先级更高；水面必须保留整段拖动。 */
 #shell .pond-hit {touch-action:none;}
