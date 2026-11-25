@@ -79,12 +79,12 @@ describe.skipIf(!socketPath)('积分排行榜 · 隔离 MySQL', () => {
   async function read(viewer, board = 'week', previous = false, now = current) {
     return readLeaderboard(viewer, board, previous, { db: state.db, config, now });
   }
-  async function seedWeek() {
+  async function seedWeek({ skipRank = 3 } = {}) {
     for (let index = 1; index <= 7; index++) {
       const id = 'player-' + index;
       await user(id, '玩家' + index);
       await point(id, 'checkin', 210 - 10 * index);
-      if (index === 3) continue;
+      if (index === skipRank) continue;
       await harvest(id, '2026-11-10 09:00:00', 1);
       await harvest(id, '2026-11-11 09:00:00', 1);
     }
@@ -153,7 +153,7 @@ describe.skipIf(!socketPath)('积分排行榜 · 隔离 MySQL', () => {
   });
 
   it('首周明确计奖时仍等到周榜结算，且开榜无通知', async () => {
-    await seedWeek();
+    await seedWeek({ skipRank: null });
     const launch = { openWeek: '2026-11-09', firstRewardWeek: '2026-11-09', rewardsEnabled: true };
     await runLeaderboardSettlement({ db: state.db, config: launch, now: current });
     const board = await readLeaderboard('player-1', 'week', false, { db: state.db, config: launch, now: current });
@@ -176,9 +176,13 @@ describe.skipIf(!socketPath)('积分排行榜 · 隔离 MySQL', () => {
     const [[openingNotices]] = await state.db.query("SELECT COUNT(*) AS n FROM notification WHERE source_type = 'leaderboard_open'");
     expect(openingNotices.n).toBe(0);
     await runLeaderboardSettlement({ db: state.db, config, now: current });
+    const live = await read('player-2');
+    expect(live.mine).toMatchObject({ rank: 2, qualified: true, rewardSlot: 2, rewardPoints: 77 });
+    expect(live.rows[2]).toMatchObject({ rank: 3, qualified: false, rewardSlot: null });
+    expect(live.rows[3]).toMatchObject({ rank: 4, qualified: true, rewardSlot: null });
     await Promise.all([1, 2].map(() => runLeaderboardSettlement({ db: state.db, config, now: monday })));
     const [frozen] = await state.db.query('SELECT position, reward_points, reward_state FROM leaderboard_results WHERE period_key = ? ORDER BY position', ['2026-11-09']);
-    expect(frozen.map((row) => row.reward_points)).toEqual([88, 77, 0, 66, 0, 0, 0]);
+    expect(frozen.map((row) => row.reward_points)).toEqual([88, 77, 0, 0, 0, 0, 0]);
     const [[observation]] = await state.db.query("SELECT state, slots FROM leaderboard_periods WHERE period_key = '2026-11-02'");
     expect(observation).toMatchObject({ state: 'complete', slots: 0 });
     await expect(assertLeaderboardReady(state.db, { ...config, openWeek: '2026-11-09' })).rejects.toMatchObject({ code: 'LEADERBOARD_OPEN_WEEK_CHANGED' });
@@ -188,15 +192,18 @@ describe.skipIf(!socketPath)('积分排行榜 · 隔离 MySQL', () => {
     const enabled = { ...config, rewardsEnabled: true, firstRewardWeek: '2026-11-02' };
     const run = () => runLeaderboardSettlement({ db: state.db, config: enabled, now: monday });
     await state.db.query(`CREATE TRIGGER fail_test_payout BEFORE UPDATE ON leaderboard_results FOR EACH ROW
-      BEGIN IF NEW.user_id = 'player-4' AND NEW.reward_state = 'paid' THEN
+      BEGIN IF NEW.user_id = 'player-1' AND NEW.reward_state = 'paid' THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'test payout rollback';
       END IF; END`);
     try {
       await run();
-      const [[pending]] = await state.db.query("SELECT reward_state FROM leaderboard_results WHERE user_id = 'player-4'");
-      const [[uncredited]] = await state.db.query("SELECT COUNT(*) AS n FROM points_log WHERE user_id = 'player-4' AND reason = 'leaderboard_reward'");
-      const [[noReceipt]] = await state.db.query("SELECT COUNT(*) AS n FROM points_grant_operations WHERE user_id = 'player-4'");
-      const [[balance]] = await state.db.query("SELECT points FROM user_growth WHERE user_id = 'player-4'");
+      const [[pending]] = await state.db.query(
+        "SELECT reward_state FROM leaderboard_results WHERE board = 'week' AND period_key = ? AND user_id = ?",
+        ['2026-11-09', 'player-1'],
+      );
+      const [[uncredited]] = await state.db.query("SELECT COUNT(*) AS n FROM points_log WHERE user_id = 'player-1' AND reason = 'leaderboard_reward'");
+      const [[noReceipt]] = await state.db.query("SELECT COUNT(*) AS n FROM points_grant_operations WHERE user_id = 'player-1'");
+      const [[balance]] = await state.db.query("SELECT points FROM user_growth WHERE user_id = 'player-1'");
       expect(pending.reward_state).toBe('pending');
       expect(uncredited.n).toBe(0);
       expect(noReceipt.n).toBe(0);
@@ -206,20 +213,20 @@ describe.skipIf(!socketPath)('积分排行榜 · 隔离 MySQL', () => {
     }
     await Promise.all([run(), run()]);
     const [credits] = await state.db.query("SELECT user_id, delta FROM points_log WHERE reason = 'leaderboard_reward' ORDER BY user_id");
-    expect(credits).toEqual([{ user_id: 'player-1', delta: 88 }, { user_id: 'player-4', delta: 66 }]);
+    expect(credits).toEqual([{ user_id: 'player-1', delta: 88 }]);
     const [notices] = await state.db.query("SELECT user_id, browser_push_pending, browser_push_created_at FROM notification WHERE source_type = 'leaderboard_reward' ORDER BY user_id");
     expect(notices).toEqual([
       { user_id: 'player-1', browser_push_pending: 0, browser_push_created_at: null },
-      { user_id: 'player-4', browser_push_pending: 0, browser_push_created_at: null },
     ]);
     await state.db.query("UPDATE leaderboard_results SET notified_at = NULL WHERE reward_state = 'paid'");
     await run();
     const [[count]] = await state.db.query("SELECT COUNT(*) AS n FROM notification WHERE source_type = 'leaderboard_reward'");
-    expect(count.n).toBe(2);
-    const history = await read('player-4', 'week', true, monday);
+    expect(count.n).toBe(1);
+    const history = await read('player-1', 'week', true, monday);
     expect(history.rows[1]).toEqual({ rank: 2, unavailable: true });
-    expect(history.mine).toMatchObject({ rank: 4, rewardSlot: 3, rewardState: 'paid' });
-    expect(history.weekly).toMatchObject({ qualifiedCount: 6, slots: 3, paidSlots: 2 });
+    expect(history.mine).toMatchObject({ rank: 1, rewardSlot: 1, rewardState: 'paid' });
+    expect(history.rows[3]).toMatchObject({ rank: 4, qualified: true, rewardSlot: null, rewardState: 'none' });
+    expect(history.weekly).toMatchObject({ qualifiedCount: 6, slots: 2, paidSlots: 1 });
     expect(await read(null, 'week', true, monday)).toMatchObject({
       canParticipate: false, mine: null, ownDays: 0, weekly: history.weekly,
       rows: history.rows.map((row) => 'unavailable' in row ? row : { ...row, isMe: false }),
@@ -254,17 +261,17 @@ describe.skipIf(!socketPath)('积分排行榜 · 隔离 MySQL', () => {
   });
 
   it('当周发奖配置可以在冻结前生效，冻结后恢复发放沿用原模式和奖额', async () => {
-    await seedWeek();
+    await seedWeek({ skipRank: null });
     const observation = { ...config, firstRewardWeek: null };
     await runLeaderboardSettlement({ db: state.db, config: observation, now: current });
     expect(await readLeaderboard('player-1', 'week', false, { db: state.db, config: observation, now: current }))
       .toMatchObject({ weekly: { mode: 'observation', slots: 0 } });
-    expect(await read('player-1')).toMatchObject({ weekly: { mode: 'reward', qualifiedCount: 6, slots: 3 } });
+    expect(await read('player-1')).toMatchObject({ weekly: { mode: 'reward', qualifiedCount: 7, slots: 3 } });
 
     await runLeaderboardSettlement({ db: state.db, config, now: monday });
     expect(await read('player-1', 'week', true, monday)).toMatchObject({
       mine: { rewardState: 'pending', rewardPoints: 88 },
-      weekly: { mode: 'reward', qualifiedCount: 6, slots: 3, paidSlots: 0 },
+      weekly: { mode: 'reward', qualifiedCount: 7, slots: 3, paidSlots: 0 },
     });
 
     const resume = () => runLeaderboardSettlement({
@@ -281,8 +288,8 @@ describe.skipIf(!socketPath)('积分排行榜 · 隔离 MySQL', () => {
   });
 
   it.each([
-    { outcome: 'commit', score: 110, validDays: 3, slots: 1, month: 117, awards: [88] },
-    { outcome: 'rollback', score: 90, validDays: 2, slots: 0, month: 97, awards: [] },
+    { outcome: 'commit', score: 110, validDays: 3, slots: 2, month: 117, awards: [88, 77] },
+    { outcome: 'rollback', score: 90, validDays: 2, slots: 1, month: 97, awards: [88] },
   ])('到期冻结等待截止前的入账事务 $outcome，只按已提交的流水和有效日定奖', async (example) => {
     await user('player-a', '玩家 A');
     await user('player-b', '玩家 B');
@@ -342,7 +349,7 @@ describe.skipIf(!socketPath)('积分排行榜 · 隔离 MySQL', () => {
     expect((await read('player-a', 'week', false, monday)).mine.score).toBe(7);
     expect((await read('player-a', 'month', false, monday)).mine.score).toBe(example.month);
     expect((await read('player-a', 'total', false, monday)).mine.score).toBe(example.month);
-    const [credits] = await state.db.query("SELECT delta FROM points_log WHERE reason = 'leaderboard_reward'");
+    const [credits] = await state.db.query("SELECT delta FROM points_log WHERE reason = 'leaderboard_reward' ORDER BY delta DESC");
     expect(credits.map(({ delta }) => delta)).toEqual(example.awards);
   });
 

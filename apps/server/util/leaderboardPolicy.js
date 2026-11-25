@@ -82,8 +82,14 @@ export function orderLeaderboard(scores, eligibleIds) {
   ).map((score, index) => ({ ...score, rank: index + 1 }));
 }
 
-export function leaderboardSeats(rows, mode) {
+export function leaderboardAwards(rows, mode) {
   const qualified = rows.filter(leaderboardQualified);
-  const slots = mode === 'reward' ? Math.min(LEADERBOARD_PRIZES.length, Math.floor(qualified.length / 2)) : 0;
-  return { qualifiedCount: qualified.length, slots, winners: qualified.slice(0, slots) };
+  const awards = new Map();
+  if (mode === 'reward') {
+    for (const { rank } of qualified) {
+      const points = LEADERBOARD_PRIZES[rank - 1];
+      if (points) awards.set(rank, points);
+    }
+  }
+  return { qualifiedCount: qualified.length, awards };
 }
