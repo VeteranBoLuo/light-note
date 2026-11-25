@@ -642,7 +642,7 @@ export function enrichPointsLogRow(row) {
   const reason = String(row.reason || '');
   const ref = String(row.ref || '');
   const baseReason = reason.startsWith('storage:') ? 'storage' : reason;
-  const privateOperation = ['admin', 'storage:admin', 'campaign', 'correction'].includes(reason);
+  const privateOperation = ['admin', 'storage:admin', 'campaign', 'correction', 'toolbox_image_repair'].includes(reason);
   let sourceKey = ref;
   let sourceMeta = null;
   if (privateOperation) sourceKey = null;

@@ -33,6 +33,7 @@ export type ToolboxToolId =
   | "study_kit"
   | "concept_map"
   | "knowledge_audit"
+  | "image_watermark_remover"
   | "pdf_organizer"
   | "image_to_pdf"
   | "pdf_to_images"

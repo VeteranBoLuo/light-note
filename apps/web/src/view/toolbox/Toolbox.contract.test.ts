@@ -42,6 +42,7 @@ describe('知识工具箱前端边界', () => {
     for (const path of [
       'src/view/toolbox/components/PdfOrganizer.vue',
       'src/view/toolbox/components/PdfWorkbench.vue',
+      'src/view/toolbox/components/ImageRepairWorkbench.vue',
       'src/view/toolbox/components/PdfImageConverter.vue',
       'src/view/toolbox/components/ImageToPdf.vue',
       'src/view/toolbox/components/PdfToImages.vue',
@@ -167,7 +168,11 @@ describe('知识工具箱前端边界', () => {
       'material_to_note',
       'study_kit',
     ]);
-    expect(TOOLBOX_HOME_GROUPS.find((group) => group.id === 'prepare')?.toolIds).toEqual(['pdf_organizer', 'ocr_to_text']);
+    expect(TOOLBOX_HOME_GROUPS.find((group) => group.id === 'prepare')?.toolIds).toEqual([
+      'pdf_organizer',
+      'image_watermark_remover',
+      'ocr_to_text',
+    ]);
     expect(TOOLBOX_HOME_GROUPS.map((group) => group.id)).toEqual(['workspace', 'create', 'prepare']);
     expect(home).toContain('class="toolbox-overview"');
     expect(homeTemplate).toContain("router.push({ name: 'aiUsage' })");

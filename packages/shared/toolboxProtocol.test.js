@@ -19,6 +19,7 @@ const ACTIVE_TOOL_IDS = [
   "material_to_note",
   "study_kit",
   "pdf_organizer",
+  "image_watermark_remover",
   "ocr_to_text",
 ];
 // 已下架但有历史成果的 AI 工具：保留协议身份与名称，只用于展示历史任务。
@@ -43,7 +44,7 @@ describe("toolbox protocol", () => {
   });
 
   it("keeps every tool id unique and every execution contract explicit", () => {
-    expect(TOOLBOX_TOOL_CATALOG).toHaveLength(17);
+    expect(TOOLBOX_TOOL_CATALOG).toHaveLength(18);
     expect(new Set(TOOLBOX_TOOL_CATALOG.map((item) => item.id)).size).toBe(
       TOOLBOX_TOOL_CATALOG.length,
     );
@@ -99,18 +100,19 @@ describe("toolbox protocol", () => {
     expect(getToolboxTool("pdf_text_extractor")?.availability.enabled).toBe(
       false,
     );
-    expect(ACTIVE_TOOL_IDS).toHaveLength(9);
+    expect(ACTIVE_TOOL_IDS).toHaveLength(10);
   });
 
-  it("does not treat browser-local utilities as paid jobs", () => {
+  it("exposes image repair as the only paid browser tool", () => {
     expect(TOOLBOX_BILLING_MEDIA).toEqual(["free", "points", "ai_quota"]);
     const localTools = TOOLBOX_TOOL_CATALOG.filter(
       (item) => item.executionMode === "browser",
     );
-    expect(localTools).toHaveLength(4);
-    expect(localTools.every((item) => item.billingMedium === "free")).toBe(
-      true,
-    );
+    expect(localTools).toHaveLength(5);
+    expect(localTools.filter((item) => item.billingMedium !== "free").map((item) => item.id)).toEqual([
+      "image_watermark_remover",
+    ]);
+    expect(getToolboxTool("image_watermark_remover")?.billingMedia).toEqual(["points"]);
     expect(isToolboxPaidTool("pdf_organizer")).toBe(false);
     expect(
       TOOLBOX_TOOL_CATALOG.filter((item) => item.executionMode === "service"),

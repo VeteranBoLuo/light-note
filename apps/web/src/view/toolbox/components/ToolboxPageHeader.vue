@@ -1,7 +1,7 @@
 <template>
   <header
     class="toolbox-page-header"
-    :class="[`is-${presentation?.accent || 'violet'}`, { 'has-native-back': nativeMobileBack }]"
+    :class="[`is-${presentation?.accent || 'violet'}`, { 'has-native-back': nativeMobileBack, 'is-mobile-compact': compactMobile }]"
   >
     <div class="toolbox-page-header__identity">
       <BButton
@@ -45,6 +45,7 @@
       title?: string;
       category?: string;
       backLabel?: string;
+      compactMobile?: boolean;
       /** The app shell already provides the back action on these mobile routes. */
       nativeMobileBack?: boolean;
     }>(),
@@ -173,6 +174,28 @@
     .toolbox-page-header__actions {
       justify-content: flex-start;
       margin-left: 0;
+    }
+
+    .toolbox-page-header.is-mobile-compact {
+      min-height: var(--ui-control-48, 48px);
+      padding: var(--ui-space-4, 4px) var(--ui-space-10, 10px);
+      gap: var(--ui-space-6, 6px);
+      flex-wrap: nowrap;
+      border-radius: 12px;
+      box-shadow: none;
+    }
+    .is-mobile-compact::before,
+    .is-mobile-compact .toolbox-page-header__category,
+    .is-mobile-compact .toolbox-page-header__icon {
+      display: none;
+    }
+    .is-mobile-compact .toolbox-page-header__identity {
+      flex: 1 1 auto;
+      gap: var(--ui-space-4, 4px);
+    }
+    .is-mobile-compact .toolbox-page-header__actions {
+      flex: none;
+      margin-inline-start: auto;
     }
   }
 </style>

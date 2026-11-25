@@ -24,7 +24,7 @@ export type ToolboxInput = {
 };
 
 export type ToolboxCatalogItem = ToolboxToolDefinition & {
-  price: { kind: 'free' | 'quote' | 'quota'; currency: 'points' | 'ai_quota' | null; min: number; max: number };
+  price: { kind: 'free' | 'fixed' | 'quote' | 'quota'; currency: 'points' | 'ai_quota' | null; min: number; max: number };
 };
 
 export type ToolboxCatalog = {
@@ -281,6 +281,22 @@ export async function fetchToolboxCatalog(): Promise<ToolboxCatalog> {
   return response.data as ToolboxCatalog;
 }
 
+export async function fetchImageRepairPoints(): Promise<{ accountId: string; cost: number; balance: number }> {
+  const response = await apiBaseGet('/api/toolbox/image-repair/points', undefined, { silent: true });
+  if (response.status !== 200) throw apiFailure(response, 'TOOLBOX_IMAGE_REPAIR_POINTS_FAILED');
+  return response.data;
+}
+
+export async function settleImageRepairPoints(input: {
+  accountId: string;
+  clientRequestId: string;
+  expectedCost: number;
+}) {
+  const response = await apiBasePost('/api/toolbox/image-repair/points', input, { silent: true });
+  if (response.status !== 200 || response.data?.cost !== input.expectedCost)
+    throw apiFailure(response, 'TOOLBOX_IMAGE_REPAIR_SETTLEMENT_FAILED');
+}
+
 export async function fetchToolboxHome(): Promise<ToolboxHomeOverview> {
   const response = await apiBaseGet('/api/toolbox/home', undefined, { silent: true });
   if (response.status !== 200) throw apiFailure(response, 'TOOLBOX_HOME_FAILED');
@@ -531,7 +547,7 @@ export async function uploadToolboxDocument(file: File, toolId = 'ocr_to_text'):
   });
 }
 
-export function createToolboxClientRequestId(prefix: 'quote' | 'job' | 'save' = 'job') {
+export function createToolboxClientRequestId(prefix: 'quote' | 'job' | 'save' | 'repair' = 'job') {
   const id =
     typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
       ? crypto.randomUUID()

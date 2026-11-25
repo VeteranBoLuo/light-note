@@ -426,6 +426,7 @@ declare(ADMIN_POLICIES.AI_USE, 'ai_skill', [
 ]);
 declare(ADMIN_POLICIES.READ, 'toolbox', [
   ['GET', '/toolbox/catalog'],
+  ['GET', '/toolbox/image-repair/points'],
   ['GET', '/toolbox/pinned-tools'],
   ['GET', '/toolbox/home'],
   ['GET', '/toolbox/project-entry'],
@@ -442,6 +443,7 @@ declare(ADMIN_POLICIES.READ, 'toolbox', [
 // 报价会持久化快照，任务会预占操作者积分，保存会创建真实笔记；这些都不能在管理员
 // 代管上下文中替数据主体执行，哪怕当前模式是 maintain。
 declare(ADMIN_POLICIES.ACCOUNT_WRITE, 'toolbox', [
+  ['POST', '/toolbox/image-repair/points'],
   ['POST', '/toolbox/quotes'],
   ['POST', '/toolbox/pinned-tools'],
   ['POST', '/toolbox/translation/stream'],

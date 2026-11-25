@@ -10,6 +10,11 @@ declare module 'virtual:lightnote-pdf-cmaps' {
   export default cMapUrl;
 }
 
+declare module 'virtual:lightnote-image-repair-model' {
+  const assetsUrl: string;
+  export default assetsUrl;
+}
+
 interface ImportMetaEnv {
   /** 可选的公开爱发电创作者主页覆盖；不得填写 API Token 或其他凭据。 */
 }

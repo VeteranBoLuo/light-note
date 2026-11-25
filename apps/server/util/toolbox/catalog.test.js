@@ -29,7 +29,17 @@ describe('toolbox catalog', () => {
     expect(input.resourceRefs).toEqual([{ type: 'note', id: 'note-1' }]);
     expect(input.options.question).toBe('这些材料有哪些共同结论？');
     expect(() => normalizeToolboxInput('pdf_organizer', {})).toThrow(/浏览器本地/);
+    expect(() => normalizeToolboxInput('image_watermark_remover', {})).toThrow(/浏览器本地/);
     expect(() => normalizeToolboxInput('forms', {})).toThrow(/免费工具/);
+  });
+
+  it('publishes a fixed price for browser-local image repair', () => {
+    const repair = getPublicToolboxCatalog().tools.find((tool) => tool.id === 'image_watermark_remover');
+    expect(repair).toMatchObject({
+      executionMode: 'browser',
+      billingMedium: 'points',
+      price: { kind: 'fixed', currency: 'points', min: 1, max: 1 },
+    });
   });
 
   it('单一处理要求保留合并后的 1000 字输入边界', () => {
@@ -77,13 +87,13 @@ describe('toolbox catalog', () => {
       'points',
       'free',
     ]);
-    expect(catalog.tools).toHaveLength(17);
-    expect(getPublicToolboxCatalog().tools.filter((item) => item.availability.enabled)).toHaveLength(9);
-    expect(catalog.tools.filter((item) => item.availability.enabled)).toHaveLength(8);
+    expect(catalog.tools).toHaveLength(18);
+    expect(getPublicToolboxCatalog().tools.filter((item) => item.availability.enabled)).toHaveLength(10);
+    expect(catalog.tools.filter((item) => item.availability.enabled)).toHaveLength(9);
     expect(
       catalog.tools.some((item) => ['action_plan', 'data_workbench', 'image_optimizer', 'knowledge_structure_audit', 'extraction'].includes(item.id)),
     ).toBe(false);
-    expect(catalog.tools.filter((item) => item.executionMode === 'browser')).toHaveLength(4);
+    expect(catalog.tools.filter((item) => item.executionMode === 'browser')).toHaveLength(5);
     expect(catalog.tools.filter((item) => item.executionMode === 'service')).toHaveLength(4);
     // 已下架的 AI 工具只保留历史名称，不再可报价。
     expect(
@@ -93,7 +103,7 @@ describe('toolbox catalog', () => {
     ).toEqual(Array.from({ length: 5 }, () => [false, 0, 0]));
     expect(
       catalog.tools
-        .filter((item) => item.executionMode === 'browser')
+        .filter((item) => item.executionMode === 'browser' && item.id !== 'image_watermark_remover')
         .every((item) => item.billingMedium === 'free' && item.price.kind === 'free'),
     ).toBe(true);
     for (const tool of catalog.tools.filter((item) => item.billingMedium === 'points' && item.availability.enabled)) {

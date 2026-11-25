@@ -13,6 +13,7 @@ import { assertLocalViteBackend, createLocalBackendProxy } from './src/vite/loca
 import seoPreviewRoutes from './src/vite/seoPreviewRoutes';
 import manorRuntime from './src/vite/manorRuntime';
 import pdfJsCmaps from './src/vite/pdfJsCmaps';
+import imageRepairModel from './src/vite/imageRepairModel';
 import staticPrewarmManifestPlugin, { publicArtworkPlugin } from './src/vite/staticPrewarm';
 
 import path from 'path';
@@ -35,6 +36,7 @@ export default defineConfig(({ command, mode }) => {
     plugins: [
       manorRuntime(),
       pdfJsCmaps(),
+      imageRepairModel(),
       publicArtworkPlugin(),
       staticPrewarmManifestPlugin(),
       earlyAppEntryBootstrap(),

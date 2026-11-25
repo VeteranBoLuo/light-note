@@ -79,6 +79,8 @@ export function buildPrewarmManifest(bundle: OutputBundle) {
   const groups: Record<string, string[]> = {};
   const maxBytes = 4 * 1024 * 1024;
   for (const [file, item] of Object.entries(bundle)) {
+    // Enhanced image repair is an explicit desktop action, including its worker entry.
+    if (file.startsWith('assets/enhancedImageRepair.worker-')) continue;
     if (!file.startsWith('assets/') || !/\.(js|mjs|css|webp|png|jpg|jpeg|svg|woff2?|ttf)$/.test(file)) continue;
     const bytes = item.type === 'asset' ? sourceSize(item.source) : Buffer.byteLength(item.code);
     if (bytes > 0 && bytes <= maxBytes) assets['/' + file] = bytes;

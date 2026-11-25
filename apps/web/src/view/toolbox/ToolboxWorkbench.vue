@@ -7,6 +7,7 @@
       'has-source-guide': hasSourceGuide,
       'is-local-workspace': Boolean(localToolComponent),
       'is-utility-workspace': isUtilityWorkbench,
+      'is-image-repair-workspace': isImageRepair,
       'is-project-detail': routeToolId.endsWith('_workspace') && Boolean(route.query.workspace),
       'is-project-list': routeToolId.endsWith('_workspace') && !route.query.workspace,
     }"
@@ -16,6 +17,8 @@
       <ToolboxPageHeader
         v-if="!tool || !tool.id.endsWith('_workspace')"
         :tool-id="routeToolId"
+        :compact-mobile="isImageRepair"
+        :native-mobile-back="!isImageRepair"
         @back="returnToToolboxParent"
       >
         <template v-if="tool && isUtilityWorkbench" #actions>
@@ -39,7 +42,11 @@
           }}<BButton v-if="restoreFailed" type="text" @click="restoreInput">{{ t('common.retry') }}</BButton></div
         >
         <section v-if="tool.executionMode === 'browser' && localToolComponent" class="toolbox-workbench__surface">
-          <component :is="localToolComponent" :tool-id="routeToolId" />
+          <component
+            :is="localToolComponent"
+            :tool-id="routeToolId"
+            v-bind="tool.price.kind === 'fixed' ? { pointsCost: tool.price.min } : {}"
+          />
         </section>
         <section v-else-if="tool.executionMode === 'browser'" class="toolbox-workbench__state is-error" role="alert">
           <span>{{ t(isToolboxRetiredToolId(routeToolId) ? 'toolbox.retired' : 'toolbox.unavailable') }}</span>
@@ -528,6 +535,7 @@
   let stateVersion = 0;
   const routeToolId = computed(() => String(route.params.toolId || '') as ToolboxToolId);
   const toolId = computed(() => canonicalToolboxToolId(routeToolId.value));
+  const isImageRepair = computed(() => toolId.value === 'image_watermark_remover');
   const workflow = computed(() =>
     isToolboxWorkflowTool(toolId.value) ? TOOLBOX_WORKFLOW_PRESENTATION[toolId.value] : null,
   );
@@ -644,6 +652,7 @@
     quote.value?.billingMedium === 'ai_quota' ? t('toolbox.aiQuotaRule') : t('toolbox.pointsRule'),
   );
   const executionTitle = computed(() => {
+    if (isImageRepair.value) return t('toolbox.imageRepair.local');
     if (tool.value?.executionMode === 'browser') return t('toolbox.workbench.localExecutionTitle');
     if (tool.value?.executionMode === 'service') return t('toolbox.workbench.serviceExecutionTitle');
     if (tool.value?.executionMode === 'worker') return t('toolbox.workbench.workerExecutionTitle');
@@ -723,7 +732,7 @@
           : t('toolbox.title'),
     onBack: returnToToolboxParent,
     searchMode: 'icon',
-    ownTopBar: () => routeToolId.value.endsWith('_workspace') && Boolean(route.query.workspace),
+    ownTopBar: () => isImageRepair.value || (routeToolId.value.endsWith('_workspace') && Boolean(route.query.workspace)),
     showNotification: false,
   });
 
@@ -2239,6 +2248,26 @@
     border-radius: 0;
     box-shadow: none;
   }
+  @media (min-width: 768px) {
+    .toolbox-workbench.is-image-repair-workspace .toolbox-workbench__inner {
+      display: flex;
+      flex-direction: column;
+      block-size: 100%;
+    }
+
+    .toolbox-workbench.is-image-repair-workspace .toolbox-workbench__inner > :not(.toolbox-workbench__surface) {
+      flex: none;
+    }
+
+    .toolbox-workbench.is-image-repair-workspace .toolbox-workbench__surface {
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+      min-block-size: 0;
+      margin-top: var(--ui-space-12, 12px);
+    }
+  }
+
   @media (max-width: 767px) {
     .toolbox-utility-header__execution {
       grid-column: 1 / -1;

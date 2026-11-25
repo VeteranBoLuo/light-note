@@ -27,11 +27,13 @@ describe('构建预热清单', () => {
       'assets/optional.js': chunk('assets/optional.js', 'optional.ts'),
       'assets/editor.css': { type: 'asset', source: 'body{}' },
       'assets/db.wasm': { type: 'asset', source: new Uint8Array(10) },
+      'assets/enhancedImageRepair.worker-abc.js': { type: 'asset', source: 'self.onmessage = () => {};' },
     } as unknown as OutputBundle;
     const manifest = buildPrewarmManifest(bundle);
     expect(manifest.entries).toEqual(['/assets/main.js']);
     expect(manifest.groups['editor.html']).toEqual(['/assets/editor.js', '/assets/shared.js', '/assets/editor.css']);
     expect(manifest.assets['/assets/db.wasm']).toBeUndefined();
+    expect(manifest.assets['/assets/enhancedImageRepair.worker-abc.js']).toBeUndefined();
     // 动态模块不进入运行时分组，只由全部代码分片在 Service Worker 接管后补齐。
     expect(Object.values(manifest.groups).filter((urls) => urls.includes('/assets/optional.js'))).toEqual([
       manifest.groups['code.1'],

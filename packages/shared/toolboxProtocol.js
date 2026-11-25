@@ -5,7 +5,7 @@ export const TOOLBOX_OCR_FILE_EXTENSIONS = Object.freeze(["pdf", "jpg", "jpeg", 
  * 轻笺知识工坊前后端共享协议。
  *
  * 工具目录只声明稳定能力边界，不包含易漂移的中文文案和动态价格。价格由服务端报价器
- * 按 pricingVersion 计算；免费 browser/service 工具不会创建 quote/job，其中浏览器工具不上传原文件，
+ * 按 pricingVersion 计算；browser 工具和免费 service 工具不会创建 quote/job，浏览器工具不上传原文件，
  * 知识库服务只读写当前账号的必要结构、引用与推进状态，不复制资料正文。
  */
 export const TOOLBOX_PROTOCOL_VERSION = 1;
@@ -304,6 +304,25 @@ export const TOOLBOX_TOOL_CATALOG = Object.freeze([
     },
     // 历史深链兼容 ID；公开入口已合并到 pdf_organizer 的 PDF 工作台。
     availability: { enabled: false },
+  }),
+  tool({
+    id: "image_watermark_remover",
+    phase: "launch",
+    executionMode: "browser",
+    billingMedium: "points",
+    input: {
+      kind: "local_files",
+      minItems: 1,
+      maxItems: 1,
+      accept: ["image/jpeg", "image/png", "image/webp"],
+      maxBytes: 15 * 1024 * 1024,
+    },
+    output: {
+      artifactType: null,
+      contentType: "image/png",
+      canSaveToNote: false,
+    },
+    availability: { enabled: true },
   }),
   tool({
     id: "ocr_to_text",
