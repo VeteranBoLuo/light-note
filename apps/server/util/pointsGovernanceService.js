@@ -838,12 +838,15 @@ export function simulatePointsPolicy(input = {}) {
     firstYearOneTime,
     expectedConsumption,
     expectedNetIssuance: repeatedAnnual + firstYearOneTime - expectedConsumption,
-    goalCycles: catalog.map((item) => ({
-      itemId: item.id,
-      name: item.name,
-      cost: Number(item.cost || 0),
-      stableWeeks: stableWeek > 0 ? Number((Number(item.cost || 0) / stableWeek).toFixed(1)) : null,
-    })),
+    goalCycles: catalog.flatMap((item) =>
+      (item.purchaseCosts || [Number(item.cost || 0)]).map((cost, index) => ({
+        itemId: item.id,
+        name: item.name,
+        ...(item.purchaseCosts && { purchaseNumber: index + 1 }),
+        cost,
+        stableWeeks: stableWeek > 0 ? Number((cost / stableWeek).toFixed(1)) : null,
+      })),
+    ),
     disclaimer: 'simulation_only_no_production_write',
   };
 }

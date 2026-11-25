@@ -10,7 +10,9 @@ export const C7_POINTS_ECONOMY_VERSION = 'points-economy-c7';
 export const C8_POINTS_ECONOMY_VERSION = 'points-economy-c8';
 export const C9_POINTS_ECONOMY_VERSION = 'points-economy-c9';
 export const C10_POINTS_ECONOMY_VERSION = 'points-economy-c10';
-export const POINTS_ECONOMY_VERSION = 'points-economy-c11';
+export const C11_POINTS_ECONOMY_VERSION = 'points-economy-c11';
+export const C12_POINTS_ECONOMY_VERSION = 'points-economy-c12';
+export const POINTS_ECONOMY_VERSION = C12_POINTS_ECONOMY_VERSION;
 
 const LEGACY_UTILITY_ITEMS = [
   {
@@ -305,11 +307,11 @@ const C10_ECONOMY_CATALOGS = Object.freeze({
 });
 
 // C11 只替换免费惊喜和当前商品说明；历史目录及其收据不可变。
-export const ECONOMY_CATALOGS = Object.freeze({
+const C11_ECONOMY_CATALOGS = Object.freeze({
   ...C10_ECONOMY_CATALOGS,
-  [POINTS_ECONOMY_VERSION]: Object.freeze({
+  [C11_POINTS_ECONOMY_VERSION]: Object.freeze({
     ...C10_ECONOMY_CATALOGS[C10_POINTS_ECONOMY_VERSION],
-    version: POINTS_ECONOMY_VERSION,
+    version: C11_POINTS_ECONOMY_VERSION,
     utilityItems: freezeItems(C10_ECONOMY_CATALOGS[C10_POINTS_ECONOMY_VERSION].utilityItems.map((item) =>
       item.effect === 'ai_pack' ? { ...item, desc: item.desc.replace('，每日等级额度用完后自动使用', '') } : item)),
     freePolicy: freezePolicy({ poolVersion: 'c11-free-v1', countsPaidPity: false, pool: [
@@ -321,6 +323,31 @@ export const ECONOMY_CATALOGS = Object.freeze({
   }),
 });
 
+const C12_AI_AMOUNTS = { ai_pack_small: 200_000, ai_pack: 400_000 };
+
+export const ECONOMY_CATALOGS = Object.freeze({
+  ...C11_ECONOMY_CATALOGS,
+  [C12_POINTS_ECONOMY_VERSION]: Object.freeze({
+    ...C11_ECONOMY_CATALOGS[C11_POINTS_ECONOMY_VERSION],
+    version: C12_POINTS_ECONOMY_VERSION,
+    utilityItems: freezeItems(C11_ECONOMY_CATALOGS[C11_POINTS_ECONOMY_VERSION].utilityItems.map((item) => {
+      if (item.id === 'storage_2g') {
+        const purchaseCosts = Object.freeze([item.cost, 6_500]);
+        return { ...item, desc: '每次为云空间永久增加 2 GB', purchaseLimit: purchaseCosts.length, purchaseCosts };
+      }
+      const bonusTokens = C12_AI_AMOUNTS[item.id];
+      return bonusTokens ? { ...item, bonusTokens, desc: `+${bonusTokens / 10_000} 万 tokens · 永久有效` } : item;
+    })),
+  }),
+});
+
+export function getShopItemPurchaseState(item, purchaseCount) {
+  const purchaseLimit = item.purchaseLimit || null;
+  const limitReached = purchaseLimit !== null && purchaseCount >= purchaseLimit;
+  const cost = item.purchaseCosts ? item.purchaseCosts[purchaseCount] ?? null : item.cost;
+  return { cost, purchaseLimit, purchaseCount, limitReached };
+}
+
 export function parseRuntimeFlag(value, defaultValue) {
   if (value === undefined || value === null || value === '') return Boolean(defaultValue);
   if (value === true || value === 'true' || value === '1') return true;
@@ -329,7 +356,8 @@ export function parseRuntimeFlag(value, defaultValue) {
 }
 
 export function getActiveEconomyVersion(env = process.env) {
-  if (parseRuntimeFlag(env.POINTS_ECONOMY_C11_ENABLED, false)) return POINTS_ECONOMY_VERSION;
+  if (parseRuntimeFlag(env.POINTS_ECONOMY_C12_ENABLED, false)) return C12_POINTS_ECONOMY_VERSION;
+  if (parseRuntimeFlag(env.POINTS_ECONOMY_C11_ENABLED, false)) return C11_POINTS_ECONOMY_VERSION;
   if (parseRuntimeFlag(env.POINTS_ECONOMY_C10_ENABLED, false)) return C10_POINTS_ECONOMY_VERSION;
   if (parseRuntimeFlag(env.POINTS_ECONOMY_C9_ENABLED, false)) return C9_POINTS_ECONOMY_VERSION;
   if (parseRuntimeFlag(env.POINTS_ECONOMY_C8_ENABLED, false)) return C8_POINTS_ECONOMY_VERSION;
@@ -358,7 +386,8 @@ export function getEconomyRuntime(env = process.env) {
       C8_POINTS_ECONOMY_VERSION,
       C9_POINTS_ECONOMY_VERSION,
       C10_POINTS_ECONOMY_VERSION,
-      POINTS_ECONOMY_VERSION,
+      C11_POINTS_ECONOMY_VERSION,
+      C12_POINTS_ECONOMY_VERSION,
     ].includes(catalog.version),
     // C4 及其后续版本激活后协议不可降级；该开关只用于 C3 兼容代码提前上线时主动收紧旧写入口。
     requireWriteVersion: versionedEconomyActive || parseRuntimeFlag(env.POINTS_ECONOMY_REQUIRE_WRITE_VERSION, false),
@@ -382,12 +411,13 @@ export function getEconomyCatalogSnapshot(version = POINTS_ECONOMY_VERSION) {
   if (!catalog) return null;
   return {
     version: catalog.version,
-    utilityItems: catalog.utilityItems.map(({ id, cost, bonusTokens = 0, storageMb = 0, purchaseLimit = null }) => ({
+    utilityItems: catalog.utilityItems.map(({ id, cost, bonusTokens = 0, storageMb = 0, purchaseLimit = null, purchaseCosts }) => ({
       id,
       cost,
       bonusTokens,
       storageMb,
       purchaseLimit,
+      ...(purchaseCosts && { purchaseCosts: [...purchaseCosts] }),
     })),
     frameItems: catalog.frameItems.map(({ id, rarity, cost, minLevel }) => ({ id, rarity, cost, minLevel })),
     ...(catalog.backgroundItems

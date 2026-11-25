@@ -25,6 +25,7 @@ const migrations = [
   '20260909_note_import_tasks.sql', '20260909_note_import_progress.sql', '20260909_visitor_examples.sql',
   '20260821_cloud_folder_tree.sql', '20260908_user_activity.sql', '20260914_resource_reuse.sql',
   '20260813_points_economy_c4.sql', '20260826_points_economy_c5_storage_limits.sql',
+  '20261125_points_economy_c12_shop_purchase_count.sql',
   '20260814_points_earning_c5.sql', '20260825_ai_bonus_wallet_and_afdian_rewards.sql',
   '20261105_update_logs_product_version.sql',
   '20261107_afdian_fixed_products.sql',

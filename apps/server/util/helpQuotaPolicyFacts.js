@@ -1,4 +1,5 @@
 import { knowledgeMaintenanceHash } from './knowledgeMaintenancePlan.js';
+import { C11_POINTS_ECONOMY_VERSION, C12_POINTS_ECONOMY_VERSION } from './pointsEconomyCatalog.js';
 
 export function parseHelpPolicyTarget(args) {
   const prefixes = [
@@ -25,7 +26,8 @@ export function selectHelpPolicyFacts(current, target, { catalogs, schedules }) 
   if (!target) return current;
   const catalog = catalogs[target.economyVersion];
   const schedule = schedules.find((item) => item.version === target.giftVersion);
-  if (!catalog || !schedule || (target.billingMode === 'permanent_only' && catalog.version !== 'points-economy-c11'))
+  const supportsPermanentOnly = [C11_POINTS_ECONOMY_VERSION, C12_POINTS_ECONOMY_VERSION].includes(catalog?.version);
+  if (!catalog || !schedule || (target.billingMode === 'permanent_only' && !supportsPermanentOnly))
     throw new Error('HELP_TARGET_UNSUPPORTED');
   const frame = catalog.frameItems.find((item) => item.id === 'frame_galaxy');
   return {

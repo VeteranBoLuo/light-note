@@ -167,6 +167,8 @@ export interface ShopItem {
   repeatable?: boolean;
   purchaseLimit?: number | null;
   purchaseCount?: number;
+  purchaseCosts?: number[];
+  storageMb?: number;
   limitReached?: boolean;
   pointsShortfall?: number;
   levelShortfall?: number;

@@ -37,6 +37,7 @@ const suites = {
   'util/infraAlerts.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
   'util/queueClaimIdle.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
   'util/points.backgrounds.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
+  'util/points.storageLimits.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
   'util/services/aiAdoption.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
   'util/services/visitorExampleScheduleService.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
   'util/services/rootChatSubscription.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',

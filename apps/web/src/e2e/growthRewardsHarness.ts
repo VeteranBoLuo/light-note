@@ -59,6 +59,7 @@ request.defaults.adapter = async (config) => {
   const payload = typeof config.data === 'string' ? JSON.parse(config.data) : config.data || {};
   const simulator = String(config.url).endsWith('/pointsSimulator');
   const input = { ...simulatorDefaults, ...payload };
+  const stableWeek = input.checkinDaily * 7 + input.dailyQuestDaily * 7 + input.weeklyChallenges;
   if (simulator) simulatorCalls.push(payload);
   return {
     config,
@@ -70,9 +71,17 @@ request.defaults.adapter = async (config) => {
       data: simulator
         ? {
             input,
-            stableWeek: input.checkinDaily * 7 + input.dailyQuestDaily * 7 + input.weeklyChallenges,
+            stableWeek,
             tiers: [],
-            goalCycles: [],
+            goalCycles: params.get('economy') === 'c12'
+              ? [5200, 6500].map((cost, index) => ({
+                  itemId: 'storage_2g',
+                  name: '扩容包 2GB',
+                  purchaseNumber: index + 1,
+                  cost,
+                  stableWeeks: stableWeek > 0 ? Number((cost / stableWeek).toFixed(1)) : null,
+                }))
+              : [],
             policyVersion: 'points-earning-c8',
           }
         : String(config.url).endsWith('/points/summary')

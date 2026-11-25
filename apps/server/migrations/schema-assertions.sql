@@ -1601,6 +1601,7 @@ FROM (
   SELECT 'points_shop_item_claims', 'source_economy_version', 'points_shop_item_claims.source_economy_version' UNION ALL
   SELECT 'points_shop_item_claims', 'operation_id', 'points_shop_item_claims.operation_id' UNION ALL
   SELECT 'points_shop_item_claims', 'claim_source', 'points_shop_item_claims.claim_source' UNION ALL
+  SELECT 'points_shop_item_claims', 'purchase_count', 'points_shop_item_claims.purchase_count' UNION ALL
   SELECT 'points_shop_item_claims', 'create_time', 'points_shop_item_claims.create_time' UNION ALL
   SELECT 'user_growth', 'lottery_paid_count', 'user_growth.lottery_paid_count' UNION ALL
   SELECT 'user_growth', 'lottery_paid_pity_progress', 'user_growth.lottery_paid_pity_progress'
@@ -1632,7 +1633,8 @@ SELECT '[47] missing_points_economy_migration_state' AS check_name,
        expected.migration_key AS detail
 FROM (
   SELECT 'points-economy-c4-paid-pity-v1' migration_key UNION ALL
-  SELECT 'points-economy-c5-storage-limits-v1'
+  SELECT 'points-economy-c5-storage-limits-v1' UNION ALL
+  SELECT 'points-economy-c12-shop-purchase-count-v1'
 ) expected
 LEFT JOIN points_economy_migration_state actual ON actual.migration_key = expected.migration_key
 WHERE actual.migration_key IS NULL;

@@ -8,13 +8,15 @@ import {
   C8_POINTS_ECONOMY_VERSION,
   C9_POINTS_ECONOMY_VERSION,
   C10_POINTS_ECONOMY_VERSION,
+  C11_POINTS_ECONOMY_VERSION,
+  C12_POINTS_ECONOMY_VERSION,
   getEconomyRuntime,
   LEGACY_POINTS_ECONOMY_VERSION,
-  POINTS_ECONOMY_VERSION,
 } from './pointsEconomyCatalog.js';
 
 export const C4_BACKFILL_MIGRATION_KEY = 'points-economy-c4-paid-pity-v1';
 export const C5_STORAGE_LIMIT_MIGRATION_KEY = 'points-economy-c5-storage-limits-v1';
+export const C12_SHOP_COUNT_MIGRATION_KEY = 'points-economy-c12-shop-purchase-count-v1';
 export const CLIENT_REQUEST_ID_PATTERN = /^[A-Za-z0-9:_-]{12,64}$/;
 
 function canonicalize(value) {
@@ -62,6 +64,16 @@ function parseStoredResult(value) {
     return JSON.parse(value);
   } catch {
     throw new PointsEconomyError('IDEMPOTENCY_RESULT_INVALID', '原请求结果无法回放，请联系客服', 500);
+  }
+}
+
+export function assertPointsEconomyCost(runtime, expectedCost, actualCost) {
+  if (expectedCost !== null && expectedCost !== actualCost) {
+    throw new PointsEconomyError('ECONOMY_CATALOG_CHANGED', '商品价格已更新，请重新确认', 409, {
+      economyVersion: runtime.economyVersion,
+      expectedCost: actualCost,
+      refresh: true,
+    });
   }
 }
 
@@ -149,15 +161,9 @@ export async function beginPointsEconomyOperation(
       refresh: true,
     });
   }
-  if (normalizedExpectedCost !== null && normalizedExpectedCost !== actualCost) {
-    throw new PointsEconomyError('ECONOMY_CATALOG_CHANGED', '商品价格已更新，请重新确认', 409, {
-      economyVersion: runtime.economyVersion,
-      expectedCost: actualCost,
-      refresh: true,
-    });
-  }
+  if (actualCost !== null) assertPointsEconomyCost(runtime, normalizedExpectedCost, actualCost);
 
-  // 只有新请求通过版本与价格校验后才写占位；校验失败回滚时不会留下 pending 孤儿。
+  // 阶梯价格在同一事务内获取账号锁后校验；失败时与占位一起回滚。
   if (requestId) {
     const [inserted] = await conn.query(
       `INSERT IGNORE INTO points_economy_operations
@@ -196,7 +202,7 @@ export async function beginPointsEconomyOperation(
     }
   }
 
-  return { replay: null, operationId, requestId, hash };
+  return { replay: null, operationId, requestId, hash, expectedCost: normalizedExpectedCost };
 }
 
 export async function completePointsEconomyOperation(conn, context, result) {
@@ -263,7 +269,8 @@ export async function assertPointsEconomyActivationReady({ db = pool, runtime = 
       C8_POINTS_ECONOMY_VERSION,
       C9_POINTS_ECONOMY_VERSION,
       C10_POINTS_ECONOMY_VERSION,
-      POINTS_ECONOMY_VERSION,
+      C11_POINTS_ECONOMY_VERSION,
+      C12_POINTS_ECONOMY_VERSION,
     ].includes(runtime.economyVersion)
   ) {
     const error = new Error('POINTS_ECONOMY_VERSION_UNSUPPORTED');
@@ -278,6 +285,13 @@ export async function assertPointsEconomyActivationReady({ db = pool, runtime = 
     const error = new Error('POINTS_ECONOMY_C5_MIGRATION_REQUIRED');
     error.code = 'POINTS_ECONOMY_C5_MIGRATION_REQUIRED';
     throw error;
+  }
+  if (runtime.economyVersion === C12_POINTS_ECONOMY_VERSION) {
+    const [shopCountRows] = await db.query(
+      'SELECT 1 FROM points_economy_migration_state WHERE migration_key = ? LIMIT 1',
+      [C12_SHOP_COUNT_MIGRATION_KEY],
+    );
+    if (!shopCountRows.length) throw new Error('POINTS_ECONOMY_C12_MIGRATION_REQUIRED');
   }
   return true;
 }

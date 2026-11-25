@@ -4,8 +4,9 @@ import { randomUUID } from 'node:crypto';
 import pool from '../db/index.js';
 import { getConsumable, grantItem } from './items.js';
 import { finishAdminAction } from './adminActionExecution.js';
-import { ECONOMY_CATALOGS, getActiveEconomyCatalog, getEconomyRuntime } from './pointsEconomyCatalog.js';
+import { ECONOMY_CATALOGS, getActiveEconomyCatalog, getEconomyRuntime, getShopItemPurchaseState } from './pointsEconomyCatalog.js';
 import {
+  assertPointsEconomyCost,
   beginPointsEconomyOperation,
   completePointsEconomyOperation,
   PointsEconomyError,
@@ -143,12 +144,16 @@ export async function ensurePointsSchema() {
       source_economy_version VARCHAR(32) DEFAULT NULL,
       operation_id BIGINT DEFAULT NULL,
       claim_source VARCHAR(24) NOT NULL DEFAULT 'purchase',
+      purchase_count TINYINT UNSIGNED NOT NULL DEFAULT 1,
       create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
       PRIMARY KEY (user_id, item_id),
       UNIQUE KEY uk_points_shop_claim_operation (operation_id),
       KEY idx_points_shop_claim_item_time (item_id, create_time)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='积分商店有限次商品领取事实'
   `);
+  if (await columnMissing('points_shop_item_claims', 'purchase_count')) {
+    await pool.query('ALTER TABLE points_shop_item_claims ADD COLUMN purchase_count TINYINT UNSIGNED NOT NULL DEFAULT 1');
+  }
   if (await columnMissing('user_growth', 'points')) {
     await pool.query('ALTER TABLE `user_growth` ADD COLUMN `points` INT NOT NULL DEFAULT 0 COMMENT "积分余额"');
   }
@@ -1192,11 +1197,21 @@ export async function getOwnedCosmetics(userId) {
   return [...new Set([...rows.map((row) => row.cosmetic_id), ...claimedAchievementFrames])];
 }
 
-export async function getClaimedLimitedShopItemIds(userId, conn = pool) {
-  if (!userId) return [];
-  const [rows] = await conn.query('SELECT item_id AS itemId FROM points_shop_item_claims WHERE user_id = ?', [userId]);
-  return [...new Set(rows.map((row) => row.itemId || row.item_id).filter(Boolean))];
+export async function getLimitedShopPurchaseCounts(userId, conn = pool) {
+  if (!userId) return new Map();
+  const [rows] = await conn.query(
+    'SELECT item_id AS itemId, purchase_count AS purchaseCount FROM points_shop_item_claims WHERE user_id = ?',
+    [userId],
+  );
+  return new Map(rows.map(({ itemId, purchaseCount }) => [itemId, Number(purchaseCount)]));
 }
+
+const shopPurchaseLimitReached = {
+  ok: false,
+  reason: 'purchase_limit',
+  code: 'POINTS_ITEM_PURCHASE_LIMIT_REACHED',
+  msg: '该商品已达兑换上限',
+};
 
 // 购买:事务内校验余额/真实等级/上限/是否已拥有 → 扣分 → 生效 → 记流水
 export async function buyItem(
@@ -1213,6 +1228,8 @@ export async function buyItem(
   }
   const conn = await pool.getConnection();
   try {
+    // 账号锁串行化限兑读取，READ COMMITTED 避免对不存在的领取行持有间隙锁。
+    if (item?.purchaseLimit) await conn.query('SET TRANSACTION ISOLATION LEVEL READ COMMITTED');
     await conn.beginTransaction();
     const operation = await beginPointsEconomyOperation(conn, {
       userId,
@@ -1222,7 +1239,7 @@ export async function buyItem(
       economyVersion,
       expectedCost,
       // 先按请求号尝试回放，使未来目录移除商品后仍能恢复旧成功响应；新请求再进入商品存在性校验。
-      actualCost: item?.cost ?? Number(expectedCost),
+      actualCost: item?.purchaseCosts ? null : item?.cost ?? Number(expectedCost),
       runtime,
     });
     if (operation.replay) {
@@ -1261,30 +1278,30 @@ export async function buyItem(
         return { ok: false, reason: 'owned', msg: '已拥有该装扮' };
       }
     }
-    const purchaseLimit = Number(item.purchaseLimit || 0);
-    if (purchaseLimit && purchaseLimit !== 1) {
-      throw new Error('UNSUPPORTED_POINTS_SHOP_PURCHASE_LIMIT');
-    }
-    if (purchaseLimit === 1) {
+    let purchaseCount = 0;
+    if (item.purchaseLimit) {
       const [claims] = await conn.query(
-        'SELECT 1 FROM points_shop_item_claims WHERE user_id = ? AND item_id = ? LIMIT 1',
+        'SELECT purchase_count FROM points_shop_item_claims WHERE user_id = ? AND item_id = ? FOR UPDATE',
         [userId, item.id],
       );
-      if (claims.length) {
-        await conn.rollback();
-        return {
-          ok: false,
-          reason: 'purchase_limit',
-          code: 'POINTS_ITEM_PURCHASE_LIMIT_REACHED',
-          msg: '该商品每个账号限兑一次',
-        };
-      }
+      purchaseCount = Number(claims[0]?.purchase_count || 0);
     }
-    if (Number(g.points) < item.cost) {
+    const { cost, purchaseLimit, limitReached } = getShopItemPurchaseState(item, purchaseCount);
+    if (limitReached) {
+      await conn.rollback();
+      return shopPurchaseLimitReached;
+    }
+    if (item.purchaseCosts) assertPointsEconomyCost(runtime, operation.expectedCost, cost);
+    if (Number(g.points) < cost) {
       await conn.rollback();
       return { ok: false, reason: 'insufficient', msg: '积分不足' };
     }
-    if (purchaseLimit === 1) {
+    if (purchaseCount > 0) {
+      await conn.query(
+        'UPDATE points_shop_item_claims SET purchase_count = purchase_count + 1 WHERE user_id = ? AND item_id = ?',
+        [userId, item.id],
+      );
+    } else if (purchaseLimit) {
       const [claim] = await conn.query(
         `INSERT IGNORE INTO points_shop_item_claims
           (user_id, item_id, source_economy_version, operation_id, claim_source)
@@ -1293,18 +1310,13 @@ export async function buyItem(
       );
       if (!claim.affectedRows) {
         await conn.rollback();
-        return {
-          ok: false,
-          reason: 'purchase_limit',
-          code: 'POINTS_ITEM_PURCHASE_LIMIT_REACHED',
-          msg: '该商品每个账号限兑一次',
-        };
+        return shopPurchaseLimitReached;
       }
     }
-    await conn.query('UPDATE user_growth SET points = points - ? WHERE user_id = ?', [item.cost, userId]);
+    await conn.query('UPDATE user_growth SET points = points - ? WHERE user_id = ?', [cost, userId]);
     await conn.query('INSERT INTO points_log (user_id, delta, reason, ref) VALUES (?, ?, ?, ?)', [
       userId,
-      -item.cost,
+      -cost,
       'buy',
       item.id,
     ]);
@@ -1315,7 +1327,7 @@ export async function buyItem(
       });
       if (!grant.ok || grant.qty !== 1) throw new Error('MAKEUP_CARD_GRANT_FAILED');
     } else if (item.effect === 'storage') {
-      // 永久扩容即时生效；C5 的每档一次资格已在同一事务内由唯一领取事实锁定。
+      // 永久扩容与扣分、领取事实和消费收据一同提交。
       await conn.query('UPDATE user_growth SET storage_bonus_mb = storage_bonus_mb + ? WHERE user_id = ?', [
         item.storageMb,
         userId,
@@ -1367,8 +1379,9 @@ export async function buyItem(
       item: item.id,
       itemId: item.id,
       type: item.type,
-      cost: item.cost,
-      purchaseLimit: purchaseLimit || null,
+      cost,
+      purchaseLimit,
+      ...(item.purchaseCosts && { purchaseCount: purchaseCount + 1 }),
       effect,
       assets: {
         storageBonusMb: Number(balance.storage_bonus_mb || 0),

@@ -185,7 +185,7 @@
       .filter((item) => isAvailable(item.id))
       .map((item) => ({
         value: item.id,
-        label: `${itemName(item)} · ${formatNumber(item.cost)} ${t('growth.points')}`,
+        label: `${itemName(item)} · ${formatNumber(props.catalog?.find((entry) => entry.id === item.id)?.cost ?? item.cost)} ${t('growth.points')}`,
       })),
   );
   function isAvailable(id: string) {
@@ -217,6 +217,10 @@
   const goalDescription = computed(() => {
     const item = goalCatalogItem.value;
     if (!item) return '';
+    if (item.purchaseCosts) return t('growth.shopRedemptionDescription', { gb: Number(item.storageMb || 0) / 1024 });
+    if (item.effect === 'ai_pack' && item.bonusTokens) {
+      return t('aiQuotaOneTime.packDescription', { amount: formatNumber(item.bonusTokens) });
+    }
     const key =
       item.effect === 'background' ? `profileBackgrounds.${item.id}Description` : `growth.shopItems.${item.id}.desc`;
     return te(key) ? t(key) : item.desc;

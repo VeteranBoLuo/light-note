@@ -16,7 +16,7 @@ const originalC5Flag = process.env.POINTS_ECONOMY_C5_ENABLED;
 process.env.POINTS_ECONOMY_C4_ENABLED = 'true';
 process.env.POINTS_ECONOMY_C5_ENABLED = 'true';
 
-const { buyItem, getClaimedLimitedShopItemIds } = await import('./points.js');
+const { buyItem, getLimitedShopPurchaseCounts } = await import('./points.js');
 
 function restoreEnv(key, value) {
   if (value === undefined) delete process.env[key];
@@ -38,8 +38,8 @@ function purchaseConnection({ claimed = false, claimInsertAffectedRows = 1, poin
       if (statement.includes('SELECT points, level, streak_protect_cards')) {
         return [[{ points, level: 8, streak_protect_cards: 0 }]];
       }
-      if (statement.includes('SELECT 1 FROM points_shop_item_claims')) {
-        return [claimed ? [{ exists: 1 }] : []];
+      if (statement.includes('SELECT purchase_count FROM points_shop_item_claims')) {
+        return [claimed ? [{ purchase_count: 1 }] : []];
       }
       if (statement.includes('INSERT IGNORE INTO points_shop_item_claims')) {
         return [{ affectedRows: claimInsertAffectedRows }];
@@ -139,9 +139,9 @@ describe('积分永久空间每档一次', () => {
   });
 
   it('一次读取当前账号全部有限次领取事实，不逐商品查询', async () => {
-    mocks.query.mockResolvedValueOnce([[{ itemId: 'storage_128' }, { itemId: 'storage_512' }]]);
+    mocks.query.mockResolvedValueOnce([[{ itemId: 'storage_128', purchaseCount: 1 }, { itemId: 'storage_2g', purchaseCount: 2 }]]);
 
-    await expect(getClaimedLimitedShopItemIds('user-1')).resolves.toEqual(['storage_128', 'storage_512']);
+    await expect(getLimitedShopPurchaseCounts('user-1')).resolves.toEqual(new Map([['storage_128', 1], ['storage_2g', 2]]));
     expect(mocks.query).toHaveBeenCalledOnce();
   });
 });
