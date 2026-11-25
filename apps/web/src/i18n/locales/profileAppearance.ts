@@ -27,9 +27,9 @@ export const profileAppearanceZh = {
   showAll: '查看全部',
   balance: '我的积分',
   hint: {
-    defaultBackground: '资料页、社区名片与公开主页恢复简洁底色',
-    backgroundOwned: '永久拥有 · 资料页、社区名片与公开主页共用',
-    backgroundRedeem: '兑换后永久拥有 · 资料页、社区名片与公开主页共用',
+    defaultBackground: '资料页、用户名片与公开主页恢复简洁底色',
+    backgroundOwned: '永久拥有 · 资料页、用户名片与公开主页共用',
+    backgroundRedeem: '兑换后永久拥有 · 资料页、用户名片与公开主页共用',
     backgroundOwnedShort: '永久拥有，可随时切换',
     backgroundRedeemShort: '兑换需确认，成功后可使用',
     noFrame: '所有位置显示原始头像',
@@ -84,7 +84,7 @@ export const profileAppearanceEn = {
   showAll: 'Show all',
   balance: 'My points',
   hint: {
-    defaultBackground: 'Your profile editor, community card and public profile return to the plain style',
+    defaultBackground: 'Your profile editor, user card and public profile return to the plain style',
     backgroundOwned: 'Yours forever · shared by your profile editor, card and public profile',
     backgroundRedeem: 'Yours forever after redeeming · shared by your profile editor, card and public profile',
     backgroundOwnedShort: 'Yours forever. Switch anytime.',

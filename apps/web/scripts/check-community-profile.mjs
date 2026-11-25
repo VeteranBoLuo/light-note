@@ -53,7 +53,7 @@ async function verifyLayout(page, { width, state }) {
     };
     const identity = el.querySelector('.chat-profile-content__identity');
     const copy = el.querySelector('.chat-profile-content__identity-copy');
-    const tags = [...el.querySelector('.chat-profile-content__identity-tags').children];
+    const tags = [...el.querySelector('.chat-profile-content__identity-tags').children].filter((tag) => !tag.classList.contains('chat-profile-content__tenure'));
     const tenure = el.querySelector('.chat-profile-content__identity .chat-profile-content__tenure');
     const avatar = el.querySelector('.chat-profile-content__avatar');
     const chipStyle = getComputedStyle(el.querySelector('.growth-level-chip'));
@@ -84,7 +84,7 @@ async function verifyLayout(page, { width, state }) {
       achievements: [...el.querySelectorAll('.chat-profile-content__achievement')].map(box),
       overflow: el.scrollWidth - el.clientWidth,
       density: document.documentElement.dataset.density,
-      ellipsis: getComputedStyle(copy.querySelector('strong')).textOverflow,
+      nameWidth: copy.querySelector('strong').scrollWidth,
       levelContrast: (Math.max(foreground, background) + 0.05) / (Math.min(foreground, background) + 0.05),
     };
   });
@@ -94,25 +94,20 @@ async function verifyLayout(page, { width, state }) {
     result.tags.length,
     ['own', 'moderator'].includes(state) ? 3 : ['framed', 'long', 'decorated'].includes(state) ? 2 : 1,
   );
+  assert(result.tenure.bottom <= result.identity.bottom + 1, 'Tenure must remain inside the identity surface');
+  assert(result.toolbar.bottom <= result.identity.bottom + 1, 'Actions must fit inside the identity surface');
   assert(
-    result.tenure.top >= Math.max(...result.tags.map((tag) => tag.bottom)),
-    'Tenure must follow the entire tag group',
+    result.toolbar.top >= result.copy.bottom - 1 || result.toolbar.left >= result.copy.right - 1,
+    'Actions must leave room for the name and public metadata',
   );
-  assert(result.tenure.bottom <= result.identity.bottom, 'Tenure must remain inside the identity surface');
-  assert(result.toolbar.top >= result.identity.bottom, 'Actions must follow the identity surface');
   assert(result.avatar.right <= result.copy.left, 'Avatar frame must reserve its full width');
   for (const tag of result.tags) assert(tag.right <= result.copy.right + 1, 'Tag label must fit the text column');
-  if (width < 768) {
-    assert.equal(result.density, 'standard', 'Mobile must ignore desktop density preferences');
-    for (let i = 1; i < result.achievements.length; i++)
-      assert(result.achievements[i].top >= result.achievements[i - 1].bottom, 'Mobile achievements use one column');
-  } else {
-    assert(
-      result.achievements.every((item) => Math.abs(item.top - result.achievements[0].top) <= 1),
-      'Featured achievements fit one row',
-    );
-  }
-  if (state === 'long') assert.equal(result.ellipsis, 'ellipsis');
+  if (width < 768) assert.equal(result.density, 'standard', 'Mobile must ignore desktop density preferences');
+  assert(result.nameWidth <= result.copy.right - result.copy.left + 1, 'Nickname must wrap within its column');
+  assert(
+    result.achievements.every((item) => Math.abs(item.top - result.achievements[0].top) <= 1),
+    'Two featured achievements fit one row',
+  );
   if (state === 'own' && !page.url().includes('locale=en-US')) {
     const tops = await page
       .locator('.chat-profile-content__toolbar button')
@@ -139,9 +134,9 @@ try {
       for (const state of ['member', 'framed', 'moderator', 'own', 'long']) {
         const page = await open({ theme, width, state, density: 'large' });
         await verifyLayout(page, { width, state });
-        const privacy = page.getByRole('button', { name: '查看范围', exact: true });
-        await privacy.scrollIntoViewIfNeeded();
-        assert(await privacy.isVisible(), 'Drawer footer must remain reachable');
+        const feature = page.getByRole('button', { name: /街角小书店/ });
+        await feature.scrollIntoViewIfNeeded();
+        assert(await feature.isVisible(), 'Featured posts must remain reachable in the drawer');
         if (['own', 'long'].includes(state)) {
           await page.locator('.b-drawer-body').evaluate((el) => {
             el.scrollTop = 0;
@@ -188,16 +183,14 @@ try {
     await page.getByRole('button', { name: '重新打开名片', exact: true }).click();
     await page.getByRole('button', { name: '关注', exact: true }).click();
     await page.getByRole('button', { name: '取消关注', exact: true }).waitFor();
-    await page.getByRole('button', { name: '查看范围', exact: true }).click();
-    assert.equal(
-      await page.getByRole('button', { name: '收起说明', exact: true }).getAttribute('aria-expanded'),
-      'true',
-    );
-    assert(await page.getByText('这里只展示昵称', { exact: false }).isVisible());
+    assert.equal(await page.getByRole('button', { name: '查看范围', exact: true }).count(), 0);
     await page.getByRole('button', { name: '查看全部 10 项成就', exact: true }).click();
     await page.getByRole('button', { name: '返回名片', exact: true }).click();
-    await page.getByRole('button', { name: '公开主页', exact: true }).click();
+    await page.getByRole('button', { name: '查看公开主页', exact: true }).click();
     await page.locator('output').filter({ hasText: 'navigate:/community/people/profile-fixture' }).waitFor();
+    await page.getByRole('button', { name: '重新打开名片', exact: true }).click();
+    await page.getByRole('button', { name: /读书摘记/ }).click();
+    await page.locator('output').filter({ hasText: 'navigate:/community/posts/reading-notes' }).waitFor();
     await page.close();
 
     page = await open({ width, state: 'official' });
@@ -221,7 +214,11 @@ try {
         await page.getByRole('button', { name: '重新读取', exact: true }).click();
         await page.locator('.chat-profile-content__identity').waitFor();
       }
-      if (state === 'empty') assert.equal(await page.locator('.chat-profile-content__achievement').count(), 0);
+      if (state === 'empty') {
+        assert.equal(await page.locator('.chat-profile-content__achievement, .chat-profile-content__post').count(), 0);
+        assert(await page.getByText('加入轻笺约 3 个月', { exact: true }).isVisible());
+        assert(await page.getByRole('button', { name: '查看公开主页', exact: true }).isVisible());
+      }
       if (state === 'visitor') {
         assert.equal(await page.getByRole('button', { name: '更多成员操作', exact: true }).count(), 0);
         await page.getByRole('button', { name: '登录 / 注册后参与', exact: true }).click();

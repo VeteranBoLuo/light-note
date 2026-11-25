@@ -1,4 +1,20 @@
 import { apiBaseGet, apiBasePost, apiBasePut } from '@/http/request';
+import type {
+  CommunityChatAuthorProfile,
+  CommunityChatPublicAchievement,
+  CommunityProfileActionsState,
+} from '@/api/communityChatApi';
+
+export interface ProfilePostPreview {
+  publicId: string;
+  title: string;
+  excerpt: string;
+}
+
+export interface PublicUserCard extends CommunityChatAuthorProfile, CommunityProfileActionsState {
+  allAchievements: CommunityChatPublicAchievement[];
+  previewPosts: ProfilePostPreview[];
+}
 export interface FeedResource {
   publicId: string;
   kind: 'note' | 'bookmark';

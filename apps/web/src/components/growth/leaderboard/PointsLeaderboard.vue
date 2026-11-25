@@ -81,6 +81,7 @@
         :loading="loading"
         :error="error"
         @retry="load()"
+        @profile="openProfile"
       />
       <BCard v-if="data?.weekly" as="aside" padding="12px" class="leaderboard-prizes">
         <header>
@@ -107,6 +108,21 @@
         <p class="prize-guide">{{ t('growth.leaderboard.seatRule') }}</p>
       </BCard>
     </div>
+    <ChatUserProfileModal
+      v-model:visible="profileOpen"
+      :profile="profile"
+      :actions-profile="profile"
+      :preview-posts="profile?.previewPosts"
+      :all-achievements="profile?.allAchievements"
+      :loading="profileLoading"
+      :error="profileError"
+      :is-own="profile?.isOwn"
+      :chat-actions="false"
+      :session-key="profileSession"
+      @retry="loadProfile"
+      @navigate="navigateFromProfile"
+      @after-close="finishProfileClose"
+    />
     <LeaderboardRules v-if="rules" :mobile="mobile" :open="rulesOpen" :rules="rules" @close="rulesOpen = false" />
   </section>
 </template>
@@ -114,6 +130,10 @@
 <script lang="ts" setup>
   import { computed, onBeforeUnmount, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
+  import { useRouter } from 'vue-router';
+  import { feedGet, type PublicUserCard } from '@/api/communityFeedApi';
+  import ChatUserProfileModal from '@/components/communityChat/ChatUserProfileModal.vue';
+  import { closeCurrentMobileOverlayThen } from '@/utils/mobileOverlayHistory';
   import { getPointsLeaderboard, type LeaderboardData, type LeaderboardPeriod, type LeaderboardType } from '@/api/pointsLeaderboardApi';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BCard from '@/components/base/BasicComponents/BCard.vue';
@@ -128,6 +148,70 @@
   const props = defineProps<{ mobile: boolean }>();
   const { t, locale } = useI18n();
   const user = useUserStore();
+  const router = useRouter();
+  const profileOpen = ref(false);
+  const profile = ref<PublicUserCard | null>(null);
+  const profileLoading = ref(false);
+  const profileError = ref(false);
+  const profileSession = ref(0);
+  let profileRequest: AbortController | null = null;
+  let profileId = '';
+  let profileTrigger: HTMLElement | null = null;
+
+  async function loadProfile() {
+    profileRequest?.abort();
+    const request = new AbortController();
+    profileRequest = request;
+    profileLoading.value = true;
+    profileError.value = false;
+    profile.value = null;
+    try {
+      const target = await feedGet<PublicUserCard>(
+        'profiles/' + encodeURIComponent(profileId),
+        { view: 'card', locale: locale.value },
+        { signal: request.signal },
+      );
+      if (!target?.userPublicId || !Array.isArray(target.previewPosts)) throw new Error('USER_CARD_UNAVAILABLE');
+      if (!request.signal.aborted) profile.value = target;
+    } catch {
+      if (!request.signal.aborted) profileError.value = true;
+    } finally {
+      if (profileRequest === request) {
+        profileRequest = null;
+        profileLoading.value = false;
+      }
+    }
+  }
+
+  function openProfile(communityId: string, trigger: HTMLElement) {
+    profileId = communityId;
+    profileTrigger = trigger;
+    profileSession.value += 1;
+    profileOpen.value = true;
+    void loadProfile();
+  }
+
+  watch(profileOpen, (open) => {
+    if (open) return;
+    profileRequest?.abort();
+  });
+
+  function finishProfileClose() {
+    if (profileOpen.value) return;
+    profile.value = null;
+    const trigger = profileTrigger;
+    profileTrigger = null;
+    if (trigger?.isConnected) trigger.focus({ preventScroll: true });
+  }
+  watch([() => user.id, () => user.role, () => user.adminContext?.id], () => (profileOpen.value = false));
+
+  function navigateFromProfile(path: string) {
+    profileTrigger = null;
+    return closeCurrentMobileOverlayThen(
+      () => (profileOpen.value = false),
+      () => router.push(path),
+    );
+  }
   const board = ref<LeaderboardType>('week');
   const period = ref<LeaderboardPeriod>('current');
   const boardIcons = { week: icon.growth.checkin, month: icon.common.calendar, total: icon.growth.crown };
@@ -184,7 +268,10 @@
     if (boardViewport.value) boardViewport.value.scrollTop = 0;
     void load();
   }, { immediate: true });
-  onBeforeUnmount(() => inflight?.abort());
+  onBeforeUnmount(() => {
+    inflight?.abort();
+    profileRequest?.abort();
+  });
 
   watch([boardViewport, columnsElement, data, loading, error, () => props.mobile], ([viewport, columns], _, onCleanup) => {
     const list = columns?.querySelector<HTMLElement>('.leaderboard-list');

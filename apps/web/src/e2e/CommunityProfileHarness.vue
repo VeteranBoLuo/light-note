@@ -1,6 +1,6 @@
 <template>
   <main class="community-profile-harness">
-    <h1>社区名片 · 隔离验收</h1>
+    <h1>用户名片 · 隔离验收</h1>
     <p>仅使用内存示例数据，所有操作均不连接真实后端。</p>
     <BButton @click="visible = true">重新打开名片</BButton>
     <output>{{ events.join(' | ') }}</output>
@@ -8,6 +8,7 @@
       v-model:visible="visible"
       :profile="profile"
       :actions-profile="{ isOwn, following: false }"
+      :preview-posts="previewPosts"
       :authenticated="state !== 'visitor'"
       :is-own="isOwn"
       :loading="loading"
@@ -53,6 +54,10 @@
     { key: 'level_15', group: 'level' },
     { key: 'note_500', group: 'create' },
     { key: 'join_7', group: 'tenure' },
+  ];
+  const previewPosts = state === 'empty' ? [] : [
+    { publicId: 'reading-notes', title: '读书摘记', excerpt: '把阅读时写下的摘记整理成主题。' },
+    { publicId: 'bookshops', title: '街角小书店', excerpt: '记录周末散步时路过的小店。' },
   ];
   const profile: CommunityChatAuthorProfile = {
     name:

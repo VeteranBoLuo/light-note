@@ -721,6 +721,43 @@ describe.skipIf(!socketPath)('P2 real database boundaries', () => {
       code: 'COMMUNITY_CLOSED',
     });
   });
+  it('prefers selected posts in both user-card views and fills with visible recent posts', async () => {
+    const selected = await published();
+    const older = await published();
+    const recent = await published();
+    const member = await identity(db, A.id);
+    const select = async (featuredPosts) => {
+      const { revision } = await profileOptions({ user: A, db, env });
+      await updateProfileOptions({
+        user: A,
+        db,
+        env,
+        input: input({ expectedRevision: revision, featuredPosts }),
+      });
+    };
+    const card = () => publicProfile({ user: B, id: member.communityId, input: { view: 'card' }, db, env });
+    const posts = () => publicProfile({
+      user: B, id: member.userPublicId, input: { view: 'preview-posts' }, db, env,
+    });
+    const preview = ({ publicId, title, body }) => ({ publicId, title, excerpt: body });
+    expect((await card()).previewPosts).toEqual([preview(recent), preview(older)]);
+    await select([selected.publicId]);
+    expect(await card()).toMatchObject({
+      userPublicId: member.userPublicId,
+      following: false,
+      previewPosts: [preview(selected), preview(recent)],
+    });
+    expect(await posts()).toEqual({ previewPosts: [preview(selected), preview(recent)] });
+    await select([recent.publicId, selected.publicId]);
+    expect((await card()).previewPosts).toEqual([preview(recent), preview(selected)]);
+    await select([recent.publicId]);
+    expect((await card()).previewPosts).toEqual([preview(recent), preview(older)]);
+    await run(withdrawPost, A, input({ postId: recent.publicId, expectedRevision: recent.revision }));
+    expect((await card()).previewPosts).toEqual([preview(older), preview(selected)]);
+    await run(relation, B, input({ userPublicId: member.userPublicId, action: 'block', enabled: true }));
+    await expect(card()).rejects.toMatchObject({ status: 404 });
+    await expect(posts()).rejects.toMatchObject({ status: 404 });
+  });
   it('pending drafts stay private and revision approval publishes only the exact version', async () => {
     const p = await run(submitPost, A, postInput());
     expect((await listPosts({ user: B, env, db })).items).toEqual([]);

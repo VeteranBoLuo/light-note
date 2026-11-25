@@ -1,5 +1,7 @@
 import { randomUUID } from 'node:crypto';
+import { parseCommunityPostDocument } from '@lightnote/shared/community-feed';
 import pool from '../../db/index.js';
+import { extractBlocks } from '../knowledgeText.js';
 import { queueNotificationChange } from '../notificationRealtimeEvents.js';
 import { buildProfilePayload, loadCommunityProfileAuthor } from '../services/communityChatProfileService.js';
 import {
@@ -108,11 +110,11 @@ export async function updateProfileOptions({ user, input, env = process.env, db 
     },
   );
 }
-export async function publicProfileRow(db, id, viewer, lock = false) {
+export async function publicProfileRow(db, id, viewer, lock = false, byCommunityId = false) {
   const row = await first(
     db,
-    `SELECT u.id,u.role,COALESCE(NULLIF(u.alias,''),'成员') AS name,i.public_id,i.community_id,o.interests,o.featured_posts FROM community_chat_user_identities i JOIN user u ON u.id=i.user_id LEFT JOIN community_profile_options o ON o.user_id=i.user_id WHERE i.public_id=? AND u.del_flag='0' AND u.role<>'visitor' AND NOT EXISTS(SELECT 1 FROM community_chat_members m WHERE m.user_id=u.id AND m.status='banned')${lock ? ' FOR UPDATE' : ''}`,
-    [publicId(id)],
+    `SELECT u.id,u.role,COALESCE(NULLIF(u.alias,''),'成员') AS name,i.public_id,i.community_id,o.interests,o.featured_posts FROM community_chat_user_identities i JOIN user u ON u.id=i.user_id LEFT JOIN community_profile_options o ON o.user_id=i.user_id WHERE ${byCommunityId ? 'i.community_id' : 'i.public_id'}=? AND u.del_flag='0' AND u.role<>'visitor' AND NOT EXISTS(SELECT 1 FROM community_chat_members m WHERE m.user_id=u.id AND m.status='banned')${lock ? ' FOR UPDATE' : ''}`,
+    [byCommunityId ? id : publicId(id)],
   );
   if (!row || !(await pairAllowed(db, viewer, row.id, { lock }))) fail('COMMUNITY_CONTENT_UNAVAILABLE', 404);
   return row;
@@ -197,11 +199,28 @@ export async function clearBlockedRelations(c, a, b) {
 }
 export async function publicProfile({ user, id, input = {}, env = process.env, db = pool }) {
   await access(db, user, { env });
-  const row = await publicProfileRow(db, id, user?.id || '');
+  const card = input.view === 'card';
+  const byCommunityId = card && typeof id === 'string' && /^ln_[2-9A-HJ-NP-Z]{6,8}$/.test(id);
+  const row = await publicProfileRow(db, id, user?.id || '', false, byCommunityId);
+  const target = row.public_id;
+  const readFeatured = () => loadFeaturedPosts({ user, target, stored: row.featured_posts, env, db });
+  const readPreviewPosts = async () => {
+    const limit = 2;
+    const featured = (await readFeatured()).slice(0, limit);
+    if (featured.length === limit) return featured.map(cardPost);
+
+    const { items } = await listPosts({ user, input: { author: target, limit }, env, db });
+    const featuredIds = new Set(featured.map((post) => post.publicId));
+    return [...featured, ...items.filter((post) => !featuredIds.has(post.publicId))]
+      .slice(0, limit)
+      .map(cardPost);
+  };
+  if (input.view === 'preview-posts') return { previewPosts: await readPreviewPosts() };
+
   const { profile, unlocked } = await buildProfilePayload({
     db,
     author: await loadCommunityProfileAuthor({ userId: row.id, db }),
-    avatarPath: `/api/community/profiles/${id}/avatar`,
+    avatarPath: `/api/community/profiles/${target}/avatar`,
     locale: input.locale === 'en-US' ? 'en-US' : 'zh-CN',
   });
   const followed = user?.id
@@ -210,6 +229,16 @@ export async function publicProfile({ user, id, input = {}, env = process.env, d
         row.id,
       ])
     : null;
+  const allAchievements = unlocked.map(({ key, group }) => ({ key, group }));
+  if (card) {
+    return {
+      ...profile,
+      allAchievements,
+      previewPosts: await readPreviewPosts(),
+      following: Boolean(followed),
+      isOwn: row.id === user?.id,
+    };
+  }
   const muted = user?.id
     ? await first(db, 'SELECT 1 AS yes FROM community_user_mutes WHERE user_id=? AND target_user_id=?', [
         user.id,
@@ -217,27 +246,14 @@ export async function publicProfile({ user, id, input = {}, env = process.env, d
       ])
     : null;
   const summary = input.summary === 'true';
-  const page = summary ? { items: [], nextCursor: null } : await listPosts({ user, input: { author: id }, env, db });
-  const featuredPostItems = (
-    await Promise.all(
-      (summary ? [] : parseJson(row.featured_posts) || []).map(async (postId) => {
-        try {
-          const p = await postDetail({ user, id: postId, env, db });
-          return p.author.userPublicId === id ? p : null;
-        } catch (e) {
-          if (e.status === 404) return null;
-          throw e;
-        }
-      }),
-    )
-  ).filter(Boolean);
+  const page = summary ? { items: [], nextCursor: null } : await listPosts({ user, input: { author: target }, env, db });
   return {
     ...profile,
     followerCount: await relationCount(db, row.id, user?.id || '', true),
     followingCount: await relationCount(db, row.id, user?.id || '', false),
-    allAchievements: unlocked.map(({ key, group }) => ({ key, group })),
-    featuredPostItems,
-    userPublicId: id,
+    allAchievements,
+    featuredPostItems: summary ? [] : await readFeatured(),
+    userPublicId: target,
     communityId: row.community_id,
     interests: parseJson(row.interests) || [],
     featuredPosts: parseJson(row.featured_posts) || [],
@@ -245,6 +261,35 @@ export async function publicProfile({ user, id, input = {}, env = process.env, d
     muted: Boolean(muted),
     isOwn: row.id === user?.id,
     posts: page,
+  };
+}
+
+async function loadFeaturedPosts({ user, target, stored, env, db }) {
+  return (
+    await Promise.all(
+      (parseJson(stored) || []).map(async (id) => {
+        try {
+          const post = await postDetail({ user, id, env, db });
+          return post.author.userPublicId === target ? post : null;
+        } catch (error) {
+          if (error.status === 404) return null;
+          throw error;
+        }
+      }),
+    )
+  ).filter(Boolean);
+}
+
+function cardPost({ publicId, title, body }) {
+  const text = parseCommunityPostDocument(body).blocks
+    .filter((block) => block.kind === 'text')
+    .map((block) => block.source)
+    .join('\n');
+  const snippet = [...extractBlocks(text).map((block) => block.text).join(' ')];
+  return {
+    publicId,
+    title,
+    excerpt: snippet.length > 140 ? `${snippet.slice(0, 140).join('')}…` : snippet.join(''),
   };
 }
 

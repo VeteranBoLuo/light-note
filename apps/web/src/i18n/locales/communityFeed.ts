@@ -197,7 +197,7 @@ export const feedZh = {
   linkFormat: '链接',
   formatPlaceholder: '文字',
   feedNotifications: '广场通知',
-  liveProfilePreview: '社区名片 · 实时预览',
+  liveProfilePreview: '用户名片 · 实时预览',
   profilePreviewHint: '聊天室与广场共用这张名片。头像和昵称沿用账号资料。',
 
   settings: '社区设置',
@@ -577,7 +577,7 @@ export const feedEn: Record<keyof typeof feedZh, string> = {
   linkFormat: 'Link',
   formatPlaceholder: 'Text',
   feedNotifications: 'Feed notifications',
-  liveProfilePreview: 'Community card \u00b7 Live preview',
+  liveProfilePreview: 'User card \u00b7 Live preview',
   profilePreviewHint: 'Chat and the feed share this card. Your account provides the avatar and name.',
 
   settings: 'Community settings',

@@ -53,7 +53,7 @@
             </span>
           </template>
           <span v-if="'unavailable' in row" class="muted">{{ t('growth.leaderboard.placeReserved') }}</span>
-          <LeaderboardIdentity v-else :entry="row">
+          <LeaderboardIdentity v-else :entry="row" @profile="openProfile">
             <template v-if="weekly">
               <span>{{ t('growth.leaderboard.effectiveDaysValue', { n: row.activeDays }) }}</span>
               <span v-if="seatCopy(row)" :class="seatTone(row)">{{ seatCopy(row) }}</span>
@@ -84,7 +84,7 @@
           </span>
           <template v-else-if="column.key === 'player'">
             <span v-if="record.unavailable" class="muted">{{ t('growth.leaderboard.placeReserved') }}</span>
-            <LeaderboardIdentity v-else :entry="record" />
+            <LeaderboardIdentity v-else :entry="record" @profile="openProfile" />
           </template>
           <span v-else-if="column.key === 'days'" class="muted">
             {{ record.unavailable ? '—' : t('growth.leaderboard.daysValue', { n: record.activeDays }) }}
@@ -127,7 +127,10 @@
     loading: boolean;
     error: boolean;
   }>();
-  const emit = defineEmits<{ retry: [] }>();
+  const emit = defineEmits<{ retry: []; profile: [communityId: string, trigger: HTMLElement] }>();
+  function openProfile(communityId: string, trigger: HTMLElement) {
+    emit('profile', communityId, trigger);
+  }
   const { t, locale } = useI18n();
   const mobileSurface = ref<InstanceType<typeof MobileListSurface> | null>(null);
   useDensityScrollAnchor(computed(() => mobileSurface.value?.$el ?? null));

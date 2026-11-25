@@ -2,28 +2,33 @@
   <div
     v-if="userPublicId && !user.adminContext && (loading || profile || loadError)"
     class="community-profile-actions"
-    :class="{ 'community-profile-actions--card': cardLayout, 'is-own': profile?.isOwn }"
+    :class="{
+      'community-profile-actions--card': cardLayout,
+      'community-profile-actions--relationship': relationshipOnly,
+      'is-own': profile?.isOwn,
+    }"
     :aria-busy="loading"
   >
     <BLoading v-if="loading" inline loading :title="t('community.feed.loading')" />
     <template v-else-if="profile">
       <BButton
-        v-if="profile.isOwn"
+        v-if="profile.isOwn && !relationshipOnly"
         class="community-profile-actions__manage"
         @click="$emit('navigate', '/community/manage')"
       >
         {{ t('community.feed.manage') }}
       </BButton>
       <BButton
-        v-else-if="user.id && user.role !== 'visitor'"
+        v-if="!profile.isOwn && user.id && user.role !== 'visitor'"
         class="community-profile-actions__follow"
-        :type="profile.following ? undefined : 'primary'"
+        :type="profile.following || relationshipOnly ? undefined : 'primary'"
         :loading="busy"
         @click="follow"
       >
         {{ t('community.feed.' + (profile.following ? 'unfollow' : 'follow')) }}
       </BButton>
       <BButton
+        v-if="!relationshipOnly"
         type="text"
         class="community-profile-actions__home"
         @click="$emit('navigate', '/community/people/' + userPublicId)"
@@ -53,6 +58,7 @@
     userPublicId: string;
     preparedProfile?: CommunityProfileActionsState | null;
     cardLayout?: boolean;
+    relationshipOnly?: boolean;
   }>();
   defineEmits<{ navigate: [path: string] }>();
   const { t } = useI18n(),
@@ -144,6 +150,11 @@
 
   .community-profile-actions--card .community-profile-actions__follow {
     min-width: var(--ui-layout-88, 88px);
+  }
+
+  .community-profile-actions--relationship .community-profile-actions__follow {
+    min-width: var(--ui-layout-64, 64px);
+    padding-inline: var(--ui-space-10, 10px);
   }
 
   .community-profile-actions--card .community-profile-actions__home {
