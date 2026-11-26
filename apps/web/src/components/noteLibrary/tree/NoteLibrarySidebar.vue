@@ -2,7 +2,7 @@
   <nav class="note-library-sidebar" :aria-label="t('note.libraryNavigation')">
     <div v-if="tabs.length > 1" class="note-library-sidebar__head">
       <BTabs v-model:active-tab="activeTab" :options="tabs" variant="segment" />
-      <BTooltip v-if="collapsible" :title="collapseTitle">
+      <BTooltip v-if="collapsible" :title="t('note.collapsePageSidebar')" :shortcut="sidebarShortcut">
         <BButton
           class="note-library-sidebar__collapse"
           :aria-label="t('note.collapsePageSidebar')"
@@ -27,7 +27,7 @@
           </template>
         </BInput>
         <!-- 只有一个页签时不单独占一行标题栏，收起按钮跟在搜索框后面。 -->
-        <BTooltip v-if="collapsible && tabs.length <= 1" :title="collapseTitle">
+        <BTooltip v-if="collapsible && tabs.length <= 1" :title="t('note.collapsePageSidebar')" :shortcut="sidebarShortcut">
           <BButton
             class="note-library-sidebar__collapse"
             :aria-label="t('note.collapsePageSidebar')"
@@ -217,9 +217,7 @@
     collapse: [];
   }>();
   const { t } = useI18n();
-  const collapseTitle = computed(
-    () => `${t('note.collapsePageSidebar')} · ${getWorkspacePanelShortcutLabel('sidebar')}`,
-  );
+  const sidebarShortcut = getWorkspacePanelShortcutLabel('sidebar');
   const activeTab = defineModel<'directory' | 'outline'>('mode', { default: 'directory' });
   const tabs = computed(() => [
     ...(props.directoryEnabled ? [{ key: 'directory', label: t('note.pagesTab') }] : []),

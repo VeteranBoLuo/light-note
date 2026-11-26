@@ -21,15 +21,15 @@ describe('BTooltip 交互状态', () => {
     vi.unstubAllGlobals();
   });
 
-  function mountScrollTooltip(delay = 0, followCursor = false) {
+  function mountScrollTooltip(delay = 0, followCursor = false, shortcut?: string) {
     host = document.createElement('div');
     document.body.append(host);
     app = createApp(
       defineComponent({
         components: { BTooltip },
-        setup: () => ({ delay, followCursor }),
+        setup: () => ({ delay, followCursor, shortcut }),
         template:
-          '<div id="scroll-container"><BTooltip title="定位提示" :delay="delay" :follow-cursor="followCursor"><button>入口</button></BTooltip></div><div id="unrelated-panel"></div>',
+          '<div id="scroll-container"><BTooltip title="定位提示" :shortcut="shortcut" :delay="delay" :follow-cursor="followCursor"><button>入口</button></BTooltip></div><div id="unrelated-panel"></div>',
       }),
     );
     app.mount(host);
@@ -39,6 +39,15 @@ describe('BTooltip 交互状态', () => {
     const unrelated = host.querySelector('#unrelated-panel') as HTMLElement;
     return { trigger, popup, container, unrelated };
   }
+
+  it('单独显示提示文字和快捷键', async () => {
+    const { trigger, popup } = mountScrollTooltip(0, false, 'Ctrl + \\');
+    trigger.dispatchEvent(new MouseEvent('mouseenter'));
+    await vi.advanceTimersByTimeAsync(1);
+    expect(popup.querySelector('span')?.textContent).toBe('定位提示');
+    expect(popup.querySelector('kbd')?.textContent).toBe('Ctrl + \\');
+    expect(popup.textContent).not.toContain('·');
+  });
 
   it.each([false, true])('容器滚动立即关闭提示，重新悬停可恢复（跟随鼠标：%s）', async (followCursor) => {
     const { trigger, popup, container } = mountScrollTooltip(0, followCursor);

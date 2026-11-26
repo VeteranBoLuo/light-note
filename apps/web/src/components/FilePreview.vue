@@ -26,7 +26,8 @@
         <div class="preview-actions">
           <BTooltip
             v-if="previewType === 'excel' && !loading && !error"
-            :title="`${t('cloudSpace.previewPanel.findInWorkbook')} · ${getGlobalShortcutLabel('globalSearch')}`"
+            :title="t('cloudSpace.previewPanel.findInWorkbook')"
+            :shortcut="getGlobalShortcutLabel('globalSearch')"
           >
             <BButton
               size="small"

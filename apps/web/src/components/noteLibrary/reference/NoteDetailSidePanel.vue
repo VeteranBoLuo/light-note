@@ -9,7 +9,7 @@
           </span>
         </template>
       </BTabs>
-      <BTooltip :title="`${t('note.hideSidePanel')} · ${getWorkspacePanelShortcutLabel('sidePanel')}`">
+      <BTooltip :title="t('note.hideSidePanel')" :shortcut="getWorkspacePanelShortcutLabel('sidePanel')">
         <BButton class="note-detail-side-panel__collapse" :aria-label="t('note.hideSidePanel')" @click="emit('collapse')">
           <SvgIcon :src="icon.noteTree.panelRightClose" size="16" aria-hidden="true" />
         </BButton>

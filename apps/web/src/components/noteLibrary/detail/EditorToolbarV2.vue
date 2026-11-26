@@ -315,9 +315,8 @@
         h(
           BTooltip,
           {
-            title: [componentProps.action.label, componentProps.action.description, componentProps.action.shortcut]
-              .filter(Boolean)
-              .join(' · '),
+            title: [componentProps.action.label, componentProps.action.description].filter(Boolean).join(' · '),
+            shortcut: componentProps.action.shortcut,
           },
           {
             default: () =>

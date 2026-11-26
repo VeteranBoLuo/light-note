@@ -50,7 +50,8 @@
         v-if="showMainSidebarTrigger"
         class="note-workspace-shell__trigger-tooltip"
         follow-cursor
-        :title="shortcutTitle(t('note.expandPageSidebar'), 'sidebar')"
+        :title="t('note.expandPageSidebar')"
+        :shortcut="panelShortcuts ? getWorkspacePanelShortcutLabel('sidebar') : undefined"
       >
         <BButton
           class="note-workspace-shell__sidebar-boundary-toggle note-workspace-shell__sidebar-boundary-toggle--open"
@@ -65,7 +66,8 @@
         v-if="showMainAiTrigger"
         class="note-workspace-shell__trigger-tooltip"
         follow-cursor
-        :title="shortcutTitle(t('note.showAiPanel'), 'sidePanel')"
+        :title="t('note.showAiPanel')"
+        :shortcut="panelShortcuts ? getWorkspacePanelShortcutLabel('sidePanel') : undefined"
       >
         <BButton
           class="note-workspace-shell__ai-boundary-toggle note-workspace-shell__ai-boundary-toggle--open"
@@ -131,7 +133,6 @@
     getWorkspacePanelAriaKeyShortcut,
     getWorkspacePanelShortcutLabel,
     matchWorkspacePanelShortcut,
-    type WorkspacePanelShortcut,
   } from '@/config/keyboardShortcuts';
   import {
     NOTE_WORKSPACE_DEFAULT_SIDEBAR_WIDTH,
@@ -332,10 +333,6 @@
       return;
     }
     emit('update:aiOverlayOpen', false);
-  }
-
-  function shortcutTitle(action: string, target: WorkspacePanelShortcut) {
-    return props.panelShortcuts ? `${action} · ${getWorkspacePanelShortcutLabel(target)}` : action;
   }
 
   function toggleSidebar() {
