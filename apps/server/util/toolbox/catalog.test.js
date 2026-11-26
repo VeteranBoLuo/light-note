@@ -34,12 +34,13 @@ describe('toolbox catalog', () => {
     expect(() => normalizeToolboxInput('forms', {})).toThrow(/免费工具/);
   });
 
-  it('publishes a fixed price for browser-local image repair', () => {
+  it('publishes browser-local image repair as free', () => {
     const repair = getPublicToolboxCatalog().tools.find((tool) => tool.id === 'image_watermark_remover');
     expect(repair).toMatchObject({
       executionMode: 'browser',
-      billingMedium: 'points',
-      price: { kind: 'fixed', currency: 'points', min: 1, max: 1 },
+      billingMedium: 'free',
+      billingMedia: ['free'],
+      price: { kind: 'free', currency: null, min: 0, max: 0 },
     });
   });
 
@@ -104,7 +105,7 @@ describe('toolbox catalog', () => {
     ).toEqual(Array.from({ length: 5 }, () => [false, 0, 0]));
     expect(
       catalog.tools
-        .filter((item) => item.executionMode === 'browser' && item.id !== 'image_watermark_remover')
+        .filter((item) => item.executionMode === 'browser')
         .every((item) => item.billingMedium === 'free' && item.price.kind === 'free'),
     ).toBe(true);
     for (const tool of catalog.tools.filter((item) => item.billingMedium === 'points' && item.availability.enabled)) {

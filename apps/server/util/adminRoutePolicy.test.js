@@ -185,7 +185,6 @@ describe('adminRoutePolicyMiddleware', () => {
     }
     for (const path of [
       '/toolbox/quotes',
-      '/toolbox/image-repair/points',
       '/toolbox/workspaces',
       '/toolbox/workspaces/workspace-1/resources',
       '/toolbox/workspaces/workspace-1/sessions',

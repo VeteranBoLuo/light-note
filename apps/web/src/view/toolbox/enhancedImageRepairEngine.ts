@@ -1,6 +1,5 @@
 import assetsUrl from 'virtual:lightnote-image-repair-model';
 
-export type EnhancedRepairPhase = 'loading' | 'repairing';
 export type EnhancedRepairError = 'unsupported' | 'load' | 'repair';
 export type EnhancedRepairRequest = {
   assets: string;
@@ -16,7 +15,6 @@ export function runEnhancedImageRepair(
   image: ImageData,
   mask: Uint8Array<ArrayBuffer>,
   signal: AbortSignal,
-  onPhase: (phase: EnhancedRepairPhase) => void,
 ): Promise<ImageData> {
   signal.throwIfAborted();
   return new Promise((resolve, reject) => {
@@ -46,7 +44,6 @@ export function runEnhancedImageRepair(
         phase = 'repair';
         window.clearTimeout(deadline);
         deadline = window.setTimeout(fail, 30_000);
-        onPhase('repairing');
       } else if (result.type === 'failed') {
         fail(result.reason);
       } else if (result.pixels.byteLength !== width * height * 4) {

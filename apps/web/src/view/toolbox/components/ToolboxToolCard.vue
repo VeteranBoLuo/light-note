@@ -7,7 +7,7 @@
     @click="$emit('open')"
   >
     <span class="toolbox-tool-card__head">
-      <span class="toolbox-tool-card__icon"><SvgIcon :src="presentation.icon" size="22" /></span>
+      <span class="toolbox-tool-card__icon"><SvgIcon :src="iconSrc || presentation.icon" size="22" /></span>
       <strong>{{ name }}</strong>
       <SvgIcon class="toolbox-tool-card__arrow" :src="icon.ai.sourceArrow" size="15" />
     </span>
@@ -34,6 +34,7 @@
   import ToolboxOutputPreview from './ToolboxOutputPreview.vue';
   const props = defineProps<{
     toolId: string;
+    iconSrc?: string;
     name: string;
     description: string;
     billing: string;

@@ -86,7 +86,10 @@ describe('工坊目录与任务呈现', () => {
     const tools = ref(
       ['research_workspace', 'learning_workspace', 'writing_workspace', 'forms', 'pdf_organizer'].map((id) => ({ id })),
     );
-    const groups = evaluateDeclaration('visibleGroups', { computed, visibleTools: tools, TOOLBOX_HOME_GROUPS });
+    const showCutoutPreview = ref(false);
+    const groups = evaluateDeclaration('visibleGroups', {
+      computed, visibleTools: tools, TOOLBOX_HOME_GROUPS, showCutoutPreview,
+    });
     expect(
       groups.value
         .find((group: { id: string }) => group.id === 'workspace')
@@ -96,6 +99,8 @@ describe('工坊目录与任务呈现', () => {
     expect(groups.value.map((group: { id: string }) => group.id)).toEqual(['prepare']);
     tools.value = [];
     expect(groups.value).toEqual([]);
+    showCutoutPreview.value = true;
+    expect(groups.value).toMatchObject([{ id: 'prepare', showCutoutPreview: true, tools: [] }]);
   });
   it('失败和保存失败不能继续承诺任务正在处理', () => {
     const describeTask = evaluateDeclaration('taskContinueDescription', {

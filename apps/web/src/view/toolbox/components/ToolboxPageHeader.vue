@@ -1,23 +1,23 @@
 <template>
   <header
     class="toolbox-page-header"
-    :class="[`is-${presentation?.accent || 'violet'}`, { 'has-native-back': nativeMobileBack, 'is-mobile-compact': compactMobile }]"
+    :class="[`is-${presentation?.accent || 'violet'}`, { 'has-native-back': nativeMobileBack, 'is-compact': compact }]"
   >
     <div class="toolbox-page-header__identity">
       <BButton
         class="toolbox-page-header__back"
         type="text"
-        icon-only
+        :icon-only="!compact"
         :aria-label="backLabel || t('toolbox.back')"
         :title="backLabel || t('toolbox.back')"
         @click="emit('back')"
         ><SvgIcon :src="icon.toolbox.back" size="16" aria-hidden="true"
-      /></BButton>
-      <span class="toolbox-page-header__icon" aria-hidden="true"
+      /><span v-if="compact">{{ backLabel || t('toolbox.back') }}</span></BButton>
+      <span v-if="!compact" class="toolbox-page-header__icon" aria-hidden="true"
         ><SvgIcon :src="presentation?.icon || icon.toolbox.home" size="30"
       /></span>
       <div class="toolbox-page-header__copy">
-        <span class="toolbox-page-header__category">{{
+        <span v-if="!compact" class="toolbox-page-header__category">{{
           category || (presentation ? t(`toolbox.category.${presentation.category}`) : t('toolbox.title'))
         }}</span>
         <div class="toolbox-page-header__title">
@@ -45,7 +45,7 @@
       title?: string;
       category?: string;
       backLabel?: string;
-      compactMobile?: boolean;
+      compact?: boolean;
       /** The app shell already provides the back action on these mobile routes. */
       nativeMobileBack?: boolean;
     }>(),
@@ -151,6 +151,49 @@
     min-width: 0;
     margin-left: auto;
   }
+  .toolbox-page-header.is-compact {
+    min-height: var(--ui-control-40, 40px);
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+    background: transparent;
+    flex-wrap: nowrap;
+    overflow: visible;
+  }
+
+  .is-compact::before {
+    display: none;
+  }
+
+  .is-compact .toolbox-page-header__identity {
+    flex: 1 1 auto;
+    gap: var(--ui-space-8, 8px);
+  }
+
+  .is-compact .toolbox-page-header__back.b_btn {
+    flex: 0 0 auto;
+    width: auto;
+    padding-inline: var(--ui-space-4, 4px);
+    gap: var(--ui-space-4, 4px);
+  }
+
+  .is-compact .toolbox-page-header__copy {
+    border-inline-start: 1px solid var(--workspace-divider);
+    padding-inline-start: var(--ui-space-10, 10px);
+  }
+
+  .is-compact h1 {
+    margin: 0;
+    font-size: var(--ui-font-18, 18px);
+  }
+
+  .is-compact .toolbox-page-header__actions {
+    flex: none;
+    margin-inline-start: auto;
+    white-space: nowrap;
+  }
+
   @media (max-width: 767px) {
     .has-native-back .toolbox-page-header__back {
       display: none;
@@ -176,26 +219,19 @@
       margin-left: 0;
     }
 
-    .toolbox-page-header.is-mobile-compact {
-      min-height: var(--ui-control-48, 48px);
-      padding: var(--ui-space-4, 4px) var(--ui-space-10, 10px);
-      gap: var(--ui-space-6, 6px);
-      flex-wrap: nowrap;
-      border-radius: 12px;
-      box-shadow: none;
+    .is-compact .toolbox-page-header__back.b_btn {
+      flex-basis: auto;
+      width: auto;
+      height: var(--ui-control-44, 44px);
     }
-    .is-mobile-compact::before,
-    .is-mobile-compact .toolbox-page-header__category,
-    .is-mobile-compact .toolbox-page-header__icon {
-      display: none;
+
+    .is-compact .toolbox-page-header__copy {
+      padding-inline-start: var(--ui-space-6, 6px);
     }
-    .is-mobile-compact .toolbox-page-header__identity {
-      flex: 1 1 auto;
-      gap: var(--ui-space-4, 4px);
+
+    .is-compact h1 {
+      font-size: var(--ui-font-16, 16px);
     }
-    .is-mobile-compact .toolbox-page-header__actions {
-      flex: none;
-      margin-inline-start: auto;
-    }
+
   }
 </style>

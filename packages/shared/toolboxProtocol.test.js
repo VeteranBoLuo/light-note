@@ -97,16 +97,15 @@ describe("toolbox protocol", () => {
     expect(ACTIVE_TOOL_IDS).toHaveLength(9);
   });
 
-  it("exposes image repair as the only paid browser tool", () => {
+  it("exposes browser tools as free", () => {
     expect(TOOLBOX_BILLING_MEDIA).toEqual(["free", "points", "ai_quota"]);
     const localTools = TOOLBOX_TOOL_CATALOG.filter(
       (item) => item.executionMode === "browser",
     );
     expect(localTools).toHaveLength(5);
-    expect(localTools.filter((item) => item.billingMedium !== "free").map((item) => item.id)).toEqual([
-      "image_watermark_remover",
-    ]);
-    expect(getToolboxTool("image_watermark_remover")?.billingMedia).toEqual(["points"]);
+    expect(localTools.every((item) => item.billingMedium === "free")).toBe(true);
+    expect(getToolboxTool("image_watermark_remover")?.billingMedia).toEqual(["free"]);
+    expect(isToolboxPaidTool("image_watermark_remover")).toBe(false);
     expect(isToolboxPaidTool("pdf_organizer")).toBe(false);
     expect(
       TOOLBOX_TOOL_CATALOG.filter((item) => item.executionMode === "service"),

@@ -396,7 +396,7 @@
                 <header class="toolbox-home-group__head">
                   <div>
                     <h3 :id="`toolbox-group-${group.id}`">{{ t(`toolbox.homeGroup.${group.id}.title`) }}</h3>
-                    <span>{{ t('toolbox.home.toolCount', { count: group.tools.length }) }}</span>
+                    <span>{{ t('toolbox.home.toolCount', { count: group.tools.length + Number(group.showCutoutPreview) }) }}</span>
                     <p>{{ t(`toolbox.homeGroup.${group.id}.description`) }}</p>
                   </div>
                 </header>
@@ -432,6 +432,18 @@
                         <SvgIcon :src="icon.contextMenu.pin" size="15" aria-hidden="true" />
                       </BButton>
                     </BTooltip>
+                  </div>
+                  <div v-if="group.showCutoutPreview" class="toolbox-card-wrap">
+                    <ToolboxToolCard
+                      class="toolbox-card"
+                      tool-id="local_cutout_preview"
+                      :icon-src="icon.toolbox.image"
+                      :name="t('toolbox.presentation.cutoutPreview.name')"
+                      :description="t('toolbox.presentation.cutoutPreview.description')"
+                      :billing="t('toolbox.localFreeLabel')"
+                      billing-tone="success"
+                      @open="openCutoutPreview"
+                    />
                   </div>
                 </div>
               </section>
@@ -533,6 +545,11 @@
     detail: string;
     usedAt: string | number;
   };
+
+  function openCutoutPreview() {
+    rememberHomeScroll();
+    void router.push({ name: 'localCutoutPreview' });
+  }
 
   function openDeveloperToolbox() {
     window.open('https://boluo66.top/toolkit/', '_blank', 'noopener,noreferrer');
@@ -766,17 +783,26 @@
         .includes(query);
     });
   });
+  const showCutoutPreview = computed(() => {
+    if (!import.meta.env.DEV || activeCategory.value === 'points') return false;
+    const query = keyword.value.trim().toLocaleLowerCase(locale.value);
+    return [t('toolbox.presentation.cutoutPreview.name'), t('toolbox.presentation.cutoutPreview.description')]
+      .join(' ')
+      .toLocaleLowerCase(locale.value)
+      .includes(query);
+  });
   const visibleGroups = computed(() => {
     const byId = new Map(visibleTools.value.map((tool) => [tool.id, tool]));
     return TOOLBOX_HOME_GROUPS.map((group) => ({
       ...group,
+      showCutoutPreview: group.id === 'prepare' && showCutoutPreview.value,
       tools: (group.id === 'workspace'
         ? group.toolIds.filter((id) => !['learning_workspace', 'writing_workspace'].includes(id))
         : group.toolIds
       )
         .map((id) => byId.get(id))
         .filter((tool): tool is ToolboxCatalogItem => Boolean(tool)),
-    })).filter((group) => group.tools.length > 0);
+    })).filter((group) => group.tools.length > 0 || group.showCutoutPreview);
   });
 
   const groupNavRef = ref<HTMLElement | null>(null);

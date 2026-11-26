@@ -289,7 +289,7 @@ export const TOOLBOX_TOOL_CATALOG = Object.freeze([
     id: "image_watermark_remover",
     phase: "launch",
     executionMode: "browser",
-    billingMedium: "points",
+    billingMedium: "free",
     input: {
       kind: "local_files",
       minItems: 1,

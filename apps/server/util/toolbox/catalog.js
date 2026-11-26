@@ -11,7 +11,6 @@ import {
 import { toolboxError } from './errors.js';
 
 export const TOOLBOX_QUOTE_TTL_MS = 10 * 60_000;
-export const IMAGE_REPAIR_POINTS = 1;
 const SAFE_ID_PATTERN = /^[A-Za-z0-9._:@/-]{1,128}$/u;
 const SAFE_REQUEST_ID_PATTERN = /^[A-Za-z0-9:_-]{12,64}$/u;
 const PAID_PRICE_RANGES = Object.freeze({
@@ -208,9 +207,7 @@ export function getPublicToolboxCatalog({ disabledToolIds = [] } = {}) {
     tools: TOOLBOX_TOOL_CATALOG.map((definition) => ({
       ...definition,
       availability: { enabled: definition.availability.enabled && !disabled.has(definition.id) },
-      ...(definition.id === 'image_watermark_remover'
-        ? { price: { kind: 'fixed', currency: 'points', min: IMAGE_REPAIR_POINTS, max: IMAGE_REPAIR_POINTS } }
-        : definition.billingMedium === 'ai_quota'
+      ...(definition.billingMedium === 'ai_quota'
         ? { price: { kind: 'quota', currency: 'ai_quota', min: 0, max: 0 } }
         : definition.billingMedium === 'points'
         ? { price: { kind: 'quote', currency: 'points', ...(PAID_PRICE_RANGES[definition.id] || { min: 0, max: 0 }) } }

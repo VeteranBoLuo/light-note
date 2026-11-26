@@ -53,7 +53,7 @@ function prepareMask(mask, imageWidth, imageHeight) {
   return { bounds, workingWidth, workingHeight, originalMask, workingMask };
 }
 
-export async function removeSubject(image, mask, signal, onPhase) {
+export async function removeSubject(image, mask, signal) {
   signal.throwIfAborted();
   const width = image.naturalWidth;
   const height = image.naturalHeight;
@@ -65,7 +65,7 @@ export async function removeSubject(image, mask, signal, onPhase) {
   context.drawImage(image, bounds.x, bounds.y, bounds.width, bounds.height, 0, 0, workingWidth, workingHeight);
   const input = context.getImageData(0, 0, workingWidth, workingHeight);
   working.width = working.height = 1;
-  const repaired = await runEnhancedImageRepair(input, workingMask, signal, onPhase);
+  const repaired = await runEnhancedImageRepair(input, workingMask, signal);
   signal.throwIfAborted();
 
   const output = document.createElement('canvas');

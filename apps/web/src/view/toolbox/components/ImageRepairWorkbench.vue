@@ -149,17 +149,10 @@
               <SvgIcon :src="icon.toolbox.image" size="44" aria-hidden="true" />
               <template v-if="canRepair">
                 <BButton type="primary" :loading="decoding" @click="picker?.open()">{{ label('choose') }}</BButton>
-                <p>{{
-                  label('formats') +
-                  ' · ' +
-                  t('toolbox.imageRepair.pointsPerRepair', { points: pointsCost }, pointsCost)
-                }}</p>
+                <p>{{ label('formats') + ' · ' + t('toolbox.free') }}</p>
               </template>
               <template v-else>
                 <p role="status">{{ availabilityMessage }}</p>
-                <BButton v-if="showLogin" type="primary" @click="router.push({ name: 'login' })">{{
-                  label('signIn')
-                }}</BButton>
               </template>
               <p v-if="error" class="image-repair__error" role="alert">{{ error }}</p>
               <div v-if="canRepair && resizeCandidate" class="image-repair__resize">
@@ -177,7 +170,7 @@
             >
               <div v-if="repairStatus" class="image-repair__feedback">
                 <p role="status">{{ repairStatus }}</p>
-                <BButton v-if="enhancePhase" type="text" @click="cancelEnhancedRepair(true)">{{
+                <BButton v-if="repairing" type="text" @click="cancelEnhancedRepair(true)">{{
                   t('common.cancel')
                 }}</BButton>
               </div>
@@ -225,13 +218,12 @@
                 v-if="!readyToDownload"
                 class="image-repair__enhance"
                 type="primary"
-                :title="label('repairHint')"
-                :loading="Boolean(enhancePhase) || settling"
-                :disabled="!canRepair || (pendingRepair ? settling : busy || comparing || !selections.length)"
-                @click="pendingRepair ? settleRepair() : repair()"
+                :loading="repairing"
+                :disabled="!canRepair || busy || comparing || !selections.length"
+                @click="repair"
               >
-                <SvgIcon v-if="!enhancePhase && !settling" :src="icon.common.magicWand" size="16" aria-hidden="true" />
-                {{ label(pendingRepair && !settling ? 'retrySettlement' : 'repair') }}
+                <SvgIcon v-if="!repairing" :src="icon.common.magicWand" size="16" aria-hidden="true" />
+                {{ label('repair') }}
               </BButton>
             </div>
           </template>
@@ -261,9 +253,7 @@
 <script setup lang="ts">
   import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import { useRouter } from 'vue-router';
   import { getToolboxTool } from '@lightnote/shared/toolbox-protocol';
-  import { createToolboxClientRequestId, fetchImageRepairPoints, settleImageRepairPoints } from '@/api/toolbox';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BUpload from '@/components/base/BasicComponents/BUpload.vue';
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
@@ -272,14 +262,12 @@
   import icon from '@/config/icon';
   import { isEditableShortcutTarget } from '@/config/keyboardShortcuts';
   import { useMobileLayout } from '@/composables/useMobileLayout';
-  import { useGrowth } from '@/composables/useGrowth';
-  import { useUserStore } from '@/store';
   import useBookmarkStore from '@/store/bookmark';
   import { isLightNoteAndroidApp, saveImageViaAndroid } from '@/utils/androidBridge';
   import { deliverGeneratedFile, encodeFileContentToBase64 } from '@/utils/fileDelivery';
   import { safeDownloadBaseName, TOOLBOX_LOCAL_DELIVERY_EVENT } from '@/utils/toolboxLocal';
   import ImageRepairCanvas from './ImageRepairCanvas.vue';
-  import { runEnhancedImageRepair, type EnhancedRepairPhase } from '../enhancedImageRepairEngine';
+  import { runEnhancedImageRepair } from '../enhancedImageRepairEngine';
   import { canUseEnhancedImageRepair } from '../imageRepairCapabilities';
   import {
     discardRepairOutputs,
@@ -308,10 +296,6 @@
   } from '../imageRepairSelection';
 
   const { t, locale } = useI18n();
-  const { pointsCost = 0 } = defineProps<{ pointsCost?: number }>();
-  const router = useRouter();
-  const user = useUserStore();
-  const { load: loadGrowth } = useGrowth();
   const label = (key: string) => t(`toolbox.imageRepair.${key}`);
   const tool = getToolboxTool('image_watermark_remover')!;
   const accept = tool.input.accept!.join(',');
@@ -342,26 +326,11 @@
   const bookmark = useBookmarkStore();
   const desktopRepair = computed(() => !mobile.value && bookmark.isDesktop);
   const capability = ref<'checking' | 'ready' | 'unavailable'>('checking');
-  const accountId = computed(() =>
-    user.role !== 'visitor' && !user.adminContext && !user.visitorWorkspace ? String(user.id || '') : '',
-  );
-  const showLogin = computed(
-    () =>
-      desktopRepair.value &&
-      capability.value === 'ready' &&
-      !accountId.value &&
-      !user.adminContext &&
-      !user.visitorWorkspace &&
-      !!pointsCost,
-  );
-  const canRepair = computed(
-    () => desktopRepair.value && capability.value === 'ready' && Boolean(accountId.value && pointsCost),
-  );
+  const canRepair = computed(() => desktopRepair.value && capability.value === 'ready');
   const availabilityMessage = computed(() => {
     if (!desktopRepair.value) return label('desktopOnly');
     if (capability.value === 'checking') return label('capabilityChecking');
     if (capability.value === 'unavailable') return label('unsupportedGraphics');
-    if (showLogin.value) return t('toolbox.imageRepair.signInHint', { points: pointsCost }, pointsCost);
     return t('toolbox.unavailable');
   });
   const desktopControls = ref<HTMLElement | null>(null);
@@ -390,22 +359,10 @@
     comparing.value ? original.value?.url : (result.value?.url ?? original.value?.url),
   );
   const decoding = ref(false);
-  const enhancePhase = ref<EnhancedRepairPhase | 'checkingPoints'>();
-  const pendingRepair = shallowRef<{
-    accountId: string;
-    clientRequestId: string;
-    expectedCost: number;
-    output: { url: string; blob: Blob };
-  }>();
-  const settling = ref(false);
-  const repairStatus = computed(() => {
-    if (settling.value) return label('settling');
-    if (enhancePhase.value === 'checkingPoints') return label('checkingPoints');
-    if (enhancePhase.value) return label(enhancePhase.value === 'loading' ? 'repairLoading' : 'repairing');
-    return '';
-  });
+  const repairing = ref(false);
+  const repairStatus = computed(() => (repairing.value ? label('repairing') : ''));
   const saving = ref(false);
-  const busy = computed(() => decoding.value || Boolean(enhancePhase.value || pendingRepair.value) || saving.value);
+  const busy = computed(() => decoding.value || repairing.value || saving.value);
   const editingDisabled = computed(() => !original.value || busy.value);
   const dragging = ref(false);
   const error = ref('');
@@ -663,35 +620,16 @@
 
   async function repair() {
     const input = original.value;
-    const expectedCost = pointsCost;
-    const owner = accountId.value;
-    if (!canRepair.value || !expectedCost || !input || busy.value || comparing.value || !selections.value.length)
-      return;
+    if (!canRepair.value || !input || busy.value || comparing.value || !selections.value.length) return;
     error.value = '';
     const selection = repairPatchBounds(selections.value, input.width, input.height);
     const controller = new AbortController();
     enhanceController = controller;
-    enhancePhase.value = 'checkingPoints';
+    repairing.value = true;
     const bounds = enhancedRepairBounds(selection, input.width, input.height);
     const canvas = document.createElement('canvas');
+    let completed = false;
     try {
-      let points;
-      try {
-        points = await fetchImageRepairPoints();
-      } catch {
-        if (active && !controller.signal.aborted) error.value = label('pointsCheckFailed');
-        return;
-      }
-      if (!active || controller.signal.aborted || accountId.value !== owner) return;
-      if (points.accountId !== owner || points.cost !== expectedCost) {
-        error.value = label('billingChanged');
-        return;
-      }
-      if (points.balance < expectedCost) {
-        error.value = label('insufficientPoints');
-        return;
-      }
-      enhancePhase.value = 'loading';
       const patch = prepareRepairPatch(selections.value, bounds);
       if (patch.status !== 'ready') {
         error.value = label('selectionNeedsBackground');
@@ -707,9 +645,7 @@
       crop.drawImage(image, bounds.x, bounds.y, bounds.width, bounds.height, 0, 0, width, height);
       const pixels = crop.getImageData(0, 0, width, height);
       canvas.width = canvas.height = 1;
-      const repaired = await runEnhancedImageRepair(pixels, mask, controller.signal, (phase) => {
-        enhancePhase.value = phase;
-      });
+      const repaired = await runEnhancedImageRepair(pixels, mask, controller.signal);
       if (!active || controller.signal.aborted) return;
       canvas.width = input.width;
       canvas.height = input.height;
@@ -719,13 +655,11 @@
       if (originalMask) applyReducedRepairPatch(output, repaired, bounds, originalMask);
       else output.putImageData(repaired, bounds.x, bounds.y);
       const blob = await encodeRepairImage(canvas);
-      if (!active || controller.signal.aborted || accountId.value !== owner) return;
-      pendingRepair.value = {
-        accountId: owner,
-        clientRequestId: createToolboxClientRequestId('repair'),
-        expectedCost,
-        output: { url: URL.createObjectURL(blob), blob },
-      };
+      if (!active || controller.signal.aborted) return;
+      const repairOutput = { url: URL.createObjectURL(blob), blob };
+      updateHistory(recordRepairEdit(history.value, { output: repairOutput, selections: [] }));
+      activeIndex.value = -1;
+      completed = true;
     } catch (cause) {
       if (!active || controller.signal.aborted) return;
       const reason = cause instanceof Error ? cause.message : '';
@@ -733,50 +667,10 @@
       else error.value = label(reason === 'load' ? 'loadFailed' : 'repairFailed');
     } finally {
       canvas.width = canvas.height = 1;
-      enhancePhase.value = undefined;
+      repairing.value = false;
       enhanceController = undefined;
     }
-    if (pendingRepair.value) await settleRepair();
-  }
-
-  function discardPendingRepair() {
-    releaseImage(pendingRepair.value?.output.url);
-    pendingRepair.value = undefined;
-  }
-
-  async function settleRepair() {
-    const pending = pendingRepair.value;
-    if (settling.value || !pending || pending.accountId !== accountId.value) return;
-    const { output, ...billing } = pending;
-    error.value = '';
-    settling.value = true;
-    try {
-      await settleImageRepairPoints(billing);
-    } catch (cause) {
-      if (!active || pending.accountId !== accountId.value) return;
-      const failure = cause as { code?: string; response?: { data?: { data?: { code?: string } } } };
-      switch (failure.response?.data?.data?.code || failure.code) {
-        case 'TOOLBOX_POINTS_INSUFFICIENT':
-          discardPendingRepair();
-          error.value = label('insufficientPoints');
-          break;
-        case 'TOOLBOX_PRICING_CHANGED':
-        case 'TOOLBOX_IMAGE_REPAIR_ACCOUNT_CHANGED':
-          discardPendingRepair();
-          error.value = label('billingChanged');
-          break;
-        default:
-          error.value = label('settlementPending');
-      }
-      return;
-    } finally {
-      settling.value = false;
-    }
-    if (!active || pending.accountId !== accountId.value) return;
-    updateHistory(recordRepairEdit(history.value, { output, selections: [] }));
-    pendingRepair.value = undefined;
-    activeIndex.value = -1;
-    void loadGrowth(true);
+    if (!completed) return;
     await nextTick();
     if (
       active &&
@@ -834,7 +728,6 @@
     window.removeEventListener('blur', onWindowBlur);
     active = false;
     cancelEnhancedRepair();
-    discardPendingRepair();
     releaseImage(original.value?.url);
     resetResults();
   });

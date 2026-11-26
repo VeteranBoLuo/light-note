@@ -77,7 +77,6 @@ const suites = {
   'util/services/growthMeasurement.mysql.test.js': 'M01_TEST_MYSQL_SOCKET',
   'util/services/coreUsageReport.mysql.test.js': 'M02_TEST_MYSQL_SOCKET',
   'util/toolbox/itemDetails.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
-  'util/toolbox/imageRepairBilling.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
   'util/toolbox/taskList.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
   'util/fileCategory.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',
   'util/services/organizeTagMerge.mysql.test.js': 'LIGHTNOTE_TEST_MYSQL_SOCKET',

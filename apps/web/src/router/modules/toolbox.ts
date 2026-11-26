@@ -44,6 +44,16 @@ const toolboxRouter: RouteRecordRaw[] = [
     meta: { ...commonMeta, title: '处理任务' },
     component: () => import('@/view/toolbox/ToolboxTask.vue'),
   },
+  ...(import.meta.env.DEV
+    ? [
+        {
+          path: '/toolbox/local-cutout',
+          name: 'localCutoutPreview',
+          meta: { ...commonMeta, title: '本地抠图' },
+          component: () => import('@/view/toolbox/LocalCutoutWorkbench.vue'),
+        },
+      ]
+    : []),
   {
     path: '/toolbox/:toolId',
     name: 'toolboxWorkbench',

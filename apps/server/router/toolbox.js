@@ -9,8 +9,6 @@ router.use('/forms', collectionFormsRouter);
 router.get('/pinned-tools', toolboxHandle.getPinnedTools);
 router.post('/pinned-tools', localProcessingRateLimiter, toolboxHandle.savePinnedTools);
 router.get('/catalog', toolboxHandle.getCatalog);
-router.get('/image-repair/points', localProcessingRateLimiter, toolboxHandle.getImageRepairPoints);
-router.post('/image-repair/points', localProcessingRateLimiter, toolboxHandle.chargeImageRepairPoints);
 router.get('/project-entry', toolboxHandle.getProjectEntry);
 router.post('/project-entry/dismiss', localProcessingRateLimiter, toolboxHandle.dismissProjectEntry);
 router.get('/home', localProcessingRateLimiter, toolboxHandle.getHome);

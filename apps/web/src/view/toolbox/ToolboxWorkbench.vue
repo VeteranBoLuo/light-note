@@ -17,7 +17,7 @@
       <ToolboxPageHeader
         v-if="!tool || !tool.id.endsWith('_workspace')"
         :tool-id="routeToolId"
-        :compact-mobile="isImageRepair"
+        :compact="isImageRepair"
         :native-mobile-back="!isImageRepair"
         @back="returnToToolboxParent"
       >
@@ -45,7 +45,6 @@
           <component
             :is="localToolComponent"
             :tool-id="routeToolId"
-            v-bind="tool.price.kind === 'fixed' ? { pointsCost: tool.price.min } : {}"
           />
         </section>
         <section v-else-if="tool.executionMode === 'browser'" class="toolbox-workbench__state is-error" role="alert">
