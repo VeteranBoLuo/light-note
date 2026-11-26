@@ -109,7 +109,8 @@
     background-size: 645.0909% 322.5455%;
     background-position: 99.3329% 100%;
   }
-  .manor-settings-modal .modal-close.b_btn {
+  // Keep the manor gradient in every state, including BModal's default hover.
+  .manor-settings-mask .modal-view.manor-settings-modal .modal-close.b_btn {
     position: absolute;
     top: calc(-1 * var(--ui-space-12, 12px));
     right: calc(-1 * var(--ui-space-12, 12px));
@@ -124,6 +125,17 @@
     box-shadow:
       0 0 0 2px #ba8351,
       0 var(--ui-space-3, 3px) #8e633c;
+    transition: filter 0.15s ease;
+
+    @media (hover: hover) and (pointer: fine) {
+      &:hover:not(:disabled) {
+        filter: brightness(1.07);
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      transition: none;
+    }
   }
   .manor-settings-modal .modal-content {
     padding: var(--ui-space-8, 8px) var(--ui-space-24, 24px) var(--ui-space-12, 12px);

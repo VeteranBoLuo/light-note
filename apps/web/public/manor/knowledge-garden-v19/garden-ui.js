@@ -659,18 +659,36 @@ function rulesDialog() {
 }
 
 function manorMenu() {
-  const items = [
-    ["daily", "每日任务", M.pendingDailyWater(state) ? "有奖励待领" : `${state.dailyDone.filter(Boolean).length} / 3`],
-    ["level", "成长奖励", `Lv.${M.level(state)}`],
-    ["memories", "庄园日记", "看看收获"],
-    ["rules", "玩法帮助", "种植 · 钓鱼 · 养鱼"],
-  ];
-  if (GardenLive.snapshot?.leaderboardAvailable) items.splice(2, 0, ['leaderboard', '积分排行榜', '查看周榜']);
-  if (typeof GardenLive.reminders === "function") items.push(["reminder-settings", "提醒设置", "通知 · 入口小红点"]);
+  const done = state.dailyDone.filter(Boolean).length;
+  const waterPending = M.pendingDailyWater(state) > 0;
+  const waterReady = waterPending && state.water < R.waterCap;
+  const growthReady = M.pendingLevelRewards(state).length > 0;
+  const chevron = '<span class="manor-menu-chevron" aria-hidden="true">›</span>';
+  const summary = (action, title, detail, ready, status = ready ? "可领取" : "") =>
+    `<button type="button" data-action="${action}"${ready ? ' class="has-reward"' : ""}>
+      <span class="manor-menu-copy"><strong>${title}</strong><span class="manor-menu-detail">
+        <span>${detail}</span>${status ? `<span class="manor-menu-status">${status}</span>` : ""}
+      </span></span>${chevron}
+    </button>`;
+  const daily = summary("daily", "每日任务", `<b>${done}</b> / 3 已完成`, waterReady,
+    waterReady ? "可领取" : waterPending ? "水桶已满" : "");
+  const growth = summary("level", "成长奖励", `Lv.${M.level(state)}`, growthReady);
+  const leaderboard = GardenLive.snapshot?.leaderboardAvailable
+    ? `<button type="button" data-action="leaderboard">积分排行榜${chevron}</button>` : "";
+  const reminders = typeof GardenLive.reminders === "function"
+    ? '<button type="button" data-action="reminder-settings">提醒设置</button>' : "";
   const copy = GardenLive.snapshot?.copy;
-  if (copy?.musicTitle && typeof GardenLive.music === "function") items.push(["music-settings", esc(copy.musicTitle)]);
-  const entries = items.map(([action, title, detail]) => `<button data-action="${action}" class="${action === "daily" && M.pendingDailyWater(state).length ? "has-reward" : ""}"><strong>${title}</strong>${detail ? `<small>${detail}</small>` : ""}<span aria-hidden="true">›</span></button>`).join("");
-  showDialog("庄园小记", `相伴 ${M.day(state)} 天`, `<div class="manor-menu">${entries}</div>`, "", false, "manor-menu-dialog");
+  const music = copy?.musicTitle && typeof GardenLive.music === "function"
+    ? `<button type="button" data-action="music-settings">${esc(copy.musicTitle)}</button>` : "";
+  showDialog("庄园小记", `相伴 ${M.day(state)} 天`, `<div class="manor-menu">
+    <div class="manor-menu-primary">${daily}${growth}</div>
+    <div class="manor-menu-links">
+      <button type="button" data-action="memories">庄园日记${chevron}</button>${leaderboard}
+    </div>
+    <div class="manor-menu-utilities">
+      <button type="button" data-action="rules">玩法帮助</button>${reminders}${music}
+    </div>
+  </div>`, "", false, "manor-menu-dialog");
 }
 
 // Background calibration may replace inventory. Refresh display panels, but

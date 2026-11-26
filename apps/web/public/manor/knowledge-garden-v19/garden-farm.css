@@ -1364,12 +1364,6 @@ html.garden-immersive.kbd-nav :is(.scene-sign,.seed-stall):focus-visible > span 
 
 /* 手机保留一行资源 HUD，次要入口收进庄园小记；触控区域仍不小于 44px。 */
 .hud-more { display: none; }
-.manor-menu { display: grid; gap: calc(10px * var(--d)); }
-.manor-menu > button { display: grid; grid-template-columns: 1fr auto; text-align: left; align-items: center; gap: calc(3px * var(--d)); min-height: calc(64px * var(--d)); padding: calc(12px * var(--d)) calc(16px * var(--d)); color: #664925; border: 1px solid #dfc38e; border-radius: calc(12px * var(--d)); background: #fff9e9; cursor: pointer; }
-.manor-menu strong { font-size: calc(16px * var(--d)); }
-.manor-menu [data-action="music-settings"] strong { grid-row: 1 / 3; }
-.manor-menu small { grid-row: 2; color: #8b7655; font-size: calc(12px * var(--d)); }
-.manor-menu button > span { grid-column: 2; grid-row: 1 / 3; font-size: calc(24px * var(--d)); }
 html.light-note-mobile-rendering #app .garden-play .seaside-courtyard.farm-staged .game-hud { display: flex; align-items: center; flex-wrap: nowrap; gap: 5px; top: 8px; left: 8px; right: 8px; padding: 0; width: auto; }
 html.light-note-mobile-rendering .seaside-courtyard.farm-staged .hud-back { flex: 0 0 44px; width: 44px; height: 44px; min-height: 44px; margin: 0; border-width: 2px; }
 html.light-note-mobile-rendering .seaside-courtyard.farm-staged .hud-back svg { width: 16px; height: 16px; }
@@ -1467,9 +1461,7 @@ html.light-note-mobile-rendering .seaside-courtyard.farm-staged .hud-more { disp
 .light-note-mobile-rendering .scene-gift .gift-count { min-width: 15px; font-size: 10px; padding: 2px; right: 0; bottom: 2px; }
 html.light-note-mobile-rendering #app .garden-play .seaside-courtyard .tank-caption .tank-collect { right: 4%; bottom: 0; }
 
-/* 更多菜单按内容收紧；帮助分类在长参数列表中仍然可达。 */
-#modal .manor-menu-dialog, .light-note-mobile-rendering #modal .manor-menu-dialog { width: min(calc(380px * var(--d)),calc(100vw - 32px)); height: auto; min-height: 0; max-height: calc(100% - 64px); }
-#modal .manor-menu-dialog .dialog-body { flex: 0 1 auto; padding-bottom: calc(24px * var(--d)); }
+/* 帮助分类在长参数列表中仍然可达。 */
 #modal .help-tabs { position: sticky; top: calc(-14px * var(--d)); z-index: 2; padding: calc(8px * var(--d)) 0; background: #fff8e8; }
 
 /* 场景招牌贴在建筑表面：小铺棚沿、码头侧梁、鱼舱石柱。 */
@@ -1585,8 +1577,6 @@ html.light-note-mobile-rendering #app .garden-play .seaside-courtyard .tank-capt
 
 #modal .bait-dialog { height: auto; min-height: 0; }
 #modal .bait-dialog > .dialog-body { flex: 0 1 auto; }
-
-.manor-menu .has-reward strong::after { content: ""; display: inline-block; width: 8px; height: 8px; margin-left: 7px; border-radius: 50%; background: #d65e39; border: 1px solid #b34328; vertical-align: middle; }
 
 .light-note-mobile-rendering #modal .bait-dialog { height: auto; max-height: calc(100vh - 54px); max-height: calc(100dvh - 54px); }
 #modal .inventory-dialog .inventory-empty > .tile-btn { margin-top: 0; }
