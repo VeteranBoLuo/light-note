@@ -15,6 +15,8 @@ vi.mock('./CommunitySavePost.vue', () => ({ default: { template: '<div />' } }))
 vi.mock('./CommunityPostCard.vue', () => ({ default: { template: '<div />' } }));
 vi.mock('./CommunityPostOutline.vue', () => ({ default: { template: '<div />' } }));
 vi.mock('./CommunityCommentComposer.vue', () => ({ default: { template: '<div />' } }));
+vi.mock('./CommunityResourcePicker.vue', () => ({ default: { template: '<div />' } }));
+vi.mock('./CommunityPostResources.vue', () => ({ default: { template: '<div />' } }));
 vi.mock('./CommunityContentMenu.vue', () => ({ default: { template: '<div />' } }));
 vi.mock('@/components/communityChat/ChatInlineEmojiText.vue', () => ({
   default: { props: ['content'], template: '<span>{{content}}</span>' },

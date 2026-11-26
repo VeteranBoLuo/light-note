@@ -218,6 +218,7 @@
     --auth-card-border: rgba(135, 128, 255, 0.27);
     --auth-title: #f7f7ff;
     --auth-muted: rgba(224, 225, 242, 0.66);
+    --auth-error-color: #ff8080;
     --auth-input-bg: rgba(255, 255, 255, 0.065);
     --auth-input-hover: rgba(255, 255, 255, 0.095);
     --auth-autofill-base: #0c0d19;

@@ -40,6 +40,24 @@ describe('正式庄园沿用确认玩法与轻笺积分', () => {
     expect(sold.result).toEqual({ sold: 100, points: 4000 });
     expect(sold.pointsDelta).toBe(4000);
   });
+  it('整批出售的报价列出可售存货，确认后按同一清单结算', () => {
+    const s = adopted();
+    s.crops = { strawberry: 35, lavender: 2, radish: 0, retiredCrop: 3 };
+    const before = structuredClone(s);
+    const quote = M.quoteAllCropSales(s);
+    expect(quote).toEqual({
+      items: [{ key: 'strawberry', sold: 35, points: 140 }, { key: 'lavender', sold: 2, points: 6 }],
+      sold: 37,
+      points: 146,
+    });
+    expect(s).toEqual(before);
+    const sale = command(s, 'sellAllCrops');
+    expect(sale.result).toEqual({ sold: quote.sold, points: quote.points });
+    expect(sale.pointsDelta).toBe(quote.points);
+    expect(sale.state.crops).toEqual({ strawberry: 0, lavender: 0, radish: 0, retiredCrop: 3 });
+    expect(sale.state.seeds).toEqual(s.seeds);
+    expect(M.quoteAllCropSales(sale.state)).toEqual({ items: [], sold: 0, points: 0 });
+  });
   it('投影实时读取主站余额，并不依赖存档内的过时钱包数值', () => {
     const s = adopted(); s.wallet = 99999;
     expect(projectManor(s, context({ points: 7 })).wallet).toBe(7);
@@ -57,6 +75,36 @@ describe('正式庄园沿用确认玩法与轻笺积分', () => {
     const r = command(s, 'fertilize', [0, 'legend']);
     expect(r.result).toBe(2);
     expect(M.plotState(projectManor(r.state, tomorrow), 0)).toBe('ripe');
+  });
+  it.each([
+    { name: '确认份数', remaining: 12, accel: 0, stock: 10, quantity: 3, used: 3, gain: 3 },
+    { name: '库存', remaining: 12, accel: 0, stock: 2, quantity: 10, used: 2, gain: 2 },
+    { name: '半轮上限', remaining: 7.5, accel: 4.5, stock: 10, quantity: 10, used: 2, gain: 1.5 },
+    { name: '成熟时间', remaining: 2.25, accel: 0, stock: 10, quantity: 10, used: 3, gain: 2.25 },
+    { name: '加速已满', remaining: 6, accel: 6, stock: 10, quantity: 10, used: 0, gain: 0 },
+    { name: '已经成熟', remaining: 0, accel: 0, stock: 10, quantity: 10, used: 0, gain: 0 },
+  ])('批量施肥按$name结算，库存与时间和连续单份施肥一致', ({ remaining, accel, stock, quantity, used, gain }) => {
+    let s = adopted();
+    s.seeds.carrot = 1;
+    s = command(s, 'plant', [0, 'carrot']).state;
+    s = command(s, 'water', [[0]]).state;
+    Object.assign(s.plots[0], { next: s.now + remaining, accel });
+    s.fertilizers.eco = stock;
+
+    const next = command(s, 'fertilize', [0, 'eco', quantity]);
+    expect(next.result).toBe(gain);
+    expect(next.pointsDelta).toBe(0);
+    expect(next.state.fertilizers.eco).toBe(stock - used);
+    expect(next.state.plots[0]).toMatchObject({ accel: accel + gain, next: s.now + remaining - gain });
+    let sequential = s;
+    for (let n = 0; n < quantity; n++) sequential = command(sequential, 'fertilize', [0, 'eco']).state;
+    expect(next.state).toEqual(sequential);
+  });
+  it('施肥份数必须是正安全整数', () => {
+    const s = adopted();
+    for (const quantity of [0, -1, 1.5, '2', null, Number.MAX_SAFE_INTEGER + 1]) {
+      expect(() => command(s, 'fertilize', [0, 'eco', quantity])).toThrow('MANOR_COMMAND_INVALID');
+    }
   });
   it('任务水滴只能来自既有成长完成事实，满桶剩余额度保留', () => {
     let s = adopted(); s.water = 58;
@@ -226,9 +274,9 @@ describe('正式庄园沿用确认玩法与轻笺积分', () => {
   it('鱼苗袋和蜂箱的每日使用记录也不会因切回日期而重置', () => {
     const a=context({now:new Date('2026-10-24T12:00:00Z'),calendar:{dayKey:'20261025',weekKey:'202643',utcOffsetMinutes:840}});
     const b=context({...a,calendar:{dayKey:'20261024',weekKey:'202643',utcOffsetMinutes:-720}});
-    let s=adopted();s.guide=null;s.xp=M.RULES.levels[5];s.seeds.tomato=3;
+    let s=adopted();s.guide=null;s.xp=M.RULES.levels[5];s.seeds.tomato=4;
     s.beehive={purchasedAt:0,pollen:6,lastPollinatedDay:null};
-    for(const [i,ctx] of [a,b].entries()) {
+    for(const [i,ctx] of [a,a,b].entries()) {
       s=command(s,'plant',[i,'tomato'],ctx).state;
       s=command(s,'water',[[i]],ctx).state;
       const result=command(s,'pollinate',[i],ctx);expect(result.result).toBe(true);s=result.state;
@@ -236,10 +284,30 @@ describe('正式庄园沿用确认玩法与轻笺积分', () => {
     }
     s=projectManor(s,a);
     expect(command(s,'buyFry',[],a).result).toBeNull();
-    s=command(s,'plant',[2,'tomato'],a).state;
-    s=command(s,'water',[[2]],a).state;
-    expect(command(s,'pollinate',[2],a).result).toBe(false);
-    expect(s.beehive.pollen).toBe(4);
+    s=command(s,'plant',[3,'tomato'],a).state;
+    s=command(s,'water',[[3]],a).state;
+    expect(command(s,'pollinate',[3],a).result).toBe(false);
+    expect(s.beehive.pollen).toBe(3);
+    expect(M.beehiveStatus(s)).toMatchObject({pollinationsUsed:2,pollinationsRemaining:0});
+    const second = command(s,'pollinate',[3],b);
+    expect(second.result).toBe(true);
+    expect(second.state.beehive.pollen).toBe(2);
+  });
+  it('旧存档当天与之前日期的授粉记录各折算为已用一次', () => {
+    const today = context();
+    const tomorrow = context({
+      now: new Date('2026-10-25T02:00:00Z'),
+      calendar: {dayKey:'20261025',weekKey:'202643',utcOffsetMinutes:480},
+    });
+    const old = adopted();
+    old.version = 'knowledge-manor-v4';
+    old.beehive = {purchasedAt:0,pollen:5,lastPollinatedDay:old.calendarDay};
+    old.dailyUsage = {
+      '20261025': {freeUsed:0,waterClaims:[0,0,0],pollinated:true},
+    };
+    expect(M.beehiveStatus(projectManor(old,today))).toMatchObject({pollinationsUsed:1,pollinationsRemaining:1});
+    expect(M.beehiveStatus(projectManor(old,tomorrow))).toMatchObject({pollinationsUsed:1,pollinationsRemaining:1});
+    expect(old.beehive).not.toHaveProperty('pollinationsUsed');
   });
   it('首钓、每日三次、25%命中及稀有度沿用原规则；强制物种入口不开放', () => {
     expect(M.RULES).toMatchObject({ dailyFree: 3, success: 0.25, firstFish: 'clown' });
@@ -320,6 +388,13 @@ describe('新增作物沿用服务端购买、生长、续收和积分结算', (
     }
     expect(M.pollinate(s,0)).toBeTruthy();expect(M.pollinationEligible(s,0)).toBe(false);
     expect(M.pollinate(s,0)).toBe(false);
+    expect(M.pollinate(s,1)).toBe(true);
+    s.now = Math.max(...s.plots.slice(0,2).map(plot=>plot.next));
+    expect(M.harvest(s,[0,1]).map(item=>item.quantity)).toEqual([2,2]);
+    expect(M.pollinationEligible(s,0)).toBe(false);
+    expect(M.pollinationEligible(s,1)).toBe(false);
+    s.now = Math.max(...s.plots.slice(0,2).map(plot=>plot.next));
+    expect(M.harvest(s,[0,1]).map(item=>item.quantity)).toEqual([1,1]);
   });
 });
 
@@ -545,4 +620,49 @@ describe('水族赎回按出售时的明确报价结算', () => {
     expect(M.buybackCost(receipt)).toBe(receipt.points);
     expect(command(s,'buyback',[receipt.id]).pointsDelta).toBe(-receipt.points);
   });
+
+  it('批量出售仅清空可售待养水族，按个体价格成交并保留最近的赎回报价', () => {
+    const s = adopted();
+    const farm = M.addFish(s, 'clown');
+    const show = M.addFish(s, 'moonjelly');
+    const first = M.addFish(s, 'clown');
+    const old = M.addFish(s, 'blue');
+    expect(M.place(s, farm.id, 0, F)).toBe(true);
+    expect(M.placeShow(s, show.id, 0, F)).toBe(true);
+    s.firstCompanionPending = first.id;
+    M.sell(s, old.id, F);
+    const waiting = Array.from({ length: M.RULES.buybackLimit + 2 }, (_, i) => M.addFish(s, i % 2 ? 'blue' : 'moonjelly'));
+    const points = waiting.reduce((total, fish) => total + M.sellPrice(fish.kind, F), 0);
+    const before = structuredClone(s);
+    expect(M.quoteWaitingFishSale(s, F)).toMatchObject({ sold: waiting.length, points });
+    expect(s).toEqual(before);
+
+    const { state, result, pointsDelta } = command(s, 'sellAllWaitingFish');
+    expect(result).toEqual({ sold: waiting.length, points });
+    expect(pointsDelta).toBe(points);
+    expect(state.fish).toEqual([farm, show, first]);
+    expect(state.fishSlots).toEqual(before.fishSlots);
+    expect(state.showSlots).toEqual(before.showSlots);
+    expect(state.firstCompanionPending).toBe(first.id);
+    expect(state.discoveries).toEqual(before.discoveries);
+    expect(state.buybacks.map(entry => entry.fish)).toEqual(waiting.slice(-M.RULES.buybackLimit).reverse());
+    for (const entry of state.buybacks) {
+      expect(entry.points).toBe(M.sellPrice(entry.fish.kind, F));
+      expect(entry.buybackPoints).toBe(M.buybackPrice(entry.points));
+    }
+    const latest = state.buybacks[0];
+    expect(command(state, 'buyback', [latest.id, latest.buybackPoints]).result).toEqual(latest.fish);
+    expect(command(state, 'sellAllWaitingFish')).toMatchObject({ result: null, pointsDelta: 0 });
+  });
+});
+
+it('垂钓期间可领取任务水滴，保持垂钓收据、消耗和结果不变', () => {
+  const started = command(adopted(), 'beginCast', ['bait']);
+  const ctx = context({ dailyDone: [true, false, false] });
+  const collected = command(started.state, 'claimAllDailyWater', [], ctx);
+  expect(collected.result.water).toBe(M.RULES.dailyWaterTiers[0]);
+  expect(collected.state).toMatchObject({ casting: true, castId: started.state.castId, freeUsed: started.state.freeUsed });
+  const caught = command(collected.state, 'resolveCast', [started.state.castId], ctx);
+  expect(caught.result.fish.kind).toBe('clown');
+  expect(command(caught.state, 'claimAllDailyWater', [], ctx).result).toBeNull();
 });

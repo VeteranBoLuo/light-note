@@ -9,16 +9,10 @@ import { createGroundedResourceSkill } from './resourceSkillFactory.js';
 const PROFILE_CONTRACTS = Object.freeze({
   material_to_note:
     '交付一篇结构清晰、可继续编辑的 Markdown 笔记。必须使用一个一级标题，并分别提供“## 关键证据”“## 冲突与差异”“## 未知与待核验”三个非空章节；没有发现时也要明确写“暂无”。不得改成交互问答或其他工具成果。',
-  study_kit:
-    '交付学习套件，必须分别提供“## 学习目标”“## 知识框架与核心概念”“## 易混淆点”“## 记忆卡片”“## 自测题”“## 参考答案”“## 薄弱点复习建议”七个非空章节。“记忆卡片”和“自测题”章节各用两列 Markdown 表格（问题 | 答案），每行对应一张卡片或一道题，禁止单元格换行。',
 });
 
 function section(...labels) {
   return Object.freeze({ type: 'section', labels: Object.freeze(labels) });
-}
-
-function sharedSection(shareGroup, ...labels) {
-  return Object.freeze({ type: 'section', labels: Object.freeze(labels), shareGroup });
 }
 
 const DOCUMENT_TITLE = Object.freeze({ type: 'document_title' });
@@ -29,16 +23,6 @@ const PROFILE_REQUIREMENTS = Object.freeze({
     section('来源', '证据', '依据', 'source', 'evidence'),
     section('冲突', '分歧', '差异', 'conflict', 'difference'),
     section('未知', '待核验', '限制', 'unknown', 'limitation'),
-  ]),
-  study_kit: Object.freeze([
-    section('学习目标', 'learning goal'),
-    sharedSection('framework_core', '知识框架', '知识结构', 'framework'),
-    sharedSection('framework_core', '核心概念', 'core concept'),
-    section('易混淆', '误区', 'confusion', 'misconception'),
-    section('记忆卡', '闪卡', 'flashcard'),
-    section('自测', '测验', 'quiz'),
-    section('参考答案', '答案', 'answer'),
-    section('复习建议', '薄弱点', 'review', 'weak point'),
   ]),
 });
 
@@ -90,27 +74,17 @@ function titleMatches(title, labels) {
   return labels.some((label) => normalizedTitle.includes(label.toLocaleLowerCase()));
 }
 
-function matchSectionRequirements(headings, requirements, requirementIndex = 0, assignments = new Map()) {
+function matchSectionRequirements(headings, requirements, requirementIndex = 0, assigned = new Set()) {
   if (requirementIndex >= requirements.length) return true;
   const requirement = requirements[requirementIndex];
   if (requirement.type !== 'section') {
-    return matchSectionRequirements(headings, requirements, requirementIndex + 1, assignments);
+    return matchSectionRequirements(headings, requirements, requirementIndex + 1, assigned);
   }
-
-  const candidates = headings
-    .map((heading, index) => ({ heading, index }))
-    .filter(({ heading }) => {
-      if (!heading.body || !titleMatches(heading.title, requirement.labels)) return false;
-      const assignedShareGroup = assignments.get(heading.index);
-      return !assignedShareGroup || (requirement.shareGroup && assignedShareGroup === requirement.shareGroup);
-    });
-
-  return candidates.some(({ index }) => {
-    const previous = assignments.get(index);
-    assignments.set(index, requirement.shareGroup || Symbol('exclusive-section'));
-    const matched = matchSectionRequirements(headings, requirements, requirementIndex + 1, assignments);
-    if (previous) assignments.set(index, previous);
-    else assignments.delete(index);
+  return headings.some((heading) => {
+    if (!heading.body || assigned.has(heading) || !titleMatches(heading.title, requirement.labels)) return false;
+    assigned.add(heading);
+    const matched = matchSectionRequirements(headings, requirements, requirementIndex + 1, assigned);
+    assigned.delete(heading);
     return matched;
   });
 }
@@ -169,14 +143,6 @@ export const toolboxSkills = Object.freeze([
     maxResources: 20,
     taskLabel: '把本轮材料整理成可继续编辑的笔记',
     systemRole: '你是轻笺知识工具箱的资料转笔记 Skill。',
-    modelPolicy: { temperature: 0.25, maxTokens: 6_000 },
-  }),
-  createToolboxSkill({
-    profileId: 'study_kit',
-    minResources: 1,
-    maxResources: 12,
-    taskLabel: '把本轮材料转换成可学习和复习的套件',
-    systemRole: '你是轻笺知识工具箱的学习套件 Skill。',
     modelPolicy: { temperature: 0.25, maxTokens: 6_000 },
   }),
 ]);

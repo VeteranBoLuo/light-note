@@ -59,8 +59,8 @@ pnpm local:stop    # 停止应用和依赖，保留本地数据
 - 数据、日志、配置及 root/test/user/visitor 账号保存在 Git 忽略的 `.local-test/`；初始账号凭据只在 `.local-test/accounts.json` 查看，不写入文档、输出或提交。自行修改密码后以新密码为准，启动不重置密码；联通检查使用仍有效的已存测试凭据。停止服务不清空数据，重启不覆盖已有账号和资料。
 - 本机进程只读取 `.local-test/server.env`，不加载后端原 `.env`，也不继承终端中的服务凭据。数据库、Redis、存储、邮件及写入目录须通过隔离校验后才允许启动或消费本地提醒。
 - 首次建库优先读取本机 `.local-test/schema.sql` 的纯结构快照，不复制线上记录、账号、会话或队列；缺失时使用仓库结构基线并执行明确登记的本地迁移与现有 ensure。Schema 门禁失败即停止，不自动修改生产数据库。
-- 新增额度、赠礼、简报预算、C11 与风控默认配置仅在缺失时追加；保留已有值及凭据，默认仍为赠礼关闭、等级日额度、C11 关闭。积分获取 C5–C8、积分经济 C10、积分中心、治理与活动开关及其生效边界默认对齐线上，同样只补缺失项；缺少 C8 成就快照标记时，本地初始化在 C8 开关临时移除的情况下执行一次快照准备。AI 账本、控制与短期风控事实 Schema 同批登记到本地迁移，不在启动时发历史赠礼。
-- 前端随 Vite 热更新；后端和 Worker 代码变化后停止、重新启动本机环境。`local:start` 会执行已登记的未完成迁移及结构补齐；停止应用后也可运行 `pnpm local:migrate` 单独初始化/升级，再重新启动。迁移执行记录在本地库，不自动重放历史数据迁移。
+- 新增额度、赠礼、简报预算、积分经济与风控配置仅在缺失时追加，保留已有值及凭据。本机默认使用 C12 兑换目录，C10 作为回退配置；AI 默认使用等级日额度并关闭赠礼。积分获取 C5–C8、积分中心、治理与活动开关及其生效边界同样只补缺失项。缺少 C8 成就快照标记时，本地初始化在 C8 开关临时移除的情况下执行一次快照准备。AI 账本、控制与短期风控事实 Schema 同批登记到本地迁移，不在启动时发历史赠礼。
+- 前端随 Vite 热更新，后端和 Worker 代码变化后停止并重新启动本机环境。`local:start` 启动服务前按锁文件同步 Node.js 依赖，并执行已登记的未完成迁移及结构补齐。停止应用后也可运行 `pnpm local:migrate` 单独初始化或升级。迁移执行记录保存在本地库，启动流程按记录跳过已执行的历史数据迁移。
 - 开发涉及数据库、依赖或配置时，交付要求统一遵守[本机测试环境同步维护](./development.md#本机测试环境同步维护)。
 - 邮件全部捕获在本机；真实 AI、第三方登录、支付、厂商推送与 Host Agent 运维需要各自的独立配置或对应运行平台，不属于本地模拟通过即已完成的真实服务验收。默认不配置真实服务凭据，支付和外部推送保持关闭。
 
@@ -72,6 +72,18 @@ pnpm local:stop    # 停止应用和依赖，保留本地数据
 - 缓存配置修改属于部署操作，须有上线授权并通过 `nginx -t` 后生效。发布验收抽查图片与代码响应头、重复访问缓存命中、新版本 URL，以及已有页面的懒加载；仅本地代码检查不能证明生产缓存已生效。
 - 预热逻辑改动运行 `pnpm --filter web exec node scripts/check-static-prewarm.mjs`，使用独立生产构建夹具检查持续操作、按任务中断、并发池补位与跨标签互斥、冷／热缓存吞吐及共享带宽竞争；以 1／2／4 并发分别对照，短续页只保留一个在途预热。可通过 `LIGHTNOTE_PREWARM_BASELINE_SOURCE` 指定旧版调度器源码，单独运行相同资源的吞吐基线，不能用它代替新版完整门禁。导航 p50/p95 增量不得超过 `max(100ms, 基线的 10%)`；普通续页不得超过 `max(200ms, 基线的 20%)`。单测覆盖续页一秒升级、重叠任务及错误释放、可见图片换源/离屏/移除、预览与庄园生命周期、网络限制、账号退出和清单版本不符。
 - 构建输出 `.lightnote-prewarm-report.tsv` 供核对候选分组体积，实际请求由权限、端型素材、网络与场景选择有限清单。发布后无痕验收须取消 DevTools 的“停用缓存”，模拟持续点击、输入与滚动，再验证纸灵和庄园实际缓存命中；区分候选、读取字节、预热完成和命中证据，不沿用静置测试结果。前台性能回退时整体回退本次网页版本，无需更改后端或缓存协议。
+
+### 笔记原图发布门禁
+
+同一批发布先更新 API，再更新 Web，并用 [managed-uploads.conf](../scripts/nginx/managed-uploads.conf) 替换主站既有的 `/uploads/` 静态目录映射。确认没有其他 location 或根目录直接暴露同一文件目录，保留原有安全响应头，执行 `nginx -t` 后平滑重载。旧阅读页可刷新以获取支持原图票据的客户端。
+
+切换前核对历史原图仍可由上传登记或资产账本确认归属。切换后用验收笔记覆盖本人原图与历史模板、书签图标、匿名分享阅读、撤销及过期后的新读取和原始地址的匿名拒绝。分享图像使用 `private, no-store`，个人原图保留鉴权后重新验证。代理映射纳入 Web 与 API 的同批发布和回滚复核。
+
+### 旧静态文件入口退役
+
+API 已移除旧静态目录挂载。发布时在主站配置中用 [retired-legacy-files.conf](../scripts/nginx/retired-legacy-files.conf) 替换既有的 `/files/` 静态映射，同时封闭经 API 代理的旧入口。检查其他站点别名和站点根目录是否仍能暴露同一目录。保留原目录与全部文件。若发现仍有效的业务引用，先核对归属，再迁到已有鉴权入口。
+
+替换配置后用 `nginx -t` 校验并平滑重载。复核 `/files`、`/api/files` 及其子路径均返回 404，并验收云空间正常的上传、预览、分享与下载。回滚 API 时保持旧静态入口关闭。
 
 ## 变更级验证
 
@@ -117,6 +129,8 @@ pnpm local:stop    # 停止应用和依赖，保留本地数据
 
 ### 其他领域门禁
 
+积分排行榜开放前显式运行 `pnpm --filter server migrate:points-leaderboard` 安装榜单表和结算锁，并通过 `check:schema`。核对可上榜账号已有社区 ID，缺失时复用既有社区身份回填流程。所有 API 实例使用同一排行榜配置。使用北京时间周一日期 `POINTS_LEADERBOARD_OPEN_WEEK=YYYY-MM-DD` 开放首个完整周，该日期录入后固定。配置 `POINTS_LEADERBOARD_FIRST_REWARD_WEEK` 指定首个发奖周，只有明确设为开榜周时，开榜周才计奖。未配置时只记录排名。`POINTS_LEADERBOARD_REWARDS_ENABLED=true` 才处理待发奖项，关闭开关仍冻结本期。开榜前随发布同步隐私政策。首次开榜或奖励规则变更时，在同一批发布更新所有负责榜单读取和结算的 API 实例及 Web 前端，并在服务端执行 `node scripts/seedPointsLeaderboardKnowledge.js --apply` 同步帮助与 AI 知识库。规则、奖额和回滚资产边界见[积分排行榜](./points-earning.md#积分排行榜)。
+
 一次性 AI 等级赠礼依赖 `20261106_ai_level_gifts.sql` 与 `20261106_ai_gift_risk_facts.sql` 的加法结构；先完成结构安装与 `check:schema`，再更新 API 和使用统一 Execution 的 Worker。结构安装不发赠礼、不清零余额；显式补发与关闭日额度仍按 [一次性等级赠礼与校准](./ai-skills.md#一次性等级赠礼与校准) 核对资格、逐档账本和差异，不能把进程启动视为补发完成。
 
 知识庄园开放前，显式运行 `pnpm --filter server migrate:knowledge-manor` 安装 `20261024_knowledge_manor.sql` 的存档与幂等操作表，不回填账号或调整资产。部署脚本仅在本轮已授权且显式设置 `LIGHTNOTE_APPLY_KNOWLEDGE_MANOR_MIGRATION=1` 时执行此迁移。`KNOWLEDGE_MANOR_ENABLED` 默认关闭，是部署总开关；开启后由 `KNOWLEDGE_MANOR_AUDIENCE` 决定开放范围，默认 `internal`（Root 与 test 账号），`all` 为全部登录账号，游客与管理员代管始终不开放；启动与 Schema 门禁均检查契约。公开开放分两段：先以 `internal` 部署 API 与 Web，用 test 账号在生产完成新手、种植、垂钓、出售与积分流水核对，确认普通账号仍不可见；再改为 `all` 并重启 API，用普通账号复核。开放获准上线时执行 `node scripts/seedKnowledgeManorKnowledge.js` 同步帮助与 AI 知识条目，随 API 重启刷新检索缓存。收回开放只需改回 `internal` 并重启，保留存档与积分。API 和 Web 必须携带同一庄园规则版本，发布前验证与主站积分并发、失败回滚、断网重试、钓鱼刷新恢复及账号隔离；MySQL 5.7 兼容门禁不能用本地 MySQL 8 的结果替代。回退先关闭开关，保留新增表、操作收据与已结算积分，不逆向回收用户资产。
@@ -134,6 +148,8 @@ pnpm local:stop    # 停止应用和依赖，保留本地数据
 资料转表格已下架，代码与 `TOOLBOX_EXTRACTION_ENABLED` 开关均已删除；`20261012_extraction_workbench.sql` 建立的表保留并继续受 Schema 断言覆盖，删表须另行授权。
 
 社区纯文本自动审核开放前，显式运行社区 Schema 迁移入口安装 `20261008_community_ai_review.sql`，再通过 `check:schema`。`COMMUNITY_AI_REVIEW_ENABLED` 默认关闭，平台日预算由 `COMMUNITY_AI_REVIEW_DAILY_BUDGET_TOKENS` 控制。独立审核调度随 API 启动，沿用 production-only 策略；关闭 AI 审核后保持新版本调度运行，将已排队或过期任务交人工。回滚旧版本前先关闭开关并确认无 pending/processing 审核任务，保留新增表及账本，避免无消费者任务滞留。
+
+广场评论资源发布前运行 `pnpm --filter server migrate:community-feed-schema` 安装 `20261124_community_comment_resources.sql`，通过 `check:schema` 后先更新全部 API，再更新 Web。迁移只新增关联表。回退 Web 时保留表和新版 API，已发布的纯资源评论仍需支持读取。
 
 广场图片按单文件协议读取与上传。`20261030_community_image_previews.sql` 的加法字段保留为历史派生对象的回收登记，清理器仍须同时回收已登记的原件和旧派生对象；停用派生功能时不删除字段或批量清空历史记录。发布验证正文与 Viewer 读取同一文件、旧 `variant=preview` 链接兼容、修订权限与历史双对象清理。
 
@@ -313,7 +329,9 @@ pnpm deploy:all
 pnpm deploy:host-agent
 ```
 
-部署脚本以当前工作树构建，发布前必须位于已推送的 `main`（紧急修复为基于 `main` 的修复分支）；GitHub 手动部署工作流只允许从 `main` 运行。不把本地 preview 进程或旧构建产物直接上传。
+生产部署入口在构建和传输前运行 [发布检查](../scripts/check-deploy-release.sh)。必须使用干净的 `main` 工作树，且提交与轻笺 GitHub 仓库的远程 `main` 顶端一致。目标提交在 `main` 的最新推送 CI 必须成功。GitHub 手动部署工作流可使用该次 `main` 提交的 detached HEAD。本地发布需要登录具备仓库与 Actions 读取权限的 GitHub CLI。
+
+紧急修复按[发版节奏](#发版节奏)合入并推送 `main` 后使用相同门禁。前端、后端和 Host Agent 的总发布固定同一个提交，各入口在传输前再次核对。GitHub 手动部署沿用 `HOST`、`USERNAME` 和 `SSH_PRIVATE_KEY` 配置 SSH。
 
 Web 生产构建必须完成首页、浏览器扩展、Android 下载和更新日志的预渲染及 SEO 产物校验：正文、允许索引指令与自引用 canonical 缺失时停止发布。CI/debug 的 `SKIP_PRERENDER=1` 只完成基础检查，不能代替生产 SEO 验收；统一部署入口强制关闭该跳过选项。
 
@@ -343,7 +361,7 @@ Web 发布先把新产物完整解包到独立 staging 目录，通过基本产�
 
 用户功能变化需同步公开帮助，不能把更新日志当作操作教程。`node scripts/syncUserHelpKnowledge.mjs` 默认只读预览；`--prepare --state-dir=绝对私有目录` 保存待维护条目、原文及状态快照，取得对应内容写入授权后使用同一目录执行 `--apply`，再用 `--verify` 核对结果。目录限当前维护者访问，快照与回执不进入 Git 或公开静态目录。
 
-维护新 AI 额度策略时，可在旧业务模式下仅对预览／准备显式指定 `--target-billing-mode=permanent_only --target-economy-version=points-economy-c11 --target-gift-version=ai-level-gifts-v1 --target-guest-quota=0`，四项须齐全，不修改运行时开关。计划保存目标事实、原运行事实、文章快照及哈希；`--apply`／`--verify` 必须核对实际事实与目标一致，`--restore` 则核对原运行事实。模式、目录、赠送表或文章发生变化即停止，不能跳过 `KNOWLEDGE_PLAN_OUTDATED` 与文章冲突检查。
+维护新 AI 额度或积分经济版本时，可在旧模式下为预览／准备同时指定目标计费模式、经济版本、赠礼版本和游客额度；仅调整经济版本时，其余参数使用目标环境的原值。永久余额模式的 C12 示例为 `--target-billing-mode=permanent_only --target-economy-version=points-economy-c12 --target-gift-version=ai-level-gifts-v1 --target-guest-quota=0`。计划保存目标事实、原运行事实、文章快照及哈希；`--apply`／`--verify` 核对实际事实与目标一致，`--restore` 核对原运行事实。模式、目录、赠送表或文章冲突时停止并重新准备计划。
 
 维护脚本从现行等级、游客额度、补签窗口和商品目录生成权益说明，更新前复核规则与条目快照，逐条复用知识库写服务和管理员审计；已归档文章不自动恢复，既有文章保持 ID。冲突时停止，沿用同一计划重试已完成项不重复创建。`--restore` 只恢复仍与本次结果一致的条目，新增文章改为内部状态而不物理删除；之后有人修改的内容不能覆盖。历史内容 migration 不重跑，不把维护脚本挂到启动流程。
 

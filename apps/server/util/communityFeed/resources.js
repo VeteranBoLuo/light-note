@@ -3,11 +3,24 @@ import { parseDocument } from 'htmlparser2';
 import { marked } from 'marked';
 import pool from '../../db/index.js';
 import { normalizeCanonicalNoteRecord } from '../noteReadModel.js';
-import { access, CommunityFeedError, fail, first, publicId, strictFields, transaction, loadPost } from './core.js';
+import {
+  access,
+  authorVisibleSql,
+  CommunityFeedError,
+  fail,
+  first,
+  publicId,
+  strictFields,
+  transaction,
+  loadPost,
+  unblockedSql,
+} from './core.js';
 import { communityFeedSchemaReady } from './schema.js';
-import { COMMUNITY_RESOURCE_SCHEMA } from './schemaContract.js';
+import { COMMUNITY_COMMENT_RESOURCE_SCHEMA, COMMUNITY_RESOURCE_SCHEMA } from './schemaContract.js';
 
 export const resourcesReady = (db = pool) => communityFeedSchemaReady(db, COMMUNITY_RESOURCE_SCHEMA);
+const COMMENT_RESOURCE_SCHEMA = { ...COMMUNITY_RESOURCE_SCHEMA, ...COMMUNITY_COMMENT_RESOURCE_SCHEMA };
+export const commentResourcesReady = (db = pool) => communityFeedSchemaReady(db, COMMENT_RESOURCE_SCHEMA);
 // Rendered as text on the client. No HTML, remote assets, child pages or private link targets escape.
 export function noteSnapshot(source) {
   if (!['html', 'md', 'markdown'].includes(source.type)) fail('COMMUNITY_RESOURCE_TEXT_ONLY');
@@ -151,8 +164,15 @@ export async function bindResources(db, post, revisionId, ids) {
   if (!(await resourcesReady(db))) fail('COMMUNITY_RESOURCES_UNAVAILABLE', 503);
   for (const [order, id] of ids.entries()) {
     const row = await first(db, 'SELECT * FROM community_resource_snapshots WHERE public_id=? FOR UPDATE', [id]);
-    if (!row || row.owner_id !== post.author_id || (row.post_id && Number(row.post_id) !== Number(post.id)))
-      fail('COMMUNITY_RESOURCE_UNAVAILABLE', 409);
+    if (!row || row.owner_id !== post.author_id) fail('COMMUNITY_RESOURCE_UNAVAILABLE', 409);
+    if (row.post_id) {
+      const revision = await first(
+        db,
+        'SELECT 1 FROM community_revision_resources rr JOIN community_post_revisions r ON r.id=rr.revision_id WHERE rr.resource_id=? AND r.post_id=? LIMIT 1',
+        [id, post.id],
+      );
+      if (String(row.post_id) !== String(post.id) || !revision) fail('COMMUNITY_RESOURCE_UNAVAILABLE', 409);
+    }
     await db.query('UPDATE community_resource_snapshots SET post_id=? WHERE public_id=?', [post.id, id]);
     await db.query('INSERT INTO community_revision_resources(revision_id,resource_id,sort_order) VALUES(?,?,?)', [
       revisionId,
@@ -170,12 +190,74 @@ export async function revisionResources(db, ids) {
     )
   )[0];
 }
+export async function bindCommentResources(db, { commentId, postId, ownerId, ids }) {
+  if (!ids.length) return;
+  if (!(await commentResourcesReady(db))) fail('COMMUNITY_RESOURCES_UNAVAILABLE', 503);
+  for (const [order, id] of ids.entries()) {
+    const [claim] = await db.query(
+      'UPDATE community_resource_snapshots SET post_id=? WHERE public_id=? AND owner_id=? AND post_id IS NULL',
+      [postId, id, ownerId],
+    );
+    if (!claim.affectedRows) fail('COMMUNITY_RESOURCE_UNAVAILABLE', 409);
+    await db.query('INSERT INTO community_comment_resources(resource_id,comment_id,sort_order) VALUES(?,?,?)', [
+      id,
+      commentId,
+      order,
+    ]);
+  }
+}
+
+export async function commentResources(db, comments) {
+  const resourcesByComment = new Map();
+  if (!comments.length || !(await commentResourcesReady(db))) return resourcesByComment;
+  const commentsById = new Map(comments.map(({ id, publicId, postId }) => [String(id), { publicId, postId }]));
+  const ids = [...commentsById.keys()];
+  const [rows] = await db.query(
+    `SELECT s.public_id,s.kind,s.title,s.created_at,r.comment_id
+     FROM community_comment_resources r JOIN community_resource_snapshots s ON s.public_id=r.resource_id
+     WHERE r.comment_id IN (${ids.map(() => '?').join(',')}) ORDER BY r.comment_id,r.sort_order`,
+    ids,
+  );
+  for (const row of rows) {
+    const key = String(row.comment_id);
+    const { postId, publicId: commentId } = commentsById.get(key);
+    if (!resourcesByComment.has(key)) resourcesByComment.set(key, []);
+    resourcesByComment.get(key).push({ ...resourceDto(row), postId, commentId });
+  }
+  return resourcesByComment;
+}
+
 export async function readResource({ user, id, input = {}, db = pool, env = process.env }) {
   const account = await access(db, user, { env });
   if (!(await resourcesReady(db))) fail('COMMUNITY_RESOURCES_UNAVAILABLE', 503);
   const row = await first(db, 'SELECT * FROM community_resource_snapshots WHERE public_id=?', [publicId(id)]);
   if (!row) fail('COMMUNITY_RESOURCE_UNAVAILABLE', 404);
-  if (input.postId) {
+  if (input.commentId !== undefined) {
+    const viewer = user?.id || '';
+    if (!(await commentResourcesReady(db))) fail('COMMUNITY_RESOURCES_UNAVAILABLE', 503);
+    const comment = await first(
+      db,
+      `SELECT c.id FROM community_comment_resources r
+       JOIN community_comments c ON c.id=r.comment_id
+       JOIN community_posts p ON p.id=c.post_id
+       WHERE r.resource_id=? AND c.public_id=? AND p.public_id=? AND p.status<>'deleted'
+       AND (? OR (p.status='published' AND ${authorVisibleSql('p')} AND ${unblockedSql('p')}
+         AND ((c.status='published' AND ${authorVisibleSql('c')} AND ${unblockedSql('c')})
+              OR (c.author_id=? AND c.status IN ('pending_review','rejected','removed')))))`,
+      [
+        row.public_id,
+        publicId(input.commentId),
+        publicId(input.postId),
+        account?.role === 'root',
+        viewer,
+        viewer,
+        viewer,
+        viewer,
+        viewer,
+      ],
+    );
+    if (!comment) fail('COMMUNITY_RESOURCE_UNAVAILABLE', 404);
+  } else if (input.postId) {
     const owner = row.owner_id === user?.id,
       moderator = account?.role === 'root';
     const post = await loadPost(db, input.postId, user, { owner, moderator });

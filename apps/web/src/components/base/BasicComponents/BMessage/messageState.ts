@@ -1,6 +1,7 @@
 import { reactive } from 'vue';
 
 export type MessageType = 'success' | 'error' | 'warning' | 'info' | 'loading';
+export type MessagePlacement = 'top';
 
 export interface MessageItem {
   id: number;
@@ -9,6 +10,7 @@ export interface MessageItem {
   duration: number;
   key?: string;
   onClose?: () => void;
+  placement?: MessagePlacement;
   /** 显示关闭按钮，适合需要读完的较长提示。 */
   closable?: boolean;
   /** 正在播放离场动画。此时节点仍在 DOM 里,只是不再参与去重、也不响应点击。 */
@@ -30,6 +32,7 @@ export interface MessageOpenConfig {
   duration?: number;
   key?: string;
   onClose?: () => void;
+  placement?: MessagePlacement;
   closable?: boolean;
 }
 

@@ -5,6 +5,15 @@
 }
 /*--------------------------IOS样式End-----------------------------*/
 
+// Escape 保留实际焦点，统一隐藏浏览器因该按键显示的焦点环。
+html.light-note-hide-escape-focus-ring {
+  --image-viewer-focus-ring-color: transparent;
+
+  :focus-visible {
+    outline: none !important;
+  }
+}
+
 /*滚动条轨道样式*/
 ::-webkit-scrollbar-track {
   background-color: rgb(0 0 0 / 5%);

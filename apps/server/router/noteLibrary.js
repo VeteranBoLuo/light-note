@@ -11,6 +11,7 @@ import { ensureNotVisitor } from '../util/auth.js';
 import { L, resultData } from '../util/common.js';
 import { NOTE_IMAGE_MAX_BYTES, noteImageExtensionForMimeType } from '../util/noteImageUpload.js';
 import { NOTE_IMAGE_DIR } from '../util/noteImages.js';
+import { setAdminNoteImageGrant } from '../util/noteImageAccess.js';
 
 const noteShareAccessLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -87,7 +88,7 @@ router.post('/updateNote', noteLibraryHandle.updateNote);
 router.post('/updateDrawingNote', noteLibraryHandle.updateDrawingNote);
 router.post('/convertMode', noteLibraryHandle.convertNoteMode);
 router.post('/addNote', noteLibraryHandle.addNote);
-router.post('/queryNoteList', noteLibraryHandle.queryNoteList);
+router.post('/queryNoteList', setAdminNoteImageGrant, noteLibraryHandle.queryNoteList);
 router.post('/queryDrawingPreviews', noteLibraryHandle.queryDrawingPreviews);
 router.post('/uploadDrawingThumbnail', noteLibraryHandle.uploadDrawingThumbnail);
 router.get('/drawing-thumbnail/:noteId/:fileName', noteLibraryHandle.getDrawingThumbnail);
@@ -98,7 +99,7 @@ router.post('/queryNoteTree', noteLibraryHandle.queryNoteTree);
 router.post('/queryNoteBreadcrumb', noteLibraryHandle.queryNoteBreadcrumb);
 router.post('/moveNoteNode', noteLibraryHandle.moveNoteNode);
 router.post('/moveNoteNodes', noteLibraryHandle.moveNoteNodes);
-router.post('/getNoteDetail', noteLibraryHandle.getNoteDetail);
+router.post('/getNoteDetail', setAdminNoteImageGrant, noteLibraryHandle.getNoteDetail);
 router.post('/previewExportScope', noteLibraryHandle.previewNoteExportScope);
 router.post('/getNotesForExport', noteLibraryHandle.getNotesForExport);
 router.post('/resolveResourceRefs', noteLibraryHandle.resolveResourceRefs);
@@ -126,6 +127,7 @@ router.post('/share/rotate', (req, res) => {
 router.post('/share/resolve', noteShareAccessLimiter, noteShareHandle.resolveNoteShare);
 router.post('/share/page', noteShareReadLimiter, noteShareHandle.getNoteSharePage);
 router.post('/share/tree', noteShareReadLimiter, noteShareHandle.getNoteShareTree);
+router.get('/share/image/:shareId/:noteId/:fileName', noteShareHandle.getNoteShareImage);
 
 router.post('/queryNoteTagList', noteLibraryHandle.queryNoteTagList);
 router.post('/getNoteTags', noteLibraryHandle.getNoteTags);
@@ -133,7 +135,7 @@ router.post('/updateNoteTags', noteLibraryHandle.updateNoteTags);
 
 router.post('/getNoteVersions', noteLibraryHandle.getNoteVersions);
 router.post('/createNoteVersion', noteLibraryHandle.createNoteVersion);
-router.post('/getNoteVersionDetail', noteLibraryHandle.getNoteVersionDetail);
+router.post('/getNoteVersionDetail', setAdminNoteImageGrant, noteLibraryHandle.getNoteVersionDetail);
 router.post('/restoreNoteVersion', noteLibraryHandle.restoreNoteVersion);
 
 // 导出中转:POST 换一次性下载票据,GET 由系统 DownloadManager 取件(仅 Android App 需要)
@@ -141,7 +143,7 @@ router.post('/exportFile', noteLibraryHandle.createNoteExportTicket);
 router.get('/exportFile', noteLibraryHandle.downloadNoteExportFile);
 
 router.post('/queryNoteTemplates', noteLibraryHandle.queryNoteTemplates);
-router.post('/getNoteTemplateDetail', noteLibraryHandle.getNoteTemplateDetail);
+router.post('/getNoteTemplateDetail', setAdminNoteImageGrant, noteLibraryHandle.getNoteTemplateDetail);
 router.post('/addNoteTemplate', noteLibraryHandle.addNoteTemplate);
 router.post('/updateNoteTemplate', noteLibraryHandle.updateNoteTemplate);
 router.post('/duplicateNoteTemplate', noteLibraryHandle.duplicateNoteTemplate);

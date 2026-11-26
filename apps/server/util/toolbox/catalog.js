@@ -11,11 +11,11 @@ import {
 import { toolboxError } from './errors.js';
 
 export const TOOLBOX_QUOTE_TTL_MS = 10 * 60_000;
+export const IMAGE_REPAIR_POINTS = 1;
 const SAFE_ID_PATTERN = /^[A-Za-z0-9._:@/-]{1,128}$/u;
 const SAFE_REQUEST_ID_PATTERN = /^[A-Za-z0-9:_-]{12,64}$/u;
 const PAID_PRICE_RANGES = Object.freeze({
   material_to_note: Object.freeze({ min: 8, max: 30 }),
-  study_kit: Object.freeze({ min: 18, max: 50 }),
   ocr_to_text: Object.freeze({ min: 5, max: 30 }),
 });
 
@@ -193,7 +193,6 @@ export function quoteToolboxPoints(toolId, { itemCount, totalBytes = 0 } = {}) {
   const sizeMiB = Math.max(0, Number(totalBytes) || 0) / (1024 * 1024);
   let points;
   if (toolId === 'material_to_note') points = 8 + Math.max(0, count - 2) * 3;
-  else if (toolId === 'study_kit') points = 18 + Math.max(0, count - 2) * 4;
   else if (toolId === 'ocr_to_text') points = 5 + Math.max(0, count - 1) * 2 + Math.ceil(sizeMiB / 2) * 2;
   else throw toolboxError('TOOLBOX_QUOTE_NOT_REQUIRED', '该工具无需服务端报价');
   const range = PAID_PRICE_RANGES[toolId];
@@ -209,7 +208,9 @@ export function getPublicToolboxCatalog({ disabledToolIds = [] } = {}) {
     tools: TOOLBOX_TOOL_CATALOG.map((definition) => ({
       ...definition,
       availability: { enabled: definition.availability.enabled && !disabled.has(definition.id) },
-      ...(definition.billingMedium === 'ai_quota'
+      ...(definition.id === 'image_watermark_remover'
+        ? { price: { kind: 'fixed', currency: 'points', min: IMAGE_REPAIR_POINTS, max: IMAGE_REPAIR_POINTS } }
+        : definition.billingMedium === 'ai_quota'
         ? { price: { kind: 'quota', currency: 'ai_quota', min: 0, max: 0 } }
         : definition.billingMedium === 'points'
         ? { price: { kind: 'quote', currency: 'points', ...(PAID_PRICE_RANGES[definition.id] || { min: 0, max: 0 }) } }

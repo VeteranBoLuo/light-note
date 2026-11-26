@@ -2,6 +2,7 @@
 # 前端部署:本地构建 → staging 解包 → 继承上一版哈希资源 → 原子切换
 set -euo pipefail
 DEPLOY_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+RELEASE_SHA="$(bash "$DEPLOY_SCRIPT_DIR/check-deploy-release.sh" "${1:-}")"
 # shellcheck source=scripts/lib/deploy-environment.sh
 source "$DEPLOY_SCRIPT_DIR/lib/deploy-environment.sh"
 
@@ -28,6 +29,7 @@ PDF_WORKER_RELATIVE="$(node apps/web/scripts/verify-pdf-worker-artifact.mjs --pr
 echo "📦  打包 dist…"
 # COPYFILE_DISABLE=1:阻止 macOS tar 往包里塞 ._* AppleDouble 元数据文件(服务器上是纯垃圾)
 COPYFILE_DISABLE=1 tar czf "$LOCAL_ARCHIVE" -C apps/web dist
+bash "$DEPLOY_SCRIPT_DIR/check-deploy-release.sh" "$RELEASE_SHA" >/dev/null
 
 echo "🚀  上传 + 原子切换(兼容上一版已打开页面,滚动保留最近 1 个备份)…"
 scp -i "$KEY" "$LOCAL_ARCHIVE" "$HOST:$REMOTE_ARCHIVE"

@@ -3,6 +3,7 @@ import zhCN from '@/i18n/locales/zh-CN-core';
 import { getAdminLoginPreviewPreferences, isAdminLoginPreview } from '@/utils/authStorage.ts';
 
 export type AppLocale = 'zh-CN' | 'en-US';
+export type RouteLocaleSection = 'admin' | 'serverManagement';
 
 // 游客/首次访问且无偏好时,按浏览器语言定默认——老外看英文而非永远中文(判断首选语言是否 zh 开头)
 function detectBrowserLang(): AppLocale {
@@ -37,33 +38,42 @@ const i18n = createI18n({
 
 let englishLocaleRequest: Promise<void> | null = null;
 let englishLocaleLoaded = false;
-let serverManagementRequested = false;
-const serverManagementRequests = new Map<AppLocale, Promise<void>>();
+const requestedSections = new Set<RouteLocaleSection>();
+const sectionRequests = new Map<string, Promise<void>>();
+const sectionLoaders = {
+  admin: {
+    'zh-CN': () => import('./locales/zh-CN-admin').then(({ default: messages }) => messages),
+    'en-US': () => import('./locales/en-US-admin').then(({ default: messages }) => messages),
+  },
+  serverManagement: {
+    'zh-CN': () => import('./locales/zh-CN-serverManagement').then(({ default: serverManagement }) => ({ serverManagement })),
+    'en-US': () => import('./locales/en-US-serverManagement').then(({ default: serverManagement }) => ({ serverManagement })),
+  },
+};
 
-async function ensureServerManagementMessages(lang: AppLocale): Promise<void> {
-  let pending = serverManagementRequests.get(lang);
+function ensureSectionMessages(section: RouteLocaleSection, lang: AppLocale): Promise<void> {
+  const key = section + ':' + lang;
+  let pending = sectionRequests.get(key);
   if (!pending) {
-    pending = (
-      lang === 'zh-CN' ? import('./locales/zh-CN-serverManagement') : import('./locales/en-US-serverManagement')
-    )
-      .then(({ default: serverManagement }) => {
-        i18n.global.mergeLocaleMessage(lang, { serverManagement });
+    pending = sectionLoaders[section][lang]()
+      .then(async (messages) => {
+        // Register the base language first so concurrent startup cannot replace a loaded section.
+        await ensureLocaleMessages(lang);
+        i18n.global.mergeLocaleMessage(lang, messages);
       })
       .catch((error) => {
-        serverManagementRequests.delete(lang);
+        sectionRequests.delete(key);
         throw error;
       });
-    serverManagementRequests.set(lang, pending);
+    sectionRequests.set(key, pending);
   }
-  await pending;
+  return pending;
 }
 
-/** Wait before entering server management, including Chinese fallback and subsequent language switches. */
-export async function prepareServerManagementLocale(): Promise<void> {
-  serverManagementRequested = true;
+export async function prepareRouteLocale(section: RouteLocaleSection): Promise<void> {
+  requestedSections.add(section);
   const lang = i18n.global.locale.value as AppLocale;
-  await ensureLocaleMessages(lang);
-  await Promise.all([ensureServerManagementMessages('zh-CN'), ensureServerManagementMessages(lang)]);
+  await Promise.all([...new Set<AppLocale>(['zh-CN', lang])].map((locale) => ensureSectionMessages(section, locale)));
 }
 
 function syncDocumentLocale(lang: AppLocale): void {
@@ -111,7 +121,7 @@ export async function prepareInitialLocale(): Promise<void> {
 // 切换语言的方法
 export function setLocale(lang: AppLocale, options: { shouldApply?: () => boolean } = {}): Promise<void> {
   return ensureLocaleMessages(lang).then(async () => {
-    if (serverManagementRequested) await ensureServerManagementMessages(lang);
+    await Promise.all([...requestedSections].map((section) => ensureSectionMessages(section, lang)));
     if (options.shouldApply && !options.shouldApply()) return;
     if (!isAdminLoginPreview()) {
       try {

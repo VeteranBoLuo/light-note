@@ -1,6 +1,6 @@
 <template>
   <div v-if="isSearchAvailable" ref="rootRef" class="global-search">
-    <BTooltip :title="`${t('resourceCenter.searchPlaceholder')} · ${searchShortcutLabel}`">
+    <BTooltip :title="t('resourceCenter.searchPlaceholder')" :shortcut="searchShortcutLabel">
       <BButton
         class="global-search__trigger"
         :aria-label="t('resourceCenter.searchPlaceholder')"

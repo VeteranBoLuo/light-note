@@ -15,6 +15,54 @@ function createPersistence() {
 }
 
 describe('aiExecution', () => {
+  it.each([
+    ['DEEPSEEK_MODEL', 'model_generation'],
+    ['AGENT_DEFAULT_MODEL', 'model_generation'],
+    ['AGENT_INTENT_MODEL', 'intent_compiler'],
+    ['AGENT_PLANNER_MODEL', 'planner'],
+    ['AGENT_NOTE_DRAFT_MODEL', 'note_draft'],
+    ['AGENT_COMPOSER_MODEL', 'final'],
+    ['AGENT_VISION_MODEL', 'image_recognition'],
+    ['DEEPSEEK_VISION_MODEL', 'image_recognition'],
+  ])('Pro 配置 %s 在额度占位与 Provider 外发前失败关闭', async (envKey, stage) => {
+    vi.stubEnv('AGENT_LLM_PROVIDER', 'deepseek');
+    vi.stubEnv(envKey, 'deepseek-v4-pro');
+    try {
+      for (const method of ['complete', 'stream']) {
+        const persistence = createPersistence();
+        const quota = { reserve: vi.fn(), reconcile: vi.fn() };
+        const client = vi.fn();
+        const gateway = createAiGateway({ completeClient: client, streamClient: client });
+
+        await expect(
+          runAiExecution(
+            {
+              request: { user: { id: 'u1', role: 'user' }, headers: {}, body: {} },
+              taskType: 'blocked_model',
+              persistence,
+            },
+            () => gateway[method]([], { trace: { stage } }),
+            { quota },
+          ),
+        ).rejects.toMatchObject({ code: 'AI_PROVIDER_MODEL_NOT_ALLOWED' });
+        expect(client).not.toHaveBeenCalled();
+        expect(quota.reserve).not.toHaveBeenCalled();
+        expect(quota.reconcile).not.toHaveBeenCalled();
+        expect(persistence.updateAiExecutionReservation).not.toHaveBeenCalled();
+        expect(persistence.insertAiProviderSpan).not.toHaveBeenCalled();
+        expect(persistence.settleAiExecution.mock.calls[0][0]).toMatchObject({
+          status: 'failed',
+          errorCode: 'AI_PROVIDER_MODEL_NOT_ALLOWED',
+          providerCallCount: 0,
+          chargedTokens: 0,
+          quotaSettlementStatus: 'not_used',
+        });
+      }
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
   it.each(['complete', 'stream'])('失败的 %s 调用仍按实际阶段供应商归属，且不虚构用量或扣费', async (method) => {
     const persistence = createPersistence();
     const quota = {

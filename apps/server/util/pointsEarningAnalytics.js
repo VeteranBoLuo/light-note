@@ -1,8 +1,8 @@
 import pool from '../db/index.js';
 import { getGrowth } from './growth.js';
 import { getGrowthCalendarContext, getGrowthPreferences } from './growthPreferences.js';
-import { getActiveShopItems } from './points.js';
-import { getEconomyRuntime } from './pointsEconomyCatalog.js';
+import { getActiveShopItems, getLimitedShopPurchaseCounts } from './points.js';
+import { getEconomyRuntime, getShopItemPurchaseState } from './pointsEconomyCatalog.js';
 import {
   getEarningPolicySnapshot,
   getPointsEarningRuntime,
@@ -113,7 +113,8 @@ export async function getUserPointsSummary(userId, { db = pool, userRole = null 
     ...operationsList,
     String(userId),
   ];
-  const [[[aggregate]], [distribution]] = await Promise.all([
+  const shopCatalog = getActiveShopItems();
+  const [[[aggregate]], [distribution], purchaseCounts] = await Promise.all([
     db.query(
       `SELECT
          COALESCE(SUM(CASE WHEN DATE_FORMAT(DATE_ADD(create_time, INTERVAL ? MINUTE), '%Y%m%d') = ?
@@ -150,8 +151,12 @@ export async function getUserPointsSummary(userId, { db = pool, userRole = null 
         GROUP BY reason, SIGN(delta) ORDER BY ABS(SUM(delta)) DESC`,
       [String(userId)],
     ),
+    shopCatalog.some((item) => item.purchaseCosts) ? getLimitedShopPurchaseCounts(userId, db) : new Map(),
   ]);
-  const shopItems = getActiveShopItems();
+  const shopItems = shopCatalog.map((item) => ({
+    ...item,
+    ...getShopItemPurchaseState(item, purchaseCounts.get(item.id) || 0),
+  }));
   const goalItemId = preferences.pointsGoalEnabled ? preferences.pointsGoalItemId : null;
   const goalItem = goalItemId ? shopItems.find((item) => item.id === goalItemId) || null : null;
   const stable28 = Number(aggregate.stable28 || 0);
@@ -159,7 +164,7 @@ export async function getUserPointsSummary(userId, { db = pool, userRole = null 
     ? {
         itemId: goalItemId,
         enabled: true,
-        unavailable: !goalItem,
+        unavailable: !goalItem || goalItem.limitReached,
         item: goalItem
           ? {
               id: goalItem.id,
@@ -204,7 +209,7 @@ export async function getUserPointsSummary(userId, { db = pool, userRole = null 
     },
     sources: sourceRows(distribution),
     goal,
-    goalOptions: shopItems.map((item) => ({
+    goalOptions: shopItems.filter((item) => !item.limitReached).map((item) => ({
       id: item.id,
       name: item.name,
       cost: Number(item.cost || 0),

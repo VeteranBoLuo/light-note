@@ -1,6 +1,7 @@
 import { isLocallyHandledModuleLoadError } from '@/utils/retryableModuleLoader';
 import { createApp } from 'vue';
 import App from '@/App.vue';
+import { installEscapeFocusRing } from '@/utils/escapeFocusRing';
 import { configureStaticPrewarmEntry } from '@/utils/staticPrewarm';
 import router, { getPendingNavigationTarget, reloadOnceTo } from '@/router';
 import '@/assets/css/index.less';
@@ -23,6 +24,7 @@ const isAndroidWebView = isAndroidWebViewRuntime();
 // 首屏内联脚本会在 CSS 绘制前先设置同样的类；这里继续负责窗口缩放、横竖屏和
 // 粗指针变化后的动态同步。Android 身份类只标记引擎，所有可见规则走共享移动基线。
 installRenderingProfileSync({ androidWebView: isAndroidWebView });
+installEscapeFocusRing();
 
 const appRoot = document.querySelector<HTMLElement>('#app');
 if (!appRoot) throw new Error('Application root not found');

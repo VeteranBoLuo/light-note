@@ -23,8 +23,8 @@ export function escapeLikePattern(text) {
 /**
  * 过滤出确属该用户的图片 URL。两条归属路径:
  * 1) 曾由其笔记上传登记于 note_images;
- * 2) 出现在其自存模板正文中——源笔记彻底删除后 note_images 行已不在,
- *    此时模板是唯一引用;再用该模板建笔记必须仍能通过归属校验并登记新引用,否则链路断裂。
+ * 2) 由资产账本保留归属。原笔记清理后，模板和历史版本仍可持有已登记的资产。
+ *    用户编辑的引用文本本身不能签发新归属。
  * 用途:存为模板/新建笔记时,只认自己的图片,防止把他人图片锚定为自己的引用。
  * 可传事务 connection;省略时走连接池。
  */
@@ -40,14 +40,30 @@ export async function filterOwnedImageUrls({ urls, userId, connection = null }) 
     [...urls, userId],
   );
   const owned = new Set(rows.map((r) => r.url));
-  // 未被笔记登记的 URL,二查自己的模板正文(逐 URL LIKE;正文图片通常个位数,模板每人≤20)
-  for (const url of urls) {
-    if (owned.has(url)) continue;
-    const [tplRows] = await runner.query(
-      'SELECT COUNT(*) AS n FROM note_template WHERE create_by = ? AND content LIKE ?',
-      [userId, `%${escapeLikePattern(url)}%`],
+  const remaining = new Map();
+  for (const url of urls.filter((value) => !owned.has(value))) {
+    try {
+      const parsed = new URL(url);
+      const decoded = decodeURIComponent(parsed.pathname);
+      const locator = path.basename(decoded);
+      if (managedUploadOrigins().includes(parsed.origin) && decoded === '/uploads/' + locator &&
+          locator && !locator.startsWith('.') && !/[\x00\\]/u.test(locator)) {
+        remaining.set(url, locator);
+      }
+    } catch {
+      // A malformed source is not an owned upload.
+    }
+  }
+  if (remaining.size) {
+    const locators = [...new Set(remaining.values())];
+    const [assets] = await runner.query(
+      `SELECT source_locator FROM image_assets
+        WHERE owner_user_id=? AND source_type='note_image' AND storage_kind='local'
+          AND source_locator IN (${locators.map(() => '?').join(',')}) AND status<>'deleting'`,
+      [userId, ...locators],
     );
-    if (tplRows[0].n > 0) owned.add(url);
+    const registered = new Set(assets.map((asset) => asset.source_locator));
+    for (const [url, locator] of remaining) if (registered.has(locator)) owned.add(url);
   }
   return urls.filter((u) => owned.has(u));
 }

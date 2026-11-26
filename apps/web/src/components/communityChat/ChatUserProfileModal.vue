@@ -24,10 +24,11 @@
     :open="visible"
     :title="t('communityChat.profile.title')"
     placement="bottom"
-    height="min(86dvh, 780px)"
-    body-padding="14px 16px calc(16px + env(safe-area-inset-bottom))"
+    height="auto"
+    body-padding="var(--ui-space-14, 14px) var(--ui-space-16, 16px) calc(var(--ui-space-16, 16px) + env(safe-area-inset-bottom))"
     mobile-centered-header
     @close="visible = false"
+    @after-close="emit('afterClose')"
   >
     <div class="chat-user-profile-drawer__content" :class="{ 'is-editing': contentView === 'edit' }">
       <ChatUserProfileContent v-bind="contentProps" v-on="contentListeners" />
@@ -36,8 +37,9 @@
 </template>
 
 <script setup lang="ts">
-  import { computed, ref } from 'vue';
+  import { computed, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
+  import { feedGet, type ProfilePostPreview } from '@/api/communityFeedApi';
   import type {
     CommunityChatAuthorProfile,
     CommunityChatOwnProfile,
@@ -68,6 +70,8 @@
       allAchievementsLoading?: boolean;
       allAchievementsError?: boolean;
       sessionKey?: number;
+      previewPosts?: ProfilePostPreview[];
+      chatActions?: boolean;
     }>(),
     {
       profile: null,
@@ -83,6 +87,7 @@
       allAchievementsLoading: false,
       allAchievementsError: false,
       sessionKey: 0,
+      chatActions: true,
     },
   );
 
@@ -95,14 +100,42 @@
     block: [];
     report: [];
     login: [];
+    afterClose: [];
   }>();
   const visible = defineModel<boolean>('visible', { default: false });
   const { t } = useI18n();
   const isMobileLayout = useMobileLayout();
   const contentView = ref<'summary' | 'achievements' | 'preview' | 'edit'>('summary');
+  const loadedPreviewPosts = ref<ProfilePostPreview[]>();
+
+  watch(visible, (open) => {
+    if (!open && !isMobileLayout.value) emit('afterClose');
+  }, { flush: 'post' });
+
+  watch(
+    [visible, () => props.profile?.userPublicId, () => props.actionsProfile === null, () => props.previewPosts],
+    ([open, publicId, unavailable, prepared], _, onCleanup) => {
+      if (!open) return;
+      loadedPreviewPosts.value = undefined;
+      if (!publicId || unavailable || prepared !== undefined) return;
+      const request = new AbortController();
+      onCleanup(() => request.abort());
+      void feedGet<{ previewPosts: ProfilePostPreview[] }>(
+        'profiles/' + encodeURIComponent(publicId),
+        { view: 'preview-posts' },
+        { signal: request.signal },
+      )
+        .then(({ previewPosts }) => {
+          if (!request.signal.aborted) loadedPreviewPosts.value = previewPosts;
+        })
+        .catch(() => undefined);
+    },
+    { immediate: true },
+  );
 
   const contentProps = computed(() => ({
     cardLayout: true,
+    chatActions: props.chatActions,
     actionsProfile: props.actionsProfile,
     profile: props.profile,
     loading: props.loading,
@@ -117,6 +150,7 @@
     allAchievementsLoading: props.allAchievementsLoading,
     allAchievementsError: props.allAchievementsError,
     sessionKey: props.sessionKey,
+    previewPosts: props.previewPosts ?? loadedPreviewPosts.value,
   }));
 
   const contentListeners = {

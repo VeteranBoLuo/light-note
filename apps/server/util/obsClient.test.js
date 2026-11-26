@@ -1,4 +1,5 @@
 import { Readable } from 'node:stream';
+import { createServer } from 'node:http';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const sdk = vi.hoisted(() => {
@@ -38,6 +39,7 @@ vi.mock('esdk-obs-nodejs', () => ({ default: sdk.MockObsClient }));
 import {
   createDownloadSignedUrl,
   copyObjectInObs,
+  getBoundedObjectBufferFromObs,
   getObjectBufferFromObs,
   getObjectRangeFromObs,
   putObjectBodyToObs,
@@ -191,6 +193,101 @@ describe('OBS metadata ranges', () => {
     await expect(getObjectRangeFromObs('audio.mp3', 0, 20 * 1024 * 1024)).rejects.toMatchObject({
       code: 'OBS_RANGE_INVALID',
     });
+  });
+});
+
+describe('bounded OBS download', () => {
+  let server;
+
+  async function serve(handler) {
+    server = createServer(handler);
+    await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+    sdk.sign.mockReturnValueOnce({ SignedUrl: 'http://127.0.0.1:' + server.address().port + '/fixture' });
+  }
+
+  afterEach(async () => {
+    vi.restoreAllMocks();
+    if (!server) return;
+    server.closeAllConnections();
+    await new Promise((resolve) => server.close(resolve));
+    server = undefined;
+  });
+
+  it('returns the original bytes at exactly the requested limit', async () => {
+    const bytes = Buffer.from([0, 128, 255, 10]);
+    await serve((_req, res) => res.end(bytes));
+    await expect(getBoundedObjectBufferFromObs('fixture', { maxBytes: bytes.length })).resolves.toEqual(bytes);
+  });
+
+  it('closes the response as soon as the declared length exceeds the limit', async () => {
+    const closed = Promise.withResolvers();
+    await serve((_req, res) => {
+      res.once('close', closed.resolve);
+      res.writeHead(200, { 'Content-Length': 9 });
+      res.flushHeaders();
+    });
+    await expect(getBoundedObjectBufferFromObs('fixture', { maxBytes: 4 })).rejects.toMatchObject({
+      code: 'OBS_DOWNLOAD_SIZE_LIMIT',
+    });
+    await closed.promise;
+  });
+
+  it('enforces the limit on the actual stream when length is unknown', async () => {
+    const closed = Promise.withResolvers();
+    await serve((_req, res) => {
+      res.once('close', closed.resolve);
+      res.write(Buffer.alloc(3));
+      setImmediate(() => res.write(Buffer.alloc(2)));
+    });
+    await expect(getBoundedObjectBufferFromObs('fixture', { maxBytes: 4 })).rejects.toMatchObject({
+      code: 'OBS_DOWNLOAD_SIZE_LIMIT',
+    });
+    await closed.promise;
+  });
+
+  it('cancels the connection while waiting for headers', async () => {
+    const started = Promise.withResolvers();
+    const closed = Promise.withResolvers();
+    await serve((_req, res) => {
+      res.once('close', closed.resolve);
+      started.resolve();
+    });
+    const controller = new AbortController();
+    const rejected = expect(
+      getBoundedObjectBufferFromObs('fixture', { maxBytes: 4, signal: controller.signal }),
+    ).rejects.toMatchObject({ name: 'AbortError' });
+    await started.promise;
+    controller.abort();
+    await rejected;
+    await closed.promise;
+  });
+
+  it('preserves a socket failure code without the transport message', async () => {
+    await serve((_req, res) => res.destroy());
+    await expect(getBoundedObjectBufferFromObs('fixture', { maxBytes: 4 })).rejects.toMatchObject({
+      code: 'ECONNRESET',
+      message: 'ECONNRESET: 无法读取文件，请稍后重试',
+    });
+  });
+
+  it('releases a stalled body when the download deadline expires', async () => {
+    const started = Promise.withResolvers();
+    const closed = Promise.withResolvers();
+    const deadline = new AbortController();
+    const timeout = vi.spyOn(AbortSignal, 'timeout').mockReturnValueOnce(deadline.signal);
+    await serve((_req, res) => {
+      res.once('close', closed.resolve);
+      res.write(Buffer.alloc(2));
+      started.resolve();
+    });
+    const rejected = expect(getBoundedObjectBufferFromObs('fixture', { maxBytes: 4 })).rejects.toMatchObject({
+      code: 'OBS_DOWNLOAD_TIMEOUT',
+    });
+    await started.promise;
+    deadline.abort();
+    await rejected;
+    await closed.promise;
+    expect(timeout).toHaveBeenCalledWith(60_000);
   });
 });
 

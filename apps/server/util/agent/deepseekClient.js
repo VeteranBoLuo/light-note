@@ -1,4 +1,4 @@
-import { DEFAULT_DEEPSEEK_MODEL } from './deepseekModelPolicy.js';
+import { assertDeepSeekFlashModel, DEFAULT_DEEPSEEK_MODEL } from './deepseekModelPolicy.js';
 import { getAiModelPrice } from '../aiCostPolicy.js';
 /**
  * Agent LLM 客户端（OpenAI 兼容接口，支持 DeepSeek / 千问双供应商）
@@ -161,7 +161,8 @@ async function readProviderResponse(res, cfg, signal) {
 }
 
 function getModel(cfg, modelOverride) {
-  return String(modelOverride || process.env[cfg.modelEnv] || cfg.defaultModel).trim();
+  const model = String(modelOverride || process.env[cfg.modelEnv] || cfg.defaultModel).trim();
+  return cfg.name === 'deepseek' ? assertDeepSeekFlashModel(model) : model;
 }
 
 const NOTE_ASSIST_MIN_TOKENS = 1024;
@@ -184,10 +185,11 @@ export function getNoteAssistMaxTokens(cfg = getProviderConfig()) {
 
 export function getActiveProviderInfo(providerOverride, modelOverride) {
   const cfg = getProviderConfig(providerOverride);
+  const model = getModel(cfg, modelOverride);
   return {
     provider: cfg.name,
-    model: getModel(cfg, modelOverride),
-    price: getAiModelPrice(cfg.name, getModel(cfg, modelOverride)) || null,
+    model,
+    price: getAiModelPrice(cfg.name, model) || null,
     noteAssistMaxTokens: getNoteAssistMaxTokens(cfg),
   };
 }
@@ -245,10 +247,11 @@ function combineSignals(signals) {
  */
 export async function requestDeepSeek(messages, options = {}) {
   const cfg = getProviderConfig(options.providerOverride);
+  const model = getModel(cfg, options.modelOverride);
   const apiKey = getApiKey(cfg);
   const providerFetch = getProviderFetch();
   const body = {
-    model: getModel(cfg, options.modelOverride),
+    model,
     messages,
     stream: false,
     ...cfg.extraBody,
@@ -319,6 +322,7 @@ export async function requestDeepSeek(messages, options = {}) {
  */
 export async function requestDeepSeekStream(messages, options = {}) {
   const cfg = getProviderConfig(options.providerOverride);
+  const model = getModel(cfg, options.modelOverride);
   const apiKey = getApiKey(cfg);
   const providerFetch = getProviderFetch();
 
@@ -343,7 +347,7 @@ export async function requestDeepSeekStream(messages, options = {}) {
       // 客户端断开(options.signal)与空闲超时,任一触发即中止
       signal,
       body: JSON.stringify({
-        model: getModel(cfg, options.modelOverride),
+        model,
         messages,
         stream: true,
         stream_options: { include_usage: true },
@@ -486,7 +490,7 @@ export async function requestDeepSeekStream(messages, options = {}) {
       usage,
       usageStatus: usage.totalTokens > 0 ? 'reported' : 'missing',
       provider: cfg.name,
-      model: getModel(cfg, options.modelOverride),
+      model,
       finishReason: consumerStopReason ? 'consumer_stop' : finishReason,
     };
   } finally {

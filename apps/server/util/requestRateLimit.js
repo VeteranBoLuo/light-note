@@ -1,4 +1,5 @@
 import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
+import { isPublicBookmarkIconFileName } from './bookmarkIconStorage.js';
 
 const positiveNumber = (value, fallback) => {
   const parsed = Number(value);
@@ -22,6 +23,19 @@ export const shouldSkipGeneralRateLimit = (req = {}) => {
 
   const pathname = String(req.path || req.originalUrl || req.url || '').split('?', 1)[0];
   return pathname === '/uploads' || pathname.startsWith('/uploads/');
+};
+
+export const shouldSkipEarlyRateLimit = (req = {}) => {
+  const method = String(req.method || '').toUpperCase();
+  if (method === 'OPTIONS') return true;
+  if (!STATIC_READ_METHODS.has(method)) return false;
+  const pathname = String(req.path || req.originalUrl || req.url || '').split('?', 1)[0];
+  if (!pathname.startsWith('/uploads/')) return false;
+  try {
+    return isPublicBookmarkIconFileName(decodeURIComponent(pathname.slice('/uploads/'.length)));
+  } catch {
+    return false;
+  }
 };
 
 export const getGlobalRateLimit = (req, limits = getConfiguredGlobalRateLimits()) => {
@@ -117,7 +131,7 @@ export const earlyAnonymousRateLimiter = rateLimit({
   keyGenerator: (req) => `early-ip:${ipKeyGenerator(req.ip || 'unknown')}`,
   standardHeaders: true,
   legacyHeaders: false,
-  skip: shouldSkipGeneralRateLimit,
+  skip: shouldSkipEarlyRateLimit,
   handler: (req, res) => {
     const resetTime = req.rateLimit?.resetTime?.getTime?.() || Date.now() + 60_000;
     const retryAfter = Math.max(1, Math.ceil((resetTime - Date.now()) / 1000));

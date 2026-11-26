@@ -401,7 +401,6 @@
   type DetailLevel = 'concise' | 'balanced' | 'detailed';
   type ToolOption = { tool: ToolboxCatalogItem; eligible: boolean; reason: string };
 
-  const OUTCOME_TOOL_ORDER: readonly ToolboxToolId[] = ['material_to_note', 'study_kit'];
 
   const props = withDefaults(
     defineProps<{
@@ -479,7 +478,6 @@
   );
   const quickPanelActions = computed(() => (selectedQuickAction.value ? [selectedQuickAction.value] : []));
   const toolOptions = computed<ToolOption[]>(() => {
-    const order = new Map(OUTCOME_TOOL_ORDER.map((id, index) => [id, index]));
     return catalog.value
       .filter(
         (tool) =>
@@ -491,10 +489,6 @@
       .map((tool) => {
         const reason = toolEligibilityReason(tool);
         return { tool, eligible: !reason, reason };
-      })
-      .sort((left, right) => {
-        if (left.eligible !== right.eligible) return left.eligible ? -1 : 1;
-        return (order.get(left.tool.id) ?? 99) - (order.get(right.tool.id) ?? 99);
       });
   });
   const visibleToolOptions = computed(() =>

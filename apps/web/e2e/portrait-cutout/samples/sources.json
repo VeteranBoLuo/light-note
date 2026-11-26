@@ -1,0 +1,51 @@
+[
+  {
+    "id": "wind",
+    "label": "风中碎发",
+    "file": "./local-assets/photos/wind.jpg",
+    "credit": "Jp Valery",
+    "url": "https://unsplash.com/photos/WO4DOw-33PA"
+  },
+  {
+    "id": "curls",
+    "label": "蓬松卷发",
+    "file": "./local-assets/photos/curls.jpg",
+    "credit": "Sohaim Siddiquee",
+    "url": "https://unsplash.com/photos/M2l8PLEIc-4"
+  },
+  {
+    "id": "street",
+    "label": "街头背景",
+    "file": "./local-assets/photos/street.jpg",
+    "credit": "Viraj Upadhyay",
+    "url": "https://unsplash.com/photos/s9-aGO8dMwA"
+  },
+  {
+    "id": "leaves",
+    "label": "树叶背景",
+    "file": "./local-assets/photos/leaves.jpg",
+    "credit": "Zoey Weesner",
+    "url": "https://unsplash.com/photos/RMBkXlRJRcw"
+  },
+  {
+    "id": "bridge",
+    "label": "桥边栏杆",
+    "file": "./local-assets/removal/photos/bridge.jpg",
+    "credit": "Bobby Thapa",
+    "url": "https://unsplash.com/photos/sOmA16lt8QQ"
+  },
+  {
+    "id": "beach",
+    "label": "海边倒影",
+    "file": "./local-assets/removal/photos/beach.jpg",
+    "credit": "Evgeny Ozerov",
+    "url": "https://unsplash.com/photos/fFtjGiswAtY"
+  },
+  {
+    "id": "group",
+    "label": "合照遮挡",
+    "file": "./local-assets/removal/photos/group.jpg",
+    "credit": "Will Haddock",
+    "url": "https://unsplash.com/photos/UnldHt2vxYw"
+  }
+]

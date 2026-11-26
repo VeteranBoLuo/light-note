@@ -281,7 +281,7 @@ export const AI_BILLING_ACTIONS = Object.freeze([
     ['idea_to_draft', 'toolboxIdeaToDraft', false],
     ['material_to_note', 'toolboxMaterialToNote', true],
     ['research_brief', 'toolboxResearchBrief', false],
-    ['study_kit', 'toolboxStudyKit', true],
+    ['study_kit', 'toolboxStudyKit', false],
     ['concept_map', 'toolboxConceptMap', false],
     ['source_comparison', 'toolboxSourceComparison', false],
     ['knowledge_audit', 'toolboxKnowledgeAudit', false],

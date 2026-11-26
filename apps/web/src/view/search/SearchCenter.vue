@@ -711,6 +711,7 @@
   import { vRangeSelect, vRangeSelectionScroll } from '@/directives/rangeSelection';
   import { usePublicResourceScope } from '@/store/publicResourceScope';
   import { fetchCombinedSearch } from '@/api/publicResources';
+  import { searchIdentityVersion } from '@/api/searchCache';
   import PublicSearchScopeControl from '@/components/publicResources/PublicSearchScopeControl.vue';
   import PublicResourceReader from '@/components/publicResources/PublicResourceReader.vue';
   import { useProjectResourceAction } from '@/composables/useProjectResourceAction';
@@ -2383,7 +2384,7 @@
   let isInitialRouteLoad = true;
   watch(
     // 移动抽屉会用同 URL 的 history state 管理返回栈；可见 URL 变化只同步筛选，显式选择由模块会话维护。
-    [() => route.fullPath, searchReturnScope],
+    [() => route.fullPath, searchReturnScope, searchIdentityVersion],
     (_value, previous) => {
       archiveOpenGeneration++;
       archiveVisible.value = false;
@@ -2392,7 +2393,20 @@
       archiveCapture = null;
       if (route.path !== '/search') return;
       mobileInspectorVisible.value = false;
-      const identityChanged = Boolean(previous?.[1] && previous[1] !== searchReturnScope.value);
+      const identityChanged = Boolean(
+        previous?.[1] && (previous[1] !== searchReturnScope.value || previous[2] !== searchIdentityVersion()),
+      );
+      if (identityChanged) {
+        requestSeq += 1;
+        viewState.rawItems = [];
+        viewState.tagOptions = [];
+        viewState.tagMatches = [];
+        viewState.nextCursor = null;
+        viewState.hasMore = false;
+        inspectedResourceKey.value = '';
+        summaryTotals.value = { bookmark: 0, note: 0, file: 0, tag: 0, todo: 0 };
+        personalSummaryTotals.value = {};
+      }
       applyRouteState(identityChanged);
       if (
         identityChanged &&
@@ -2408,7 +2422,7 @@
       });
       // 模块级搜索缓存用于同页筛选/视图切换，不能跨页面进入继续充当资源事实源。
       // 每次 SearchCenter 重新挂载时强制请求一次，确保新增、编辑或删除后的资源立即可见。
-      const force = isInitialRouteLoad || previous?.[1] !== searchReturnScope.value;
+      const force = isInitialRouteLoad || identityChanged;
       isInitialRouteLoad = false;
       void loadData(force);
     },

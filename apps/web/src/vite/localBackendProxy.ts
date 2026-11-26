@@ -4,6 +4,7 @@ import type { ProxyOptions } from 'vite';
 
 export const LOCAL_VITE_BACKEND_TARGET = 'http://127.0.0.1:9001';
 export const PUBLIC_UPLOAD_ORIGIN = 'https://boluo66.top';
+export const PUBLIC_BOOKMARK_UPLOAD_ROUTE = /^\/uploads\/bookmark-[a-z0-9_-]+\.(?:png|svg|jpe?g|gif|webp|ico)(?:[?#]|$)/.source;
 
 const PUBLIC_UPLOAD_READ_METHODS = new Set(['GET', 'HEAD']);
 const PUBLIC_UPLOAD_SENSITIVE_REQUEST_HEADERS = [
@@ -39,20 +40,26 @@ export function assertLocalViteBackend(viteEnv: unknown) {
 
 export function createLocalBackendProxy({ isolated = process.env.LIGHTNOTE_LOCAL_TEST === '1' } = {}): Record<string, ProxyOptions> {
   const backendTarget = isolated ? `http://127.0.0.1:${localTestPorts().api}` : LOCAL_VITE_BACKEND_TARGET;
+  const publicBookmarkProxy: ProxyOptions = {
+    target: PUBLIC_UPLOAD_ORIGIN,
+    changeOrigin: true,
+    bypass: (req) => (isPublicUploadReadMethod(req.method) ? undefined : false),
+    configure: (proxy) => {
+      proxy.on('proxyReq', stripPublicUploadRequestCredentials);
+      proxy.on('proxyRes', stripPublicUploadResponseCookies);
+    },
+  };
   return {
     '^/api(?:/|$)': {
       target: backendTarget,
       changeOrigin: true,
       rewrite: (path: string) => path.replace(/^\/api/, ''),
     },
+    ...(!isolated ? { [PUBLIC_BOOKMARK_UPLOAD_ROUTE]: publicBookmarkProxy } : {}),
     '^/uploads(?:/|$)': {
-      target: isolated ? backendTarget : PUBLIC_UPLOAD_ORIGIN,
+      target: backendTarget,
       changeOrigin: true,
       bypass: (req) => (isPublicUploadReadMethod(req.method) ? undefined : false),
-      configure: (proxy) => {
-        proxy.on('proxyReq', stripPublicUploadRequestCredentials);
-        proxy.on('proxyRes', stripPublicUploadResponseCookies);
-      },
     },
     '/realtime/chat': {
       target: backendTarget,

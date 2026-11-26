@@ -130,7 +130,9 @@ describe('积分头像框价格与持有状态', () => {
     expect(mocks.model.buyItem).not.toHaveBeenCalled();
     await mocks.alert.mock.calls[0][0].onOk();
     await flush();
-    expect(mocks.model.buyItem).toHaveBeenCalledExactlyOnceWith('frame_dragon');
+    expect(mocks.model.buyItem).toHaveBeenCalledExactlyOnceWith('frame_dragon', {
+      economyVersion: 'points-economy-c9', expectedCost: 12000,
+    });
     expect(price()).toBe('12,000');
     expect(card().querySelector('.ps-item-owned')?.textContent).toBe(zh.growth.shopOwned);
     expect(action().textContent?.trim()).toBe(zh.growth.shopEquip);
@@ -165,5 +167,38 @@ describe('积分头像框价格与持有状态', () => {
     expect(mocks.alert).not.toHaveBeenCalled();
     expect(mocks.model.buyItem).not.toHaveBeenCalled();
     expect(mocks.model.equipFrame).not.toHaveBeenCalled();
+  });
+});
+
+describe('积分扩容兑换进度', () => {
+  it('小档限兑一次，2 GB 档显示二次价格且确认时使用弹框打开时的报价', async () => {
+    const shop = mocks.model.shop.value as Shop;
+    shop.economyVersion = 'points-economy-c12';
+    shop.items = [
+      { ...frame(), id: 'storage_512', type: 'consumable', effect: 'storage', cost: 1600, purchaseLimit: 1, purchaseCount: 1 },
+      { ...frame(), id: 'storage_2g', type: 'consumable', effect: 'storage', cost: 5200, purchaseLimit: 2,
+        purchaseCount: 0, purchaseCosts: [5200, 6500], storageMb: 2048 },
+    ];
+    await mount();
+    const small = host.querySelector('[data-shop-item-id="storage_512"]')!;
+    expect(small.textContent).toContain(zh.growth.shopLimitRedeemed);
+    expect(small.querySelector('button')?.disabled).toBe(true);
+    const staged = host.querySelector('[data-shop-item-id="storage_2g"]')!;
+    const button = staged.querySelector('button')!;
+    expect(staged.textContent).toContain('6,500');
+    expect(staged.querySelector('[aria-current="step"]')?.textContent).toContain('5,200');
+    button.click();
+    expect(mocks.alert.mock.calls[0][0].content).toContain('5,200 积分');
+    Object.assign(mocks.model.shop.value.items[1], { purchaseCount: 1, cost: 6500 });
+    await mocks.alert.mock.calls[0][0].onOk();
+    await flush();
+    expect(mocks.model.buyItem).toHaveBeenCalledExactlyOnceWith('storage_2g', {
+      economyVersion: 'points-economy-c12', expectedCost: 5200,
+    });
+    expect(staged.querySelector('[aria-current="step"]')?.textContent).toContain('6,500');
+    Object.assign(mocks.model.shop.value.items[1], { purchaseCount: 2, cost: null });
+    await flush();
+    expect(button.disabled).toBe(true);
+    expect(staged.textContent).toContain('已扩容 4 GB');
   });
 });

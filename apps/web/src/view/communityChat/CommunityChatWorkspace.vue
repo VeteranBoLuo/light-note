@@ -846,7 +846,7 @@
   import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
   import { useUiDensity } from '@/composables/useUiDensity';
   import { useI18n } from 'vue-i18n';
-  import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router';
+  import { isNavigationFailure, NavigationFailureType, onBeforeRouteLeave, useRoute, useRouter } from 'vue-router';
   import { isEqual } from 'lodash-es';
   import {
     blockCommunityChatMessageAuthor,
@@ -2194,6 +2194,10 @@
       await scrollToFocusedMessage(normalizedPublicId);
       return;
     }
+    if (focusMessageFromRoute.value === normalizedPublicId) {
+      await loadInitial();
+      return;
+    }
     try {
       await router.replace({ query: { ...route.query, message: normalizedPublicId } });
     } catch {
@@ -2469,6 +2473,17 @@
   }
 
   async function jumpToLatest() {
+    if (hasNewerThanFocus.value) {
+      await returnToLatest();
+      return;
+    }
+    if (programmaticMessageNavigationActive) cancelProgrammaticMessageNavigation();
+    if (focusedMessagePublicId.value) {
+      // 定位窗口已包含最新消息，解除定位后可以直接贴底。
+      focusedMessagePublicId.value = '';
+      transientFocusedMessagePublicId.value = '';
+      void clearFocusMessageRoute();
+    }
     pendingNewMessageCount.value = 0;
     await scrollToBottom();
     await markLatestRead();
@@ -5015,6 +5030,20 @@
     if (nextValue !== previousValue && selectedRoomSlug.value) void loadInitial();
   });
 
+  const stopRefocusAfterDuplicateNavigation = router.afterEach((to, _from, failure) => {
+    const publicId = focusMessageFromRoute.value;
+    // Reopening a notification while reading history still requests a jump, even when the URL is already correct.
+    if (
+      to.name === 'communityChat' &&
+      workspaceActive.value &&
+      !initialLoading.value &&
+      publicId &&
+      isNavigationFailure(failure, NavigationFailureType.duplicated)
+    ) {
+      void jumpToMessage(publicId);
+    }
+  });
+
   watch(
     () =>
       chatMessages.value
@@ -5182,6 +5211,7 @@
   onBeforeUnmount(() => {
     if (!readingPositionCapturedForLeave) rememberReadingPosition();
     isUnmounted = true;
+    stopRefocusAfterDuplicateNavigation();
     cancelAvatarLongPress();
     clearAvatarClickSuppression();
     resetComposerDragState();
@@ -5743,6 +5773,8 @@
 
   .community-message.is-focused {
     background-color: var(--mobile-selected-bg, var(--workspace-panel-bg-color));
+    outline: var(--ui-space-2, 2px) solid var(--primary-color);
+    outline-offset: calc(-1 * var(--ui-space-2, 2px));
   }
 
   .community-message.is-own {

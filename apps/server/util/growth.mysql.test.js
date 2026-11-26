@@ -93,6 +93,9 @@ describe.skipIf(!socketPath)('成长经验并发与账本（隔离 MySQL）', ()
       await state.db.query(`DELETE FROM ${table}`);
     }
     await state.db.query('INSERT INTO user_growth (user_id) VALUES (?)', [userId]);
+    vi.stubEnv('POINTS_EARNING_C5_ENABLED', 'true');
+    vi.stubEnv('POINTS_EARNING_C5_EFFECTIVE_DAY', '20260803');
+    vi.stubEnv('POINTS_EARNING_C5_EFFECTIVE_WEEK', '202632');
     calendar = await getGrowthCalendarContext(userId);
   });
 

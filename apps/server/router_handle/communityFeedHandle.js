@@ -69,6 +69,7 @@ export const feedCapabilities = readHandle(async ({ previewReadOnly }) => {
     imagesEnabled,
     inlineImagesEnabled: imagesEnabled,
     resourcesEnabled: await resources.resourcesReady().catch(() => false),
+    commentResourcesEnabled: await resources.commentResourcesReady().catch(() => false),
     limits: COMMUNITY_FEED_LIMITS,
   };
 });

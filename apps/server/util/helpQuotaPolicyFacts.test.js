@@ -70,4 +70,16 @@ describe('target help facts', () => {
     expect(() => assertHelpPolicyFacts(plan, prepared, { restore: true })).toThrow('KNOWLEDGE_PLAN_OUTDATED');
     expect(() => assertHelpPolicyFacts(plan, facts, { restore: true })).not.toThrow();
   });
+  it('uses the target catalog for C12 help and preserves previous versions', () => {
+    const c12 = selectHelpPolicyFacts(facts, { ...target, economyVersion: 'points-economy-c12' }, {
+      catalogs: ECONOMY_CATALOGS, schedules: AI_LEVEL_GIFT_VERSIONS,
+    });
+    const article = (input) => buildHelpKnowledgeRefreshEntries(input).find((item) => item.key === 'points-shop').content;
+    expect(article(c12)).toContain('60 积分，永久增加 5 万');
+    expect(article(c12)).toContain('240 积分，永久增加 20 万');
+    expect(article(c12)).toContain('420 积分，永久增加 40 万');
+    expect(article(c12)).toContain('第 1 次 5,200 积分，第 2 次 6,500 积分');
+    expect(article(resolved())).toContain('420 积分，永久增加 60 万');
+    expect(article(resolved())).not.toContain('第 2 次');
+  });
 });

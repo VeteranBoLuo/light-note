@@ -59,6 +59,7 @@
     "lodash-es": "^4.17.21",
     "marked": "^17.0.1",
     "mermaid": "^11.16.1",
+    "onnxruntime-web": "1.31.1",
     "pdf-lib": "^1.17.1",
     "pdfjs-dist": "4.9.155",
     "pinia": "^2.1.7",

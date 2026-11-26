@@ -233,6 +233,7 @@ const routes = {
       imagesEnabled,
       inlineImagesEnabled: imagesEnabled,
       resourcesEnabled: await resources.resourcesReady(db),
+      commentResourcesEnabled: await resources.commentResourcesReady(db),
     };
   },
   'GET resources/eligible': resources.eligibleResources,

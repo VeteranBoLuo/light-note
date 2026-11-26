@@ -26,7 +26,8 @@
     <BTooltip
       v-else
       class="cloud-folder-sidebar__expand-tooltip"
-      :title="`${expandLabel} · ${getWorkspacePanelShortcutLabel('sidebar')}`"
+      :title="expandLabel"
+      :shortcut="getWorkspacePanelShortcutLabel('sidebar')"
     >
       <BButton
         ref="expandButton"

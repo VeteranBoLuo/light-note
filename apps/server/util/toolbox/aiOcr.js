@@ -1,7 +1,6 @@
 import { buildOcrPages } from './ocrPages.js';
 import crypto from 'node:crypto';
-import { prepareFreeOcrInputs } from './freeOcr.js';
-import { getObjectBufferFromObs } from '../obsClient.js';
+import { prepareFreeOcrInputs, readOcrSourceBuffer } from './freeOcr.js';
 import { parseDocumentBuffer } from '../aiDocument/parser.js';
 import { recognizePdfWithLocalOcr } from '../aiDocument/localOcr.js';
 import { deepseekVisionProvider } from '../imageRecognition/deepseekVisionProvider.js';
@@ -11,7 +10,6 @@ import { toolboxError } from './errors.js';
 // Read original bytes under the owner boundary, never the free OCR cache or its garbled text.
 export async function executeAiOcr(job, inputs, identity, database, dependencies = {}) {
   const prepare = dependencies.prepare || prepareFreeOcrInputs;
-  const read = dependencies.read || getObjectBufferFromObs;
   const parse = dependencies.parse || parseDocumentBuffer;
   const vision = dependencies.vision || deepseekVisionProvider;
   const render = dependencies.render || recognizePdfWithLocalOcr;
@@ -42,7 +40,7 @@ export async function executeAiOcr(job, inputs, identity, database, dependencies
     async () => {
       const outputs = [];
       for (const { descriptor: source, hash } of files) {
-        const buffer = await read(source.object_key);
+        const buffer = await readOcrSourceBuffer(source, dependencies.read);
         if (crypto.createHash('sha256').update(buffer).digest('hex') !== hash)
           throw toolboxError('TOOLBOX_RESOURCE_STALE', '文件已变化，请重新选择', 409);
         let recognitionError;

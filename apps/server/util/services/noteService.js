@@ -142,6 +142,7 @@ export async function createNote({
         parentId: existing.parent_id ?? null,
         revision: Math.max(1, Number(existing.revision || 1)),
         addedToInbox: false,
+        replayed: true,
       };
     }
   }
@@ -271,6 +272,7 @@ export async function createNote({
     parentId: data.parent_id,
     revision: 1,
     addedToInbox: Boolean(addToInbox),
+    ...(recoveredExisting ? { replayed: true } : {}),
   };
 }
 

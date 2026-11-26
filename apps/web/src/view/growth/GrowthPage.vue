@@ -6,6 +6,7 @@
       'growth-page--wide': useWideDesktopLayout,
       'growth-page--mobile': bookmark.isMobile,
       'growth-page--inventory': activeSection === 'rewards' && activeRewardSection === 'inventory',
+      'growth-page--leaderboard': activeSection === 'leaderboard',
     }"
   >
     <div class="growth-container" :class="{ 'growth-container--wide': useWideDesktopLayout }">
@@ -106,7 +107,11 @@
                 <span class="growth-side-nav-label">{{ option.label }}</span>
                 <span v-if="option.badge !== undefined" class="growth-side-nav-badge">{{ option.badge }}</span>
                 <span v-else-if="option.hint" class="growth-side-nav-hint">{{ option.hint }}</span>
-                <span v-else-if="option.meta" class="growth-side-nav-meta">{{ option.meta }}</span>
+                <span
+                  v-else-if="option.meta"
+                  class="growth-side-nav-meta"
+                  :class="{ 'growth-side-nav-meta--rank': option.key === 'leaderboard' && weeklyRank != null }"
+                >{{ option.meta }}</span>
               </BButton>
             </template>
           </nav>
@@ -391,6 +396,8 @@
             </template>
           </template>
 
+          <PointsLeaderboard v-if="activeSection === 'leaderboard'" :mobile="bookmark.isMobile" />
+
           <template v-if="activeSection === 'rewards'">
             <BButton
               v-if="growthV2Enabled && preferences && freeLotteryRemaining > 0 && !lowPressureMode"
@@ -511,6 +518,7 @@
   import LotteryDraw from '@/components/growth/LotteryDraw.vue';
   import MyInventory from '@/components/growth/MyInventory.vue';
   import WeeklyChallenge from '@/components/growth/WeeklyChallenge.vue';
+  import PointsLeaderboard from '@/components/growth/leaderboard/PointsLeaderboard.vue';
   import GrowthPreferencesCard from '@/components/growth/GrowthPreferencesCard.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
@@ -521,6 +529,7 @@
   import icon from '@/config/icon.ts';
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
   import { recordOperation } from '@/api/commonApi.ts';
+  import { getWeeklyLeaderboardRank } from '@/api/pointsLeaderboardApi';
   import { useGrowth } from '@/composables/useGrowth.ts';
   import { useGrowthClaimFeedback, useTransientClaimReceipt } from '@/composables/useGrowthClaimFeedback';
   import { useGrowthCheckin } from '@/composables/useGrowthCheckin';
@@ -553,7 +562,7 @@
     type RewardSection,
   } from '@/utils/inventoryNavigation';
 
-  type GrowthSection = 'overview' | 'tasks' | 'achievements' | 'rewards';
+  type GrowthSection = 'overview' | 'tasks' | 'achievements' | 'leaderboard' | 'rewards';
   type TaskView = 'daily' | 'weekly' | 'onboarding';
   type GrowthNavOption<T extends string> = { key: T; label: string; icon: string; badge?: number };
   type DesktopGrowthNavOption = {
@@ -569,7 +578,7 @@
     reward?: RewardSection;
   };
 
-  const { t } = useI18n();
+  const { t, n } = useI18n();
   const { visibleAttention: dailyQuestManor } = useManorAttention();
   const route = useRoute();
   const router = useRouter();
@@ -579,6 +588,7 @@
   const activeSection = computed<GrowthSection>({
     get: () => {
       const section = String(route.query.section || '');
+      if (section === 'leaderboard' && leaderboardEnabled.value) return 'leaderboard';
       return ['overview', 'tasks', 'achievements', 'rewards'].includes(section)
         ? (section as GrowthSection)
         : 'overview';
@@ -617,7 +627,7 @@
   const useWideDesktopLayout = computed(() => bookmark.isDesktop && !bookmark.isCompactLayout);
   const sectionOptions = computed<GrowthNavOption<GrowthSection>[]>(() => {
     const achievementBadge = achievementClaimableCount.value;
-    return [
+    const entries: GrowthNavOption<GrowthSection>[] = [
       { key: 'overview', label: t('growth.mobileTabOverview'), icon: icon.growth.rank },
       { key: 'tasks', label: t('growth.mobileTabTasks'), icon: icon.growth.action },
       {
@@ -626,13 +636,20 @@
         icon: icon.growth.level,
         badge: achievementBadge > 0 ? achievementBadge : undefined,
       },
-      {
-        key: 'rewards',
-        label:
-          growthV2Enabled.value && !bookmark.isMobile ? t('growth.assetsRewardsTitle') : t('growth.mobileTabRewards'),
-        icon: icon.growth.reward,
-      },
     ];
+    if (leaderboardEnabled.value) {
+      entries.push({
+        key: 'leaderboard',
+        label: t(bookmark.isMobile ? 'growth.leaderboard.mobileTab' : 'growth.leaderboard.tab'),
+        icon: icon.growth.rank,
+      });
+    }
+    entries.push({
+      key: 'rewards',
+      label: growthV2Enabled.value && !bookmark.isMobile ? t('growth.assetsRewardsTitle') : t('growth.mobileTabRewards'),
+      icon: icon.growth.reward,
+    });
+    return entries;
   });
   const rewardSectionOptions = computed<GrowthNavOption<RewardSection>[]>(() => {
     const options: GrowthNavOption<RewardSection>[] = [
@@ -655,9 +672,11 @@
             ...option,
             section: option.key,
             meta:
-              option.key === 'tasks' && quests.value.length
-                ? `${dailyQuestDoneCount.value}/${quests.value.length}`
-                : undefined,
+              option.key === 'leaderboard'
+                ? weeklyRankLabel.value
+                : option.key === 'tasks' && quests.value.length
+                  ? `${dailyQuestDoneCount.value}/${quests.value.length}`
+                  : undefined,
           })),
       },
       {
@@ -715,6 +734,40 @@
   // 成长中心 V2 已全量开放：只有服务端明确下发 false（应急回退）才显示旧版，加载期间不先闪旧版。
   const growthV2Enabled = computed(() => growth.value?.features?.growthCenterV2 !== false);
   const pointsCenterEnabled = computed(() => growth.value?.features?.pointsCenter ?? import.meta.env.DEV);
+  const leaderboardEnabled = computed(() => Boolean(growth.value?.features?.leaderboard) && !isAdminContext.value);
+  const weeklyRankOwner = computed(() => useWideDesktopLayout.value && leaderboardEnabled.value ? user.id : null);
+  const weeklyRank = ref<number | null>();
+  const weeklyRankLabel = computed(() => {
+    if (weeklyRank.value === undefined) return undefined;
+    if (weeklyRank.value === null) return t('growth.leaderboard.unranked');
+    return t('growth.leaderboard.weeklyPlaceValue', { n: n(weeklyRank.value) });
+  });
+  let weeklyRankRequest: AbortController | undefined;
+
+  async function loadWeeklyRank() {
+    const owner = weeklyRankOwner.value;
+    if (!owner || weeklyRankRequest) return;
+    const request = new AbortController();
+    weeklyRankRequest = request;
+    try {
+      const result = await getWeeklyLeaderboardRank(request.signal);
+      if (!request.signal.aborted && owner === weeklyRankOwner.value) {
+        weeklyRank.value = result.canParticipate ? result.rank : undefined;
+      }
+    } catch {
+      if (!request.signal.aborted && owner === weeklyRankOwner.value) weeklyRank.value = undefined;
+    } finally {
+      if (weeklyRankRequest === request) weeklyRankRequest = undefined;
+    }
+  }
+
+  watch(weeklyRankOwner, () => {
+    weeklyRankRequest?.abort();
+    weeklyRankRequest = undefined;
+    weeklyRank.value = undefined;
+    void loadWeeklyRank();
+  }, { immediate: true });
+  onBeforeUnmount(() => weeklyRankRequest?.abort());
   const claimableCount = computed(() => Number(claimable.value?.count || 0));
   const { achievementClaimableCount, claimAllTooltip, snapshotClaimableBreakdown, claimSuccessMessage, claimReceipt } =
     useGrowthClaimFeedback(claimable);
@@ -731,7 +784,10 @@
   const preferencesVisible = ref(false);
   const { checking, levelUp, checkin, announceUnreadLevelUp } = useGrowthCheckin({
     readOnly: isAdminContext,
-    onChanged: refreshOverview,
+    onChanged: () => {
+      void heatmapRef.value?.reload();
+      if (useWideDesktopLayout.value) void loadLottery();
+    },
   });
   const preferencesSaving = ref(false);
   const usingProtectCard = ref(false);
@@ -1025,7 +1081,7 @@
             showOverviewReceipt(
               claimReceipt(
                 { exp: res.data.expGained, points: res.data.pointsEarned, claimed: 1 },
-                { daily: 1, growthTasks: 0, achievements: 0, weekly: 0, community: 0 },
+                { daily: 1, growthTasks: 0, achievements: 0, weekly: 0, community: 0, manor: 0 },
               ),
             );
           } else {
@@ -1203,7 +1259,7 @@
    */
   useForegroundRefresh({
     refresh: () => {
-      const requests: Array<Promise<unknown>> = [loadDashboard(), load(true), loadClaimable()];
+      const requests: Array<Promise<unknown>> = [loadDashboard(), load(true), loadClaimable(), loadWeeklyRank()];
       if (activeSection.value === 'tasks') requests.push(loadGrowthTasks(true), loadWeekly());
       if (activeSection.value === 'overview') requests.push(loadWeekly(), loadInventory());
       if (activeSection.value === 'rewards' || (activeSection.value === 'overview' && useWideDesktopLayout.value)) {
@@ -1384,6 +1440,47 @@
     overflow-y: auto;
     scrollbar-width: thin;
   }
+  .growth-page.growth-page--leaderboard {
+    overflow: hidden;
+    padding-bottom: var(--ui-space-16, 16px);
+
+    .growth-container {
+      height: 100%;
+      min-height: 0;
+    }
+    .growth-workspace {
+      flex: 1 1 0;
+      min-height: 0;
+    }
+    .growth-workspace:not(.growth-workspace--wide) {
+      display: flex;
+    }
+    .growth-main {
+      flex: 1 1 0;
+      height: 100%;
+      min-height: 0;
+      overflow: hidden;
+    }
+    .growth-section-tabs {
+      position: static;
+      flex: none;
+    }
+
+    &:not(.growth-page--wide):not(.growth-page--mobile) {
+      padding-top: var(--ui-space-16, 16px);
+
+      .growth-container, .growth-main { gap: var(--ui-space-12, 12px); }
+      .growth-hero {
+        flex-direction: row;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--ui-space-12, 12px);
+      }
+      .growth-back, .growth-report-actions { margin: 0; }
+      .growth-subtitle { display: none; }
+      .growth-report-actions { margin-inline-start: auto; }
+    }
+  }
   .growth-sidebar-head {
     display: flex;
     flex: 0 0 auto;
@@ -1505,6 +1602,12 @@
     color: var(--desc-color);
     font-size: var(--ui-font-12, 12px);
     font-weight: 500;
+    white-space: nowrap;
+  }
+  .growth-side-nav-meta--rank {
+    color: var(--workspace-purple-text);
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
   }
   .growth-side-nav-hint {
     margin-left: auto;

@@ -2,7 +2,7 @@ import { feedZh, feedEn } from './communityFeed';
 export const communityZh = {
   settingsScope: '聊天室提醒、广场通知和屏蔽成员，在这里统一管理。',
   profileFields: '社区展示',
-  profileFieldsHint: '简介、资历与精选成就会显示在社区名片中。',
+  profileFieldsHint: '简介、资历与精选成就会显示在用户名片中。',
   profileSave: '保存社区资料',
   profilePartial: '部分内容可能已保存，未保存的输入已保留，请重试。',
 
@@ -17,7 +17,7 @@ export const communityZh = {
 export const communityEn = {
   settingsScope: 'Manage chat reminders, feed notifications and blocked members here.',
   profileFields: 'Community details',
-  profileFieldsHint: 'Your bio, tenure and featured achievements appear on your community card.',
+  profileFieldsHint: 'Your bio, tenure and featured achievements appear on your user card.',
   profileSave: 'Save community profile',
   profilePartial: 'Some changes may have been saved. Unsaved input is preserved. Please retry.',
 

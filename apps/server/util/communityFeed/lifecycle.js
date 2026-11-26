@@ -7,6 +7,11 @@ export async function purgeCommunityFeedData(connection, tables, userId) {
         'DELETE r FROM community_revision_resources r JOIN community_resource_snapshots s ON s.public_id=r.resource_id WHERE s.owner_id=?',
         [userId],
       );
+    if (tables.has('community_comment_resources'))
+      await connection.query(
+        'DELETE r FROM community_comment_resources r JOIN community_resource_snapshots s ON s.public_id=r.resource_id WHERE s.owner_id=?',
+        [userId],
+      );
     await connection.query('DELETE FROM community_resource_snapshots WHERE owner_id=?', [userId]);
   }
   if (tables.has('community_accepted_answers'))

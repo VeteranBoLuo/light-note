@@ -30,18 +30,16 @@ export type ToolboxToolId =
   | "idea_to_draft"
   | "material_to_note"
   | "research_brief"
-  | "study_kit"
   | "concept_map"
   | "knowledge_audit"
+  | "image_watermark_remover"
   | "pdf_organizer"
   | "image_to_pdf"
   | "pdf_to_images"
   | "pdf_text_extractor"
   | "source_comparison"
   | "ocr_to_text";
-export type ToolboxAiToolId =
-  | "material_to_note"
-  | "study_kit";
+export type ToolboxAiToolId = "material_to_note";
 
 export interface ToolboxToolDefinition {
   id: ToolboxToolId;
@@ -70,7 +68,6 @@ export interface ToolboxToolDefinition {
       | "translation"
       | "note_draft"
       | "research_brief"
-      | "study_kit"
       | "concept_map"
       | "knowledge_audit"
       | "comparison"

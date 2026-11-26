@@ -1,4 +1,5 @@
 import pool from '../../db/index.js';
+import { Parser } from 'htmlparser2';
 import { buildRelevantSearchQuery, relevanceReason } from '../searchRelevancePagination.js';
 import {
   searchSeekScope,
@@ -135,6 +136,36 @@ export function buildSnippet(text, keyword, len = 140) {
   if (start > 0) snip = '…' + snip;
   if (start + len < plain.length) snip = snip + '…';
   return snip;
+}
+
+const NOTE_SEARCH_PREVIEW_LENGTH = 1800;
+
+function buildNoteSearchPreview(content, type) {
+  const source = String(content || '');
+  if (!source || type === 'drawing') return '';
+  if (type === 'markdown' || type === 'md') {
+    return source
+      .replace(/\x60{3}[\s\S]*?\x60{3}/g, ' ')
+      .replace(/!\[[^\]]*\]\([^)]*\)/g, ' ')
+      .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+      .replace(/^[#>*+\-]\s+/gm, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, NOTE_SEARCH_PREVIEW_LENGTH);
+  }
+
+  let preview = '';
+  const parser = new Parser({
+    ontext(value) {
+      const text = value.replace(/\s+/g, ' ');
+      const next = !preview || preview.endsWith(' ') ? text.trimStart() : text;
+      preview = (preview + next).slice(0, NOTE_SEARCH_PREVIEW_LENGTH);
+      if (preview.length === NOTE_SEARCH_PREVIEW_LENGTH) parser.pause();
+    },
+  });
+  parser.end(source);
+  // Legacy inspectors still parse raw.content according to the note type.
+  return preview.trimEnd().replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
 export function normalizeDate(value) {
@@ -633,18 +664,9 @@ export async function queryNotes(userId, options, lang, includeItems, includeTot
           n.id,
           n.title,
           IF(n.type = 'drawing', '', n.content) AS content,
-          n.create_by,
-          n.update_by,
-          n.del_flag,
-          n.sort,
-          n.is_top,
           n.create_time,
           n.update_time,
-          n.deleted_at,
           n.type,
-          n.revision,
-          n.parent_id,
-          n.tree_delete_batch_id,
           (
             SELECT JSON_ARRAYAGG(JSON_OBJECT('id', nt.id, 'name', nt.name))
             FROM resource_tag_relations ntr
@@ -681,6 +703,7 @@ export async function queryNotes(userId, options, lang, includeItems, includeTot
         .join(' / ');
       const childCount = metadata?.childCount || 0;
       const descendantCount = metadata?.descendantCount || 0;
+      const noteType = item.type || 'html';
       return {
         id,
         type: 'note',
@@ -693,7 +716,12 @@ export async function queryNotes(userId, options, lang, includeItems, includeTot
         path,
         childCount,
         descendantCount,
-        raw: item,
+        raw: {
+          type: noteType,
+          create_time: item.create_time,
+          update_time: item.update_time,
+          ...(options.suggestion ? {} : { content: buildNoteSearchPreview(item.content, noteType) }),
+        },
       };
     }),
   };
@@ -1133,7 +1161,13 @@ export async function querySuggestItems({ userId, options, lang, selectedTypes, 
   const candidateLimit = 10;
   const results = await Promise.all(
     selectedTypes.map((type) =>
-      SEARCH_QUERY_BY_TYPE[type](userId, { ...options, pageSize: candidateLimit, offset: 0 }, lang, true, false),
+      SEARCH_QUERY_BY_TYPE[type](
+        userId,
+        { ...options, pageSize: candidateLimit, offset: 0, suggestion: true },
+        lang,
+        true,
+        false,
+      ),
     ),
   );
   const ranked = results

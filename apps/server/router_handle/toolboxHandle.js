@@ -10,14 +10,13 @@ import { resultData } from '../util/common.js';
 import { stableAgentErrorCode } from '../util/agent/logSafety.js';
 import { recordServerOperation } from '../util/operationLog.js';
 import { parseToolboxError } from '../util/toolbox/errors.js';
+import { readImageRepairPoints, settleImageRepairPoints } from '../util/toolbox/imageRepairBilling.js';
 import {
   cancelToolboxJob,
   dismissToolboxJob,
   createToolboxJob,
   createFreeOcrJob,
   getToolboxOcrUsage,
-  getStudyProgress,
-  saveStudyProgress,
   createToolboxQuote,
   getToolboxArtifact,
   getToolboxCatalog,
@@ -79,6 +78,31 @@ export async function getCatalog(req, res) {
     const catalog = getToolboxCatalog();
     if (req.user?.id && req.user.role !== 'visitor') catalog.ocrUsage = await getToolboxOcrUsage(readUserId(req));
     return res.send(resultData(catalog));
+  } catch (error) {
+    return sendError(res, error);
+  }
+}
+
+function requireImageRepairAccount(req, res) {
+  if (!req.adminContext) return requireWrite(req, res);
+  res.status(403).send(resultData({ code: 'ADMIN_PREVIEW_READONLY' }, 403, '管理员代管期间无法使用积分'));
+  return false;
+}
+
+export async function getImageRepairPoints(req, res) {
+  if (!requireImageRepairAccount(req, res)) return;
+  try {
+    const points = await readImageRepairPoints(req.user.id);
+    return res.send(resultData({ ...points, accountId: String(req.user.id) }));
+  } catch (error) {
+    return sendError(res, error);
+  }
+}
+
+export async function chargeImageRepairPoints(req, res) {
+  if (!requireImageRepairAccount(req, res)) return;
+  try {
+    return res.send(resultData(await settleImageRepairPoints({ userId: req.user.id, input: req.body })));
   } catch (error) {
     return sendError(res, error);
   }
@@ -389,25 +413,6 @@ export async function saveArtifact(req, res) {
       );
     }
     return res.send(resultData(receipt));
-  } catch (error) {
-    return sendError(res, error);
-  }
-}
-
-export async function readStudy(req, res) {
-  if (!requireRead(req, res)) return;
-  try {
-    return res.send(resultData(await getStudyProgress({ userId: readUserId(req), artifactId: req.params.artifactId })));
-  } catch (error) {
-    return sendError(res, error);
-  }
-}
-export async function writeStudy(req, res) {
-  if (!requireWrite(req, res)) return;
-  try {
-    return res.send(
-      resultData(await saveStudyProgress({ userId: req.user.id, artifactId: req.params.artifactId, input: req.body })),
-    );
   } catch (error) {
     return sendError(res, error);
   }

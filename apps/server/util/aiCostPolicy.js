@@ -1,4 +1,4 @@
-import { DEFAULT_DEEPSEEK_MODEL } from './agent/deepseekModelPolicy.js';
+import { DEEPSEEK_FLASH_MODELS, DEFAULT_DEEPSEEK_MODEL } from './agent/deepseekModelPolicy.js';
 import { resolveAgentStageModelOptions } from './agent/stageModelPolicy.js';
 export const AI_PRICE_EFFECTIVE_AT = '2026-08-16T16:00:00Z';
 const legacyPrices = {
@@ -8,10 +8,8 @@ const legacyPrices = {
 };
 // 新价格从本项目核验日零点启用，不冒充官方精确切价时刻，也不回算历史账本。
 const FLASH_PRICE_VERIFIED_AT = Date.parse('2026-09-11T00:00:00+08:00');
-// 官方明确的 Pro 重定向时间；未来 Pro 再次升级时需重新核验价格。
-const PRO_REDIRECT_AT = Date.parse('2026-09-14T12:00:00+08:00');
 const flashPrice = { input: 2, cached: 0.04, output: 8 };
-const flashModels = new Set([DEFAULT_DEEPSEEK_MODEL, 'deepseek-v4-flash', 'deepseek-v4-flash-vision-exp']);
+const flashModels = new Set(DEEPSEEK_FLASH_MODELS);
 
 export function isPeakAiTime(at = Date.now()) {
   const d = new Date(at);
@@ -24,8 +22,7 @@ export function getAiModelPrice(provider, model, at = Date.now(), peak = false) 
   if (provider !== 'deepseek' || !Number.isFinite(timestamp) || timestamp < Date.parse(AI_PRICE_EFFECTIVE_AT))
     return null;
   const price =
-    (flashModels.has(model) && timestamp >= FLASH_PRICE_VERIFIED_AT) ||
-    (model === 'deepseek-v4-pro' && timestamp >= PRO_REDIRECT_AT)
+    flashModels.has(model) && timestamp >= FLASH_PRICE_VERIFIED_AT
       ? flashPrice
       : Object.hasOwn(legacyPrices, model)
         ? legacyPrices[model]

@@ -20,7 +20,7 @@ import {
   getBackgroundCatalog,
   getShopItem,
   getOwnedCosmetics,
-  getClaimedLimitedShopItemIds,
+  getLimitedShopPurchaseCounts,
   buyItem,
   equipTitle,
   equipFrame,
@@ -35,7 +35,7 @@ import {
 import { drawLottery, getLotteryStatus, freeDrawsFor } from '../util/lottery.js';
 import { getLotteryHistory } from '../util/services/lotteryHistoryService.js';
 import { getInventoryAcquisitions } from '../util/services/inventoryAcquisitionService.js';
-import { getEconomyRuntime } from '../util/pointsEconomyCatalog.js';
+import { getEconomyRuntime, getShopItemPurchaseState } from '../util/pointsEconomyCatalog.js';
 import { PointsEconomyError } from '../util/pointsEconomyOperations.js';
 import { getInventory, useItem } from '../util/items.js';
 import { getWeeklyChallenges } from '../util/weeklyChallenge.js';
@@ -74,6 +74,7 @@ import {
 } from '../util/pointsCampaignService.js';
 import { PointsGrantError } from '../util/pointsGrantOperations.js';
 import { canEnterManor, knowledgeManorEnabled } from '../util/services/knowledgeManorAccess.js';
+import { canViewLeaderboard, getLeaderboardConfig, leaderboardOpen } from '../util/leaderboardPolicy.js';
 
 // GET /growth/me —— 读当前用户真实成长快照（游客返回 Lv.1 默认展示）。
 export const getMyGrowth = async (req, res) => {
@@ -85,6 +86,7 @@ export const getMyGrowth = async (req, res) => {
       growthCenterV2: isGrowthCenterV2Enabled(),
       pointsCenter: getPointsEarningRuntime().pointsCenterEnabled,
       manor: knowledgeManorEnabled() && canEnterManor(userRole) && !req.adminContext,
+      leaderboard: canViewLeaderboard(req) && leaderboardOpen(getLeaderboardConfig()),
     };
     res.send(resultData(growth));
   } catch (error) {
@@ -342,7 +344,7 @@ export const getShop = async (req, res) => {
     let equippedBackground = null;
     let owned = [];
     const activeShopItems = getActiveShopItems();
-    let claimedLimitedItemIds = [];
+    let purchaseCounts = new Map();
     if (!isVisitor) {
       const g = await getGrowth(userId, { userRole });
       points = g.points || 0;
@@ -353,21 +355,19 @@ export const getShop = async (req, res) => {
       protectCards = g.protectCards || 0;
       owned = await getOwnedCosmetics(userId);
       if (activeShopItems.some((item) => Number(item.purchaseLimit || 0) > 0)) {
-        claimedLimitedItemIds = await getClaimedLimitedShopItemIds(userId);
+        purchaseCounts = await getLimitedShopPurchaseCounts(userId);
       }
     }
     for (const background of getBackgroundCatalog()) {
       if (owned.includes(background.id) && !activeShopItems.some((item) => item.id === background.id))
         activeShopItems.push(background);
     }
-    const claimedLimitedItems = new Set(claimedLimitedItemIds);
     const ownable = (t) => t === 'title' || t === 'cosmetic';
     const items = activeShopItems.map((it) => {
       const isOwned = ownable(it.type) && owned.includes(it.id);
       const meetsLevel = !it.minLevel || level >= it.minLevel;
-      const purchaseLimit = Number(it.purchaseLimit || 0) || null;
-      const purchaseCount = claimedLimitedItems.has(it.id) ? 1 : 0;
-      const limitReached = purchaseLimit !== null && purchaseCount >= purchaseLimit;
+      const purchase = getShopItemPurchaseState(it, purchaseCounts.get(it.id) || 0);
+      const { cost, purchaseLimit, limitReached } = purchase;
       return {
         id: it.id,
         type: it.type,
@@ -375,7 +375,8 @@ export const getShop = async (req, res) => {
         rarity: it.rarity || null,
         name: it.name,
         desc: it.desc,
-        cost: it.cost,
+        ...purchase,
+        ...(it.purchaseCosts && { purchaseCosts: it.purchaseCosts, storageMb: it.storageMb }),
         minLevel: it.minLevel || 0,
         bonusTokens: it.bonusTokens || 0,
         acquisition: 'shop',
@@ -387,10 +388,7 @@ export const getShop = async (req, res) => {
           (it.effect === 'background' && equippedBackground === it.id),
         // canBuy 仅供前端置灰按钮;真正校验在 buyItem 事务内(级别/余额/上限/已拥有)
         repeatable: it.type === 'consumable' && purchaseLimit === null,
-        purchaseLimit,
-        purchaseCount,
-        limitReached,
-        pointsShortfall: Math.max(0, Number(it.cost || 0) - points),
+        pointsShortfall: Math.max(0, (cost ?? 0) - points),
         levelShortfall: Math.max(0, Number(it.minLevel || 0) - level),
         unavailableReasons: [
           ...(!runtime.purchaseEnabled ? ['maintenance'] : []),
@@ -398,9 +396,9 @@ export const getShop = async (req, res) => {
           ...(isOwned ? ['owned'] : []),
           ...(!meetsLevel ? ['level'] : []),
           ...(limitReached ? ['purchase_limit'] : []),
-          ...(points < it.cost ? ['points'] : []),
+          ...(cost !== null && points < cost ? ['points'] : []),
         ],
-        canBuy: runtime.purchaseEnabled && !isVisitor && !isOwned && meetsLevel && !limitReached && points >= it.cost,
+        canBuy: runtime.purchaseEnabled && !isVisitor && !isOwned && meetsLevel && !limitReached && cost !== null && points >= cost,
       };
     });
     const frames = getActiveFrameCatalog().map((frame) => {
@@ -529,7 +527,7 @@ export const equipTitleHandle = async (req, res) => {
   }
 };
 
-// GET /growth/claimable —— 待领取总数(日常阶段 + 成长任务 + 成就 + 每周挑战),供首页/入口红点
+// GET /growth/claimable —— 日常阶段、成长任务、成就、周挑战、社区奖励与任务水滴的待领取总数
 export const getClaimable = async (req, res) => {
   try {
     const userId = req.user?.id;
@@ -541,7 +539,7 @@ export const getClaimable = async (req, res) => {
   }
 };
 
-// POST /growth/claimAll —— 按可选范围原子领取日常阶段、成长任务、成就与每周挑战奖励
+// POST /growth/claimAll —— 按可选范围原子领取成长奖励、社区奖励与庄园任务水滴
 export const doClaimAll = async (req, res) => {
   if (!ensureNotVisitor(req, res)) return;
   try {

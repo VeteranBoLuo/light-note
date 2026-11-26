@@ -56,6 +56,10 @@ export const notificationMessages = {
     publicResourceCount: "{action} {count} 项",
     communityReplyTitle: "社区有新的回复或提及",
     communityResultTitle: "社区处理结果",
+    communityPostReviewTitles: {
+      approve: "帖子审核通过",
+      reject: "帖子审核未通过",
+    },
     communityTitles: {
       review: "有新帖子待审核",
       reply: "有人回复了你",
@@ -122,6 +126,10 @@ export const notificationMessages = {
     publicResourceCount: "{action}: {count}",
     communityReplyTitle: "New community reply or mention",
     communityResultTitle: "Community review result",
+    communityPostReviewTitles: {
+      approve: "Post approved",
+      reject: "Post not approved",
+    },
     communityTitles: {
       review: "New post awaiting review",
       reply: "Someone replied to you",
@@ -264,13 +272,15 @@ export function notificationPresentation(item, locale = "zh-CN") {
         .join(" · ");
     }
   }
-  if (item.type === "community_feed")
-    title =
-      meta.kind === "result"
-        ? messages.communityResultTitle
-        : Object.hasOwn(messages.communityTitles, meta.kind)
-          ? messages.communityTitles[meta.kind]
-          : title;
+  if (item.type === "community_feed") {
+    if (meta.kind === "result") {
+      title = Object.hasOwn(messages.communityPostReviewTitles, meta.action)
+        ? messages.communityPostReviewTitles[meta.action]
+        : messages.communityResultTitle;
+    } else if (Object.hasOwn(messages.communityTitles, meta.kind)) {
+      title = messages.communityTitles[meta.kind];
+    }
+  }
   return {
     title,
     content,

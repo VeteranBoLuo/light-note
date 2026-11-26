@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
+  refreshManorAttention: vi.fn().mockResolvedValue(undefined),
   user: { id: 'user-a' },
   getShop: vi.fn(),
   buyShopItem: vi.fn(),
@@ -18,6 +19,7 @@ const mocks = vi.hoisted(() => ({
   getWeekly: vi.fn(),
 }));
 
+vi.mock('./useManorAttention', () => ({ refreshManorAttention: mocks.refreshManorAttention }));
 vi.mock('@/store', () => ({
   useUserStore: () => mocks.user,
 }));
@@ -72,6 +74,7 @@ describe('useGrowth load', () => {
   beforeEach(() => {
     resetGrowth();
     mocks.user.id = 'user-a';
+    mocks.refreshManorAttention.mockClear();
     mocks.getMyGrowth.mockReset();
     mocks.getRanks.mockReset();
     mocks.getGrowthTasks.mockReset();
@@ -283,6 +286,44 @@ describe('useGrowth load', () => {
 
     expect(useGrowth().growth.value).toMatchObject({ level: 4, checkedInToday: true });
     expect(useGrowth().loading.value).toBe(false);
+  });
+
+  it('签到自动结算后同步看板、待领数和庄园提醒，忽略晚到的旧待领响应', async () => {
+    const store = useGrowth();
+    const initial = { ...growth(1), features: { manor: true, growthCenterV2: true } };
+    mocks.getMyGrowth.mockResolvedValueOnce({ status: 200, data: initial });
+    await store.load();
+    const old = deferred<any>();
+    mocks.getClaimable.mockReturnValueOnce(old.promise).mockResolvedValueOnce({ status: 200, data: { count: 1, daily: { count: 0 }, manor: { count: 1, water: 20 } } });
+    const stale = store.loadClaimable();
+    const oldWeekly = deferred<any>();
+    mocks.getWeekly.mockReturnValueOnce(oldWeekly.promise).mockResolvedValueOnce({ status: 200, data: { challenges: [], weekKey: 'new-week' } });
+    const staleWeekly = store.loadWeekly();
+    mocks.checkin.mockResolvedValueOnce({ status: 200, data: { ok: true, growth: { ...initial, points: 30, checkedInToday: true } } });
+    mocks.getDashboard.mockResolvedValueOnce({ status: 200, data: { questBonus: { claimed: true } } });
+    await store.doCheckin();
+    old.resolve({ status: 200, data: { count: 2, daily: { count: 2 } } });
+    await stale;
+    oldWeekly.resolve({ status: 200, data: { challenges: [], weekKey: 'old-week' } });
+    await staleWeekly;
+    expect(store.weekly.value?.weekKey).toBe('new-week');
+    expect(store.growth.value).toMatchObject({ points: 30, checkedInToday: true });
+    expect(store.dashboard.value).toMatchObject({ questBonus: { claimed: true } });
+    expect(store.claimable.value).toMatchObject({ count: 1, daily: { count: 0 }, manor: { water: 20 } });
+    expect(mocks.refreshManorAttention).toHaveBeenCalledWith(true);
+  });
+
+  it('一键领取水滴后同步所有待领入口与庄园提醒', async () => {
+    const store = useGrowth();
+    const initial = { ...growth(1), features: { manor: true } };
+    mocks.getMyGrowth.mockResolvedValueOnce({ status: 200, data: initial });
+    await store.load();
+    mocks.getClaimable.mockResolvedValueOnce({ status: 200, data: { count: 0, manor: { count: 0, water: 0 } } });
+    mocks.claimAll.mockResolvedValueOnce({ status: 200, data: { ok: true, water: 10, claimed: 1, growth: initial } });
+    await store.claimAllRewards();
+    expect(store.claimable.value).toMatchObject({ count: 0, manor: { water: 0 } });
+    expect(mocks.refreshManorAttention).toHaveBeenCalledWith(true);
+    expect(mocks.getWeekly).toHaveBeenCalled();
   });
 
   it('请求同步失败后清理在途状态并允许重试', async () => {

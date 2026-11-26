@@ -17,8 +17,8 @@ const ACTIVE_TOOL_IDS = [
   "learning_workspace",
   "writing_workspace",
   "material_to_note",
-  "study_kit",
   "pdf_organizer",
+  "image_watermark_remover",
   "ocr_to_text",
 ];
 // 已下架但有历史成果的 AI 工具：保留协议身份与名称，只用于展示历史任务。
@@ -33,13 +33,8 @@ const RETIRED_AI_TOOL_IDS = [
 describe("toolbox protocol", () => {
   it("keeps the toolbox processing requirement boundary in the shared protocol", () => {
     expect(TOOLBOX_PROCESSING_REQUIREMENT_MAX_CHARS).toBe(1000);
-    expect(Object.keys(TOOLBOX_TOOL_INTENTS)).toEqual(["material_to_note", "study_kit"]);
-    expect(TOOLBOX_TOOL_INTENTS.study_kit).toEqual([
-      "understand",
-      "memorize",
-      "practice",
-    ]);
-    expect(Object.isFrozen(TOOLBOX_TOOL_INTENTS.study_kit)).toBe(true);
+    expect(Object.keys(TOOLBOX_TOOL_INTENTS)).toEqual(["material_to_note"]);
+    expect(Object.isFrozen(TOOLBOX_TOOL_INTENTS.material_to_note)).toBe(true);
   });
 
   it("keeps every tool id unique and every execution contract explicit", () => {
@@ -102,15 +97,16 @@ describe("toolbox protocol", () => {
     expect(ACTIVE_TOOL_IDS).toHaveLength(9);
   });
 
-  it("does not treat browser-local utilities as paid jobs", () => {
+  it("exposes image repair as the only paid browser tool", () => {
     expect(TOOLBOX_BILLING_MEDIA).toEqual(["free", "points", "ai_quota"]);
     const localTools = TOOLBOX_TOOL_CATALOG.filter(
       (item) => item.executionMode === "browser",
     );
-    expect(localTools).toHaveLength(4);
-    expect(localTools.every((item) => item.billingMedium === "free")).toBe(
-      true,
-    );
+    expect(localTools).toHaveLength(5);
+    expect(localTools.filter((item) => item.billingMedium !== "free").map((item) => item.id)).toEqual([
+      "image_watermark_remover",
+    ]);
+    expect(getToolboxTool("image_watermark_remover")?.billingMedia).toEqual(["points"]);
     expect(isToolboxPaidTool("pdf_organizer")).toBe(false);
     expect(
       TOOLBOX_TOOL_CATALOG.filter((item) => item.executionMode === "service"),
@@ -118,11 +114,8 @@ describe("toolbox protocol", () => {
     expect(isToolboxPaidTool("research_workspace")).toBe(false);
     expect(isToolboxPaidTool("translation")).toBe(true);
     expect(isToolboxPaidTool("material_to_note")).toBe(true);
-    expect(isToolboxPaidTool("study_kit")).toBe(true);
-    expect(getToolboxTool("study_kit")?.billingMedia).toEqual([
-      "points",
-      "ai_quota",
-    ]);
+    expect(isToolboxPaidTool("study_kit")).toBe(false);
+    expect(getToolboxTool("study_kit")).toBeNull();
     expect(getToolboxTool("ocr_to_text")?.billingMedia).toEqual(["ai_quota", "points", "free"]);
     // 历史概念图谱成果仍可保存为笔记，依赖协议中保留的成果定义。
     expect(getToolboxTool("concept_map")?.output.canSaveToNote).toBe(true);

@@ -3862,6 +3862,8 @@
     --note-card-min-width: var(--ui-layout-320, 320px);
     --note-workspace-frame-color: color-mix(in srgb, var(--card-border-color) 72%, transparent);
     --note-workspace-divider-color: var(--note-workspace-frame-color);
+    /* ui-density-fixed: 分隔线在侧栏内侧占 1px，把手中心内移半个线宽。 */
+    --workspace-splitter-gap: -1px;
 
     width: 100%;
     height: 100%;

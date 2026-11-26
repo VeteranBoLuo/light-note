@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
-vi.mock('../obsClient.js', () => ({ getObjectBufferFromObs: vi.fn() }));
+vi.mock('../obsClient.js', () => ({ getBoundedObjectBufferFromObs: vi.fn() }));
 vi.mock('../aiExecution/service.js', () => ({ runAiExecution: vi.fn() }));
 import { executeAiOcr } from './aiOcr.js';
 
@@ -13,6 +13,7 @@ function setup({ pdf = false, basicText = false, error, uncertain = false } = {}
     kind: 'file',
     file_name: pdf ? 'scan.pdf' : 'scan.png',
     file_type: pdf ? 'application/pdf' : 'image/png',
+    file_size: buffer.length,
     object_key: 'private-test-key',
   };
   const deps = {
@@ -61,6 +62,7 @@ describe('AI OCR', () => {
       providerPlan: { image_recognition: { maxCalls: 1 } },
     });
     expect(deps.vision.recognizeImage.mock.calls[0][0]).toEqual(buffer);
+    expect(deps.read).toHaveBeenCalledWith('private-test-key', { maxBytes: buffer.length });
     expect(deps.beforeRequest).toHaveBeenCalledOnce();
     expect(result.meta).toMatchObject({ recognitionMode: 'ai', modelCalled: true });
   });

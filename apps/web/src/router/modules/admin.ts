@@ -3,7 +3,12 @@ import { RoleEnum } from '@/config/bookmarkCfg.ts';
 
 // 移动端扁平后台路由(App.vue phoneReplaceMap 的映射目标)统一 Root 守卫:
 // 此前这批路由无 meta.roles,前端仅靠 App.vue 的 mobileAdminRoute 兜底列表(覆盖不全);后端 ensureRootRole 仍是硬边界。
-const MOBILE_ADMIN_META = { title: '后台管理', requireAuth: true, roles: [RoleEnum.Root] };
+const MOBILE_ADMIN_META = {
+  title: '后台管理',
+  requireAuth: true,
+  roles: [RoleEnum.Root],
+  localeSection: 'admin' as const,
+};
 
 const adminRouter: RouteRecordRaw[] = [
   {
@@ -11,6 +16,7 @@ const adminRouter: RouteRecordRaw[] = [
     name: 'serverManagement',
     meta: {
       title: '服务器管理',
+      localeSection: 'serverManagement',
       requireAuth: true,
       roles: [RoleEnum.Root],
     },
@@ -58,6 +64,7 @@ const adminRouter: RouteRecordRaw[] = [
   {
     meta: {
       title: '后台管理',
+      localeSection: 'admin',
       keepAlive: true,
       requireAuth: true,
       roles: [RoleEnum.Root],

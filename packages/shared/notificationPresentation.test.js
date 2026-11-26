@@ -177,6 +177,19 @@ it("distinguishes existing review, result and conversation notifications", () =>
   ).toBe("New post awaiting review");
 });
 
+it.each([
+  ["approve", null, "帖子审核通过", "Post approved"],
+  ["reject", "请补充说明", "帖子审核未通过", "Post not approved"],
+])("localizes a post review decision and keeps its review note (%s)", (action, content, zh, en) => {
+  const notice = {
+    type: "community_feed",
+    content,
+    meta: JSON.stringify({ kind: "result", action }),
+  };
+  expect(notificationPresentation(notice)).toEqual({ title: zh, content: content || "" });
+  expect(notificationPresentation(notice, "en-US")).toEqual({ title: en, content: content || "" });
+});
+
 it("public-resource notices contain only localized metadata and never submission text",()=>{
   expect(notificationPresentation({type:"public_resource",meta:{kind:"review"}}).title).toBe("有公开资源待审核");
   expect(notificationPresentation({type:"public_resource",meta:{kind:"result"}},"en-US").title).toBe("Public resource review result");

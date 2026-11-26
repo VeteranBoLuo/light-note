@@ -85,7 +85,16 @@ export async function createAdminContext({ actor, actorSessionId, subjectUserId,
 
 export async function getAdminContext(token) {
   if (!token) return null;
-  const raw = await redisClient.get(cacheKey(token));
+  return getAdminContextByDigest(hashToken(token));
+}
+
+export function adminNoteImageGrant(token) {
+  return hashToken(token);
+}
+
+export async function getAdminContextByDigest(digest) {
+  if (!/^[a-f0-9]{64}$/.test(digest)) return null;
+  const raw = await redisClient.get(CACHE_PREFIX + digest);
   if (!raw) return null;
   try {
     const context = JSON.parse(raw);

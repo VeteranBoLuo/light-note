@@ -10,6 +10,7 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import { stopManagedChild } from './localProcessLifecycle.mjs';
 import { localTestPorts } from '../apps/server/util/localTestPorts.js';
 import { assertLocalTestEnvironment } from '../apps/server/util/localTestEnvironment.js';
+import { leaderboardRange } from '../apps/server/util/leaderboardPolicy.js';
 
 const script = fileURLToPath(import.meta.url);
 const root = path.resolve(path.dirname(script), '..');
@@ -125,9 +126,11 @@ function prepareConfig() {
   const env = dotenv.parse(source);
   const defaults = { LIGHTNOTE_LOCAL_PORT_OFFSET: String(portOffset), AI_LEVEL_GIFT_MODE: 'off', AI_DAILY_QUOTA_MODE: 'level',
     AI_DAILY_BRIEF_PLATFORM_BILLING: 'off', AI_RESERVATION_CALIBRATION_MODE: 'legacy', AI_DAILY_BRIEF_DAILY_QUOTA: '66000', POINTS_ECONOMY_C11_ENABLED: 'false',
-    AI_GIFT_NETWORK_REGISTRATION_LIMIT: '3', AI_GIFT_GLOBAL_REGISTRATION_LIMIT: '20', AI_GIFT_NEW_ACCOUNT_TOKEN_LIMIT: '500000',
+    POINTS_ECONOMY_C12_ENABLED: 'true',
+    AI_GIFT_NETWORK_REGISTRATION_LIMIT: '3', AI_GIFT_GLOBAL_REGISTRATION_LIMIT: '100', AI_GIFT_NEW_ACCOUNT_TOKEN_LIMIT: '500000',
     SUPPORT_PACKAGES_AFDIAN_PRODUCTS: '{}',
-    // 积分获取 C5–C8 与积分经济 C10 对齐线上开关和生效边界，本机看到的每日/每周奖励、商店和抽奖与线上一致。
+    POINTS_LEADERBOARD_OPEN_WEEK: leaderboardRange('week', new Date()).start,
+    // 保留 C10 回退目录与积分获取 C5–C8 的生效边界，本机默认体验 C12 兑换。
     // C8 成就快照由 localTestBootstrap 在缺失时补齐；已有值（含用户自行改过的）一律保留。
     POINTS_EARNING_C5_ENABLED: 'true', POINTS_EARNING_C5_EFFECTIVE_DAY: '20260815', POINTS_EARNING_C5_EFFECTIVE_WEEK: '202634',
     POINTS_EARNING_C6_ENABLED: 'true', POINTS_EARNING_C6_EFFECTIVE_DAY: '20260820',
@@ -237,8 +240,10 @@ async function serve(migrateOnly = false) {
   try {
     for (const port of [...Object.values(ports), ...storagePorts]) if (await canConnect(port)) throw new Error(`本地端口 ${port} 已占用；未结束原有进程。`);
     const env = childEnv(config);
-    for (const binary of ['docker', 'colima', 'redis-server', 'weed', 'mailpit', 'pnpm']) executable(binary);
+    for (const binary of ['docker', 'colima', 'redis-server', 'weed', 'mailpit']) executable(binary);
+    const pnpm = executable('pnpm');
     if (!existsSync(config.LIGHTNOTE_LOCAL_FAVICON_ENTRY || '')) throw new Error('缺少本机工具箱 favimg 源码；请在同级准备 toolkit，或在 .local-test/server.env 设置 LIGHTNOTE_LOCAL_FAVICON_ENTRY。');
+    await oneShot('dependencies', pnpm, ['install', '--frozen-lockfile', '--prefer-offline'], childEnv({}), root);
     let dockerReady = false;
     try { execFileSync(executable('docker'), ['info', '--format', '{{.ServerVersion}}'], { env: dockerEnv(), stdio: 'ignore', timeout: 3000 }); dockerReady = true; }
     catch { /* 冷启动才启动专属虚拟机；不重复执行已在线虚拟机的初始化。 */ }
@@ -263,7 +268,7 @@ async function serve(migrateOnly = false) {
     const api = run('api', process.execPath, [path.join(serverDir, 'app.js')], env, { cwd: serverDir });
     await waitPort(ports.api, api);
     for (const name of ['document', 'bookmarkIcon', 'resourceGovernance', 'browserPush', 'noteImport', 'dataExport']) run(`${name}-worker`, process.execPath, [path.join(serverDir, `${name}Worker.js`)], env, { cwd: serverDir });
-    const web = run('web', executable('pnpm'), ['--filter', 'web', 'exec', 'vite', '--host', '127.0.0.1', '--port', String(ports.web), '--strictPort'], env);
+    const web = run('web', pnpm, ['--filter', 'web', 'exec', 'vite', '--host', '127.0.0.1', '--port', String(ports.web), '--strictPort'], env);
     await waitPort(ports.web, web);
     await sleep(1500);
     if (stopping) return;

@@ -14,6 +14,8 @@ const mocks = vi.hoisted(() => ({
   scheduleLandingStartupPreload: vi.fn(() => vi.fn()),
   prefetchResolvedRoute: vi.fn(() => Promise.resolve()),
   messageWarning: vi.fn(),
+  messageOpen: vi.fn(),
+  postFeedback: vi.fn(),
   hasLoginHint: true,
   user: {
     id: '',
@@ -60,11 +62,11 @@ vi.mock('@/api/commonApi.ts', () => ({
 }));
 
 vi.mock('@/components/base/BasicComponents/BMessage/BMessage.ts', () => ({
-  default: { warning: mocks.messageWarning },
+  default: { warning: mocks.messageWarning, open: mocks.messageOpen },
 }));
 
 vi.mock('@/http/request', () => ({
-  apiBasePost: vi.fn(),
+  apiBasePost: mocks.postFeedback,
 }));
 
 vi.mock('@/utils/conversion', () => ({
@@ -95,7 +97,7 @@ vi.mock('@/components/base/SvgIcon/src/SvgIcon.vue', () => ({
 }));
 
 vi.mock('@/components/base/BasicComponents/BModal/BModal.vue', () => ({
-  default: { name: 'BModalStub', template: '<div><slot /></div>' },
+  default: { name: 'BModalStub', props: ['visible'], template: '<div v-if="visible"><slot /></div>' },
 }));
 
 const { default: Landing } = await import('./Landing.vue');
@@ -188,9 +190,36 @@ afterEach(() => {
   mocks.prefetchResolvedRoute.mockClear();
   mocks.bookmark.openAuthModal.mockClear();
   mocks.messageWarning.mockClear();
+  mocks.messageOpen.mockReset();
+  mocks.postFeedback.mockReset();
   vi.mocked(trackConversion).mockClear();
   delete (window as unknown as Record<string, unknown>)[LANDING_EARLY_INTENT_KEY];
   vi.useRealTimers();
+});
+
+it('反馈失败时保留输入，重试成功后先关闭弹窗，再显示一次顶部提示', async () => {
+  mocks.postFeedback.mockResolvedValueOnce({ status: 500 }).mockResolvedValueOnce({ status: 200 });
+  const host = await mountLanding();
+  const contact = [...host.querySelectorAll<HTMLAnchorElement>('a')].find((link) => link.textContent === 'landing.contactUs')!;
+  contact.click();
+  await nextTick();
+  const form = host.querySelector<HTMLFormElement>('.contact-dialog__body')!;
+  const input = form.querySelector('textarea')!;
+  input.value = '测试官网反馈重试';
+  input.dispatchEvent(new Event('input', { bubbles: true }));
+  await nextTick();
+  form.requestSubmit();
+  await vi.waitFor(() => expect(form.querySelector('[role="status"]')?.textContent).toContain('landing.feedbackFail'));
+  expect(input.value).toBe('测试官网反馈重试');
+  expect(mocks.messageOpen).not.toHaveBeenCalled();
+
+  mocks.messageOpen.mockImplementationOnce(() => expect(host.contains(form)).toBe(false));
+  form.requestSubmit();
+  await vi.waitFor(() =>
+    expect(mocks.messageOpen).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ type: 'success', placement: 'top', content: 'landing.feedbackOk' }),
+    ),
+  );
 });
 
 describe('Landing 接管前点击补执行', () => {

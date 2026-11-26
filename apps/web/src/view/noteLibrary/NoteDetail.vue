@@ -445,6 +445,7 @@
   } from '@/utils/noteReference';
   import { markNoteDraftPromoted } from '@/utils/routeViewKey';
   import { discardAiNoteDraft, readAiNoteDraft } from '@/utils/aiNoteDraft';
+  import { createNoteDraftSession, newNoteDraftEntry, sameNoteDraftContent, type NoteDraftContent } from '@/utils/noteDraft';
   import { NOTE_TREE_ROOT_KEY, useNoteTree } from '@/composables/useNoteTree';
   import { useNoteTreeDragDrop } from '@/composables/useNoteTreeDragDrop';
   import type { NoteTreeItem } from '@/types/noteTree';
@@ -1016,6 +1017,7 @@
   // 历史版本恢复后:回写标题/正文并刷新编辑器与目录
   async function onVersionRestored(data: any) {
     if (!data) return;
+    void localDraft?.clear();
     // 恢复的版本可能是不同编辑模式(md/html):模式变了直接重载,保证编辑器与内容一致(罕见路径)
     const restoredType = normalizeNoteType(data.type || note.type);
     if (restoredType !== note.type) {
@@ -1036,6 +1038,7 @@
         note.content = content;
       }
     }
+    acknowledgeDraftSave(currentNoteVersion());
     setUpdateTime();
     nextTick(() => void refreshCatalog());
   }
@@ -1078,6 +1081,7 @@
     resetSaveQueueAfterConflict();
     conflictVisible.value = false;
     await applyVersionSnapshot(cloud);
+    acknowledgeDraftSave(cloud);
     saveStatus.value = 'saved';
     conflictCloudVersion.value = null;
     conflictLocalVersion.value = null;
@@ -1110,6 +1114,8 @@
         return;
       }
       resetSaveQueueAfterConflict();
+      void localDraft?.clear();
+      watchDraftUnload(false);
       conflictVisible.value = false;
       conflictEditorUsesLocal = false;
       skipSaveOnLeave = true;
@@ -1152,6 +1158,7 @@
       conflictEditorUsesLocal = false;
       conflictCloudVersion.value = null;
       conflictLocalVersion.value = null;
+      stageEditorDraft();
       const saved = await saveImmediately(false);
       if (saved) {
         message.success(t('noteDetail.conflict.overwriteSuccess'));
@@ -1243,6 +1250,7 @@
     persistedSaveVersion = Math.max(persistedSaveVersion, requestedSaveVersion);
     saveQueue = Promise.resolve(true);
     saveStatus.value = 'saved';
+    acknowledgeDraftSave(currentNoteVersion());
     if (note.id) noteWorkspace.updateNoteMetadata(note.id, { title: note.title, type: note.type });
   }
 
@@ -1315,8 +1323,7 @@
   const isLeaving = ref(false);
   const updateTime = ref('');
   const timer = ref<ReturnType<typeof setTimeout> | null>(null);
-  // 正文草稿已由 IndexedDB 以更短合并窗口托底；服务端保存放宽到 1.5s，
-  // 离开路由、切换笔记和显式保存仍会立即 flush，减少连续输入的重复写入。
+  // IndexedDB coalesces local draft writes separately from the cloud save queue.
   const TEXT_SAVE_DEBOUNCE_DELAY = 1_500;
   const DRAWING_SAVE_DEBOUNCE_DELAY = 3_000;
   let requestedSaveVersion = 0;
@@ -1324,6 +1331,87 @@
   let latestRequestedTitle = note.title;
   let skipSaveOnLeave = false;
   let saveQueue: Promise<boolean> = Promise.resolve(true);
+  let localDraft: ReturnType<typeof createNoteDraftSession> | null = null;
+  let draftBaseline: NoteDraftContent | null = null;
+  let draftScope = '';
+  let creationDraftToken = '';
+  let watchingUnload = false;
+  let savingDraftSnapshot: NoteDraftContent | null = null;
+
+  function handleDraftBeforeUnload(event: BeforeUnloadEvent) {
+    void localDraft?.flush();
+    event.preventDefault();
+    event.returnValue = true;
+  }
+
+  function watchDraftUnload(dirty: boolean) {
+    if (dirty === watchingUnload) return;
+    watchingUnload = dirty;
+    if (dirty) window.addEventListener('beforeunload', handleDraftBeforeUnload);
+    else window.removeEventListener('beforeunload', handleDraftBeforeUnload);
+  }
+
+  function stageEditorDraft() {
+    if (!draftBaseline || draftScope !== noteCacheScope.value || readonly.value || skipSaveOnLeave) return;
+    const current = currentNoteVersion();
+    const dirty = !sameNoteDraftContent(current, draftBaseline) ||
+      Boolean(savingDraftSnapshot && !sameNoteDraftContent(current, savingDraftSnapshot));
+    watchDraftUnload(dirty);
+    if (dirty) localDraft?.stage(current);
+    else void localDraft?.clear();
+  }
+
+  function acknowledgeDraftSave(snapshot: NoteDraftContent) {
+    if (!draftScope || draftScope !== noteCacheScope.value) return;
+    draftBaseline = snapshot;
+    stageEditorDraft();
+  }
+
+  function closeDraftSession() {
+    void localDraft?.flush();
+    localDraft = null;
+    draftBaseline = null;
+    draftScope = '';
+    creationDraftToken = '';
+    savingDraftSnapshot = null;
+    watchDraftUnload(false);
+  }
+
+  async function restoreEditorDraft(routeId: string, source: string, requestVersion: number) {
+    const scope = noteCacheScope.value;
+    const baseline = currentNoteVersion(updateTime.value);
+    if (readonly.value) return;
+    if (routeId === 'add') creationDraftToken = newNoteDraftEntry(scope, source);
+    const key = routeId === 'add' ? `new:${creationDraftToken}` : routeId;
+    const session = user.id && user.role !== 'visitor' && !user.adminContext
+      ? createNoteDraftSession(scope, key)
+      : null;
+    const restored = await session?.read();
+    if (requestVersion !== noteLoadVersion || scope !== noteCacheScope.value) return;
+    draftScope = scope;
+    localDraft = session;
+    if (restored && !sameNoteDraftContent(restored, baseline)) {
+      note.title = restored.title;
+      note.content = restored.content;
+      note.type = restored.type;
+      note.revision = restored.revision;
+      watchDraftUnload(true);
+      if (routeId !== 'add' && restored.revision !== baseline.revision) {
+        requestSaveVersion();
+        openVersionConflict(baseline, { ...currentNoteVersion(restored.updatedAt), parentId: note.parentId });
+      } else {
+        saveFunc();
+        message.info(t('noteDetail.localDraftRecovered'));
+      }
+    } else if (restored) {
+      void session?.clear();
+    }
+    draftBaseline = baseline;
+  }
+
+  function flushDraftWhenHidden() {
+    if (document.visibilityState === 'hidden') void localDraft?.flush();
+  }
   async function syncHeaderTitle() {
     if (bookmark.isMobile) return;
     await nextTick();
@@ -1795,13 +1883,26 @@
     if (note.id) return Promise.resolve(note.id);
     if (createPromise) return createPromise;
     const params: any = cloneDeep(note);
+    const draftAtCreation = localDraft;
+    const token = creationDraftToken;
+    const scope = noteCacheScope.value;
+    const targetLoad = noteLoadVersion;
+    function assertCurrentEditor() {
+      if (scope !== noteCacheScope.value || targetLoad !== noteLoadVersion) {
+        throw new DOMException('Note editor changed', 'AbortError');
+      }
+    }
+    if (draftScope !== scope) return Promise.reject(new DOMException('Note editor is unavailable', 'AbortError'));
     delete params.lastTitle;
     delete params.revision;
     if (!params.title || !params.title.trim()) {
       params.title = DEFAULT_NOTE_TITLE;
     }
-    createPromise = (async () => {
+    if (token) params.idempotencyKey = `note-editor:${token}`;
+    const creating = (async () => {
+      void draftAtCreation?.flush();
       await noteTreeFeaturePromise;
+      assertCurrentEditor();
       {
         const parentId = noteTreeWriteEnabled.value ? routeQueryValue(router.currentRoute.value.query.parent) : '';
         if (parentId) params.parentId = parentId;
@@ -1816,7 +1917,9 @@
         },
         { silent: true },
       );
+      assertCurrentEditor();
       const exposureDecision = await confirmNoteShareExposure(res);
+      assertCurrentEditor();
       if (exposureDecision === false) {
         throw Object.assign(new Error('NOTE_SHARE_EXPOSURE_CANCELLED'), { code: 'NOTE_SHARE_EXPOSURE_CANCELLED' });
       }
@@ -1824,12 +1927,48 @@
         res = await apiBasePost('/api/note/addNote', { ...params, shareExposureAcknowledged: true }, { silent: true });
       }
       if (res.status === 200 && res.data?.id) {
+        assertCurrentEditor();
+        const revision = Math.max(1, Number(res.data.revision || 1));
+        let confirmed: ConflictVersion = {
+          title: params.title, content: params.content, type: normalizeNoteType(params.type), revision,
+          id: String(res.data.id), parentId: res.data.parentId ?? params.parentId ?? null, updatedAt: null,
+        };
+        if (res.data.replayed) {
+          const detail = await consumeNoteDetail(user, String(res.data.id));
+          assertCurrentEditor();
+          if (detail.status !== 200 || !detail.data) {
+            throw new Error('Unable to verify the previously created note');
+          }
+          confirmed = normalizeConflictVersion(detail.data, String(res.data.id)) ?? confirmed;
+        }
         note.id = res.data.id;
-        note.revision = Math.max(1, Number(res.data.revision || 1));
+        note.revision = confirmed.revision;
         note.createBy = user.id;
-        note.parentId = params.parentId || null;
+        note.parentId = confirmed.parentId ?? null;
         if (!note.title || !note.title.trim()) {
           note.title = params.title;
+        }
+        const sameContent = sameNoteDraftContent(currentNoteVersion(), confirmed);
+        if (draftAtCreation) {
+          // Keep the new-page draft until the target has a durable copy of any newer edits.
+          const adopted = createNoteDraftSession(scope, String(res.data.id));
+          localDraft = adopted;
+          if (sameContent) {
+            void draftAtCreation.clear();
+          } else {
+            adopted.stage(currentNoteVersion());
+            if (await adopted.flush()) void draftAtCreation.clear();
+          }
+        }
+        assertCurrentEditor();
+        acknowledgeDraftSave(confirmed);
+        if (!sameContent) {
+          if (res.data.replayed && confirmed.revision > 1) {
+            requestSaveVersion();
+            openVersionConflict(confirmed);
+          } else {
+            saveFunc();
+          }
         }
         promoteSavedDraftInTree();
         // 详情工作区的路由 key 保持稳定，草稿首次保存只替换地址，不重挂编辑器内容区。
@@ -1857,9 +1996,10 @@
       }
       throw new Error(res.msg || '创建笔记失败');
     })().finally(() => {
-      createPromise = null;
+      if (createPromise === creating) createPromise = null;
     });
-    return createPromise;
+    createPromise = creating;
+    return creating;
   }
   // 供编辑器在“新建笔记还没 id 就粘贴图片”时调用：先确保笔记已创建，返回其 id，让图片带真实 noteId 上传
   async function ensureNoteId(): Promise<string> {
@@ -1908,6 +2048,12 @@
     }
     isStartEdit.value = true;
     saveStatus.value = 'saving';
+    const scope = noteCacheScope.value;
+    const targetLoad = noteLoadVersion;
+    const isCurrentEditor = () => scope === noteCacheScope.value && targetLoad === noteLoadVersion;
+    const saving = currentNoteVersion();
+    savingDraftSnapshot = saving;
+    void localDraft?.flush();
     const titleAtSave = note.title;
     let ok = false;
 
@@ -1928,6 +2074,7 @@
           delete params.updateTime;
           res = await apiBasePost('/api/note/updateNote', params);
         }
+        if (!isCurrentEditor()) return false;
         if (res.status === 409 && res.data?.code === 'NOTE_VERSION_CONFLICT') {
           const cloud = normalizeConflictVersion(res.data?.details?.current, note.id);
           if (cloud) openVersionConflict(cloud, currentNoteVersion());
@@ -1937,6 +2084,7 @@
         if (ok) {
           const nextRevision = Math.max(1, Number(res.data?.revision || note.revision || 1));
           note.revision = nextRevision;
+          acknowledgeDraftSave({ ...saving, revision: nextRevision });
         }
         if (ok && isMsg) {
           recordOperation({ module: '笔记', operation: `保存笔记成功【${titleAtSave}】` });
@@ -1944,7 +2092,9 @@
       } else {
         // 新建统一走守卫式创建（与粘贴图片共用同一个在途 Promise，绝不并发建多条）
         await createNote();
-        ok = !!note.id;
+        if (!isCurrentEditor()) return false;
+        ok = !!note.id && !conflictCloudVersion.value;
+        if (conflictCloudVersion.value) return false;
       }
       if (ok) {
         // 只在服务端确认成功后才推进已保存标题，避免失败时把草稿误认为已落库。
@@ -1960,12 +2110,14 @@
           message.success(t('common.saveSuccess'));
         }
         setUpdateTime();
-        saveStatus.value = 'saved';
+        saveStatus.value = draftBaseline && !sameNoteDraftContent(currentNoteVersion(), draftBaseline)
+          ? (navigator.onLine ? 'pending' : 'offline')
+          : 'saved';
         if (isDrawingNote.value && note.id) {
           invalidateDrawingPreview(note.id);
           const thumbnailNoteId = note.id;
           const thumbnailRevision = note.revision;
-          const thumbnailContent = String(note.content || '');
+          const thumbnailContent = draftBaseline?.content ?? saving.content;
           // 缩略图是可丢失的派生数据：后台刷新失败时卡片自动回退 scene 预览，
           // 不能让图片编码或上传状态反向污染正文的“已保存”状态。
           void uploadDrawingThumbnail(thumbnailNoteId, thumbnailRevision, thumbnailContent).catch((error) => {
@@ -1977,6 +2129,7 @@
         saveStatus.value = 'error';
       }
     } catch (error: any) {
+      if (!isCurrentEditor()) return false;
       if (error?.code === 'NOTE_SHARE_EXPOSURE_CANCELLED') {
         saveStatus.value = 'pending';
         ok = false;
@@ -1986,15 +2139,22 @@
       ok = false;
       saveStatus.value = navigator.onLine ? 'error' : 'offline';
     } finally {
-      isStartEdit.value = false;
+      if (savingDraftSnapshot === saving) {
+        savingDraftSnapshot = null;
+        stageEditorDraft();
+        isStartEdit.value = false;
+      }
     }
     return ok;
   }
 
   function queueSave(version: number, isMsg?: boolean) {
+    const scope = noteCacheScope.value;
+    const targetLoad = noteLoadVersion;
     const task = saveQueue
       .catch(() => false)
       .then(async () => {
+        if (scope !== noteCacheScope.value || scope !== draftScope || targetLoad !== noteLoadVersion) return false;
         if (version <= persistedSaveVersion) return true;
         const snapshotVersion = requestedSaveVersion;
         // 空白新建笔记没有需要落库的数据，允许直接离开，不因一次被取消的编辑而拦截用户。
@@ -2232,6 +2392,8 @@
     // 删除已在服务端成功完成，离开时不能再把排队中的旧编辑内容写回已删除笔记。
     skipSaveOnLeave = true;
     clearScheduledSave();
+    void localDraft?.clear();
+    watchDraftUnload(false);
     const organizer = resolveUntaggedReturnPath(sourceReturnPath());
     noteWorkspace.setNavigation({ activePageId: organizer ? null : fallbackId || null, browseParentId: null });
     await refreshTree();
@@ -2301,6 +2463,7 @@
   async function persistBeforeLeave() {
     captureDetailTreeScroll();
     captureTitleBeforeLeave();
+    void localDraft?.flush();
     // 返回发生在失焦事件之前时，主动把当前标题纳入保存队列；不能依赖事件时序。
     if (note.title?.trim() && note.title !== note.lastTitle && note.title !== latestRequestedTitle) {
       const titleSaved = await saveImmediately();
@@ -2353,6 +2516,8 @@
   const editorRuntimeReady = ref(false);
 
   function resetPerNoteRuntime() {
+    closeDraftSession();
+    createPromise = null;
     clearScheduledSave();
     readonlyToolbarObserver?.disconnect();
     readonlyToolbarObserver = null;
@@ -2459,6 +2624,8 @@
         await applyTemplateFromQuery(query, () => requestVersion === noteLoadVersion);
       }
       if (requestVersion !== noteLoadVersion) return;
+      await restoreEditorDraft(routeId, routeNoteLoadKey.value, requestVersion);
+      if (requestVersion !== noteLoadVersion) return;
       latestRequestedTitle = note.title;
       noteContentKey.value = `note-content:add:${requestVersion}`;
       isReady.value = true;
@@ -2517,6 +2684,8 @@
           // 历史笔记不要求用户制造一次正文 revision；完整 scene 到达后静默补齐当前版派生图。
           void ensureDrawingThumbnail(note.id, note.revision, String(note.content || '')).catch(() => false);
         }
+        await restoreEditorDraft(routeId, '', requestVersion);
+        if (requestVersion !== noteLoadVersion) return;
         noteContentKey.value = `note-content:${note.id}`;
         contentApplied = true;
         isReady.value = true;
@@ -2568,8 +2737,15 @@
   });
   const detailInstanceRouteId = routeNoteLoadKey.value.split('|', 1)[0];
 
+  watch(noteCacheScope, () => {
+    closeDraftSession();
+    noteLoadVersion += 1;
+    clearScheduledSave();
+    isReady.value = false;
+  }, { flush: 'sync' });
+
   watch(
-    routeNoteLoadKey,
+    [routeNoteLoadKey, noteCacheScope],
     () => {
       const route = router.currentRoute.value;
       const rawId = route.params.id;
@@ -2578,12 +2754,14 @@
       // 收到一次 watch 回调，必须忽略，避免重复请求或让旧编辑器参与新笔记的状态更新。
       // 唯一例外是 add 首次保存为真实 ID：它有意沿用当前编辑器实例。
       const isPromotedCurrentDraft =
-        detailInstanceRouteId === 'add' && id === promotedDraftRouteId && note.id === promotedDraftRouteId;
+        detailInstanceRouteId === 'add' && id === note.id;
       if (id !== detailInstanceRouteId && !isPromotedCurrentDraft) return;
       void loadRouteNote(id, { ...route.query });
     },
     { immediate: true },
   );
+
+  watch(() => [note.title, note.content, note.type] as const, stageEditorDraft, { flush: 'sync' });
 
   watch(
     () => note.content,
@@ -2608,6 +2786,7 @@
     window.addEventListener('pageshow', resourceRefsForeground.refreshOnWake);
     window.addEventListener('offline', handleNetworkOffline);
     window.addEventListener('online', handleNetworkOnline);
+    document.addEventListener('visibilitychange', flushDraftWhenHidden);
   });
   onUnmounted(() => {
     markNoteDraftPromoted(null);
@@ -2619,6 +2798,8 @@
     window.removeEventListener('pageshow', resourceRefsForeground.refreshOnWake);
     window.removeEventListener('offline', handleNetworkOffline);
     window.removeEventListener('online', handleNetworkOnline);
+    document.removeEventListener('visibilitychange', flushDraftWhenHidden);
+    closeDraftSession();
     readonlyToolbarObserver?.disconnect();
     clearScheduledSave();
     nStore.headings = [];

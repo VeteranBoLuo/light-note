@@ -9,6 +9,8 @@ router.use('/forms', collectionFormsRouter);
 router.get('/pinned-tools', toolboxHandle.getPinnedTools);
 router.post('/pinned-tools', localProcessingRateLimiter, toolboxHandle.savePinnedTools);
 router.get('/catalog', toolboxHandle.getCatalog);
+router.get('/image-repair/points', localProcessingRateLimiter, toolboxHandle.getImageRepairPoints);
+router.post('/image-repair/points', localProcessingRateLimiter, toolboxHandle.chargeImageRepairPoints);
 router.get('/project-entry', toolboxHandle.getProjectEntry);
 router.post('/project-entry/dismiss', localProcessingRateLimiter, toolboxHandle.dismissProjectEntry);
 router.get('/home', localProcessingRateLimiter, toolboxHandle.getHome);
@@ -41,7 +43,5 @@ router.post('/jobs/:jobId/cancel', toolboxHandle.cancelJob);
 router.patch('/artifacts/:artifactId/comparison', localProcessingRateLimiter, toolboxHandle.reviewComparison);
 router.get('/artifacts/:artifactId', toolboxHandle.getArtifact);
 router.post('/artifacts/:artifactId/save', toolboxHandle.saveArtifact);
-router.get('/artifacts/:artifactId/study', toolboxHandle.readStudy);
-router.post('/artifacts/:artifactId/study', localProcessingRateLimiter, toolboxHandle.writeStudy);
 
 export default router;

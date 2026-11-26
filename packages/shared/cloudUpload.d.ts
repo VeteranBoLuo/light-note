@@ -6,3 +6,4 @@ export const CLOUD_UPLOAD_SIGN_BATCH: number;
 export function cloudUploadMode(
   size: number,
 ): "invalid" | "multipart" | "direct";
+export function unnumberedCloudUploadStem(stem: string): string;

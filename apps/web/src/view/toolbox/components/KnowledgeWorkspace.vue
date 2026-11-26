@@ -440,7 +440,7 @@
       :resources="outcomeResources"
       surface="workspace"
       :source-workspace-id="workspace.id"
-      :initial-tool-id="defaultOutcomeTool"
+      initial-tool-id="material_to_note"
       @update:open="outcomeOpen = $event"
     />
     <BModal
@@ -784,9 +784,6 @@
         (item) => item.available !== false && selectedResourceKeys.value.includes(`${item.type}:${item.resourceId}`),
       )
       .map((item) => ({ type: item.type, id: item.resourceId, title: item.title })),
-  );
-  const defaultOutcomeTool = computed(
-    () => ({ research: 'material_to_note', learning: 'study_kit', writing: 'material_to_note' })[kind.value],
   );
   function toggleResource(item: ToolboxWorkspaceResource, checked: boolean) {
     const key = `${item.type}:${item.resourceId}`;

@@ -10,8 +10,15 @@
   >
     <slot />
     <Teleport to="body">
-      <div v-show="visible" class="b-tooltip-popup" ref="popupRef" :style="resolvedPopupStyle">
-        {{ title }}
+      <div
+        v-show="visible"
+        class="b-tooltip-popup"
+        :class="{ 'has-shortcut': shortcut }"
+        ref="popupRef"
+        :style="resolvedPopupStyle"
+      >
+        <span>{{ title }}</span>
+        <kbd v-if="shortcut" class="b-tooltip-shortcut">{{ shortcut }}</kbd>
       </div>
     </Teleport>
   </span>
@@ -23,6 +30,7 @@
 
   const props = defineProps<{
     title: string;
+    shortcut?: string;
     always?: boolean;
     disabled?: boolean;
     delay?: number;
@@ -185,5 +193,23 @@
     max-width: var(--ui-layout-280, 280px);
     white-space: normal;
     text-align: center;
+  }
+
+  .b-tooltip-popup.has-shortcut {
+    display: flex;
+    align-items: center;
+    gap: var(--ui-space-8, 8px);
+  }
+
+  .b-tooltip-shortcut {
+    flex-shrink: 0;
+    padding: var(--ui-space-1, 1px) var(--ui-space-5, 5px);
+    border: 1px solid var(--surface-border-color);
+    border-radius: 4px;
+    background: var(--menu-item-h-bg-color);
+    font: inherit;
+    font-size: var(--ui-font-11, 11px);
+    font-weight: 600;
+    white-space: nowrap;
   }
 </style>

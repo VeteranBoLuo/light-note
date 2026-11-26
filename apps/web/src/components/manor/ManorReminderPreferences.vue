@@ -111,18 +111,6 @@
     font-size: var(--ui-font-13, 13px);
     line-height: 1.6;
   }
-  .is-game :deep(.b-switch__track) {
-    border: 1px solid #a59265;
-    box-shadow: inset 0 1px var(--ui-space-2, 2px) #71572d30;
-  }
-  .is-game :deep(.b-switch__thumb) {
-    background: #fffbe9;
-  }
-  .is-game :deep(.b-switch:focus-visible) {
-    outline: 2px solid #526f2f;
-    outline-offset: 2px;
-    border-radius: var(--ui-space-8, 8px);
-  }
   .is-game .manor-reminder-options {
     display: grid;
     gap: var(--ui-space-12, 12px);

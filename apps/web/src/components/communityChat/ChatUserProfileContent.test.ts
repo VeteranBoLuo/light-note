@@ -55,7 +55,7 @@ function ownProfile(): CommunityChatOwnProfile {
 
 function findButton(host: HTMLElement, text: string) {
   return Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) =>
-    button.textContent?.includes(text),
+    button.textContent?.includes(text) || button.getAttribute('aria-label') === text,
   );
 }
 
@@ -217,12 +217,12 @@ describe('ChatUserProfileContent', () => {
     const onReport = vi.fn();
     const host = mountProfile({ profile: profile(), cardLayout: true, authenticated: true, onBlock, onReport });
     expect(host.textContent).not.toContain(zhCN.communityChat.blocks.action);
-    findButton(host, zhCN.common.more)?.click();
+    findButton(host, zhCN.communityChat.profile.moreActions)?.click();
     await nextTick();
     findButton(document.body, zhCN.communityChat.blocks.action)?.click();
     await nextTick();
     expect(onBlock).toHaveBeenCalledTimes(1);
-    findButton(host, zhCN.common.more)?.click();
+    findButton(host, zhCN.communityChat.profile.moreActions)?.click();
     await nextTick();
     findButton(document.body, zhCN.communityChat.report.title)?.click();
     expect(onReport).toHaveBeenCalledTimes(1);
@@ -230,26 +230,51 @@ describe('ChatUserProfileContent', () => {
     cleanup?.();
     cleanup = undefined;
     const official = mountProfile({ profile: profile({ role: 'official' }), cardLayout: true, authenticated: true });
-    findButton(official, zhCN.common.more)?.click();
+    findButton(official, zhCN.communityChat.profile.moreActions)?.click();
     await nextTick();
     expect(findButton(document.body, zhCN.communityChat.blocks.action)).toBeUndefined();
     expect(findButton(document.body, zhCN.communityChat.report.title)).toBeDefined();
   });
 
-  it('弹窗名片的隐私范围可展开，成就仍可进入全部列表并返回', async () => {
+  it('展示可直达的公开帖子和公开主页，保留全部成就入口', async () => {
     const onLoadAllAchievements = vi.fn();
-    const host = mountProfile({ profile: profile(), cardLayout: true, onLoadAllAchievements });
-    expect(host.textContent).toContain(zhCN.communityChat.profile.privacySummary);
-    expect(host.textContent).not.toContain(zhCN.communityChat.profile.privacy);
-    findButton(host, zhCN.communityChat.profile.showPrivacy)?.click();
-    await nextTick();
-    expect(host.textContent).toContain(zhCN.communityChat.profile.privacy);
-    expect(findButton(host, zhCN.communityChat.profile.hidePrivacy)?.getAttribute('aria-expanded')).toBe('true');
+    const onNavigate = vi.fn();
+    const host = mountProfile({
+      profile: profile({ userPublicId: 'public-member' }),
+      cardLayout: true,
+      previewPosts: [{ publicId: 'featured-one', title: '读书摘记', excerpt: '一段摘要' }],
+      onLoadAllAchievements,
+      onNavigate,
+    });
+    expect(host.textContent).toContain('一段摘要');
+    expect(host.textContent).not.toContain(zhCN.communityChat.profile.privacySummary);
+    findButton(host, '读书摘记')?.click();
+    findButton(host, zhCN.communityChat.profile.publicHome)?.click();
+    expect(onNavigate.mock.calls).toEqual([['/community/posts/featured-one'], ['/community/people/public-member']]);
     findButton(host, zhCN.communityChat.profile.allAchievementsLink.replace('{count}', '2'))?.click();
     await nextTick();
     expect(onLoadAllAchievements).toHaveBeenCalledTimes(1);
     findButton(host, zhCN.communityChat.profile.backToCard)?.click();
     await nextTick();
-    expect(host.textContent).toContain(zhCN.communityChat.profile.privacySummary);
+    expect(findButton(host, '读书摘记')).toBeDefined();
+  });
+
+  it('没有简介、精选帖子和成就时保留加入时间和主页入口', () => {
+    const host = mountProfile({
+      profile: profile({
+        userPublicId: 'public-member',
+        bio: '',
+        achievements: [],
+        achievementCount: 0,
+        hasMoreAchievements: false,
+      }),
+      cardLayout: true,
+      previewPosts: [],
+    });
+    expect(host.textContent).toContain('加入轻笺约 2 个月');
+    expect(findButton(host, zhCN.communityChat.profile.publicHome)).toBeDefined();
+    expect(host.textContent).not.toContain(zhCN.communityChat.profile.posts);
+    expect(host.textContent).not.toContain(zhCN.communityChat.profile.featuredAchievements);
+    expect(host.textContent).not.toContain(zhCN.communityChat.profile.bioEmptyShort);
   });
 });

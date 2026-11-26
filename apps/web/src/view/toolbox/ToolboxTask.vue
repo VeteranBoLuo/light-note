@@ -271,14 +271,6 @@
                 >
                   <article ref="resultContentRef" class="toolbox-result__markdown" v-html="renderedContent"></article>
                 </KnowledgeAuditResult>
-                <StudyResultCards
-                  v-else-if="artifact.meta?.study?.cards?.length"
-                  :artifact-id="artifact.id"
-                  :version="artifact.version"
-                  :cards="artifact.meta.study.cards"
-                >
-                  <article ref="resultContentRef" class="toolbox-result__markdown" v-html="renderedContent"></article>
-                </StudyResultCards>
                 <article
                   v-else
                   ref="resultContentRef"
@@ -454,7 +446,6 @@
   import ComparisonTableResult from './components/ComparisonTableResult.vue';
   import TranslationResult from './components/TranslationResult.vue';
   import { translationMarkdown } from '@/utils/translationResult';
-  import StudyResultCards from './components/StudyResultCards.vue';
   import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
   import { resolveResourceRoute } from '@/utils/resourceNavigation';
   import { copyTextToClipboard } from '@/utils/clipboard';

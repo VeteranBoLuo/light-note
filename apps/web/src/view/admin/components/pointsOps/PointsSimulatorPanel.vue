@@ -47,7 +47,7 @@
         </article>
         <article class="points-simulator__panel">
           <h3>商品目标周期</h3>
-          <BTable :data="goalRows" :columns="goalColumns" row-key="itemId" />
+          <BTable :data="goalRows" :columns="goalColumns" row-key="rowKey" />
         </article>
       </div>
     </template>
@@ -120,9 +120,16 @@
       yearLabel: format(row.expectedYear),
     })),
   );
+  function goalName(row: { itemId: string; name?: string; purchaseNumber?: number }) {
+    const name = row.name || row.itemId;
+    return row.purchaseNumber ? `${name} · 第 ${row.purchaseNumber} 次` : name;
+  }
+
   const goalRows = computed(() =>
     (result.value?.goalCycles || []).map((row: any) => ({
       ...row,
+      rowKey: row.purchaseNumber ? `${row.itemId}:${row.purchaseNumber}` : row.itemId,
+      name: goalName(row),
       costLabel: format(row.cost),
       weeksLabel: row.stableWeeks == null ? '—' : `${row.stableWeeks} 周`,
     })),
@@ -181,7 +188,7 @@
       ]),
       ...(result.value.goalCycles || []).map((row: any) => [
         'goal',
-        row.name || row.itemId,
+        goalName(row),
         row.cost,
         `stableWeeks=${row.stableWeeks ?? ''}`,
       ]),

@@ -45,6 +45,7 @@ export default {
   },
   // 庄园游戏入口：立体菜园、小屋与海湾；小尺寸保留清晰的彩色轮廓。
   manor: {
+    water: '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none"><path d="M12 3s-6.5 7.1-6.5 11.5a6.5 6.5 0 0 0 13 0C18.5 10.1 12 3 12 3Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M9 14.5a3 3 0 0 0 3 3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>',
     entry: '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 32 32" fill="none"><path d="m2 20 13-7.5 15 7.8v4L17 31 2 24Z" fill="#A66B37" stroke="#744927" stroke-width="1.1" stroke-linejoin="round"/><path d="m2 20 13-7.5 15 7.8L17 27Z" fill="#93CB65" stroke="#4E833B" stroke-width="1.1" stroke-linejoin="round"/><path d="m17 27 13-6.7v4L17 31Z" fill="#815330"/><path d="m16.8 20.6 6.6-2.5 4.2 2.2-7.2 3.5Z" fill="#54BDCA"/><path d="m18.9 21 3.6-1.4m-1.9 3 3.8-1.7" stroke="#C3F4EE" stroke-width=".9" stroke-linecap="round"/><path d="M6.6 18V11l7-4.2L21 11v7.2l-7.2 3.9Z" fill="#FFF0C4" stroke="#9A6238" stroke-width="1.1" stroke-linejoin="round"/><path d="m13.8 21.9 7.2-3.7V11l-7.2 3.5Z" fill="#E8C188"/><path d="m5.1 11.3 8.4-6.8L22 9.6l-8.1 5.2Z" fill="#F78B42" stroke="#A9512E" stroke-width="1.1" stroke-linejoin="round"/><path d="m5.1 11.3 8.4-6.8L14 7l-7.4 5.4Z" fill="#FFC45A"/><path d="M9 19.2v-4.7l3 1.5v4.8" fill="#AA663A"/><path d="m16.6 15.8 2.5-1.3v2.9l-2.5 1.3Z" fill="#55B8D0" stroke="#FFF4D9" stroke-width=".8" stroke-linejoin="round"/><path d="M24 13V7.1" stroke="#557C32" stroke-width="1.5" stroke-linecap="round"/><path d="M24 8C19.8 7.7 18.8 4.7 19.5 2 23.8 2 25 4.4 24 8Z" fill="#79BA49" stroke="#4C8437" stroke-width="1"/><path d="M24 7.8c-.1-4 2.1-6.3 6.1-6.3.3 3.8-1.5 6.4-6.1 6.3Z" fill="#AFD858" stroke="#4C8437" stroke-width="1"/><path d="m4.5 22 4-2m-.6 3.8 3.4-1.7" stroke="#5E993D" stroke-width="1.1" stroke-linecap="round"/></svg>',
   },
   noteTree: {
@@ -130,6 +131,8 @@ export default {
       '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none"><path d="M20 12a8 8 0 0 1-8 8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M4 12a8 8 0 0 1 8-8" stroke="currentColor" stroke-width="2" stroke-linecap="round" opacity=".35"/></svg>',
   },
   growth: {
+    trophy: achievementGlyph('<path d="M8 3h8v6a4 4 0 0 1-8 0V3ZM8 5H4v2a4 4 0 0 0 4 4m8-6h4v2a4 4 0 0 1-4 4m-4 2v5m-4 3h8m-6-3h4v3"/>'),
+    medal: achievementGlyph('<path d="m6 3 3 6m9-6-3 6M6 3h4l2 4 2-4h4"/><circle cx="12" cy="14" r="5"/><path d="m10.5 14 1 1 2-2"/>'),
     skip: '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none"><path d="m4 5 11 7L4 19V5ZM19 5v14" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>',
     backpack: achievementGlyph('<path d="M8 8V6a4 4 0 0 1 8 0v2M5 8h14l2 13H3L5 8Z"/><path d="M8 8v3M16 8v3"/>'),
     lock: '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><path fill="currentColor" d="M12 1a5 5 0 0 0-5 5v3H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2h-1V6a5 5 0 0 0-5-5zm3 8H9V6a3 3 0 0 1 6 0v3z"/></svg>',
@@ -655,6 +658,7 @@ export default {
       heading6: achievementGlyph('<path d="M3 5v14M12 5v14M3 12h9M21 13c-5-2-5 8-2 7 4 0 3-6-2-3"/>'),
       heading:
         '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.9" d="M6 5v14M18 5v14M6 12h12"/></svg>',
+      fontSize: achievementGlyph('<path d="M2.5 19l4-10 4 10m-6.4-4h4.8M12.5 19l4.5-14 4.5 14m-7.5-5h6"/>'),
       quote:
         '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"><path d="M4 5.5v13"/><path d="M9 8h11M9 12h11M9 16h7"/></g></svg>',
       bulletList:

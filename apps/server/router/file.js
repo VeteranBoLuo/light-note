@@ -8,7 +8,7 @@ import {
   reserveLegacyUploadConfirmation,
   lockLegacyUploadForConfirmation,
 } from '../util/services/cloudLegacyObjectLifecycle.js';
-import { assertCloudFileDisplayName } from '../util/services/cloudFileNameService.js';
+import { assertCloudFileDisplayName, uniqueCloudFileName } from '../util/services/cloudFileNameService.js';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { readOwnedCloudImage } from '../util/services/cloudImageReadService.js';
@@ -376,8 +376,15 @@ router.post('/confirmUpload', async (req, res) => {
     // 浏览器直传完成后以 OBS 元数据为准，客户端 fileSize 只用于签名阶段的提前提示，不能作为最终容量依据。
     const reservedFiles = await Promise.all(
       files.map(async (file) => {
-        if (file?.multipartSessionId)
-          return cloudMultipartUploads.reserveConfirmation({ userId, sessionId: file.multipartSessionId, folderId });
+        const keepBoth = file?.keepBoth === true;
+        if (file?.multipartSessionId) {
+          const reserved = await cloudMultipartUploads.reserveConfirmation({
+            userId,
+            sessionId: file.multipartSessionId,
+            folderId,
+          });
+          return { ...reserved, keepBoth };
+        }
         const parsedName = parseLegacyUploadName(file?.fileName);
         if (parsedName.validationError) return parsedName;
         const { fileName } = parsedName;
@@ -386,7 +393,7 @@ router.post('/confirmUpload', async (req, res) => {
           fileName,
           objectKey: file.objectKey,
         });
-        return { fileType: file.fileType, fileName, objectKey, generation };
+        return { fileType: file.fileType, fileName, objectKey, generation, keepBoth };
       }),
     );
 
@@ -473,7 +480,11 @@ router.post('/confirmUpload', async (req, res) => {
       : null;
 
     // 容量强校验（权威）：正常文件与回收站文件共享容量，同名覆盖只计算新旧差额。
-    const { fileNames, incomingBytes } = summarizeIncomingFiles(verifiedFiles.filter((file) => !file.confirmed));
+    const newFiles = verifiedFiles.filter((file) => file.fileName && !file.confirmed);
+    const uploadBatchNames = new Set(newFiles.map((file) => file.fileName));
+    const { fileNames, incomingBytes: replaceableBytes } = summarizeIncomingFiles(newFiles.filter((file) => !file.keepBoth));
+    const keptBytes = newFiles.reduce((bytes, file) => bytes + (file.keepBoth ? Number(file.fileSize || 0) : 0), 0);
+    const incomingBytes = replaceableBytes + keptBytes;
     if (incomingBytes > 0) {
       const usedBytes = await getAccountedStorageBytes(connection, userId);
       const replacementBytes = await getActiveReplacementBytes(connection, userId, fileNames);
@@ -489,11 +500,10 @@ router.post('/confirmUpload', async (req, res) => {
     const results = [];
 
     for (const file of verifiedFiles) {
-      const fileName = file.fileName;
       const fileType = file.fileType || 'application/octet-stream';
       const fileSize = file.fileSize || 0;
 
-      if (!fileName) {
+      if (!file.fileName) {
         results.push({ filename: '', status: '处理失败', error: file.validationError || '缺少文件名' });
         continue;
       }
@@ -511,6 +521,16 @@ router.post('/confirmUpload', async (req, res) => {
       }
       const objectKey = file.publicationKey;
       const directory = `${bucketBaseUrl}/files/${userId}/`;
+      // 预检后可能新占名，数据库也可能把大小写不同的名字视为相同。
+      const fileName = file.keepBoth
+        ? await uniqueCloudFileName(connection, userId, file.fileName, { includeDeleted: false, uploadBatchNames })
+        : file.fileName;
+      const [existingRows] = file.keepBoth
+        ? [[]]
+        : await connection.query('SELECT * FROM files WHERE create_by = ? AND file_name = ? AND del_flag = 0', [
+            userId,
+            fileName,
+          ]);
 
       const fileInfo = {
         create_by: userId,
@@ -521,9 +541,6 @@ router.post('/confirmUpload', async (req, res) => {
         obs_key: objectKey,
         folder_id: targetFolderId,
       };
-
-      const selectSql = 'SELECT * FROM files WHERE create_by = ? AND file_name = ? AND del_flag = 0';
-      const [existingRows] = await connection.query(selectSql, [userId, fileName]);
 
       if (existingRows.length > 0) {
         const existingObjectKey = existingRows[0].obs_key || buildObjectKey(userId, existingRows[0].file_name);

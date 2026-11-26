@@ -1,8 +1,7 @@
 <template>
   <div class="file-card-identity">
     <BTooltip class="file-card-name" :title="fileName" :aria-label="fileName">
-      <span class="file-card-name__stem">{{ nameParts.stem }}</span
-      ><span v-if="nameParts.extension" class="file-card-name__extension">{{ nameParts.extension }}</span>
+      <CloudFileName :file-name="fileName" />
     </BTooltip>
     <div class="file-card-folder-hint" :aria-hidden="!folder || undefined">
       <div v-if="folder" class="file-card-folder" @click.stop @dragstart.stop.prevent>
@@ -18,7 +17,7 @@
 </template>
 
 <script setup lang="ts">
-  import { computed } from 'vue';
+  import CloudFileName from './CloudFileName.vue';
   import CloudFolderBreadcrumb from './CloudFolderBreadcrumb.vue';
   import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
@@ -26,19 +25,13 @@
   import type { CloudFolderNode } from '@/types/cloudFolder';
 
   type FolderLocation = Pick<CloudFolderNode, 'id' | 'name' | 'fullPath'>;
-  const props = defineProps<{
+  defineProps<{
     fileName: string;
     folder?: FolderLocation | null;
     folderPath?: FolderLocation[];
     disabled?: boolean;
   }>();
   const emit = defineEmits<{ openFolder: [folder: FolderLocation] }>();
-  const nameParts = computed(() => {
-    const index = props.fileName.lastIndexOf('.');
-    return index > 0 && index < props.fileName.length - 1
-      ? { stem: props.fileName.slice(0, index), extension: props.fileName.slice(index) }
-      : { stem: props.fileName, extension: '' };
-  });
 </script>
 
 <style scoped>
@@ -50,27 +43,10 @@
   }
 
   .file-card-name {
-    display: flex;
-    align-items: baseline;
     min-width: 0;
     font-size: var(--ui-font-14, 14px);
     font-weight: 600;
     line-height: 1.4;
-  }
-
-  .file-card-name__stem {
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .file-card-name__extension {
-    flex: 0 0 auto;
-    max-width: 40%;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
   }
 
   .file-card-folder-hint {

@@ -7,7 +7,7 @@ import pool from '../db/index.js';
 import { assertLocalTestEnvironment } from '../util/localTestEnvironment.js';
 import { hasLoginPassword } from '../util/loginPasswordState.js';
 import { verifyPassword } from '../util/password.js';
-import { putObjectBodyToObs, getObjectBufferFromObs, getObjectMetadataFromObs, copyObjectInObs, deleteObjectFromObs, createDownloadSignedUrl, createUploadSignedUrl, getObjectRangeFromObs } from '../util/obsClient.js';
+import { putObjectBodyToObs, getObjectBufferFromObs, getBoundedObjectBufferFromObs, getObjectMetadataFromObs, copyObjectInObs, deleteObjectFromObs, createDownloadSignedUrl, createUploadSignedUrl, getObjectRangeFromObs } from '../util/obsClient.js';
 import { initiateCloudMultipart, signCloudMultipartPart, listCloudMultipartParts, completeCloudMultipart, abortCloudMultipart } from '../util/cloudMultipartObs.js';
 import { sendTrackedEmail } from '../util/emailDelivery.js';
 
@@ -30,6 +30,8 @@ try {
   const bytes = Buffer.from([0, 128, 255, 10, 13, 37, 64, 127]);
   await putObjectBodyToObs(key, bytes);
   assert.deepEqual(await getObjectBufferFromObs(key), bytes);
+  assert.deepEqual(await getBoundedObjectBufferFromObs(key, { maxBytes: bytes.length }), bytes);
+  await assert.rejects(getBoundedObjectBufferFromObs(key, { maxBytes: bytes.length - 1 }), { code: 'OBS_DOWNLOAD_SIZE_LIMIT' });
   const metadata = await getObjectMetadataFromObs(key);
   assert.equal(metadata.contentLength, bytes.length);
   await copyObjectInObs(key, copyKey, { sourceEtag: metadata.etag });

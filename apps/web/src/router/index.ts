@@ -32,7 +32,7 @@ import { isMobileViewport } from '@/config/responsive.ts';
 import { hasLoggedInBefore } from '@/utils/authStorage.ts';
 import { hasVisitedMobileLanding } from '@/utils/mobileLandingVisit.ts';
 import { syncRouteSeoMeta } from '@/utils/seoMeta.ts';
-import { prepareServerManagementLocale } from '@/i18n';
+import { prepareRouteLocale } from '@/i18n';
 import { installRoutePending } from '@/utils/routePending';
 
 function getStoredPreferences() {
@@ -207,23 +207,22 @@ const router = createRouter({
 });
 installRoutePending(router);
 router.beforeResolve(async (to) => {
-  if (to.matched.some((record) => record.path === '/serverManagement')) {
-    await prepareServerManagementLocale();
-  }
+  if (to.meta.localeSection) await prepareRouteLocale(to.meta.localeSection);
 });
 
 // 记录"用户正要去哪":异步组件解析(可能因 chunk 404 而失败)之前先落一份目标路径,
 // 供 main.ts 的 vite:preloadError 兜底使用,让自愈刷新精确落到用户点击的目标页,
 // 而不是退回到点击前的旧页面(那样用户还得再点一次)。
 let pendingNavigationTarget = '';
-router.beforeEach((to) => {
-  if (to.name === 'landing') {
+router.beforeEach((to, from) => {
+  if (to.name === 'landing' && (from.name !== 'landing' || to.fullPath !== from.fullPath)) {
     const runtime = resolveLightNoteRuntime();
     const isMobileLayout = isMobileViewport(window.innerWidth);
     const isReturningVisitor = runtime === 'browser' && (hasVisitedMobileLanding() || hasLoggedInBefore());
 
     // 这是 <head> 首屏守卫的路由级兜底，也覆盖同一 SPA 会话中再次导航到根路径：
     // APK/移动 PWA 与移动回访浏览器进入应用，桌面浏览器和桌面 PWA 保留官网。
+    // 关闭移动官网的浮层会回到同一个 URL，不能把这次回退当成重新访问官网。
     if (
       shouldRedirectLandingToApplication({
         runtime,

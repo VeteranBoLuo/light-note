@@ -3,6 +3,7 @@ import { createPinia, setActivePinia } from 'pinia';
 import useUserStore from './useUser';
 import bookmarkStore from './bookmark';
 import cloudSpaceStore from './cloudSpace';
+import { searchIdentityVersion } from '@/api/searchCache';
 
 beforeEach(() => {
   setActivePinia(createPinia());
@@ -39,5 +40,21 @@ describe('用户身份切换资源隔离', () => {
 
     expect(cloud.fileList).toEqual([]);
     expect(cloud.loading).toBe(true);
+  });
+
+  it('代管会话变化与登出各释放一次搜索缓存，普通资料刷新沿用当前身份', () => {
+    const user = useUserStore();
+    const adminContext = {
+      id: 'context-1', mode: 'readonly' as const, subjectUserId: 'owner', subjectRole: 'user',
+      subjectAlias: '', issuedAt: '', expiresAt: '', capabilities: [],
+    };
+    user.setUserInfo({ id: 'owner', role: 'user', adminContext });
+    const current = searchIdentityVersion();
+    user.setUserInfo({ id: 'owner', role: 'user', adminContext, alias: 'New label' });
+    expect(searchIdentityVersion()).toBe(current);
+    user.setUserInfo({ id: 'owner', role: 'user', adminContext: { ...adminContext, id: 'context-2' } });
+    expect(searchIdentityVersion()).toBe(current + 1);
+    user.resetUserInfo();
+    expect(searchIdentityVersion()).toBe(current + 2);
   });
 });

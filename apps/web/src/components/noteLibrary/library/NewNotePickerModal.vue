@@ -20,7 +20,7 @@
           <SvgIcon :src="icon.arrow_left" size="18" aria-hidden="true" />{{ t('note.picker.backToTemplates') }}
         </BButton>
         <strong v-else>{{ title || t('note.newNote') }}</strong>
-        <BButton class="new-note-picker__close" :aria-label="t('common.close')" @click="closePicker">
+        <BButton type="text" class="new-note-picker__close" :aria-label="t('common.close')" @click="closePicker">
           <SvgIcon :src="icon.navigation.close" size="18" aria-hidden="true" />
         </BButton>
       </div>
@@ -31,13 +31,29 @@
       @keydown.esc="handlePreviewEscape"
     >
       <div v-show="!mobilePreview" class="new-note-picker__blank">
-        <span>{{ t('note.picker.startBlank') }}</span>
-        <BButton v-for="mode in modes" :key="mode.type" @click="emit('selectBlank', mode.type)">
-          <SvgIcon class="new-note-picker__mode-icon" :src="mode.icon" size="24" aria-hidden="true" />
-          <span class="new-note-picker__mode-copy"
-            ><strong>{{ t(mode.label) }}</strong
-            ><small>{{ t(mode.description) }}</small></span
-          >
+        <h2 class="new-note-picker__blank-title">
+          {{ t(blankOnly ? 'note.picker.startBlank' : 'note.picker.blankTitle') }}
+        </h2>
+        <BButton
+          v-for="mode in modes"
+          :key="mode.type"
+          class="new-note-picker__mode"
+          @click="emit('selectBlank', mode.type)"
+        >
+          <div class="new-note-picker__mode-icon" aria-hidden="true">
+            <SvgIcon :src="mode.icon" :size="blankOnly ? 24 : isMobile ? 18 : 22" />
+          </div>
+          <span class="new-note-picker__mode-copy">
+            <strong>{{ t(mode.label) }}</strong>
+            <small>{{ t(mode.description) }}</small>
+          </span>
+          <SvgIcon
+            v-if="!blankOnly"
+            class="new-note-picker__mode-arrow"
+            :src="icon.arrow_right"
+            size="16"
+            aria-hidden="true"
+          />
         </BButton>
       </div>
       <template v-if="!blankOnly">
@@ -98,53 +114,57 @@
           </aside>
           <section
             v-show="!isMobile || mobilePreview"
-            ref="previewScroll"
-            class="new-note-picker__preview"
+            class="new-note-picker__template-pane"
             :aria-label="t('note.templateManager.preview')"
           >
-            <template v-if="activeTab === 'builtin' && activeBuiltin">
-              <div class="new-note-picker__preview-toolbar">
-                <span>{{ t(activeBuiltin.nameKey) }} · {{ typeLabel(activeBuiltin.type) }}</span>
-                <BButton type="text" :aria-pressed="showExample" @click="showExample = !showExample">{{
-                  t(showExample ? 'note.picker.showBlank' : 'note.picker.showExample')
-                }}</BButton>
+            <div v-if="canUse" class="new-note-picker__preview-toolbar">
+              <span
+                ><strong>{{ selectedName }}</strong> · {{ selectedType }}</span
+              >
+              <BButton
+                v-if="activeTab === 'builtin'"
+                type="text"
+                :aria-pressed="showExample"
+                @click="showExample = !showExample"
+              >
+                {{ t(showExample ? 'note.picker.showBlank' : 'note.picker.showExample') }}
+              </BButton>
+            </div>
+            <div ref="previewScroll" class="new-note-picker__preview">
+              <div v-if="activeTab === 'builtin' && activeBuiltin" class="new-note-picker__paper">
+                <NoteTemplateBodyPreview :content="builtinContent" :type="activeBuiltin.type" />
               </div>
-              <div class="new-note-picker__paper"
-                ><NoteTemplateBodyPreview :content="builtinContent" :type="activeBuiltin.type"
-              /></div>
-              <p v-if="showExample" class="new-note-picker__example-hint">{{ t('note.picker.exampleHint') }}</p>
-            </template>
-            <template v-else-if="activeTab === 'mine' && myTemplatesState === 'success' && selectedMine">
-              <BLoading v-if="detailLoading" inline loading :title="t('note.templateManager.detailLoading')" />
-              <div v-else-if="detailError" class="new-note-picker__status" role="alert">
-                <p>{{ t('note.templateManager.detailFailed') }}</p
-                ><BButton @click="loadMineDetail(selectedMine)">{{ t('common.retry') }}</BButton>
-              </div>
-              <template v-else-if="mineDetail">
-                <div class="new-note-picker__preview-toolbar"
-                  ><span>{{ mineDetail.name }} · {{ typeLabel(mineDetail.type) }}</span></div
-                >
-                <div class="new-note-picker__paper"
-                  ><NoteTemplateBodyPreview
+              <template v-else-if="activeTab === 'mine' && myTemplatesState === 'success' && selectedMine">
+                <BLoading v-if="detailLoading" inline loading :title="t('note.templateManager.detailLoading')" />
+                <div v-else-if="detailError" class="new-note-picker__status" role="alert">
+                  <p>{{ t('note.templateManager.detailFailed') }}</p>
+                  <BButton @click="loadMineDetail(selectedMine)">{{ t('common.retry') }}</BButton>
+                </div>
+                <div v-else-if="mineDetail" class="new-note-picker__paper">
+                  <NoteTemplateBodyPreview
                     :content="renderNoteTemplate(mineDetail.content, { locale })"
                     :type="mineDetail.type"
-                /></div>
+                  />
+                </div>
               </template>
-            </template>
-            <div
-              v-else-if="myTemplatesState === 'loading' || myTemplatesState === 'error'"
-              class="new-note-picker__status"
-              >{{ t(myTemplatesState === 'loading' ? 'note.tplLoading' : 'note.tplRetryDesc') }}</div
-            >
-            <div v-else class="new-note-picker__status"
-              ><strong>{{ t('note.picker.emptyTitle') }}</strong
-              ><p>{{ t('note.picker.emptyHint') }}</p></div
-            >
+              <div
+                v-else-if="myTemplatesState === 'loading' || myTemplatesState === 'error'"
+                class="new-note-picker__status"
+              >
+                {{ t(myTemplatesState === 'loading' ? 'note.tplLoading' : 'note.tplRetryDesc') }}
+              </div>
+              <div v-else class="new-note-picker__status">
+                <strong>{{ t('note.picker.emptyTitle') }}</strong>
+                <p>{{ t('note.picker.emptyHint') }}</p>
+              </div>
+            </div>
+            <div v-if="canUse && (!isMobile || mobilePreview)" class="new-note-picker__footer">
+              <p v-if="activeTab === 'builtin' && showExample" class="new-note-picker__example-hint">
+                {{ t('note.picker.exampleHint') }}
+              </p>
+              <BButton class="new-note-picker__use" @click="useSelected">{{ t('note.templateManager.use') }}</BButton>
+            </div>
           </section>
-        </div>
-        <div v-if="canUse && (!isMobile || mobilePreview)" class="new-note-picker__footer">
-          <span>{{ selectedName }} · {{ selectedType }}</span
-          ><BButton type="primary" @click="useSelected">{{ t('note.templateManager.use') }}</BButton>
         </div>
       </template>
     </div>
@@ -263,10 +283,10 @@
       ? activeBuiltin.value
         ? t(activeBuiltin.value.nameKey)
         : ''
-      : activeMine.value?.name || '',
+      : mineDetail.value?.name || '',
   );
   const selectedType = computed(() =>
-    typeLabel(activeTab.value === 'builtin' ? activeBuiltin.value?.type || 'html' : activeMine.value?.type || 'html'),
+    typeLabel((activeTab.value === 'builtin' ? activeBuiltin.value?.type : mineDetail.value?.type) || 'html'),
   );
 
   function releasePreview() {
@@ -403,38 +423,52 @@
   }
   .new-note-picker__blank {
     display: grid;
-    grid-template-columns: auto repeat(3, minmax(0, 1fr));
-    align-items: center;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     flex: 0 0 auto;
-    gap: var(--ui-space-12, 12px);
+    gap: var(--ui-space-8, 8px) var(--ui-space-12, 12px);
     padding: var(--ui-space-14, 14px) var(--ui-space-24, 24px);
+    background: var(--workspace-canvas);
+    background: color-mix(in srgb, var(--workspace-purple-selected) 48%, var(--workspace-open-canvas));
+    border-bottom: 1px solid var(--workspace-border);
   }
-  .new-note-picker__blank > span {
-    color: var(--desc-color);
-    font-size: var(--ui-font-12, 12px);
-    margin-right: var(--ui-space-8, 8px);
+  .new-note-picker__blank-title {
+    grid-column: 1 / -1;
+    margin: 0;
+    color: var(--workspace-purple-text);
+    font-size: var(--ui-font-14, 14px);
+    font-weight: 600;
+    line-height: 1.5;
   }
-  .new-note-picker__blank .b_btn {
+  .new-note-picker__mode.b_btn {
     width: 100%;
     min-width: 0;
     height: auto;
     min-height: var(--ui-layout-64, 64px);
-    padding: var(--ui-space-10, 10px) var(--ui-space-14, 14px);
-    gap: var(--ui-space-12, 12px);
+    padding: var(--ui-space-10, 10px) var(--ui-space-12, 12px);
+    gap: var(--ui-space-10, 10px);
     justify-content: flex-start;
     text-align: left;
     white-space: normal;
     line-height: 1.5;
-    border: 1px solid var(--surface-border-color);
-    background: transparent;
-  }
-  .new-note-picker__blank .b_btn:hover {
-    border-color: var(--primary-color);
-    background: var(--workspace-canvas);
+    border: 1px solid var(--workspace-border);
+    border-color: color-mix(in srgb, var(--workspace-purple-text) 18%, var(--workspace-border));
+    border-radius: 10px;
+    background: var(--workspace-purple-selected);
   }
   .new-note-picker__mode-icon {
+    display: grid;
+    place-items: center;
     flex: 0 0 auto;
-    color: var(--workspace-purple-text, var(--primary-color));
+    width: var(--ui-layout-36, 36px);
+    height: var(--ui-layout-36, 36px);
+    border-radius: 8px;
+    background: var(--primary-color);
+    color: white;
+  }
+  .new-note-picker__mode-arrow {
+    flex: 0 0 auto;
+    margin-inline-start: auto;
+    color: var(--workspace-purple-text);
   }
   .new-note-picker__mode-copy {
     display: grid;
@@ -442,7 +476,7 @@
     gap: var(--ui-space-3, 3px);
   }
   .new-note-picker__mode-copy strong {
-    font-size: var(--ui-font-13, 13px);
+    font-size: var(--ui-font-14, 14px);
     font-weight: 600;
   }
   .new-note-picker__blank small {
@@ -454,7 +488,7 @@
     align-items: center;
     justify-content: space-between;
     gap: var(--ui-space-12, 12px);
-    margin-inline: var(--ui-space-24, 24px);
+    padding-inline: var(--ui-space-24, 24px);
     flex: 0 0 auto;
     border-bottom: 1px solid var(--surface-border-color);
   }
@@ -469,34 +503,48 @@
     min-height: 0;
   }
   .new-note-picker__catalog {
+    min-width: 0;
+    min-height: 0;
     overflow: auto;
-    padding: var(--ui-space-12, 12px);
+    padding: var(--ui-space-8, 8px) var(--ui-space-10, 10px);
     border-right: 1px solid var(--surface-border-color);
   }
   .new-note-picker__item.b_btn {
+    position: relative;
     width: 100%;
     height: auto;
-    min-height: var(--ui-layout-64, 64px);
-    padding: var(--ui-space-9, 9px) var(--ui-space-10, 10px);
-    margin-bottom: var(--ui-space-4, 4px);
+    min-height: var(--ui-layout-54, 54px);
+    padding: var(--ui-space-6, 6px) var(--ui-space-9, 9px);
+    margin-bottom: var(--ui-space-2, 2px);
     display: flex;
     justify-content: flex-start;
     align-items: center;
-    gap: var(--ui-space-12, 12px);
+    gap: var(--ui-space-10, 10px);
     text-align: left;
     white-space: normal;
+    line-height: 1.45;
     border: 1px solid transparent;
     background: transparent;
   }
-  .new-note-picker__item.is-selected {
-    border-color: var(--primary-color);
-    background: var(--workspace-purple-selected);
-    color: var(--primary-color);
+  .new-note-picker__item.b_btn.is-selected {
+    border-color: var(--workspace-border);
+    background: var(--workspace-hover);
+  }
+  .new-note-picker__item.is-selected::before {
+    content: '';
+    position: absolute;
+    inset-block: var(--ui-space-8, 8px);
+    inset-inline-start: 0;
+    width: var(--ui-space-2, 2px);
+    border-radius: 2px;
+    background: var(--workspace-purple-text);
+    pointer-events: none;
   }
   .new-note-picker__copy {
     min-width: 0;
     display: grid;
-    gap: var(--ui-space-3, 3px);
+    gap: var(--ui-space-2, 2px);
+    overflow-wrap: anywhere;
   }
   .new-note-picker__copy strong {
     font-size: var(--ui-font-13, 13px);
@@ -508,10 +556,11 @@
     line-height: 1.5;
   }
   .new-note-picker__mini {
-    width: var(--ui-layout-39, 39px);
-    height: var(--ui-layout-46, 46px);
+    box-sizing: border-box;
+    width: var(--ui-layout-32, 32px);
+    height: var(--ui-layout-38, 38px);
     flex: 0 0 auto;
-    padding: var(--ui-space-7, 7px) var(--ui-space-5, 5px);
+    padding: var(--ui-space-5, 5px) var(--ui-space-4, 4px);
     border: 1px solid var(--surface-border-color);
     border-radius: 4px;
     background: var(--card-background);
@@ -523,13 +572,13 @@
     width: 70%;
     background: var(--workspace-note-text);
     opacity: 0.7;
-    margin-bottom: var(--ui-space-5, 5px);
+    margin-bottom: var(--ui-space-4, 4px);
   }
   .new-note-picker__mini i {
     display: block;
     height: var(--ui-space-3, 3px);
     background: var(--surface-border-color);
-    margin-bottom: var(--ui-space-3, 3px);
+    margin-bottom: var(--ui-space-2, 2px);
   }
   .new-note-picker__mini.is-daily i:nth-of-type(2) {
     width: 55%;
@@ -574,56 +623,98 @@
     border: 1px solid var(--workspace-note-text);
     background: transparent;
   }
-  .new-note-picker__preview {
+  .new-note-picker__template-pane {
+    display: flex;
+    flex-direction: column;
     min-width: 0;
     min-height: 0;
-    overflow: auto;
     background: var(--workspace-canvas);
-    padding: var(--ui-space-18, 18px) var(--ui-space-24, 24px) var(--ui-space-28, 28px);
+  }
+  .new-note-picker__preview {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    padding: var(--ui-space-16, 16px) var(--ui-space-24, 24px) var(--ui-space-20, 20px);
+  }
+  .new-note-picker__preview-toolbar + .new-note-picker__preview {
+    padding-top: 0;
   }
   .new-note-picker__preview-toolbar {
     display: flex;
+    flex: 0 0 auto;
     align-items: center;
     justify-content: space-between;
     gap: var(--ui-space-12, 12px);
-    margin-bottom: var(--ui-space-14, 14px);
+    padding: var(--ui-space-6, 6px) var(--ui-space-24, 24px);
   }
   .new-note-picker__preview-toolbar > span {
+    min-width: 0;
     color: var(--desc-color);
     font-size: var(--ui-font-12, 12px);
+    overflow-wrap: anywhere;
+  }
+  .new-note-picker__preview-toolbar strong {
+    color: var(--text-color);
+    font-weight: 600;
   }
   .new-note-picker__preview-toolbar .b_btn {
+    flex: 0 0 auto;
     font-size: var(--ui-font-12, 12px);
   }
   .new-note-picker__paper {
-    padding: var(--ui-space-32, 32px) var(--ui-space-34, 34px);
+    padding: var(--ui-space-22, 22px) var(--ui-space-24, 24px);
     border: 1px solid var(--surface-border-color);
-    border-radius: 4px;
+    border-radius: 8px;
     background: var(
       --card-background
     ); /* ui-density-fixed: Preview uses document font size, independent of interface density. */
     font-size: 14px;
   }
   .new-note-picker__example-hint {
-    margin: var(--ui-space-12, 12px) 0 0;
+    margin: 0 auto 0 0;
     color: var(--desc-color);
     font-size: var(--ui-font-11, 11px);
   }
   .new-note-picker__footer {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    gap: var(--ui-space-12, 12px);
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: var(--ui-space-8, 8px) var(--ui-space-12, 12px);
     flex: 0 0 auto;
-    padding: var(--ui-space-13, 13px) var(--ui-space-24, 24px);
+    padding: var(--ui-space-9, 9px) var(--ui-space-24, 24px);
     border-top: 1px solid var(--surface-border-color);
+    background: var(--background-color);
   }
-  .new-note-picker__footer > span {
-    color: var(--desc-color);
-    font-size: var(--ui-font-12, 12px);
+  .new-note-picker__use.b_btn {
+    height: auto;
+    min-height: var(--ui-control-36, 36px);
+    min-width: var(--ui-layout-96, 96px);
+    padding: var(--ui-space-6, 6px) var(--ui-space-14, 14px);
+    border: 1px solid var(--workspace-border);
+    border-color: color-mix(in srgb, var(--workspace-purple-text) 22%, var(--workspace-border));
+    border-radius: 7px;
+    background: var(--background-color);
+    color: var(--workspace-purple-text);
+    font-weight: 600;
+    font-size: var(--ui-font-13, 13px);
+    line-height: 1.4;
+    white-space: normal;
   }
-  .new-note-picker__footer .b_btn {
-    min-width: var(--ui-layout-130, 130px);
+  .new-note-picker__mode.b_btn:focus-visible,
+  .new-note-picker__item.b_btn:focus-visible,
+  .new-note-picker__use.b_btn:focus-visible {
+    outline-color: var(--focus-ring-color);
+  }
+  @media (hover: hover) and (pointer: fine) {
+    .new-note-picker__mode.b_btn:hover,
+    .new-note-picker__use.b_btn:hover {
+      background: var(--surface-card-hover-bg);
+      border-color: var(--workspace-purple-text);
+    }
+    .new-note-picker__item.b_btn:not(.is-selected):hover {
+      background: var(--surface-card-hover-bg);
+    }
   }
   .new-note-picker__status {
     padding: var(--ui-space-24, 24px);
@@ -642,58 +733,86 @@
     justify-content: space-between;
     width: 100%;
     gap: var(--ui-space-12, 12px);
+    box-sizing: border-box;
+    padding: var(--ui-space-6, 6px) var(--ui-space-12, 12px) var(--ui-space-6, 6px) var(--ui-space-14, 14px);
   }
-  .new-note-picker__close {
-    width: var(--ui-control-32, 32px);
-    height: var(--ui-control-32, 32px);
+  .new-note-picker__mobile-header .b_btn {
+    min-height: var(--ui-control-44, 44px);
+  }
+  .new-note-picker__close.b_btn {
+    width: var(--ui-control-44, 44px);
     padding: 0;
     border: 0;
+    color: var(--desc-color);
   }
   .is-blank-only .new-note-picker__blank {
     grid-template-columns: 1fr;
+    gap: var(--ui-space-12, 12px);
     padding: 0;
+    border: 0;
+    background: transparent;
   }
-  .is-blank-only .new-note-picker__blank > span {
-    width: 100%;
+  .is-blank-only .new-note-picker__blank-title {
+    color: var(--desc-color);
+    font-size: var(--ui-font-12, 12px);
+    font-weight: 400;
   }
-  .is-blank-only .new-note-picker__blank .b_btn {
-    width: 100%;
-    justify-content: flex-start;
+  .is-blank-only .new-note-picker__mode.b_btn {
+    padding-inline: var(--ui-space-14, 14px);
+    gap: var(--ui-space-12, 12px);
+    border-color: var(--surface-border-color);
+    border-radius: 6px;
+    background: transparent;
+  }
+  .is-blank-only .new-note-picker__mode-icon {
+    width: auto;
+    height: auto;
+    color: var(--workspace-purple-text);
+    background: transparent;
+  }
+  .is-blank-only .new-note-picker__mode-copy strong {
+    font-size: var(--ui-font-13, 13px);
+  }
+  @media (hover: hover) and (pointer: fine) {
+    .is-blank-only .new-note-picker__mode.b_btn:hover {
+      border-color: var(--primary-color);
+      background: var(--workspace-canvas);
+    }
   }
   @media (max-width: 767px) {
-    .new-note-picker__blank {
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: var(--ui-space-7, 7px);
+    .new-note-picker:not(.is-blank-only) .new-note-picker__blank {
+      column-gap: var(--ui-space-7, 7px);
       padding: var(--ui-space-12, 12px) var(--ui-space-14, 14px);
     }
-    .new-note-picker__blank > span {
-      grid-column: 1 / -1;
-      margin: 0;
-    }
-    .new-note-picker__blank .b_btn {
-      min-width: 0;
+    .new-note-picker:not(.is-blank-only) .new-note-picker__mode.b_btn {
       flex-direction: column;
       justify-content: center;
       text-align: center;
       gap: var(--ui-space-5, 5px);
-      padding-inline: var(--ui-space-5, 5px);
+      padding: var(--ui-space-7, 7px) var(--ui-space-4, 4px);
+      min-height: var(--ui-layout-68, 68px);
+    }
+    .new-note-picker:not(.is-blank-only) .new-note-picker__mode-icon {
+      width: var(--ui-layout-28, 28px);
+      height: var(--ui-layout-28, 28px);
+      border-radius: 6px;
+    }
+    .new-note-picker:not(.is-blank-only) .new-note-picker__mode-copy strong {
       font-size: var(--ui-font-12, 12px);
     }
-    .new-note-picker__blank small {
+    .new-note-picker:not(.is-blank-only) .new-note-picker__mode-copy small,
+    .new-note-picker__mode-arrow {
       display: none;
     }
     .is-blank-only .new-note-picker__blank {
-      grid-template-columns: 1fr;
+      gap: var(--ui-space-7, 7px);
     }
-    .is-blank-only .new-note-picker__blank .b_btn {
-      flex-direction: row;
-      text-align: left;
-    }
-    .is-blank-only .new-note-picker__blank small {
-      display: block;
+    .is-blank-only .new-note-picker__mode.b_btn {
+      gap: var(--ui-space-5, 5px);
+      padding-inline: var(--ui-space-5, 5px);
     }
     .new-note-picker__tabs {
-      margin-inline: var(--ui-space-14, 14px);
+      padding-inline: var(--ui-space-14, 14px);
       gap: var(--ui-space-8, 8px);
     }
     .new-note-picker__manage {
@@ -709,21 +828,30 @@
       min-height: 0;
       padding: var(--ui-space-10, 10px);
     }
-    .new-note-picker__preview {
+    .new-note-picker__template-pane {
       flex: 1;
-      padding: var(--ui-space-14, 14px) var(--ui-space-12, 12px);
+    }
+    .new-note-picker__preview-toolbar {
+      padding: 0 var(--ui-space-12, 12px);
+    }
+    .new-note-picker__preview-toolbar .b_btn {
+      min-height: var(--ui-control-44, 44px);
+    }
+    .new-note-picker__preview {
+      padding: var(--ui-space-12, 12px);
     }
     .new-note-picker__paper {
-      padding: var(--ui-space-23, 23px) var(--ui-space-20, 20px);
+      padding: var(--ui-space-16, 16px);
     }
     .new-note-picker__footer {
-      padding: var(--ui-space-12, 12px) var(--ui-space-14, 14px)
-        max(var(--ui-space-12, 12px), env(safe-area-inset-bottom));
+      gap: var(--ui-space-5, 5px);
+      padding: var(--ui-space-9, 9px) var(--ui-space-12, 12px) max(var(--ui-space-9, 9px), env(safe-area-inset-bottom));
     }
-    .new-note-picker__footer > span {
-      font-size: var(--ui-font-11, 11px);
+    .new-note-picker__example-hint {
+      width: 100%;
     }
-    .new-note-picker__footer .b_btn {
+    .new-note-picker__use.b_btn {
+      width: 100%;
       min-height: var(--ui-control-44, 44px);
     }
   }

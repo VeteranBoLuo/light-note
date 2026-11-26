@@ -1,11 +1,7 @@
 <template>
   <span class="tool-output-preview" :class="`is-${kind}`" aria-hidden="true">
     <span class="tool-output-preview__label">{{ t('toolbox.presentation.preview') }}</span>
-    <span v-if="kind === 'flashcards'" class="preview-flashcards">
-      <span><b>Q</b>{{ label('question') }}</span
-      ><span><b>A</b>{{ label('answer') }}</span>
-    </span>
-    <span v-else-if="kind === 'pages'" class="preview-pages">
+    <span v-if="kind === 'pages'" class="preview-pages">
       <span v-for="page in 3" :key="page"
         ><span class="preview-page"><i v-for="line in 4" :key="line" /></span><small>{{ page }}</small></span
       >
@@ -22,7 +18,7 @@
 
 <script setup lang="ts">
   import { useI18n } from 'vue-i18n';
-  defineProps<{ kind: 'note' | 'flashcards' | 'pages' }>();
+  defineProps<{ kind: 'note' | 'pages' }>();
   const { t } = useI18n();
   const label = (key: string) => t(`toolbox.presentation.previewLabels.${key}`);
   const labels = ['focus', 'explanation', 'source'];
@@ -47,7 +43,6 @@
     font-size: var(--ui-font-10, 10px);
   }
   .preview-outline,
-  .preview-flashcards,
   .preview-pages {
     min-height: var(--ui-layout-60, 60px);
     min-width: 0;
@@ -85,35 +80,6 @@
   .is-note .preview-outline > span:nth-child(2) {
     padding-left: var(--ui-space-8, 8px);
   }
-  .preview-flashcards {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 0 var(--ui-space-4, 4px);
-  }
-  .preview-flashcards > span {
-    .workspace-content-surface();
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: var(--ui-space-5, 5px);
-    border: 1px solid var(--workspace-border);
-    border-radius: 6px;
-    padding: var(--ui-space-8, 8px);
-    min-width: 0;
-    flex: 1;
-    transform: rotate(-5deg);
-    z-index: 1;
-  }
-  .preview-flashcards > span + span {
-    transform: translateY(15%) rotate(4deg);
-    margin-left: calc(-1 * var(--ui-space-10, 10px));
-    z-index: 0;
-  }
-  .preview-flashcards b {
-    color: var(--tool-accent);
-    font-size: var(--ui-font-14, 14px);
-  }
   .preview-pages {
     display: flex;
     justify-content: center;
@@ -144,12 +110,8 @@
       gap: var(--ui-space-6, 6px);
     }
     .preview-outline,
-    .preview-flashcards,
     .preview-pages {
       min-height: var(--ui-layout-54, 54px);
-    }
-    .preview-flashcards > span {
-      padding: var(--ui-space-6, 6px) var(--ui-space-4, 4px);
     }
   }
 </style>

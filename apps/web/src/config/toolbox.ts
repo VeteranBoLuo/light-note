@@ -15,9 +15,9 @@ export function toolboxWorkspaceStatusTone(status: ToolboxWorkspaceStatus): 'suc
   return 'neutral';
 }
 
-export type ToolboxCategory = 'workspace' | 'knowledge' | 'document';
+export type ToolboxCategory = 'workspace' | 'knowledge' | 'document' | 'image';
 
-export type ToolboxWorkflowToolId = 'material_to_note' | 'study_kit';
+export type ToolboxWorkflowToolId = 'material_to_note';
 
 export type ToolboxWorkflowPresentation = {
   defaultIntent: string;
@@ -34,7 +34,6 @@ export type ToolboxHomeGroup = {
 
 export const TOOLBOX_DEFAULT_QUICK_TOOL_IDS: ToolboxToolId[] = [
   'material_to_note',
-  'study_kit',
   'pdf_organizer',
   'forms',
   'ocr_to_text',
@@ -72,6 +71,7 @@ export const TOOLBOX_RETIRED_TOOL_IDS: readonly string[] = Object.freeze([
   'research_brief',
   'source_comparison',
   'structured_data_lab',
+  'study_kit',
   'table_converter',
   'table_diff',
   'table_merge_split',
@@ -106,9 +106,9 @@ export const TOOLBOX_PRESENTATION: Record<
   idea_to_draft: { icon: icon.toolbox.materialNote, category: 'knowledge', accent: 'violet' },
   material_to_note: { icon: icon.toolbox.materialNote, category: 'knowledge', accent: 'violet' },
   research_brief: { icon: icon.toolbox.research, category: 'knowledge', accent: 'blue' },
-  study_kit: { icon: icon.toolbox.study, category: 'knowledge', accent: 'teal' },
   concept_map: { icon: icon.toolbox.conceptMap, category: 'knowledge', accent: 'violet' },
   knowledge_audit: { icon: icon.toolbox.audit, category: 'knowledge', accent: 'rose' },
+  image_watermark_remover: { icon: icon.toolbox.image, category: 'image', accent: 'violet' },
   pdf_organizer: { icon: icon.toolbox.pdf, category: 'document', accent: 'rose' },
   image_to_pdf: { icon: icon.toolbox.imageToPdf, category: 'document', accent: 'amber' },
   pdf_to_images: { icon: icon.toolbox.pdfToImages, category: 'document', accent: 'blue' },
@@ -162,13 +162,13 @@ export const TOOLBOX_HOME_GROUPS = [
     id: 'create',
     icon: icon.toolbox.materialNote,
     accent: 'violet',
-    toolIds: ['translation', 'material_to_note', 'study_kit'],
+    toolIds: ['translation', 'material_to_note'],
   },
   {
     id: 'prepare',
     icon: icon.toolbox.pdf,
     accent: 'blue',
-    toolIds: ['pdf_organizer', 'ocr_to_text'],
+    toolIds: ['pdf_organizer', 'image_watermark_remover', 'ocr_to_text'],
   },
 ] as const satisfies readonly ToolboxHomeGroup[];
 
@@ -182,11 +182,6 @@ export const TOOLBOX_WORKFLOW_PRESENTATION: Record<ToolboxWorkflowToolId, Toolbo
     defaultIntent: 'synthesize',
     intents: TOOLBOX_TOOL_INTENTS.material_to_note,
     outcomes: ['structure', 'evidence', 'openQuestions'],
-  },
-  study_kit: {
-    defaultIntent: 'understand',
-    intents: TOOLBOX_TOOL_INTENTS.study_kit,
-    outcomes: ['framework', 'flashcards', 'quiz'],
   },
 };
 

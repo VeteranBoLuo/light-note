@@ -19,7 +19,7 @@ pnpm build:web
 
 `pnpm dev:server`、`pnpm dev:server:watch` 和 `pnpm preview` 会托管项目需要的本地 Worker。仅在绕过项目级命令单独启动后端时，才按专题需求额外启动 Worker。
 
-Vite 开发服务器的 REST、上传写入、Worker 和实时代理固定指向本机后端；`VITE_ENV` 缺省或为 `local` 时允许启动，其他值失败关闭。唯一远程例外是公开静态目录 `/uploads`：本地开发与本地预览仅允许把 GET/HEAD 只读代理到生产站点，转发前必须移除 Cookie、Authorization、会话、管理员上下文和设备标识等凭据，响应也不得向 localhost 写入 Cookie；其他方法直接拒绝。服务端的早期与全局业务限流均不统计 `/uploads` 的 GET/HEAD，但写方法、API 上传入口和相似前缀仍正常限流。生产构建部署后继续使用站点同源 API 与静态资源，不允许用本地 Vite 反向代理生产业务服务，以免调试请求和在线状态进入生产运行时。
+Vite 开发服务器的 REST、上传写入、受控原图读取、Worker 和实时代理固定指向本机后端。`VITE_ENV` 缺省或为 `local` 时允许启动，其他值失败关闭。非独立预览仅将公开的 `/uploads/bookmark-*` GET/HEAD 只读代理到生产站点，转发前移除 Cookie、Authorization、会话、管理员上下文和设备标识等凭据，响应不向 localhost 写 Cookie。独立沙箱的图片读取统一走本机后端并保留本机凭据。受控 `/uploads` 原图进入早期来源保护，静态书签图标豁免。生产构建使用站点同源 API 和素材。
 
 ### 数据库环境隔离
 

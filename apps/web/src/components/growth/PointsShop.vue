@@ -61,19 +61,44 @@
           <div class="ps-item-body">
             <div class="ps-item-name">{{ itemName(it) }}</div>
             <div class="ps-item-desc">{{ itemDesc(it) }}</div>
+            <ol
+              v-if="it.purchaseCosts"
+              class="ps-redemption-steps"
+              :class="{ 'is-finished': isLimitReached(it) }"
+              role="list"
+              :aria-label="t('growth.shopRedemptionProgress')"
+            >
+              <li
+                v-for="(cost, index) in it.purchaseCosts"
+                :key="index"
+                :class="{ 'is-complete': index < (it.purchaseCount || 0) }"
+                :aria-current="index === (it.purchaseCount || 0) ? 'step' : undefined"
+              >
+                <span class="ps-redemption-node" aria-hidden="true">
+                  <SvgIcon v-if="index < (it.purchaseCount || 0)" :src="icon.filterPanel.check" size="14" />
+                </span>
+                <span>{{ t('growth.shopRedemptionStep', { n: index + 1 }) }}</span>
+                <span class="ps-redemption-detail">
+                  {{ index < (it.purchaseCount || 0) ? t('growth.shopRedeemed') : t('growth.shopCost', { n: formatPoints(cost) }) }}
+                </span>
+              </li>
+            </ol>
             <BChip v-if="it.effect === 'makeup_card'" tone="neutral" class="ps-item-limit">
               {{ t('growth.shopCardInventory', { n: shop?.protectCards || 0 }) }}
             </BChip>
-            <BChip v-if="hasPurchaseLimit(it)" :tone="isLimitReached(it) ? 'success' : 'neutral'" class="ps-item-limit">
+            <BChip v-if="hasPurchaseLimit(it) && !it.purchaseCosts" :tone="isLimitReached(it) ? 'success' : 'neutral'" class="ps-item-limit">
               {{ purchaseLimitLabel(it) }}
             </BChip>
           </div>
           <div class="ps-item-foot">
             <span class="ps-purchase-meta">
-              <span class="ps-item-cost"
+              <span v-if="it.purchaseCosts" class="ps-redemption-summary" :class="{ 'is-complete': isLimitReached(it) }" aria-live="polite">
+                {{ redemptionSummary(it) }}
+              </span>
+              <span v-else class="ps-item-cost"
                 ><SvgIcon :src="icon.growth.coin" size="13" /> {{ formatPoints(it.cost) }}</span
               >
-              <small v-if="unavailableLabel(it)" class="ps-item-unavailable">{{ unavailableLabel(it) }}</small>
+              <small v-if="!it.purchaseCosts && unavailableLabel(it)" class="ps-item-unavailable">{{ unavailableLabel(it) }}</small>
             </span>
             <BButton
               type="primary"
@@ -302,6 +327,13 @@
 
   function purchaseConfirmation(it: ShopItem) {
     const params = { n: it.cost, name: itemName(it) };
+    if (it.purchaseCosts) {
+      return t('growth.shopRedemptionConfirm', {
+        price: formatPoints(it.cost),
+        step: (it.purchaseCount || 0) + 1,
+        gb: Number(it.storageMb || 0) / 1024,
+      });
+    }
     if (it.effect === 'makeup_card')
       return t('growth.shopBuyConfirmCard', {
         ...params,
@@ -326,8 +358,9 @@
     return te(k) ? t(k) : it.name;
   }
   function itemDesc(it: ShopItem) {
-    if (shop.value?.economyVersion === 'points-economy-c11' && ['ai_pack', 'ai_pack_small'].includes(it.id)) {
-      return t('aiQuotaOneTime.packDescription', { amount: Number(it.bonusTokens || 0).toLocaleString() });
+    if (it.purchaseCosts) return t('growth.shopRedemptionDescription', { gb: Number(it.storageMb || 0) / 1024 });
+    if (['points-economy-c11', 'points-economy-c12'].includes(shop.value?.economyVersion || '') && it.effect === 'ai_pack' && !it.purchaseLimit) {
+      return t('aiQuotaOneTime.packDescription', { amount: formatPoints(it.bonusTokens) });
     }
     const k = 'growth.shopItems.' + it.id + '.desc';
     return te(k) ? t(k) : it.desc;
@@ -345,7 +378,7 @@
         .sort(
           (a, b) =>
             Number(a.effect === 'makeup_card') - Number(b.effect === 'makeup_card') ||
-            Number(isLimitReached(a)) - Number(isLimitReached(b)),
+            Number(!a.purchaseCosts && isLimitReached(a)) - Number(!b.purchaseCosts && isLimitReached(b)),
         ) || [],
   );
   const frames = computed(() =>
@@ -469,11 +502,20 @@
 
   // 消耗品按钮文案:可买=兑换;否则按原因给出置灰提示
   function consumableBtn(it: ShopItem) {
-    if (isLimitReached(it)) return t('growth.shopRedeemed');
-    if (canBuyNow(it)) return t('growth.shopBuy');
+    if (isLimitReached(it)) return t(it.purchaseCosts ? 'growth.shopRedemptionFinished' : 'growth.shopRedeemed');
+    if (canBuyNow(it)) return it.purchaseCosts
+      ? t('growth.shopRedemptionAction', { n: (it.purchaseCount || 0) + 1 })
+      : t('growth.shopBuy');
     if (shop.value && !shop.value.purchaseEnabled) return t('growth.shopMaintenanceShort');
     if ((shop.value?.points || 0) < Number(it.cost || 0)) return t('growth.shopInsufficient');
     return t('growth.shopBuy');
+  }
+
+  function redemptionSummary(it: ShopItem) {
+    const count = it.purchaseCount || 0;
+    return unavailableLabel(it) || (count
+      ? t('growth.shopRedemptionGranted', { gb: count * Number(it.storageMb || 0) / 1024 })
+      : t('growth.shopRedemptionRemaining', { n: it.purchaseLimit }));
   }
   // 称号按钮文案:未拥有且不可买 → 等级不足 / 积分不足
   function titleBtn(it: ShopItem) {
@@ -494,26 +536,27 @@
   });
 
   function askBuy(it: ShopItem) {
-    if (readOnly.value || !canBuyNow(it)) return;
+    if (readOnly.value || !canBuyNow(it) || !shop.value || it.cost === null) return;
     recordEntitlementEvent('select_item', { ...journey.value, skuId: it.id });
     const ownerId = user.id;
+    const quote = { economyVersion: shop.value.economyVersion, expectedCost: it.cost };
     Alert.alert({
       title: t('growth.shopBuy'),
       content: purchaseConfirmation(it),
       okText: t('growth.shopBuy'),
       cancelText: t('common.cancel'),
       onOk: () => {
-        if (!disposed && ownerId === user.id) return confirmBuy(it);
+        if (!disposed && ownerId === user.id) return confirmBuy(it, quote);
       },
     });
   }
 
-  async function confirmBuy(it: ShopItem) {
+  async function confirmBuy(it: ShopItem, quote: { economyVersion: string; expectedCost: number }) {
     if (readOnly.value) return;
     if (buyingId.value) return;
     buyingId.value = it.id;
     try {
-      const res = await buyItem(it.id);
+      const res = await buyItem(it.id, quote);
       if (res?.status === 200 && res.data?.ok) {
         goalRefreshKey.value++;
         message.success(t('growth.shopBuyOk'));
@@ -1069,6 +1112,84 @@
   }
   .ps-item-limit {
     margin-top: var(--ui-space-8, 8px);
+  }
+  .ps-redemption-steps {
+    --ps-redemption-node-size: var(--ui-layout-18, 18px);
+    --ps-redemption-line-size: var(--ui-space-1, 1px);
+
+    position: relative;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    max-width: var(--ui-layout-180, 180px);
+    margin: var(--ui-space-10, 10px) 0 0;
+    padding: 0;
+    list-style: none;
+    font-size: var(--ui-font-11, 11px);
+    color: var(--desc-color);
+  }
+  .ps-redemption-steps li {
+    display: grid;
+    align-content: start;
+    justify-items: center;
+    gap: var(--ui-space-3, 3px);
+    text-align: center;
+  }
+  .ps-redemption-steps::before {
+    position: absolute;
+    // The grid puts the ring centers at 25% and 75%. Stop outside both rings.
+    inset-inline: calc(25% + var(--ps-redemption-node-size) / 2 + var(--ui-space-6, 6px));
+    inset-block-start: calc((var(--ps-redemption-node-size) - var(--ps-redemption-line-size)) / 2);
+    height: var(--ps-redemption-line-size);
+    background: var(--desc-color);
+    opacity: 0.45;
+    content: '';
+  }
+  .ps-redemption-steps.is-finished::before {
+    background: var(--success-color);
+    opacity: 0.55;
+  }
+  .ps-redemption-node {
+    box-sizing: border-box;
+    display: grid;
+    place-items: center;
+    width: var(--ps-redemption-node-size);
+    height: var(--ps-redemption-node-size);
+    border: var(--ui-space-1, 1px) solid var(--desc-color);
+    border-radius: 50%;
+  }
+  .ps-redemption-steps [aria-current='step'] {
+    color: var(--workspace-purple-text);
+    font-weight: 600;
+  }
+  .ps-redemption-steps [aria-current='step'] .ps-redemption-node {
+    border-color: var(--workspace-purple-text);
+    background: var(--workspace-purple-selected);
+  }
+  .ps-redemption-steps [aria-current='step'] .ps-redemption-node::after {
+    width: var(--ui-space-6, 6px);
+    height: var(--ui-space-6, 6px);
+    border-radius: 50%;
+    background: currentColor;
+    content: '';
+  }
+  .ps-redemption-steps .is-complete,
+  .ps-redemption-summary.is-complete {
+    color: var(--success-color);
+  }
+  .ps-redemption-steps .is-complete .ps-redemption-node {
+    border-color: var(--success-color);
+    background: var(--chip-success-bg);
+  }
+  .ps-redemption-detail {
+    font-size: var(--ui-font-12, 12px);
+    font-variant-numeric: tabular-nums;
+  }
+  .ps-redemption-steps [aria-current='step'] .ps-redemption-detail {
+    color: var(--warning-color);
+  }
+  .ps-redemption-summary {
+    color: var(--desc-color);
+    font-size: var(--ui-font-12, 12px);
   }
   .ps-achievement-requirement {
     display: flex;

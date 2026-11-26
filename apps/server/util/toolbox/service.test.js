@@ -29,8 +29,6 @@ const {
   createFreeOcrJob,
   createToolboxQuote,
   getToolboxArtifact,
-  getStudyProgress,
-  saveStudyProgress,
   listToolboxHomeTasks,
   listTranslationHistory,
   deleteTranslationHistory,
@@ -205,42 +203,6 @@ describe('toolbox service boundaries', () => {
     expect(connection.rollback).toHaveBeenCalledOnce();
   });
 
-  it('scopes learning state to the owner and rejects stale versions and unknown cards', async () => {
-    const row = { id: 'study', artifact_version: 2, meta_json: { study: { version: 1, cards: [{ id: 'card' }] } } };
-    const database = { query: vi.fn(async (sql) => (sql.includes('FROM toolbox_artifacts') ? [[row]] : [[]])) };
-    for (const input of [
-      { version: 1, cardId: 'card', mastered: true },
-      { version: 2, cardId: 'other', mastered: true },
-    ]) {
-      await expect(saveStudyProgress({ userId: 'owner', artifactId: 'study', input, database })).rejects.toMatchObject({
-        code: 'TOOLBOX_STUDY_CARD_INVALID',
-      });
-    }
-    expect(database.query.mock.calls.every(([sql]) => !sql.includes('INSERT'))).toBe(true);
-    await saveStudyProgress({
-      userId: 'owner',
-      artifactId: 'study',
-      input: { version: 2, cardId: 'card', mastered: true },
-      database,
-    });
-    await saveStudyProgress({
-      userId: 'owner',
-      artifactId: 'study',
-      input: { version: 2, cardId: 'card', mastered: true },
-      database,
-    });
-    const writes = database.query.mock.calls.filter(([sql]) => sql.includes('INSERT'));
-    expect(writes).toHaveLength(2);
-    expect(writes[0][1]).toEqual(['owner', 'study', 2, 'card', 1]);
-    expect(writes[1][1]).toEqual(writes[0][1]);
-    expect(writes[0][0]).toContain('ON DUPLICATE KEY UPDATE mastered');
-    database.query.mockResolvedValueOnce([[]]);
-    await expect(getStudyProgress({ userId: 'other-owner', artifactId: 'study', database })).rejects.toMatchObject({
-      code: 'TOOLBOX_ARTIFACT_NOT_FOUND',
-    });
-    expect(database.query.mock.lastCall[1]).toEqual(['study', 'other-owner']);
-  });
-
   it('validates cloud OCR files against the same MIME and per-file size limits as uploads', async () => {
     mocks.resolvePersonalKnowledgeResourceVersions.mockResolvedValue([{ type: 'file', id: 'file-1', version: 'v1' }]);
     const database = {
@@ -316,9 +278,31 @@ describe('toolbox service boundaries', () => {
     ).rejects.toMatchObject({ code: 'TOOLBOX_RESOURCE_STALE', status: 409 });
   });
 
+  it('stops an unused quote for a retired tool before reserving points', async () => {
+    const connection = {
+      beginTransaction: vi.fn(),
+      commit: vi.fn(),
+      rollback: vi.fn(),
+      release: vi.fn(),
+      query: vi.fn().mockResolvedValueOnce([[]]).mockResolvedValueOnce([[{ tool_id: 'study_kit' }]]),
+    };
+    await expect(createToolboxJob({
+      userId: 'user-1',
+      quoteId: 'old-quote',
+      clientRequestId: 'retired-quote-1234',
+      database: { getConnection: async () => connection },
+    })).rejects.toMatchObject({ code: 'TOOLBOX_TOOL_NOT_FOUND' });
+    expect(connection.query).toHaveBeenCalledTimes(2);
+    expect(connection.rollback).toHaveBeenCalledOnce();
+  });
+
   it('binds a quote to the authoritative input snapshot and replays the same request idempotently', async () => {
-    const authoritative = { type: 'note', id: 'note-1', version: 'version-1' };
-    mocks.resolvePersonalKnowledgeResourceVersions.mockResolvedValue([{ ...authoritative, title: '服务端材料名称' }]);
+    const authoritative = [
+      { type: 'note', id: 'note-1', version: 'version-1' },
+      { type: 'note', id: 'note-2', version: 'version-2' },
+    ];
+    const resourceRefs = authoritative.map(({type, id}) => ({type, id}));
+    mocks.resolvePersonalKnowledgeResourceVersions.mockResolvedValue(authoritative.map((ref) => ({ ...ref, title: '服务端材料名称' })));
     const database = {
       query: vi
         .fn()
@@ -327,8 +311,8 @@ describe('toolbox service boundaries', () => {
     };
     const request = {
       userId: 'user-1',
-      toolId: 'study_kit',
-      rawInput: { resourceRefs: [{ type: 'note', id: 'note-1' }] },
+      toolId: 'material_to_note',
+      rawInput: { resourceRefs },
       billingMedium: 'points',
       clientRequestId: 'quote-request-1234',
       database,
@@ -336,16 +320,16 @@ describe('toolbox service boundaries', () => {
 
     const quote = await createToolboxQuote(request);
     expect(quote).toMatchObject({
-      toolId: 'study_kit',
+      toolId: 'material_to_note',
       billingMedium: 'points',
-      quotedPoints: 18,
+      quotedPoints: 8,
       status: 'active',
     });
     const inserted = database.query.mock.calls[1][1];
     expect(JSON.parse(inserted[7])).toEqual({
-      resourceRefs: [authoritative],
+      resourceRefs: authoritative,
       sourceIds: [],
-      options: { taskMaterials: [{ type: 'note', id: 'note-1', title: '服务端材料名称' }] },
+      options: { taskMaterials: resourceRefs.map((ref) => ({ ...ref, title: '服务端材料名称' })) },
     });
 
     const replayDatabase = {
@@ -359,7 +343,7 @@ describe('toolbox service boundaries', () => {
             billing_medium: inserted[5],
             input_digest: inserted[6],
             input_snapshot_json: inserted[7],
-            quoted_points: 18,
+            quoted_points: 8,
             status: 'active',
             expires_at: quote.expiresAt,
           },
@@ -371,8 +355,12 @@ describe('toolbox service boundaries', () => {
   });
 
   it('quotes an AI skill with user AI quota without reserving points', async () => {
-    const authoritative = { type: 'note', id: 'note-1', version: 'version-1' };
-    mocks.resolvePersonalKnowledgeResourceVersions.mockResolvedValue([authoritative]);
+    const authoritative = [
+      { type: 'note', id: 'note-1', version: 'version-1' },
+      { type: 'note', id: 'note-2', version: 'version-2' },
+    ];
+    const resourceRefs = authoritative.map(({type, id}) => ({type, id}));
+    mocks.resolvePersonalKnowledgeResourceVersions.mockResolvedValue(authoritative);
     const database = {
       query: vi
         .fn()
@@ -382,8 +370,8 @@ describe('toolbox service boundaries', () => {
 
     const quote = await createToolboxQuote({
       userId: 'user-1',
-      toolId: 'study_kit',
-      rawInput: { resourceRefs: [{ type: 'note', id: 'note-1' }] },
+      toolId: 'material_to_note',
+      rawInput: { resourceRefs },
       billingMedium: 'ai_quota',
       clientRequestId: 'quota-quote-1234',
       database,
@@ -395,19 +383,23 @@ describe('toolbox service boundaries', () => {
   });
 
   it('does not let an idempotency key switch from points to AI quota', async () => {
-    const authoritative = { type: 'note', id: 'note-1', version: 'version-1' };
-    const snapshot = { resourceRefs: [authoritative], sourceIds: [], options: {} };
-    mocks.resolvePersonalKnowledgeResourceVersions.mockResolvedValue([authoritative]);
+    const authoritative = [
+      { type: 'note', id: 'note-1', version: 'version-1' },
+      { type: 'note', id: 'note-2', version: 'version-2' },
+    ];
+    const resourceRefs = authoritative.map(({type, id}) => ({type, id}));
+    const snapshot = { resourceRefs: authoritative, sourceIds: [], options: {} };
+    mocks.resolvePersonalKnowledgeResourceVersions.mockResolvedValue(authoritative);
     const database = {
       query: vi.fn().mockResolvedValueOnce([
         [
           {
             id: 'quote-existing',
             request_id: 'medium-quote-1234',
-            tool_id: 'study_kit',
+            tool_id: 'material_to_note',
             pricing_version: 'toolbox-billing-v2',
             billing_medium: 'points',
-            input_digest: toolboxInputDigest({ toolId: 'study_kit', input: snapshot }),
+            input_digest: toolboxInputDigest({ toolId: 'material_to_note', input: snapshot }),
             input_snapshot_json: JSON.stringify(snapshot),
             quoted_points: 20,
             status: 'active',
@@ -420,8 +412,8 @@ describe('toolbox service boundaries', () => {
     await expect(
       createToolboxQuote({
         userId: 'user-1',
-        toolId: 'study_kit',
-        rawInput: { resourceRefs: [{ type: 'note', id: 'note-1' }] },
+        toolId: 'material_to_note',
+        rawInput: { resourceRefs },
         billingMedium: 'ai_quota',
         clientRequestId: 'medium-quote-1234',
         database,
@@ -438,10 +430,10 @@ describe('toolbox service boundaries', () => {
     const quote = {
       id: 'quote-1',
       user_id: 'user-1',
-      tool_id: 'study_kit',
+      tool_id: 'material_to_note',
       pricing_version: 'toolbox-billing-v2',
       billing_medium: 'points',
-      input_digest: toolboxInputDigest({ toolId: 'study_kit', input: snapshot }),
+      input_digest: toolboxInputDigest({ toolId: 'material_to_note', input: snapshot }),
       input_snapshot_json: JSON.stringify(snapshot),
       quoted_points: 20,
       status: 'active',
@@ -475,7 +467,7 @@ describe('toolbox service boundaries', () => {
         database,
       }),
     ).resolves.toMatchObject({
-      toolId: 'study_kit',
+      toolId: 'material_to_note',
       status: 'queued',
       artifactState: 'none',
       billing: { status: 'reserved', quotedPoints: 20 },
@@ -497,10 +489,10 @@ describe('toolbox service boundaries', () => {
     const quote = {
       id: 'quote-quota-1',
       user_id: 'user-1',
-      tool_id: 'study_kit',
+      tool_id: 'material_to_note',
       pricing_version: 'toolbox-billing-v2',
       billing_medium: 'ai_quota',
-      input_digest: toolboxInputDigest({ toolId: 'study_kit', input: snapshot }),
+      input_digest: toolboxInputDigest({ toolId: 'material_to_note', input: snapshot }),
       input_snapshot_json: JSON.stringify(snapshot),
       quoted_points: 0,
       status: 'active',
@@ -1208,14 +1200,14 @@ describe('toolbox service boundaries', () => {
     expect(finalizationConnection.commit).toHaveBeenCalledOnce();
   });
 
-  it('replays an already completed recreate generation without creating a third note', async () => {
+  it.each(['research_brief', 'study_kit'])('replays a completed recreate generation for %s', async (toolId) => {
     const artifactRow = {
       id: 'artifact-1',
       job_id: 'job-1',
-      tool_id: 'research_brief',
-      artifact_type: 'research_brief',
+      tool_id: toolId,
+      artifact_type: toolId,
       artifact_version: 1,
-      title: '研究速读包',
+      title: '历史成果',
       content: '# 内容',
       content_type: 'markdown',
       save_status: 'saved',
@@ -1401,9 +1393,9 @@ describe('source project transaction boundary', () => {
     const quote = {
       id: 'q',
       pricing_version: 'toolbox-billing-v2',
-      tool_id: 'study_kit',
+      tool_id: 'material_to_note',
       billing_medium: 'ai_quota',
-      input_digest: toolboxInputDigest({ toolId: 'study_kit', input: snapshot }),
+      input_digest: toolboxInputDigest({ toolId: 'material_to_note', input: snapshot }),
       input_snapshot_json: JSON.stringify(snapshot),
       status: 'active',
       expires_at: new Date(Date.now() + 60_000),

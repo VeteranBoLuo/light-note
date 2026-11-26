@@ -114,7 +114,7 @@ describe('noteService.createNote', () => {
     const imgUrl = 'https://boluo66.top/uploads/note-1-a.png';
     connection.query.mockImplementation(async (sql) => {
       if (sql.includes('FROM note_images')) return [[]]; // 源笔记已删,note_images 无归属行
-      if (sql.includes('FROM note_template')) return [[{ n: 1 }]]; // 归属由用户自己的模板正文兜住
+      if (sql.includes('FROM image_assets')) return [[{ source_locator: 'note-1-a.png' }]];
       return [{ affectedRows: 1 }];
     });
     await createNote({
@@ -133,7 +133,7 @@ describe('noteService.createNote', () => {
     const imgUrl = 'https://boluo66.top/uploads/note-ai-safe.png';
     connection.query.mockImplementation(async (sql) => {
       if (sql.includes('FROM note_images')) return [[]];
-      if (sql.includes('FROM note_template')) return [[{ n: 0 }]];
+      if (sql.includes('FROM image_assets')) return [[]];
       return [{ affectedRows: 1 }];
     });
     await createNote({
@@ -261,6 +261,7 @@ describe('noteService.createNote', () => {
       parentId: 'parent-1',
       revision: 1,
       addedToInbox: false,
+      replayed: true,
     });
 
     expect(connection.query.mock.calls.filter(([sql]) => sql === 'INSERT INTO note SET ?')).toHaveLength(1);

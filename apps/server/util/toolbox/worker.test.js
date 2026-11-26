@@ -1,7 +1,7 @@
 import { TOOLBOX_TOOL_CATALOG, TOOLBOX_TOOL_INTENTS } from '@lightnote/shared/toolbox-protocol';
 import { describe, expect, it, vi } from 'vitest';
 import { toolboxSkills } from '../aiSkill/skills/toolboxSkills.js';
-import { toolboxWorkerInternals } from './worker.js';
+import { runClaimedToolboxJob, toolboxWorkerInternals } from './worker.js';
 
 describe('toolbox worker contracts', () => {
   it('reuses the persisted document source of a cloud file after a document wait', async () => {
@@ -33,7 +33,6 @@ describe('toolbox worker contracts', () => {
   it('maps every fixed artifact to its own toolbox-internal Skill profile', () => {
     expect(toolboxWorkerInternals.TOOL_SKILLS).toEqual({
       material_to_note: 'toolbox.material_to_note',
-      study_kit: 'toolbox.study_kit',
     });
   });
 
@@ -53,6 +52,39 @@ describe('toolbox worker contracts', () => {
       expect(strategy.skillId).toBe(`toolbox.${tool.id}`);
       expect(strategy.artifactType).toBe(tool.output.artifactType);
     }
+  });
+
+  it('returns points for a retired job before loading its resources or calling AI', async () => {
+    const job = {
+      id: 'old-job',
+      user_id: 'user-1',
+      tool_id: 'study_kit',
+      locked_by: 'worker-1',
+      billing_medium: 'points',
+      billing_status: 'reserved',
+      quoted_points: 18,
+      points_operation_id: 1,
+    };
+    const connection = {
+      beginTransaction: vi.fn(),
+      commit: vi.fn(),
+      rollback: vi.fn(),
+      release: vi.fn(),
+      query: vi.fn().mockResolvedValueOnce([[job]]).mockResolvedValue([{ affectedRows: 1 }]),
+    };
+    const database = { query: vi.fn(), getConnection: async () => connection };
+
+    await expect(runClaimedToolboxJob(job, database)).resolves.toBe(true);
+    expect(database.query).not.toHaveBeenCalled();
+    expect(connection.query).toHaveBeenCalledWith(
+      'UPDATE user_growth SET points = points + ? WHERE user_id = ?',
+      [18, 'user-1'],
+    );
+    expect(connection.query).toHaveBeenCalledWith(
+      expect.stringContaining("SET status = 'failed'"),
+      ['released', 0, 'TOOLBOX_TOOL_UNAVAILABLE', '该工具已下架', 'old-job'],
+    );
+    expect(connection.commit).toHaveBeenCalledOnce();
   });
 
   it('keeps Worker responsible only for artifact persistence, not duplicated model prompts', () => {
@@ -93,8 +125,8 @@ describe('toolbox worker contracts', () => {
   });
 
   it('derives scenario guidance from a server-controlled intent instead of a second user prompt', () => {
-    expect(toolboxWorkerInternals.toolboxIntentInstruction('study_kit', 'memorize')).toContain('记忆巩固');
-    expect(toolboxWorkerInternals.toolboxIntentInstruction('study_kit', 'synthesize')).toBe('');
+    expect(toolboxWorkerInternals.toolboxIntentInstruction('material_to_note', 'merge')).toContain('合并多份相近材料');
+    expect(toolboxWorkerInternals.toolboxIntentInstruction('material_to_note', 'memorize')).toBe('');
     expect(toolboxWorkerInternals.toolboxIntentInstruction('research_brief', 'decision')).toBe('');
     expect(toolboxWorkerInternals.toolboxIntentInstruction('unknown', 'memorize')).toBe('');
     for (const [toolId, intents] of Object.entries(TOOLBOX_TOOL_INTENTS)) {

@@ -10,8 +10,6 @@ export const workshopPresentationZh = {
     focus: '重点',
     explanation: '解释',
     source: '来源',
-    question: '问题',
-    answer: '答案',
   },
   shortDescription: {
     research_workspace: '研究 · 学习 · 写作',
@@ -19,7 +17,6 @@ export const workshopPresentationZh = {
     writing_workspace: '积累素材，推进写作',
     forms: '创建表单，收集资料',
     material_to_note: '整理重点，形成结构化笔记',
-    study_kit: '知识框架、记忆卡与自测',
     pdf_organizer: '整理页面 · 转换 · 提取文字',
     ocr_to_text: '识别扫描 PDF 与图片文字',
   },
@@ -37,8 +34,6 @@ export const workshopPresentationEn = {
     focus: 'Key points',
     explanation: 'Explanation',
     source: 'Sources',
-    question: 'Question',
-    answer: 'Answer',
   },
   shortDescription: {
     research_workspace: 'Research · Learning · Writing',
@@ -46,7 +41,6 @@ export const workshopPresentationEn = {
     writing_workspace: 'Collect ideas and develop your writing',
     forms: 'Create a form to collect materials',
     material_to_note: 'Turn key points into structured notes',
-    study_kit: 'Frameworks, flashcards and self-tests',
     pdf_organizer: 'Arrange pages · Convert · Extract text',
     ocr_to_text: 'Read text from scans and images',
   },

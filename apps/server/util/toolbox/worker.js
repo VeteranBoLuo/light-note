@@ -1,6 +1,5 @@
 import { executeTranslationJob } from './translationWorker.js';
 import { toolboxWorkerEnabled } from './workerPolicy.js';
-import { extractStudyCards } from './studyCards.js';
 import { executeFreeOcr } from './freeOcr.js';
 import { executeAiOcr } from './aiOcr.js';
 import crypto from 'node:crypto';
@@ -30,12 +29,6 @@ const AI_TOOL_STRATEGIES = Object.freeze({
     defaultTitle: '资料整理笔记',
     draftState: 'editable',
   }),
-  study_kit: Object.freeze({
-    skillId: 'toolbox.study_kit',
-    artifactType: 'study_kit',
-    defaultTitle: '学习套件',
-    draftState: 'editable',
-  }),
 });
 const TOOL_SKILLS = Object.freeze(
   Object.fromEntries(Object.entries(AI_TOOL_STRATEGIES).map(([toolId, strategy]) => [toolId, strategy.skillId])),
@@ -45,11 +38,6 @@ const AI_TOOL_INTENT_INSTRUCTIONS = Object.freeze({
     synthesize: '按主题综合整理材料，合并重复信息，同时保留来源依据、分歧和未知项。',
     outline: '优先建立层级清晰的笔记大纲，再把材料内容归入合适章节。',
     merge: '合并多份相近材料，删除重复表述，并明确标出互相冲突或版本不同的内容。',
-  }),
-  study_kit: Object.freeze({
-    understand: '以建立理解为主，先给知识框架，再解释核心概念、关系和易混淆点。',
-    memorize: '以记忆巩固为主，提炼关键定义、区别、条件和高质量问答卡片。',
-    practice: '以自测为主，生成由浅入深的理解题和应用题，并将答案与解析独立放置。',
   }),
 });
 const NON_RETRYABLE_CODES = new Set([
@@ -73,6 +61,7 @@ const RETRYABLE_CODES = new Set([
   'AI_NETWORK_ERROR',
   'AI_PROVIDER_ERROR',
   'DOCUMENT_PARSE_TIMEOUT',
+  'TOOLBOX_OCR_DOWNLOAD_TIMEOUT',
   'OCR_TIMEOUT',
 ]);
 const RETRYABLE_NETWORK_CODE =
@@ -476,7 +465,6 @@ async function executeAiTool(job, inputs, identity) {
     sources: Array.isArray(response.sources) ? response.sources : [],
     coverage: response.coverage || { complete: false, warnings: ['coverage_missing'] },
     meta: {
-      ...(job.tool_id === 'study_kit' ? { study: extractStudyCards(content) } : {}),
       draftState: strategy.draftState,
       sourceCount: Array.isArray(response.sources) ? response.sources.length : 0,
     },
@@ -695,6 +683,9 @@ export async function runSingleToolboxJob(workerId, database = pool, options = {
 export async function runClaimedToolboxJob(job, database = pool, { onProgress, signal, runLocalProcessing = work => work() } = {}) {
   const leaseOwner = job.locked_by;
   try {
+    if (!AI_TOOL_STRATEGIES[job.tool_id] && !['ocr_to_text', 'translation'].includes(job.tool_id)) {
+      throw toolboxError('TOOLBOX_TOOL_UNAVAILABLE', '该工具已下架', 410);
+    }
     const artifact = await withToolboxLeaseHeartbeat(
       job,
       leaseOwner,
@@ -806,8 +797,13 @@ export async function cleanupExpiredToolboxData(database = pool) {
   );
   await database.query(`DELETE input FROM toolbox_ocr_inputs input JOIN toolbox_jobs job ON job.id COLLATE utf8mb4_unicode_ci = input.job_id
     WHERE job.expires_at <= NOW() AND job.status NOT IN ('queued', 'processing')`);
-  await database.query(`DELETE progress FROM toolbox_study_progress progress JOIN toolbox_artifacts artifact ON artifact.id COLLATE utf8mb4_unicode_ci = progress.artifact_id
-    WHERE artifact.status = 'expired'`);
+  // 旧版的学习进度仍随历史成果到期清理，新安装可以没有该表。
+  try {
+    await database.query(`DELETE progress FROM toolbox_study_progress progress JOIN toolbox_artifacts artifact ON artifact.id COLLATE utf8mb4_unicode_ci = progress.artifact_id
+      WHERE artifact.status = 'expired'`);
+  } catch (error) {
+    if (error?.code !== 'ER_NO_SUCH_TABLE') throw error;
+  }
   await database.query(`DELETE input FROM toolbox_translation_inputs input LEFT JOIN toolbox_jobs job ON job.id COLLATE utf8mb4_unicode_ci=input.job_id
     WHERE input.expires_at<=NOW() OR job.status IN ('failed','cancelled','expired')`);
   return { expiredJobs: expiredJobCount, expiredArtifacts: Number(expiredArtifacts.affectedRows || 0) };

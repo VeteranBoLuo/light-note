@@ -15,7 +15,7 @@ describe('growthClaimFeedback', () => {
       weekly: { count: Number.NaN },
     });
 
-    expect(breakdown).toEqual({ daily: 1, growthTasks: 0, achievements: 4, weekly: 0, community: 0 });
+    expect(breakdown).toEqual({ daily: 1, growthTasks: 0, achievements: 4, weekly: 0, community: 0, manor: 0 });
     expect(growthClaimBreakdownTotal(breakdown)).toBe(5);
     expect(growthClaimBreakdownEntries(breakdown)).toEqual([
       { source: 'daily', count: 1 },
@@ -34,11 +34,18 @@ describe('growthClaimFeedback', () => {
         { type: 'weekly', status: 'incomplete' },
         { type: 'unknown', status: 'claimed' },
       ]),
-    ).toEqual({ daily: 1, growthTasks: 1, achievements: 2, weekly: 0, community: 0 });
+    ).toEqual({ daily: 1, growthTasks: 1, achievements: 2, weekly: 0, community: 0, manor: 0 });
   });
 });
 
 it('counts community rewards across shared claim entry points', () => {
   expect(resolveClaimedBreakdown([{ type: 'community', status: 'claimed' }]).community).toBe(1);
   expect(resolveClaimableBreakdown({ community: { count: 2 } }).community).toBe(2);
+});
+
+it('水滴只计实际领取的一项奖励，满桶和重复请求不增加来源数', () => {
+  expect(resolveClaimableBreakdown({ manor: { count: 1 } }).manor).toBe(1);
+  expect(resolveClaimedBreakdown([
+    { type: 'manor', status: 'claimed' }, { type: 'manor', status: 'full' }, { type: 'manor', status: 'already' },
+  ]).manor).toBe(1);
 });

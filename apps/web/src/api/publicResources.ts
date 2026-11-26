@@ -1,6 +1,7 @@
 import { apiBaseGet, apiBasePost } from '@/http/request';
 import { PUBLIC_RESOURCE_LIMITS } from '@lightnote/shared/public-resources';
 import type { GlobalSearchResponse, GlobalSearchQuery } from '@/api/search';
+import { assertSearchIdentity, searchIdentityVersion } from './searchCache';
 import type {
   PublicationMaterial,
   PublicationPreview,
@@ -246,12 +247,16 @@ export async function fetchCombinedSearch(
   signal?: AbortSignal,
   requestOptions?: import('@/http/request').RequestOptions,
 ): Promise<GlobalSearchResponse> {
+  const identity = searchIdentityVersion();
+  const requestSignal = signal ?? requestOptions?.signal;
+  assertSearchIdentity(identity, requestSignal);
   const { paginationMode: _, separateTagMatches: __, todoPriority, page: ___, ...query } = options;
   const response = await apiBasePost(
     '/api/public-resources/search/combined',
     { keyword, ...query, ...(todoPriority ? { todoPriorities: todoPriority } : {}) },
-    { silent: true, ...requestOptions, signal },
+    { silent: true, ...requestOptions, signal: requestSignal },
   );
+  assertSearchIdentity(identity, requestSignal);
   if (response.status !== 200) throw apiError(response);
   return response.data;
 }

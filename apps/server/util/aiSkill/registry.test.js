@@ -32,7 +32,6 @@ const EXPECTED_SKILLS = Object.freeze([
 const EXPECTED_INTERNAL_SKILLS = Object.freeze([
   ['routine.daily_brief', 'routine', 'read'],
   ['toolbox.material_to_note', 'toolbox', 'read'],
-  ['toolbox.study_kit', 'toolbox', 'read'],
   ['toolbox.translation', 'toolbox', 'read'],
   ['community.review_screen', 'community', 'read'],
   ['public_resource.review_screen', 'public_resource', 'read'],

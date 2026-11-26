@@ -95,6 +95,15 @@ describe('C5 积分治理时间窗与只读模拟器', () => {
     expect(query).not.toHaveBeenCalled();
   });
 
+  it('分别估算 C12 扩容包的两次兑换所需周数', () => {
+    vi.stubEnv('POINTS_ECONOMY_C12_ENABLED', 'true');
+    const result = simulatePointsPolicy();
+    expect(result.goalCycles.filter(({ itemId }) => itemId === 'storage_2g')).toEqual([
+      { itemId: 'storage_2g', name: '扩容包 2GB', purchaseNumber: 1, cost: 5200, stableWeeks: 14.2 },
+      { itemId: 'storage_2g', name: '扩容包 2GB', purchaseNumber: 2, cost: 6500, stableWeeks: 17.8 },
+    ]);
+  });
+
   it('免费惊喜期望跟随当前奖池，并允许小数模拟而不放宽其他整数金额', () => {
     vi.stubEnv('POINTS_ECONOMY_C10_ENABLED', 'true');
     const result = simulatePointsPolicy();

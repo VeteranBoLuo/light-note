@@ -2,7 +2,7 @@ import model from './manorModel.js';
 import { MANOR_SPECIES } from './manorSpecies.js';
 
 export { model as manorModel, MANOR_SPECIES };
-export const MANOR_VERSION = 'knowledge-manor-v4';
+export const MANOR_VERSION = 'knowledge-manor-v5';
 
 export class ManorError extends Error {
   constructor(code, status = 409) {
@@ -48,7 +48,7 @@ function rememberDailyUsage(s) {
     birdDelivered: s.birdSeedDay === day,
     birdPicked: s.birdSeedPickedDay === day,
     fryUsed: s.fryDay === day ? s.fryUsed : 0,
-    pollinated: s.beehive?.lastPollinatedDay === day,
+    pollinationsUsed: model.beehiveStatus(s).pollinationsUsed,
     purifierWater: s.purifier?.claimDay === day ? s.purifier.claimedWater || 0 : 0,
   };
 }
@@ -62,7 +62,11 @@ function restoreDailyUsage(s, dayKey) {
   s.birdSeedPickedDay = usage?.birdPicked ? s.calendarDay : null;
   s.fryDay = s.calendarDay;
   s.fryUsed = usage?.fryUsed || 0;
-  if (s.beehive) s.beehive.lastPollinatedDay = usage?.pollinated ? s.calendarDay : null;
+  if (s.beehive) {
+    const pollinationsUsed = usage?.pollinationsUsed ?? Number(usage?.pollinated === true);
+    s.beehive.lastPollinatedDay = pollinationsUsed ? s.calendarDay : null;
+    s.beehive.pollinationsUsed = pollinationsUsed;
+  }
   if (s.purifier) {
     s.purifier.claimDay = s.calendarDay;
     s.purifier.claimedWater = usage?.purifierWater || 0;
@@ -88,7 +92,7 @@ export function createManor({ now, calendar, points }) {
 
 /** Read projection: real time and real task progress; it does not award or persist anything. */
 export function projectManor(saved, { now, calendar, points, dailyDone = [false, false, false], supplyEligibility = {} }) {
-  if (![MANOR_VERSION, 'knowledge-manor-v3', 'knowledge-manor-v2', 'knowledge-manor-v1'].includes(saved.version)) throw new ManorError('MANOR_VERSION_UNSUPPORTED', 409);
+  if (![MANOR_VERSION, 'knowledge-manor-v4', 'knowledge-manor-v3', 'knowledge-manor-v2', 'knowledge-manor-v1'].includes(saved.version)) throw new ManorError('MANOR_VERSION_UNSUPPORTED', 409);
   const s = structuredClone(saved);
   if (s.version === 'knowledge-manor-v1') {
     s.emptyCastStreak = 0;
@@ -134,7 +138,10 @@ const commandCatalog = Object.freeze({
   },
   water(s, a) { if (a.length !== 1) invalid(); return model.water(s, indices(a[0])); },
   harvest(s, a) { if (a.length !== 1) invalid(); return model.harvest(s, indices(a[0])); },
-  fertilize(s, a) { if (a.length !== 2) invalid(); return model.fertilize(s, integer(a[0], 0, 7), key(a[1], model.FERT)); },
+  fertilize(s, a) {
+    if (a.length < 2 || a.length > 3) invalid();
+    return model.fertilize(s, integer(a[0], 0, model.RULES.plotCount - 1), key(a[1], model.FERT), a.length === 2 ? 1 : integer(a[2], 1));
+  },
   remove(s, a) { if (a.length !== 1) invalid(); return model.remove(s, integer(a[0], 0, 7)); },
   buySeed(s, a) { if (a.length !== 2) invalid(); return model.buySeed(s, key(a[0], model.CROPS), integer(a[1], 1, 10)); },
   sellCrop(s, a) {
@@ -159,6 +166,7 @@ const commandCatalog = Object.freeze({
   },
   selectBait(s, a) { if (a.length !== 1 || typeof a[0] !== 'string') invalid(); return model.selectBait(s, a[0]); },
   sell(s, a) { if (a.length !== 1) invalid(); return model.sell(s, integer(a[0], 1), MANOR_SPECIES); },
+  sellAllWaitingFish(s, a) { emptyArgs(a); return model.sellAllWaitingFish(s, MANOR_SPECIES); },
   release(s, a) { if (a.length !== 1) invalid(); return model.release(s, integer(a[0], 1), MANOR_SPECIES); },
   buyback(s, a) { if (a.length < 1 || a.length > 2) invalid(); return model.buyback(s, integer(a[0], 1), MANOR_SPECIES, a.length === 2 ? integer(a[1], 1) : undefined); },
   place(s, a) { if (a.length !== 2) invalid(); return model.place(s, integer(a[0], 1), integer(a[1], 0, 5), MANOR_SPECIES); },
@@ -222,7 +230,7 @@ export function executeManorCommand(saved, command, context) {
   if (command.args.length > 3) invalid();
   const state = projectManor(saved, context);
   if (!state.adopted && command.action !== 'adopt') throw new ManorError('MANOR_NOT_ADOPTED');
-  if (state.casting && !['resolveCast', 'readAtlasEntry'].includes(command.action)) throw new ManorError('MANOR_CAST_PENDING');
+  if (state.casting && !['resolveCast', 'readAtlasEntry', 'claimAllDailyWater'].includes(command.action)) throw new ManorError('MANOR_CAST_PENDING');
   const result = commandCatalog[command.action](state, command.args, context);
   if (!Number.isSafeInteger(state.wallet) || state.wallet < 0 || state.wallet > 2_147_483_647) {
     throw new ManorError('MANOR_POINTS_INVALID');

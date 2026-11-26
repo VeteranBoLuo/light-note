@@ -31,16 +31,27 @@
           </BButton>
         </div>
       </div>
-      <div v-if="pendingShare && (captureType === 'file' || pendingShare.skippedFiles)" class="share-file-report">
+      <div
+        v-if="pendingShare && (captureType === 'file' || pendingShare.skippedFiles)"
+        class="share-file-report capture-file-notice"
+      >
         <MobileNoticeStrip
           v-if="pendingShare.skippedFiles"
-          class="share-file-warning"
+          class="share-file-warning capture-file-warning"
           tone="warning"
           role="alert"
-          :title="t(files.length ? 'inbox.shareSomeFilesNotAdded' : 'inbox.shareFilesNotAdded')"
-          :description="[...shareSkipSummary, shareLimitsText].join(locale.startsWith('zh') ? '' : ' ')"
+          :title="shareWarningTitle"
+          :description="shareWarningDescription"
         />
         <p v-else>{{ shareLimitsText }}</p>
+        <BButton
+          v-if="shareSizeExceeded && canGoToCloudUpload && !fileSelectionTooLarge"
+          type="text"
+          size="small"
+          @click="goToCloudUpload"
+        >
+          {{ t('inbox.goToCloudUpload') }}
+        </BButton>
         <BButton
           v-if="pendingShare.skippedFileDetails?.length"
           type="text"
@@ -109,22 +120,37 @@
             </div>
 
             <div v-if="captureType === 'file'" class="file-capture">
-              <!-- 来源显式传 'picker',与 handleDrop/handlePaste 一致;别简写成 @change="addFiles",
-                   那样 BUpload 以后多 emit 一个参数就会顶掉 source。整块面板作为 BButton，
-                   让浅紫色选择区本身就是明确、可键盘访问的文件选择入口。 -->
+              <p v-if="!fileSelectionTooLarge" class="file-selection-guidance">
+                {{ t('inbox.quickCaptureFileLimits', { count: INCOMING_SHARE_MAX_FILES, size: MAX_FILE_TOTAL_MB }) }}
+                {{ shareSizeExceeded ? '' : t('inbox.quickCaptureLargeFileHint') }}
+              </p>
+              <div v-else class="capture-file-notice">
+                <MobileNoticeStrip
+                  class="capture-file-warning"
+                  tone="warning"
+                  role="alert"
+                  :title="fileSizeWarningTitle"
+                  :description="cloudUploadRecoveryText"
+                />
+                <BButton v-if="canGoToCloudUpload" type="text" size="small" @click="goToCloudUpload">
+                  {{ t('inbox.goToCloudUpload') }}
+                </BButton>
+              </div>
+              <!-- 选择、拖拽和粘贴共用弹窗内的大小提示，选择数量仍由 BUpload 提前校验。 -->
               <BUpload
                 block
                 :multiple="true"
                 :raw-file="true"
                 :disabled="submitting"
                 :max-count="INCOMING_SHARE_MAX_FILES"
-                :max-total-size="MAX_FILE_TOTAL_SIZE"
+                :max-total-size="null"
                 @change="(selected) => addFiles(selected, 'picker')"
               >
                 <BButton
                   block
                   class="file-capture__dropzone"
                   :disabled="submitting"
+                  @click="fileSelectionTooLarge = false"
                   @dragover.prevent
                   @drop.prevent.stop="handleDrop"
                 >
@@ -290,12 +316,14 @@
   } from '@/utils/incomingShare';
 
   const MAX_FILE_TOTAL_SIZE = INCOMING_SHARE_MAX_BYTES;
+  const MAX_FILE_TOTAL_MB = MAX_FILE_TOTAL_SIZE / (1024 * 1024);
 
   /** 当前弹窗承接的系统分享；completed 表示内容已保存、原生暂存已清理。 */
   interface ShareCaptureState extends ShareSkipReport {
     id: string;
     initialText: string;
     bookmarkName: string;
+    receivedFiles: number;
     skippedFiles: number;
     textTruncated: boolean;
     hasText: boolean;
@@ -370,6 +398,7 @@
     { flush: 'sync' },
   );
   const files = ref<ManagedCloudUploadFile[]>([]);
+  const fileSelectionTooLarge = ref(false);
   const fileUploadNotice = ref('');
   const fileReadFailures = ref<Record<string, boolean>>({});
   const shareDetailsOpen = ref(false);
@@ -399,6 +428,20 @@
     pendingShare.value ? t('inbox.shareCaptureEyebrow') : t('inbox.quickCaptureEyebrow'),
   );
   const skipReasons: ShareSkipReason[] = ['count_limit', 'size_limit', 'unreadable', 'unknown'];
+  const shareSizeExceeded = computed(() => Boolean(pendingShare.value?.skippedFileCounts?.size_limit));
+  const canGoToCloudUpload = computed(
+    () =>
+      visible.value &&
+      captureType.value === 'file' &&
+      !submitting.value &&
+      !successText.value &&
+      !files.value.length &&
+      !content.value.trim(),
+  );
+  const cloudUploadRecoveryText = computed(() =>
+    t(canGoToCloudUpload.value ? 'inbox.reselectInCloudSpace' : 'inbox.uploadLargeFilesAfterSaving'),
+  );
+  const fileSizeWarningTitle = computed(() => t('inbox.quickCaptureFileSizeExceeded', { size: MAX_FILE_TOTAL_MB }));
   const shareLimitsText = computed(() =>
     t('inbox.shareLimits', {
       count: pendingShare.value?.limits?.files ?? INCOMING_SHARE_MAX_FILES,
@@ -419,11 +462,30 @@
           : t(`inbox.shareSkippedSummary.${reason}`, { count: counts[reason] }),
       );
   });
+  const shareWarningTitle = computed(() => {
+    const share = pendingShare.value;
+    return share?.receivedFiles
+      ? t('inbox.shareSomeFilesNotAdded', { received: share.receivedFiles, skipped: share.skippedFiles })
+      : t('inbox.shareFilesNotAdded');
+  });
+  const shareWarningDescription = computed(() =>
+    [
+      ...shareSkipSummary.value,
+      shareLimitsText.value,
+      pendingShare.value?.skippedFileCounts?.count_limit ? t('inbox.shareFewerFiles') : '',
+      shareSizeExceeded.value && captureType.value === 'file' && !fileSelectionTooLarge.value
+        ? cloudUploadRecoveryText.value
+        : '',
+    ]
+      .filter(Boolean)
+      .join(locale.value.startsWith('zh') ? '' : ' '),
+  );
   const captureHint = computed(() => {
     if (captureType.value === 'todo') return t('inbox.todoCaptureHint');
     const share = pendingShare.value;
     if (!share) return t('inbox.captureHint');
-    if (share.skippedFiles && !files.value.length && !share.hasText) return t('inbox.shareNoFilesToUpload');
+    if (share.skippedFiles && !files.value.length && !share.hasText)
+      return t(shareSizeExceeded.value ? 'inbox.shareNoFilesAccepted' : 'inbox.shareNoFilesToUpload');
     return (
       [
         t('inbox.shareCaptureHint'),
@@ -504,6 +566,7 @@
       limits: draft.limits,
       initialText: draft.text,
       bookmarkName: draft.bookmarkName,
+      receivedFiles: draft.files.length,
       skippedFiles: draft.skippedFiles,
       skippedFileCounts: draft.skippedFileCounts,
       skippedFileDetails: draft.skippedFileDetails,
@@ -582,6 +645,7 @@
 
   function handleTypeChange() {
     manualType.value = true;
+    fileSelectionTooLarge.value = false;
     successText.value = '';
     capturedResource.value = null;
     if (captureType.value === 'todo') todoFormKey.value += 1;
@@ -603,6 +667,7 @@
   function addFiles(value: ManagedCloudUploadFile[], source: 'picker' | 'drop' | 'clipboard' | 'share' = 'picker') {
     if (submitting.value) return;
     if (!value.length) return;
+    fileSelectionTooLarge.value = false;
     const seenKeys = new Set(files.value.map(selectedFileKey));
     const additions = value.filter((file) => {
       const key = selectedFileKey(file);
@@ -610,12 +675,18 @@
       seenKeys.add(key);
       return true;
     });
-    if (!additions.length) return;
+    // 选择器先核对本次所选文件，再核对去重后的草稿总量。
+    const pickedSize = source === 'picker' ? value.reduce((sum, file) => sum + file.size, 0) : 0;
     const nextTotalSize = totalFileSize.value + additions.reduce((sum, file) => sum + file.size, 0);
-    if (nextTotalSize > MAX_FILE_TOTAL_SIZE) {
-      message.warning(t('common.maxTotalSize', { n: MAX_FILE_TOTAL_SIZE / (1024 * 1024) }));
+    if (pickedSize > MAX_FILE_TOTAL_SIZE || nextTotalSize > MAX_FILE_TOTAL_SIZE) {
+      if (captureType.value === 'file' && !successText.value) {
+        fileSelectionTooLarge.value = true;
+      } else {
+        message.warning(`${fileSizeWarningTitle.value} ${t('inbox.quickCaptureLargeFileHint')}`);
+      }
       return;
     }
+    if (!additions.length) return;
     if (source === 'clipboard') additions.forEach((file) => pastedFileKeys.add(selectedFileKey(file)));
     if (source === 'share') additions.forEach((file) => sharedFileKeys.add(selectedFileKey(file)));
     files.value = [...files.value, ...additions];
@@ -654,6 +725,7 @@
       delete fileReadFailures.value[selectedFileKey(target)];
     }
     files.value = files.value.filter((_, fileIndex) => fileIndex !== index);
+    fileSelectionTooLarge.value = false;
   }
 
   function clearFiles() {
@@ -661,6 +733,7 @@
     fileReadFailures.value = {};
     fileUploadReceipts.clear();
     fileUploadNotice.value = '';
+    fileSelectionTooLarge.value = false;
     files.value = [];
     pastedFileKeys.clear();
     sharedFileKeys.clear();
@@ -940,6 +1013,20 @@
     );
   }
 
+  async function goToCloudUpload() {
+    if (!canGoToCloudUpload.value) return;
+    // 先结束空分享，再关闭浮层，避免原生检查在跳转期间重新打开同一次分享。
+    releaseShare(true);
+    await closeCurrentMobileOverlayThen(
+      () => {
+        visible.value = false;
+      },
+      () => {
+        if (router.currentRoute.value.path !== '/cloudSpace') return router.push('/cloudSpace');
+      },
+    );
+  }
+
   /** 复用与成功区同一份目标解析，避免顶部入口和成功区各写一套跳转规则。 */
   function goCaptureTarget() {
     visible.value = false;
@@ -987,6 +1074,7 @@
     fileUploadController?.abort();
     fileUploadController = null;
     fileUploadNotice.value = '';
+    fileSelectionTooLarge.value = false;
     fileReadFailures.value = {};
     shareDetailsOpen.value = false;
     uploadProgress.value = { processed: 0, total: 0 };
@@ -1015,7 +1103,7 @@
 </script>
 
 <style scoped lang="less">
-  .share-file-report {
+  .capture-file-notice {
     display: flex;
     flex-direction: column;
     align-items: flex-start;
@@ -1026,7 +1114,7 @@
       margin: 0;
     }
   }
-  .share-file-warning {
+  .capture-file-warning {
     align-self: stretch;
     flex-shrink: 0;
     min-height: var(--ui-layout-48, 48px);
@@ -1191,6 +1279,12 @@
     grid-area: 2 / 1;
     display: grid;
     gap: var(--ui-space-12, 12px);
+  }
+  .file-selection-guidance {
+    margin: 0;
+    color: var(--desc-color);
+    font-size: var(--ui-font-12, 12px);
+    line-height: 1.5;
   }
   .capture-resource-input {
     grid-area: 2 / 1;

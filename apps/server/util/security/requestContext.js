@@ -73,7 +73,7 @@ export const shouldSkipSecurity = (req) => {
   }
   // 静态只读目录：仅对 GET/HEAD 跳过(静态路由本就不处理写方法，真实文件上传走 /file 仍全程检测)，
   // 既省 1 核机器上对静态资源的无谓检测，又避免加载大量静态资源被计入高频窗口误判为攻击
-  if (STATIC_READ_METHODS.has(req.method) && (path.startsWith('/files') || path.startsWith('/uploads'))) {
+  if (STATIC_READ_METHODS.has(req.method) && path.startsWith('/uploads')) {
     return true;
   }
   return false;

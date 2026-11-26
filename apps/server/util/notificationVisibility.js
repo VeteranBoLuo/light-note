@@ -1,6 +1,8 @@
 // Keep historical subscription rows visible after the preference is switched off,
 // but recheck the source and current role before exposing their saved text.
 // MySQL 5.7 resolves the outer notification reference in WHERE, not a nested JOIN ON.
+const chatMessageSource = 'chat_message.public_id = CONVERT(notification.source_id USING utf8mb4) COLLATE utf8mb4_unicode_ci';
+
 function chatNotificationSource(recipientRole) {
   return `EXISTS (
  SELECT 1 FROM community_chat_messages chat_message
@@ -9,7 +11,7 @@ function chatNotificationSource(recipientRole) {
  JOIN user chat_recipient ON ${recipientRole} AND chat_recipient.del_flag = 0
  LEFT JOIN community_chat_members chat_membership ON chat_membership.user_id = chat_recipient.id
  WHERE chat_recipient.id = notification.user_id
-   AND chat_message.public_id = CONVERT(notification.source_id USING utf8mb4) COLLATE utf8mb4_unicode_ci
+   AND ${chatMessageSource}
    AND chat_message.status = 'active' AND chat_message.user_id <> chat_recipient.id
    AND COALESCE(chat_membership.status, '') <> 'banned'
    AND NOT EXISTS (SELECT 1 FROM community_chat_blocks blocked
@@ -28,6 +30,16 @@ export const COMMUNITY_CHAT_TARGETED_NOTIFICATION_SQL = `(
   OR (type = 'community_chat' AND source_type = 'community_chat_message'
       AND JSON_UNQUOTE(JSON_EXTRACT(meta, '$.kind')) = 'subscription' AND ${rootSubscriptionSource})
 )`;
+
+// Only the inbox needs the source text, and only rows eligible for legacy preview recovery.
+export const COMMUNITY_CHAT_NOTIFICATION_PREVIEW_SQL = `CASE WHEN notification.type = 'community_chat'
+  AND notification.source_type = 'community_chat_message' AND LOCATE('?', notification.content) > 0 THEN (
+    SELECT JSON_OBJECT('content', chat_message.content, 'kind', chat_message.message_kind)
+    FROM community_chat_messages chat_message
+    WHERE ${chatMessageSource} AND chat_message.status = 'active'
+      AND chat_message.edited_at IS NULL
+) END`;
+
 export const COMMUNITY_CHAT_DELIVERY_NOTIFICATION_SQL = `(${COMMUNITY_CHAT_TARGETED_NOTIFICATION_SQL}
  AND (type <> 'community_chat' OR COALESCE(JSON_UNQUOTE(JSON_EXTRACT(meta, '$.kind')), '') <> 'subscription'
    OR (COALESCE(JSON_UNQUOTE(JSON_EXTRACT(meta, '$.subscriptionCancelled')), '0') <> '1'

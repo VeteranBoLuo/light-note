@@ -362,6 +362,152 @@ html.light-note-mobile-rendering #modal .dialog > .dialog-body {flex:1 1 auto;mi
 html.light-note-mobile-rendering #modal .dialog-close {right:calc(-8px * var(--d));top:calc(-14px * var(--d));width:calc(44px * var(--d));height:calc(44px * var(--d));}
 html.light-note-mobile-rendering #modal .dialog-foot {flex:none;padding:calc(10px * var(--d)) calc(12px * var(--d));}
 html.light-note-mobile-rendering #modal .dialog-foot .button {flex:1 1 auto;white-space:normal;}
+
+/* 庄园小记沿用场景弹窗与同一滚动区，页头和入口按各自优先级排布。 */
+#modal .dialog.manor-menu-dialog {
+  width: min(100%, calc(560px * var(--d)));
+  height: auto;
+  margin: 0;
+  background: var(--g-panel-1);
+  border-width: 2px;
+  border-radius: calc(20px * var(--d));
+  box-shadow: 0 calc(3px * var(--d)) 0 var(--g-frame-dark), 0 calc(12px * var(--d)) calc(32px * var(--d)) #0b1d1430;
+}
+#modal .dialog.manor-menu-dialog > .dialog-head {
+  align-items: center;
+  gap: calc(8px * var(--d));
+  padding: calc(14px * var(--d)) var(--pad) calc(12px * var(--d));
+  text-align: left;
+}
+#modal .manor-menu-dialog > .dialog-head > div {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: calc(2px * var(--d)) calc(14px * var(--d));
+}
+#modal .manor-menu-dialog > .dialog-body { scrollbar-gutter: auto; }
+#modal .dialog.manor-menu-dialog .game-title {
+  gap: calc(8px * var(--d));
+  max-width: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  box-shadow: none;
+}
+#modal .dialog.manor-menu-dialog .game-title #dialogTitle {
+  color: var(--g-ink);
+  font-size: var(--heading);
+  letter-spacing: normal;
+  text-shadow: none;
+}
+#modal .dialog.manor-menu-dialog .game-title .title-leaves:first-child {
+  position: static;
+  width: calc(30px * var(--d));
+  height: calc(30px * var(--d));
+  translate: none;
+}
+#modal .manor-menu-dialog .game-title .title-leaves:last-child { display: none; }
+#modal .dialog.manor-menu-dialog .dialog-head p {
+  margin: 0;
+  color: var(--g-muted);
+  font-size: var(--font);
+}
+#modal .dialog.manor-menu-dialog .dialog-close {
+  position: static;
+  display: grid;
+  place-items: center;
+  width: calc(44px * var(--d));
+  height: calc(44px * var(--d));
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: calc(8px * var(--d));
+  background: transparent;
+  color: var(--g-ink);
+  font-size: calc(26px * var(--d));
+  box-shadow: none;
+}
+.manor-menu {
+  display: grid;
+  gap: calc(12px * var(--d));
+}
+.manor-menu button {
+  color: var(--g-ink);
+  border: 1px solid transparent;
+  border-radius: calc(8px * var(--d));
+  line-height: 1.35;
+}
+.manor-menu-primary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: calc(12px * var(--d));
+}
+.manor-menu-primary button,
+.manor-menu-links button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: calc(8px * var(--d));
+  padding: calc(10px * var(--d)) calc(14px * var(--d));
+  text-align: left;
+}
+.manor-menu-primary button {
+  min-height: calc(80px * var(--d));
+  border-color: var(--g-well-line);
+  background: var(--g-panel-2);
+}
+.manor-menu-primary button.has-reward {
+  border-color: var(--g-ribbon);
+  background: var(--green-soft);
+}
+.manor-menu-copy { display: grid; gap: calc(4px * var(--d)); }
+.manor-menu-copy strong,
+.manor-menu-links button { font-size: calc(18px * var(--d)); font-weight: 700; }
+.manor-menu-detail {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: calc(2px * var(--d)) calc(6px * var(--d));
+  color: var(--g-muted);
+  font-size: var(--font);
+}
+.manor-menu-detail b { color: var(--g-ink); font-size: calc(18px * var(--d)); }
+.has-reward .manor-menu-status { color: var(--green); font-weight: 700; }
+.manor-menu-chevron {
+  flex: none;
+  font-size: calc(22px * var(--d));
+  line-height: 1;
+}
+.manor-menu-links { display: grid; }
+.manor-menu-links button { min-height: calc(52px * var(--d)); border-radius: 0; }
+.manor-menu-links button + button { border-top-color: var(--g-well-line); }
+.manor-menu-utilities {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0 calc(6px * var(--d));
+  padding-top: calc(6px * var(--d));
+  border-top: 1px solid var(--g-well-line);
+}
+.manor-menu-utilities button {
+  flex: 1 1 auto;
+  min-height: calc(44px * var(--d));
+  padding: calc(4px * var(--d)) calc(6px * var(--d));
+  font-size: var(--font);
+}
+#modal .dialog.manor-menu-dialog .dialog-close:hover,
+.manor-menu button:hover { background: var(--g-well); }
+#modal .dialog.manor-menu-dialog .dialog-close:focus-visible,
+.manor-menu button:focus-visible { border-color: var(--g-ribbon-dark); }
+.light-note-mobile-rendering .manor-menu-primary { gap: calc(8px * var(--d)); }
+.light-note-mobile-rendering .manor-menu-primary button {
+  align-items: flex-start;
+  padding-inline: calc(9px * var(--d));
+}
+.light-note-mobile-rendering .manor-menu-primary .manor-menu-chevron { align-self: center; }
+.light-note-mobile-rendering .manor-menu-copy strong,
+.light-note-mobile-rendering .manor-menu-links button { font-size: calc(16px * var(--d)); }
+
 html.light-note-mobile-rendering #modal .fish-detail-art {height:clamp(calc(120px * var(--d)),22vh,calc(180px * var(--d)));}
 .light-note-mobile-rendering .manor-quest {display:grid;grid-template-columns:calc(28px * var(--d)) minmax(0,1fr) auto;column-gap:calc(8px * var(--d));row-gap:calc(2px * var(--d));}
 .light-note-mobile-rendering .manor-quest > .quest-art {grid-column:1;grid-row:1/3;}

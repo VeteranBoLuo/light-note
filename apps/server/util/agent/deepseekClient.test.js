@@ -34,6 +34,63 @@ describe('Agent LLM 供应商切换(AGENT_LLM_PROVIDER)', () => {
     expect(() => getActiveProviderInfo()).toThrow(/未知的 AGENT_LLM_PROVIDER/);
   });
 
+  it.each(['deepseek-v4-pro', 'unknown-model', 'deepseek-flash-pro', 'claude-opus-4', '   '])(
+    'DeepSeek 单次覆盖 %s 在同步和流式请求前被拒绝',
+    async (modelOverride) => {
+      process.env.AGENT_LLM_PROVIDER = 'deepseek';
+      process.env.DEEPSEEK_API_KEY = 'test-key';
+      globalThis.fetch = vi.fn();
+      expect(() => getActiveProviderInfo('deepseek', modelOverride)).toThrow(
+        expect.objectContaining({ code: 'AI_PROVIDER_MODEL_NOT_ALLOWED' }),
+      );
+      for (const request of [requestDeepSeek, requestDeepSeekStream]) {
+        await expect(request([], { modelOverride })).rejects.toMatchObject({
+          code: 'AI_PROVIDER_MODEL_NOT_ALLOWED',
+          status: 503,
+          retryable: false,
+        });
+      }
+      expect(globalThis.fetch).not.toHaveBeenCalled();
+    },
+  );
+
+  it('全局模型配置不能绕过同步和流式请求的白名单', async () => {
+    process.env.AGENT_LLM_PROVIDER = 'deepseek';
+    process.env.DEEPSEEK_MODEL = 'deepseek-v4-pro';
+    process.env.DEEPSEEK_API_KEY = 'test-key';
+    globalThis.fetch = vi.fn();
+    for (const request of [requestDeepSeek, requestDeepSeekStream]) {
+      await expect(request([])).rejects.toMatchObject({ code: 'AI_PROVIDER_MODEL_NOT_ALLOWED' });
+    }
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+  });
+
+  it.each(['deepseek-flash', 'deepseek-v4-flash', 'deepseek-v4-flash-vision-exp'])(
+    'Flash 模型 %s 与官方旧别名继续支持同步和流式请求',
+    async (model) => {
+      process.env.AGENT_LLM_PROVIDER = 'deepseek';
+      process.env.DEEPSEEK_API_KEY = 'test-key';
+      globalThis.fetch = vi.fn(async (_url, { body }) => {
+        const { stream } = JSON.parse(body);
+        const usage = { prompt_tokens: 3, completion_tokens: 2, total_tokens: 5 };
+        return new Response(
+          stream
+            ? `data: ${JSON.stringify({ choices: [{ delta: { content: 'ok' }, finish_reason: 'stop' }], usage })}\n\ndata: [DONE]\n\n`
+            : JSON.stringify({ choices: [{ message: { content: 'ok' }, finish_reason: 'stop' }], usage }),
+        );
+      });
+      for (const request of [requestDeepSeek, requestDeepSeekStream]) {
+        await expect(request([], { modelOverride: ` ${model} ` })).resolves.toMatchObject({
+          content: 'ok',
+          model,
+          usage: { totalTokens: 5 },
+        });
+      }
+      expect(globalThis.fetch).toHaveBeenCalledTimes(2);
+      for (const [, { body }] of globalThis.fetch.mock.calls) expect(JSON.parse(body).model).toBe(model);
+    },
+  );
+
   it('笔记助手默认给 8K 输出预算，且环境变量只能在供应商安全上限内调整', () => {
     delete process.env.AGENT_LLM_PROVIDER;
     delete process.env.DEEPSEEK_NOTE_ASSIST_MAX_TOKENS;

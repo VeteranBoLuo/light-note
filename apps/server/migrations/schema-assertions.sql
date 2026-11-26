@@ -1601,6 +1601,7 @@ FROM (
   SELECT 'points_shop_item_claims', 'source_economy_version', 'points_shop_item_claims.source_economy_version' UNION ALL
   SELECT 'points_shop_item_claims', 'operation_id', 'points_shop_item_claims.operation_id' UNION ALL
   SELECT 'points_shop_item_claims', 'claim_source', 'points_shop_item_claims.claim_source' UNION ALL
+  SELECT 'points_shop_item_claims', 'purchase_count', 'points_shop_item_claims.purchase_count' UNION ALL
   SELECT 'points_shop_item_claims', 'create_time', 'points_shop_item_claims.create_time' UNION ALL
   SELECT 'user_growth', 'lottery_paid_count', 'user_growth.lottery_paid_count' UNION ALL
   SELECT 'user_growth', 'lottery_paid_pity_progress', 'user_growth.lottery_paid_pity_progress'
@@ -1632,7 +1633,8 @@ SELECT '[47] missing_points_economy_migration_state' AS check_name,
        expected.migration_key AS detail
 FROM (
   SELECT 'points-economy-c4-paid-pity-v1' migration_key UNION ALL
-  SELECT 'points-economy-c5-storage-limits-v1'
+  SELECT 'points-economy-c5-storage-limits-v1' UNION ALL
+  SELECT 'points-economy-c12-shop-purchase-count-v1'
 ) expected
 LEFT JOIN points_economy_migration_state actual ON actual.migration_key = expected.migration_key
 WHERE actual.migration_key IS NULL;
@@ -3589,24 +3591,22 @@ SELECT 'bookmark_archive_index_contract' AS check_name, e.idx AS detail FROM (
 
 SELECT 'bookmark_snapshot_source_missing' AS check_name FROM (SELECT 1) e WHERE NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='bookmark_snapshot' AND column_name='source');
 
--- Knowledge workshop free OCR and learning progress.
-SELECT 'missing_toolbox_free_ocr_or_study_table' AS check_name FROM (SELECT 1) expected
+-- Knowledge workshop free OCR.
+SELECT 'missing_toolbox_free_ocr_table' AS check_name FROM (SELECT 1) expected
 WHERE (SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE()
-  AND table_name IN ('toolbox_ocr_usage','toolbox_ocr_inputs','toolbox_study_progress')) <> 3;
-SELECT 'missing_toolbox_free_ocr_or_study_primary_key' AS check_name FROM (SELECT 1) expected
+  AND table_name IN ('toolbox_ocr_usage','toolbox_ocr_inputs')) <> 2;
+SELECT 'missing_toolbox_free_ocr_primary_key' AS check_name FROM (SELECT 1) expected
 WHERE (SELECT COUNT(DISTINCT table_name) FROM information_schema.statistics WHERE table_schema = DATABASE()
-  AND table_name IN ('toolbox_ocr_usage','toolbox_ocr_inputs','toolbox_study_progress') AND index_name = 'PRIMARY') <> 3;
+  AND table_name IN ('toolbox_ocr_usage','toolbox_ocr_inputs') AND index_name = 'PRIMARY') <> 2;
 
 SELECT 'toolbox_free_ocr_quote_must_be_nullable' AS check_name FROM information_schema.columns
 WHERE table_schema = DATABASE() AND table_name = 'toolbox_jobs' AND column_name = 'quote_id' AND is_nullable <> 'YES';
 
-SELECT 'toolbox_free_ocr_or_study_missing_column' AS check_name, CONCAT(e.tab,'.',e.col) AS detail FROM (
+SELECT 'toolbox_free_ocr_missing_column' AS check_name, CONCAT(e.tab,'.',e.col) AS detail FROM (
  SELECT 'toolbox_ocr_usage' tab, 'used_pages' col UNION ALL SELECT 'toolbox_ocr_usage','reserved_pages'
  UNION ALL SELECT 'toolbox_ocr_usage','usage_date' UNION ALL SELECT 'toolbox_ocr_inputs','attempted_pages'
  UNION ALL SELECT 'toolbox_ocr_inputs','content_hash' UNION ALL SELECT 'toolbox_ocr_inputs','result_json'
  UNION ALL SELECT 'toolbox_ocr_inputs','source_json' UNION ALL SELECT 'toolbox_ocr_inputs','pages'
- UNION ALL SELECT 'toolbox_study_progress','mastered' UNION ALL SELECT 'toolbox_study_progress','artifact_version'
- UNION ALL SELECT 'toolbox_study_progress','card_id'
 ) e LEFT JOIN information_schema.columns c ON c.table_schema=DATABASE() AND c.table_name=e.tab AND c.column_name=e.col
 WHERE c.column_name IS NULL;
 
@@ -4548,3 +4548,12 @@ WHERE NOT EXISTS (
   SELECT 1 FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='ai_level_gift_registrations'
     AND column_name='id' AND data_type='bigint' AND LOCATE('auto_increment',extra)>0
 );
+
+-- Community comment resources.
+SELECT 'community_comment_resource_column' AS check_name, expected.col AS detail
+FROM (SELECT 'resource_id' AS col UNION ALL SELECT 'comment_id' UNION ALL SELECT 'sort_order') expected
+WHERE NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='community_comment_resources' AND column_name=expected.col);
+SELECT 'community_comment_resource_index' AS check_name,'PRIMARY' AS detail
+FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM information_schema.statistics WHERE table_schema=DATABASE() AND table_name='community_comment_resources' AND index_name='PRIMARY' GROUP BY index_name HAVING GROUP_CONCAT(column_name ORDER BY seq_in_index)='resource_id' AND MAX(non_unique)=0);
+SELECT 'community_comment_resource_index' AS check_name,'uk_order' AS detail
+FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM information_schema.statistics WHERE table_schema=DATABASE() AND table_name='community_comment_resources' AND index_name='uk_order' GROUP BY index_name HAVING GROUP_CONCAT(column_name ORDER BY seq_in_index)='comment_id,sort_order' AND MAX(non_unique)=0);

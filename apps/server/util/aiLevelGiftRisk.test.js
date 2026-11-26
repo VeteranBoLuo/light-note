@@ -6,7 +6,7 @@ describe('AI gift risk policy', () => {
   it('uses safe defaults and requires distinct accounts in the same network', () => {
     expect(aiGiftRiskPolicy({ AI_GIFT_NETWORK_REGISTRATION_LIMIT: '-2' })).toEqual({
       networkRegistrations: 3,
-      globalRegistrations: 20,
+      globalRegistrations: 100,
       newAccountTokens: 500000,
     });
     const rows = [

@@ -28,7 +28,7 @@
           <h3>{{ prepared.title }}</h3>
           <div class="snapshot-text">{{ prepared.kind === 'bookmark' ? prepared.url : prepared.body }}</div>
         </div>
-        <p>{{ t('community.feed.snapshotConfirm') }}</p>
+        <p>{{ t(props.forComment ? 'community.feed.commentSnapshotConfirm' : 'community.feed.snapshotConfirm') }}</p>
         <div class="snapshot-actions"
           ><BButton @click="chooseAgain">{{ t('community.feed.chooseAgain') }}</BButton
           ><BButton type="primary" @click="add">{{ t('community.feed.addSnapshot') }}</BButton></div
@@ -61,6 +61,7 @@
     const keys = new Set(result.keys);
     return items.filter((item) => keys.has(resourceItemKey(item)));
   }
+  const props = defineProps<{ forComment?: boolean }>();
   const emit = defineEmits<{ close: []; add: [resource: FeedResource] }>();
   const { t } = useI18n(),
     user = useUserStore();

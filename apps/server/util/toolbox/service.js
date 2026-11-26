@@ -907,33 +907,6 @@ export async function getToolboxArtifact({ userId, artifactId, database = pool }
   };
 }
 
-export async function getStudyProgress({ userId, artifactId, database = pool }) {
-  const artifact = await getToolboxArtifact({ userId, artifactId, database });
-  const [rows] = await database.query(
-    'SELECT card_id, mastered FROM toolbox_study_progress WHERE user_id = ? AND artifact_id = ? AND artifact_version = ?',
-    [userId, artifact.id, artifact.version],
-  );
-  return {
-    version: artifact.version,
-    cards: rows.map((row) => ({ id: row.card_id, mastered: Boolean(row.mastered) })),
-  };
-}
-export async function saveStudyProgress({ userId, artifactId, input, database = pool }) {
-  const artifact = await getToolboxArtifact({ userId, artifactId, database });
-  if (
-    input?.version !== artifact.version ||
-    typeof input?.mastered !== 'boolean' ||
-    !artifact.meta?.study?.cards?.some((card) => card.id === input.cardId)
-  )
-    throw toolboxError('TOOLBOX_STUDY_CARD_INVALID', '学习卡片已变化，请刷新后重试', 409);
-  await database.query(
-    `INSERT INTO toolbox_study_progress (user_id,artifact_id,artifact_version,card_id,mastered) VALUES (?,?,?,?,?)
-    ON DUPLICATE KEY UPDATE mastered = VALUES(mastered)`,
-    [userId, artifact.id, artifact.version, input.cardId, input.mastered ? 1 : 0],
-  );
-  return { id: input.cardId, mastered: input.mastered };
-}
-
 function saveReceiptKey({ userId, artifactId, version, targetType }) {
   return toolboxInputDigest({ userId, artifactId, version, targetType });
 }
@@ -1023,7 +996,8 @@ export async function saveToolboxArtifactToNote({
   const artifact = await getToolboxArtifact({ userId, artifactId, database });
   const definition = getToolboxTool(artifact.toolId);
   const isDocumentSummary = artifact.toolId === 'pdf_text_extractor' && artifact.type === 'document_summary';
-  if (!definition?.output.canSaveToNote && !isDocumentSummary)
+  const isHistoricalStudyResult = artifact.toolId === 'study_kit' && artifact.type === 'study_kit';
+  if (!definition?.output.canSaveToNote && !isDocumentSummary && !isHistoricalStudyResult)
     throw toolboxError('TOOLBOX_ARTIFACT_NOT_SAVABLE', '该产物不能保存到笔记');
   const receiptKey = saveReceiptKey({ userId, artifactId: artifact.id, version: artifact.version, targetType: 'note' });
   let saveGeneration = 1;

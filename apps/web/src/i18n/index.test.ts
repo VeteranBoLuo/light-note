@@ -29,11 +29,15 @@ describe('i18n 文档语言同步', () => {
     expect(document.documentElement.lang).toBe('zh-CN');
   });
 
-  it('服务器词典在进入模块时加载，之后切换语言仍保留基础词典与回退', async () => {
+  it('按路由加载服务器和后台词典，之后切换语言仍保留基础词典与回退', async () => {
     localStorage.setItem('preferences', JSON.stringify({ lang: 'zh-CN' }));
-    const { default: i18n, prepareServerManagementLocale, setLocale } = await import('@/i18n');
+    const { default: i18n, prepareRouteLocale, setLocale } = await import('@/i18n');
     expect(i18n.global.getLocaleMessage('zh-CN')).not.toHaveProperty('serverManagement');
-    await Promise.all([prepareServerManagementLocale(), prepareServerManagementLocale()]);
+    expect(i18n.global.getLocaleMessage('zh-CN')).not.toHaveProperty('adminOverview');
+    await Promise.all([prepareRouteLocale('serverManagement'), prepareRouteLocale('serverManagement')]);
+    expect(i18n.global.getLocaleMessage('zh-CN')).toHaveProperty('serverManagement');
+    expect(i18n.global.getLocaleMessage('zh-CN')).not.toHaveProperty('adminOverview');
+    await prepareRouteLocale('admin');
     const zh = (await import('./locales/zh-CN')).default;
     expect(i18n.global.getLocaleMessage('zh-CN')).toEqual(zh);
     await setLocale('en-US');
@@ -41,10 +45,10 @@ describe('i18n 文档语言同步', () => {
     expect(i18n.global.getLocaleMessage('zh-CN')).toEqual(zh);
   });
 
-  it('英文直接进入服务器模块与首次语言准备并行时不丢失基础或模块文案', async () => {
+  it('英文直达后台或服务器与首次语言准备并行时保留基础和模块文案', async () => {
     localStorage.setItem('preferences', JSON.stringify({ lang: 'en-US' }));
-    const { default: i18n, prepareServerManagementLocale, prepareInitialLocale } = await import('@/i18n');
-    await Promise.all([prepareServerManagementLocale(), prepareInitialLocale()]);
+    const { default: i18n, prepareRouteLocale, prepareInitialLocale } = await import('@/i18n');
+    await Promise.all([prepareRouteLocale('admin'), prepareRouteLocale('serverManagement'), prepareInitialLocale()]);
     expect(i18n.global.getLocaleMessage('en-US')).toEqual((await import('./locales/en-US')).default);
     expect(i18n.global.getLocaleMessage('zh-CN')).toEqual((await import('./locales/zh-CN')).default);
   });

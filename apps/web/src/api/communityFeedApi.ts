@@ -1,10 +1,27 @@
 import { apiBaseGet, apiBasePost, apiBasePut } from '@/http/request';
+import type {
+  CommunityChatAuthorProfile,
+  CommunityChatPublicAchievement,
+  CommunityProfileActionsState,
+} from '@/api/communityChatApi';
+
+export interface ProfilePostPreview {
+  publicId: string;
+  title: string;
+  excerpt: string;
+}
+
+export interface PublicUserCard extends CommunityChatAuthorProfile, CommunityProfileActionsState {
+  allAchievements: CommunityChatPublicAchievement[];
+  previewPosts: ProfilePostPreview[];
+}
 export interface FeedResource {
   publicId: string;
   kind: 'note' | 'bookmark';
   title: string;
   createdAt: string;
   postId?: string;
+  commentId?: string;
   revision?: number;
 }
 export interface FeedResourceContent extends FeedResource {
@@ -55,6 +72,7 @@ export interface FeedPost {
   author: FeedAuthor;
 }
 export interface FeedComment {
+  resources?: FeedResource[];
   publicId: string;
   body: string;
   status: string;

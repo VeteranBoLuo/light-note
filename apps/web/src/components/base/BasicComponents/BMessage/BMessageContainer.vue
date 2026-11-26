@@ -1,9 +1,17 @@
 <template>
   <Teleport to="body">
     <!-- 节点增删由 Vue patch 负责，纯 CSS 动画配合 messageState 的延迟移除，避免 Teleport 过渡残留。 -->
-    <div class="b-message-container" v-show="messageState.messages.length > 0" aria-live="polite" aria-atomic="false">
+    <div
+      v-for="stack in messageStacks"
+      :key="stack.placement"
+      v-show="stack.items.length > 0"
+      class="b-message-container"
+      :class="{ 'is-top': stack.placement === 'top' }"
+      aria-live="polite"
+      aria-atomic="false"
+    >
       <div
-        v-for="msg in messageState.messages"
+        v-for="msg in stack.items"
         :key="msg.key || msg.id"
         :class="['b-message-item', `b-message-${msg.type}`, { 'is-leaving': msg.leaving }]"
         :role="msg.type === 'error' || msg.type === 'warning' ? 'alert' : 'status'"
@@ -39,11 +47,25 @@
   import icon from '@/config/icon.ts';
   import i18n from '@/i18n';
   import { messageState, removeMessage } from './messageState';
-  import { onBeforeUnmount, onMounted } from 'vue';
+  import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 
   const messageIcons = icon.message;
   // 容器通过 render() 独立挂载，拿不到应用的 i18n 实例，直接读全局实例。
   const closeLabel = String(i18n.global.t('common.close'));
+  const compactViewport = typeof window === 'undefined' ? undefined : window.matchMedia?.('(max-width: 600px)');
+  const isCompact = ref(compactViewport?.matches === true);
+  const messageStacks = computed(() => {
+    if (!isCompact.value) return [{ placement: 'default', items: messageState.messages }];
+    return [
+      { placement: 'top', items: messageState.messages.filter((item) => item.placement === 'top') },
+      { placement: 'default', items: messageState.messages.filter((item) => item.placement !== 'top') },
+    ];
+  });
+
+  function syncViewport(event: MediaQueryListEvent) {
+    isCompact.value = event.matches;
+  }
+
   const overlayBodyClasses = {
     '.guest-nudge': 'light-note-has-guest-nudge',
     '.guest-browse-nudge': 'light-note-has-guest-browse-nudge',
@@ -58,19 +80,21 @@
   }
 
   onMounted(() => {
+    compactViewport?.addEventListener?.('change', syncViewport);
     syncOverlayBodyClasses();
     overlayObserver = new MutationObserver(syncOverlayBodyClasses);
     overlayObserver.observe(document.body, { childList: true, subtree: true });
   });
 
   onBeforeUnmount(() => {
+    compactViewport?.removeEventListener?.('change', syncViewport);
     overlayObserver?.disconnect();
     overlayObserver = null;
     Object.values(overlayBodyClasses).forEach((className) => document.body.classList.remove(className));
   });
 
   function dismissOnMobile(id: number) {
-    if (window.matchMedia?.('(max-width: 600px)').matches) removeMessage(id);
+    if (isCompact.value) removeMessage(id);
   }
 </script>
 
@@ -111,7 +135,7 @@
     font-size: var(--ui-font-13_5, 13.5px);
     line-height: 1.45;
     pointer-events: auto;
-    animation: b-message-in 0.24s cubic-bezier(0.34, 1.56, 0.64, 1);
+    animation: var(--message-enter-animation, b-message-in) 0.24s cubic-bezier(0.34, 1.56, 0.64, 1);
   }
 
   .b-message-icon {
@@ -226,13 +250,15 @@
 
   /* forwards 保住终态,避免动画结束到节点摘除之间闪回不透明 */
   .b-message-item.is-leaving {
-    animation: b-message-out 0.2s ease-out forwards;
+    animation: var(--message-exit-animation, b-message-out) 0.2s ease-out forwards;
     pointer-events: none;
   }
 
   @media (max-width: 600px) {
     /* 移动端使用紧凑 Snackbar，并始终避开底部导航和系统安全区。 */
-    .b-message-container {
+    .b-message-container:not(.is-top) {
+      --message-enter-animation: b-message-in-from-bottom;
+      --message-exit-animation: b-message-out-to-bottom;
       top: auto;
       bottom: calc(var(--mobile-shell-bottom-height, env(safe-area-inset-bottom)) + 10px);
       width: max-content;
@@ -241,20 +267,20 @@
     }
 
     /* 写操作引导和被动浏览提示均占用底部安全区，消息统一叠在提示卡上方。 */
-    body.light-note-has-guest-nudge .b-message-container {
+    body.light-note-has-guest-nudge .b-message-container:not(.is-top) {
       bottom: calc(var(--mobile-shell-bottom-height, env(safe-area-inset-bottom)) + 166px);
     }
 
-    body.light-note-has-guest-browse-nudge .b-message-container {
+    body.light-note-has-guest-browse-nudge .b-message-container:not(.is-top) {
       bottom: calc(var(--mobile-shell-bottom-height, env(safe-area-inset-bottom)) + 78px);
     }
 
-    body.light-note-has-guest-nudge.light-note-has-guest-browse-nudge .b-message-container {
+    body.light-note-has-guest-nudge.light-note-has-guest-browse-nudge .b-message-container:not(.is-top) {
       bottom: calc(var(--mobile-shell-bottom-height, env(safe-area-inset-bottom)) + 230px);
     }
 
     /* 原生下载进度浮层也占着底部,消息同样要叠在它上方(否则文字互相压住看不清) */
-    body.light-note-has-native-download-progress .b-message-container {
+    body.light-note-has-native-download-progress .b-message-container:not(.is-top) {
       bottom: calc(var(--mobile-shell-bottom-height, env(safe-area-inset-bottom)) + 104px);
     }
 
@@ -276,15 +302,6 @@
     /* 只保留最新两条，避免连续操作时遮挡大块内容。 */
     .b-message-item:nth-last-child(n + 3) {
       display: none;
-    }
-
-    /* 底部弹出:进出场都改为从下方滑入/滑出 */
-    .b-message-item {
-      animation-name: b-message-in-from-bottom;
-    }
-
-    .b-message-item.is-leaving {
-      animation-name: b-message-out-to-bottom;
     }
   }
 

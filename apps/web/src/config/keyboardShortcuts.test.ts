@@ -151,7 +151,7 @@ describe('笔记工作区面板开关快捷键', () => {
 
   it('提示文字与无障碍快捷键按平台生成', () => {
     expect(getWorkspacePanelShortcutLabel('sidebar', 'mac')).toBe('⌘ + \\');
-    expect(getWorkspacePanelShortcutLabel('sidePanel', 'mac')).toBe('⌃ + \\');
+    expect(getWorkspacePanelShortcutLabel('sidePanel', 'mac')).toBe('Control + \\');
     expect(getWorkspacePanelShortcutLabel('sidebar', 'other')).toBe('Ctrl + \\');
     expect(getWorkspacePanelShortcutLabel('sidePanel', 'other')).toBe('Alt + \\');
     expect(getWorkspacePanelAriaKeyShortcut('sidePanel', 'mac')).toBe('Control+\\');

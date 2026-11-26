@@ -877,6 +877,7 @@
     return tool.price.kind === 'free' ? 'success' : 'pin';
   }
   function billingLabel(tool: ToolboxCatalogItem) {
+    if (tool.price.kind === 'fixed') return t('toolbox.fixedPoints', { points: tool.price.min }, tool.price.min);
     if (tool.billingMedia.length === 1 && tool.billingMedium === 'ai_quota') return t('translation.quota');
     if (tool.id === 'ocr_to_text') return t('toolbox.ocrBillingLabel');
     if (tool.price.kind !== 'free') {

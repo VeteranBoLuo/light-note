@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const pool = { query: vi.fn(), getConnection: vi.fn() };
 const getObjectMetadataFromObs = vi.fn();
-const getObjectBufferFromObs = vi.fn();
+const getBoundedObjectBufferFromObs = vi.fn();
 const deleteObjectFromObs = vi.fn();
 const buildAiTemporaryObjectKey = vi.fn();
 const createDownloadSignedUrl = vi.fn();
@@ -34,7 +34,7 @@ vi.mock('../obsClient.js', () => ({
   createDownloadSignedUrl,
   createUploadSignedUrl,
   deleteObjectFromObs,
-  getObjectBufferFromObs,
+  getBoundedObjectBufferFromObs,
   getObjectMetadataFromObs,
 }));
 
@@ -91,7 +91,7 @@ describe('AI 文档服务', () => {
     };
     pool.getConnection.mockResolvedValueOnce(claimConnection).mockResolvedValueOnce(persistConnection);
     getObjectMetadataFromObs.mockResolvedValue({ contentLength: source.file_size });
-    getObjectBufferFromObs.mockResolvedValue(Buffer.alloc(source.file_size, 1));
+    getBoundedObjectBufferFromObs.mockResolvedValue(Buffer.alloc(source.file_size, 1));
     const parsed = {
       extractedChars: 8,
       chunks: [
@@ -425,7 +425,7 @@ describe('AI 文档服务', () => {
       ],
     ]);
     getObjectMetadataFromObs.mockResolvedValue({ contentLength: 1 });
-    getObjectBufferFromObs.mockResolvedValue(Buffer.from(' '));
+    getBoundedObjectBufferFromObs.mockResolvedValue(Buffer.from(' '));
     const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
 
     await expect(runSingleDocumentJob('worker-test')).resolves.toBe(true);
@@ -485,7 +485,7 @@ describe('AI 文档服务', () => {
       ],
     ]);
     getObjectMetadataFromObs.mockResolvedValue({ contentLength: content.length });
-    getObjectBufferFromObs.mockResolvedValue(content);
+    getBoundedObjectBufferFromObs.mockResolvedValue(content);
 
     await expect(runSingleDocumentJob('worker-success')).resolves.toBe(true);
 
@@ -538,7 +538,7 @@ describe('AI 文档服务', () => {
       ],
     ]);
     getObjectMetadataFromObs.mockResolvedValue({ contentLength: content.length });
-    getObjectBufferFromObs.mockResolvedValue(content);
+    getBoundedObjectBufferFromObs.mockResolvedValue(content);
 
     await expect(runSingleDocumentJob('worker-stale')).resolves.toBe(true);
     expect(finishConnection.rollback).toHaveBeenCalledOnce();
@@ -585,7 +585,7 @@ describe('AI 文档服务', () => {
       ],
     ]);
     getObjectMetadataFromObs.mockResolvedValue({ contentLength: content.length });
-    getObjectBufferFromObs.mockResolvedValue(content);
+    getBoundedObjectBufferFromObs.mockResolvedValue(content);
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
     await expect(runSingleDocumentJob('worker-stale-failure')).resolves.toBe(true);
@@ -635,7 +635,7 @@ describe('AI 文档服务', () => {
       ],
     ]);
     getObjectMetadataFromObs.mockResolvedValue({ contentLength: content.length });
-    getObjectBufferFromObs.mockResolvedValue(content);
+    getBoundedObjectBufferFromObs.mockResolvedValue(content);
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
     await expect(runSingleDocumentJob('worker-failure')).resolves.toBe(true);
@@ -696,7 +696,7 @@ describe('AI 文档服务', () => {
       ],
     ]);
     getObjectMetadataFromObs.mockResolvedValue({ contentLength: content.length });
-    getObjectBufferFromObs.mockResolvedValue(content);
+    getBoundedObjectBufferFromObs.mockResolvedValue(content);
 
     await expect(runSingleDocumentJob('worker-rolling')).resolves.toBe(true);
     expect(claimConnection.commit).toHaveBeenCalledOnce();

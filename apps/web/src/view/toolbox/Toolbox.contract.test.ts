@@ -42,6 +42,7 @@ describe('知识工具箱前端边界', () => {
     for (const path of [
       'src/view/toolbox/components/PdfOrganizer.vue',
       'src/view/toolbox/components/PdfWorkbench.vue',
+      'src/view/toolbox/components/ImageRepairWorkbench.vue',
       'src/view/toolbox/components/PdfImageConverter.vue',
       'src/view/toolbox/components/ImageToPdf.vue',
       'src/view/toolbox/components/PdfToImages.vue',
@@ -165,9 +166,12 @@ describe('知识工具箱前端边界', () => {
     expect(TOOLBOX_HOME_GROUPS.find((group) => group.id === 'create')?.toolIds).toEqual([
       'translation',
       'material_to_note',
-      'study_kit',
     ]);
-    expect(TOOLBOX_HOME_GROUPS.find((group) => group.id === 'prepare')?.toolIds).toEqual(['pdf_organizer', 'ocr_to_text']);
+    expect(TOOLBOX_HOME_GROUPS.find((group) => group.id === 'prepare')?.toolIds).toEqual([
+      'pdf_organizer',
+      'image_watermark_remover',
+      'ocr_to_text',
+    ]);
     expect(TOOLBOX_HOME_GROUPS.map((group) => group.id)).toEqual(['workspace', 'create', 'prepare']);
     expect(home).toContain('class="toolbox-overview"');
     expect(homeTemplate).toContain("router.push({ name: 'aiUsage' })");
@@ -197,6 +201,7 @@ describe('知识工具箱前端边界', () => {
     expect(home).toContain('TOOLBOX_DEFAULT_QUICK_TOOL_IDS');
     expect(home).toContain('resolveToolboxQuickToolIds(pinnedToolIds.value)');
     expect(TOOLBOX_DEFAULT_QUICK_TOOL_IDS[0]).toBe('material_to_note');
+    expect(resolveToolboxQuickToolIds(['study_kit'])).not.toContain('study_kit');
     expect(resolveToolboxQuickToolIds(['ocr_to_text', 'pdf_organizer']).slice(0, 3)).toEqual([
       'ocr_to_text',
       'pdf_organizer',
@@ -252,6 +257,7 @@ describe('知识工具箱前端边界', () => {
       'data_chart',
       'table_converter',
       'extraction',
+      'study_kit',
     ] as const) {
       expect(canonicalToolboxToolId(retiredId)).toBe(retiredId);
       expect(TOOLBOX_RETIRED_TOOL_IDS).toContain(retiredId);
@@ -271,7 +277,7 @@ describe('知识工具箱前端边界', () => {
         availability: { enabled: true },
       });
     }
-    expect(Object.keys(TOOLBOX_WORKFLOW_PRESENTATION)).toEqual(['material_to_note', 'study_kit']);
+    expect(Object.keys(TOOLBOX_WORKFLOW_PRESENTATION)).toEqual(['material_to_note']);
     expect(TOOLBOX_TOOL_CATALOG.find((tool) => tool.id === 'idea_to_draft')?.availability.enabled).toBe(false);
 
     expect(homeTemplate).not.toContain('class="toolbox-section toolbox-start toolbox-outcomes"');
@@ -468,7 +474,6 @@ describe('知识工具箱前端边界', () => {
       'idea_to_draft',
       'material_to_note',
       'research_brief',
-      'study_kit',
       'concept_map',
       'source_comparison',
       'knowledge_audit',

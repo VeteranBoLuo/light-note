@@ -18,6 +18,7 @@ import { submitPost, moderatePost, listPosts, postDetail, withdrawPost, deletePo
 import {
   createComment,
   withdrawComment,
+  moderateComment,
   listComments,
   ownComments,
   resolveQuestion,
@@ -25,12 +26,18 @@ import {
   commentState,
 } from './comments.js';
 import { relation, updateProfileOptions, profileOptions, members, publicProfile } from './profiles.js';
-import { reportContent, appeal, results, dismissReport } from './governance.js';
+import { reportContent, appeal, results, dismissReport, moderationQueue } from './governance.js';
 import { markNotificationSnapshotRead } from '../notificationReadSnapshot.js';
 import { purgeCommunityFeedData } from './lifecycle.js';
 import { COMMUNITY_FEED_TABLES } from './schema.js';
 import { identity } from './core.js';
-import { consumeCommunityEvent, feedNotificationVisibleSql, feedNotificationContentSql } from './notifications.js';
+import {
+  consumeCommunityEvent,
+  feedNotificationVisibleSql,
+  feedNotificationContentSql,
+  feedNotificationPostReviewSql,
+  withFeedNotificationPostReview,
+} from './notifications.js';
 const socketPath = process.env.LIGHTNOTE_TEST_MYSQL_SOCKET;
 const env = {
   COMMUNITY_FEED_ENABLED: 'true',
@@ -54,6 +61,14 @@ const postInput = (values = {}) =>
     ...values,
   });
 const run = (fn, user, body) => fn({ user, input: body, env, db });
+async function reviewNotifications(user) {
+  const [rows] = await db.query(
+    `SELECT id, type, title, content, link, meta, ${feedNotificationPostReviewSql(true, env)} AS post_review
+     FROM notification WHERE user_id=? AND source_type='community_feed_result' AND ${feedNotificationVisibleSql(true)}`,
+    [user.id],
+  );
+  return rows.map(withFeedNotificationPostReview);
+}
 async function published(user = A) {
   const p = await run(submitPost, user, postInput());
   if (user.role !== 'root')
@@ -169,6 +184,19 @@ describe.skipIf(!socketPath)('P2 real database boundaries', () => {
     expect((await db.query('SELECT status FROM community_post_review_jobs'))[0][0].status).toBe('passed');
     expect((await db.query("SELECT * FROM community_moderation_actions WHERE reason='ai_pass'"))[0]).toHaveLength(1);
     expect((await db.query("SELECT * FROM community_outbox WHERE kind='result'"))[0]).toHaveLength(1);
+    while (await consumeCommunityEvent({ db, env })) {}
+    const [notice] = await reviewNotifications(A);
+    expect(notice).toMatchObject({
+      content: null,
+      link: `/community/posts/${submitted.publicId}`,
+      meta: { kind: 'result', action: 'approve' },
+    });
+    // Reproduce the old row, including its generic destination and audit reason.
+    await db.query("UPDATE notification SET content='ai_pass', link='/community/manage?tab=results' WHERE id=?", [
+      notice.id,
+    ]);
+    expect(await reviewNotifications(A)).toEqual([notice]);
+    expect(await reviewNotifications(B)).toEqual([]);
     expect(
       Number((await db.query('SELECT consumed_tokens FROM community_review_daily_budget'))[0][0].consumed_tokens),
     ).toBe(1000);
@@ -581,15 +609,18 @@ describe.skipIf(!socketPath)('P2 real database boundaries', () => {
         )
       )[0],
     ).toHaveLength(1);
-    await run(
+    const approved = await run(
       moderatePost,
       ROOT,
       input({ postId: post.publicId, expectedRevision: post.revision, action: 'approve', reason: '通过' }),
     );
     while (await consumeCommunityEvent({ db, env })) {}
-    expect(
-      (await db.query("SELECT * FROM notification WHERE user_id=? AND source_type='community_feed_result'", [A.id]))[0],
-    ).toHaveLength(1);
+    const [notice] = await reviewNotifications(A);
+    expect(notice).toMatchObject({
+      content: '通过',
+      link: `/community/posts/${post.publicId}`,
+      meta: { kind: 'result', action: 'approve' },
+    });
     expect(
       (
         await db.query(
@@ -597,6 +628,8 @@ describe.skipIf(!socketPath)('P2 real database boundaries', () => {
         )
       )[0],
     ).toHaveLength(0);
+    await run(withdrawPost, A, input({ postId: post.publicId, expectedRevision: approved.revision }));
+    expect(await reviewNotifications(A)).toEqual([{ ...notice, link: '/community/manage?tab=results' }]);
   });
   it('manages topics with root authorization, revisions and replay-safe receipts', async () => {
     const draft = input({
@@ -688,6 +721,43 @@ describe.skipIf(!socketPath)('P2 real database boundaries', () => {
       code: 'COMMUNITY_CLOSED',
     });
   });
+  it('prefers selected posts in both user-card views and fills with visible recent posts', async () => {
+    const selected = await published();
+    const older = await published();
+    const recent = await published();
+    const member = await identity(db, A.id);
+    const select = async (featuredPosts) => {
+      const { revision } = await profileOptions({ user: A, db, env });
+      await updateProfileOptions({
+        user: A,
+        db,
+        env,
+        input: input({ expectedRevision: revision, featuredPosts }),
+      });
+    };
+    const card = () => publicProfile({ user: B, id: member.communityId, input: { view: 'card' }, db, env });
+    const posts = () => publicProfile({
+      user: B, id: member.userPublicId, input: { view: 'preview-posts' }, db, env,
+    });
+    const preview = ({ publicId, title, body }) => ({ publicId, title, excerpt: body });
+    expect((await card()).previewPosts).toEqual([preview(recent), preview(older)]);
+    await select([selected.publicId]);
+    expect(await card()).toMatchObject({
+      userPublicId: member.userPublicId,
+      following: false,
+      previewPosts: [preview(selected), preview(recent)],
+    });
+    expect(await posts()).toEqual({ previewPosts: [preview(selected), preview(recent)] });
+    await select([recent.publicId, selected.publicId]);
+    expect((await card()).previewPosts).toEqual([preview(recent), preview(selected)]);
+    await select([recent.publicId]);
+    expect((await card()).previewPosts).toEqual([preview(recent), preview(older)]);
+    await run(withdrawPost, A, input({ postId: recent.publicId, expectedRevision: recent.revision }));
+    expect((await card()).previewPosts).toEqual([preview(older), preview(selected)]);
+    await run(relation, B, input({ userPublicId: member.userPublicId, action: 'block', enabled: true }));
+    await expect(card()).rejects.toMatchObject({ status: 404 });
+    await expect(posts()).rejects.toMatchObject({ status: 404 });
+  });
   it('pending drafts stay private and revision approval publishes only the exact version', async () => {
     const p = await run(submitPost, A, postInput());
     expect((await listPosts({ user: B, env, db })).items).toEqual([]);
@@ -733,6 +803,16 @@ describe.skipIf(!socketPath)('P2 real database boundaries', () => {
       [A.id],
     );
     expect(actions.map((x) => x.reason)).toContain('审批通过');
+    const pending = await run(submitPost, B, postInput());
+    await run(
+      moderatePost,
+      ROOT,
+      input({ postId: pending.publicId, expectedRevision: pending.revision, action: 'reject', reason: '请补充说明' }),
+    );
+    while (await consumeCommunityEvent({ db, env })) {}
+    expect(await reviewNotifications(B)).toMatchObject([
+      { content: '请补充说明', link: '/community/manage?tab=results', meta: { kind: 'result', action: 'reject' } },
+    ]);
   });
   it('hides deleted post results and disables unavailable comment destinations', async () => {
     const p = await published();
@@ -1687,6 +1767,62 @@ describe.skipIf(!socketPath)('P2 real database boundaries', () => {
     ).rejects.toMatchObject({ code: 'COMMUNITY_CLOSED' });
     await run(withdrawPost, A, input({ postId: p.publicId, expectedRevision: live.revision }));
     await expect(read()).rejects.toMatchObject({ code: 'COMMUNITY_CONTENT_UNAVAILABLE' });
+  });
+  it('shares fixed snapshots in comments and replies with comment-scoped visibility', async () => {
+    const post = await published(A);
+    await db.query("INSERT INTO bookmark(id,user_id,name,url) VALUES('b1','b','Docs','https://example.com/')");
+    await db.query("INSERT INTO note(id,create_by,title,content,type) VALUES('n1','b','Guide','<p>Original</p>','html')");
+    const bookmark = await run(prepareResource, B, input({ type: 'bookmark', id: 'b1' }));
+    const note = await run(prepareResource, B, input({ type: 'note', id: 'n1' }));
+    const postId = post.publicId;
+    const rootInput = input({ postId, resources: [bookmark.publicId] });
+    const comments = (user, root) => listComments({ user, input: { postId, root }, db, env });
+    const read = (user, id, commentId, parent = postId) =>
+      readResource({ user, id, input: { postId: parent, commentId }, db, env });
+
+    await expect(run(createComment, A, rootInput)).rejects.toMatchObject({ code: 'COMMUNITY_RESOURCE_UNAVAILABLE' });
+    await expect(run(createComment, B, input({ postId, resources: [bookmark.publicId, randomUUID()] })))
+      .rejects.toMatchObject({ code: 'COMMUNITY_RESOURCE_UNAVAILABLE' });
+    expect((await comments(A)).items).toEqual([]);
+    await expect(run(createComment, B, input({ postId, resources: [bookmark.publicId, bookmark.publicId.toUpperCase()] })))
+      .rejects.toMatchObject({ code: 'COMMUNITY_INVALID_INPUT' });
+    await expect(run(createComment, B, input({ postId, resources: Array.from({ length: 4 }, randomUUID) })))
+      .rejects.toMatchObject({ code: 'COMMUNITY_INVALID_INPUT' });
+    const root = await run(createComment, B, rootInput);
+    expect(await run(createComment, B, rootInput)).toEqual(root);
+    await expect(run(createComment, B, input({ postId, resources: [bookmark.publicId] })))
+      .rejects.toMatchObject({ code: 'COMMUNITY_RESOURCE_UNAVAILABLE' });
+    const reviewedEnv = { ...env, COMMUNITY_FEED_REVIEW_ALL_WRITES: 'true' };
+    const reply = await createComment({
+      user: B, db, env: reviewedEnv,
+      input: input({ postId, replyTo: root.publicId, body: 'More detail', resources: [note.publicId] }),
+    });
+    expect((await comments(A)).items[0]).toMatchObject({
+      body: '', resources: [{ publicId: bookmark.publicId, postId, commentId: root.publicId }],
+    });
+    expect((await comments(A, root.publicId)).items).toEqual([]);
+    await expect(read(A, note.publicId, reply.publicId)).rejects.toMatchObject({ status: 404 });
+    expect((await moderationQueue({ user: ROOT, input: { type: 'comments' }, db, env })).items[0])
+      .toMatchObject({ resources: [{ publicId: note.publicId, postId, commentId: reply.publicId }] });
+    expect((await read(ROOT, note.publicId, reply.publicId)).body).toBe('Original');
+    await run(moderateComment, ROOT, input({ postId, commentId: reply.publicId, expectedRevision: 1, action: 'approve' }));
+    await db.query("UPDATE note SET content='<p>Edited</p>' WHERE id='n1'");
+    expect((await read(A, note.publicId, reply.publicId)).body).toBe('Original');
+    expect((await comments(A, root.publicId)).items[0].resources).toMatchObject([{ publicId: note.publicId }]);
+    await db.query("INSERT INTO community_chat_blocks(id,user_id,blocked_user_id) VALUES(UUID(),'a','b')");
+    expect((await comments(A)).items[0]).not.toHaveProperty('resources');
+    await expect(read(A, note.publicId, reply.publicId)).rejects.toMatchObject({ status: 404 });
+    await db.query('DELETE FROM community_chat_blocks');
+    await expect(read(A, bookmark.publicId, reply.publicId)).rejects.toMatchObject({ status: 404 });
+    await expect(read(A, bookmark.publicId, root.publicId, randomUUID())).rejects.toMatchObject({ status: 404 });
+    await run(withdrawComment, B, input({ postId, commentId: root.publicId, expectedRevision: 1 }));
+    expect((await comments(A)).items[0]).not.toHaveProperty('resources');
+    await expect(read(A, bookmark.publicId, root.publicId)).rejects.toMatchObject({ status: 404 });
+    expect((await read(A, note.publicId, reply.publicId)).body).toBe('Original');
+    await run(withdrawPost, A, input({ postId, expectedRevision: post.revision }));
+    await expect(read(A, note.publicId, reply.publicId)).rejects.toMatchObject({ status: 404 });
+    await purgeCommunityFeedData(db, new Set(COMMUNITY_FEED_TABLES), B.id);
+    expect((await db.query('SELECT resource_id FROM community_comment_resources'))[0]).toEqual([]);
   });
   it('expired drafts are cleaned up, prepare retries are idempotent and missing optional schema leaves text available', async () => {
     await db.query("INSERT INTO bookmark(id,user_id,name,url) VALUES('b1','a','Docs','https://example.com/')");

@@ -2,7 +2,7 @@ import { buildOcrPages } from './ocrPages.js';
 import { getToolboxTool } from '@lightnote/shared/toolbox-protocol';
 import crypto from 'node:crypto';
 import pdfParse from 'pdf-parse/lib/pdf-parse.js';
-import { getObjectBufferFromObs } from '../obsClient.js';
+import { getBoundedObjectBufferFromObs } from '../obsClient.js';
 import { validateDocumentDescriptor, parseDocumentBuffer } from '../aiDocument/parser.js';
 import { localOcrProvider } from '../aiDocument/localOcr.js';
 import { toolboxError } from './errors.js';
@@ -34,6 +34,29 @@ export async function getFreeOcrUsage(database, userId) {
     resetsAt: new Date(Date.parse(`${date}T00:00:00+08:00`) + 86400_000).toISOString(),
   };
 }
+
+function ocrSourceBytes(source) {
+  const expectedBytes = Number(source.file_size);
+  if (!Number.isSafeInteger(expectedBytes) || expectedBytes <= 0)
+    throw toolboxError('TOOLBOX_RESOURCE_STALE', '文件大小无效，请重新选择', 409);
+  if (expectedBytes > FREE_OCR_POLICY.maxBytes)
+    throw toolboxError('TOOLBOX_UPLOAD_TOO_LARGE', '文件总大小不能超过 20 MB', 413);
+  return expectedBytes;
+}
+
+export async function readOcrSourceBuffer(source, read = getBoundedObjectBufferFromObs) {
+  const expectedBytes = ocrSourceBytes(source);
+  try {
+    const buffer = await read(source.object_key, { maxBytes: expectedBytes });
+    if (buffer.length === expectedBytes) return buffer;
+  } catch (error) {
+    if (error?.code === 'OBS_DOWNLOAD_TIMEOUT')
+      throw toolboxError('TOOLBOX_OCR_DOWNLOAD_TIMEOUT', '文件读取超时，请稍后重试', 503);
+    if (error?.code !== 'OBS_DOWNLOAD_SIZE_LIMIT') throw error;
+  }
+  throw toolboxError('TOOLBOX_RESOURCE_STALE', '文件已变化，请重新选择', 409);
+}
+
 export async function prepareFreeOcrInputs(database, userId, snapshot) {
   const descriptors = [];
   for (const ref of snapshot.resourceRefs) {
@@ -54,13 +77,11 @@ export async function prepareFreeOcrInputs(database, userId, snapshot) {
   }
   if (!descriptors.length || descriptors.length > FREE_OCR_POLICY.maxFiles)
     throw toolboxError('TOOLBOX_OCR_FILE_LIMIT', '每次选择 1 至 5 个文件');
-  if (descriptors.reduce((sum, item) => sum + Number(item.file_size), 0) > FREE_OCR_POLICY.maxBytes)
+  if (descriptors.reduce((sum, item) => sum + ocrSourceBytes(item), 0) > FREE_OCR_POLICY.maxBytes)
     throw toolboxError('TOOLBOX_UPLOAD_TOO_LARGE', '文件总大小不能超过 20 MB', 413);
   const result = [];
   for (const descriptor of descriptors) {
-    const buffer = await getObjectBufferFromObs(descriptor.object_key);
-    if (buffer.length !== Number(descriptor.file_size))
-      throw toolboxError('TOOLBOX_RESOURCE_STALE', '文件已变化，请重新选择', 409);
+    const buffer = await readOcrSourceBuffer(descriptor);
     const meta = validateDocumentDescriptor({
       fileName: descriptor.file_name,
       fileType: descriptor.file_type,
@@ -168,7 +189,7 @@ export async function executeFreeOcr(job, database) {
       throw toolboxError('TOOLBOX_RESOURCE_UNAVAILABLE', '文件已不可用，请重新选择', 404);
     let result = typeof row.result_json === 'string' ? JSON.parse(row.result_json) : row.result_json;
     if (!result) {
-      const buffer = await getObjectBufferFromObs(source.object_key);
+      const buffer = await readOcrSourceBuffer(source);
       if (crypto.createHash('sha256').update(buffer).digest('hex') !== row.content_hash)
         throw toolboxError('TOOLBOX_RESOURCE_STALE', '文件已变化，请重新选择', 409);
       const markPage = async (page) => {

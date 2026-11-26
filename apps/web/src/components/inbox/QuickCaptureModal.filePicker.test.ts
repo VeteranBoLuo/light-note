@@ -177,6 +177,31 @@ describe('快速添加 · 选择文件', () => {
 
     expect(host.querySelectorAll('.file-list__item')).toHaveLength(1);
   });
+
+  it('追加后超出大小上限时保留已选文件，移除后可重新选择', async () => {
+    const existing = new File(['a'], 'a.zip');
+    const added = new File(['b'], 'b.zip');
+    for (const file of [existing, added]) Object.defineProperty(file, 'size', { value: 300 * 1024 * 1024 });
+    const host = mount();
+    const picker = host.querySelector<HTMLButtonElement>('.upload-stub')!;
+    stubFiles = [existing];
+    picker.click();
+    await nextTick();
+
+    stubFiles = [added];
+    picker.click();
+    await nextTick();
+    expect(host.querySelector('[role="alert"]')?.textContent).toContain(zhCN.inbox.uploadLargeFilesAfterSaving);
+    expect(host.querySelector('.file-list__name')?.textContent).toBe('a.zip');
+    expect(collectButton(host)?.disabled).toBe(false);
+
+    host.querySelector<HTMLButtonElement>('.file-list__remove')!.click();
+    await nextTick();
+    picker.click();
+    await nextTick();
+    expect(host.querySelector('[role="alert"]')).toBeNull();
+    expect(host.querySelector('.file-list__name')?.textContent).toBe('b.zip');
+  });
 });
 
 

@@ -122,6 +122,22 @@ const fixture: Shop = {
   ],
 };
 
+const stagedStorage = fixture.items.find((item) => item.id === 'storage_2g')!;
+if (state.startsWith('c12-')) {
+  fixture.economyVersion = 'points-economy-c12';
+  fixture.points = state === 'c12-short' ? 6200 : 17200;
+  const purchaseCosts = [5200, 6500];
+  const purchaseCount = state === 'c12-first' ? 0 : state === 'c12-done' ? 2 : 1;
+  const cost = purchaseCosts[purchaseCount] ?? null;
+  Object.assign(stagedStorage, {
+    purchaseCosts, purchaseCount, cost, purchaseLimit: purchaseCosts.length, storageMb: 2048,
+    limitReached: cost === null, canBuy: cost !== null && fixture.points >= cost,
+    unavailableReasons: cost === null ? ['purchase_limit'] : fixture.points < cost ? ['points'] : [],
+  });
+  fixture.items.find((item) => item.id === 'ai_pack_small')!.bonusTokens = 200_000;
+  fixture.items.find((item) => item.id === 'ai_pack')!.bonusTokens = 400_000;
+}
+
 if (state === 'loading') {
   growthApi.getShop = () => new Promise<never>(() => {});
 } else if (state === 'error') {
@@ -159,6 +175,18 @@ growthApi.getGrowthPreferences = async () => reply({ celebrationEnabled: false }
 growthApi.getInventory = async () =>
   reply({ items: [{ id: 'makeup_card', qty: fixture.protectCards }], assets: { points: fixture.points } });
 growthApi.buyShopItem = async (payload) => {
+  if (payload.itemId === stagedStorage.id && stagedStorage.purchaseCosts) {
+    if (stagedStorage.cost === null) return reply({ ok: false, reason: 'purchase_limit' });
+    if (payload.expectedCost !== stagedStorage.cost || payload.economyVersion !== fixture.economyVersion) {
+      return { status: 409, data: { code: 'ECONOMY_CATALOG_CHANGED', refresh: true } } as Awaited<ReturnType<typeof growthApi.buyShopItem>>;
+    }
+    if (fixture.points < stagedStorage.cost) return reply({ ok: false, reason: 'insufficient' });
+    fixture.points -= stagedStorage.cost;
+    stagedStorage.purchaseCount = (stagedStorage.purchaseCount || 0) + 1;
+    stagedStorage.cost = stagedStorage.purchaseCosts[stagedStorage.purchaseCount] ?? null;
+    stagedStorage.limitReached = stagedStorage.cost === null;
+    return reply({ ok: true, points: fixture.points, itemId: stagedStorage.id, purchaseCount: stagedStorage.purchaseCount });
+  }
   if (payload.itemId !== 'makeup_card')
     return reply({ ok: false, msg: 'Only make-up cards are enabled in this fixture' });
   if (fixture.points < 600) return reply({ ok: false, reason: 'insufficient' });

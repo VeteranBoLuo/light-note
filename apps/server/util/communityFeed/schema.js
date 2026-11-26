@@ -29,6 +29,7 @@ export const COMMUNITY_FEED_TABLES = [
   'community_revision_images',
   'community_resource_snapshots',
   'community_revision_resources',
+  'community_comment_resources',
 ];
 export async function ensureCommunityFeedSchema(db = pool) {
   const sql =
@@ -50,7 +51,9 @@ export async function ensureCommunityFeedSchema(db = pool) {
     '\n' +
     (await readFile(new URL('../../migrations/20260921_community_like_notifications.sql', import.meta.url), 'utf8')) +
     '\n' +
-    (await readFile(new URL('../../migrations/20261030_community_image_previews.sql', import.meta.url), 'utf8'));
+    (await readFile(new URL('../../migrations/20261030_community_image_previews.sql', import.meta.url), 'utf8')) +
+    '\n' +
+    (await readFile(new URL('../../migrations/20261124_community_comment_resources.sql', import.meta.url), 'utf8'));
   const connection = db.getConnection ? await db.getConnection() : db;
   try {
     for (const statement of sql

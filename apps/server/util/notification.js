@@ -89,7 +89,7 @@ export async function ensureNotificationTable() {
  * - 传 conn 时复用外部事务(升级通知与经验同事务,要么都成功要么都回滚,保证"升级即有通知")。
  * - userId 为空或游客直接跳过。
  * @param {string} userId 接收者
- * @param {{type:string,title:string,content?:string,link?:string,meta?:object,batchId?:string,sourceType?:string,sourceId?:string,id?:string}} payload
+ * @param {{type:string,title:string,content?:string,link?:string,meta?:object,batchId?:string,sourceType?:string,sourceId?:string,id?:string,inAppOnly?:boolean}} payload
  * @param {import('mysql2/promise').PoolConnection|null} conn
  */
 export async function createNotification(
@@ -104,6 +104,7 @@ export async function createNotification(
     sourceType = null,
     sourceId = null,
     id = null,
+    inAppOnly = false,
   },
   conn = null,
 ) {
@@ -122,14 +123,15 @@ export async function createNotification(
     isRead: 0,
   });
   if (id) row.id = id;
-  row.browser_push_pending = !INBOX_ONLY_NOTIFICATION_TYPES.includes(type) &&
+  row.browser_push_pending = !inAppOnly && !INBOX_ONLY_NOTIFICATION_TYPES.includes(type) &&
     ((type !== 'community_feed' && browserPushEnabled()) || huaweiPushEnabled()) ? 1 : 0;
   // Use a database microsecond timestamp, shared with subscription eligibility.
+  // In-app-only notices also stay out of the legacy native foreground poll.
+  const pushTime = inAppOnly ? 'NULL' : 'CURRENT_TIMESTAMP(6)';
   // 只有携带来源键的系统事实才允许幂等忽略；普通通知仍保留原先的严格 INSERT 语义。
+  const insert = id || (sourceType && sourceId) ? 'INSERT IGNORE' : 'INSERT';
   const [result] = await db.query(
-    id || (sourceType && sourceId)
-      ? 'INSERT IGNORE INTO notification SET ?, browser_push_created_at = CURRENT_TIMESTAMP(6)'
-      : 'INSERT INTO notification SET ?, browser_push_created_at = CURRENT_TIMESTAMP(6)',
+    `${insert} INTO notification SET ?, browser_push_created_at = ${pushTime}`,
     [row],
   );
   if (Number(result?.affectedRows || 0) <= 0) return null;

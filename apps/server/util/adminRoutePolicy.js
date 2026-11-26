@@ -177,6 +177,8 @@ declare(ADMIN_POLICIES.READ, 'note', [
   ['GET', '/note/drawing-thumbnail/:noteId/:fileName'],
   ['HEAD', '/note/drawing-thumbnail/:noteId/:fileName'],
   ['GET', '/note/image-thumbnail/:fileName'],
+  ['GET', '/uploads/:fileName'],
+  ['HEAD', '/uploads/:fileName'],
   ['POST', '/note/getNoteTreeFeatures'],
   ['POST', '/note/previewNoteCreateTarget'],
   ['POST', '/note/queryNoteTree'],
@@ -201,6 +203,8 @@ declare(ADMIN_POLICIES.READ, 'note', [
   ['POST', '/note/share/resolve'],
   ['POST', '/note/share/page'],
   ['POST', '/note/share/tree'],
+  ['GET', '/note/share/image/:shareId/:noteId/:fileName'],
+  ['HEAD', '/note/share/image/:shareId/:noteId/:fileName'],
   // 导出中转不改用户内容,只把已可读的笔记正文换成一次性下载地址,与 /file/downloadFileById 同属只读
   ['POST', '/note/exportFile'],
   ['GET', '/note/exportFile'],
@@ -422,6 +426,7 @@ declare(ADMIN_POLICIES.AI_USE, 'ai_skill', [
 ]);
 declare(ADMIN_POLICIES.READ, 'toolbox', [
   ['GET', '/toolbox/catalog'],
+  ['GET', '/toolbox/image-repair/points'],
   ['GET', '/toolbox/pinned-tools'],
   ['GET', '/toolbox/home'],
   ['GET', '/toolbox/project-entry'],
@@ -438,6 +443,7 @@ declare(ADMIN_POLICIES.READ, 'toolbox', [
 // 报价会持久化快照，任务会预占操作者积分，保存会创建真实笔记；这些都不能在管理员
 // 代管上下文中替数据主体执行，哪怕当前模式是 maintain。
 declare(ADMIN_POLICIES.ACCOUNT_WRITE, 'toolbox', [
+  ['POST', '/toolbox/image-repair/points'],
   ['POST', '/toolbox/quotes'],
   ['POST', '/toolbox/pinned-tools'],
   ['POST', '/toolbox/translation/stream'],
@@ -617,6 +623,11 @@ declare(ADMIN_POLICIES.READ, 'growth', [
   ['GET', '/growth/heatmap'],
 ]);
 declare(ADMIN_POLICIES.READ, 'daily_review', [['GET', '/daily-review/today']]);
+// 榜单身份和账号资格以实际登录者为准。
+declare(ADMIN_POLICIES.ACCOUNT_WRITE, 'points_leaderboard', [
+  ['GET', '/growth/leaderboard'],
+  ['GET', '/growth/leaderboard/avatar/:communityId'],
+]);
 // 年度报告含本人的标题、网站与标签明细，纪念成就也只记在真实登录账号上；任何代管上下文都不开放。
 declare(ADMIN_POLICIES.ACCOUNT_WRITE, 'annual_report', [
   ['GET', '/growth/annual-report/status'],
@@ -854,6 +865,12 @@ function resolvePolicy(method, path) {
   }
   if (/^\/note\/image-thumbnail\/[^/]+$/.test(path)) {
     return routePolicies.get(`${method} /note/image-thumbnail/:fileName`);
+  }
+  if (/^\/uploads\/[^/]+$/.test(path)) {
+    return routePolicies.get(`${method} /uploads/:fileName`);
+  }
+  if (/^\/note\/share\/image\/[^/]+\/[^/]+\/[^/]+$/.test(path)) {
+    return routePolicies.get(`${method} /note/share/image/:shareId/:noteId/:fileName`);
   }
   if (/^\/note\/drawing-thumbnail\/[^/]+\/[^/]+$/.test(path)) {
     return routePolicies.get(`${method} /note/drawing-thumbnail/:noteId/:fileName`);

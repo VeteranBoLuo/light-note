@@ -1,7 +1,7 @@
 import { createVNode, render } from 'vue';
 import BMessageContainer from './BMessageContainer.vue';
 import { clearMessages, messageState, removeMessage } from './messageState';
-import type { MessageType, MessageOpenConfig } from './messageState';
+import type { MessageType, MessageOpenConfig, MessagePlacement } from './messageState';
 
 let seed = 0;
 let mounted = false;
@@ -33,12 +33,16 @@ function resolveDuration(type: MessageType, duration?: number): number {
   return isMobileMessageViewport() ? mobileDuration[type] : 3;
 }
 
-function suppressDuplicateMobileMessage(type: MessageType, content: string): (() => void) | null {
+function suppressDuplicateMobileMessage(
+  type: MessageType,
+  content: string,
+  placement?: MessagePlacement,
+): (() => void) | null {
   if (!isMobileMessageViewport()) return null;
   // 正在播离场动画的那条不算「已存在」:否则新提示会被并进一条即将消失的消息里,
   // 用户看不到这次操作的反馈
   const existing = messageState.messages.find(
-    (message) => message.type === type && message.content === content && !message.leaving,
+    (message) => message.type === type && message.content === content && message.placement === placement && !message.leaving,
   );
   return existing ? () => removeMessage(existing.id) : null;
 }
@@ -89,7 +93,7 @@ const message = {
 
   open(config: MessageOpenConfig): () => void {
     ensureMounted();
-    const { content, type = 'info', duration, key, onClose, closable } = config;
+    const { content, type = 'info', duration, key, onClose, closable, placement } = config;
 
     // Dedup by key
     if (key) {
@@ -97,7 +101,7 @@ const message = {
       if (existing) return () => {};
     }
 
-    const duplicateCloser = suppressDuplicateMobileMessage(type, content);
+    const duplicateCloser = suppressDuplicateMobileMessage(type, content, placement);
     if (duplicateCloser) return duplicateCloser;
     const id = ++seed;
     const item = {
@@ -108,6 +112,7 @@ const message = {
       key,
       onClose,
       closable,
+      placement,
     };
     messageState.messages.push(item);
     if (item.duration > 0) {

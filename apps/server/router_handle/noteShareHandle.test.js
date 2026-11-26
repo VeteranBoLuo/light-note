@@ -32,7 +32,7 @@ vi.mock('../util/services/noteShareService.js', () => {
   };
 });
 
-const { getNoteSharePage, resolveNoteShare } = await import('./noteShareHandle.js');
+const { getNoteShareImage, getNoteSharePage, resolveNoteShare } = await import('./noteShareHandle.js');
 
 function mockRes() {
   const res = { headers: new Map(), body: null };
@@ -44,6 +44,11 @@ function mockRes() {
     res.body = body;
     return res;
   });
+  res.cookie = vi.fn(() => res);
+  res.vary = vi.fn(() => res);
+  res.sendFile = vi.fn();
+  res.status = vi.fn(() => res);
+  res.end = vi.fn();
   return res;
 }
 
@@ -132,6 +137,11 @@ describe('note share public resolve', () => {
         page: { id: 'root-1', content: '# 内容', type: 'markdown' },
       },
     });
+    expect(res.cookie).toHaveBeenCalledWith(
+      'ln-note-share-image',
+      'ticket-value',
+      expect.objectContaining({ httpOnly: true, sameSite: 'lax', path: '/api/note/share/image/share-1/' }),
+    );
   });
 
   it('访问次数耗尽时不读取正文、不签发票据也不增加计数', async () => {
@@ -237,4 +247,45 @@ describe('note share public resolve', () => {
     expect(mocks.connection.release).toHaveBeenCalledTimes(1);
     expect(res.body).toMatchObject({ status: 200, data: { page: { id: 'root-1' } } });
   });
+
+  it('原图读取使用同一阅读会话复核当前分享、页面范围、内嵌引用和归属', async () => {
+    const ticket = { shareId: 'share-1', rootNoteId: 'root-1', ownerUserId: 'owner-1', scopeType: 'subtree' };
+    mocks.readNoteShareTicket.mockResolvedValue(ticket);
+    mocks.connection.query
+      .mockResolvedValueOnce([[activeShareRow()]])
+      .mockResolvedValueOnce([[{ owner: 'owner-1' }]]);
+    mocks.getSharedNotePage.mockResolvedValueOnce({
+      page: { content: '![插图](/uploads/note-fixture.png)', type: 'markdown' },
+    });
+    const res = mockRes();
+    await getNoteShareImage({
+      params: { shareId: 'share-1', noteId: 'root-1', fileName: 'note-fixture.png' },
+      headers: { cookie: 'ln-note-share-image=' + 'a'.repeat(43) },
+    }, res);
+
+    expect(mocks.getSharedNotePage).toHaveBeenCalledWith({ db: mocks.connection, ticket, noteId: 'root-1' });
+    expect(res.headers.get('Cache-Control')).toBe('private, no-store');
+    expect(res.sendFile).toHaveBeenCalledWith('note-fixture.png', expect.any(Object), expect.any(Function));
+    expect(mocks.connection.commit).toHaveBeenCalled();
+    expect(mocks.connection.release).toHaveBeenCalled();
+  });
+
+  it.each([{ status: 'revoked' }, { expires_at: new Date(0) }])(
+    '已签发的阅读会话也停止交付失效分享的图片',
+    async (overrides) => {
+      const ticket = { shareId: 'share-1', rootNoteId: 'root-1', ownerUserId: 'owner-1', scopeType: 'subtree' };
+      mocks.readNoteShareTicket.mockResolvedValue(ticket);
+      mocks.connection.query.mockResolvedValueOnce([[activeShareRow(overrides)]]);
+      const res = mockRes();
+      await getNoteShareImage({
+        params: { shareId: 'share-1', noteId: 'root-1', fileName: 'note-fixture.png' },
+        headers: { cookie: 'ln-note-share-image=' + 'a'.repeat(43) },
+      }, res);
+      expect(res.status).toHaveBeenCalledWith(404);
+      expect(res.sendFile).not.toHaveBeenCalled();
+      expect(mocks.getSharedNotePage).not.toHaveBeenCalled();
+      expect(mocks.connection.rollback).toHaveBeenCalled();
+      expect(mocks.connection.release).toHaveBeenCalled();
+    },
+  );
 });

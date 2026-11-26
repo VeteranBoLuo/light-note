@@ -4,7 +4,7 @@ import {
   buildAiTemporaryObjectKey,
   createUploadSignedUrl,
   deleteObjectFromObs,
-  getObjectBufferFromObs,
+  getBoundedObjectBufferFromObs,
   getObjectMetadataFromObs,
 } from '../obsClient.js';
 import { AI_DOCUMENT_MAX_BYTES, parseDocumentBuffer, validateDocumentDescriptor } from './parser.js';
@@ -729,6 +729,20 @@ async function releaseInlineImageRecognition({ source, job, leaseId }) {
   }
 }
 
+export async function readDocumentSource(source, { signal, download = getBoundedObjectBufferFromObs } = {}) {
+  const expectedBytes = Number(source.file_size);
+  if (!Number.isSafeInteger(expectedBytes) || expectedBytes <= 0 || expectedBytes > AI_DOCUMENT_MAX_BYTES) {
+    throw serviceError('FILE_SIZE_INVALID', '文件大小无效或超过 20MB');
+  }
+  try {
+    const buffer = await download(source.object_key, { maxBytes: expectedBytes, signal });
+    if (buffer.length === expectedBytes) return buffer;
+  } catch (error) {
+    if (error?.code !== 'OBS_DOWNLOAD_SIZE_LIMIT') throw error;
+  }
+  throw serviceError('FILE_SIZE_MISMATCH', '文件大小与记录不一致');
+}
+
 /**
  * 云图片只在用户明确发起 AI Skill 后进入视觉模型。调用发生在当前 AI Execution 内，
  * 成功结果覆盖后台本地解析；job 租约保证迟到 Worker 不会再把 Vision 结果覆盖回 OCR。
@@ -745,14 +759,7 @@ export async function recognizeCloudImageDocumentSource({
   if (!claimed.claimed) return formatSource(claimed.source);
   const { source, job } = claimed;
   try {
-    const metadata = await getObjectMetadataFromObs(source.object_key);
-    if (metadata.contentLength <= 0 || metadata.contentLength > AI_DOCUMENT_MAX_BYTES) {
-      throw serviceError('FILE_SIZE_INVALID', '文件大小无效或超过 20MB');
-    }
-    if (Number(source.file_size || 0) !== metadata.contentLength) {
-      throw serviceError('FILE_SIZE_MISMATCH', '文件大小与记录不一致');
-    }
-    const buffer = await getObjectBufferFromObs(source.object_key);
+    const buffer = await readDocumentSource(source, { signal });
     const parsed = await parseBuffer(
       buffer,
       { fileName: source.file_name, fileType: source.file_type, fileSize: source.file_size },
@@ -999,30 +1006,21 @@ export async function runSingleDocumentJob(workerId) {
     if (source.expires_at && new Date(source.expires_at).getTime() <= Date.now()) {
       throw serviceError('ATTACHMENT_EXPIRED', '附件已过期', 410);
     }
-    const metadata = await getObjectMetadataFromObs(source.object_key);
-    if (metadata.contentLength <= 0 || metadata.contentLength > AI_DOCUMENT_MAX_BYTES) {
-      throw serviceError('FILE_SIZE_INVALID', '文件大小无效或超过 20MB');
-    }
-    if (Number(source.file_size || 0) !== metadata.contentLength) {
-      throw serviceError('FILE_SIZE_MISMATCH', '文件大小与记录不一致');
-    }
-    const buffer = await getObjectBufferFromObs(source.object_key);
     const abortController = new AbortController();
     let timeout;
     const parsed = await Promise.race([
-      parseDocumentBuffer(
-        buffer,
-        {
-          fileName: source.file_name,
-          fileType: source.file_type,
-          fileSize: source.file_size,
-        },
-        { signal: abortController.signal },
+      readDocumentSource(source, { signal: abortController.signal }).then((buffer) =>
+        parseDocumentBuffer(
+          buffer,
+          { fileName: source.file_name, fileType: source.file_type, fileSize: source.file_size },
+          { signal: abortController.signal },
+        ),
       ),
       new Promise((_, reject) => {
         timeout = setTimeout(() => {
-          abortController.abort();
-          reject(serviceError('DOCUMENT_PARSE_TIMEOUT', '文件解析超时，请缩小文件或减少页数后重试'));
+          const error = serviceError('DOCUMENT_PARSE_TIMEOUT', '文件处理超时，请缩小文件或减少页数后重试');
+          abortController.abort(error);
+          reject(error);
         }, PARSE_TIMEOUT_MS);
       }),
     ]).finally(() => {

@@ -73,6 +73,14 @@ describe('BMessage mobile behavior', () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
+  it('keeps explicitly top-placed mobile messages independent from default messages', () => {
+    setMobileViewport(true);
+    message.success('反馈已收到');
+    message.open({ type: 'success', content: '反馈已收到', placement: 'top' });
+    message.open({ type: 'success', content: '反馈已收到', placement: 'top' });
+    expect(messageState.messages.map((item) => item.placement)).toEqual([undefined, 'top']);
+  });
+
   it('does not merge a new message into one that is already leaving', () => {
     vi.useFakeTimers();
     setMobileViewport(true);

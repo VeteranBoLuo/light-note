@@ -130,6 +130,10 @@ export const feedZh = {
   draftSaved: '草稿已保存',
   localDraft: '本地草稿',
   addResources: '分享我的资源',
+  addCommentResource: '添加资源',
+  commentResourceLimit: '已添加 {count} 项资源（上限 {max} 项）',
+  commentSnapshotConfirm:
+    '确认以上内容可向社区公开。修改或删除原资源不会改变这份副本。删除评论或回复后，其他人将无法查看。',
   resourceShortHint: '书签与文字笔记 · 最多 3 项',
   resourceLimits:
     '选择自己的书签或文字笔记。笔记仅分享本页文字，最多 3 万字；不含子页面、原排版和链接目标。含图片的笔记、画板及文件暂不支持。',
@@ -193,7 +197,7 @@ export const feedZh = {
   linkFormat: '链接',
   formatPlaceholder: '文字',
   feedNotifications: '广场通知',
-  liveProfilePreview: '社区名片 · 实时预览',
+  liveProfilePreview: '用户名片 · 实时预览',
   profilePreviewHint: '聊天室与广场共用这张名片。头像和昵称沿用账号资料。',
 
   settings: '社区设置',
@@ -502,6 +506,10 @@ export const feedEn: Record<keyof typeof feedZh, string> = {
   draftSaved: 'Draft saved',
   localDraft: 'Local draft',
   addResources: 'Share my resources',
+  addCommentResource: 'Add resource',
+  commentResourceLimit: '{count} resources added (limit {max})',
+  commentSnapshotConfirm:
+    'Confirm this content may be shared with the community. Editing or deleting the original will not change this copy. Deleting the comment or reply will hide it from others.',
   resourceShortHint: 'Bookmarks and text notes \u00b7 Up to 3',
   resourceLimits:
     'Choose your bookmarks or text notes. Notes include this page only, up to 30,000 characters, without child pages, formatting or link destinations. Images, drawings and files are not supported yet.',
@@ -569,7 +577,7 @@ export const feedEn: Record<keyof typeof feedZh, string> = {
   linkFormat: 'Link',
   formatPlaceholder: 'Text',
   feedNotifications: 'Feed notifications',
-  liveProfilePreview: 'Community card \u00b7 Live preview',
+  liveProfilePreview: 'User card \u00b7 Live preview',
   profilePreviewHint: 'Chat and the feed share this card. Your account provides the avatar and name.',
 
   settings: 'Community settings',

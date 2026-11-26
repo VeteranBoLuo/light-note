@@ -162,6 +162,30 @@ describe('Agent AI Gateway', () => {
     expect(client).not.toHaveBeenCalled();
     expect(governanceAdapter.finishAiGatewayGovernance).not.toHaveBeenCalled();
   });
+
+  it('被模型白名单拒绝的调用不进入旧治理占位，并记录失败原因', async () => {
+    const governanceAdapter = {
+      beginAiGatewayGovernance: vi.fn(),
+      finishAiGatewayGovernance: vi.fn(),
+    };
+    const client = vi.fn();
+    const onTrace = vi.fn();
+    const gateway = createAiGateway({ completeClient: client, governanceAdapter });
+
+    await expect(
+      gateway.complete([], {
+        providerOverride: 'deepseek',
+        modelOverride: 'deepseek-v4-pro',
+        governance: { quotaPolicy: 'user' },
+        trace: { onTrace },
+      }),
+    ).rejects.toMatchObject({ code: 'AI_PROVIDER_MODEL_NOT_ALLOWED' });
+    expect(client).not.toHaveBeenCalled();
+    expect(governanceAdapter.beginAiGatewayGovernance).not.toHaveBeenCalled();
+    expect(governanceAdapter.finishAiGatewayGovernance).not.toHaveBeenCalled();
+    expect(onTrace.mock.calls.map(([event]) => event.event)).toEqual(['ai.span.started', 'ai.span.failed']);
+    expect(onTrace.mock.calls.at(-1)[0].error).toBe('AI_PROVIDER_MODEL_NOT_ALLOWED');
+  });
 });
 
 it('多张图片分别预留 1024 tokens，额度预算不随 base64 大小变化', () => {

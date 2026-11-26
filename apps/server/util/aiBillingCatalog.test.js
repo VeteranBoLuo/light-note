@@ -129,7 +129,6 @@ describe('aiBillingCatalog', () => {
     // 已下架工具只保留计费动作用于历史用量展示，不再进入公开目录。
     expect(toolboxActions.filter((action) => action.publicCatalog).map((action) => action.id)).toEqual([
       'toolbox.material_to_note',
-      'toolbox.study_kit',
       'toolbox.ocr_to_text',
     ]);
     expect(toolboxActions.map((action) => action.id)).toEqual(expect.arrayContaining(retiredActionIds));
@@ -138,23 +137,23 @@ describe('aiBillingCatalog', () => {
       expect(publicIds).not.toContain(actionId);
     expect(toolboxActions.every((action) => action.allowedBillingPolicies.join(',') === 'user,system')).toBe(true);
 
-    const skill = resolveAiSkill('toolbox.study_kit', 1);
+    const skill = resolveAiSkill('toolbox.material_to_note', 1);
     const request = { input: {}, scope: { resourceRefs: [{ type: 'note', id: 'n-1' }] } };
     expect(createAiSkillExecutionConfig(skill, request)).toMatchObject({
       billingPolicy: 'user',
-      skillId: 'toolbox.study_kit',
-      taskType: 'skill_toolbox_study_kit',
+      skillId: 'toolbox.material_to_note',
+      taskType: 'skill_toolbox_material_to_note',
     });
     expect(createUserAiExecutionConfig(skill.id)).toMatchObject({
       billingPolicy: 'user',
-      skillId: 'toolbox.study_kit',
+      skillId: 'toolbox.material_to_note',
     });
     expect(
       createAiSkillExecutionConfig(skill, request, { billingPolicy: 'system', systemId: 'toolbox_points' }),
     ).toMatchObject({
       billingPolicy: 'system',
-      skillId: 'toolbox.study_kit',
-      taskType: 'skill_toolbox_study_kit',
+      skillId: 'toolbox.material_to_note',
+      taskType: 'skill_toolbox_material_to_note',
     });
   });
 

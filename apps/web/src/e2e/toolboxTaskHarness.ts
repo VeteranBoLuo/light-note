@@ -20,11 +20,7 @@ const state = ['queued', 'retrying', 'processing', 'success', 'partial', 'failed
   ? String(params.get('state'))
   : 'partial';
 const toolId =
-  params.get('tool') === 'translation' ? 'translation' : params.get('tool') === 'study_kit'
-    ? 'study_kit'
-    : params.get('tool') === 'concept_map'
-      ? 'concept_map'
-      : 'research_brief';
+  params.get('tool') === 'translation' ? 'translation' : params.get('tool') === 'concept_map' ? 'concept_map' : 'research_brief';
 const theme = params.get('theme') === 'night' ? 'night' : 'day';
 const locale = params.get('locale') === 'en-US' ? 'en-US' : 'zh-CN';
 const now = new Date('2026-08-29T01:20:00+08:00').toISOString();
@@ -223,27 +219,6 @@ function artifactFixture() {
     meta: {
       draftState: 'needs_verification',
       sourceCount: 3,
-      ...(toolId === 'study_kit'
-        ? {
-            study: {
-              version: 1,
-              cards: [
-                {
-                  id: 'card-a',
-                  kind: 'flashcard',
-                  question: '为什么要验证来源？',
-                  answer: '确认结论是否有可核对的依据。',
-                },
-                {
-                  id: 'card-b',
-                  kind: 'quiz',
-                  question: '部分读取可以代表全文吗？',
-                  answer: '不能，需要保留读取范围与限制。',
-                },
-              ],
-            },
-          }
-        : {}),
     },
     save: { status: 'unsaved' },
     createdAt: now,
@@ -276,16 +251,6 @@ request.defaults.adapter = async (config) => {
     };
   }
 
-  if (config.url === '/api/toolbox/artifacts/visual-toolbox-artifact/study') {
-    const key = 'workshop-visual-study';
-    const mastered = JSON.parse(sessionStorage.getItem(key) || '{}');
-    if (config.method === 'post') {
-      const input = JSON.parse(String(config.data));
-      mastered[input.cardId] = input.mastered;
-      sessionStorage.setItem(key, JSON.stringify(mastered));
-    }
-    return response(config, { cards: Object.entries(mastered).map(([id, value]) => ({ id, mastered: value })) });
-  }
   if (config.url === '/api/toolbox/workspaces')
     return response(config, {
       items: params.has('source')

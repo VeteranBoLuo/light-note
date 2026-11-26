@@ -99,7 +99,7 @@ const GardenModel = (() => {
     fruit: Object.freeze({name:"果香引鱼饵", crop:"tomato", preference:"鱼类"}),
     herb: Object.freeze({name:"草木觅贝饵", crop:"lettuce", preference:"底栖水族"}),
   });
-  const FACILITY_RULES = Object.freeze({craftHours:2, craftMax:3, targetWeight:4, pollenCapacity:6,
+  const FACILITY_RULES = Object.freeze({craftHours:2, craftMax:3, targetWeight:4, pollenCapacity:6, pollinationDailyLimit:2,
     flowerPollen:Object.freeze({lavender:3, sunflower:6, rosemary:4}),
     pollinationCrops:Object.freeze(["tomato","strawberry","eggplant","pepper","blueberry","cucumber","grape"])});
   // 每级一次补给，每 5 级加赠里程碑礼包；Lv.1 就是见面礼，不重复发放。
@@ -328,17 +328,32 @@ const GardenModel = (() => {
     }
     return out;
   }
-  // 施肥：缩短这一轮剩余的生长时间；每株累计加速不超过这一轮时长的一半，成熟的地不消耗肥料
-  function fertilize(s, i, kind) {
-    const fert = FERT[kind];
-    if (!fert || !(s.fertilizers[kind] > 0) || plotState(s, i) !== "growing") return 0;
+  const FERT_TIME_EPSILON = 1e-9;
+  function fertilizerRoom(s, i) {
+    if (plotState(s, i) !== "growing") return 0;
     const p = s.plots[i];
-    const room = cycle(s, p) * RULES.accelShare - p.accel;
-    const gain = Math.min(fert.hours, room, p.next - s.now);
-    if (gain <= 1e-9) return 0;
+    const room = Math.min(cycle(s, p) * RULES.accelShare - p.accel, p.next - s.now);
+    return room > FERT_TIME_EPSILON ? room : 0;
+  }
+  // 详情预览与实际扣除共用上限。达到上限或成熟时，最后一份可以只发挥部分肥效。
+  function quoteFertilizer(s, i, kind, quantity = 1) {
+    const fert = Object.hasOwn(FERT, kind) ? FERT[kind] : null;
+    const stock = s.fertilizers[kind];
+    const room = fertilizerRoom(s, i);
+    if (!fert || !Number.isSafeInteger(stock) || stock < 1 || !room || !Number.isSafeInteger(quantity) || quantity < 1) {
+      return { max: 0, used: 0, gain: 0 };
+    }
+    const max = Math.min(stock, Math.ceil((room - FERT_TIME_EPSILON) / fert.hours));
+    const used = Math.min(quantity, max);
+    return { max, used, gain: Math.min(used * fert.hours, room) };
+  }
+  function fertilize(s, i, kind, quantity = 1) {
+    const { used, gain } = quoteFertilizer(s, i, kind, quantity);
+    if (!used) return 0;
+    const p = s.plots[i];
     p.accel += gain;
-    p.next -= gain;
-    s.fertilizers[kind]--;
+    p.next = gain >= p.next - s.now ? s.now : p.next - gain;
+    s.fertilizers[kind] -= used;
     return gain;
   }
   function remove(s, i) {
@@ -393,22 +408,33 @@ const GardenModel = (() => {
     if (![points, s.wallet + points, s.weekEarned + points].every(Number.isSafeInteger)) return empty;
     return { sold, points, left: stock - sold };
   }
-  function sellCrop(s, key, n) {
-    const result = quoteCropSale(s, key, n ?? s.crops[key]);
-    const { sold, points } = result;
-    if (!sold) return result;
+  function applyCropSale(s, key, { sold, points }) {
     s.crops[key] -= sold;
     earn(s, points, `卖出${CROPS[key].name} × ${sold}`);
+  }
+  function sellCrop(s, key, n) {
+    const result = quoteCropSale(s, key, n ?? s.crops[key]);
+    if (result.sold) applyCropSale(s, key, result);
     return result;
   }
-  function sellAllCrops(s) {
+  function quoteAllCropSales(s) {
+    const projected = { crops: s.crops, wallet: s.wallet, weekEarned: s.weekEarned };
+    const items = [];
     let sold = 0, points = 0;
-    for (const key of Object.keys(s.crops)) {
-      if (!s.crops[key] || !CROPS[key] || CROPS[key].sell === null) continue;
-      const r = sellCrop(s, key);
-      sold += r.sold;
-      points += r.points;
+    for (const [key, stock] of Object.entries(s.crops)) {
+      const quote = quoteCropSale(projected, key, stock);
+      if (!quote.sold) continue;
+      items.push({ key, sold: quote.sold, points: quote.points });
+      sold += quote.sold;
+      points += quote.points;
+      projected.wallet += quote.points;
+      projected.weekEarned += quote.points;
     }
+    return { items, sold, points };
+  }
+  function sellAllCrops(s) {
+    const { items, sold, points } = quoteAllCropSales(s);
+    for (const item of items) applyCropSale(s, item.key, item);
     return { sold, points };
   }
   // 玉米换鱼饵；彩虹玉米换彩虹鱼饵（下一竿必定上钩，不改变稀有度）
@@ -458,7 +484,7 @@ const GardenModel = (() => {
   // 今日已领合计。分档后不再按项记录，新领取记在第 0 格；旧版按项和全完成奖励的领取量一并计入，
   // 换规则当天不会多领。
   const dailyWaterClaimed = s => (s.dailyWaterClaims || []).reduce((n, v) => n + v, 0) + (s.dailyWaterBonusClaimed || 0);
-  // 庄园只领取水滴，与轻笺积分领取分开。水桶装不下的部分留待当日领取。
+  // 庄园内外共用当日水滴领取额度；水桶装不下的部分留待当日领取。
   const pendingDailyWater = s => Math.max(0, dailyWaterEarned(s) - dailyWaterClaimed(s));
   function claimAllDailyWater(s) {
     const water = Math.min(pendingDailyWater(s), Math.max(0, RULES.waterCap - s.water));
@@ -513,7 +539,7 @@ const GardenModel = (() => {
     if(!facility||!s.adopted||s.casting||s[key]||level(s)<facility.gardenLevel||
       ![s.wallet,s.weekSpent+facility.cost].every(Number.isSafeInteger)||s.wallet<facility.cost)return false;
     spend(s,facility.cost,`建造${facility.name}`);
-    s[key]=key==="workshop"?{purchasedAt:s.now,job:null,nextJobId:1}:key==="composter"?{purchasedAt:s.now,level:1,residue:0,stock:0,nextReady:null}:{purchasedAt:s.now,pollen:0,lastPollinatedDay:null};
+    s[key]=key==="workshop"?{purchasedAt:s.now,job:null,nextJobId:1}:key==="composter"?{purchasedAt:s.now,level:1,residue:0,stock:0,nextReady:null}:{purchasedAt:s.now,pollen:0,lastPollinatedDay:null,pollinationsUsed:0};
     diary(s,`${facility.name}建好了`);
     return true;
   }
@@ -589,8 +615,18 @@ const GardenModel = (() => {
   }
   function beehiveStatus(s) {
     const hive=s.beehive;
-    return {owned:!!hive,pollen:hive?.pollen||0,capacity:FACILITY_RULES.pollenCapacity,
-      usedToday:!!hive&&hive.lastPollinatedDay===day(s)};
+    const { pollenCapacity, pollinationDailyLimit } = FACILITY_RULES;
+    // Old saves with today's date recorded have already used one of the daily slots.
+    const pollinationsUsed = hive?.lastPollinatedDay === day(s)
+      ? hive.pollinationsUsed ?? 1
+      : 0;
+    return {
+      owned: !!hive,
+      pollen: hive?.pollen || 0,
+      capacity: pollenCapacity,
+      pollinationsUsed,
+      pollinationsRemaining: Math.max(0, pollinationDailyLimit - pollinationsUsed),
+    };
   }
   function refillPollen(s, crop) {
     const amount=FACILITY_RULES.flowerPollen[crop],hive=s.beehive;
@@ -604,9 +640,12 @@ const GardenModel = (() => {
   const pollinationTargets = s => s.plots.flatMap((p,i)=>pollinationEligible(s,i)?[i]:[]);
   function pollinate(s,i) {
     const hive=s.beehive;
+    const { pollinationsUsed, pollinationsRemaining } = beehiveStatus(s);
     if(!s.adopted||s.casting||!pollinationEligible(s,i)||!Number.isSafeInteger(hive.pollen)||hive.pollen<1||
-      hive.lastPollinatedDay===day(s))return false;
-    hive.pollen--;hive.lastPollinatedDay=day(s);
+      !pollinationsRemaining)return false;
+    hive.pollen--;
+    hive.lastPollinatedDay = day(s);
+    hive.pollinationsUsed = pollinationsUsed + 1;
     s.plots[i].pollinated=true;s.plots[i].pollinationPending=true;
     return true;
   }
@@ -863,19 +902,50 @@ const GardenModel = (() => {
     if (!c) return 0;
     return Math.round(RULES.sellPrice[c.quality] * (c.fertilizer ? 1 : RULES.creatureSellRate));
   };
+  function waitingFishPrice(s, fish, catalog) {
+    if (s.firstCompanionPending === fish.id || placed(s, fish.id)) return 0;
+    const price = sellPrice(fish.kind, catalog);
+    return Number.isSafeInteger(price) && price > 0 ? price : 0;
+  }
+  const fitsSale = (s, points) => [points, s.wallet + points, s.weekEarned + points].every(Number.isSafeInteger);
+  function storeFishSales(s, items) {
+    s.nextSaleId ||= 1;
+    const receipts = items.map(({ fish, points }) => ({
+      id: s.nextSaleId++, fish: { ...fish }, points, buybackPoints: buybackPrice(points), soldAt: s.now,
+    }));
+    s.buybacks = receipts.reverse().concat(buybackEntries(s)).slice(0, RULES.buybackLimit);
+  }
   // 卖出待养区里的生物：消耗唯一个体换成积分，图鉴记录保留。
   function sell(s, fishId, catalog) {
-    if(s.firstCompanionPending===fishId)return 0;
-    if (placed(s, fishId)) return 0;
     const i = s.fish.findIndex((f) => f.id === fishId);
     if (i < 0) return 0;
-    const price = sellPrice(s.fish[i].kind, catalog);
-    if (!price || ![price, s.wallet + price, s.weekEarned + price].every(Number.isSafeInteger)) return 0;
+    const price = waitingFishPrice(s, s.fish[i], catalog);
+    if (!price || !fitsSale(s, price)) return 0;
     const [fish] = s.fish.splice(i, 1);
     earn(s, price, `卖出${catalog[fish.kind].name || "一位水族"}`);
-    s.nextSaleId ||= 1;
-    s.buybacks=[{id:s.nextSaleId++,fish:{...fish},points:price,buybackPoints:buybackPrice(price),soldAt:s.now},...buybackEntries(s)].slice(0,RULES.buybackLimit);
+    storeFishSales(s, [{ fish, points: price }]);
     return price;
+  }
+  function quoteWaitingFishSale(s, catalog) {
+    const items = [];
+    let points = 0;
+    for (const fish of s.fish) {
+      const price = waitingFishPrice(s, fish, catalog);
+      if (!price) continue;
+      items.push({ fish, points: price });
+      points += price;
+    }
+    if (!fitsSale(s, points)) return { items, sold: 0, points: 0 };
+    return { items, sold: items.length, points };
+  }
+  function sellAllWaitingFish(s, catalog) {
+    const { items, sold, points } = quoteWaitingFishSale(s, catalog);
+    if (!sold) return null;
+    const ids = new Set(items.map(({ fish }) => fish.id));
+    s.fish = s.fish.filter(fish => !ids.has(fish.id));
+    earn(s, points, `卖出待养水族 × ${sold}`);
+    storeFishSales(s, items);
+    return { sold, points };
   }
   const buybackEntries=s=>(s.buybacks||[]).filter(r=>Number.isFinite(r.soldAt)&&s.now>=r.soldAt&&s.now-r.soldAt<RULES.buybackHours);
   function buybackPrice(points) {
@@ -976,6 +1046,8 @@ const GardenModel = (() => {
     replantSeed,
     water,
     harvest,
+    fertilizerRoom,
+    quoteFertilizer,
     fertilize,
     remove,
     birdCanDeliver,
@@ -990,6 +1062,7 @@ const GardenModel = (() => {
     buySeed,
     grantSeed,
     quoteCropSale,
+    quoteAllCropSales,
     sellCrop,
     sellAllCrops,
     buybackPrice, buybackCost,
@@ -1024,6 +1097,8 @@ const GardenModel = (() => {
     unplace,
     sellPrice,
     sell,
+    quoteWaitingFishSale,
+    sellAllWaitingFish,
     tankSize,
   };
 })();

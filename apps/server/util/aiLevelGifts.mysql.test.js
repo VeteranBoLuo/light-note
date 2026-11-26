@@ -387,11 +387,18 @@ describe.skipIf(!socketPath)('one-time AI gifts / reservations (isolated MySQL)'
     expect((await assessAiLevelGiftRisk({ database: state.db, notify })).heldAccounts).toBe(0);
     expect((await grantOutstandingLevelGifts('network-1')).creditedTokens).toBe(120000);
   });
-  it('global pause holds all seven-day accounts and a reviewed restart ignores the same previous facts', async () => {
-    for (let i = 0; i < 21; i++) await state.db.query('INSERT INTO user(id) VALUES (?)', ['global-' + i]);
+  it('pauses after the default global limit and ignores reviewed facts on restart', async () => {
+    vi.stubEnv('AI_GIFT_GLOBAL_REGISTRATION_LIMIT', undefined);
+    const registrations = Array.from({ length: 100 }, (_, index) => [`global-${index}`]);
+    await state.db.query('INSERT INTO user(id) VALUES ?', [registrations]);
+    expect(await assessAiLevelGiftRisk({ database: state.db, notify: vi.fn() })).toMatchObject({
+      paused: false,
+      heldAccounts: 0,
+    });
+    await state.db.query("INSERT INTO user(id) VALUES ('global-100')");
     expect(await assessAiLevelGiftRisk({ database: state.db, notify: vi.fn() })).toMatchObject({
       paused: true,
-      heldAccounts: 21,
+      heldAccounts: 101,
     });
     await state.db.query("INSERT INTO user(id) VALUES ('later')");
     expect((await grantOutstandingLevelGifts('later')).reason).toBe('new_accounts_paused');
@@ -516,6 +523,7 @@ describe.skipIf(!socketPath)('one-time AI gifts / reservations (isolated MySQL)'
     },
   );
   it('a global pause uses one stable episode and never duplicates existing active holds', async () => {
+    vi.stubEnv('AI_GIFT_GLOBAL_REGISTRATION_LIMIT', '20');
     for (let i = 0; i < 21; i++) await register('episode-' + i);
     expect((await assessAiLevelGiftRisk({ database: state.db })).heldAccounts).toBe(21);
     await register('episode-new');
@@ -528,6 +536,7 @@ describe.skipIf(!socketPath)('one-time AI gifts / reservations (isolated MySQL)'
     expect((await assessAiLevelGiftRisk({ database: state.db })).heldAccounts).toBe(0);
   });
   it('deleted accounts still count toward global registrations after their user rows are purged', async () => {
+    vi.stubEnv('AI_GIFT_GLOBAL_REGISTRATION_LIMIT', '20');
     for (let i = 0; i < 21; i++) {
       await register('deleted-' + i, '198.51.' + i + '.1');
       if (i < 20) {

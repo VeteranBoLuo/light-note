@@ -153,6 +153,21 @@ describe('积分经济 C9 单一目录', () => {
     expect(parseRuntimeFlag('unexpected', true)).toBe(false);
   });
 
+  it('C12 仅开放 2 GB 档二次兑换、降低常规 AI 商品到账并沿用 C11 奖池', () => {
+    const previous = getEconomyCatalogSnapshot('points-economy-c11');
+    const current = getEconomyCatalogSnapshot('points-economy-c12');
+    expect(current.utilityItems).toEqual(previous.utilityItems.map((item) => {
+      if (item.id === 'storage_2g') return { ...item, purchaseLimit: 2, purchaseCosts: [5200, 6500] };
+      if (item.id === 'ai_pack_small') return { ...item, bonusTokens: 200_000 };
+      if (item.id === 'ai_pack') return { ...item, bonusTokens: 400_000 };
+      return item;
+    }));
+    expect(current.paidPolicy).toEqual(previous.paidPolicy);
+    expect(current.freePolicy).toEqual(previous.freePolicy);
+    expect(getActiveEconomyVersion({ POINTS_ECONOMY_C12_ENABLED: 'true', POINTS_ECONOMY_C11_ENABLED: 'true' })).toBe(current.version);
+    expect(getActiveEconomyVersion({ POINTS_ECONOMY_C12_ENABLED: 'false', POINTS_ECONOMY_C11_ENABLED: 'true' })).toBe(previous.version);
+  });
+
   it('C4/C5 免费次数都按 0/1/2/3 封顶，且写协议不能被环境变量降级', () => {
     expect([1, 2, 3, 5, 6, 9, 10, 15].map((level) => freeDrawsFor(level, POINTS_ECONOMY_VERSION))).toEqual([
       0, 0, 1, 1, 2, 2, 3, 3,

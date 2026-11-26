@@ -47,13 +47,17 @@ describe('CloudFileCardIdentity', () => {
     const name = '《新赤脚医生手册》 中国13亿人口的全民健康指导手册.PDF';
     const { host, props } = mountIdentity({ fileName: name });
     expect(host.querySelector('.file-card-name')?.textContent).toBe(name);
-    expect(host.querySelector('.file-card-name__extension')?.textContent).toBe('.PDF');
+    expect(host.querySelector('.cloud-file-name__extension')?.textContent).toBe('.PDF');
     expect(host.querySelector('.file-card-name')?.getAttribute('aria-label')).toBe(name);
+    props.value.fileName = '季度离线备份.TAR.GZ';
+    await nextTick();
+    expect(host.querySelector('.cloud-file-name__extension')?.textContent).toBe('.TAR.GZ');
+    expect(host.querySelector('.file-card-name')?.textContent).toBe(props.value.fileName);
     for (const fileName of ['无扩展名文件', '.gitignore', '草稿.']) {
       props.value.fileName = fileName;
       await nextTick();
       expect(host.querySelector('.file-card-name')?.textContent).toBe(fileName);
-      expect(host.querySelector('.file-card-name__extension')).toBeNull();
+      expect(host.querySelector('.cloud-file-name__extension')).toBeNull();
     }
     expect(host.querySelector('.file-card-folder')).toBeNull();
   });

@@ -439,7 +439,7 @@
             <span class="footer-sep">|</span>
             <a href="/legal/user-agreement.html" @click="handleDocumentNavigation">{{ t('landing.userAgreement') }}</a>
             <span class="footer-sep">|</span>
-            <a href="#" @click.prevent="handleContact">{{ t('landing.contactUs') }}</a>
+            <a ref="contactLink" href="#" @click.prevent="handleContact">{{ t('landing.contactUs') }}</a>
             <span class="footer-sep">|</span>
             <a
               class="footer-store-link"
@@ -509,7 +509,7 @@
             type="textarea"
             :placeholder="t('landing.feedbackPlaceholder')"
             :rows="4"
-            :readonly="submitting || feedbackSubmitted"
+            :readonly="submitting"
             :aria-invalid="feedbackTooLong"
             aria-describedby="landing-feedback-length landing-feedback-status"
             @input="feedbackError = ''"
@@ -524,22 +524,13 @@
         <p
           id="landing-feedback-status"
           class="contact-dialog__status"
-          :class="{ 'is-error': feedbackError, 'is-success': feedbackSubmitted }"
+          :class="{ 'is-error': feedbackError }"
           role="status"
           aria-atomic="true"
         >
-          {{ feedbackSubmitted ? t('landing.feedbackOk') : feedbackError ? t(feedbackError) : '' }}
+          {{ feedbackError ? t(feedbackError) : '' }}
         </p>
         <BButton
-          v-if="feedbackSubmitted"
-          type="primary"
-          class="contact-dialog__submit"
-          @click="showContactModal = false"
-        >
-          {{ t('landing.feedbackDone') }}
-        </BButton>
-        <BButton
-          v-else
           type="primary"
           native-type="submit"
           class="contact-dialog__submit"
@@ -554,7 +545,7 @@
 </template>
 
 <script setup lang="ts">
-  import { ref, computed, inject, onMounted, onBeforeUnmount } from 'vue';
+  import { ref, computed, inject, nextTick, onMounted, onBeforeUnmount } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useRouter } from 'vue-router';
   import { OPINION_CONTENT_MAX_LENGTH, OPINION_CONTENT_MIN_LENGTH } from '@lightnote/shared';
@@ -614,20 +605,16 @@
   const previewIndex = ref(bookmark.isMobile ? 3 : 0);
   const visible = ref({ 1: false, 2: false, 3: false, 4: false });
   const animating = ref(false);
+  const contactLink = ref<HTMLAnchorElement>();
   const showContactModal = ref(false);
   const officialContactEmail = '1902013368@qq.com';
   const feedbackContent = ref('');
   const submitting = ref(false);
-  const feedbackSubmitted = ref(false);
   const feedbackError = ref<'landing.feedbackFail' | 'landing.networkErr' | ''>('');
   const feedbackLength = computed(() => feedbackContent.value.trim().length);
   const feedbackTooLong = computed(() => feedbackLength.value > OPINION_CONTENT_MAX_LENGTH);
   const canSubmitFeedback = computed(
-    () =>
-      !submitting.value &&
-      !feedbackSubmitted.value &&
-      feedbackLength.value >= OPINION_CONTENT_MIN_LENGTH &&
-      !feedbackTooLong.value,
+    () => !submitting.value && feedbackLength.value >= OPINION_CONTENT_MIN_LENGTH && !feedbackTooLong.value,
   );
   type LandingNavigationAction = 'primary' | 'account' | 'store' | 'extension' | 'document';
   type LandingNavigationKind = 'app' | 'registration' | 'page';
@@ -904,7 +891,6 @@
     if (!submitting.value) {
       feedbackContent.value = '';
       feedbackError.value = '';
-      feedbackSubmitted.value = false;
     }
     showContactModal.value = true;
   }
@@ -920,7 +906,12 @@
         { silent: true },
       );
       if (res.status === 200) {
-        feedbackSubmitted.value = true;
+        const restoreFocus = showContactModal.value;
+        showContactModal.value = false;
+        feedbackContent.value = '';
+        await nextTick();
+        if (restoreFocus) contactLink.value?.focus({ preventScroll: true });
+        message.open({ type: 'success', content: t('landing.feedbackOk'), placement: 'top', duration: 2 });
       } else {
         feedbackError.value = 'landing.feedbackFail';
       }
@@ -3164,9 +3155,6 @@
   }
   .contact-dialog__body .is-error {
     color: var(--danger-color);
-  }
-  .contact-dialog__status.is-success {
-    color: var(--success-color);
   }
   .contact-dialog__submit.b_btn {
     width: 100%;

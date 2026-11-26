@@ -52,7 +52,6 @@
   );
   const previews = {
     material_to_note: 'note',
-    study_kit: 'flashcards',
     pdf_organizer: 'pages',
   } as const;
   const preview = computed(() => previews[props.toolId as keyof typeof previews]);

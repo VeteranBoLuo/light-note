@@ -1,6 +1,6 @@
 /* 海边庭院：海面落点与起竿位置。钓获仍交给 GardenModel。 */
 const GardenCourtyard = (() => {
-  let root = null, cursor = "";
+  let root = null;
   const mobile = () => document.documentElement.classList.contains("light-note-mobile-rendering");
   function fishingGeometry(isMobile) {
     // 种田底图：码头位置来自标定（舞台按当前端型换算）
@@ -136,18 +136,7 @@ const GardenCourtyard = (() => {
     GardenLife.mount(scene);
     if (root === scene) return;
     root = scene;
-    if (!cursor) {
-      const c = document.createElement("canvas"); c.width = c.height = 40;
-      const ctx = c.getContext("2d");
-      ctx.lineCap = "round"; ctx.strokeStyle = "#fff8df"; ctx.lineWidth = 5;
-      ctx.beginPath(); ctx.moveTo(5, 34); ctx.quadraticCurveTo(14, 5, 31, 5); ctx.stroke();
-      ctx.strokeStyle = "#74502a"; ctx.lineWidth = 2.5; ctx.stroke();
-      ctx.strokeStyle = "#fffdf4"; ctx.lineWidth = 1.5;
-      ctx.beginPath(); ctx.moveTo(31, 5); ctx.lineTo(31, 27); ctx.stroke();
-      ctx.fillStyle = "#e6734e"; ctx.beginPath(); ctx.ellipse(31, 28, 3, 5, 0, 0, Math.PI * 2); ctx.fill();
-      cursor = `url("${c.toDataURL()}") 31 28, crosshair`;
-    }
-    const hit = pond.querySelector(".pond-hit"); hit.style.cursor = cursor;
+    const hit = pond.querySelector(".pond-hit");
     // Hold and drag to aim; the normal release click casts at the final point.
     bindAim(hit, () => !pond.classList.contains("casting"), aimAtPointer);
     hit.addEventListener("focus", () => {
@@ -162,7 +151,6 @@ const GardenCourtyard = (() => {
   function updateFishing(phase) {
     const pond = document.querySelector("#pondSpot");
     if (!pond) return;
-    pond.querySelector(".pond-hit").style.cursor = cursor;
     // 水面的反馈由浮漂下沉、涟漪和竿梢表达；文字由主热区和 live 播报提供。
     paintAim(pond, pond.dataset.landing?.split(",").map(Number) || fishingGeometry(mobile()).center, phase);
   }

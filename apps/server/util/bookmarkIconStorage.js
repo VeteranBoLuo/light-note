@@ -6,6 +6,14 @@ const SHARED_BOOKMARK_ICON_PATTERN = new RegExp(
   `^bookmark-icon-[a-f0-9]{64}\\.${BOOKMARK_ICON_EXTENSION_PATTERN}$`,
   'i',
 );
+const BOOKMARK_ICON_FILE_PATTERN = new RegExp(
+  String.raw`^bookmark-[a-z0-9_-]+\.${BOOKMARK_ICON_EXTENSION_PATTERN}$`,
+  'i',
+);
+
+export function isPublicBookmarkIconFileName(value) {
+  return BOOKMARK_ICON_FILE_PATTERN.test(String(value || ''));
+}
 
 function escapeRegExp(value) {
   return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');

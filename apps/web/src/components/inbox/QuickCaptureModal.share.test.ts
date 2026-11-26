@@ -324,10 +324,20 @@ describe('快速添加 · 系统分享', () => {
     expect(host.textContent).toContain('超出总大小上限');
     expect(buttonByText(host, zhCN.inbox.collect)?.disabled).toBe(true);
     expect(host.querySelector('[role="alert"]')?.textContent).toContain('分享文件未加入');
-    expect(host.querySelector('[role="alert"]')?.textContent).toContain('500MB');
+    expect(host.querySelector('[role="alert"]')?.textContent).toContain('500 MB');
     expect(host.textContent).toContain('没有文件可上传');
     expect(host.querySelector('#share-skipped-details')?.textContent).toContain('too-big.mp4');
     expect(host.querySelector('#share-skipped-details')?.textContent).toContain('broken.jpg');
+    expect(buttonByText(host, zhCN.inbox.goToCloudUpload)).toBeDefined();
+  });
+
+  it('全部文件大小超限但仍有分享文字时，保留草稿且只显示上传指引', () => {
+    pendingDraft = draft({ skippedFiles: 1, skippedFileCounts: { size_limit: 1 } });
+    const host = mount();
+
+    expect(host.textContent).toContain(zhCN.inbox.uploadLargeFilesAfterSaving);
+    expect(buttonByText(host, zhCN.inbox.goToCloudUpload)).toBeUndefined();
+    expect(completeAndroidShare).not.toHaveBeenCalled();
   });
 
   it('文字和文件一起分享时先存文件，文字保留到「继续添加」，全部保存后才清理暂存', async () => {

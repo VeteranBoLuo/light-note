@@ -7,6 +7,7 @@
  */
 import pool from '../db/index.js';
 import { upsertKnowledgeBase } from '../util/services/knowledgeBaseService.js';
+import { manorModel } from '@lightnote/shared/manor';
 
 const ENTRIES = [
   {
@@ -52,6 +53,8 @@ const ENTRIES = [
 ## 设施
 
 诱饵工坊和花园蜂箱在庄园 Lv.6 可建，海水过滤器在 Lv.8 可建（每天额外产水），堆肥箱在 Lv.9 可建。建造与升级都使用积分。
+
+花园蜂箱每天可给最多 ${manorModel.FACILITY_RULES.pollinationDailyLimit} 株生长中的符合条件作物授粉。每次消耗 1 份花粉，让该株下一轮多收 1 份。每株只能授粉一次。
 
 ## 等级与图鉴
 

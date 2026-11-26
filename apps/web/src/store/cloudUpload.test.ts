@@ -87,6 +87,32 @@ function holdPuts() {
 }
 
 describe('全局上传会话', () => {
+  it('自动改名时保留未撞名的原名，并要求确认接口保留两份', async () => {
+    const files = ['same.jpg', 'unique.jpg', 'same (1).jpg'].map((name) => new File(['photo'], name));
+    post.mockResolvedValueOnce({
+      status: 200,
+      msg: '',
+      data: {
+        allNames: ['same.jpg'],
+        check: files.map((file) => ({ fileName: file.name, exists: file.name === 'same.jpg' })),
+      },
+    });
+    const pending = store.enqueue(files, 'folder-a');
+    await vi.advanceTimersByTimeAsync(50);
+    const dialog = fixture.alert.mock.calls[0][0];
+    dialog.footer.find(({ label }: { label: string }) => label.startsWith('cloudSpace.uploadQueueRename')).function();
+    await finish(pending);
+
+    const expectedNames = ['same (2).jpg', 'unique.jpg', 'same (1).jpg'];
+    expect(put.mock.calls.map(([, file]) => file.name)).toEqual(expectedNames);
+    const confirmation = post.mock.calls.find(([url]) => url.endsWith('/confirmUpload'))?.[1];
+    expect(confirmation).toMatchObject({
+      folderId: 'folder-a',
+      files: expectedNames.map((fileName) => ({ fileName, keepBoth: true })),
+    });
+    expect(store.progress?.success).toBe(3);
+  });
+
   it('入口组件卸载后仍可追加到同一队列，保持折叠状态和每一批目标目录', async () => {
     store.$dispose();
     const pinia = createPinia();

@@ -1,3 +1,5 @@
+import { ECONOMY_CATALOGS } from './pointsEconomyCatalog.js';
+
 export const RICH_MEDIA_HELP_ENTRY = Object.freeze({
   title: '富文本笔记怎么让图片和文字一一对应',
   category: '帮助中心',
@@ -46,6 +48,33 @@ export function buildHelpKnowledgeRefreshEntries({ ranks, guestQuota, makeupWind
     guide(key, title, null, content, { category, ...options });
   const site = 'https://boluo66.top';
   const link = (label, path) => `[${label}](${site}${path})`;
+  const economy = ECONOMY_CATALOGS[economyVersion];
+  const pointsOnlySurprise = economy?.freePolicy.pool.every((reward) => reward.kind === 'points');
+  if (economy) {
+    const format = (points) => points.toLocaleString('zh-CN');
+    const aiItems = economy.utilityItems.filter((item) => item.effect === 'ai_pack').map((item) =>
+      `- ${item.name}：${format(item.cost)} 积分，永久增加 ${item.bonusTokens / 10_000} 万 tokens，${item.purchaseLimit ? `每账号限兑 ${item.purchaseLimit} 次` : '可重复兑换'}。`);
+    const spaceItems = economy.utilityItems.filter((item) => item.effect === 'storage').map((item) => {
+      const price = item.purchaseCosts
+        ? `每账号限兑 ${item.purchaseLimit} 次（${item.purchaseCosts.map((cost, index) => `第 ${index + 1} 次 ${format(cost)} 积分`).join('，')}）`
+        : `${format(item.cost)} 积分${item.purchaseLimit ? `，每账号限兑 ${item.purchaseLimit} 次` : ''}`;
+      return `- ${item.name}：${price}。`;
+    });
+    const makeup = economy.utilityItems.find((item) => item.effect === 'makeup_card');
+    guide('points-shop', '积分商店与积分抽奖', '账号与设置', `# 积分商店与积分抽奖
+在${link('我的成长', '/growth')}的「兑换」页查看当前价格、剩余资格和到账权益。头像框和个人背景兑换后永久拥有，可在个人装扮中使用。
+
+## AI 永久余额
+${aiItems.join('\n')}
+兑换后立即到账。${permanentOnly ? '余额永久保留。' : '每日等级额度用完后会自动接续使用永久余额。'}历史到账数量按原兑换记录保留。
+
+## 永久扩容
+${spaceItems.join('\n')}
+每次扩容都叠加在等级容量之上。${economy.utilityItems.some((item) => item.effect === 'storage' && item.purchaseLimit) ? '历史直接兑换计入对应档位的首次资格，抽奖或赠送的空间不占资格。' : ''}
+${makeup ? `\n## 补签卡\n每张 ${format(makeup.cost)} 积分，可重复兑换，持有数量不限。兑换只会增加库存，每补一天消耗一张，可补今天之前最近 ${makeupWindowDays} 个自然日。\n` : ''}
+## 每日惊喜与积分抽奖
+每日惊喜免费${pointsOnlySurprise ? '，只发积分' : '，奖项以页面公示为准'}，不会推进付费保底。积分抽奖价格和概率以抽奖页公示为准。兑换与资源商店购买分别记录，积分没有人民币兑换汇率。`);
+  }
   const giftTotal = levelGifts.reduce((sum, value) => sum + value, 0);
   const rankTable = permanentOnly
     ? '| 等级 | 本级赠礼 | 累计赠礼 | 基础云空间 | 回收站保留期 |\n|---|---:|---:|---:|---|\n' + ranks.map((r, index) => `| Lv.${r.level} | ${levelGifts[index] / 10000} 万 tokens | ${levelGifts.slice(0, index + 1).reduce((sum, value) => sum + value, 0) / 10000} 万 tokens | ${r.spaceMb / 1024} GB | ${r.trashDays >= 3650 ? '永久（按当前等级规则）' : r.trashDays + ' 天'} |`).join('\n')
@@ -140,7 +169,7 @@ export function buildHelpKnowledgeRefreshEntries({ ranks, guestQuota, makeupWind
 行动可以绑定已有的具体待办，也可在保存时新建待办。绑定后日期和完成状态由该条待办决定，应到待办中完成；解除关联不删除待办。记录进展时填写本次进展或下一步，可选记录用时。
 
 ## 费用与保留
-项目管理免费，不会自动调用 AI；主动用资料转笔记、学习套件生成成果时另行确认费用。项目可暂停、完成或归档。删除项目不可恢复，但不会删除原始资料、独立任务、已保存笔记和正式待办。`,
+项目管理免费，不会自动调用 AI；主动用资料转笔记生成成果时另行确认费用。项目可暂停、完成或归档。删除项目不可恢复，但不会删除原始资料、独立任务、已保存笔记和正式待办。`,
     { required: false },
   );
 
@@ -284,7 +313,7 @@ ${rankTable}
 
 ${storage}
 
-免费「每日惊喜」次数按等级解锁：Lv.1～2 无，Lv.3～5 每日 1 次，Lv.6～9 每日 2 次，Lv.10 及以上每日 3 次，以当前页面为准。每日惊喜与付费积分抽奖分别管理，奖励不是保证收入。历史已到账资产继续保留。${economyVersion === 'points-economy-c11' ? '免费每日惊喜只赠送积分，奖项为 2、3、5、20 积分，权重依次 200、600、180、20；不再直接赠送 AI 额度。切换或回退不恢复已使用次数，历史奖品收据保持原样。' : ''}
+免费「每日惊喜」次数按等级解锁：Lv.1～2 无，Lv.3～5 每日 1 次，Lv.6～9 每日 2 次，Lv.10 及以上每日 3 次，以当前页面为准。每日惊喜与付费积分抽奖分别管理，奖励不是保证收入。历史已到账资产继续保留。${pointsOnlySurprise ? `免费每日惊喜只赠送积分，奖项为 ${economy.freePolicy.pool.map(({ amount }) => amount).join('、')} 积分。切换或回退不恢复已使用次数，历史奖品收据保持原样。` : ''}
 
 当前权益可在${link('我的成长', '/growth')}、云空间容量详情和${link('AI 用量', '/ai-usage')}核对。`,
   );

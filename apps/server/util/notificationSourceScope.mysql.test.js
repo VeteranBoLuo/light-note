@@ -94,6 +94,8 @@ describe.skipIf(!socketPath)('notification source recipient SQL', () => {
     await add('bob', 'community_feed_comment_like', 'like', { postId: 'post', commentId: 'comment' });
     expect(await recipients('feed_post', ['post'])).toEqual(['alice', 'bob']);
     expect(await recipients('feed_comment', ['comment'])).toEqual(['bob']);
+    await add('alice', 'community_feed_result', 'approved-action', { postId: 'approved-post' });
+    expect(await recipients('feed_post', ['approved-post'])).toEqual(['alice']);
     await add('alice', 'public_resource_review', 'publication:1', { publicationId: 'publication' });
     await add('bob', 'public_resource_result', 'action', { publicationId: 'publication' });
     expect(await recipients('publication', ['publication'])).toEqual(['alice', 'bob']);

@@ -711,6 +711,33 @@ describe('globalSearch 快捷模式', () => {
     mocks.formatDateTime.mockImplementation(() => '2026-07-31 10:00:00');
   });
 
+  it('快捷结果保留关键词摘要但省略正文与冗余分组，完整结果只提供检查器预览', async () => {
+    const content = '<p>前缀 &lt;例&gt; &amp; ' + 'x'.repeat(200_000) + '正文末尾命中</p>';
+    mocks.pool.query.mockImplementation(async (sql) => [
+      String(sql).includes("IF(n.type = 'drawing', '', n.content) AS content")
+        ? [{ id: 'note-1', title: '笔记', type: 'html', content, tags: [] }]
+        : [],
+    ]);
+    const req = { user: { id: 'owner' }, headers: {} };
+    const query = { types: ['note'], keyword: '正文末尾命中' };
+    const suggest = createResponse();
+    await globalSearch({ ...req, body: { ...query, mode: 'suggest', includeMetadata: false } }, suggest);
+    const suggested = suggest.send.mock.calls.at(-1)[0].data;
+    expect(suggested.items[0].description).toContain(query.keyword);
+    expect(suggested.items[0].raw).not.toHaveProperty('content');
+    expect(suggested).not.toHaveProperty('groups');
+    expect(Buffer.byteLength(JSON.stringify(suggested))).toBeLessThan(1024);
+
+    const full = createResponse();
+    await globalSearch({ ...req, body: query }, full);
+    const result = full.send.mock.calls.at(-1)[0].data;
+    const preview = result.items[0].raw.content;
+    expect(preview).toMatch(/^前缀 &lt;例&gt; &amp; x/);
+    expect(preview.replace('&lt;', '<').replace('&gt;', '>').replace('&amp;', '&')).toHaveLength(1800);
+    expect(result.items[0].description).toContain(query.keyword);
+    expect(result.groups[0].items[0].id).toBe('note-1');
+  });
+
   it.each([
     ['', 3, ['bookmark', 'note', 'file', 'todo', 'tag']],
     ['备案', 5, ['bookmark', 'note', 'file', 'todo', 'tag']],

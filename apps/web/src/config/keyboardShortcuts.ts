@@ -50,7 +50,7 @@ export function getGlobalShortcutLabel(
 
 /**
  * 笔记工作区面板开关，同用反斜杠键：
- * macOS 用 ⌘ 开关页面树、⌃ 开关右侧面板（⌥ + \\ 会输入「«」，不占用）；
+ * macOS 用 ⌘ 开关页面树、Control 开关右侧面板（⌥ + \\ 会输入「«」，不占用）；
  * Windows / Linux 用 Ctrl 开关页面树、Alt 开关右侧面板。
  */
 export type WorkspacePanelShortcut = 'sidebar' | 'sidePanel';
@@ -59,7 +59,7 @@ export function getWorkspacePanelShortcutLabel(
   target: WorkspacePanelShortcut,
   platform: ShortcutPlatform = getShortcutPlatform(),
 ): string {
-  if (platform === 'mac') return target === 'sidebar' ? '⌘ + \\' : '⌃ + \\';
+  if (platform === 'mac') return target === 'sidebar' ? '⌘ + \\' : 'Control + \\';
   return target === 'sidebar' ? 'Ctrl + \\' : 'Alt + \\';
 }
 

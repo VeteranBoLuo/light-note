@@ -37,7 +37,7 @@
   import { readTextPreviewSource } from '@/utils/textPreviewSource';
   import { onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import { isHtmlFile } from '@/constants/cloudFileCategory';
+  import { isHtmlFile, isMarkdownFile } from '@/constants/cloudFileCategory';
   import { configureMarkdownRenderer } from '@/utils/markdownRenderer';
 
   type CloudTextFile = {
@@ -151,19 +151,8 @@
     });
   }
 
-  function fileExtension(file: CloudTextFile): string {
-    const explicit = String(file.ext || '')
-      .trim()
-      .toLowerCase();
-    if (explicit) return explicit;
-    const name = String(file.fileName || '').toLowerCase();
-    const index = name.lastIndexOf('.');
-    return index >= 0 ? name.slice(index + 1) : '';
-  }
-
   function previewKind(file: CloudTextFile): PreviewKind {
-    const extension = fileExtension(file);
-    if (extension === 'md' || extension === 'markdown') return 'markdown';
+    if (isMarkdownFile(file)) return 'markdown';
     if (isHtmlFile(file)) return 'html';
     return 'text';
   }

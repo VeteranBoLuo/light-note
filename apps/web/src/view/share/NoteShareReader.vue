@@ -214,6 +214,7 @@
     type PublicNoteShareTreeItem,
   } from '@/api/noteShare';
   import { normalizeNoteContentResourceUrls, noteContentToHtml } from '@/utils/common';
+  import { bindSharedNoteImages } from '@/utils/noteShareImages';
   import { parseResourceHref } from '@/utils/noteResourceRefs';
   import { scrollIntoContainer } from '@/utils/scrolling';
   import { handleNoteAnchorActivation } from '@/utils/noteAnchors';
@@ -245,6 +246,7 @@
   let headingSpyFrame = 0;
   let pageRenderVersion = 0;
   const share = reactive({
+    id: '',
     rootNoteId: '',
     rootTitle: '',
     rootType: 'html',
@@ -290,7 +292,7 @@
   );
 
   function applyPage(nextPage: PublicNoteSharePage, nextBreadcrumb: Array<{ id: string; title: string }>) {
-    Object.assign(page, nextPage);
+    Object.assign(page, { ...nextPage, protectedImages: nextPage.protectedImages === true });
     breadcrumb.value = nextBreadcrumb;
     void renderPage();
   }
@@ -307,7 +309,7 @@
     try {
       const nextHtml = await noteContentToHtml(normalizeNoteContentResourceUrls(sourceContent), sourceType);
       if (renderVersion !== pageRenderVersion) return;
-      renderedHtml.value = nextHtml;
+      renderedHtml.value = page.protectedImages ? bindSharedNoteImages(nextHtml, share.id, page.id) : nextHtml;
       await collectRenderedHeadings(renderVersion);
     } finally {
       if (renderVersion === pageRenderVersion) pageRendering.value = false;

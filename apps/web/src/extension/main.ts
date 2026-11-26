@@ -3,6 +3,7 @@ import ExtensionApp from './ExtensionApp.vue';
 import '@/assets/css/index.less';
 import './styles.less';
 import i18n, { prepareInitialLocale } from '@/i18n';
+import { installEscapeFocusRing } from '@/utils/escapeFocusRing';
 import { applyDocumentTheme } from '@/utils/theme';
 import { getExtensionTheme } from './storage';
 
@@ -16,4 +17,5 @@ async function mountExtension() {
   app.mount('#app');
 }
 
+installEscapeFocusRing();
 void mountExtension();
