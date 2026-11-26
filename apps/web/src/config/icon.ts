@@ -658,6 +658,7 @@ export default {
       heading6: achievementGlyph('<path d="M3 5v14M12 5v14M3 12h9M21 13c-5-2-5 8-2 7 4 0 3-6-2-3"/>'),
       heading:
         '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.9" d="M6 5v14M18 5v14M6 12h12"/></svg>',
+      fontSize: achievementGlyph('<path d="M2.5 19l4-10 4 10m-6.4-4h4.8M12.5 19l4.5-14 4.5 14m-7.5-5h6"/>'),
       quote:
         '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"><path d="M4 5.5v13"/><path d="M9 8h11M9 12h11M9 16h7"/></g></svg>',
       bulletList:

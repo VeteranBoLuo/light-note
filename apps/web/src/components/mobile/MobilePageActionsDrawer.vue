@@ -8,7 +8,13 @@
     @close="emit('update:open', false)"
     @after-close="handleAfterClose"
   >
-    <div class="mobile-page-actions" :class="{ 'is-compact': compact }" role="menu" :aria-label="sheetTitle">
+    <div
+      ref="actionsRef"
+      class="mobile-page-actions"
+      :class="{ 'is-compact': compact }"
+      role="menu"
+      :aria-label="sheetTitle"
+    >
       <slot name="before-actions" :run-action="runAction" :pending="actionHandoffPending" />
       <BButton
         v-for="action in actions"
@@ -24,6 +30,7 @@
         :disabled="action.disabled || actionHandoffPending"
         :loading="action.loading"
         role="menuitem"
+        :aria-haspopup="action.menuNavigation === 'forward' ? 'menu' : undefined"
         @click="runAction(action)"
       >
         <span class="mobile-page-actions__icon" aria-hidden="true">
@@ -33,7 +40,8 @@
           <strong>{{ action.label }}</strong>
           <small v-if="action.description">{{ action.description }}</small>
         </span>
-        <SvgIcon v-if="action.selected" :src="icon.filterPanel.check" size="18" aria-hidden="true" />
+        <SvgIcon v-if="action.menuNavigation === 'forward'" :src="icon.arrow_right" size="18" aria-hidden="true" />
+        <SvgIcon v-else-if="action.selected" :src="icon.filterPanel.check" size="18" aria-hidden="true" />
       </BButton>
     </div>
   </BDrawer>
@@ -50,11 +58,12 @@
     selected?: boolean;
     disabled?: boolean;
     loading?: boolean;
+    menuNavigation?: 'forward' | 'back';
   }
 </script>
 
 <script setup lang="ts">
-  import { computed, onBeforeUnmount, ref } from 'vue';
+  import { computed, nextTick, onBeforeUnmount, ref } from 'vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BDrawer from '@/components/base/BasicComponents/BDrawer.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
@@ -77,6 +86,7 @@
     action: [action: MobilePageActionItem];
   }>();
   const actionHandoffPending = ref(false);
+  const actionsRef = ref<HTMLElement | null>(null);
   let resolveVisualClose: (() => void) | null = null;
 
   function waitForVisualClose() {
@@ -92,6 +102,12 @@
 
   async function runAction(action: MobilePageActionItem) {
     if (action.disabled || action.loading || actionHandoffPending.value) return;
+    if (action.menuNavigation) {
+      emit('action', action);
+      await nextTick();
+      actionsRef.value?.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus();
+      return;
+    }
     actionHandoffPending.value = true;
     const visuallyClosed = waitForVisualClose();
     try {

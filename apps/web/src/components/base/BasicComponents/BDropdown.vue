@@ -5,6 +5,7 @@
     @mouseenter="onTriggerEnter"
     @mouseleave="onLeave"
     @click="onTriggerClick"
+    @keydown.esc="onEscape"
   >
     <slot :open="visible" />
     <Teleport :to="teleportTarget">
@@ -17,6 +18,8 @@
           :style="panelStyle"
           @mouseenter="onPanelEnter"
           @mouseleave="onLeave"
+          @keydown.esc="onEscape"
+          @keydown.up.down="onMenuArrow"
           role="menu"
         >
           <template v-for="(item, index) in menuOptions" :key="item.key || item.label || `divider-${index}`">
@@ -27,7 +30,9 @@
               :class="{ 'b-dropdown-item--danger': item.danger, 'b-dropdown-item--active': item.active }"
               block
               role="menuitem"
+              :disabled="item.disabled"
               :aria-current="item.active ? 'page' : undefined"
+              :aria-haspopup="item.menuNavigation === 'forward' ? 'menu' : undefined"
               :aria-label="item.unread ? [item.label, item.unreadLabel].filter(Boolean).join(' · ') : item.label"
               @click="onItemClick(item)"
             >
@@ -38,6 +43,7 @@
                   item.description
                 }}</small></span
               >
+              <SvgIcon v-if="item.menuNavigation === 'forward'" :src="icon.arrow_right" size="15" aria-hidden="true" />
               <span v-if="item.unread" class="b-dropdown-item__unread-dot" aria-hidden="true" />
             </BButton>
           </template>
@@ -53,6 +59,7 @@
   import { computed, onBeforeUnmount, nextTick, reactive, ref, watch } from 'vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import icon from '@/config/icon';
 
   type BDropdownTrigger = 'hover' | 'click';
 
@@ -62,10 +69,12 @@
     description?: string;
     icon?: string;
     danger?: boolean;
+    disabled?: boolean;
     active?: boolean;
     divider?: boolean;
     unread?: boolean;
     unreadLabel?: string;
+    menuNavigation?: 'forward' | 'back';
     function?: () => void;
   }
 
@@ -74,6 +83,7 @@
       menuOptions: BDropdownOption[];
       trigger?: BDropdownTrigger | BDropdownTrigger[];
       overlayClassName?: string;
+      keyboard?: boolean;
       // 浮层相对触发元素的水平对齐:left(默认,左边对齐)/ center(居中)/ right(右边对齐)
       align?: 'left' | 'center' | 'right';
       // 与 antd 一致:返回浮层挂载的容器(默认 body)。用于把浮层挂进某个定位容器,
@@ -178,7 +188,7 @@
     }
   }
 
-  function open() {
+  function open(focusFirst = false) {
     clearCloseTimer();
     if (visible.value) return;
     teleportTarget.value = (props.getPopupContainer?.(triggerRef.value as HTMLElement) as HTMLElement | null) || 'body';
@@ -194,6 +204,9 @@
         resizeObserver = new ResizeObserver(refreshPosition);
         resizeObserver.observe(panelRef.value);
         if (triggerRef.value) resizeObserver.observe(triggerRef.value);
+      }
+      if (focusFirst) {
+        void nextTick(() => focusableMenuItems()[0]?.focus({ preventScroll: true }));
       }
     });
     // 滚动关闭而不是跟随重定位：浮层是 fixed 层，内容一滚就与触发元素脱节，
@@ -239,9 +252,34 @@
   }
 
   // click:点击切换;点击外部关闭
-  function onTriggerClick() {
+  function onTriggerClick(event: MouseEvent) {
     if (!isClick.value) return;
-    visible.value ? close() : open();
+    if (visible.value) return close();
+    open(props.keyboard && event.detail === 0);
+  }
+
+  function focusableMenuItems() {
+    return Array.from(panelRef.value?.querySelectorAll<HTMLButtonElement>('button:not(:disabled)') ?? []);
+  }
+
+  function onEscape(event: KeyboardEvent) {
+    if (!props.keyboard || !visible.value || event.isComposing) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const back = props.menuOptions.find((item) => item.menuNavigation === 'back');
+    if (back) return onItemClick(back);
+    close();
+    triggerRef.value?.querySelector('button')?.focus({ preventScroll: true });
+  }
+
+  function onMenuArrow(event: KeyboardEvent) {
+    if (!props.keyboard || event.defaultPrevented || event.isComposing) return;
+    const items = focusableMenuItems();
+    if (!items.length) return;
+    const current = items.indexOf(document.activeElement as HTMLButtonElement);
+    const step = event.key === 'ArrowDown' ? 1 : -1;
+    event.preventDefault();
+    items[(current + step + items.length) % items.length]?.focus();
   }
   function onDocMouseDown(e: MouseEvent) {
     const target = e.target as Node;
@@ -267,8 +305,15 @@
   }
 
   function onItemClick(item: BDropdownOption) {
-    if (item.divider) return;
+    if (item.divider || item.disabled) return;
     item.function?.();
+    if (item.menuNavigation) {
+      void nextTick(() => {
+        panelRef.value?.scrollTo({ top: 0 });
+        focusableMenuItems()[0]?.focus({ preventScroll: true });
+      });
+      return;
+    }
     close();
   }
 

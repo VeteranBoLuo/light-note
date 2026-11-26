@@ -37,7 +37,8 @@ describe('移动端富文本交给系统菜单', () => {
     expect(editorSource).toMatch(
       /usesNativeTextSelectionMenu\s*=\s*computed\(\(\)\s*=>\s*bookmark\.isMobile\s*\|\|\s*bookmark\.isTouchDevice\)/,
     );
-    expect(source).toMatch(/quickbars_selection_toolbar:\s*usesNativeTextSelectionMenu\.value\s*\?\s*false/);
+    expect(source).toContain('quickbars_selection_toolbar: false');
+    expect(source).toMatch(/addContextToolbar\('textselection',[\s\S]*?predicate:[\s\S]*?!usesNativeTextSelectionMenu\.value/);
     // 桌面分支仍要有自研入口，别在修移动端时把桌面一起关掉
     expect(source).toMatch(/aiEdit \| myHeadingMenu/);
   });

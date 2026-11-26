@@ -1,4 +1,4 @@
-import { nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
+import { nextTick, onBeforeUnmount, onMounted, ref, toValue, watch, type MaybeRefOrGetter } from 'vue';
 
 export interface ElementWidthClassRule {
   className: string;
@@ -14,7 +14,10 @@ export function resolveElementWidthClasses(width: number, rules: readonly Elemen
  * 以 ResizeObserver 给容器同步显式宽度类，作为旧 WebView 不支持 @container 的稳定替代。
  * 现代浏览器与 App 都走同一条 JS 判定，避免两端在相同容器宽度下分叉。
  */
-export function useElementWidthClasses(rules: readonly ElementWidthClassRule[]) {
+export function useElementWidthClasses(
+  rules: MaybeRefOrGetter<readonly ElementWidthClassRule[]>,
+  onChange?: (activeClasses: ReadonlySet<string>) => void,
+) {
   const elementRef = ref<HTMLElement | null>(null);
   let observer: ResizeObserver | null = null;
   let disposed = false;
@@ -24,11 +27,14 @@ export function useElementWidthClasses(rules: readonly ElementWidthClassRule[]) 
     if (!element) return;
     const width = explicitWidth || element.clientWidth || element.getBoundingClientRect().width;
     if (!Number.isFinite(width) || width <= 0) return;
-    const activeClasses = new Set(resolveElementWidthClasses(width, rules));
-    rules.forEach((rule) => element.classList.toggle(rule.className, activeClasses.has(rule.className)));
+    const widthRules = toValue(rules);
+    const activeClasses = new Set(resolveElementWidthClasses(width, widthRules));
+    widthRules.forEach((rule) => element.classList.toggle(rule.className, activeClasses.has(rule.className)));
+    onChange?.(activeClasses);
   };
 
   const handleWindowResize = () => sync();
+  watch(() => toValue(rules), handleWindowResize, { flush: 'post' });
 
   onMounted(() => {
     disposed = false;

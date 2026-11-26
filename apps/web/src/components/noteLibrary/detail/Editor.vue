@@ -17,6 +17,7 @@
           :ariaLabel="t('noteDetail.editor.toolbarLabel')"
           v-bind="editorToolbarProps"
           @action="handleEditorToolbarAction"
+          @capture-font-size-selection="captureRichFontSizeSelection"
         />
       </div>
       <EditorFindBar
@@ -756,6 +757,7 @@
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import i18n from '@/i18n';
   import { useI18n } from 'vue-i18n';
+  import type { Ui } from 'tinymce';
   import { useUserStore } from '@/store';
   import { bookmarkStore } from '@/store';
   import icon from '@/config/icon';
@@ -781,6 +783,12 @@
   import RichMediaTextImagePlaceholders from './RichMediaTextImagePlaceholders.vue';
   import EditorFindBar, { type EditorFindBarExpose } from './EditorFindBar.vue';
   import EditorToolbarV2, { type EditorToolbarAction } from './EditorToolbarV2.vue';
+  import {
+    EDITOR_FONT_SIZES,
+    NOTE_INLINE_FONT_STYLES,
+    readEditorFontSize,
+    type EditorFontSizeState,
+  } from './editorFontSize';
   import NoteDetailLoadingState from './NoteDetailLoadingState.vue';
   import NoteEditorWarmupPreview from './NoteEditorWarmupPreview.vue';
   import NoteFileUploadModal from './NoteFileUploadModal.vue';
@@ -1019,6 +1027,9 @@
     orderedList: false,
     block: 'p',
   });
+  const richFontSizeState = ref<EditorFontSizeState>({ enabled: false, value: '' });
+  type RichFontSizeSelection = { editor: unknown; range: Range; content: string | undefined };
+  let richFontSizeSelection: RichFontSizeSelection | null = null;
   const markdownHistoryState = ref({ canUndo: false, canRedo: false });
   type RichColorMode = 'text' | 'background';
   const richColorDialogVisible = ref(false);
@@ -1062,6 +1073,10 @@
   const bookmark = bookmarkStore();
   const router = useRouter();
   const { t, locale } = useI18n();
+  const richFontSizeChoices = computed(() => [
+    { value: 'default', label: t('noteDetail.editor.fontSizeDefault'), style: '' },
+    ...EDITOR_FONT_SIZES.map((size) => ({ value: String(size), label: String(size), style: `${size}px` })),
+  ]);
   const isMobile = computed(() => bookmark.isMobile);
   const richTextGradientDirectionOptions = computed(() => [
     { value: '90deg', label: t('noteDetail.editor.gradientDirectionHorizontal') },
@@ -1083,6 +1098,9 @@
     };
   });
   const usesNativeTextSelectionMenu = computed(() => bookmark.isMobile || bookmark.isTouchDevice);
+  watch(usesNativeTextSelectionMenu, (nativeMenu) => {
+    if (nativeMenu) editorRef.value?.dispatch?.('contexttoolbar-hide');
+  });
   // 普通游客只能阅读已有引用；管理员进入“游客内容维护”工作区时沿用现有维护权限放行。
   const canEditResourceMentions = computed(
     () => props.context === 'note' && !props.readonly && (user.role !== 'visitor' || user.visitorWorkspace),
@@ -1108,6 +1126,14 @@
   let visibilityObserver: IntersectionObserver | null = null;
 
   const currentType = ref(props.type);
+  watch(
+    [editorRef, currentType, () => props.readonly],
+    () => {
+      richFontSizeState.value = { enabled: false, value: '' };
+      richFontSizeSelection = null;
+    },
+    { flush: 'sync' },
+  );
   const switchBackup = ref<{ content: string; type: NoteFormat } | null>(null);
   const conversionPreviewVisible = ref(false);
   const conversionRenderedContent = ref('');
@@ -4126,6 +4152,9 @@
         ]
       : formatMoreActions;
 
+    const fontSize = richFontSizeState.value;
+    const fontSizeDisabled = disabled || !richEditorRuntimeReady.value || !fontSize.enabled;
+
     return {
       undoAction: action('undo', t('noteDetail.editor.undo'), icon.noteDetail.toolbar.undo, {
         disabled: disabled || (isMarkdown ? !markdownHistoryState.value.canUndo : !state.canUndo),
@@ -4176,6 +4205,17 @@
       insertActions,
       moreActions,
       desktopFormatActions,
+      fontSizeAction: isMarkdown
+        ? undefined
+        : action('fontSize', t('noteDetail.editor.fontSize'), icon.noteDetail.toolbar.fontSize, {
+            disabled: fontSizeDisabled,
+          }),
+      fontSizeOptions: richFontSizeChoices.value.map((choice) =>
+        action(`fontSize:${choice.value}`, choice.label, '', {
+          disabled: fontSizeDisabled,
+          selected: fontSize.value === choice.style,
+        }),
+      ),
     };
   });
 
@@ -4281,6 +4321,7 @@
   function runRichToolbarAction(key: string, options: { remember?: boolean } = {}) {
     const editor = editorRef.value;
     if (!editor || props.readonly) return;
+    if (key.startsWith('fontSize:')) return applyRichFontSize(key.slice('fontSize:'.length));
     editor.focus();
     if (
       options.remember !== false &&
@@ -4386,6 +4427,44 @@
     richColorValue.value = mode === 'text' ? '#2563eb' : '#dbeafe';
     richColorBookmark = editor.selection?.getBookmark?.(2, true) ?? null;
     richColorDialogVisible.value = true;
+  }
+
+  function updateRichFontSizeState(editor: any, range = editor.selection?.getRng?.() as Range | undefined) {
+    const body = editor.getBody?.() as HTMLElement | undefined;
+    if (!body || !range) return;
+    const size = readEditorFontSize(body, range);
+    if (size.enabled !== richFontSizeState.value.enabled || size.value !== richFontSizeState.value.value) {
+      richFontSizeState.value = size;
+    }
+  }
+
+  function getRichFontSizeSelection(editor = editorRef.value): RichFontSizeSelection | null {
+    if (!editor || editor !== editorRef.value || props.readonly || !richEditorRuntimeReady.value) return null;
+    const range = editor.selection.getRng() as Range;
+    if (!rangeBelongsToTinyMce(editor, range)) return null;
+    return { editor, range: range.cloneRange(), content: content.value };
+  }
+
+  function captureRichFontSizeSelection() {
+    // 保存抽屉或菜单取得焦点之前的选区，避免移动端软键盘收起时折叠选中的文字。
+    richFontSizeSelection = getRichFontSizeSelection();
+    if (richFontSizeSelection) updateRichFontSizeState(editorRef.value, richFontSizeSelection.range);
+  }
+
+  function applyRichFontSize(value: string, selection = richFontSizeSelection) {
+    const editor = editorRef.value;
+    richFontSizeSelection = null;
+    if (props.readonly || !selection || selection.editor !== editor || selection.content !== content.value) return;
+    if (value !== 'default' && !EDITOR_FONT_SIZES.some((size) => String(size) === value)) return;
+    if (!readEditorFontSize(editor.getBody(), selection.range).enabled) return;
+
+    editor.focus();
+    editor.selection.setRng(selection.range);
+    editor.undoManager.transact(() => {
+      if (value === 'default') editor.formatter.remove('removeNoteFontSize', {}, undefined, true);
+      else editor.execCommand('FontSize', false, `${value}px`);
+    });
+    editor.nodeChanged();
   }
 
   function closeRichColorDialog() {
@@ -5072,9 +5151,8 @@
     // imageselection 快捷条。桌面编辑态由同一守卫阻止浏览器系统菜单，避免它和划词快捷条重叠；
     // 移动端长按与只读正文仍交给系统菜单，保留复制、粘贴和全选能力。
     // 格式化能力不受影响:移动端仍有底部主工具栏 #editor-toolbar。
-    quickbars_selection_toolbar: usesNativeTextSelectionMenu.value
-      ? false
-      : 'aiEdit | myHeadingMenu | bold italic | forecolor backcolor | removeformat quicklink',
+    // Quickbars 的内置选区条只在初始化时读取配置。改用下方按当前视口判断的文本浮条。
+    quickbars_selection_toolbar: false,
     quickbars_insert_toolbar: false,
     // 普通图片快捷条在 setup 中按节点类型自行注册，避免 quickbars 把图文组合里的图片
     // 也识别成普通图片，再和图文组合设置条叠出第二层菜单。
@@ -5085,6 +5163,13 @@
     object_resizing: usesNativeTextSelectionMenu.value ? false : 'img,table',
     table_resize_bars: true,
     table_column_resizing: 'preservetable',
+    formats: {
+      // 复用 TinyMCE 的选区拆分，恢复默认字号时保留导入内容里的链接、强调和颜色。
+      removeNoteFontSize: [
+        { inline: 'span', styles: ['fontSize'], remove: 'empty', split: true, deep: true },
+        { selector: NOTE_INLINE_FONT_STYLES, styles: ['fontSize'], remove: 'none', split: true, deep: true },
+      ],
+    },
     codesample_languages: CODE_LANGUAGES.map((lang) => ({ text: lang.text, value: lang.value })),
     extended_valid_elements:
       'input[type|class|checked|data-note-task],a[href|contenteditable|title|data-ln-resource-type|data-ln-resource-id|data-ln-resource-snapshot-title|data-ln-resource-display-title|data-ln-resource-state|class|aria-disabled],img[src|alt|title|class|style|width|height|data-ln-size],span[class|style|data-ln-text-gradient|data-ln-math|data-ln-latex|contenteditable],div[id|class|style|title|align|dir|lang|data-ln-math|data-ln-latex|contenteditable],section[class|data-ln-media-position|data-ln-media-width|data-ln-media-inserting],figure[class],figcaption[class]',
@@ -5558,6 +5643,17 @@
         items:
           'lnImagePreview lnImageMediaText | lnImageCopy lnImageCut lnImagePaste lnImageDelete | alignleft aligncenter alignright | lnImageParagraphAfter',
         position: 'node',
+      });
+      editor.ui.registry.addContextToolbar('textselection', {
+        predicate: (node: Element) =>
+          !usesNativeTextSelectionMenu.value &&
+          !props.readonly &&
+          !editor.selection.isCollapsed() &&
+          !node.matches('img, figure.image') &&
+          editor.dom.isEditable(node),
+        items: 'aiEdit | myHeadingMenu noteFontSize | bold italic | forecolor backcolor | removeformat quicklink',
+        position: 'selection',
+        scope: 'editor',
       });
 
       let richImageNativeMenuBody: HTMLElement | null = null;
@@ -6039,6 +6135,7 @@
 
       const refreshExternalToolbarState = () => {
         if (editorRef.value !== editor) return;
+        if (editor.hasFocus() || !richEditorRuntimeReady.value) updateRichFontSizeState(editor);
         const queryCommandState = (command: string) => {
           if (!editor.initialized || !editor.getBody?.()) return false;
           try {
@@ -6168,6 +6265,29 @@
           callback(items);
         },
       });
+      editor.ui.registry.addMenuButton('noteFontSize', {
+        text: t('noteDetail.editor.fontSize'),
+        onSetup(api) {
+          const refresh = () => api.setEnabled(!props.readonly && richFontSizeState.value.enabled);
+          refresh();
+          editor.on('NodeChange SelectionChange SetContent', refresh);
+          return () => editor.off('NodeChange SelectionChange SetContent', refresh);
+        },
+        fetch(callback) {
+          const selection = getRichFontSizeSelection(editor);
+          const format = selection && readEditorFontSize(editor.getBody(), selection.range);
+          callback(
+            format?.enabled
+              ? richFontSizeChoices.value.map((choice) => ({
+                  type: 'togglemenuitem',
+                  text: choice.label,
+                  active: format.value === choice.style,
+                  onAction: () => applyRichFontSize(choice.value, selection),
+                }))
+              : [],
+          );
+        },
+      } satisfies Ui.Toolbar.ToolbarMenuButtonSpec);
 
       // 划词 AI 是一条独立的「选段改写」链路：只传动作枚举和选中文字，
       // 由服务端组装受限提示并强制纯文本输出。全文助手的【标题】/【正文】契约不再进入这里。
@@ -6385,6 +6505,7 @@
           resetUndoHistory(editor);
           refreshResourceReferences();
           decorateRichMediaTextCaptions(editor);
+          updateRichFontSizeState(editor);
           richEditorRuntimeReady.value = true;
           emits('ready');
         }, 0);
@@ -6798,6 +6919,19 @@
         color: var(--desc-color);
         cursor: not-allowed;
       }
+    }
+  }
+
+  .note-editor-rich-content[contenteditable='true'] ::selection {
+    background-color: var(--selection-background, rgba(97, 92, 237, 0.24));
+  }
+
+  @supports ((background-clip: text) or (-webkit-background-clip: text)) {
+    // Chromium 的原生选区填充会盖住背景裁切产生的渐变，需要单独保留透明填充。
+    .note-editor-rich-content[contenteditable='true'] .ln-text-gradient::selection,
+    .note-editor-rich-content[contenteditable='true'] .ln-text-gradient ::selection {
+      color: transparent;
+      -webkit-text-fill-color: transparent;
     }
   }
 

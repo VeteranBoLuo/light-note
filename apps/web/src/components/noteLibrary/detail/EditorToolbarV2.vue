@@ -5,6 +5,9 @@
     :class="{ 'is-mobile': mobile, 'is-compact': compact && !mobile }"
     role="toolbar"
     :aria-label="ariaLabel"
+    @pointerdown.capture="captureFontSizeSelection"
+    @keydown.enter.capture="captureFontSizeSelection"
+    @keydown.space.capture="captureFontSizeSelection"
   >
     <template v-if="mobile">
       <BButton
@@ -31,7 +34,17 @@
 
       <span class="editor-toolbar-v2__divider" aria-hidden="true"></span>
 
-      <ToolbarMenu :action="headingAction" :items="headingActions" @run="emitAction" />
+      <div class="editor-toolbar-v2__group">
+        <ToolbarMenu :action="headingAction" :items="headingActions" @run="emitAction" />
+        <ToolbarMenu
+          v-if="fontSizeAction && !narrow"
+          :action="fontSizeAction"
+          :items="fontSizeOptions || []"
+          keyboard
+          long-menu
+          @run="emitAction"
+        />
+      </div>
 
       <span class="editor-toolbar-v2__divider" aria-hidden="true"></span>
 
@@ -70,7 +83,15 @@
 
       <div class="editor-toolbar-v2__group editor-toolbar-v2__more-group">
         <ToolbarMenu v-if="!minimal" :action="insertAction" :items="insertActions" @run="emitAction" />
-        <ToolbarMenu :action="moreAction" :items="moreActions" align="right" @run="emitAction" />
+        <ToolbarMenu
+          :action="moreAction"
+          :items="desktopMoreActions"
+          align="right"
+          :keyboard="narrow"
+          :long-menu="inFontSizeMenu"
+          @open-change="resetMoreMenuOnOpen"
+          @run="runMoreAction"
+        />
         <ToolbarButton v-if="!minimal" :action="shortcutsAction" @run="emitAction" />
       </div>
 
@@ -107,10 +128,10 @@
   <MobilePageActionsDrawer
     v-if="mobile"
     v-model:open="moreDrawerOpen"
-    :title="moreAction.label"
+    :title="inFontSizeMenu ? fontSizeAction?.label : moreAction.label"
     :actions="mobileMoreActions"
     compact
-    @action="emitAction"
+    @action="runMoreAction"
   />
 </template>
 
@@ -124,11 +145,13 @@
     dividerBefore?: boolean;
     disabled?: boolean;
     selected?: boolean;
+    menuNavigation?: 'forward' | 'back';
   }
 </script>
 
 <script setup lang="ts">
   import { computed, defineComponent, h, ref, type PropType } from 'vue';
+  import { useI18n } from 'vue-i18n';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BDropdown from '@/components/base/BasicComponents/BDropdown.vue';
   import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
@@ -136,6 +159,8 @@
   import MobilePageActionsDrawer from '@/components/mobile/MobilePageActionsDrawer.vue';
   import type { MobilePageActionItem } from '@/components/mobile/MobilePageActionsDrawer.vue';
   import { useElementWidthClasses } from '@/composables/useElementWidthClasses';
+  import { useUiDensity } from '@/composables/useUiDensity';
+  import icon from '@/config/icon';
 
   const props = defineProps<{
     mobile: boolean;
@@ -160,20 +185,40 @@
     insertActions: EditorToolbarAction[];
     moreActions: EditorToolbarAction[];
     desktopFormatActions: EditorToolbarAction[];
+    fontSizeAction?: EditorToolbarAction;
+    fontSizeOptions?: EditorToolbarAction[];
   }>();
+  const { t } = useI18n();
 
   const emit = defineEmits<{
     action: [action: EditorToolbarAction];
+    'capture-font-size-selection': [];
   }>();
+
+  function captureFontSizeSelection() {
+    if (props.fontSizeAction) emit('capture-font-size-selection');
+  }
 
   const headingDrawerOpen = ref(false);
   const listDrawerOpen = ref(false);
   const insertDrawerOpen = ref(false);
   const moreDrawerOpen = ref(false);
-  const toolbarRef = useElementWidthClasses([
-    { className: 'is-narrow-840', maxWidth: 840 },
-    { className: 'is-narrow-680', maxWidth: 680 },
-  ]);
+  const narrow = ref(false);
+  const fontSizeMenuOpen = ref(false);
+  const hasFontSize = computed(() => Boolean(props.fontSizeAction));
+  const inFontSizeMenu = computed(() => fontSizeMenuOpen.value && hasFontSize.value && (props.mobile || narrow.value));
+  const { dimension } = useUiDensity();
+  const toolbarRef = useElementWidthClasses(
+    () => [
+      // 富文本完整工具栏需要容纳字号和两种语言的菜单标签。
+      { className: 'is-note-toolbar-compact-width', maxWidth: hasFontSize.value ? dimension(1060, 'layout') : 0 },
+      { className: 'is-narrow-840', maxWidth: 840 },
+      { className: 'is-narrow-680', maxWidth: 680 },
+    ],
+    (classes) => {
+      narrow.value = classes.has('is-note-toolbar-compact-width');
+    },
+  );
 
   const mobilePrimaryActions = computed(() =>
     props.minimal
@@ -196,9 +241,43 @@
         ],
   );
 
-  const mobileMoreActions = computed(() =>
-    props.minimal && props.showImage ? [props.redoAction, ...props.moreActions] : props.moreActions,
+  function moreActionsWithFontSize(actions: EditorToolbarAction[]) {
+    if (!props.fontSizeAction) return actions;
+    if (inFontSizeMenu.value) {
+      return [
+        {
+          key: 'backFromFontSizeMenu',
+          label: t('common.back'),
+          icon: icon.arrow_left,
+          menuNavigation: 'back' as const,
+        },
+        ...(props.fontSizeOptions ?? []),
+      ];
+    }
+    return [{ ...props.fontSizeAction, menuNavigation: 'forward' as const }, ...actions];
+  }
+
+  const desktopMoreActions = computed(() =>
+    narrow.value ? moreActionsWithFontSize(props.moreActions) : props.moreActions,
   );
+  const mobileMoreActions = computed(() =>
+    moreActionsWithFontSize(
+      props.minimal && props.showImage ? [props.redoAction, ...props.moreActions] : props.moreActions,
+    ),
+  );
+
+  function resetMoreMenuOnOpen(open: boolean) {
+    if (open) fontSizeMenuOpen.value = false;
+  }
+
+  function runMoreAction(action: EditorToolbarAction | MobilePageActionItem) {
+    if (action.menuNavigation) {
+      fontSizeMenuOpen.value = action.menuNavigation === 'forward';
+      return;
+    }
+    emitAction(action);
+  }
+
   function emitAction(action: EditorToolbarAction | MobilePageActionItem) {
     emit('action', action as EditorToolbarAction);
   }
@@ -218,6 +297,7 @@
       return;
     }
     if (action.key === props.moreAction.key) {
+      resetMoreMenuOnOpen(true);
       moreDrawerOpen.value = true;
       return;
     }
@@ -264,8 +344,10 @@
       action: { type: Object as PropType<EditorToolbarAction>, required: true },
       items: { type: Array as PropType<EditorToolbarAction[]>, required: true },
       align: { type: String as PropType<'left' | 'right'>, default: 'left' },
+      keyboard: Boolean,
+      longMenu: Boolean,
     },
-    emits: ['run'],
+    emits: ['run', 'open-change'],
     setup(componentProps, { emit: componentEmit }) {
       const options = computed(() =>
         componentProps.items.flatMap((item) => [
@@ -276,6 +358,7 @@
             icon: item.icon,
             disabled: item.disabled,
             active: item.selected,
+            menuNavigation: item.menuNavigation,
             function: () => {
               if (!item.disabled) componentEmit('run', item);
             },
@@ -294,10 +377,14 @@
                   trigger: 'click',
                   align: componentProps.align,
                   menuOptions: options.value,
-                  overlayClassName: 'editor-toolbar-v2__menu',
+                  overlayClassName: componentProps.longMenu
+                    ? 'editor-toolbar-v2__menu editor-toolbar-v2__font-size-menu'
+                    : 'editor-toolbar-v2__menu',
+                  keyboard: componentProps.keyboard,
+                  onOpenChange: (open: boolean) => componentEmit('open-change', open),
                 },
                 {
-                  default: () =>
+                  default: ({ open }: { open: boolean }) =>
                     h(
                       BButton,
                       {
@@ -310,6 +397,7 @@
                         disabled: componentProps.action.disabled,
                         'aria-label': componentProps.action.label,
                         'aria-haspopup': 'menu',
+                        'aria-expanded': open,
                       },
                       {
                         default: () => [
@@ -464,19 +552,18 @@
   }
 
   .editor-toolbar-v2.is-narrow-840 .editor-toolbar-v2__button-label,
-  .editor-toolbar-v2.is-narrow-840 .editor-toolbar-v2__chevron {
+  .editor-toolbar-v2.is-narrow-840 .editor-toolbar-v2__chevron,
+  .editor-toolbar-v2.is-note-toolbar-compact-width :deep(.editor-toolbar-v2__button-label),
+  .editor-toolbar-v2.is-note-toolbar-compact-width :deep(.editor-toolbar-v2__chevron),
+  .editor-toolbar-v2:is(.is-narrow-840, .is-note-toolbar-compact-width) .editor-toolbar-v2__desktop-formats {
     display: none;
   }
 
-  .editor-toolbar-v2.is-narrow-840 .editor-toolbar-v2__desktop-formats {
-    display: none;
-  }
-
-  .editor-toolbar-v2.is-narrow-840 :deep(.editor-toolbar-v2__button.is-menu) {
+  .editor-toolbar-v2:is(.is-narrow-840, .is-note-toolbar-compact-width) :deep(.editor-toolbar-v2__button.is-menu) {
     min-width: var(--ui-control-30, 30px);
   }
 
-  .editor-toolbar-v2.is-narrow-840 .editor-toolbar-v2__divider {
+  .editor-toolbar-v2:is(.is-narrow-840, .is-note-toolbar-compact-width) .editor-toolbar-v2__divider {
     margin-inline: 0;
   }
 
@@ -498,6 +585,16 @@
 </style>
 
 <style lang="less">
+  .editor-toolbar-v2__font-size-menu {
+    height: var(--ui-layout-460, 460px);
+    overscroll-behavior: contain;
+    scrollbar-width: none;
+
+    &::-webkit-scrollbar {
+      display: none;
+    }
+  }
+
   .editor-toolbar-v2__menu .b-dropdown-item[aria-disabled='true'] {
     opacity: 0.45;
     pointer-events: none;

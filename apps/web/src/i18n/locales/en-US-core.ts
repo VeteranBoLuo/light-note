@@ -5882,6 +5882,8 @@ export default {
       link: 'Link',
       insert: 'Insert',
       moreFormatting: 'More formatting',
+      fontSize: 'Font size',
+      fontSizeDefault: 'Default',
       table: 'Table',
       tableProperties: 'Table properties',
       deleteTable: 'Delete table',

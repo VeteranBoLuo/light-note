@@ -5647,6 +5647,8 @@ export default {
       link: '链接',
       insert: '插入',
       moreFormatting: '更多格式',
+      fontSize: '字号',
+      fontSizeDefault: '默认',
       table: '表格',
       tableProperties: '表格属性',
       deleteTable: '删除表格',
