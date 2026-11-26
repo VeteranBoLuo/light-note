@@ -308,14 +308,14 @@
       border: 1px solid var(--chip-pending-border);
     }
     &[data-place='2'] {
-      color: var(--chip-neutral-fg);
-      background: var(--chip-neutral-bg);
-      border: 1px solid var(--chip-neutral-border);
+      color: var(--leaderboard-silver-fg);
+      background: var(--leaderboard-silver-bg);
+      border: 1px solid var(--leaderboard-silver-border);
     }
     &[data-place='3'] {
-      color: var(--workspace-file-text);
-      background: var(--workspace-file-selected);
-      border: 1px solid var(--chip-file-border);
+      color: var(--leaderboard-bronze-fg);
+      background: var(--leaderboard-bronze-bg);
+      border: 1px solid var(--leaderboard-bronze-border);
     }
   }
 

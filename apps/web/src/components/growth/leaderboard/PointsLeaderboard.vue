@@ -557,14 +557,14 @@
         --prize-border: var(--chip-pending-border);
       }
       &[data-rank='2'] {
-        --prize-foreground: var(--chip-neutral-fg);
-        --prize-background: var(--chip-neutral-bg);
-        --prize-border: var(--chip-neutral-border);
+        --prize-foreground: var(--leaderboard-silver-fg);
+        --prize-background: var(--leaderboard-silver-bg);
+        --prize-border: var(--leaderboard-silver-border);
       }
       &[data-rank='3'] {
-        --prize-foreground: var(--workspace-file-text);
-        --prize-background: var(--workspace-file-selected);
-        --prize-border: var(--chip-file-border);
+        --prize-foreground: var(--leaderboard-bronze-fg);
+        --prize-background: var(--leaderboard-bronze-bg);
+        --prize-border: var(--leaderboard-bronze-border);
       }
       strong {
         color: var(--text-color);

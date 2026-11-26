@@ -1,6 +1,7 @@
 import pool from '../../db/index.js';
 import { POINTS_ACCOUNT_ELIGIBLE, POINTS_ACCOUNT_NOT_BANNED } from '../pointsAudienceEligibility.js';
 import {
+  compareLeaderboardScores,
   LEADERBOARD_ACTIVITY_REASONS,
   LEADERBOARD_LIMIT,
   LEADERBOARD_MIN_DAYS,
@@ -130,6 +131,16 @@ export async function readLeaderboardAccounts(db, userIds, includeProfile = fals
     for (const row of rows) accounts.set(row.userId, row);
   }
   return accounts;
+}
+
+export async function readWeeklyLeaderboardRank(participantId, { db = pool, now = new Date() } = {}) {
+  const { scores } = await liveScores('week', leaderboardRange('week', now), db);
+  const own = scores.find(({ userId }) => userId === participantId);
+  if (!own) return null;
+
+  const ahead = scores.filter((row) => compareLeaderboardScores(row, own) < 0).map(({ userId }) => userId);
+  const accounts = await readLeaderboardAccounts(db, [participantId, ...ahead]);
+  return accounts.has(participantId) ? ahead.filter((id) => accounts.has(id)).length + 1 : null;
 }
 
 export function leaderboardNickname(value) {

@@ -8145,7 +8145,7 @@ export default {
     lotteryOverflowPolicy:
       'You can hold up to {max} make-up cards. If full, a drawn card becomes {points} points automatically.',
     leaderboard: {
-      tab: 'Leaderboard',
+      tab: 'Rankings',
       mobileTab: 'Ranks',
       title: 'Points leaderboards',
       rules: 'Scoring rules',
@@ -8169,6 +8169,7 @@ export default {
       pointsUnit: 'Points',
       daysUnit: 'days',
       placeValue: '#{n}',
+      weeklyPlaceValue: 'Wk #{n}',
       unranked: 'Unranked',
       member: 'Light Note user',
       you: 'You',

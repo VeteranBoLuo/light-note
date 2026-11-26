@@ -3,7 +3,7 @@ import { stableAgentErrorCode } from '../util/agent/logSafety.js';
 import { canViewLeaderboard, getLeaderboardConfig, LEADERBOARD_TYPES, leaderboardOpen } from '../util/leaderboardPolicy.js';
 import { isPointsAudienceAccount } from '../util/pointsAudienceEligibility.js';
 import { sendProfileAvatar } from '../util/profileAvatarResponse.js';
-import { readLeaderboard, readLeaderboardAvatar } from '../util/services/leaderboardRead.js';
+import { readLeaderboard, readLeaderboardAvatar, readWeeklyLeaderboardRank } from '../util/services/leaderboardRead.js';
 
 function available(req, res, config, now) {
   res.set('Cache-Control', 'private, no-store');
@@ -39,6 +39,19 @@ export async function getLeaderboard(req, res) {
     }
     const participantId = isPointsAudienceAccount(req.user) ? req.user.id : null;
     return res.send(resultData(await readLeaderboard(participantId, board, period === 'previous', { config, now })));
+  } catch (error) {
+    return failed(req, res, error);
+  }
+}
+
+export async function getWeeklyLeaderboardRank(req, res) {
+  try {
+    const config = getLeaderboardConfig();
+    const now = new Date();
+    if (!available(req, res, config, now)) return;
+    const canParticipate = isPointsAudienceAccount(req.user);
+    const rank = canParticipate ? await readWeeklyLeaderboardRank(req.user.id, { now }) : null;
+    return res.send(resultData({ canParticipate, rank }));
   } catch (error) {
     return failed(req, res, error);
   }

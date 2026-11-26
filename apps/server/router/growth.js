@@ -1,7 +1,7 @@
 import express from 'express';
 import * as growthHandle from '../router_handle/growthHandle.js';
 import * as annualReportHandle from '../router_handle/annualReportHandle.js';
-import { getLeaderboard, getLeaderboardAvatar } from '../router_handle/leaderboardHandle.js';
+import { getLeaderboard, getLeaderboardAvatar, getWeeklyLeaderboardRank } from '../router_handle/leaderboardHandle.js';
 import { getKnowledgeManor, getKnowledgeManorAttention, runKnowledgeManorCommand } from '../router_handle/knowledgeManorHandle.js';
 import * as manorAdmin from '../router_handle/manorAdminHandle.js';
 import { manorReadLimit, manorCommandLimit, manorAdminWriteLimit } from '../util/manorRateLimit.js';
@@ -21,6 +21,7 @@ router.post('/admin/manor/runtime', manorAdminWriteLimit, manorAdmin.updateManor
 
 router.get('/me', growthHandle.getMyGrowth);
 router.get('/leaderboard', getLeaderboard);
+router.get('/leaderboard/weekly-rank', getWeeklyLeaderboardRank);
 router.get('/leaderboard/avatar/:communityId', getLeaderboardAvatar);
 router.get('/dashboard', growthHandle.getDashboard);
 router.get('/tasks', growthHandle.getGrowthTasksHandle);

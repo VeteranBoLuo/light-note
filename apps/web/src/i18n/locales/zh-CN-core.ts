@@ -7860,6 +7860,7 @@ export default {
       pointsUnit: '积分',
       daysUnit: '天',
       placeValue: '第 {n} 名',
+      weeklyPlaceValue: '本周第 {n} 名',
       unranked: '未上榜',
       member: '轻笺用户',
       you: '你',

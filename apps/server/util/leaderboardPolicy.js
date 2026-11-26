@@ -76,10 +76,14 @@ export function leaderboardQualified({ score, activeDays }) {
   return score >= LEADERBOARD_MIN_SCORE && activeDays >= LEADERBOARD_MIN_DAYS;
 }
 
+export function compareLeaderboardScores(a, b) {
+  return b.score - a.score || b.activeDays - a.activeDays ||
+    a.reachedAt.localeCompare(b.reachedAt) || a.userId.localeCompare(b.userId);
+}
+
 export function orderLeaderboard(scores, eligibleIds) {
-  return scores.filter((score) => eligibleIds.has(score.userId)).sort((a, b) =>
-    b.score - a.score || b.activeDays - a.activeDays || a.reachedAt.localeCompare(b.reachedAt) || a.userId.localeCompare(b.userId),
-  ).map((score, index) => ({ ...score, rank: index + 1 }));
+  return scores.filter((score) => eligibleIds.has(score.userId)).sort(compareLeaderboardScores)
+    .map((score, index) => ({ ...score, rank: index + 1 }));
 }
 
 export function leaderboardAwards(rows, mode) {

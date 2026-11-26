@@ -107,7 +107,11 @@
                 <span class="growth-side-nav-label">{{ option.label }}</span>
                 <span v-if="option.badge !== undefined" class="growth-side-nav-badge">{{ option.badge }}</span>
                 <span v-else-if="option.hint" class="growth-side-nav-hint">{{ option.hint }}</span>
-                <span v-else-if="option.meta" class="growth-side-nav-meta">{{ option.meta }}</span>
+                <span
+                  v-else-if="option.meta"
+                  class="growth-side-nav-meta"
+                  :class="{ 'growth-side-nav-meta--rank': option.key === 'leaderboard' && weeklyRank != null }"
+                >{{ option.meta }}</span>
               </BButton>
             </template>
           </nav>
@@ -525,6 +529,7 @@
   import icon from '@/config/icon.ts';
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
   import { recordOperation } from '@/api/commonApi.ts';
+  import { getWeeklyLeaderboardRank } from '@/api/pointsLeaderboardApi';
   import { useGrowth } from '@/composables/useGrowth.ts';
   import { useGrowthClaimFeedback, useTransientClaimReceipt } from '@/composables/useGrowthClaimFeedback';
   import { useGrowthCheckin } from '@/composables/useGrowthCheckin';
@@ -573,7 +578,7 @@
     reward?: RewardSection;
   };
 
-  const { t } = useI18n();
+  const { t, n } = useI18n();
   const { visibleAttention: dailyQuestManor } = useManorAttention();
   const route = useRoute();
   const router = useRouter();
@@ -667,9 +672,11 @@
             ...option,
             section: option.key,
             meta:
-              option.key === 'tasks' && quests.value.length
-                ? `${dailyQuestDoneCount.value}/${quests.value.length}`
-                : undefined,
+              option.key === 'leaderboard'
+                ? weeklyRankLabel.value
+                : option.key === 'tasks' && quests.value.length
+                  ? `${dailyQuestDoneCount.value}/${quests.value.length}`
+                  : undefined,
           })),
       },
       {
@@ -728,6 +735,39 @@
   const growthV2Enabled = computed(() => growth.value?.features?.growthCenterV2 !== false);
   const pointsCenterEnabled = computed(() => growth.value?.features?.pointsCenter ?? import.meta.env.DEV);
   const leaderboardEnabled = computed(() => Boolean(growth.value?.features?.leaderboard) && !isAdminContext.value);
+  const weeklyRankOwner = computed(() => useWideDesktopLayout.value && leaderboardEnabled.value ? user.id : null);
+  const weeklyRank = ref<number | null>();
+  const weeklyRankLabel = computed(() => {
+    if (weeklyRank.value === undefined) return undefined;
+    if (weeklyRank.value === null) return t('growth.leaderboard.unranked');
+    return t('growth.leaderboard.weeklyPlaceValue', { n: n(weeklyRank.value) });
+  });
+  let weeklyRankRequest: AbortController | undefined;
+
+  async function loadWeeklyRank() {
+    const owner = weeklyRankOwner.value;
+    if (!owner || weeklyRankRequest) return;
+    const request = new AbortController();
+    weeklyRankRequest = request;
+    try {
+      const result = await getWeeklyLeaderboardRank(request.signal);
+      if (!request.signal.aborted && owner === weeklyRankOwner.value) {
+        weeklyRank.value = result.canParticipate ? result.rank : undefined;
+      }
+    } catch {
+      if (!request.signal.aborted && owner === weeklyRankOwner.value) weeklyRank.value = undefined;
+    } finally {
+      if (weeklyRankRequest === request) weeklyRankRequest = undefined;
+    }
+  }
+
+  watch(weeklyRankOwner, () => {
+    weeklyRankRequest?.abort();
+    weeklyRankRequest = undefined;
+    weeklyRank.value = undefined;
+    void loadWeeklyRank();
+  }, { immediate: true });
+  onBeforeUnmount(() => weeklyRankRequest?.abort());
   const claimableCount = computed(() => Number(claimable.value?.count || 0));
   const { achievementClaimableCount, claimAllTooltip, snapshotClaimableBreakdown, claimSuccessMessage, claimReceipt } =
     useGrowthClaimFeedback(claimable);
@@ -1219,7 +1259,7 @@
    */
   useForegroundRefresh({
     refresh: () => {
-      const requests: Array<Promise<unknown>> = [loadDashboard(), load(true), loadClaimable()];
+      const requests: Array<Promise<unknown>> = [loadDashboard(), load(true), loadClaimable(), loadWeeklyRank()];
       if (activeSection.value === 'tasks') requests.push(loadGrowthTasks(true), loadWeekly());
       if (activeSection.value === 'overview') requests.push(loadWeekly(), loadInventory());
       if (activeSection.value === 'rewards' || (activeSection.value === 'overview' && useWideDesktopLayout.value)) {
@@ -1562,6 +1602,12 @@
     color: var(--desc-color);
     font-size: var(--ui-font-12, 12px);
     font-weight: 500;
+    white-space: nowrap;
+  }
+  .growth-side-nav-meta--rank {
+    color: var(--workspace-purple-text);
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
   }
   .growth-side-nav-hint {
     margin-left: auto;

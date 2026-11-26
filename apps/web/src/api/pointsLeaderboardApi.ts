@@ -40,3 +40,9 @@ export async function getPointsLeaderboard(board: LeaderboardType, period: Leade
   if (response.status !== 200 || !response.data) throw new Error('LEADERBOARD_LOAD_FAILED');
   return response.data as LeaderboardData;
 }
+
+export async function getWeeklyLeaderboardRank(signal: AbortSignal) {
+  const response = await apiBaseGet('/api/growth/leaderboard/weekly-rank', {}, { signal, silent: true });
+  if (response.status !== 200 || !response.data) throw new Error('LEADERBOARD_LOAD_FAILED');
+  return response.data as { canParticipate: boolean; rank: number | null };
+}

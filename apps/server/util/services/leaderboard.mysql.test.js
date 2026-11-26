@@ -10,7 +10,7 @@ vi.mock('../../db/index.js', () => ({
 }));
 vi.mock('../notificationRealtimeEvents.js', () => ({ queueNotificationChange: vi.fn() }));
 
-import { readLeaderboard, readLeaderboardAvatar } from './leaderboardRead.js';
+import { readLeaderboard, readLeaderboardAvatar, readWeeklyLeaderboardRank } from './leaderboardRead.js';
 import { assertLeaderboardReady, runLeaderboardSettlement } from './leaderboardSettlement.js';
 import { earnPoints } from '../points.js';
 
@@ -139,6 +139,10 @@ describe.skipIf(!socketPath)('积分排行榜 · 隔离 MySQL', () => {
       sources: { checkin: 20, quest: 15, manor_sale: 84, manor_aquarium_sale: 11 },
     });
     expect(weekly.canParticipate).toBe(true);
+    for (const id of ['internal-1', 'internal-2', 'phone-like', 'banned', 'harvest-only']) {
+      expect(await readWeeklyLeaderboardRank(id, { db: state.db, now: current }))
+        .toBe((await read(id)).mine?.rank ?? null);
+    }
     expect(await read(null)).toMatchObject({
       canParticipate: false, mine: null, ownDays: 0,
       rows: weekly.rows.map((row) => ({ ...row, isMe: false })),
@@ -256,6 +260,8 @@ describe.skipIf(!socketPath)('积分排行榜 · 隔离 MySQL', () => {
       expect(inside.rows.at(-1)).toMatchObject({ rank: 20, isMe: true });
       expect(inside.mine).toMatchObject({ rank: 20, isMe: true });
     }
+    expect(await readWeeklyLeaderboardRank('extra-21', { db: state.db, now: current })).toBe(21);
+    expect(await readWeeklyLeaderboardRank('extra-21', { db: state.db, now: monday })).toBeNull();
     const [[empty]] = await state.db.query("SELECT COUNT(*) AS n FROM leaderboard_periods WHERE period_key = '2026-11-02' AND state = 'complete'");
     expect(empty.n).toBe(1);
   });
