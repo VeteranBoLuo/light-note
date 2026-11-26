@@ -227,7 +227,9 @@
     if (item.type === 'streak_risk') return icon.growth.checkin;
     if (item.type === 'manor_digest' || item.type === 'manor_water_expiring') return icon.manor.entry;
     if (item.type === 'daily_brief' || item.type === 'ai_routine') return icon.ai.summary;
-    if (item.type === 'opinion_reply' || item.type === 'feature_request') return icon.userCenter.menu.feedback;
+    if (item.type === 'opinion_reply' || item.type === 'opinion_received' || item.type === 'feature_request') {
+      return icon.userCenter.menu.feedback;
+    }
     if (item.type === 'community_chat') return icon.ai.conversations;
     return icon.settings.notification;
   }
@@ -737,6 +739,7 @@
   }
 
   .is-wide-desktop-page .nt-type-icon.type-opinion_reply,
+  .is-wide-desktop-page .nt-type-icon.type-opinion_received,
   .is-wide-desktop-page .nt-type-icon.type-feature_request,
   .is-wide-desktop-page .nt-type-icon.type-community_chat {
     color: var(--resource-note-color);

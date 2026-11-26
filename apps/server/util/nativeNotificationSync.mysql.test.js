@@ -797,6 +797,7 @@ describe.skipIf(!socketPath)('native notification real SQL', () => {
     const { since } = await readNativeNotifications(db, 'alice');
     await add({ type: 'email_health' });
     await add({ type: 'signup_source_survey' });
+    await add({ type: 'opinion_received' });
     await add({ type: 'manor_digest' });
     await add({ type: 'manor_water_expiring' });
     const regular = await add({ type: 'system' });

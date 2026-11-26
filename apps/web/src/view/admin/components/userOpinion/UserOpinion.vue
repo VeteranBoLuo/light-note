@@ -78,6 +78,7 @@
     :show-footer="false"
     :mask-closable="!replying"
     :esc-closable="!replying"
+    @close="closeDetail"
   >
     <AdminOpinionDetail
       v-if="selectedRecord"
@@ -152,6 +153,7 @@
     onPageChange,
     onSizeChange,
     openOpinion,
+    closeDetail,
     submitReply,
     requestDelete,
     confirmDelete,

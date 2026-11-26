@@ -57,6 +57,7 @@
       :mask-closable="!replying"
       :esc-closable="!replying"
       fullscreen-mobile
+      @close="closeDetail"
     >
       <AdminOpinionDetail
         v-if="selectedRecord"
@@ -116,6 +117,7 @@
     onPageChange,
     onSizeChange,
     openOpinion,
+    closeDetail,
     submitReply,
   } = useAdminUserOpinion({ initialPageSize: 10 });
 

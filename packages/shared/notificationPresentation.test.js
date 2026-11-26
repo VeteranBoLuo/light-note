@@ -110,6 +110,10 @@ describe("shared notification presentation", () => {
       ),
     ).toEqual({ title: "Your feedback got a reply", body: "reply" });
   });
+  it("localizes the new feedback notice using only its generic copy", () => {
+    expect(notificationPresentation({ type: "opinion_received", title: "raw", content: "private feedback" }, "en-US"))
+      .toEqual({ title: "New feedback received", content: "Open the feedback to review it." });
+  });
   it("localizes credited survey rewards from the original award snapshot", () => {
     const item = {
       type: "collection_form_reward",

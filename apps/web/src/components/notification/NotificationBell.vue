@@ -192,6 +192,7 @@
   import { OPERATION_LOG_MAP } from '@/config/logMap.ts';
   import { NOTIFICATION_PANEL_OPEN_EVENT } from '@/utils/notificationEntry';
   import { resolveNotificationLink } from '@/utils/notificationLink';
+  import { FEEDBACK_NOTIFICATION_TYPES } from '@lightnote/shared';
   import NotificationCenterPanel from '@/components/notification/NotificationCenterPanel.vue';
   import MobilePageActionsDrawer, { type MobilePageActionItem } from '@/components/mobile/MobilePageActionsDrawer.vue';
   import { useMobileLayout } from '@/composables/useMobileLayout';
@@ -244,6 +245,7 @@
 
   const WIDE_NOTIFICATION_GROUPS = Object.freeze({
     system: ['system', 'collection_form_submission', 'signup_source_survey'],
+    feedback: FEEDBACK_NOTIFICATION_TYPES,
     growth: ['level_up', 'streak_risk', 'collection_form_reward', 'manor_digest', 'manor_water_expiring'],
     ai_routine: ['daily_brief', 'ai_routine'],
   });
@@ -273,7 +275,7 @@
           { value: 'all', label: t('notification.tabAll') },
           { value: 'todo_reminder', label: t('notification.tabTodo') },
           { value: 'system', label: t('notification.tabSystem') },
-          { value: 'opinion_reply', label: t('notification.tabFeedback') },
+          { value: 'feedback', label: t('notification.tabFeedback') },
           { value: 'community_feed', label: t('community.feed.title') },
           { value: 'public_resource', label: t('publicResources.publicResourceNotices') },
         ],
@@ -282,7 +284,7 @@
   // 「其他」tab 兜底:非三大已知类型(如 streak_risk 签到提醒)都归它,与后端 list 口径一致
   function tabUnread(v: string): number {
     if (v === 'all') return unreadTotal.value;
-    if (v === 'growth' || v === 'ai_routine' || v === 'system') {
+    if (v === 'growth' || v === 'ai_routine' || v === 'system' || v === 'feedback') {
       return WIDE_NOTIFICATION_GROUPS[v].reduce((sum, type) => sum + (unreadByType.value[type] || 0), 0);
     }
     if (v === 'system_group') {
@@ -542,9 +544,14 @@
         message.warning(t('notification.invalidLink'));
         return;
       }
-      await closePanelThen(() =>
-        target.kind === 'internal' ? router.push(target.url).catch(() => {}) : window.location.assign(target.url),
-      );
+      if (target.kind === 'internal') {
+        const url = n.type === 'opinion_received' && isMobileLayout.value
+          ? target.url.replace(/^\/admin\/userOpinion(?=[?#]|$)/, '/userOpinion')
+          : target.url;
+        await closePanelThen(() => router.push(url).catch(() => {}));
+      } else {
+        await closePanelThen(() => window.location.assign(target.url));
+      }
     } else {
       // 系统/其他等无跳转链接的通知:弹框展示完整标题+正文(列表里被截成两行,弹框看全)
       detailItem.value = n;

@@ -1,4 +1,4 @@
-import { computed, onBeforeUnmount, reactive, ref } from 'vue';
+import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 import opinionApi from '@/api/opinionApi.ts';
@@ -158,6 +158,10 @@ export function useAdminUserOpinion(options: { initialPageSize?: number } = {}) 
 
   function closeDetail() {
     detailVisible.value = false;
+    if (!linkedOpinionId.value || linkedOpinionId.value !== selectedRecord.value?.id) return;
+    const query = { ...route.query };
+    delete query.opinionId;
+    void router.replace({ path: route.path, query, hash: route.hash });
   }
 
   function replaceRecord(id: string, patch: Partial<AdminOpinionRecord>) {
@@ -225,34 +229,38 @@ export function useAdminUserOpinion(options: { initialPageSize?: number } = {}) 
     }
   }
 
-  async function openLinkedOpinion() {
-    const id = linkedOpinionId.value;
-    if (!id) return;
-    const current = opinionList.value.find((item) => item.id === id);
-    if (current) {
-      openOpinion(current);
-      return;
-    }
-    try {
-      const response: any = await opinionApi.getOpinionList({
-        currentPage: 1,
-        pageSize: 1,
-        filters: { opinionId: id, hideInternal: false },
+  watch(
+    linkedOpinionId,
+    async (id, _previousId, onCleanup) => {
+      if (!id) return;
+      let active = true;
+      onCleanup(() => {
+        active = false;
       });
-      const record = response?.status === 200 && Array.isArray(response.data?.items) ? response.data.items[0] : null;
-      if (!record) {
-        message.warning(t('adminUserOpinion.messages.notFound'));
-        return;
+      try {
+        const response: any = await opinionApi.getOpinionList({
+          currentPage: 1,
+          pageSize: 1,
+          filters: { opinionId: id, hideInternal: false },
+        });
+        if (!active || linkedOpinionId.value !== id) return;
+        const record = response?.status === 200 && Array.isArray(response.data?.items)
+          ? response.data.items.find((item: AdminOpinionRecord) => item.id === id)
+          : null;
+        if (!record) {
+          message.warning(t('adminUserOpinion.messages.notFound'));
+          return;
+        }
+        openOpinion(record);
+      } catch {
+        if (active && linkedOpinionId.value === id) message.warning(t('adminUserOpinion.messages.notFound'));
       }
-      openOpinion(record);
-    } catch {
-      message.warning(t('adminUserOpinion.messages.notFound'));
-    }
-  }
+    },
+    { immediate: true },
+  );
 
-  async function initialize() {
-    await loadOpinions();
-    await openLinkedOpinion();
+  function initialize() {
+    return loadOpinions();
   }
 
   function handleSearch() {

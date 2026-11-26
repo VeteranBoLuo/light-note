@@ -492,32 +492,63 @@
       v-model:visible="showContactModal"
       :title="t('landing.contactUs')"
       :show-footer="false"
-      width="min(420px, calc(100vw - 32px))"
+      width="min(var(--ui-layout-420, 420px), calc(100vw - var(--ui-space-32, 32px)))"
       modal-class="landing-contact-dialog"
     >
-      <div class="contact-dialog__body">
-        <div class="contact-dialog__email">{{ t('landing.contactEmail') }}</div>
+      <form class="contact-dialog__body" data-theme="night" @submit.prevent="submitFeedback">
+        <div class="contact-dialog__email">
+          <span>{{ t('landing.contactEmail') }}</span>
+          <a :href="`mailto:${officialContactEmail}`">{{ officialContactEmail }}</a>
+        </div>
         <div class="contact-dialog__field">
-          <label>{{ t('landing.feedbackLabel') }}</label>
+          <label for="landing-feedback-content">{{ t('landing.feedbackLabel') }}</label>
           <BInput
+            id="landing-feedback-content"
             v-model:value="feedbackContent"
             class="contact-dialog__input"
             type="textarea"
             :placeholder="t('landing.feedbackPlaceholder')"
             :rows="4"
-            :maxlength="2000"
+            :readonly="submitting || feedbackSubmitted"
+            :aria-invalid="feedbackTooLong"
+            aria-describedby="landing-feedback-length landing-feedback-status"
+            @input="feedbackError = ''"
           />
+          <div id="landing-feedback-length" class="contact-dialog__length" :class="{ 'is-error': feedbackTooLong }">
+            <span>
+              {{ t('landing.feedbackLength', { min: OPINION_CONTENT_MIN_LENGTH, max: OPINION_CONTENT_MAX_LENGTH }) }}
+            </span>
+            <span>{{ feedbackLength }} / {{ OPINION_CONTENT_MAX_LENGTH }}</span>
+          </div>
         </div>
+        <p
+          id="landing-feedback-status"
+          class="contact-dialog__status"
+          :class="{ 'is-error': feedbackError, 'is-success': feedbackSubmitted }"
+          role="status"
+          aria-atomic="true"
+        >
+          {{ feedbackSubmitted ? t('landing.feedbackOk') : feedbackError ? t(feedbackError) : '' }}
+        </p>
         <BButton
+          v-if="feedbackSubmitted"
           type="primary"
           class="contact-dialog__submit"
-          :disabled="!feedbackContent.trim() || submitting"
+          @click="showContactModal = false"
+        >
+          {{ t('landing.feedbackDone') }}
+        </BButton>
+        <BButton
+          v-else
+          type="primary"
+          native-type="submit"
+          class="contact-dialog__submit"
+          :disabled="!canSubmitFeedback"
           :loading="submitting"
-          @click="submitFeedback"
         >
           {{ submitting ? t('landing.submitting') : t('landing.submitFeedback') }}
         </BButton>
-      </div>
+      </form>
     </BModal>
   </div>
 </template>
@@ -526,6 +557,7 @@
   import { ref, computed, inject, onMounted, onBeforeUnmount } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useRouter } from 'vue-router';
+  import { OPINION_CONTENT_MAX_LENGTH, OPINION_CONTENT_MIN_LENGTH } from '@lightnote/shared';
   import { useUserStore, bookmarkStore } from '@/store';
   import { apiBasePost } from '@/http/request';
   import { recordOperation } from '@/api/commonApi.ts';
@@ -583,8 +615,20 @@
   const visible = ref({ 1: false, 2: false, 3: false, 4: false });
   const animating = ref(false);
   const showContactModal = ref(false);
+  const officialContactEmail = '1902013368@qq.com';
   const feedbackContent = ref('');
   const submitting = ref(false);
+  const feedbackSubmitted = ref(false);
+  const feedbackError = ref<'landing.feedbackFail' | 'landing.networkErr' | ''>('');
+  const feedbackLength = computed(() => feedbackContent.value.trim().length);
+  const feedbackTooLong = computed(() => feedbackLength.value > OPINION_CONTENT_MAX_LENGTH);
+  const canSubmitFeedback = computed(
+    () =>
+      !submitting.value &&
+      !feedbackSubmitted.value &&
+      feedbackLength.value >= OPINION_CONTENT_MIN_LENGTH &&
+      !feedbackTooLong.value,
+  );
   type LandingNavigationAction = 'primary' | 'account' | 'store' | 'extension' | 'document';
   type LandingNavigationKind = 'app' | 'registration' | 'page';
   const activeLandingAction = ref<LandingNavigationAction | null>(null);
@@ -857,28 +901,31 @@
     if (event.persisted) finishLandingNavigation();
   }
   function handleContact() {
+    if (!submitting.value) {
+      feedbackContent.value = '';
+      feedbackError.value = '';
+      feedbackSubmitted.value = false;
+    }
     showContactModal.value = true;
-    feedbackContent.value = '';
   }
   async function submitFeedback() {
+    if (!canSubmitFeedback.value) return;
     const content = feedbackContent.value.trim();
-    if (!content) return;
     submitting.value = true;
+    feedbackError.value = '';
     try {
-      const res = await apiBasePost('/api/opinion/recordOpinion', {
-        type: '官网反馈',
-        content,
-        imgArray: '[]',
-      });
+      const res = await apiBasePost(
+        '/api/opinion/recordOpinion',
+        { type: '官网反馈', content, imgArray: '[]' },
+        { silent: true },
+      );
       if (res.status === 200) {
-        showContactModal.value = false;
-        feedbackContent.value = '';
-        message.success(t('landing.feedbackOk'));
+        feedbackSubmitted.value = true;
       } else {
-        message.error(t('landing.feedbackFail'));
+        feedbackError.value = 'landing.feedbackFail';
       }
-    } catch {
-      message.error(t('landing.networkErr'));
+    } catch (error) {
+      feedbackError.value = (error as { status?: number })?.status ? 'landing.feedbackFail' : 'landing.networkErr';
     } finally {
       submitting.value = false;
     }
@@ -3059,44 +3106,71 @@
   }
   .contact-dialog__body {
     width: 100%;
+    color: var(--text-color);
   }
   .contact-dialog__email {
-    font-size: 13px;
-    color: #888;
-    margin-bottom: 20px;
-    padding-bottom: 16px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--ui-space-4, 4px) var(--ui-space-8, 8px);
+    font-size: var(--ui-font-13, 13px);
+    color: var(--desc-color);
+    margin-bottom: var(--ui-space-16, 16px);
+    padding-bottom: var(--ui-space-12, 12px);
+    border-bottom: 1px solid var(--surface-divider-color);
+  }
+  .contact-dialog__email a {
+    color: var(--bl-input-focus-border-color);
+    text-decoration: underline;
+    overflow-wrap: anywhere;
+  }
+  .contact-dialog__email a:focus-visible {
+    outline: 1px solid currentColor;
   }
   .contact-dialog__field label {
     display: block;
-    font-size: 13px;
-    color: #aaa;
-    margin-bottom: 8px;
+    font-size: var(--ui-font-14, 14px);
+    margin-bottom: var(--ui-space-8, 8px);
+  }
+  .contact-dialog__input {
+    --bl-input-bg-color: var(--surface-panel-bg);
+    --bl-input-hover-bg-color: var(--bl-input-bg-color);
+    --bl-input-focus-bg-color: var(--bl-input-bg-color);
   }
   .contact-dialog__input :deep(.b-textarea) {
-    width: 100%;
-    box-sizing: border-box;
-    background: rgba(255, 255, 255, 0.04);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 8px;
-    padding: 10px 12px;
-    color: #ddd;
-    font-size: 13px;
+    display: block;
+    padding-block: var(--ui-space-10, 10px);
+    font-size: var(--ui-font-16, 16px);
     resize: none;
-    outline: none;
-    transition: border-color 0.2s;
-    font-family: inherit;
   }
-  .contact-dialog__input :deep(.b-textarea:focus) {
-    border-color: #615ced;
+  .contact-dialog__input :deep(.b-textarea[aria-invalid='true']) {
+    --bl-input-border-color: var(--danger-color);
+    --bl-input-hover-border-color: var(--danger-color);
+    --bl-input-focus-border-color: var(--danger-color);
   }
-  .contact-dialog__input :deep(.b-textarea::placeholder) {
-    color: #555;
+  .contact-dialog__length {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: var(--ui-space-4, 4px) var(--ui-space-12, 12px);
+    margin-top: var(--ui-space-6, 6px);
+    color: var(--desc-color);
+    font-size: var(--ui-font-12, 12px);
+  }
+  .contact-dialog__status {
+    min-block-size: calc(var(--ui-font-13, 13px) * 1.4);
+    margin: var(--ui-space-8, 8px) 0 var(--ui-space-10, 10px);
+    font-size: var(--ui-font-13, 13px);
+    line-height: 1.4;
+  }
+  .contact-dialog__body .is-error {
+    color: var(--danger-color);
+  }
+  .contact-dialog__status.is-success {
+    color: var(--success-color);
   }
   .contact-dialog__submit.b_btn {
-    margin-top: 16px;
     width: 100%;
-    min-height: 42px;
+    min-height: var(--ui-control-42, 42px);
     border-radius: 9px;
   }
 

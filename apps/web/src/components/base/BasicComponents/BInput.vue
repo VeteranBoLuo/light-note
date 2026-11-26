@@ -8,6 +8,8 @@
       :maxlength="maxlength"
       :disabled="disabled"
       :readonly="readonly"
+      :aria-describedby="ariaDescribedby"
+      :aria-invalid="ariaInvalid || undefined"
       class="b-textarea"
       :value="value"
       @input="handleInput"
@@ -46,6 +48,8 @@
       :maxlength="maxlength"
       :disabled="disabled"
       :readonly="readonly"
+      :aria-describedby="ariaDescribedby"
+      :aria-invalid="ariaInvalid || undefined"
       :placeholder="placeholder"
       @change="handleChange"
       @focus="$emit('focus')"
@@ -83,6 +87,8 @@
       submitOnEnter?: boolean;
       disabled?: boolean;
       readonly?: boolean;
+      ariaDescribedby?: string;
+      ariaInvalid?: boolean;
     }>(),
     {
       id: () => Math.floor(Math.random() * 9000000).toString(),

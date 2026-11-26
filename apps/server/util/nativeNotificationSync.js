@@ -1,7 +1,7 @@
 import { huaweiPushEnabled } from './huaweiPushPolicy.js';
 import { communityFeedSchemaReady } from './communityFeed/schema.js';
 import { feedNotificationVisibleSql } from './communityFeed/notifications.js';
-import { COMMUNITY_CHAT_DELIVERY_NOTIFICATION_SQL } from './notificationVisibility.js';
+import { COMMUNITY_CHAT_DELIVERY_NOTIFICATION_SQL, EXCLUDE_INBOX_ONLY_NOTIFICATION_SQL } from './notificationVisibility.js';
 import { todoPushPresentation } from './todoPushPresentation.js';
 import { readCommunityChatPushPresentations } from './communityChatPushPresentation.js';
 
@@ -32,7 +32,8 @@ export async function readNativeNotifications(db, userId, input = {}) {
   const [rows] = await db.query(
     `SELECT id, type, source_type, source_id, meta,
       DATE_FORMAT(browser_push_created_at,'%Y-%m-%d %H:%i:%s.%f') AS time
-    FROM notification WHERE user_id=? AND del_flag=0 AND COALESCE(recalled,0)=0 AND type NOT IN ('public_resource', 'email_health', 'signup_source_survey', 'manor_digest', 'manor_water_expiring')
+    FROM notification WHERE user_id=? AND del_flag=0 AND COALESCE(recalled,0)=0 AND ${EXCLUDE_INBOX_ONLY_NOTIFICATION_SQL}
+      AND type NOT IN ('manor_digest', 'manor_water_expiring')
       AND create_time >= DATE_SUB(NOW(), INTERVAL 24 HOUR)
       AND browser_push_created_at>=? AND browser_push_created_at<=?
       AND ${COMMUNITY_CHAT_DELIVERY_NOTIFICATION_SQL} AND ${feedNotificationVisibleSql(ready)}

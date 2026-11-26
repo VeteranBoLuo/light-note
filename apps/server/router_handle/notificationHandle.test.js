@@ -115,6 +115,18 @@ describe('聊天室通知中心可见性与旧客户端兼容', () => {
     expect(res.send.mock.calls[0][0].data).toMatchObject({ total: 2, unreadTotal: 1 });
   });
 
+  it.each(['root', 'user'])('反馈分组统一筛选回复和新反馈，并按 %s 权限限制新反馈', async (role) => {
+    query.mockResolvedValueOnce([[]]).mockResolvedValueOnce([[{ total: 0 }]]).mockResolvedValueOnce([[{ unreadTotal: 0 }]]);
+    const req = { user: { id: 'recipient', role }, body: { type: 'feedback' } };
+    await list(req, mockRes());
+    expect(query.mock.calls[0][1].slice(0, 3)).toEqual(['recipient', 'opinion_reply', 'opinion_received']);
+    for (const [sql] of query.mock.calls) {
+      expect(sql.includes("type <> 'opinion_received'")).toBe(role !== 'root');
+    }
+    await markAllRead(req, mockRes());
+    expect(markSnapshot.mock.calls.at(-1)[2]).toEqual(['recipient', 'opinion_reply', 'opinion_received']);
+  });
+
   it('旧客户端的铃铛计数和全部已读仍可完全排除聊天室通知', async () => {
     query.mockResolvedValueOnce([[{ type: 'system', c: 2 }]]);
     const unreadRes = mockRes();

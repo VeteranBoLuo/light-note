@@ -1,6 +1,6 @@
 import { communityFeedSchemaReady } from './communityFeed/schema.js';
 import { feedNotificationVisibleSql } from './communityFeed/notifications.js';
-import { COMMUNITY_CHAT_DELIVERY_NOTIFICATION_SQL } from './notificationVisibility.js';
+import { COMMUNITY_CHAT_DELIVERY_NOTIFICATION_SQL, EXCLUDE_INBOX_ONLY_NOTIFICATION_SQL } from './notificationVisibility.js';
 import { readCommunityChatPushPresentations } from './communityChatPushPresentation.js';
 import {
   huaweiNotificationPresentation,
@@ -269,7 +269,7 @@ export async function processNextPush({ db = pool, send = sendWebPush, env = pro
     }
     const huawei = isHuaweiEndpoint(subscription?.endpoint);
     const visible = huawei
-      ? `del_flag = 0 AND recalled = 0 AND type NOT IN ('public_resource', 'email_health', 'signup_source_survey') AND ${COMMUNITY_CHAT_DELIVERY_NOTIFICATION_SQL} AND ${feedNotificationVisibleSql(await communityFeedSchemaReady(db).catch(() => false))}`
+      ? `del_flag = 0 AND recalled = 0 AND ${EXCLUDE_INBOX_ONLY_NOTIFICATION_SQL} AND ${COMMUNITY_CHAT_DELIVERY_NOTIFICATION_SQL} AND ${feedNotificationVisibleSql(await communityFeedSchemaReady(db).catch(() => false))}`
       : notificationVisibleSql;
     let [[notification]] = await db.query(`SELECT * FROM notification WHERE id = ? AND user_id = ? AND ${visible}`, [
       job.notification_id,

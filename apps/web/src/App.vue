@@ -727,16 +727,14 @@
   // 手机布局和桌面布局的路由不一样，切换断点后需要切换对应路由地址
   // 工作台已支持移动端访问,不再强制跳回移动首页。
   function handleRouteChange(isMobileLayout: boolean, path: string) {
-    // 桌面布局切换至手机布局
-    if (isMobileLayout) {
-      if (phoneReplaceMap[path]) {
-        router.push(phoneReplaceMap[path]);
-      }
-    } else {
-      if (deskReplaceMap[path]) {
-        router.push(deskReplaceMap[path]);
-      }
+    const target = (isMobileLayout ? phoneReplaceMap : deskReplaceMap)[path];
+    if (!target) return;
+    if (path === '/admin/userOpinion' || path === '/userOpinion') {
+      const { query, hash } = router.currentRoute.value;
+      void router.push({ path: target, query, hash });
+      return;
     }
+    void router.push(target);
   }
   async function redirectToGuestHome() {
     const targetPath = getRuntimeGuestEntryPath(user.preferences, {

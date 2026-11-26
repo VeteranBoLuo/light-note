@@ -14,6 +14,8 @@ export const notificationMessages: Record<
     };
     levelUpTitle: string;
     opinionReplyTitle: string;
+    opinionReceivedTitle: string;
+    opinionReceivedContent: string;
     collectionRewardTitle: string;
     collectionRewardContent: string;
     collectionSubmissionTitle: string;

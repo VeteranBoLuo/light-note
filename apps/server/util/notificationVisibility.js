@@ -37,3 +37,7 @@ export const COMMUNITY_CHAT_DELIVERY_NOTIFICATION_SQL = `(${COMMUNITY_CHAT_TARGE
        AND COALESCE(chat_settings.root_all_messages_enabled, 1) = 1
        AND COALESCE(chat_settings.global_notification_enabled, 1) = 1
        AND COALESCE(JSON_UNQUOTE(JSON_EXTRACT(chat_owner.preferences, '$.notificationsInApp')), 'true') <> 'false'))))`;
+export const INBOX_ONLY_NOTIFICATION_TYPES = Object.freeze([
+  'public_resource', 'email_health', 'signup_source_survey', 'opinion_received',
+]);
+export const EXCLUDE_INBOX_ONLY_NOTIFICATION_SQL = `type NOT IN (${INBOX_ONLY_NOTIFICATION_TYPES.map((type) => `'${type}'`).join(', ')})`;

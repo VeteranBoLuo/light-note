@@ -18,7 +18,7 @@ vi.mock('../db/index.js', () => ({
 }));
 vi.mock('../util/common.js', () => ({
   resultData: (data = null, status = 200, msg = '') => ({ data, status, msg }),
-  insertData: (value) => value,
+  insertData: (value) => ({ id: 'new-opinion', ...value }),
   INTERNAL_ROLES: ['root', 'test'],
   L: (_req, zh) => zh,
 }));
@@ -64,10 +64,11 @@ describe('opinion handler', () => {
 
       expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ status: 400 }));
       expect(mocks.query).not.toHaveBeenCalled();
+      expect(mocks.createNotification).not.toHaveBeenCalled();
     });
 
     it('trims valid content and keeps server-owned status fields', async () => {
-      mocks.query.mockResolvedValueOnce([{ insertId: 1 }]);
+      mocks.query.mockResolvedValueOnce([{ affectedRows: 1 }]).mockResolvedValueOnce([[]]);
       const res = createResponse();
       await recordOpinion(
         {
@@ -91,6 +92,41 @@ describe('opinion handler', () => {
         replyViewed: 0,
       });
       expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ status: 200 }));
+    });
+
+    it('links the saved feedback ID in one private notification per opted-in root', async () => {
+      mocks.query.mockResolvedValueOnce([{ affectedRows: 1 }]).mockResolvedValueOnce([[{ id: 'root-1' }, { id: 'root-2' }]]);
+      const res = createResponse();
+      await recordOpinion({ user: { id: 'visitor' }, body: { type: '官网反馈', content: '一条用于验证的反馈正文' } }, res);
+
+      const [recipientsSql] = mocks.query.mock.calls[1];
+      expect(recipientsSql).toContain("role = 'root' AND del_flag = 0");
+      expect(recipientsSql).toContain('$.notificationsInApp');
+      expect(mocks.createNotification.mock.calls.map(([id]) => id)).toEqual(['root-1', 'root-2']);
+      for (const [, notification] of mocks.createNotification.mock.calls) {
+        expect(notification).toMatchObject({
+          type: 'opinion_received',
+          link: '/admin/userOpinion?opinionId=new-opinion',
+          sourceType: 'opinion_received',
+          sourceId: 'new-opinion',
+        });
+        expect(JSON.stringify(notification)).not.toContain('一条用于验证的反馈正文');
+      }
+      expect(res.send.mock.invocationCallOrder[0]).toBeLessThan(mocks.createNotification.mock.invocationCallOrder[0]);
+    });
+
+    it('returns success once even when the notification insert fails', async () => {
+      mocks.query.mockResolvedValueOnce([{ affectedRows: 1 }]).mockResolvedValueOnce([[{ id: 'root-1' }]]);
+      mocks.createNotification.mockRejectedValueOnce(new Error('private error'));
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const res = createResponse();
+      try {
+        await recordOpinion({ body: { type: '官网反馈', content: '一条用于验证的反馈正文' } }, res);
+        expect(res.send).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ status: 200 }));
+        expect(warn).toHaveBeenCalledWith('[opinion] new feedback notification failed code=%s', 'TEST_ERROR');
+      } finally {
+        warn.mockRestore();
+      }
     });
   });
 

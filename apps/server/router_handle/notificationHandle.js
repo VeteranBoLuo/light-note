@@ -6,6 +6,7 @@ import { markNotificationSnapshotRead } from '../util/notificationReadSnapshot.j
 import { communityFeedSchemaReady } from '../util/communityFeed/schema.js';
 import { feedNotificationVisibleSql, feedNotificationContentSql } from '../util/communityFeed/notifications.js';
 import crypto from 'crypto';
+import { FEEDBACK_NOTIFICATION_TYPES } from '@lightnote/shared';
 import pool from '../db/index.js';
 import { resultData } from '../util/common.js';
 import { ensureNotVisitor } from '../util/auth.js';
@@ -30,6 +31,7 @@ const COMMUNITY_CHAT_EXCLUDED_SQL =
   "type <> 'community_chat' AND COALESCE(source_type, '') <> 'community_chat_message'";
 const NOTIFICATION_TYPE_GROUPS = Object.freeze({
   system: Object.freeze(['system', 'collection_form_submission', 'signup_source_survey']),
+  feedback: FEEDBACK_NOTIFICATION_TYPES,
   growth: Object.freeze(['level_up', 'streak_risk', 'collection_form_reward', 'manor_digest', 'manor_water_expiring']),
   ai_routine: Object.freeze(['daily_brief', 'ai_routine']),
 });
@@ -62,6 +64,10 @@ function appendNotificationTypeFilter(type, where, params) {
   }
   where.push('type = ?');
   params.push(type);
+}
+
+function opinionNotificationVisibility(req) {
+  return req.user?.role === 'root' && !req.adminContext ? '1 = 1' : "type <> 'opinion_received'";
 }
 
 function parseNotificationMeta(meta) {
@@ -148,7 +154,8 @@ export const list = async (req, res) => {
 
     const feedReady = await communityFeedSchemaReady(db).catch(() => false);
     const feedVisibility = `(${feedNotificationVisibleSql(feedReady)}) AND (${publicResourceNotificationVisibleSql(await publicResourceSchemaReady(db).catch(() => false))})`;
-    const where = ['user_id = ?', 'del_flag = 0', COMMUNITY_CHAT_TARGETED_NOTIFICATION_SQL, feedVisibility];
+    const opinionVisibility = opinionNotificationVisibility(req);
+    const where = ['user_id = ?', 'del_flag = 0', COMMUNITY_CHAT_TARGETED_NOTIFICATION_SQL, feedVisibility, opinionVisibility];
     const params = [userId];
     if (excludeCommunityChat) where.push(COMMUNITY_CHAT_EXCLUDED_SQL);
     appendNotificationTypeFilter(type, where, params);
@@ -190,7 +197,7 @@ export const list = async (req, res) => {
         `SELECT COUNT(*) AS unreadTotal
           FROM notification
           WHERE user_id = ? AND is_read = 0 AND del_flag = 0
-            AND ${COMMUNITY_CHAT_TARGETED_NOTIFICATION_SQL} AND ${feedVisibility}
+            AND ${COMMUNITY_CHAT_TARGETED_NOTIFICATION_SQL} AND ${feedVisibility} AND ${opinionVisibility}
             ${excludeCommunityChat ? `AND ${COMMUNITY_CHAT_EXCLUDED_SQL}` : ''}`,
         [userId],
       );
@@ -223,7 +230,7 @@ export const unreadCount = async (req, res) => {
     const [rows] = await pool.query(
       `SELECT type, COUNT(*) AS c FROM notification
        WHERE user_id = ? AND is_read = 0 AND del_flag = 0
-         AND ${COMMUNITY_CHAT_TARGETED_NOTIFICATION_SQL} AND ${feedVisibility}
+         AND ${COMMUNITY_CHAT_TARGETED_NOTIFICATION_SQL} AND ${feedVisibility} AND ${opinionNotificationVisibility(req)}
          ${excludeCommunityChat ? `AND ${COMMUNITY_CHAT_EXCLUDED_SQL}` : ''}
        GROUP BY type`,
       [userId],
@@ -301,7 +308,7 @@ export const setReadState = async (req, res) => {
     const feedReady = await communityFeedSchemaReady(pool).catch(() => false);
     const publicReady = await publicResourceSchemaReady(pool).catch(() => false);
     const where = `user_id = ? AND id = ? AND del_flag = 0 AND COALESCE(recalled, 0) = 0
-      AND ${COMMUNITY_CHAT_TARGETED_NOTIFICATION_SQL}
+      AND ${COMMUNITY_CHAT_TARGETED_NOTIFICATION_SQL} AND ${opinionNotificationVisibility(req)}
       AND (${feedNotificationVisibleSql(feedReady)}) AND (${publicResourceNotificationVisibleSql(publicReady)})`;
     const state = isRead ? 1 : 0;
     const owner = [req.user.id, id.trim()];
@@ -330,7 +337,7 @@ export const markAllRead = async (req, res) => {
   try {
     const excludeCommunityChat = req.body?.excludeCommunityChat === true;
     const feedVisibility = `(${feedNotificationVisibleSql(await communityFeedSchemaReady(pool).catch(() => false))}) AND (${publicResourceNotificationVisibleSql(await publicResourceSchemaReady(pool).catch(() => false))})`;
-    const where = ['user_id = ?', 'is_read=0', 'del_flag=0', COMMUNITY_CHAT_TARGETED_NOTIFICATION_SQL, feedVisibility];
+    const where = ['user_id = ?', 'is_read=0', 'del_flag=0', COMMUNITY_CHAT_TARGETED_NOTIFICATION_SQL, feedVisibility, opinionNotificationVisibility(req)];
     const params = [req.user.id];
     appendNotificationTypeFilter(req.body?.type, where, params);
     if (excludeCommunityChat) where.push(COMMUNITY_CHAT_EXCLUDED_SQL);

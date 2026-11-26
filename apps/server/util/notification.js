@@ -3,6 +3,7 @@ import { ensureBrowserPushTables } from './browserPushSchema.js';
 import { browserPushEnabled } from './browserPushPolicy.js';
 import pool from '../db/index.js';
 import { queueNotificationChange } from './notificationRealtimeEvents.js';
+import { INBOX_ONLY_NOTIFICATION_TYPES } from './notificationVisibility.js';
 // 使用无路由副作用的数据工具，避免业务 service -> common.js -> router -> Agent 的循环依赖。
 import { insertData } from './agent/data.js';
 
@@ -121,7 +122,8 @@ export async function createNotification(
     isRead: 0,
   });
   if (id) row.id = id;
-  row.browser_push_pending = ['public_resource', 'email_health', 'signup_source_survey'].includes(type) ? 0 : (type !== 'community_feed' && browserPushEnabled()) || huaweiPushEnabled() ? 1 : 0;
+  row.browser_push_pending = !INBOX_ONLY_NOTIFICATION_TYPES.includes(type) &&
+    ((type !== 'community_feed' && browserPushEnabled()) || huaweiPushEnabled()) ? 1 : 0;
   // Use a database microsecond timestamp, shared with subscription eligibility.
   // 只有携带来源键的系统事实才允许幂等忽略；普通通知仍保留原先的严格 INSERT 语义。
   const [result] = await db.query(

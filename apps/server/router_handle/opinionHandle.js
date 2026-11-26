@@ -1,4 +1,6 @@
 import crypto from 'node:crypto';
+import { OPINION_CONTENT_MAX_LENGTH, OPINION_CONTENT_MIN_LENGTH } from '@lightnote/shared';
+import { notificationMessages } from '@lightnote/shared/notification-presentation';
 import pool from '../db/index.js';
 import { resultData, insertData, INTERNAL_ROLES, L } from '../util/common.js';
 import { ensureNotVisitor } from '../util/auth.js';
@@ -48,6 +50,32 @@ function auditReason(value, fallback) {
   );
 }
 
+async function notifyNewOpinion(opinionId) {
+  try {
+    const [admins] = await pool.query(`SELECT id FROM user
+      WHERE role = 'root' AND del_flag = 0
+        AND COALESCE(JSON_UNQUOTE(JSON_EXTRACT(preferences, '$.notificationsInApp')), 'true') <> 'false'`);
+    const type = 'opinion_received';
+    const copy = notificationMessages['zh-CN'];
+    const notice = {
+      type,
+      title: copy.opinionReceivedTitle,
+      content: copy.opinionReceivedContent,
+      link: `/admin/userOpinion?opinionId=${encodeURIComponent(opinionId)}`,
+      sourceType: type,
+      sourceId: opinionId,
+    };
+    const results = await Promise.allSettled(admins.map(({ id }) => createNotification(id, notice)));
+    for (const result of results) {
+      if (result.status === 'rejected') {
+        console.warn('[opinion] new feedback notification failed code=%s', stableAgentErrorCode(result.reason));
+      }
+    }
+  } catch (error) {
+    console.warn('[opinion] feedback recipient lookup failed code=%s', stableAgentErrorCode(error));
+  }
+}
+
 export const recordOpinion = async (req, res) => {
   const userId = req.user?.id;
   const insertSql = 'INSERT INTO opinion SET ?';
@@ -56,8 +84,12 @@ export const recordOpinion = async (req, res) => {
   if (!type) {
     return res.send(resultData(null, 400, '请选择反馈类型'));
   }
-  if (content.length < 6 || content.length > 500) {
-    return res.send(resultData(null, 400, '反馈内容需为 6 至 500 个字符'));
+  const min = OPINION_CONTENT_MIN_LENGTH;
+  const max = OPINION_CONTENT_MAX_LENGTH;
+  if (content.length < min || content.length > max) {
+    return res.send(
+      resultData(null, 400, L(req, `反馈内容需为 ${min} 至 ${max} 个字符`, `Feedback must be ${min}–${max} characters.`)),
+    );
   }
   // 字段白名单:此前 params = req.body 整体入库(mass-assignment),请求体可直写任意列(如 reply_content/status)
   const params = {
@@ -69,13 +101,16 @@ export const recordOpinion = async (req, res) => {
     status: OPINION_STATUS.PENDING,
     replyViewed: 0,
   };
+  let row;
   try {
-    await pool.query(insertSql, [insertData(params)]);
-    res.send(resultData('反馈成功'));
+    row = insertData(params);
+    await pool.query(insertSql, [row]);
   } catch (err) {
     console.error('[opinion] 记录反馈失败 code=%s', stableAgentErrorCode(err));
-    res.send(resultData(null, 500, '提交失败，请稍后重试'));
+    return res.send(resultData(null, 500, '提交失败，请稍后重试'));
   }
+  res.send(resultData('反馈成功'));
+  await notifyNewOpinion(row.id);
 };
 
 export const getOpinionList = async (req, res) => {

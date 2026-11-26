@@ -1,6 +1,10 @@
 // 补签仅限今天之前最近若干自然日，按账号时区计算，前后端共用。
 export const MAKEUP_WINDOW_DAYS = 30;
 
+export const OPINION_CONTENT_MIN_LENGTH = 6;
+export const OPINION_CONTENT_MAX_LENGTH = 500;
+export const FEEDBACK_NOTIFICATION_TYPES = Object.freeze(['opinion_reply', 'opinion_received']);
+
 // 轻笺前后端共享契约 —— 单一来源,改这里前后端同步生效。
 // 这些是 resultData 的「业务 status」(HTTP 始终 200,除少数显式 res.status)。
 export const STATUS = Object.freeze({

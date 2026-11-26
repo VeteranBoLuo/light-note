@@ -31,6 +31,8 @@ export const notificationMessages = {
     levelGift: "AI 赠礼 {amount} tokens 已到账",
     levelGiftPending: "AI 赠礼待到账",
     opinionReplyTitle: "你的反馈收到新回复",
+    opinionReceivedTitle: "收到一条新反馈",
+    opinionReceivedContent: "点击查看并处理反馈。",
     emailHealthTitle: "请检查账号邮箱",
     emailHealthContent:
       "账号邮箱 {email} 可能无法接收邮件。请前往账号与安全核对或更换，以便忘记密码时找回账号。正常登录和使用不受影响。",
@@ -94,6 +96,8 @@ export const notificationMessages = {
     levelGift: "AI gift of {amount} tokens credited",
     levelGiftPending: "AI gift pending",
     opinionReplyTitle: "Your feedback got a reply",
+    opinionReceivedTitle: "New feedback received",
+    opinionReceivedContent: "Open the feedback to review it.",
     emailHealthTitle: "Check your account email",
     emailHealthContent:
       "Your account email {email} may not receive mail. Check or change it in Account & security so you can recover your account if you forget your password. Sign-in and normal use are unaffected.",
@@ -185,6 +189,10 @@ export function notificationPresentation(item, locale = "zh-CN") {
       : ['held', 'missing'].includes(meta.aiGiftStatus) ? messages.levelGiftPending : '';
   }
   if (item.type === "opinion_reply") title = messages.opinionReplyTitle;
+  if (item.type === "opinion_received") {
+    title = messages.opinionReceivedTitle;
+    content = messages.opinionReceivedContent;
+  }
   if (["manor_digest", "manor_water_expiring"].includes(item.type) &&
       typeof meta?.manor?.dayKey === "string" &&
       /^\d{8}$/.test(meta?.manor?.dayKey || "") &&

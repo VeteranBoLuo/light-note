@@ -1,6 +1,10 @@
 // 补签仅限今天之前最近若干自然日，按账号时区计算，前后端共用。
 export declare const MAKEUP_WINDOW_DAYS: 30;
 
+export declare const OPINION_CONTENT_MIN_LENGTH: 6;
+export declare const OPINION_CONTENT_MAX_LENGTH: 500;
+export declare const FEEDBACK_NOTIFICATION_TYPES: readonly ['opinion_reply', 'opinion_received'];
+
 export type ApiStatus =
   200 | 400 | 401 | 403 | 404 | 423 | 500 | 'preview' | 'visitor';
 

@@ -1,4 +1,4 @@
-import { COMMUNITY_CHAT_DELIVERY_NOTIFICATION_SQL } from './notificationVisibility.js';
+import { COMMUNITY_CHAT_DELIVERY_NOTIFICATION_SQL, EXCLUDE_INBOX_ONLY_NOTIFICATION_SQL } from './notificationVisibility.js';
 import { createHash } from 'node:crypto';
 import { notificationSchedulerEnabled } from './notificationSchedulerPolicy.js';
 export function browserPushEnabled(env = process.env) {
@@ -52,7 +52,7 @@ export function pushFailure(code, attempts) {
   if (attempts >= 8 || (code >= 400 && code < 500 && code !== 408 && code !== 429)) return 'failed';
   return 'pending';
 }
-export const notificationVisibleSql = `(del_flag = 0 AND recalled = 0 AND type NOT IN ('community_feed', 'public_resource', 'email_health', 'signup_source_survey') AND ${COMMUNITY_CHAT_DELIVERY_NOTIFICATION_SQL})`;
+export const notificationVisibleSql = `(del_flag = 0 AND recalled = 0 AND type <> 'community_feed' AND ${EXCLUDE_INBOX_ONLY_NOTIFICATION_SQL} AND ${COMMUNITY_CHAT_DELIVERY_NOTIFICATION_SQL})`;
 
 export const isBrowserPushSubscriptionRequest = (context) =>
   String(context.method).toUpperCase() === 'POST' &&
