@@ -153,7 +153,7 @@
             >
               <BButton
                 class="file-more-button"
-                :class="{ 'file-more--on-cover': hasMediaCover(item) }"
+                :class="{ 'file-more--on-cover': usesCornerActionScrim(item) }"
                 :aria-label="$t('common.more')"
                 :aria-expanded="open"
                 aria-haspopup="menu"
@@ -176,7 +176,7 @@
             <div
               v-if="!batchMode && (!bookmark.isMobile || hasMediaCover(item))"
               class="file-card-overlay"
-              :class="{ 'file-card-overlay--media': hasMediaCover(item) }"
+              :class="{ 'file-card-overlay--corner': usesCornerActionScrim(item) }"
             >
               <BTooltip v-if="!bookmark.isMobile" :title="$t('cloudSpace.download')">
                 <svg-icon
@@ -945,6 +945,7 @@
     CLOUD_FILE_CATEGORY_LABEL_KEY,
     getCloudPreviewType,
     getCloudFileCategory,
+    isMarkdownFile,
   } from '@/constants/cloudFileCategory.ts';
   import { useRouter } from 'vue-router';
   import { recordOperation } from '@/api/commonApi.ts';
@@ -1726,6 +1727,10 @@
 
   function isTextFile(file: any): boolean {
     return getFileCategory(file) === 'text' && !!file?.fileUrl;
+  }
+
+  function usesCornerActionScrim(file: any): boolean {
+    return hasMediaCover(file) || (isTextFile(file) && isMarkdownFile(file));
   }
 
   function getFilePreviewLabel(file: any): string {
@@ -3312,7 +3317,7 @@
     background: linear-gradient(to bottom, rgba(0, 0, 0, 0.3) 0%, transparent 40%);
     pointer-events: none;
   }
-  .file-card-overlay--media {
+  .file-card-overlay--corner {
     background: radial-gradient(
       ellipse var(--ui-layout-92, 92px) var(--ui-layout-58, 58px) at top right,
       var(--cloud-file-cover-action-scrim) 50%,

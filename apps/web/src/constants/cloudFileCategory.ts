@@ -32,6 +32,14 @@ export function isLegacyOfficeFile(file?: { fileName?: string; fileType?: string
 export function isHtmlFile(file?: { fileName?: string; fileType?: string; ext?: string }): boolean {
   return getCloudPreviewType(file) === 'html';
 }
+
+export function isMarkdownFile(file: { fileName?: string; ext?: string }): boolean {
+  const name = String(file.fileName || '');
+  const lastDot = name.lastIndexOf('.');
+  const extension = (String(file.ext || '').trim() || (lastDot >= 0 ? name.slice(lastDot + 1) : '')).toLowerCase();
+  return extension === 'md' || extension === 'markdown';
+}
+
 export type CloudMediaPlaybackSupport = 'supported' | 'unsupported' | 'unknown';
 
 export function getCloudMediaPlaybackSupport(
