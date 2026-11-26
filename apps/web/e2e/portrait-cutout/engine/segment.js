@@ -1,5 +1,5 @@
 let model;
-const asset = (name) => new URL(name, new URL('../local-assets/engine/', import.meta.url)).href;
+const asset = (name) => new URL('../local-assets/engine/' + name, import.meta.url).href;
 
 async function loadModel() {
   const { FilesetResolver, InteractiveSegmenter } = await import(/* @vite-ignore */ asset('./vision_bundle.mjs'));
