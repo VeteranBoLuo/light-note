@@ -9,6 +9,7 @@ import { MOBILE_OVERLAY_HISTORY_STATE_KEY, resetMobileOverlayHistoryForTests } f
 const filePreviewApiMocks = vi.hoisted(() => ({
   resolveOwnedFilePreview: vi.fn(),
   prepareOwnedFilePreview: vi.fn(),
+  renderOwnedTemporaryImagePreview: vi.fn(),
   prepareSharedFilePreview: vi.fn(),
   resolveSharedFilePreview: vi.fn(),
   resolveCommunityChatFilePreview: vi.fn(),
@@ -1394,6 +1395,34 @@ describe('FilePreview verified image content', () => {
     expect(document.querySelector('.preview-loading')).toBeNull();
     expect(document.querySelector('.preview-controls')).not.toBeNull();
     expect(document.querySelector('img[src="/original.heic"]')).toBeNull();
+  });
+
+  it('renders a readonly HEIF using temporary WebP and releases it when switching files', async () => {
+    filePreviewApiMocks.resolveOwnedFilePreview
+      .mockResolvedValueOnce({
+        previewType: 'image',
+        strategy: 'image_display',
+        formatId: 'heif',
+        status: 'missing',
+        temporaryImagePreview: true,
+        sourceDownloadUrl: '/readonly-original.heic',
+      })
+      .mockResolvedValue({ previewType: 'image', status: 'ready', sourceDownloadUrl: '/current.jpeg' });
+    const image = new Blob(['webp'], { type: 'image/webp' });
+    const url = 'blob:readonly-preview';
+    createObjectUrl.mockReturnValueOnce(url);
+    filePreviewApiMocks.renderOwnedTemporaryImagePreview.mockResolvedValue(image);
+    const info = ref(file());
+    mountVerified(info);
+
+    await vi.waitFor(() => expect(document.querySelector('.preview-image')?.getAttribute('src')).toBe(url));
+    expect(filePreviewApiMocks.renderOwnedTemporaryImagePreview).toHaveBeenCalledWith('verified-image', expect.any(AbortSignal));
+    expect(filePreviewApiMocks.prepareOwnedFilePreview).not.toHaveBeenCalled();
+    expect(createObjectUrl).toHaveBeenCalledWith(image);
+
+    info.value = file('current');
+    await vi.waitFor(() => expect(document.querySelector('.preview-image')?.getAttribute('src')).toBe('/current.jpeg'));
+    expect(revokeObjectUrl).toHaveBeenCalledWith(url);
   });
 
   it('polls a genuine shared HEIF through its preview ticket, keeping its original download URL', async () => {

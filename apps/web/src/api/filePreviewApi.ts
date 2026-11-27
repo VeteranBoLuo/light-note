@@ -1,4 +1,4 @@
-import { apiBasePost } from '@/http/request.ts';
+import request, { apiBasePost, type ApiResponse, type RequestOptions } from '@/http/request.ts';
 
 export type FilePreviewJobStatus = 'missing' | 'queued' | 'processing' | 'ready' | 'failed';
 
@@ -11,6 +11,7 @@ export interface FilePreviewState {
   status: FilePreviewJobStatus;
   errorCode: string;
   pollAfterMs: number;
+  temporaryImagePreview?: boolean;
   previewUrl?: string;
   expiresIn?: number;
   artifactSize?: number;
@@ -63,6 +64,33 @@ export async function resolveOwnedFilePreview(fileId: string): Promise<FilePrevi
 
 export async function prepareOwnedFilePreview(fileId: string, retry = false): Promise<FilePreviewState> {
   return unwrap(await apiBasePost('/api/file/preview/prepare', { fileId, retry }, { silent: true }));
+}
+
+export async function renderOwnedTemporaryImagePreview(fileId: string, signal: AbortSignal): Promise<Blob> {
+  const options: RequestOptions = {
+    signal,
+    silent: true,
+    responseType: 'arraybuffer',
+    // Decode JSON errors before the shared authentication interceptor sees them.
+    transformResponse: [
+      (body, responseHeaders) => {
+        if (body instanceof ArrayBuffer && String(responseHeaders['content-type']).startsWith('application/json')) {
+          return JSON.parse(new TextDecoder().decode(body));
+        }
+        return body;
+      },
+    ],
+  };
+  const { data, headers } = await request.post<ArrayBuffer | ApiResponse>(
+    '/api/file/preview/temporary-image',
+    { fileId },
+    options,
+  );
+  if (data instanceof ArrayBuffer && data.byteLength && headers['content-type'] === 'image/webp') {
+    return new Blob([data], { type: 'image/webp' });
+  }
+  if (!(data instanceof ArrayBuffer)) unwrap(data);
+  throw new Error('FILE_PREVIEW_REQUEST_FAILED');
 }
 
 export async function listOwnedArchivePreview(

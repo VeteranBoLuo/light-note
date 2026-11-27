@@ -6,6 +6,7 @@ const obsMocks = vi.hoisted(() => ({
   buildObjectKey: vi.fn((_userId, fileName) => `source/${fileName}`),
   createDownloadSignedUrl: vi.fn(() => ({ url: 'https://preview.example/derived.pdf' })),
   deleteObjectFromObs: vi.fn(),
+  getBoundedObjectBufferFromObs: vi.fn(),
   getObjectBufferFromObs: vi.fn(),
   getObjectMetadataFromObs: vi.fn(),
   getObjectRangeFromObs: vi.fn(),
@@ -38,6 +39,7 @@ const {
   deleteFilePreviewArtifactsForSource,
   resolveFilePreview,
   prepareFilePreview,
+  renderTemporaryFileImage,
   runSingleFilePreviewJob,
 } = await import('./service.js');
 
@@ -200,6 +202,45 @@ describe('file preview service', () => {
     });
     expect(obsMocks.getObjectRangeFromObs).not.toHaveBeenCalled();
     expect(obsMocks.createDownloadSignedUrl).not.toHaveBeenCalled();
+  });
+
+  it('renders a version-checked HEIF for readonly preview without changing storage or the queue', async () => {
+    const source = await fs.readFile(new URL('../imagePreview/fixtures/primary.heic', import.meta.url));
+    const file = {
+      id: 42,
+      create_by: 'subject',
+      file_name: 'photo.heic',
+      file_type: 'image/heic',
+      file_size: source.length,
+      obs_key: 'source-key',
+    };
+    poolMocks.query.mockImplementation(async (_sql, [, owner]) => [owner === file.create_by ? [file] : []]);
+    obsMocks.getObjectMetadataFromObs.mockResolvedValue({ contentLength: source.length, etag: '"etag-1"' });
+    obsMocks.getBoundedObjectBufferFromObs.mockResolvedValue(source);
+
+    await expect(renderTemporaryFileImage({ ownerUserId: 'another-user', fileId: 42 })).rejects.toMatchObject({
+      code: 'FILE_NOT_FOUND',
+    });
+    expect(obsMocks.getBoundedObjectBufferFromObs).not.toHaveBeenCalled();
+
+    const webp = await renderTemporaryFileImage({ ownerUserId: 'subject', fileId: 42 });
+    expect(webp.subarray(8, 12).toString()).toBe('WEBP');
+    expect(obsMocks.getBoundedObjectBufferFromObs).toHaveBeenCalledWith('source-key', {
+      maxBytes: source.length,
+      expectedEtag: 'etag-1',
+      signal: expect.any(AbortSignal),
+    });
+
+    obsMocks.getObjectMetadataFromObs
+      .mockResolvedValueOnce({ contentLength: source.length, etag: 'etag-1' })
+      .mockResolvedValueOnce({ contentLength: source.length, etag: 'etag-2' });
+    await expect(renderTemporaryFileImage({ ownerUserId: 'subject', fileId: 42 })).rejects.toMatchObject({
+      code: 'FILE_PREVIEW_SOURCE_CHANGED',
+    });
+    expect(poolMocks.query.mock.calls.every(([sql]) => sql.startsWith('SELECT') && sql.includes('FROM files'))).toBe(true);
+    expect(poolMocks.getConnection).not.toHaveBeenCalled();
+    expect(obsMocks.putObjectBodyToObs).not.toHaveBeenCalled();
+    expect(obsMocks.deleteObjectFromObs).not.toHaveBeenCalled();
   });
 
   it('queues HEIF conversion only after source authorization and preserves the original object', async () => {

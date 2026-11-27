@@ -401,6 +401,7 @@
     prepareCommunityChatFilePreview,
     prepareOwnedFilePreview,
     prepareSharedFilePreview,
+    renderOwnedTemporaryImagePreview,
     resolveCommunityChatFilePreview,
     resolveOwnedFilePreview,
     resolveSharedFilePreview,
@@ -541,6 +542,8 @@
   let activePreviewFileId = '';
   let textAbortController: AbortController | null = null;
   let htmlAbortController: AbortController | null = null;
+  let temporaryImageRequest: AbortController | null = null;
+  let temporaryImageUrl = '';
   const derivedPreviewUrl = ref('');
   const derivedReady = ref(false);
   const sharePreviewTicket = ref('');
@@ -885,6 +888,10 @@
   }
 
   function resetDerivedPreviewState() {
+    temporaryImageRequest?.abort();
+    temporaryImageRequest = null;
+    if (temporaryImageUrl) URL.revokeObjectURL(temporaryImageUrl);
+    temporaryImageUrl = '';
     imageSourceState.value = null;
     derivedPreviewUrl.value = '';
     derivedReady.value = false;
@@ -935,6 +942,8 @@
     const pollingStartedAt = Date.now();
     const shareAccess = props.previewAccess?.kind === 'share' ? props.previewAccess : null;
     const chatAccess = props.previewAccess?.kind === 'community_chat_file' ? props.previewAccess : null;
+    const needsPreparation = (state: FilePreviewState) =>
+      state.status === 'missing' || (state.status === 'failed' && retryDerived);
     let state: FilePreviewState;
     if (shareAccess) {
       state =
@@ -945,7 +954,7 @@
       sharedSourceFileUrl.value = String(state.sourceDownloadUrl || '');
     } else if (chatAccess) {
       state = initialState || (await resolveCommunityChatFilePreview(chatAccess.publicId));
-      if (state.status === 'missing' || (state.status === 'failed' && retryDerived)) {
+      if (needsPreparation(state)) {
         state = await prepareCommunityChatFilePreview(chatAccess.publicId, retryDerived);
       }
       if (requestAttempt !== previewAttempt.value || !props.visible) return;
@@ -956,7 +965,8 @@
       }
     } else {
       state = initialState || (await resolveOwnedFilePreview(expectedFileId));
-      if (state.status === 'missing' || (state.status === 'failed' && retryDerived)) {
+      if (requestAttempt !== previewAttempt.value || !props.visible) return;
+      if (needsPreparation(state) && !state.temporaryImagePreview) {
         state = await prepareOwnedFilePreview(expectedFileId, retryDerived);
       }
     }
@@ -965,6 +975,19 @@
     if (state.sourceDownloadUrl) sharedSourceFileUrl.value = state.sourceDownloadUrl;
     for (let pollCount = 0; ; pollCount += 1) {
       if (requestAttempt !== previewAttempt.value || expectedFileId !== activePreviewFileId || !props.visible) return;
+      if (state.temporaryImagePreview && needsPreparation(state)) {
+        if (state.sourceDownloadUrl) sharedSourceFileUrl.value = state.sourceDownloadUrl;
+        const controller = new AbortController();
+        temporaryImageRequest = controller;
+        try {
+          const image = await renderOwnedTemporaryImagePreview(expectedFileId, controller.signal);
+          if (controller.signal.aborted || requestAttempt !== previewAttempt.value || !props.visible) return;
+          temporaryImageUrl = URL.createObjectURL(image);
+          state = { ...state, status: 'ready', previewUrl: temporaryImageUrl };
+        } finally {
+          if (temporaryImageRequest === controller) temporaryImageRequest = null;
+        }
+      }
       if (state.status === 'ready') {
         derivedReady.value = true;
         if (state.previewType === 'image') {
@@ -1652,8 +1675,10 @@
   });
 
   onUnmounted(() => {
+    previewAttempt.value += 1;
     document.removeEventListener('keydown', handleFindShortcut, true);
     cancelPreviewPolling();
+    resetDerivedPreviewState();
     htmlAbortController?.abort();
     htmlAbortController = null;
     textAbortController?.abort();

@@ -47,8 +47,9 @@ export async function convertImageDisplay(buffer, options = {}) {
 
 async function compressImage(
   buffer,
-  { runner = promisify(execFile), now = Date.now, budgetMs = 60_000, cropLongImage = true, display = false } = {},
+  { runner = promisify(execFile), now = Date.now, budgetMs = 60_000, cropLongImage = true, display = false, signal } = {},
 ) {
+  signal?.throwIfAborted();
   const source = validateSource(buffer);
   const maxEdge = display ? 4096 : 720;
   const maxBytes = display ? 8 * 1024 * 1024 : CARD_PROFILE.maxBytes;
@@ -67,6 +68,7 @@ async function compressImage(
     MAGICK_TEMPORARY_PATH: dir,
   };
   const run = async (args, stage) => {
+    signal?.throwIfAborted();
     const remaining = deadline - now();
     if (remaining <= 0) throw imageError('IMAGE_PROCESS_TIMEOUT');
     try {
@@ -75,14 +77,16 @@ async function compressImage(
         killSignal: 'SIGKILL',
         maxBuffer: 128 * 1024,
         env,
+        signal,
         windowsHide: true,
       });
     } catch (error) {
+      signal?.throwIfAborted();
       throw imageError(classifyImageError(error, stage));
     }
   };
   try {
-    await fs.writeFile(input, buffer, { mode: 0o600 });
+    await fs.writeFile(input, buffer, { mode: 0o600, signal });
     // Ping reads geometry/orientation without allocating the full pixel cache.
     const header = await run(
       [...heifOptions, '-ping', `${input}[0]`, '-format', '%w %h %[orientation]', 'info:'],

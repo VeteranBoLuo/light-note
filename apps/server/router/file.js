@@ -940,6 +940,7 @@ router.post('/getFileInfo', fileHandle.getFileInfo);
 // 已打开的旧客户端收到关闭信号后回到原图链路，不再准备派生任务。
 router.post('/image-previews/prepare', (_req, res) => res.send({ status: 200, data: { enabled: false, items: [] } }));
 router.post('/preview/resolve', filePreviewHandle.resolveOwnedFilePreview);
+router.post('/preview/temporary-image', localProcessingRateLimiter, filePreviewHandle.renderOwnedTemporaryImagePreview);
 router.post('/preview/prepare', localProcessingRateLimiter, (req, res) => {
   if (!ensureUserOrAdminPolicy(req, res, ['content_write'])) return;
   return filePreviewHandle.prepareOwnedFilePreview(req, res);

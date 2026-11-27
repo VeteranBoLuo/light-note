@@ -10,6 +10,7 @@ import {
   buildObjectKey,
   createDownloadSignedUrl,
   deleteObjectFromObs,
+  getBoundedObjectBufferFromObs,
   getObjectBufferFromObs,
   getObjectMetadataFromObs,
   putObjectBodyToObs,
@@ -27,6 +28,8 @@ export const FILE_PREVIEW_SOURCE_TYPE = Object.freeze({
 });
 const MAX_JOB_ATTEMPTS = 3;
 const PREVIEW_URL_EXPIRES_SECONDS = 600;
+const TEMPORARY_IMAGE_PREVIEW_TIMEOUT_MS = 50_000;
+let temporaryImagePreviewInProgress = false;
 const PREVIEW_CLEANUP_PENDING_ERROR = 'FILE_PREVIEW_CLEANUP_PENDING';
 const NON_RETRYABLE_ERRORS = new Set([
   'FILE_CONTENT_INVALID',
@@ -281,6 +284,52 @@ async function loadSourceMetadata(file, descriptor) {
   if (sourceSize !== Number(file.file_size || 0)) throw previewError('FILE_SIZE_MISMATCH', 409);
   if (!sourceEtag) throw previewError('FILE_PREVIEW_SOURCE_METADATA_INVALID', 503);
   return { sourceSize, sourceEtag };
+}
+
+/** 管理员只读代看的冷预览，不创建任务或保留产物。每个 API 进程至多执行一次转换。 */
+export async function renderTemporaryFileImage({ ownerUserId, fileId, signal }) {
+  if (temporaryImagePreviewInProgress) throw previewError('FILE_PREVIEW_SERVICE_UNAVAILABLE', 503);
+  temporaryImagePreviewInProgress = true;
+  const timeout = AbortSignal.timeout(TEMPORARY_IMAGE_PREVIEW_TIMEOUT_MS);
+  const renderSignal = signal ? AbortSignal.any([signal, timeout]) : timeout;
+  try {
+    renderSignal.throwIfAborted();
+    const file = await selectOwnedFile(pool, ownerUserId, fileId);
+    if (!file) throw sourceUnavailableError(FILE_PREVIEW_SOURCE_TYPE.CLOUD_FILE);
+    if (!isImagePreviewCandidate({ fileName: file.file_name, fileType: file.file_type })) {
+      throw previewError('FILE_PREVIEW_UNSUPPORTED', 415);
+    }
+    const objectKey = sourceObjectKey(file);
+    const { sourceSize, sourceEtag } = await loadSourceMetadata(file, HEIF_DESCRIPTOR);
+    const source = await getBoundedObjectBufferFromObs(objectKey, {
+      maxBytes: sourceSize,
+      expectedEtag: sourceEtag,
+      signal: renderSignal,
+    });
+    if (source.length !== sourceSize) throw previewError('FILE_SIZE_MISMATCH', 409);
+    const { body } = await convertImageDisplay(source, { signal: renderSignal });
+
+    renderSignal.throwIfAborted();
+    const currentMetadata = await getObjectMetadataFromObs(objectKey);
+    const currentFile = await selectOwnedFile(pool, ownerUserId, fileId);
+    if (!currentFile) throw sourceUnavailableError(FILE_PREVIEW_SOURCE_TYPE.CLOUD_FILE);
+    if (
+      sourceObjectKey(currentFile) !== objectKey ||
+      Number(currentFile.file_size) !== sourceSize ||
+      Number(currentMetadata.contentLength) !== sourceSize ||
+      normalizeEtag(currentMetadata.etag) !== sourceEtag
+    ) {
+      throw previewError('FILE_PREVIEW_SOURCE_CHANGED', 409);
+    }
+    renderSignal.throwIfAborted();
+    return body;
+  } catch (error) {
+    if (timeout.aborted) throw previewError('IMAGE_PROCESS_TIMEOUT', 503);
+    if (error?.code === 'OBS_DOWNLOAD_SOURCE_CHANGED') throw previewError('FILE_PREVIEW_SOURCE_CHANGED', 409);
+    throw error;
+  } finally {
+    temporaryImagePreviewInProgress = false;
+  }
 }
 
 export async function prepareFilePreview({

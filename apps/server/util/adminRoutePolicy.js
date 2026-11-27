@@ -251,6 +251,7 @@ declare(ADMIN_POLICIES.READ, 'file', [
   ['POST', '/file/queryTotalFileSize'],
   ['POST', '/file/getFileInfo'],
   ['POST', '/file/preview/resolve'],
+  ['POST', '/file/preview/temporary-image'],
   ['POST', '/file/image-previews/prepare'],
   ['POST', '/file/preview/archive'],
   ['POST', '/file/queryFolder'],

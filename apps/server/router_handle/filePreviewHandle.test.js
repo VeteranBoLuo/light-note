@@ -27,7 +27,7 @@ describe('file preview handler', () => {
   });
 
   it('uses the effective resource owner and avoids cache-touch writes in an admin context', async () => {
-    previewServiceMocks.resolveFilePreview.mockResolvedValue({ status: 'ready' });
+    previewServiceMocks.resolveFilePreview.mockResolvedValue({ status: 'missing', strategy: 'image_display' });
     const res = response();
 
     await resolveOwnedFilePreview(
@@ -40,7 +40,10 @@ describe('file preview handler', () => {
       fileId: 42,
       touch: false,
     });
-    expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ status: 200 }));
+    expect(res.send).toHaveBeenCalledWith(expect.objectContaining({
+      status: 200,
+      data: { status: 'missing', strategy: 'image_display', temporaryImagePreview: true },
+    }));
   });
 
   it('does not expose an unknown dependency error code to the client', async () => {

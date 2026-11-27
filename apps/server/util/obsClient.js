@@ -212,7 +212,7 @@ function obsDownloadError(code, message, status) {
   return Object.assign(new Error(code + ': ' + message), { code, ...(status ? { obsStatus: status } : {}) });
 }
 
-export async function getBoundedObjectBufferFromObs(objectKey, { maxBytes, signal } = {}) {
+export async function getBoundedObjectBufferFromObs(objectKey, { maxBytes, signal, expectedEtag } = {}) {
   if (!Number.isSafeInteger(maxBytes) || maxBytes <= 0) {
     throw obsDownloadError('OBS_DOWNLOAD_LIMIT_INVALID', '文件读取上限无效');
   }
@@ -234,6 +234,9 @@ export async function getBoundedObjectBufferFromObs(objectKey, { maxBytes, signa
     });
     if (response.statusCode !== 200) {
       throw obsDownloadError('OBS_DOWNLOAD_FAILED', '无法读取文件，请稍后重试', response.statusCode);
+    }
+    if (expectedEtag && String(response.headers.etag || '').replace(/^"|"$/gu, '') !== expectedEtag) {
+      throw obsDownloadError('OBS_DOWNLOAD_SOURCE_CHANGED', '文件已发生变化，请重新读取');
     }
     const declaredBytes = Number(response.headers['content-length']);
     if (declaredBytes > maxBytes) {

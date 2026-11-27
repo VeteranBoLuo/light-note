@@ -3,8 +3,10 @@ import {
   getFilePreviewErrorStatus,
   listArchivePreview,
   prepareFilePreview,
+  renderTemporaryFileImage,
   resolveFilePreview,
 } from '../util/filePreview/service.js';
+import { FILE_PREVIEW_STRATEGY } from '@lightnote/shared';
 import { stableAgentErrorCode } from '../util/agent/logSafety.js';
 
 const messages = {
@@ -29,7 +31,9 @@ const messages = {
 
 function sendPreviewError(req, res, error, scene) {
   const rawCode = String(error?.code || '');
-  const code = Object.hasOwn(messages, rawCode) ? rawCode : 'FILE_PREVIEW_SERVICE_UNAVAILABLE';
+  const code = Object.hasOwn(messages, rawCode) || /^IMAGE_[A-Z_]+$/u.test(rawCode)
+    ? rawCode
+    : 'FILE_PREVIEW_SERVICE_UNAVAILABLE';
   const pair = messages[code] || ['文件预览暂时不可用，请稍后重试', 'File preview is temporarily unavailable'];
   console.error('[file-preview] %s failed code=%s', scene, stableAgentErrorCode(error));
   return res.send(resultData({ errorCode: code }, getFilePreviewErrorStatus(error), L(req, pair[0], pair[1])));
@@ -49,9 +53,36 @@ export async function resolveOwnedFilePreview(req, res) {
       fileId: fileIdFromRequest(req),
       touch: !req.adminContext,
     });
+    if (req.adminContext?.mode === 'readonly' && data.strategy === FILE_PREVIEW_STRATEGY.IMAGE_DISPLAY) {
+      return res.send(resultData({ ...data, temporaryImagePreview: true }));
+    }
     return res.send(resultData(data));
   } catch (error) {
     return sendPreviewError(req, res, error, 'resolve');
+  }
+}
+
+export async function renderOwnedTemporaryImagePreview(req, res) {
+  if (req.adminContext?.mode !== 'readonly') {
+    return res
+      .status(403)
+      .send(resultData(null, 403, L(req, '仅供管理员只读预览', 'Available only in read-only admin preview')));
+  }
+  res.set('Cache-Control', 'private, no-store');
+  const controller = new AbortController();
+  const abort = () => controller.abort();
+  res.once('close', abort);
+  try {
+    const body = await renderTemporaryFileImage({
+      ownerUserId: req.user.id,
+      fileId: fileIdFromRequest(req),
+      signal: controller.signal,
+    });
+    if (!controller.signal.aborted) return res.type('image/webp').send(body);
+  } catch (error) {
+    if (!controller.signal.aborted) return sendPreviewError(req, res, error, 'temporary-image');
+  } finally {
+    res.off('close', abort);
   }
 }
 

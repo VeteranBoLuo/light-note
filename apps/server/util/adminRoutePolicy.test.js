@@ -438,6 +438,18 @@ describe('adminRoutePolicyMiddleware', () => {
     expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ data: { code: 'ADMIN_PREVIEW_READONLY' } }));
   });
 
+  it('只读代看允许临时图片预览，仍拒绝创建持久预览任务', () => {
+    const next = vi.fn();
+    adminRoutePolicyMiddleware(createReq('/file/preview/temporary-image'), createRes(), next);
+    expect(next).toHaveBeenCalledTimes(1);
+
+    const res = createRes();
+    adminRoutePolicyMiddleware(createReq('/file/preview/prepare'), res, next);
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(res.status).toHaveBeenCalledWith(403);
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ data: { code: 'ADMIN_PREVIEW_READONLY' } }));
+  });
+
   it('笔记公开分享不允许管理员代替目标用户创建、撤销或轮换', () => {
     for (const mode of ['readonly', 'maintain']) {
       for (const path of ['/note/share/create', '/note/share/revoke', '/note/share/rotate']) {
