@@ -624,6 +624,7 @@ declare(ADMIN_POLICIES.READ, 'daily_review', [['GET', '/daily-review/today']]);
 // 榜单身份和账号资格以实际登录者为准。
 declare(ADMIN_POLICIES.ACCOUNT_WRITE, 'points_leaderboard', [
   ['GET', '/growth/leaderboard'],
+  ['GET', '/growth/leaderboard/weekly-rank'],
   ['GET', '/growth/leaderboard/avatar/:communityId'],
 ]);
 // 年度报告含本人的标题、网站与标签明细，纪念成就也只记在真实登录账号上；任何代管上下文都不开放。
