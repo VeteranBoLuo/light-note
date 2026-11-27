@@ -1,4 +1,5 @@
 import { createApp, nextTick } from 'vue';
+import { createI18n } from 'vue-i18n';
 import { expect, it, vi } from 'vitest';
 import Toolbar from './EditorToolbarV2.vue';
 vi.mock('@/components/base/BasicComponents/BButton.vue', () => ({
@@ -41,6 +42,7 @@ it('keeps six mobile actions and opens More with redo when unused insert shares 
     desktopFormatActions: [],
     onAction,
   });
+  app.use(createI18n({ legacy: false, locale: 'en', messages: { en: { common: { back: 'Back' } } } }));
   app.mount(host);
   expect(host.querySelectorAll('.editor-toolbar-v2__mobile-button')).toHaveLength(6);
   Array.from(host.querySelectorAll('button'))

@@ -1,7 +1,10 @@
 import { createApp, nextTick, h, ref } from 'vue';
 import { expect, it, vi } from 'vitest';
 import Composer from './CommunityCommentComposer.vue';
-vi.mock('vue-i18n', () => ({ useI18n: () => ({ t: (key: string) => key }) }));
+vi.mock('vue-i18n', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('vue-i18n')>()),
+  useI18n: () => ({ t: (key: string) => key }),
+}));
 vi.mock('@/store', () => ({ useUserStore: () => ({ id: 'test' }) }));
 vi.mock('@/composables/useCommunityChatEmojiRecent', () => ({ useCommunityChatEmojiRecent: () => ({ recent: [], remember: vi.fn() }) }));
 vi.mock('@/components/communityChat/ChatEmojiPanel.vue', () => ({ default: { template: '<div />' } }));

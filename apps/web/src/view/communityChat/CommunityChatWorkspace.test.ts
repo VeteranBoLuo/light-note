@@ -1861,7 +1861,7 @@ describe('CommunityChatWorkspace', () => {
     await flushAsync();
 
     expect(mocks.getAuthorProfile).toHaveBeenCalledWith('message-1');
-    expect(document.body.textContent).toContain('社区名片');
+    expect(document.body.textContent).toContain('用户名片');
     expect(document.body.textContent).toContain('Lv.3 秀才');
     expect(document.body.textContent).toContain('七日不辍');
     expect(document.body.textContent).not.toContain('user-2');
