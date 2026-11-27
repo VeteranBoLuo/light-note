@@ -10,7 +10,8 @@
 .fixture-state {position:absolute;left:50%;bottom:2%;translate:-50% 0;min-width:max-content;padding:calc(3px * var(--d)) calc(7px * var(--d));border:calc(1px * var(--d)) solid #b18c52;border-radius:calc(6px * var(--d));background:#fff4d9;color:#72512c;font-size:calc(11px * var(--d));font-weight:700;line-height:1.5;pointer-events:none;}
 .scene-facility[data-state="ready"] .fixture-state {border-color:#9d8a43;background:#fff0b1;color:#675226;}
 .scene-facility[data-state="spent"] .fixture-state,.scene-facility[data-state="idle"] .fixture-state {opacity:0;}
-.scene-facility:is(:hover,:focus-visible) .fixture-state {opacity:1;}
+.scene-facility:hover .fixture-state,
+.kbd-nav .scene-facility:focus-visible .fixture-state {opacity:1;}
 .scene-facility.hide-caption .fixture-state {visibility:hidden;}
 .facility-bees {position:absolute;inset:0;pointer-events:none;}
 .facility-bees .bee-art {position:absolute;left:27%;top:26%;width:calc(20px * var(--d));height:calc(16px * var(--d));object-fit:contain;animation:facility-bee-flight 7s ease-in-out infinite;}

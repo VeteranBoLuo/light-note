@@ -4429,10 +4429,11 @@
     richColorDialogVisible.value = true;
   }
 
-  function updateRichFontSizeState(editor: any, range = editor.selection?.getRng?.() as Range | undefined) {
-    const body = editor.getBody?.() as HTMLElement | undefined;
-    if (!body || !range) return;
-    const size = readEditorFontSize(body, range);
+  function updateRichFontSizeState(editor: any, range?: Range) {
+    const body = editor.getBody() as HTMLElement | undefined;
+    const selection = editor.selection;
+    if (!body || !selection) return;
+    const size = readEditorFontSize(body, range ?? selection.getRng());
     if (size.enabled !== richFontSizeState.value.enabled || size.value !== richFontSizeState.value.value) {
       richFontSizeState.value = size;
     }
